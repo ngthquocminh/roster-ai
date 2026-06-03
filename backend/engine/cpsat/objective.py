@@ -19,6 +19,16 @@ class LexResult:
     solver: cp_model.CpSolver
     round1_value: float    # scaled unmet-hours
     round2_value: float    # scaled cost
+    # Round-1 solution vector, set only when round 2 found NO solution in time.
+    # Re-solving for cost overwrites the solver's solution, so we snapshot the
+    # unmet-optimal one and read from it instead of the (empty) solver.
+    snapshot: list[int] | None = None
+
+    def value(self, var) -> int:
+        """Variable value from the round-2 solution, or the round-1 snapshot."""
+        if self.snapshot is not None:
+            return self.snapshot[var.Index()]
+        return self.solver.Value(var)
 
 
 _STATUS = {
@@ -44,13 +54,17 @@ def solve_lexicographic(builder: CpSatBuilder, time_limit_s: float,
     if s1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return LexResult(_STATUS.get(s1, "UNKNOWN"), solver, float("nan"), float("nan"))
     r1 = solver.ObjectiveValue()
+    # Snapshot the unmet-optimal solution + its cost before round 2 overwrites it.
+    snap = list(solver.ResponseProto().solution)
+    cost1 = solver.Value(builder.round2_cost)
 
     # ---- lock round 1, minimize cost ----
     m.Add(builder.round1_unmet <= int(round(r1)))
     m.Minimize(builder.round2_cost)
     s2 = solver.Solve(m)
     if s2 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        # round 1 solution still valid; report it with its cost
-        return LexResult(_STATUS.get(s2, "UNKNOWN"), solver, r1, float("nan"))
+        # Round 2 found no solution in time: fall back to the round-1 solution
+        # (unmet-optimal, cost not yet minimized) via the snapshot.
+        return LexResult(_STATUS.get(s2, "UNKNOWN"), solver, r1, float(cost1), snapshot=snap)
     r2 = solver.ObjectiveValue()
     return LexResult(_STATUS.get(s2, "UNKNOWN"), solver, r1, r2)

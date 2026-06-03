@@ -1,7 +1,7 @@
 """Distilled constants for the Scheduling Engine.
 
-Values mirror the production model (config/constants.py) where they
-carry over; engine-specific scaling knobs are grouped at the bottom.
+Values mirror the production model where they carry over; engine-specific
+scaling knobs are grouped at the bottom.
 """
 from __future__ import annotations
 

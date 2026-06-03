@@ -6,10 +6,9 @@ The slice is shrunk **vertically**, not horizontally: we keep the **whole week**
 (the full Scenario Range) and instead cut the problem down by (a) keeping only a
 handful of tasks per demand family, (b) keeping only the qualified+rostered
 members that supply those tasks, and (c) scaling demand volume so required hours
-stay near DEMAND_LOAD x the kept workforce's weekly capacity. This mirrors the
-production dev tool (scripts/dev/make_short_input.py), which subsamples members
-and demand but never truncates the horizon — so the coverage report spans all
-seven days rather than only the first two.
+stay near DEMAND_LOAD x the kept workforce's weekly capacity. Subsampling members
+and demand (rather than truncating the horizon) keeps the coverage report
+spanning all seven days rather than only the first two.
 
 "Coherent" means: every demand task we keep is qualified-for and rostered-over by
 at least one member we keep. Otherwise the tiny instance would be trivially 100%
@@ -31,10 +30,11 @@ from datetime import datetime, timedelta
 # --------------------------------------------------------------------------
 # Config — tune the size of the tiny instance here
 # --------------------------------------------------------------------------
-SRC = r"data\sample_weekly_input.json"
 # repo-root/data/ (this file lives at repo-root/backend/fixtures/)
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DST = os.path.join(_REPO_ROOT, "data", "sample_tiny_input.json")
+# Full weekly source input (data/sample_weekly_input.json, git-ignored, ~16 MB).
+SRC = os.path.join(_REPO_ROOT, "data", "sample_weekly_input.json")
 
 # Horizon: keep the WHOLE scenario week. Set HORIZON_DAYS to an int to truncate
 # (horizontal shrink); leave it None to span the full Scenario Range so the
@@ -48,6 +48,8 @@ MAX_MEMBERS = 14          # hard cap on members in the slice
 MEMBERS_PER_TASK = 3      # qualified+rostered members to pull in per kept task
 DEMAND_LOAD = 1.3         # scale OB/IB demand so required hours ~= this x supply
                           # capacity (>1 => meaningful-but-not-trivial unmet)
+C_MAX_HOURS_PER_WEEK = 56.0  # mirror config.constants.DEFAULT_MAX_HOURS_PER_WEEK
+                             # (kept local so this builder stays import-light)
 
 DT_FMT = "%Y-%m-%dT%H:%M:%S"
 
@@ -239,8 +241,31 @@ def main() -> None:
         ref_rate[tid] = (sum(rates) / len(rates)) if rates else 100.0
     required_h = sum(ob_vol[t] / ref_rate[t] for t in keep_tasks if ob_vol.get(t)) \
         + sum(ib_vol[t] / ref_rate[t] for t in keep_tasks if ib_vol.get(t))
-    # ~one 8h shift/member/day, capped at the weekly-hours limit (56h).
-    capacity_h = max(1.0, len(keep_members) * min(horizon_days * 8.0, 56.0))
+
+    # Capacity = the kept members' *actual* deliverable hours over the horizon,
+    # not a flat 56h/member (which over-states supply, since rosters rarely span
+    # the whole week). Sum each member's roster-window hours in horizon (falling
+    # back to availability windows), capped at the weekly limit. This makes
+    # DEMAND_LOAD a meaningful coverage target rather than an inflated one.
+    def window_hours(rows: list[dict]) -> float:
+        tot = 0.0
+        for r in rows:
+            try:
+                ws, we = parse_dt(r["StartDateTime"]), parse_dt(r["EndDateTime"])
+            except Exception:
+                continue
+            s, e = max(start, ws), min(horizon_end, we)
+            if e > s:
+                tot += (e - s).total_seconds() / 3600.0
+        return tot
+
+    capacity_h = 0.0
+    for cid in keep_members:
+        h = window_hours(rosters_by_cid.get(cid, []))
+        if h == 0.0:
+            h = window_hours(avail_by_cid.get(cid, []))
+        capacity_h += min(C_MAX_HOURS_PER_WEEK, h)
+    capacity_h = max(1.0, capacity_h)
     demand_scale = min(1.0, capacity_h * DEMAND_LOAD / required_h) if required_h > 0 else 1.0
 
     # Outbound: aggregate the fine-grained (14-min) bands into hourly bands per

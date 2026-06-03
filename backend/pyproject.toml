@@ -1,0 +1,18 @@
+[project]
+name = "nl-scheduling-engine"
+version = "0.1.0"
+description = "Scheduling Engine for the NL Workforce Scheduling Assistant"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    # 9.15 wheel segfaults on the dev machine; 9.11.4210 is the validated pin.
+    "ortools==9.11.4210",
+    "pandas",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

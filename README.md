@@ -6,7 +6,7 @@ demand data; later phases add a FastAPI backend, natural-language constraint
 editing + LLM insights, and a React UI.
 
 The Scheduling Engine is an open-source-solver (OR-Tools CP-SAT) reimplementation
-of the core logic of a production weekly model. See [`design.md`](design.md)
+of the core logic of a production weekly scheduling model. See [`design.md`](design.md)
 for the full system design and phase plan.
 
 ## Status
@@ -43,7 +43,14 @@ uv run python fixtures/build_short_input.py
 
 ## Notes
 
-- The fixture horizon is 2 days (`HORIZON_DAYS` in `build_short_input.py`);
-  raise it toward 7 for a full week.
+- ortools is pinned to `9.11.4210`: the 9.15 wheel segfaults on the dev machine.
+- The fixture covers the **full scenario week**. It is shrunk *vertically*
+  (fewer tasks/members + demand scaling), not by truncating days, so coverage
+  reports span all seven days. `build_short_input.py` exposes `HORIZON_DAYS`
+  (`None` = full week; set an int only to truncate for a quick probe).
+- The full-week instance solves the primary objective (unmet labour-hours) in
+  ~20s; proving cost-optimality takes longer (~2 min). With a short time limit
+  the engine returns the unmet-optimal schedule (cost not yet minimized) rather
+  than failing. Pass a time limit to the CLI: `run.py <input> cpsat <seconds>`.
 - Deployment target is AWS (frontend → S3/CloudFront; backend container →
   ECR + App Runner/ECS/EC2 — container compute, not Lambda).

@@ -15,6 +15,10 @@ env/
 output/
 *.log
 
+# Full weekly source input (~16 MB) — kept local for regenerating the fixture,
+# not committed. Only the small generated data/sample_tiny_input.json is tracked.
+data/sample_weekly_input.json
+
 # OS / editor
 .DS_Store
 Thumbs.db

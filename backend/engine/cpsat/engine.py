@@ -26,7 +26,8 @@ class CpSatEngine:
         builder = CpSatBuilder(problem).build()
         lex = solve_lexicographic(builder, config.time_limit_s, config.num_workers, config.seed)
 
-        if lex.status in ("INFEASIBLE", "MODEL_INVALID", "UNKNOWN") and math.isnan(lex.round1_value):
+        # No solution at all (round 1 never found one): report empty gracefully.
+        if math.isnan(lex.round1_value):
             return SolveResult(
                 status=lex.status, schedule=[],
                 metrics=SummaryMetrics(),
@@ -40,7 +41,7 @@ class CpSatEngine:
         schedule = []
         used_shifts, used_members = set(), set()
         for tv in builder.task_vars:
-            if solver.Value(tv.var) == 1:
+            if lex.value(tv.var) == 1:
                 sv = tv.shift
                 used_shifts.add(sv.var.Name())
                 used_members.add(sv.member.contact_id)
@@ -78,11 +79,11 @@ class CpSatEngine:
 
         for (tid, h), var in builder.unmet_vol.items():
             ref = max(builder._ref_rate.get(tid, C.DEFAULT_TASK_RATE), 1e-9)
-            hrs = solver.Value(var) / C.VOL_SCALE / ref
+            hrs = lex.value(var) / C.VOL_SCALE / ref
             unmet_func[func_of.get(tid, "Unknown")] += hrs
             unmet_day[h // 24] += hrs
         for (tid, h), var in builder.unmet_hc.items():
-            hrs = float(solver.Value(var))
+            hrs = float(lex.value(var))
             unmet_func[func_of.get(tid, "Indirect")] += hrs
             unmet_day[h // 24] += hrs
 

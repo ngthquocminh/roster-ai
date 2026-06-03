@@ -4,7 +4,7 @@
 workforce + demand data → a constraint solver produces a weekly schedule →
 (later) describe constraint tweaks in plain English and have an LLM explain the
 result. The **Scheduling Engine** is an open-source-solver (OR-Tools CP-SAT)
-reimplementation of the core logic of the production MDC model
+reimplementation of the core logic of a production weekly scheduling model
 (CPLEX/docplex, ~2,500 lines of constraints, ~759 team members).
 
 **Status.** This document is the working spec. **Phase 1 (Scheduling Engine +
@@ -17,7 +17,7 @@ for context and to keep the architecture honest.
 
 | Term | Meaning |
 |---|---|
-| **Scheduling Engine** | The optimization model + solver. Distilled from the weekly model. |
+| **Scheduling Engine** | The optimization model + solver. Distilled from the production weekly model. |
 | **Fixture / short input** | A small, coherent slice of a full weekly input, for fast iteration. |
 | **Scenario** | A named workspace: one input dataset + constraint overrides. |
 | **Run** | One solve of a scenario snapshot → schedule + metrics. |
@@ -77,7 +77,7 @@ nl-scheduling-assistant/            # one git repo
       types.py                      # Member, Task, Demand*, ShiftTemplate, Roster, Qualification
       problem.py                    # SchedulingProblem (engine input)
       result.py                     # SolveResult, ScheduleRow, SummaryMetrics
-    io/
+    ingest/
       input_adapter.py              # real-schema JSON -> SchedulingProblem
       scenario_time.py              # datetime <-> hours-from-start helpers
     config/
@@ -85,7 +85,7 @@ nl-scheduling-assistant/            # one git repo
     run.py                          # load fixture -> solve -> print metrics
     tests/
       test_adapter.py test_engine_small.py
-    requirements.txt
+    pyproject.toml uv.lock          # uv-managed deps + lockfile
   frontend/                         # added in Phase 4
   design.md  docker-compose.yml  README.md
 ```
@@ -103,25 +103,29 @@ in the sample. We do **not** reproduce the production adapter's
 `Order Volume → Workload` generation (site-flow splits, conversions,
 dispatch-readiness caps — hundreds of lines, out of scope).
 
-**Fixture tool** (`fixtures/build_short_input.py`, evolved from the prototype
-`scripts/shrink_input.py`):
-- Pick a horizon (default 2 days from scenario start).
+**Fixture tool** (`fixtures/build_short_input.py`):
+- **Shrink vertically, keep the whole week.** Span the full Scenario Range (no
+  day truncation) — so coverage reports cover all seven days. (`HORIZON_DAYS` can
+  truncate for a quick probe, but defaults to the full week.)
 - Select top-demand tasks per family **that have coherent supply** (≥1 qualified
   member rostered/available in the horizon) — never keep a starved task.
 - Greedily pull in qualified+rostered members (cap total) so every kept task is
   serviceable; deliberately undersupply to keep some unmet interesting.
+- **Scale demand to the kept workforce's real capacity:** sum each kept member's
+  actual roster-window hours over the week (capped at the weekly limit) and scale
+  OB/IB volume to `DEMAND_LOAD ×` that, so coverage lands in an informative band
+  rather than ~2% (or an inflated 100%).
 - **Retain & hourly-aggregate** Outbound Workload (14-min → hourly bands;
   lossless for hourly coverage); prune Inbound `Tasks[]` to kept tasks.
-- Emit the **same real schema**, just tiny (current output: ~180 KB, 12 members,
-  6 tasks across 3 families, 2-day horizon).
+- Emit the **same real schema**, just tiny (current output: ~410 KB, 11 members,
+  6 tasks across 3 families, full 7-day week).
 
-> Reference: the production `scripts/dev/make_short_input.py` does robust
-> stratified member sampling + demand-coverage top-up, but is built around
-> dropping Workload and regenerating from Order Volume — the opposite of our
-> "consume Workload" decision. We borrow its coverage-top-up idea, not its
-> Workload-drop behaviour.
+> Design note: an alternative shrink strategy does stratified member sampling +
+> demand-coverage top-up but drops the materialized Workload and regenerates it
+> from Order Volume — the opposite of our "consume Workload" decision. We borrow
+> the coverage-top-up idea, not the Workload-drop behaviour.
 
-**Input adapter** (`io/input_adapter.py`): real-schema JSON → `SchedulingProblem`.
+**Input adapter** (`ingest/input_adapter.py`): real-schema JSON → `SchedulingProblem`.
 
 | Output | Built from |
 |---|---|
@@ -224,9 +228,12 @@ untouched.
 | | The Phase-2A/B/C task-spec budget/hour-cap filtering |
 
 ### 3.6 Phase-1 done criteria
-- `python run.py data/sample_tiny_input.json` solves in seconds and prints:
-  per-function coverage %, total cost, unmet hours, solver status, and a schedule
-  sample.
+- `run.py <input> cpsat [time_limit_s]` prints per-function & per-day coverage %,
+  total cost, unmet hours, solver status, and a schedule sample. The full-week
+  fixture finds the unmet-optimal schedule in ~20s; proving cost-optimality takes
+  ~2 min. A short time limit returns the unmet-optimal schedule (cost not yet
+  minimized) rather than failing — the lex solver snapshots round 1 so a round-2
+  timeout degrades gracefully.
 - `tests/test_engine_small.py`: a hand-built 2-member / 1-task instance with a
   known optimum (full coverage feasible → unmet 0; undersupplied → expected
   unmet). `tests/test_adapter.py`: adapter parses the fixture without loss.
@@ -261,5 +268,8 @@ untouched.
   the real two-layer (per-order volume balance **and** per-hour supply≥produced).
   Single-layer chosen for the distilled engine; revisit if order-level fidelity
   is needed.
-- Fixture realism: 2-day / 12-member default — scale up once the engine is
-  proven.
+- Fixture realism: full-week / 11-member default — raise `MAX_MEMBERS` /
+  task counts for a larger instance once the engine is proven (watch solve time).
+- Solve-time vs. optimality: proving cost-optimality over the full week is the
+  expensive tail (~2 min). For the API/UI, consider capping the time limit and
+  reporting the unmet-optimal schedule, or adding a round-2 relative-gap stop.
