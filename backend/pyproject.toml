@@ -1,7 +1,7 @@
 [project]
-name = "nl-scheduling-engine"
+name = "rosterai"
 version = "0.1.0"
-description = "Scheduling Engine for the NL Workforce Scheduling Assistant"
+description = "Scheduling Engine for ShiftMind, an AI workforce scheduling assistant"
 requires-python = ">=3.10,<3.13"
 dependencies = [
     # 9.15 wheel segfaults on the dev machine; 9.11.4210 is the validated pin.

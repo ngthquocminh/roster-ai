@@ -1,4 +1,8 @@
-# NL Workforce Scheduling Assistant
+# ShiftMind
+
+> AI-powered workforce scheduling — natural language constraints + optimization solver
+
+**Repo:** `rosterai` · **Product name:** ShiftMind
 
 A workforce scheduling assistant for distribution-centre operations. A constraint
 solver (the **Scheduling Engine**) produces a weekly schedule from workforce +

@@ -1,4 +1,6 @@
-# NL Workforce Scheduling Assistant — System Design
+# ShiftMind — System Design
+
+> **Repo:** `rosterai` · **Product name:** ShiftMind
 
 **What it is.** A workforce scheduling assistant: load a distribution-centre week of
 workforce + demand data → a constraint solver produces a weekly schedule →
@@ -61,7 +63,7 @@ swapping the solver library or LLM vendor touches only one infra package.
 ### 3.1 Repository layout (Phase 1)
 
 ```
-nl-scheduling-assistant/            # one git repo
+rosterai/                           # one git repo
   data/
     sample_tiny_input.json          # generated fixture (committed, shared)
   backend/                          # Phase 1 lives here; FastAPI app added in Phase 2
