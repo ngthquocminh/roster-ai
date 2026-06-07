@@ -15,6 +15,12 @@ env/
 output/
 *.log
 
+# SQLite app database (created at runtime)
+*.db
+*.db-wal
+*.db-shm
+backend/var/
+
 # Full weekly source input (~16 MB) — kept local for regenerating the fixture,
 # not committed. Only the small generated data/sample_tiny_input.json is tracked.
 data/sample_weekly_input.json

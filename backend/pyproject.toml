@@ -7,11 +7,14 @@ dependencies = [
     # 9.15 wheel segfaults on the dev machine; 9.11.4210 is the validated pin.
     "ortools==9.11.4210",
     "pandas",
+    "fastapi",
+    "uvicorn[standard]",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
+    "httpx",  # required by fastapi.testclient.TestClient
 ]
 
 [tool.pytest.ini_options]

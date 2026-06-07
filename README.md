@@ -17,14 +17,21 @@ for the full system design and phase plan.
 
 **Phase 1 — Scheduling Engine + data spine: complete.** Loads a real-schema
 weekly input, solves a lexicographic (unmet → cost) model, and reports coverage,
-cost, and a schedule. Backend API, LLM, and frontend are future phases.
+cost, and a schedule.
+
+**Phase 2 — Backend skeleton: complete.** A FastAPI app over SQLite: create
+scenarios from a fixture, trigger runs that solve in a worker thread (off the
+event loop), poll status, and fetch results. LLM and frontend are future phases.
 
 ## Layout
 
 ```
-backend/      # Phase 1 engine: domain/ engine/ ingest/ config/ fixtures/ run.py tests/
+backend/      # domain/ engine/ ingest/ config/ fixtures/ run.py tests/
+              # api/ services/ store/ settings.py   (Phase 2 backend)
 data/         # sample_tiny_input.json  (small coherent fixture, real schema)
-design.md     # full system design + phase plan
+design.md     # full system design (the "how")
+PLAN.md       # build plan + phase status tracker (the "what's done / next")
+docs/API.md   # HTTP API reference (endpoints, models, run lifecycle)
 ```
 
 ## Quick start
@@ -35,7 +42,7 @@ Dependencies are managed with [uv](https://docs.astral.sh/uv/). From `backend/`:
 cd backend
 uv sync                                       # create .venv + install (uses uv.lock)
 
-uv run python run.py ../data/sample_tiny_input.json   # solve the fixture
+uv run python run.py ../data/sample_tiny_input.json   # solve the fixture (CLI)
 uv run pytest -q                              # run the tests
 ```
 
@@ -44,6 +51,33 @@ Regenerate the small fixture from a full weekly input (stdlib only, no solver):
 ```bash
 uv run python fixtures/build_short_input.py
 ```
+
+### Backend API (Phase 2)
+
+```bash
+cd backend
+uv run uvicorn api.main:app --reload          # http://127.0.0.1:8000  (/docs for Swagger)
+```
+
+Lifecycle: list fixtures → create a scenario → trigger a run → poll → get result.
+
+```bash
+curl localhost:8000/fixtures
+curl -X POST localhost:8000/scenarios \
+  -H 'content-type: application/json' \
+  -d '{"name":"week1","fixture":"sample_tiny_input.json","time_limit_s":60}'
+curl -X POST localhost:8000/scenarios/<scenario_id>/runs   # -> run (PENDING)
+curl localhost:8000/runs/<run_id>                          # poll until COMPLETED
+curl localhost:8000/runs/<run_id>/result                   # metrics + schedule
+```
+
+The solve runs in a worker thread, so the API stays responsive during a run; a
+run finishes `COMPLETED` even if the solver hits its time limit (it reports the
+unmet-optimal schedule with `solver_status` `UNKNOWN`). SQLite lives at
+`backend/var/rosterai.db` (override with `ROSTERAI_DB`).
+
+Full endpoint/model reference: [`docs/API.md`](docs/API.md). Live schema at
+`/docs` (Swagger), `/redoc`, and `/openapi.json` when the server is running.
 
 ## Notes
 
