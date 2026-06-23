@@ -1,6 +1,11 @@
 # ShiftMind — System Design
 
 > **Repo:** `rosterai` · **Product name:** ShiftMind
+>
+> This is the primary design doc — how the system is built. To run it see
+> [`../README.md`](../README.md); for the HTTP API see [`API.md`](API.md); for
+> status see [`PLAN.md`](PLAN.md). (The original project idea is archived in
+> [`vision.md`](vision.md) for reference only.)
 
 **What it is.** A workforce scheduling assistant: load a distribution-centre week of
 workforce + demand data → a constraint solver produces a weekly schedule →
@@ -9,9 +14,10 @@ result. The **Scheduling Engine** is an open-source-solver (OR-Tools CP-SAT)
 reimplementation of the core logic of a production weekly scheduling model
 (CPLEX/docplex, ~2,500 lines of constraints, ~759 team members).
 
-**Status.** This document is the working spec. **Phase 1 (Scheduling Engine +
-data spine)** is the current build target; the rest of the system is described
-for context and to keep the architecture honest.
+**Status.** Phases 1–2 (Scheduling Engine + data spine, backend skeleton) are
+complete; **Phase 3 (LLM layer)** is next. See [`PLAN.md`](PLAN.md) for the
+live tracker. The rest of the system is described here for context and to keep
+the architecture honest.
 
 ---
 
@@ -89,7 +95,8 @@ rosterai/                           # one git repo
       test_adapter.py test_engine_small.py
     pyproject.toml uv.lock          # uv-managed deps + lockfile
   frontend/                         # added in Phase 4
-  design.md  docker-compose.yml  README.md
+  docs/                             # design.md, PLAN.md, API.md, vision.md
+  README.md  docker-compose.yml
 ```
 
 Deployment target is **AWS** (not yet planned in detail): frontend → S3 +
@@ -240,6 +247,31 @@ untouched.
   known optimum (full coverage feasible → unmet 0; undersupplied → expected
   unmet). `tests/test_adapter.py`: adapter parses the fixture without loss.
 - Result is deterministic (fixed CP-SAT seed).
+
+### 3.7 Notable design decisions
+
+Brief rationale for the choices most likely to be questioned:
+
+- **Real-schema JSON input, not demo CSVs.** The engine is a distilled
+  reimplementation of a real production scheduler, so it ingests a real-schema
+  weekly JSON via an adapter and consumes the materialized Workload tables. This
+  validates the model against real data shapes from day one. CSV upload, if
+  added later, is just another adapter feeding the same `SchedulingProblem`.
+- **Lexicographic objective, not a weighted sum.** Demand coverage must never be
+  traded for cost. A weighted sum makes that a function of weight tuning (brittle);
+  lexicographic solve-and-lock (minimize unmet, lock it, then minimize cost) makes
+  it a hard guarantee. Cost-proving is the slow tail, so a time-limited run falls
+  back to the round-1 (unmet-optimal) snapshot rather than failing.
+- **Shift templates from input data, not hardcoded.** Templates + breaks vary by
+  site/agreement and come from the input, so a new site needs no code change.
+- **Solves run in a worker thread pool, not FastAPI BackgroundTasks.** A solve is
+  CPU-bound and long; a thread pool keeps it off the event loop with bounded
+  concurrency (one at a time) and a status lifecycle persisted to SQLite.
+- **Lightweight infra: stdlib `sqlite3` + dataclass settings.** Two small tables
+  don't justify SQLAlchemy/Alembic/pydantic-settings yet; revisit when the schema
+  grows (sessions, files, constraints). Pydantic is still used for API schemas.
+- **Single-tenant for now.** No sessions/auth yet — fine for local/demo, not for
+  shared public hosting. Sessions are additive when needed (see §4).
 
 ---
 

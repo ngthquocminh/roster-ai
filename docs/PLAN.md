@@ -1,10 +1,20 @@
 # ShiftMind — Build Plan & Status
 
-Living tracker for the build. **`design.md` is the source of truth for *how*;
-this file tracks *what's done* and *what's next*.** Update the checkboxes as work
-lands; keep phase status in sync with the table below.
+Living tracker for the build. **[`design.md`](design.md) is the source of truth
+for *how*; this file tracks *what's done* and *what's next*.** Update the
+checkboxes as work lands; keep phase status in sync with the table below.
 
 Status legend: ✅ done · 🟡 in progress · ⬜ not started · ⏸ deferred/optional
+
+### How we document a phase
+
+1. **Before coding** — write a per-phase plan doc `phase-<n>-<name>.md` (here in
+   `docs/`): goal & measurable targets, design sketch, step-by-step tasks, open
+   questions. Expand this file's phase checklist to match.
+2. **While building** — tick the checklist here; keep the phase doc current;
+   update [`API.md`](API.md) when endpoints change.
+3. **When it ships** — fold the durable design into [`design.md`](design.md),
+   mark the phase ✅ here. The phase doc stays as a record (or is deleted).
 
 ## Status at a glance
 
@@ -22,6 +32,8 @@ next build target (not yet started).
 ---
 
 ## Phase 1 — Scheduling Engine + data spine ✅
+
+Plan doc: [`phase-1-engine.md`](phase-1-engine.md).
 
 The distilled CP-SAT engine that turns a real-schema weekly input into a
 schedule + coverage/cost metrics. CLI only — no web, no LLM.
@@ -58,6 +70,8 @@ schedule + coverage/cost metrics. CLI only — no web, no LLM.
 ---
 
 ## Phase 2 — Backend skeleton ✅
+
+Plan doc: [`phase-2-backend.md`](phase-2-backend.md).
 
 FastAPI app exposing the engine: manage scenarios, trigger runs off the event
 loop, serve results. SQLite (WAL) persistence. No LLM yet.

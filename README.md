@@ -10,8 +10,8 @@ demand data; later phases add a FastAPI backend, natural-language constraint
 editing + LLM insights, and a React UI.
 
 The Scheduling Engine is an open-source-solver (OR-Tools CP-SAT) reimplementation
-of the core logic of a production weekly scheduling model. See [`design.md`](design.md)
-for the full system design and phase plan.
+of the core logic of a production weekly scheduling model. See
+[`docs/design.md`](docs/design.md) for the full system design and phase plan.
 
 ## Status
 
@@ -29,10 +29,19 @@ event loop), poll status, and fetch results. LLM and frontend are future phases.
 backend/      # domain/ engine/ ingest/ config/ fixtures/ run.py tests/
               # api/ services/ store/ settings.py   (Phase 2 backend)
 data/         # sample_tiny_input.json  (small coherent fixture, real schema)
-design.md     # full system design (the "how")
-PLAN.md       # build plan + phase status tracker (the "what's done / next")
-docs/API.md   # HTTP API reference (endpoints, models, run lifecycle)
+docs/         # all project docs:
+              #   design.md   — system design (architecture, the model, decisions)
+              #   PLAN.md     — build plan + phase status tracker
+              #   API.md      — HTTP API reference
+              #   vision.md   — original project idea, archived for reference
 ```
+
+## Documentation
+
+- [`docs/design.md`](docs/design.md) — system design and architecture (start here).
+- [`docs/API.md`](docs/API.md) — HTTP API reference.
+- [`docs/PLAN.md`](docs/PLAN.md) — phase plan and status.
+- [`docs/vision.md`](docs/vision.md) — the original idea, kept for reference (not maintained).
 
 ## Quick start
 
