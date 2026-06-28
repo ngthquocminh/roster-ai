@@ -22,7 +22,7 @@ calibrates penalty weights — while CI stays stub-only throughout.
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: First NL Constraint End-to-End** - One plain-English constraint flows through the stub provider into a soft CP-SAT penalty and re-solve, proving the seam
+- [x] **Phase 1: First NL Constraint End-to-End** - One plain-English constraint flows through the stub provider into a soft CP-SAT penalty and re-solve, proving the seam (completed 2026-06-28)
 - [ ] **Phase 2: Full 5-Tool Set + Safe Validation** - All five solver tools, with arg/ID validation, plain-English errors, and parse-UX fields
 - [ ] **Phase 3: On-Demand Insight Reports** - Decoupled, metric-grounded, cached natural-language insight endpoint
 - [ ] **Phase 4: Real Claude Provider + Penalty Calibration** - Live Claude behind the Protocol, calibrated weights, one CI-excluded integration test
@@ -42,11 +42,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A scenario with no overrides re-solves identically to the pre-LLM baseline (no regression).
   4. The `StubLLMProvider` is injected via a `get_llm_provider` dependency (mirroring `get_engine`) and returns Claude-faithful `tool_use` blocks (`type`/`id`/`name`/`input`); the full NL→override→re-solve round trip passes in CI with zero network calls.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 - [x] 01-01-PLAN.md — Engine soft-penalty slice: OverrideCall domain seam + SolverConfig.overrides + CP-SAT per-hour shortfall penalty (round-2 only) + engine honors/no-regression tests
 - [x] 01-02-PLAN.md — Parse/store slice: vendor-agnostic LLMProvider + StubLLMProvider + get_llm_provider + POST /constraints + constraint_service (resolve/validate/persist) + ScenarioRepo.update_overrides
-- [ ] 01-03-PLAN.md — Integration slice: run_service threads overrides into SolverConfig + full stub-driven NL→override→re-solve round-trip test
+- [x] 01-03-PLAN.md — Integration slice: run_service threads overrides into SolverConfig + full stub-driven NL→override→re-solve round-trip test
 
 ### Phase 2: Full 5-Tool Set + Safe Validation
 
@@ -100,7 +100,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. First NL Constraint End-to-End | 2/3 | In Progress|  |
+| 1. First NL Constraint End-to-End | 3/3 | Complete   | 2026-06-28 |
 | 2. Full 5-Tool Set + Safe Validation | 0/TBD | Not started | - |
 | 3. On-Demand Insight Reports | 0/TBD | Not started | - |
 | 4. Real Claude Provider + Penalty Calibration | 0/TBD | Not started | - |
