@@ -38,7 +38,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Re-solving a scenario that carries an override returns a schedule that visibly honors it; the override enters the round-2 (cost) objective as a soft penalty only — never round-1 (unmet), and never as a hard constraint that can make the model infeasible.
   3. A scenario with no overrides re-solves identically to the pre-LLM baseline (no regression).
   4. The `StubLLMProvider` is injected via a `get_llm_provider` dependency (mirroring `get_engine`) and returns Claude-faithful `tool_use` blocks (`type`/`id`/`name`/`input`); the full NL→override→re-solve round trip passes in CI with zero network calls.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 01-01-PLAN.md — Engine soft-penalty slice: OverrideCall domain seam + SolverConfig.overrides + CP-SAT per-hour shortfall penalty (round-2 only) + engine honors/no-regression tests
+- [ ] 01-02-PLAN.md — Parse/store slice: vendor-agnostic LLMProvider + StubLLMProvider + get_llm_provider + POST /constraints + constraint_service (resolve/validate/persist) + ScenarioRepo.update_overrides
+- [ ] 01-03-PLAN.md — Integration slice: run_service threads overrides into SolverConfig + full stub-driven NL→override→re-solve round-trip test
 
 ### Phase 2: Full 5-Tool Set + Safe Validation
 **Goal**: A user can express any of the five supported constraints in plain English, see a readable echo of what was understood, and have unsafe, degenerate, or unknown inputs rejected with clear guidance before anything reaches the solver.
@@ -83,7 +86,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. First NL Constraint End-to-End | 0/TBD | Not started | - |
+| 1. First NL Constraint End-to-End | 0/3 | Not started | - |
 | 2. Full 5-Tool Set + Safe Validation | 0/TBD | Not started | - |
 | 3. On-Demand Insight Reports | 0/TBD | Not started | - |
 | 4. Real Claude Provider + Penalty Calibration | 0/TBD | Not started | - |
