@@ -9,18 +9,18 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 
 ### LLM Provider Seam
 
-- [ ] **LLM-01**: An `LLMProvider` Protocol defines a synchronous interface with two operations — parse constraints, and generate insights
+- [x] **LLM-01**: An `LLMProvider` Protocol defines a synchronous interface with two operations — parse constraints, and generate insights
 - [ ] **LLM-02**: A Claude implementation sits behind the Protocol with a config-driven model id (default `claude-sonnet-4-6` via an `ANTHROPIC_MODEL` setting)
-- [ ] **LLM-03**: The provider is injected via a FastAPI dependency seam (mirroring `get_engine`), so a stub can be substituted in tests
+- [x] **LLM-03**: The provider is injected via a FastAPI dependency seam (mirroring `get_engine`), so a stub can be substituted in tests
 
 ### NL Constraint Parsing
 
-- [ ] **NLC-01**: User can submit plain-English constraint text for a scenario via an API endpoint
+- [x] **NLC-01**: User can submit plain-English constraint text for a scenario via an API endpoint
 - [ ] **NLC-02**: Text is parsed into zero or more solver-hook tool calls from the fixed set: `lock_worker_shift`, `set_min_workers_per_task`, `exclude_worker_from_task`, `scale_demand`, `set_max_hours`
 - [ ] **NLC-03**: When the text maps to no tool, the system returns "no constraint found" rather than forcing a spurious tool call
 - [ ] **NLC-04**: The response echoes a human-readable `parsed_constraint` summary of what was understood
 - [ ] **NLC-05**: Ambiguous or unparseable input returns a `clarification_needed` signal with a question (single-turn — the user rephrases)
-- [ ] **NLC-06**: Validated tool calls are persisted to the scenario `overrides` JSON with stable per-override IDs
+- [x] **NLC-06**: Validated tool calls are persisted to the scenario `overrides` JSON with stable per-override IDs
 
 ### Constraint Validation
 
@@ -46,8 +46,8 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 
 ### Testing
 
-- [ ] **TEST-01**: A `StubLLMProvider` implements the Protocol with Claude-faithful tool-use wire format; no live LLM API runs in CI
-- [ ] **TEST-02**: Tests cover the full NL → override → re-solve round trip driven by the stub
+- [x] **TEST-01**: A `StubLLMProvider` implements the Protocol with Claude-faithful tool-use wire format; no live LLM API runs in CI
+- [x] **TEST-02**: Tests cover the full NL → override → re-solve round trip driven by the stub
 - [ ] **TEST-03**: Validation tests cover unknown IDs and out-of-bounds arguments
 - [ ] **TEST-04**: One live-Claude integration test exists but is excluded from the default CI run
 
@@ -87,12 +87,12 @@ Which phases cover which requirements. Populated during roadmap creation.
 | ENG-02 | Phase 1 | Complete |
 | ENG-03 | Phase 1 | Complete |
 | ENG-06 | Phase 1 | Complete |
-| LLM-01 | Phase 1 | Pending |
-| LLM-03 | Phase 1 | Pending |
-| NLC-01 | Phase 1 | Pending |
-| NLC-06 | Phase 1 | Pending |
-| TEST-01 | Phase 1 | Pending |
-| TEST-02 | Phase 1 | Pending |
+| LLM-01 | Phase 1 | Complete |
+| LLM-03 | Phase 1 | Complete |
+| NLC-01 | Phase 1 | Complete |
+| NLC-06 | Phase 1 | Complete |
+| TEST-01 | Phase 1 | Complete |
+| TEST-02 | Phase 1 | Complete |
 | NLC-02 | Phase 2 | Pending |
 | NLC-03 | Phase 2 | Pending |
 | NLC-04 | Phase 2 | Pending |
