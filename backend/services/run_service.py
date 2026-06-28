@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Optional
 
+from domain.overrides import OverrideCall
 from engine.base import SchedulerEngine, SolverConfig
 from ingest.input_adapter import load_problem
 from services.serialize import serialize_result
@@ -81,7 +82,13 @@ def _execute(run_id: str, scenario: dict, engine: SchedulerEngine,
 
         path = os.path.join(data_dir, scenario["fixture"])
         problem = load_problem(path)
-        config = SolverConfig(time_limit_s=float(scenario["time_limit_s"]))
+        # Parse scenario's stored overrides JSON (dict keyed by content-hash id, D-04)
+        # into a list[OverrideCall] for SolverConfig. An empty store yields [] and the
+        # solve is byte-identical to the baseline (ENG-06). Malformed entries raise
+        # inside this try/except, marking the run FAILED rather than crashing the pool.
+        raw = json.loads(scenario["overrides"] or "{}")
+        overrides = [OverrideCall(id=k, tool=v["tool"], args=v["args"]) for k, v in raw.items()]
+        config = SolverConfig(time_limit_s=float(scenario["time_limit_s"]), overrides=overrides)
         result = engine.solve(problem, config)
 
         repo.set_completed(run_id, result.status,
