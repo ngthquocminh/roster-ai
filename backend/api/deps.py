@@ -10,6 +10,7 @@ from typing import Iterator
 from fastapi import Depends
 
 from engine.base import SchedulerEngine, create_engine
+from llm.base import LLMProvider, create_provider
 from settings import Settings, default_settings
 from store import db
 
@@ -29,3 +30,7 @@ def get_db(settings: Settings = Depends(get_settings)) -> Iterator:
 
 def get_engine() -> SchedulerEngine:
     return create_engine("cpsat")
+
+
+def get_llm_provider() -> LLMProvider:
+    return create_provider("stub")

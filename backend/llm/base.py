@@ -1,0 +1,27 @@
+"""LLMProvider seam — the swap point for language-model backends.
+
+Mirror of engine/base.py: Protocol + factory with lazy imports. The Protocol
+returns provider-neutral list[OverrideCall]; no vendor-specific payload crosses
+this boundary (D-08). The real Claude SDK is Phase 4; only the stub is registered
+here.
+"""
+from __future__ import annotations
+
+from typing import Protocol
+
+from domain.overrides import OverrideCall
+
+
+class LLMProvider(Protocol):
+    def parse_constraints(self, text: str) -> list[OverrideCall]: ...
+
+    @property
+    def name(self) -> str: ...
+
+
+def create_provider(name: str) -> LLMProvider:
+    """Registry of available LLM providers. Add a backend here to make it swappable."""
+    if name == "stub":
+        from llm.stub import StubLLMProvider
+        return StubLLMProvider()
+    raise ValueError(f"Unknown LLM provider: {name!r}. Available: ['stub']")
