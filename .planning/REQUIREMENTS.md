@@ -83,13 +83,38 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | — | Pending |
+| ENG-01 | Phase 1 | Pending |
+| ENG-02 | Phase 1 | Pending |
+| ENG-03 | Phase 1 | Pending |
+| ENG-06 | Phase 1 | Pending |
+| LLM-01 | Phase 1 | Pending |
+| LLM-03 | Phase 1 | Pending |
+| NLC-01 | Phase 1 | Pending |
+| NLC-06 | Phase 1 | Pending |
+| TEST-01 | Phase 1 | Pending |
+| TEST-02 | Phase 1 | Pending |
+| NLC-02 | Phase 2 | Pending |
+| NLC-03 | Phase 2 | Pending |
+| NLC-04 | Phase 2 | Pending |
+| NLC-05 | Phase 2 | Pending |
+| VAL-01 | Phase 2 | Pending |
+| VAL-02 | Phase 2 | Pending |
+| VAL-03 | Phase 2 | Pending |
+| ENG-05 | Phase 2 | Pending |
+| TEST-03 | Phase 2 | Pending |
+| INS-01 | Phase 3 | Pending |
+| INS-02 | Phase 3 | Pending |
+| INS-03 | Phase 3 | Pending |
+| INS-04 | Phase 3 | Pending |
+| LLM-02 | Phase 4 | Pending |
+| ENG-04 | Phase 4 | Pending |
+| TEST-04 | Phase 4 | Pending |
 
 **Coverage:**
-- v1 requirements: 24 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 24 ⚠️
+- v1 requirements: 26 total (source count of "24" was a miscount; 26 distinct IDs enumerated above)
+- Mapped to phases: 26 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-28*
-*Last updated: 2026-06-28 after initial definition*
+*Last updated: 2026-06-28 after roadmap creation (traceability populated)*
