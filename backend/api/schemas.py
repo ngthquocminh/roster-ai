@@ -29,3 +29,15 @@ class RunOut(BaseModel):
     finished_at: Optional[str] = None
     solver_status: Optional[str] = None
     error: Optional[str] = None
+
+
+class ConstraintParseRequest(BaseModel):
+    scenario_id: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class ConstraintParseResponse(BaseModel):
+    id: str
+    tool: str
+    args: dict
+    parsed_constraint: str

@@ -23,11 +23,13 @@ from domain.overrides import OverrideCall, override_id
 
 # Matches phrasings like:
 #   "at least 2 on Pick"
+#   "at least 2 on C Pick"
 #   "minimum 3 on the Pack area"
 #   "need at least 5 on Receiving"
+# The task token group captures 1-3 words to handle multi-word task names like "C Pick".
 _MIN_WORKERS_RE = re.compile(
     r"(?:at\s+least|minimum|min|need\s+at\s+least|require\s+at\s+least)"
-    r"\s+(\d+)\s+(?:workers?\s+)?on\s+(?:the\s+)?(\w+)",
+    r"\s+(\d+)\s+(?:workers?\s+)?on\s+(?:the\s+)?(\w+(?:\s+\w+){0,2})",
     re.IGNORECASE,
 )
 

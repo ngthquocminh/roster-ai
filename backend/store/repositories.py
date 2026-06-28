@@ -33,6 +33,13 @@ class ScenarioRepo:
             "SELECT * FROM scenarios ORDER BY created_at DESC").fetchall()
         return [dict(r) for r in rows]
 
+    def update_overrides(self, scenario_id: str, overrides_json: str) -> None:
+        """Write the overrides JSON column for a scenario. Caller commits."""
+        self.conn.execute(
+            "UPDATE scenarios SET overrides=? WHERE id=?",
+            (overrides_json, scenario_id),
+        )
+
 
 class RunRepo:
     def __init__(self, conn: sqlite3.Connection):

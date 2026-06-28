@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from api.deps import get_settings
-from api.routers import fixtures, health, runs, scenarios
+from api.routers import constraints, fixtures, health, runs, scenarios
 from services import run_service
 from store import db
 
@@ -28,3 +28,4 @@ app.include_router(health.router)
 app.include_router(fixtures.router)
 app.include_router(scenarios.router)
 app.include_router(runs.router)
+app.include_router(constraints.router)
