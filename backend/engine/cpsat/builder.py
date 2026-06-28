@@ -14,6 +14,7 @@ from typing import Dict, List, Tuple
 from ortools.sat.python import cp_model
 
 from config import constants as C
+from domain.overrides import OverrideCall
 from domain.problem import SchedulingProblem
 from domain.types import DemandFamily, Member, ShiftTemplate, Window
 
@@ -89,8 +90,9 @@ class TaskVar:
 
 # ----------------------------- builder --------------------------------------
 class CpSatBuilder:
-    def __init__(self, problem: SchedulingProblem):
+    def __init__(self, problem: SchedulingProblem, overrides: list[OverrideCall] | None = None):
         self.p = problem
+        self.overrides: list[OverrideCall] = overrides or []
         self.m = cp_model.CpModel()
         self.shift_vars: List[ShiftVar] = []
         self.task_vars: List[TaskVar] = []
@@ -102,6 +104,8 @@ class CpSatBuilder:
         self.round2_cost = None
         # precomputed reference rate per task (avg qualified rate) for unmet->hours
         self._ref_rate: Dict[str, float] = {}
+        # coverage_terms exposed for _build_objectives; set by build() (D-02)
+        self.coverage_terms: Dict[Tuple[str, int], List[Tuple[cp_model.IntVar, float]]] = {}
 
     # ---- demand aggregation ----
     def _aggregate_demand(self):
@@ -223,6 +227,10 @@ class CpSatBuilder:
                             shift_task_vars.extend(vars_)
                         self.m.Add(sum(shift_task_vars) >= sv.var)         # no empty selected shift
 
+        # Store coverage_terms before building objectives so _build_objectives
+        # can reuse the per-(task,hour) body-count expressions for the shortfall
+        # penalty (D-02).
+        self.coverage_terms = coverage_terms
         self._add_window_and_cap_constraints()
         self._add_coverage_constraints(vol_demand, hc_demand, is_ind, coverage_terms)
         self._build_objectives(is_ind)
@@ -313,4 +321,31 @@ class CpSatBuilder:
             int(round(sv.eff_h * sv.member.wage_per_hour * C.COST_SCALE)) * sv.var
             for sv in self.shift_vars
         ]
-        self.round2_cost = sum(cost_terms) if cost_terms else 0
+
+        # --- soft shortfall penalty for NL-derived overrides (D-02/D-03) ---
+        # Added to round2_cost ONLY — never to round1_unmet, never as a hard
+        # constraint.  Because round 1 is locked before round 2 is minimised
+        # (objective.py), this term can never affect round-1 feasibility; an
+        # override can therefore never make the solve infeasible (T-01-E1).
+        shortfall_terms = []
+        for ov in self.overrides:
+            if ov.tool != "set_min_workers_per_task":
+                continue  # only tool supported in Phase 1 (D-01)
+            tid = ov.args["task_id"]
+            n = int(ov.args["n"])
+            # hours with demand for this task (union of vol and hc demand)
+            hours = set(self.vol_demand.get(tid, {})) | set(self.hc_demand.get(tid, {}))
+            for h in hours:
+                # body count: bare vars (coeff ignored) — headcount form (D-02)
+                bodies = [var for var, _ in self.coverage_terms.get((tid, h), [])]
+                # slack bounded by n so an empty supply degrades to a constant
+                # penalty rather than causing infeasibility (T-01-E1)
+                short = self.m.NewIntVar(0, n, f"minw_short_{tid[:6]}_{h}")
+                self.m.Add(sum(bodies) + short >= n)
+                shortfall_terms.append(short)
+
+        self.round2_cost = (
+            sum(cost_terms) + C.MIN_WORKERS_PENALTY * sum(shortfall_terms)
+            if (cost_terms or shortfall_terms)
+            else 0
+        )

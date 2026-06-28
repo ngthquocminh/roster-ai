@@ -23,7 +23,7 @@ class CpSatEngine:
     name = "cpsat"
 
     def solve(self, problem: SchedulingProblem, config: SolverConfig) -> SolveResult:
-        builder = CpSatBuilder(problem).build()
+        builder = CpSatBuilder(problem, overrides=config.overrides).build()
         lex = solve_lexicographic(builder, config.time_limit_s, config.num_workers, config.seed)
 
         # No solution at all (round 1 never found one): report empty gracefully.
