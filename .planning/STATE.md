@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 1
-current_phase_name: First NL Constraint End-to-End
-status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-06-28T07:58:38.593Z"
+current_phase: 01
+current_phase_name: first-nl-constraint-end-to-end
+status: executing
+stopped_at: Completed 01-01 engine override seam
+last_updated: "2026-06-28T08:47:15.197Z"
 last_activity: 2026-06-28
-last_activity_desc: Roadmap created (4 vertical slices, 26/26 requirements mapped)
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** Phase 1 — First NL Constraint End-to-End
+**Current focus:** Phase 01 — first-nl-constraint-end-to-end
 
 ## Current Position
 
-Phase: 1 of 4 (First NL Constraint End-to-End)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-06-28 — Roadmap created (4 vertical slices, 26/26 requirements mapped)
+Phase: 01 (first-nl-constraint-end-to-end) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-06-28 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -55,6 +55,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 01 P01 | 7 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ Recent decisions affecting current work:
 - [Roadmap]: `OverrideCall` types live in `domain/` (not `llm/`) to avoid an engine→llm import cycle.
 - [Roadmap]: Overrides apply as SOFT penalties in round-2 (cost) only; never round-1, never infeasible.
 - [Roadmap]: Insights are a separate on-demand, cached step — an LLM failure never fails a valid schedule.
+- [Phase ?]: MIN_WORKERS_PENALTY = 100_000 scaled cents; Phase-4 calibration deferred (ENG-04)
 
 ### Pending Todos
 
@@ -90,6 +92,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-28T07:58:38.585Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-first-nl-constraint-end-to-end/01-CONTEXT.md
+Last session: 2026-06-28T08:47:15.187Z
+Stopped at: Completed 01-01 engine override seam
+Resume file: None

@@ -30,12 +30,12 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 
 ### Engine Override Application
 
-- [ ] **ENG-01**: `OverrideCall` domain types live in `domain/` so the engine references them without an engine→llm import cycle
-- [ ] **ENG-02**: `SolverConfig` carries the overrides; the `SchedulerEngine.solve(problem, config)` signature is unchanged
-- [ ] **ENG-03**: The CP-SAT builder applies each override as a **soft** penalty term — never a hard constraint that can make the model infeasible
+- [x] **ENG-01**: `OverrideCall` domain types live in `domain/` so the engine references them without an engine→llm import cycle
+- [x] **ENG-02**: `SolverConfig` carries the overrides; the `SchedulerEngine.solve(problem, config)` signature is unchanged
+- [x] **ENG-03**: The CP-SAT builder applies each override as a **soft** penalty term — never a hard constraint that can make the model infeasible
 - [ ] **ENG-04**: Overrides enter the correct lexicographic round with calibrated penalty weights (respected, but not dominating the cost objective)
 - [ ] **ENG-05**: Re-solving a scenario with overrides yields a schedule reflecting them; degenerate solves (e.g. coverage collapsing to zero) are detected and flagged
-- [ ] **ENG-06**: A scenario with no overrides solves identically to today (no regression)
+- [x] **ENG-06**: A scenario with no overrides solves identically to today (no regression)
 
 ### Insights
 
@@ -83,10 +83,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENG-01 | Phase 1 | Pending |
-| ENG-02 | Phase 1 | Pending |
-| ENG-03 | Phase 1 | Pending |
-| ENG-06 | Phase 1 | Pending |
+| ENG-01 | Phase 1 | Complete |
+| ENG-02 | Phase 1 | Complete |
+| ENG-03 | Phase 1 | Complete |
+| ENG-06 | Phase 1 | Complete |
 | LLM-01 | Phase 1 | Pending |
 | LLM-03 | Phase 1 | Pending |
 | NLC-01 | Phase 1 | Pending |
@@ -111,6 +111,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | TEST-04 | Phase 4 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 26 total (source count of "24" was a miscount; 26 distinct IDs enumerated above)
 - Mapped to phases: 26 ✓
 - Unmapped: 0
