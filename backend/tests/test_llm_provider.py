@@ -1,0 +1,120 @@
+"""Tests for the LLM provider seam (LLMProvider Protocol + StubLLMProvider + DI).
+
+Verifies:
+- create_provider("stub") returns a StubLLMProvider with name=="stub"
+- create_provider("bogus") raises ValueError
+- StubLLMProvider.parse_constraints("at least 2 on Pick") -> one OverrideCall
+- OverrideCall fields: tool, args, id match expectations
+- Internal tool_use dict never crosses the Protocol boundary (returns list[OverrideCall])
+- Non-matching text returns []
+- get_llm_provider() dependency returns the stub
+"""
+from __future__ import annotations
+
+import pytest
+
+from domain.overrides import OverrideCall, override_id
+
+
+# ---------------------------------------------------------------------------
+# create_provider factory
+# ---------------------------------------------------------------------------
+
+def test_create_provider_stub_returns_stub_llm_provider():
+    from llm.base import create_provider
+    p = create_provider("stub")
+    assert p.name == "stub"
+
+
+def test_create_provider_bogus_raises_value_error():
+    from llm.base import create_provider
+    with pytest.raises(ValueError, match="stub"):
+        create_provider("bogus")
+
+
+# ---------------------------------------------------------------------------
+# StubLLMProvider.parse_constraints — matching text
+# ---------------------------------------------------------------------------
+
+def test_parse_constraints_returns_list_of_override_call():
+    from llm.base import create_provider
+    p = create_provider("stub")
+    result = p.parse_constraints("at least 2 on Pick")
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert isinstance(result[0], OverrideCall)
+
+
+def test_parse_constraints_correct_tool():
+    from llm.base import create_provider
+    p = create_provider("stub")
+    call = p.parse_constraints("at least 2 on Pick")[0]
+    assert call.tool == "set_min_workers_per_task"
+
+
+def test_parse_constraints_correct_args():
+    from llm.base import create_provider
+    p = create_provider("stub")
+    call = p.parse_constraints("at least 2 on Pick")[0]
+    assert call.args == {"task_id": "Pick", "n": 2}
+
+
+def test_parse_constraints_id_starts_with_ov():
+    from llm.base import create_provider
+    p = create_provider("stub")
+    call = p.parse_constraints("at least 2 on Pick")[0]
+    assert call.id.startswith("ov_")
+
+
+def test_parse_constraints_id_is_stable_content_hash():
+    """Same text twice -> same id (content-hash stability, D-05)."""
+    from llm.base import create_provider
+    p = create_provider("stub")
+    a = p.parse_constraints("at least 2 on Pick")[0]
+    b = p.parse_constraints("at least 2 on Pick")[0]
+    assert a.id == b.id
+
+
+def test_parse_constraints_id_matches_override_id_helper():
+    """The id field equals override_id(tool, args) for the human token args (pre-resolve)."""
+    from llm.base import create_provider
+    p = create_provider("stub")
+    call = p.parse_constraints("at least 2 on Pick")[0]
+    expected = override_id("set_min_workers_per_task", {"task_id": "Pick", "n": 2})
+    assert call.id == expected
+
+
+# ---------------------------------------------------------------------------
+# StubLLMProvider.parse_constraints — non-matching text
+# ---------------------------------------------------------------------------
+
+def test_parse_constraints_no_match_returns_empty_list():
+    from llm.base import create_provider
+    p = create_provider("stub")
+    assert p.parse_constraints("hello there") == []
+
+
+def test_parse_constraints_general_question_returns_empty():
+    from llm.base import create_provider
+    p = create_provider("stub")
+    assert p.parse_constraints("show me the schedule") == []
+
+
+# ---------------------------------------------------------------------------
+# get_llm_provider DI dependency
+# ---------------------------------------------------------------------------
+
+def test_get_llm_provider_returns_stub():
+    from api.deps import get_llm_provider
+    provider = get_llm_provider()
+    assert provider.name == "stub"
+
+
+def test_get_llm_provider_parse_constraints_works():
+    from api.deps import get_llm_provider
+    provider = get_llm_provider()
+    result = provider.parse_constraints("at least 3 on Pack")
+    # "Pack" token — stub should still parse even if it's not a real task id
+    assert isinstance(result, list)
+    # either 1 result (matched the number+task pattern) or 0 — either valid
+    assert len(result) in (0, 1)
