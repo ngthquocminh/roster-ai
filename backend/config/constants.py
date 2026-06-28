@@ -30,3 +30,12 @@ VOL_SCALE: int = 100        # volume & (rate*time) products -> ints
 HOUR_SCALE: int = 100_000   # labour-hours in the objective -> ints
 COST_SCALE: int = 100       # dollars -> cents
 ROSTER_UNFILL_WEIGHT: int = 1  # small nudge (in scaled hours) to fill rosters in round 1
+
+# Penalty per unit of headcount shortfall for set_min_workers_per_task overrides
+# (soft round-2 term only — never round 1, never a hard constraint).
+#
+# Chosen large enough that assigning one extra body to clear a single-hour shortfall
+# beats that body's marginal wage cost (a full shift: 8h * $40/h * COST_SCALE = 32_000),
+# yet not so large it dominates the entire round-2 cost objective.
+# Empirical calibration against the full-week fixture is deferred to Phase 4 (ENG-04).
+MIN_WORKERS_PENALTY: int = 100_000
