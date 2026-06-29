@@ -48,7 +48,7 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 
 - [x] **TEST-01**: A `StubLLMProvider` implements the Protocol with Claude-faithful tool-use wire format; no live LLM API runs in CI
 - [x] **TEST-02**: Tests cover the full NL → override → re-solve round trip driven by the stub
-- [ ] **TEST-03**: Validation tests cover unknown IDs and out-of-bounds arguments
+- [x] **TEST-03**: Validation tests cover unknown IDs and out-of-bounds arguments
 - [ ] **TEST-04**: One live-Claude integration test exists but is excluded from the default CI run
 
 ## v2 Requirements
@@ -101,7 +101,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | VAL-02 | Phase 2 | Complete |
 | VAL-03 | Phase 2 | Complete |
 | ENG-05 | Phase 2 | Complete |
-| TEST-03 | Phase 2 | Pending |
+| TEST-03 | Phase 2 | Complete |
 | INS-01 | Phase 3 | Pending |
 | INS-02 | Phase 3 | Pending |
 | INS-03 | Phase 3 | Pending |

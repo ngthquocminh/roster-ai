@@ -23,7 +23,7 @@ calibrates penalty weights — while CI stays stub-only throughout.
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: First NL Constraint End-to-End** - One plain-English constraint flows through the stub provider into a soft CP-SAT penalty and re-solve, proving the seam (completed 2026-06-28)
-- [ ] **Phase 2: Full 5-Tool Set + Safe Validation** - All five solver tools, with arg/ID validation, plain-English errors, and parse-UX fields
+- [x] **Phase 2: Full 5-Tool Set + Safe Validation** - All five solver tools, with arg/ID validation, plain-English errors, and parse-UX fields (completed 2026-06-29)
 - [ ] **Phase 3: On-Demand Insight Reports** - Decoupled, metric-grounded, cached natural-language insight endpoint
 - [ ] **Phase 4: Real Claude Provider + Penalty Calibration** - Live Claude behind the Protocol, calibrated weights, one CI-excluded integration test
 
@@ -62,7 +62,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A re-solve whose coverage collapses to zero for a task family is detected and flagged, rather than narrated as an optimization success.
   5. Validation tests cover unknown IDs and out-of-bounds arguments, including a mixed multi-tool call where one reference is valid and one is not.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans complete
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Partial-apply contract + parse-UX backbone (response shape, _resolve_member, no_constraint_found/clarification/rejection) for the min-workers tool
@@ -74,7 +74,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-04-PLAN.md — TEST-03 validation suite: unknown IDs, out-of-bounds args, and mixed valid/invalid multi-tool calls
+- [x] 02-04-PLAN.md — TEST-03 validation suite: unknown IDs, out-of-bounds args, and mixed valid/invalid multi-tool calls
 
 ### Phase 3: On-Demand Insight Reports
 
@@ -113,6 +113,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. First NL Constraint End-to-End | 3/3 | Complete    | 2026-06-28 |
-| 2. Full 5-Tool Set + Safe Validation | 3/4 | In Progress|  |
+| 2. Full 5-Tool Set + Safe Validation | 4/4 | Complete   | 2026-06-29 |
 | 3. On-Demand Insight Reports | 0/TBD | Not started | - |
 | 4. Real Claude Provider + Penalty Calibration | 0/TBD | Not started | - |
