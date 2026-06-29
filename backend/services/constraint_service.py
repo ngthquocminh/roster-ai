@@ -177,7 +177,6 @@ def parse_and_store(
             # Resolve human task token to a real task_id (VAL-02)
             rr = _resolve_task(problem, args["task_id"])
             if rr.clarification is not None:
-                # Ambiguous token → fold into clarification_needed
                 if clarification_needed is None:
                     clarification_needed = rr.clarification
                 continue
@@ -187,7 +186,7 @@ def parse_and_store(
             resolved_task_id = rr.resolved_id
             args["task_id"] = resolved_task_id
 
-            # Validate n > 0 (T-01-I6)
+            # Validate n > 0 (VAL-01)
             n = int(args["n"])
             if n <= 0:
                 rejected.append({
@@ -197,21 +196,172 @@ def parse_and_store(
                 continue
             args["n"] = n
 
-            # Build applied entry
-            new_id = override_id(tool, args)
             task = problem.task(resolved_task_id)
             task_label = task.name if task else resolved_task_id
             parsed_constraint = f"At least {n} workers on {task_label} (every demanded hour)"
             applied.append({
-                "id": new_id,
+                "id": override_id(tool, args),
                 "tool": tool,
                 "args": args,
                 "parsed_constraint": parsed_constraint,
             })
+
+        elif tool == "scale_demand":
+            # Resolve task token (VAL-02)
+            rr = _resolve_task(problem, args["task_id"])
+            if rr.clarification is not None:
+                if clarification_needed is None:
+                    clarification_needed = rr.clarification
+                continue
+            if rr.error is not None:
+                rejected.append({"tool": tool, "error": rr.error})
+                continue
+            args["task_id"] = rr.resolved_id
+
+            # Validate factor > 0 (VAL-01/T-02-05)
+            factor = float(args["factor"])
+            if factor <= 0:
+                rejected.append({
+                    "tool": tool,
+                    "error": (
+                        f"factor must be positive, got {factor}. "
+                        "Use a value > 0 (e.g. 1.5 to scale demand up by 50%)."
+                    ),
+                })
+                continue
+            args["factor"] = factor
+
+            task = problem.task(rr.resolved_id)
+            task_label = task.name if task else rr.resolved_id
+            parsed_constraint = f"Scale demand for {task_label} by {factor}x"
+            applied.append({
+                "id": override_id(tool, args),
+                "tool": tool,
+                "args": args,
+                "parsed_constraint": parsed_constraint,
+            })
+
+        elif tool == "lock_worker_shift":
+            # Resolve member token (VAL-02/D-11)
+            rr = _resolve_member(problem, args["member_id"])
+            if rr.clarification is not None:
+                if clarification_needed is None:
+                    clarification_needed = rr.clarification
+                continue
+            if rr.error is not None:
+                rejected.append({"tool": tool, "error": rr.error})
+                continue
+            args["member_id"] = rr.resolved_id
+
+            # Validate day within scenario horizon (VAL-01/T-02-07)
+            day = int(args["day"])
+            max_day = int(problem.horizon_h // 24) - 1
+            if day < 0 or day > max_day:
+                rejected.append({
+                    "tool": tool,
+                    "error": (
+                        f"day {day} is outside the scenario horizon. "
+                        f"Valid days: 0..{max_day} "
+                        f"(horizon is {problem.horizon_h:.0f}h = {max_day + 1} days)."
+                    ),
+                })
+                continue
+            args["day"] = day
+
+            # Resolve member name for the parsed_constraint echo
+            member = next((m for m in problem.members if m.contact_id == rr.resolved_id), None)
+            member_name = member.name if member else rr.resolved_id
+            parsed_constraint = f"Keep {member_name} scheduled on day {day}"
+            applied.append({
+                "id": override_id(tool, args),
+                "tool": tool,
+                "args": args,
+                "parsed_constraint": parsed_constraint,
+            })
+
+        elif tool == "exclude_worker_from_task":
+            # Resolve both member and task tokens (VAL-02/D-11)
+            rr_member = _resolve_member(problem, args["member_id"])
+            rr_task = _resolve_task(problem, args["task_id"])
+
+            # Collect any clarification or rejection from either resolution
+            got_clarification = False
+            if rr_member.clarification is not None:
+                if clarification_needed is None:
+                    clarification_needed = rr_member.clarification
+                got_clarification = True
+            if rr_task.clarification is not None:
+                if clarification_needed is None:
+                    clarification_needed = rr_task.clarification
+                got_clarification = True
+            if got_clarification:
+                continue
+
+            if rr_member.error is not None:
+                rejected.append({"tool": tool, "error": rr_member.error})
+                continue
+            if rr_task.error is not None:
+                rejected.append({"tool": tool, "error": rr_task.error})
+                continue
+
+            args["member_id"] = rr_member.resolved_id
+            args["task_id"] = rr_task.resolved_id
+
+            member = next((m for m in problem.members if m.contact_id == rr_member.resolved_id), None)
+            member_name = member.name if member else rr_member.resolved_id
+            task = problem.task(rr_task.resolved_id)
+            task_label = task.name if task else rr_task.resolved_id
+            parsed_constraint = f"Exclude {member_name} from {task_label}"
+            applied.append({
+                "id": override_id(tool, args),
+                "tool": tool,
+                "args": args,
+                "parsed_constraint": parsed_constraint,
+            })
+
+        elif tool == "set_max_hours":
+            # Resolve member token (VAL-02/D-11)
+            rr = _resolve_member(problem, args["member_id"])
+            if rr.clarification is not None:
+                if clarification_needed is None:
+                    clarification_needed = rr.clarification
+                continue
+            if rr.error is not None:
+                rejected.append({"tool": tool, "error": rr.error})
+                continue
+            args["member_id"] = rr.resolved_id
+
+            # Validate max_hours > 0 (VAL-01/T-02-06)
+            max_hours = float(args["max_hours"])
+            if max_hours <= 0:
+                rejected.append({
+                    "tool": tool,
+                    "error": (
+                        f"max_hours must be positive, got {max_hours}. "
+                        "Specify a weekly hour cap > 0."
+                    ),
+                })
+                continue
+            args["max_hours"] = max_hours
+
+            member = next((m for m in problem.members if m.contact_id == rr.resolved_id), None)
+            member_name = member.name if member else rr.resolved_id
+            parsed_constraint = f"Cap {member_name} at {max_hours} hours per week (soft)"
+            applied.append({
+                "id": override_id(tool, args),
+                "tool": tool,
+                "args": args,
+                "parsed_constraint": parsed_constraint,
+            })
+
         else:
             rejected.append({
                 "tool": tool,
-                "error": f"Unsupported tool {tool!r}. Only 'set_min_workers_per_task' is supported in Phase 2 plan 01.",
+                "error": (
+                    f"Unsupported tool {tool!r}. "
+                    "Supported tools: set_min_workers_per_task, scale_demand, "
+                    "lock_worker_shift, exclude_worker_from_task, set_max_hours."
+                ),
             })
 
     # Persist ONLY applied entries; rejected/clarification are response-only (T-02-02)
