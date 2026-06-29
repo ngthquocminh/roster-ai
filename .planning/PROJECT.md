@@ -32,18 +32,23 @@ explanation of what changed — without touching solver code or JSON.
 - ✓ FastAPI backend: scenario CRUD, run trigger/status/results over HTTP — Phase 2
 - ✓ Solve runs in a worker thread (never blocks the event loop) — Phase 2
 - ✓ SQLite (WAL) persistence; `overrides` JSON column reserved on scenarios — Phase 2
+- ✓ `LLMProvider` Protocol + stub provider seam (partial-apply parse contract) — Phase 1
+- ✓ NL constraint parser: plain English → all five validated solver-hook tool calls
+  (`lock_worker_shift`, `set_min_workers_per_task`, `exclude_worker_from_task`,
+  `scale_demand`, `set_max_hours`), with a readable `parsed_constraint` echo — Phase 2
+- ✓ Tool-call validation against real scenario IDs + arg bounds (reject unknown
+  member/task refs and out-of-range values with plain-English guidance) — Phase 2
+- ✓ Apply overrides as **soft** constraints in the CP-SAT solve and re-solve — all
+  five tools penalize, never make the model infeasible (verified) — Phases 1–2
+- ✓ Degenerate-re-solve detection: `SolveResult.warnings` flags families with real
+  demand but zero served hours, without touching solver status (ENG-05) — Phase 2
 
 ### Active
 
 <!-- This milestone — Phase 3 LLM layer. Hypotheses until shipped and validated. -->
 
-- [ ] `LLMProvider` Protocol + Claude implementation (config-driven model id)
-- [ ] NL constraint parser: plain English → validated solver-hook tool calls
-      (`lock_worker_shift`, `set_min_workers_per_task`, `exclude_worker_from_task`,
-      `scale_demand`, `set_max_hours`)
-- [ ] Tool-call validation against real scenario IDs (reject unknown member/task refs)
-- [ ] Apply overrides as **soft** constraints in the CP-SAT solve and re-solve
-      (a bad tweak penalizes, never makes the model infeasible)
+- [ ] Live Claude implementation behind the `LLMProvider` Protocol (config-driven
+      model id) + penalty calibration — Phase 4
 - [ ] Insight generator: run metrics → structured natural-language report
 - [ ] Insights generated as a **separate step** after the run (an LLM failure
       can't fail a valid schedule)
@@ -116,4 +121,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-28 after initialization*
+*Last updated: 2026-06-29 — Phase 2 (Full 5-Tool Set + Safe Validation) complete*
