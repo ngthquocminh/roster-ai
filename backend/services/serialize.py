@@ -41,4 +41,5 @@ def serialize_result(r: SolveResult) -> dict:
             "cost_objective": _num(r.stats.cost_objective),
         },
         "schedule": [asdict(row) for row in r.schedule],
+        "warnings": r.warnings,
     }

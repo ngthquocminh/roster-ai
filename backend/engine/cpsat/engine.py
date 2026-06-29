@@ -112,4 +112,14 @@ class CpSatEngine:
             unmet_objective_hours=(lex.round1_value / C.HOUR_SCALE) if not math.isnan(lex.round1_value) else float("nan"),
             cost_objective=total_cost,
         )
-        return SolveResult(status=lex.status, schedule=schedule, metrics=metrics, stats=stats)
+
+        # ENG-05: Degenerate-solve detection. Detection-only — never alters status.
+        warnings: list[str] = []
+        for fn, stat in coverage_by_function.items():
+            if stat.required_h > 1e-9 and stat.served_h <= 1e-9:
+                warnings.append(
+                    f"Degenerate solve: task family '{fn}' has {stat.required_h:.1f}h "
+                    f"required but zero assigned supply."
+                )
+
+        return SolveResult(status=lex.status, schedule=schedule, metrics=metrics, stats=stats, warnings=warnings)

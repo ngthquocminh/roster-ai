@@ -50,3 +50,4 @@ class SolveResult:
     schedule: List[ScheduleRow]
     metrics: SummaryMetrics
     stats: SolverStats
+    warnings: List[str] = field(default_factory=list)
