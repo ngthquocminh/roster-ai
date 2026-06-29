@@ -624,3 +624,25 @@ def test_multi_match_member_clarification(client, scenario_id):
     assert body["clarification_needed"] is not None, (
         "'Jae' matches two members -> clarification_needed must be non-null (NLC-05)"
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan 02-02: Multi-tool sentence yields multiple applied[] entries (NLC-02)
+# ---------------------------------------------------------------------------
+
+def test_multi_tool_applied(client, scenario_id):
+    """Two-constraint text yields two applied[] entries (NLC-02/D-02)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "at least 2 on C Pick and cap Gary at 40 hours",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["applied"]) == 2, (
+        f"Expected 2 applied entries for two-constraint text, got {len(body['applied'])}: "
+        f"{[e['tool'] for e in body['applied']]}"
+    )
+    tools = {e["tool"] for e in body["applied"]}
+    assert "set_min_workers_per_task" in tools
+    assert "set_max_hours" in tools
+    assert body["no_constraint_found"] is False
