@@ -488,3 +488,139 @@ def test_no_constraint_yields_empty_overrides_in_config(_capture_pair):
         "SolverConfig.overrides must be empty when no constraint was posted (ENG-06). "
         f"Got: {cfg.overrides}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan 02-02: Four new tools — happy-path round-trips (NLC-02/NLC-04)
+# ---------------------------------------------------------------------------
+
+def test_scale_demand_applied(client, scenario_id):
+    """'scale C Pick demand by 1.5x' -> applied[] with tool='scale_demand' (NLC-02)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "scale C Pick demand by 1.5x",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["applied"]) == 1
+    entry = body["applied"][0]
+    assert entry["tool"] == "scale_demand"
+    assert len(entry["parsed_constraint"]) > 0, "parsed_constraint must be non-empty (NLC-04)"
+
+
+def test_lock_worker_shift_applied(client, scenario_id):
+    """'keep Gary on Monday' -> applied[] with tool='lock_worker_shift' (NLC-02)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "keep Gary on Monday",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["applied"]) == 1
+    entry = body["applied"][0]
+    assert entry["tool"] == "lock_worker_shift"
+    assert len(entry["parsed_constraint"]) > 0, "parsed_constraint must be non-empty (NLC-04)"
+
+
+def test_exclude_worker_from_task_applied(client, scenario_id):
+    """'exclude Gary from C Pick' -> applied[] with tool='exclude_worker_from_task' (NLC-02)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "exclude Gary from C Pick",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["applied"]) == 1
+    entry = body["applied"][0]
+    assert entry["tool"] == "exclude_worker_from_task"
+    assert len(entry["parsed_constraint"]) > 0, "parsed_constraint must be non-empty (NLC-04)"
+
+
+def test_set_max_hours_applied(client, scenario_id):
+    """'cap Gary at 40 hours' -> applied[] with tool='set_max_hours' (NLC-02)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "cap Gary at 40 hours",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["applied"]) == 1
+    entry = body["applied"][0]
+    assert entry["tool"] == "set_max_hours"
+    assert len(entry["parsed_constraint"]) > 0, "parsed_constraint must be non-empty (NLC-04)"
+
+
+# ---------------------------------------------------------------------------
+# Plan 02-02: Argument bounds validation (VAL-01)
+# ---------------------------------------------------------------------------
+
+def test_scale_demand_bad_factor_rejected(client, scenario_id):
+    """factor=0 is invalid -> rejected[] entry naming the arg (VAL-01/D-12)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "scale C Pick demand by 0x",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) >= 1, "factor=0 must be rejected"
+    assert any("factor" in e["error"].lower() or "0" in e["error"] for e in body["rejected"]), (
+        "rejection error must mention the offending arg (VAL-03)"
+    )
+
+
+def test_max_hours_zero_rejected(client, scenario_id):
+    """max_hours=0 is invalid -> rejected[] entry naming the arg (VAL-01/D-12)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "cap Gary at 0 hours",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) >= 1, "max_hours=0 must be rejected"
+    assert any("max_hours" in e["error"].lower() or "0" in e["error"] for e in body["rejected"]), (
+        "rejection error must mention the offending arg (VAL-03)"
+    )
+
+
+def test_unknown_member_rejected(client, scenario_id):
+    """Unknown member ref -> rejected[] entry naming the unknown token (VAL-02)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "cap XYZ_NONEXISTENT_MEMBER at 40 hours",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) >= 1, "unknown member must be rejected"
+    assert any("XYZ_NONEXISTENT_MEMBER" in e["error"] for e in body["rejected"]), (
+        "rejection error must name the unknown token (VAL-03)"
+    )
+
+
+def test_lock_out_of_horizon_day_rejected(client, scenario_id):
+    """day=7 is outside a 7-day horizon (valid days 0..6) -> rejected[] (VAL-01/D-12)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "lock Gary on 7",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) >= 1, "out-of-horizon day must be rejected"
+
+
+# ---------------------------------------------------------------------------
+# Plan 02-02: Multi-match member -> clarification_needed (NLC-05)
+# ---------------------------------------------------------------------------
+
+def test_multi_match_member_clarification(client, scenario_id):
+    """'Jae' matches two members in the fixture -> clarification_needed (NLC-05)."""
+    # The fixture has two roster entries for Jae Rerekura (same contact_id but two
+    # Member objects from two windows), triggering the multi-match path.
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "cap Jae at 40 hours",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["clarification_needed"] is not None, (
+        "'Jae' matches two members -> clarification_needed must be non-null (NLC-05)"
+    )
