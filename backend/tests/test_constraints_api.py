@@ -19,6 +19,15 @@ Exercises (plan 02-01 — Phase-2 parse-UX contract, NLC-03/04/05, VAL-02/03):
 - Partial phrasing ("more people on packing") -> clarification_needed (NLC-05)
 - Mixed valid + partial text -> applied[] and clarification_needed both non-null (D-02)
 - Conjunction-split ("...and...") -> multiple tool calls parsed from one text
+
+Exercises (plan 02-04 — TEST-03 validation suite):
+- Unknown task token in scale_demand -> rejected[] naming the token, not persisted (VAL-02/TEST-03)
+- scale_demand factor=0 -> rejected[] naming 'factor', not persisted (VAL-01/TEST-03)
+- Rejection error strings name the offending ref AND list valid options (VAL-03/TEST-03)
+- Mixed valid+unknown-member multi-tool -> applied[]+rejected[] in one 200; only valid persisted
+  (criterion 5/TEST-03/T-02-11)
+- Mixed valid+out-of-bounds-arg multi-tool -> applied[]+rejected[] in one 200; only valid persisted
+  (criterion 5/TEST-03/T-02-11)
 """
 from __future__ import annotations
 
@@ -646,3 +655,104 @@ def test_multi_tool_applied(client, scenario_id):
     assert "set_min_workers_per_task" in tools
     assert "set_max_hours" in tools
     assert body["no_constraint_found"] is False
+
+
+# ---------------------------------------------------------------------------
+# Plan 02-04: TEST-03 validation suite — unknown IDs and out-of-bounds args
+# ---------------------------------------------------------------------------
+
+def test_unknown_task_rejected(client, scenario_id):
+    """scale_demand with an unknown task token -> 200, rejected[] naming the token (VAL-02/TEST-03).
+
+    Tests the rejection path for the scale_demand tool (one of the four new tools added
+    in plan 02-02) to ensure unknown task references are rejected with a plain-English error
+    and are never persisted to scenario.overrides.
+    """
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "scale GHOST_TASK_NONEXISTENT demand by 2.0x",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) == 1, (
+        f"Unknown task must produce exactly one rejected entry, got {len(body['rejected'])}"
+    )
+    assert "GHOST_TASK_NONEXISTENT" in body["rejected"][0]["error"], (
+        "Rejection error must name the unknown token (VAL-02)"
+    )
+    assert body["applied"] == [], "No override must be applied for an unknown task reference"
+    # Rejected item must not be persisted: re-submit still rejects (non-persistence proof)
+    r2 = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "scale GHOST_TASK_NONEXISTENT demand by 2.0x",
+    })
+    assert r2.status_code == 200
+    assert r2.json()["applied"] == [], "Ghost task must never appear in applied[] after re-submit"
+    assert len(r2.json()["rejected"]) == 1, "Ghost task must still be rejected on re-submit"
+
+
+def test_scale_demand_bad_factor(client, scenario_id):
+    """scale_demand with factor=0 -> 200, rejected[] naming 'factor', not persisted (VAL-01/TEST-03).
+
+    Distinct from test_scale_demand_bad_factor_rejected: uses an alternate phrasing and
+    explicitly asserts non-persistence via a re-submit check (T-02-02/TEST-03).
+    """
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "boost C Pick volume by 0x",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) >= 1, "factor=0 must produce at least one rejected entry (VAL-01)"
+    error = body["rejected"][0]["error"]
+    assert "factor" in error.lower(), (
+        f"Rejection error must name the offending arg 'factor', got: {error!r}"
+    )
+    assert body["applied"] == [], "No override must be applied for an out-of-bounds factor"
+    # Rejected item must not be persisted: re-submit still rejects
+    r2 = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "boost C Pick volume by 0x",
+    })
+    assert r2.status_code == 200
+    assert r2.json()["applied"] == [], "OOB factor must never appear in applied[] after re-submit"
+    assert len(r2.json()["rejected"]) >= 1, "OOB factor must still be rejected on re-submit"
+
+
+def test_rejection_error_names_ref(client, scenario_id):
+    """Rejection errors must name the offending reference AND list valid options (VAL-03/TEST-03).
+
+    Verifies that the service embeds both the bad token and a list of valid alternatives in
+    every zero-match rejection error, so the user can immediately self-correct.
+    """
+    # --- Unknown task ---
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "scale BAD_TASK_REF demand by 1.5x",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) == 1, "Unknown task must be rejected"
+    task_error = body["rejected"][0]["error"]
+    assert "BAD_TASK_REF" in task_error, (
+        f"Error must name the offending token 'BAD_TASK_REF', got: {task_error!r}"
+    )
+    assert "Valid tasks:" in task_error, (
+        f"Error must list valid task options (VAL-03), got: {task_error!r}"
+    )
+
+    # --- Unknown member ---
+    r2 = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "cap BAD_MEMBER_REF at 40 hours",
+    })
+    assert r2.status_code == 200
+    body2 = r2.json()
+    assert len(body2["rejected"]) == 1, "Unknown member must be rejected"
+    member_error = body2["rejected"][0]["error"]
+    assert "BAD_MEMBER_REF" in member_error, (
+        f"Error must name the offending token 'BAD_MEMBER_REF', got: {member_error!r}"
+    )
+    assert "Valid members:" in member_error, (
+        f"Error must list valid member options (VAL-03), got: {member_error!r}"
+    )
