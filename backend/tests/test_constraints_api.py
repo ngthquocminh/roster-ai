@@ -1,17 +1,24 @@
 """Tests for POST /constraints and end-to-end NL -> override -> re-solve round-trip.
 
 Exercises (plan 01-02):
-- POST /constraints with a valid text -> 200 with echoed override (id, tool, args, parsed_constraint)
+- POST /constraints with a valid text -> 200 with structured body (applied[], rejected[],
+  clarification_needed, no_constraint_found)
 - Override is persisted to scenario.overrides JSON (idempotent re-submission, D-04/D-05)
 - Unknown scenario_id -> 404
-- Text that yields no constraint -> 400
-- Ambiguous task token (matches >1 task) -> 400
-- n <= 0 -> 400
-- Nothing persisted on rejection paths
+- Text that yields no constraint -> 200 with no_constraint_found=True (D-03)
+- Ambiguous task token (matches >1 task) -> 200 with clarification_needed (NLC-05)
+- Unknown task token -> 200 with rejected[0] naming the token (VAL-02)
+- n <= 0 -> 200 with rejected[0] (not 400)
+- Nothing persisted on rejected/clarification paths (T-02-02)
 
 Exercises (plan 01-03 — end-to-end round-trip, TEST-02):
 - POST /constraints + trigger run -> stored override is threaded into SolverConfig.overrides
 - Control: scenario with no constraint completes with empty SolverConfig.overrides (baseline, ENG-06)
+
+Exercises (plan 02-01 — Phase-2 parse-UX contract, NLC-03/04/05, VAL-02/03):
+- Partial phrasing ("more people on packing") -> clarification_needed (NLC-05)
+- Mixed valid + partial text -> applied[] and clarification_needed both non-null (D-02)
+- Conjunction-split ("...and...") -> multiple tool calls parsed from one text
 """
 from __future__ import annotations
 
@@ -95,7 +102,7 @@ def scenario_id(client):
 
 
 # ---------------------------------------------------------------------------
-# Happy path
+# Happy path — Phase-2 structured response (applied[] field)
 # ---------------------------------------------------------------------------
 
 def test_post_constraints_returns_200(client, scenario_id):
@@ -106,16 +113,32 @@ def test_post_constraints_returns_200(client, scenario_id):
     assert r.status_code == 200
 
 
-def test_post_constraints_response_has_required_fields(client, scenario_id):
+def test_post_constraints_response_has_structured_body(client, scenario_id):
+    """Response body must have the four Phase-2 top-level fields (D-01)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
         "text": "at least 2 on C Pick",
     })
     body = r.json()
-    assert "id" in body
-    assert "tool" in body
-    assert "args" in body
-    assert "parsed_constraint" in body
+    assert "applied" in body
+    assert "rejected" in body
+    assert "clarification_needed" in body
+    assert "no_constraint_found" in body
+
+
+def test_post_constraints_applied_has_required_fields(client, scenario_id):
+    """applied[0] must carry id, tool, args, parsed_constraint (NLC-04)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "at least 2 on C Pick",
+    })
+    body = r.json()
+    assert len(body["applied"]) == 1
+    entry = body["applied"][0]
+    assert "id" in entry
+    assert "tool" in entry
+    assert "args" in entry
+    assert "parsed_constraint" in entry
 
 
 def test_post_constraints_echoes_correct_tool(client, scenario_id):
@@ -123,7 +146,7 @@ def test_post_constraints_echoes_correct_tool(client, scenario_id):
         "scenario_id": scenario_id,
         "text": "at least 2 on C Pick",
     })
-    assert r.json()["tool"] == "set_min_workers_per_task"
+    assert r.json()["applied"][0]["tool"] == "set_min_workers_per_task"
 
 
 def test_post_constraints_args_has_resolved_task_id(client, scenario_id):
@@ -132,7 +155,7 @@ def test_post_constraints_args_has_resolved_task_id(client, scenario_id):
         "scenario_id": scenario_id,
         "text": "at least 2 on C Pick",
     })
-    args = r.json()["args"]
+    args = r.json()["applied"][0]["args"]
     assert args["n"] == 2
     # The resolved task_id must be a GUID-like string (not the human token "C Pick")
     task_id = args["task_id"]
@@ -146,7 +169,7 @@ def test_post_constraints_id_starts_with_ov(client, scenario_id):
         "scenario_id": scenario_id,
         "text": "at least 2 on C Pick",
     })
-    assert r.json()["id"].startswith("ov_")
+    assert r.json()["applied"][0]["id"].startswith("ov_")
 
 
 def test_post_constraints_parsed_constraint_is_string(client, scenario_id):
@@ -154,8 +177,9 @@ def test_post_constraints_parsed_constraint_is_string(client, scenario_id):
         "scenario_id": scenario_id,
         "text": "at least 2 on C Pick",
     })
-    assert isinstance(r.json()["parsed_constraint"], str)
-    assert len(r.json()["parsed_constraint"]) > 0
+    pc = r.json()["applied"][0]["parsed_constraint"]
+    assert isinstance(pc, str)
+    assert len(pc) > 0
 
 
 def test_post_constraints_persists_override_to_scenario(client, scenario_id):
@@ -165,17 +189,15 @@ def test_post_constraints_persists_override_to_scenario(client, scenario_id):
         "text": "at least 2 on C Pick",
     })
     assert r.status_code == 200
-    override_id = r.json()["id"]
+    override_id = r.json()["applied"][0]["id"]
 
-    # Fetch the scenario — note ScenarioOut doesn't expose overrides, so we
-    # trust the idempotency test below to prove persistence.
     # Direct verification: re-submit same constraint, should return same id.
     r2 = client.post("/constraints", json={
         "scenario_id": scenario_id,
         "text": "at least 2 on C Pick",
     })
     assert r2.status_code == 200
-    assert r2.json()["id"] == override_id  # idempotent (D-04/D-05)
+    assert r2.json()["applied"][0]["id"] == override_id  # idempotent (D-04/D-05)
 
 
 def test_post_constraints_idempotent_same_id(client, scenario_id):
@@ -186,11 +208,11 @@ def test_post_constraints_idempotent_same_id(client, scenario_id):
         "scenario_id": scenario_id, "text": "at least 3 on C Pick"})
     assert r1.status_code == 200
     assert r2.status_code == 200
-    assert r1.json()["id"] == r2.json()["id"]
+    assert r1.json()["applied"][0]["id"] == r2.json()["applied"][0]["id"]
 
 
 # ---------------------------------------------------------------------------
-# Error paths
+# Error paths — 404 preserved; per-call failures become structured signals
 # ---------------------------------------------------------------------------
 
 def test_post_constraints_unknown_scenario_returns_404(client):
@@ -201,29 +223,43 @@ def test_post_constraints_unknown_scenario_returns_404(client):
     assert r.status_code == 404
 
 
-def test_post_constraints_no_constraint_in_text_returns_400(client, scenario_id):
+def test_no_constraint_found_in_text_returns_200_with_flag(client, scenario_id):
+    """Gibberish text -> 200 with no_constraint_found=True (NLC-03/D-03)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
         "text": "hello there",
     })
-    assert r.status_code == 400
+    assert r.status_code == 200
+    body = r.json()
+    assert body["no_constraint_found"] is True
+    assert body["applied"] == []
+    assert body["clarification_needed"] is None
 
 
-def test_post_constraints_ambiguous_task_token_returns_400(client, scenario_id):
-    """'Pick' alone matches C Pick, F Pick, A Pick -> ambiguous -> 400."""
+def test_ambiguous_task_token_returns_clarification_needed(client, scenario_id):
+    """'Pick' alone matches C Pick, F Pick, A Pick -> clarification_needed not None (NLC-05/D-04)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
         "text": "at least 2 on Pick",
     })
-    assert r.status_code == 400
+    assert r.status_code == 200
+    body = r.json()
+    assert body["clarification_needed"] is not None
+    assert "Pick" in body["clarification_needed"]
+    assert body["applied"] == []
 
 
-def test_post_constraints_unknown_task_token_returns_400(client, scenario_id):
+def test_unknown_task_token_returns_rejected(client, scenario_id):
+    """Unknown token -> 200 with rejected[0].error naming the offending token (VAL-02/D-11)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
         "text": "at least 2 on NonExistentTask",
     })
-    assert r.status_code == 400
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["rejected"]) == 1
+    assert "NonExistentTask" in body["rejected"][0]["error"]
+    assert body["applied"] == []
 
 
 def test_post_constraints_nothing_persisted_on_404(client):
@@ -254,6 +290,63 @@ def test_post_constraints_missing_scenario_id_returns_422(client):
     """Missing required field returns Pydantic 422."""
     r = client.post("/constraints", json={"text": "at least 2 on C Pick"})
     assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Phase-2 parse-UX contract: partial phrasing + conjunction-split (NLC-05/D-02)
+# ---------------------------------------------------------------------------
+
+def test_partial_phrasing_clarification(client, scenario_id):
+    """'more people on <task>' (no number) -> 200 with clarification_needed (NLC-05)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "more people on C Pick",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["clarification_needed"] is not None
+    assert "C Pick" in body["clarification_needed"]
+    assert body["no_constraint_found"] is False
+
+
+def test_mixed_applied_and_clarification(client, scenario_id):
+    """'at least 2 on C Pick and more people on packing' -> one applied + clarification_needed (D-02)."""
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "at least 2 on C Pick and more people on packing",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    # One valid constraint applied
+    assert len(body["applied"]) == 1
+    assert body["applied"][0]["tool"] == "set_min_workers_per_task"
+    # And a clarification signal from the partial fragment
+    assert body["clarification_needed"] is not None
+    assert body["no_constraint_found"] is False
+
+
+def test_rejected_entries_not_persisted(client, scenario_id):
+    """Rejected entries must not be written to scenario.overrides (T-02-02)."""
+    # Post an unknown task (goes to rejected[])
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "at least 2 on GhostTask",
+    })
+    assert r.status_code == 200
+    assert len(r.json()["rejected"]) == 1
+
+    # Now post a valid constraint and check its id in applied[]
+    r2 = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "at least 3 on C Pick",
+    })
+    assert r2.status_code == 200
+    # Only the valid one should be persisted (idempotency shows it was stored)
+    r3 = client.post("/constraints", json={
+        "scenario_id": scenario_id,
+        "text": "at least 3 on C Pick",
+    })
+    assert r3.json()["applied"][0]["id"] == r2.json()["applied"][0]["id"]
 
 
 # ---------------------------------------------------------------------------
@@ -346,7 +439,7 @@ def test_override_is_threaded_into_solver_config(_capture_pair):
         "text": "at least 2 on C Pick",
     })
     assert r.status_code == 200
-    posted_id = r.json()["id"]
+    posted_id = r.json()["applied"][0]["id"]
     assert posted_id.startswith("ov_")
 
     # Trigger a run and wait for it to reach a terminal state.
