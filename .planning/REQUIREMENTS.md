@@ -16,17 +16,17 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 ### NL Constraint Parsing
 
 - [x] **NLC-01**: User can submit plain-English constraint text for a scenario via an API endpoint
-- [ ] **NLC-02**: Text is parsed into zero or more solver-hook tool calls from the fixed set: `lock_worker_shift`, `set_min_workers_per_task`, `exclude_worker_from_task`, `scale_demand`, `set_max_hours`
-- [ ] **NLC-03**: When the text maps to no tool, the system returns "no constraint found" rather than forcing a spurious tool call
-- [ ] **NLC-04**: The response echoes a human-readable `parsed_constraint` summary of what was understood
-- [ ] **NLC-05**: Ambiguous or unparseable input returns a `clarification_needed` signal with a question (single-turn — the user rephrases)
+- [x] **NLC-02**: Text is parsed into zero or more solver-hook tool calls from the fixed set: `lock_worker_shift`, `set_min_workers_per_task`, `exclude_worker_from_task`, `scale_demand`, `set_max_hours`
+- [x] **NLC-03**: When the text maps to no tool, the system returns "no constraint found" rather than forcing a spurious tool call
+- [x] **NLC-04**: The response echoes a human-readable `parsed_constraint` summary of what was understood
+- [x] **NLC-05**: Ambiguous or unparseable input returns a `clarification_needed` signal with a question (single-turn — the user rephrases)
 - [x] **NLC-06**: Validated tool calls are persisted to the scenario `overrides` JSON with stable per-override IDs
 
 ### Constraint Validation
 
-- [ ] **VAL-01**: Tool-call arguments are validated for type and bounds before reaching the solver (reject `scale_demand` factor ≤ 0, `set_max_hours` = 0, negatives, and other degenerate values)
-- [ ] **VAL-02**: Member/task references are validated against real scenario IDs; unknown references are rejected (no hallucinated IDs reach the engine)
-- [ ] **VAL-03**: Validation failures return a plain-English error naming the offending reference/argument and the available options
+- [x] **VAL-01**: Tool-call arguments are validated for type and bounds before reaching the solver (reject `scale_demand` factor ≤ 0, `set_max_hours` = 0, negatives, and other degenerate values)
+- [x] **VAL-02**: Member/task references are validated against real scenario IDs; unknown references are rejected (no hallucinated IDs reach the engine)
+- [x] **VAL-03**: Validation failures return a plain-English error naming the offending reference/argument and the available options
 
 ### Engine Override Application
 
@@ -93,13 +93,13 @@ Which phases cover which requirements. Populated during roadmap creation.
 | NLC-06 | Phase 1 | Complete |
 | TEST-01 | Phase 1 | Complete |
 | TEST-02 | Phase 1 | Complete |
-| NLC-02 | Phase 2 | Pending |
-| NLC-03 | Phase 2 | Pending |
-| NLC-04 | Phase 2 | Pending |
-| NLC-05 | Phase 2 | Pending |
-| VAL-01 | Phase 2 | Pending |
-| VAL-02 | Phase 2 | Pending |
-| VAL-03 | Phase 2 | Pending |
+| NLC-02 | Phase 2 | Complete |
+| NLC-03 | Phase 2 | Complete |
+| NLC-04 | Phase 2 | Complete |
+| NLC-05 | Phase 2 | Complete |
+| VAL-01 | Phase 2 | Complete |
+| VAL-02 | Phase 2 | Complete |
+| VAL-03 | Phase 2 | Complete |
 | ENG-05 | Phase 2 | Pending |
 | TEST-03 | Phase 2 | Pending |
 | INS-01 | Phase 3 | Pending |
