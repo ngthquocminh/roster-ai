@@ -756,3 +756,77 @@ def test_rejection_error_names_ref(client, scenario_id):
     assert "Valid members:" in member_error, (
         f"Error must list valid member options (VAL-03), got: {member_error!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan 02-04: TEST-03 — Mixed valid/invalid multi-tool calls (criterion 5)
+# ---------------------------------------------------------------------------
+
+def test_mixed_valid_invalid_multi_tool(client, scenario_id):
+    """Mixed: valid set_min_workers + unknown-member exclude -> applied[]+rejected[] in one 200.
+
+    Proves criterion 5 (must-have truth 3): a single NL sentence with one valid fragment
+    and one unknown-member reference yields both applied[] and rejected[] in the same 200
+    response. Only the valid fragment is persisted to scenario.overrides (T-02-11/TEST-03).
+    """
+    text = "at least 2 on C Pick and exclude XYZ_NONEXISTENT_MEMBER from C Pick"
+    r = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["applied"]) == 1, (
+        f"Expected 1 applied entry (valid fragment), got {len(body['applied'])}: "
+        f"{[e['tool'] for e in body['applied']]}"
+    )
+    assert len(body["rejected"]) == 1, (
+        f"Expected 1 rejected entry (unknown-member fragment), got {len(body['rejected'])}"
+    )
+    assert body["applied"][0]["tool"] == "set_min_workers_per_task"
+    assert "XYZ_NONEXISTENT_MEMBER" in body["rejected"][0]["error"], (
+        "Rejection error must name the unknown member token (VAL-02/VAL-03)"
+    )
+
+    # Only the valid constraint was persisted: re-submit yields same applied id (idempotent)
+    applied_id = body["applied"][0]["id"]
+    r2 = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
+    assert r2.status_code == 200
+    assert r2.json()["applied"][0]["id"] == applied_id, (
+        "Re-submitting the same text must return the same applied id (idempotent persist)"
+    )
+    assert len(r2.json()["rejected"]) == 1, (
+        "Unknown-member fragment must still be rejected on re-submit (never persisted)"
+    )
+
+
+def test_mixed_valid_oob_multi_tool(client, scenario_id):
+    """Mixed: valid set_min_workers + scale_demand with factor=0 -> applied[]+rejected[] in one 200.
+
+    Proves criterion 5 (must-have truth 4): a single NL sentence with one valid fragment
+    and one out-of-bounds arg yields both applied[] and rejected[] in the same 200
+    response. Only the valid fragment is persisted to scenario.overrides (T-02-11/TEST-03).
+    """
+    text = "at least 3 on C Pick and boost C Pick volume by 0x"
+    r = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["applied"]) == 1, (
+        f"Expected 1 applied entry (valid fragment), got {len(body['applied'])}: "
+        f"{[e['tool'] for e in body['applied']]}"
+    )
+    assert len(body["rejected"]) == 1, (
+        f"Expected 1 rejected entry (out-of-bounds factor), got {len(body['rejected'])}"
+    )
+    assert body["applied"][0]["tool"] == "set_min_workers_per_task"
+    assert "factor" in body["rejected"][0]["error"].lower(), (
+        "Rejection error must name the offending arg 'factor' (VAL-01/VAL-03)"
+    )
+
+    # Only the valid constraint was persisted: re-submit yields same applied id (idempotent)
+    applied_id = body["applied"][0]["id"]
+    r2 = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
+    assert r2.status_code == 200
+    assert r2.json()["applied"][0]["id"] == applied_id, (
+        "Re-submitting must return the same applied id (idempotent persist)"
+    )
+    assert len(r2.json()["rejected"]) == 1, (
+        "OOB-factor fragment must still be rejected on re-submit (never persisted)"
+    )
