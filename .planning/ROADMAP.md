@@ -62,11 +62,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A re-solve whose coverage collapses to zero for a task family is detected and flagged, rather than narrated as an optimization success.
   5. Validation tests cover unknown IDs and out-of-bounds arguments, including a mixed multi-tool call where one reference is valid and one is not.
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Partial-apply contract + parse-UX backbone (response shape, _resolve_member, no_constraint_found/clarification/rejection) for the min-workers tool
-- [ ] 02-03-PLAN.md — Degenerate-solve detection: SolveResult.warnings + zero-coverage flag through serialization (ENG-05)
+- [x] 02-03-PLAN.md — Degenerate-solve detection: SolveResult.warnings + zero-coverage flag through serialization (ENG-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -113,6 +113,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. First NL Constraint End-to-End | 3/3 | Complete    | 2026-06-28 |
-| 2. Full 5-Tool Set + Safe Validation | 1/4 | In Progress|  |
+| 2. Full 5-Tool Set + Safe Validation | 2/4 | In Progress|  |
 | 3. On-Demand Insight Reports | 0/TBD | Not started | - |
 | 4. Real Claude Provider + Penalty Calibration | 0/TBD | Not started | - |
