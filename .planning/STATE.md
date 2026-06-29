@@ -84,7 +84,8 @@ Recent decisions affecting current work:
 
 [From .planning/todos/pending/ — ideas captured during sessions]
 
-None yet.
+- [Phase 4 / api]: Harden scenario fixture path against traversal (WR-04) — add containment check before `json.load` in `constraint_service.py:152`
+- [testing]: Add real-engine test for ENG-05 degeneracy detection (WR-05) — current tests validate a copied mirror, not `CpSatEngine.solve()`
 
 ### Blockers/Concerns
 
