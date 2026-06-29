@@ -109,23 +109,32 @@ class CpSatBuilder:
 
     # ---- demand aggregation ----
     def _aggregate_demand(self):
+        # scale_demand overrides: per-task factor applied here (D-10).
+        # SchedulingProblem stays immutable; unmet slack absorbs resulting shortfall,
+        # so no factor value can make the model infeasible (OQ-1/T-02-05).
+        scale: dict[str, float] = {
+            o.args["task_id"]: float(o.args["factor"])
+            for o in self.overrides if o.tool == "scale_demand"
+        }
+
         vol: Dict[str, Dict[int, float]] = defaultdict(lambda: defaultdict(float))
         hc: Dict[str, Dict[int, float]] = defaultdict(lambda: defaultdict(float))
         is_ind: Dict[str, bool] = {}
         for b in self.p.demand:
+            f = scale.get(b.task_id, 1.0)          # factor=1.0 when no override
             h0, h1 = int(math.floor(b.start_h)), int(math.ceil(b.end_h))
             if b.family == DemandFamily.INDIRECT:
                 is_ind[b.task_id] = True
                 for h in range(h0, h1):
                     if _overlap((b.start_h, b.end_h), (h, h + 1)) > 0:
-                        hc[b.task_id][h] += b.amount
+                        hc[b.task_id][h] += b.amount * f
             else:
                 is_ind.setdefault(b.task_id, False)
                 dur = max(b.duration_h, 1e-9)
                 for h in range(h0, h1):
                     ov = _overlap((b.start_h, b.end_h), (h, h + 1))
                     if ov > 0:
-                        vol[b.task_id][h] += b.amount * ov / dur
+                        vol[b.task_id][h] += b.amount * f * ov / dur
         return vol, hc, is_ind
 
     def _compute_ref_rates(self):
@@ -322,30 +331,84 @@ class CpSatBuilder:
             for sv in self.shift_vars
         ]
 
-        # --- soft shortfall penalty for NL-derived overrides (D-02/D-03) ---
-        # Added to round2_cost ONLY — never to round1_unmet, never as a hard
-        # constraint.  Because round 1 is locked before round 2 is minimised
-        # (objective.py), this term can never affect round-1 feasibility; an
-        # override can therefore never make the solve infeasible (T-01-E1).
-        shortfall_terms = []
+        # --- soft penalty terms for NL-derived overrides (D-02/D-03) ---
+        # All terms added to round2_cost ONLY — never to round1_unmet, never as
+        # hard constraints.  Because round 1 is locked before round 2 is minimised
+        # (objective.py), these terms can never affect round-1 feasibility; an
+        # override can therefore never make the solve infeasible (T-01-E1/T-02-05..T-02-08).
+        # scale_demand is handled in _aggregate_demand, not here (D-10).
+        shortfall_terms = []    # set_min_workers_per_task (existing)
+        lock_terms = []         # lock_worker_shift (new)
+        excl_terms = []         # exclude_worker_from_task (new)
+        maxh_terms = []         # set_max_hours (new)
+
         for ov in self.overrides:
-            if ov.tool != "set_min_workers_per_task":
-                continue  # only tool supported in Phase 1 (D-01)
-            tid = ov.args["task_id"]
-            n = int(ov.args["n"])
-            # hours with demand for this task (union of vol and hc demand)
-            hours = set(self.vol_demand.get(tid, {})) | set(self.hc_demand.get(tid, {}))
-            for h in hours:
-                # body count: bare vars (coeff ignored) — headcount form (D-02)
-                bodies = [var for var, _ in self.coverage_terms.get((tid, h), [])]
-                # slack bounded by n so an empty supply degrades to a constant
-                # penalty rather than causing infeasibility (T-01-E1)
-                short = self.m.NewIntVar(0, n, f"minw_short_{tid[:6]}_{h}")
-                self.m.Add(sum(bodies) + short >= n)
-                shortfall_terms.append(short)
+            if ov.tool == "set_min_workers_per_task":
+                tid = ov.args["task_id"]
+                n = int(ov.args["n"])
+                # hours with demand for this task (union of vol and hc demand)
+                hours = set(self.vol_demand.get(tid, {})) | set(self.hc_demand.get(tid, {}))
+                for h in hours:
+                    # body count: bare vars (coeff ignored) — headcount form (D-02)
+                    bodies = [var for var, _ in self.coverage_terms.get((tid, h), [])]
+                    # slack bounded by n so an empty supply degrades to a constant
+                    # penalty rather than causing infeasibility (T-01-E1)
+                    short = self.m.NewIntVar(0, n, f"minw_short_{tid[:6]}_{h}")
+                    self.m.Add(sum(bodies) + short >= n)
+                    shortfall_terms.append(short)
+
+            elif ov.tool == "lock_worker_shift":
+                # Soft penalty if member works zero shifts on the locked day (D-07).
+                # absent=1 when no shift candidates exist for that day — penalty fires
+                # but model stays feasible (bounded-slack guarantee, Pitfall 2).
+                mid = ov.args["member_id"]
+                day = int(ov.args["day"])
+                day_shifts = [
+                    sv for sv in self.shift_vars
+                    if sv.member.contact_id == mid and int(sv.start_h // 24) == day
+                ]
+                absent = self.m.NewBoolVar(f"lock_absent_{mid[:6]}_{day}")
+                self.m.Add(sum(sv.var for sv in day_shifts) + absent >= 1)
+                lock_terms.append(absent)
+
+            elif ov.tool == "exclude_worker_from_task":
+                # Direct penalty on task assignment vars — no new slack needed (D-08).
+                mid = ov.args["member_id"]
+                tid = ov.args["task_id"]
+                excl_vars = [
+                    tv.var for tv in self.task_vars
+                    if tv.shift.member.contact_id == mid and tv.task_id == tid
+                ]
+                excl_terms.extend(excl_vars)
+
+            elif ov.tool == "set_max_hours":
+                # Bounded overflow var above soft cap, layered under the hard cap (D-09/Pitfall 3).
+                mid = ov.args["member_id"]
+                max_h = float(ov.args["max_hours"])
+                member_svs = [sv for sv in self.shift_vars if sv.member.contact_id == mid]
+                if not member_svs:
+                    continue
+                emp_type = member_svs[0].member.emp_type
+                hard_cap = self.p.max_hours_per_week.get(emp_type, C.DEFAULT_MAX_HOURS_PER_WEEK)
+                scaled_max = int(round(max_h * C.VOL_SCALE))
+                hard_cap_scaled = int(round(hard_cap * C.VOL_SCALE))
+                # overflow var bounded by (hard_cap - max_hours)*VOL_SCALE, never
+                # an arbitrary large constant — prevents the solver from absorbing
+                # unlimited hours into the penalty variable (Pitfall 3).
+                over = self.m.NewIntVar(
+                    0, max(0, hard_cap_scaled - scaled_max), f"maxh_over_{mid[:6]}"
+                )
+                total = sum(int(round(sv.eff_h * C.VOL_SCALE)) * sv.var for sv in member_svs)
+                self.m.Add(total <= scaled_max + over)
+                maxh_terms.append(over)
+            # scale_demand is handled in _aggregate_demand, not here (D-10)
 
         self.round2_cost = (
-            sum(cost_terms) + C.MIN_WORKERS_PENALTY * sum(shortfall_terms)
-            if (cost_terms or shortfall_terms)
+            sum(cost_terms)
+            + C.MIN_WORKERS_PENALTY * sum(shortfall_terms)
+            + C.LOCK_SHIFT_PENALTY * sum(lock_terms)
+            + C.EXCLUDE_WORKER_PENALTY * sum(excl_terms)
+            + C.MAX_HOURS_PENALTY * sum(maxh_terms)
+            if (cost_terms or shortfall_terms or lock_terms or excl_terms or maxh_terms)
             else 0
         )

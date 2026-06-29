@@ -39,3 +39,20 @@ ROSTER_UNFILL_WEIGHT: int = 1  # small nudge (in scaled hours) to fill rosters i
 # yet not so large it dominates the entire round-2 cost objective.
 # Empirical calibration against the full-week fixture is deferred to Phase 4 (ENG-04).
 MIN_WORKERS_PENALTY: int = 100_000
+
+# Penalty for lock_worker_shift: soft round-2 penalty if member has zero shifts
+# on the locked day. Same order of magnitude as MIN_WORKERS_PENALTY so the signal
+# is visible against wage costs. Empirical calibration deferred to Phase 4 (ENG-04).
+LOCK_SHIFT_PENALTY: int = 100_000
+
+# Penalty per task-var assignment where excluded member is assigned to excluded task.
+# Assignment vars are booleans; penalty fires once per assigned slot (not per hour).
+# Set large enough to discourage assignment but below MIN_WORKERS_PENALTY so a
+# round-1 coverage requirement can still override the exclusion.
+EXCLUDE_WORKER_PENALTY: int = 50_000
+
+# Penalty per VOL_SCALE unit of effective hours above the soft max_hours cap.
+# Actual penalty per hour over limit = MAX_HOURS_PENALTY / VOL_SCALE = 1_000.
+# Layered atop the existing HARD weekly cap (total can never exceed the hard cap).
+# Empirical calibration deferred to Phase 4 (ENG-04).
+MAX_HOURS_PENALTY: int = 100_000
