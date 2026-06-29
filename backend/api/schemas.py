@@ -36,8 +36,20 @@ class ConstraintParseRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
 
 
-class ConstraintParseResponse(BaseModel):
+class AppliedConstraint(BaseModel):
     id: str
     tool: str
     args: dict
     parsed_constraint: str
+
+
+class RejectedConstraint(BaseModel):
+    tool: str
+    error: str
+
+
+class ConstraintParseResponse(BaseModel):
+    applied: list[AppliedConstraint]
+    rejected: list[RejectedConstraint]
+    clarification_needed: str | None
+    no_constraint_found: bool

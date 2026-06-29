@@ -25,7 +25,6 @@ router = APIRouter(prefix="/constraints", tags=["constraints"])
     response_model=ConstraintParseResponse,
     responses={
         404: {"description": "Scenario not found"},
-        400: {"description": "Constraint validation error (unknown/ambiguous task, n<=0, no match)"},
     },
 )
 def parse_constraint(
@@ -44,5 +43,4 @@ def parse_constraint(
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    # ValueError no longer raised by service — per-call failures go to rejected[]
