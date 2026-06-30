@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ScenarioCreate(BaseModel):
@@ -37,6 +37,14 @@ class InsightOut(BaseModel):
     report: Optional[str] = None    # present when ready=True (INS-01)
     status: Optional[str] = None    # present when ready=False (D-07)
     reason: Optional[str] = None    # present when ready=False (D-07)
+
+    @model_validator(mode="after")
+    def check_ready_fields(self) -> "InsightOut":
+        if self.ready and self.report is None:
+            raise ValueError("report must be set when ready=True")
+        if not self.ready and self.status is None:
+            raise ValueError("status must be set when ready=False")
+        return self
 
 
 class ConstraintParseRequest(BaseModel):
