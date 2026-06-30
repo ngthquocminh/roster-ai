@@ -39,10 +39,10 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 
 ### Insights
 
-- [ ] **INS-01**: An endpoint generates a natural-language insight report from a completed run's metrics
+- [x] **INS-01**: An endpoint generates a natural-language insight report from a completed run's metrics
 - [ ] **INS-02**: Insights are generated as a separate, on-demand step; an LLM failure never changes run status or invalidates the schedule result
-- [ ] **INS-03**: The insight report cites specific metric values from the run (no generic "coverage was adequate" language)
-- [ ] **INS-04**: The insight result is cached (`runs.insight_json`) so repeat fetches don't re-call the LLM
+- [x] **INS-03**: The insight report cites specific metric values from the run (no generic "coverage was adequate" language)
+- [x] **INS-04**: The insight result is cached (`runs.insight_json`) so repeat fetches don't re-call the LLM
 
 ### Testing
 
@@ -102,10 +102,10 @@ Which phases cover which requirements. Populated during roadmap creation.
 | VAL-03 | Phase 2 | Complete |
 | ENG-05 | Phase 2 | Complete |
 | TEST-03 | Phase 2 | Complete |
-| INS-01 | Phase 3 | Pending |
+| INS-01 | Phase 3 | Complete |
 | INS-02 | Phase 3 | Pending |
-| INS-03 | Phase 3 | Pending |
-| INS-04 | Phase 3 | Pending |
+| INS-03 | Phase 3 | Complete |
+| INS-04 | Phase 3 | Complete |
 | LLM-02 | Phase 4 | Pending |
 | ENG-04 | Phase 4 | Pending |
 | TEST-04 | Phase 4 | Pending |

@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 3
-current_phase_name: On-Demand Insight Reports
+current_phase: 03
+current_phase_name: on-demand-insight-reports
 status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-06-30T08:56:12.965Z"
-last_activity: 2026-06-29
-last_activity_desc: Phase 02 complete, transitioned to Phase 3
+last_updated: "2026-06-30T09:54:44.549Z"
+last_activity: 2026-06-30
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 9
+  completed_plans: 8
   percent: 50
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** Phase 02 — full-5-tool-set-safe-validation
+**Current focus:** Phase 03 — on-demand-insight-reports
 
 ## Current Position
 
-Phase: 3 — On-Demand Insight Reports
-Plan: Not started
+Phase: 03 (on-demand-insight-reports) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-06-29 — Phase 02 complete, transitioned to Phase 3
+Last activity: 2026-06-30 — Phase 03 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P03 | 15 | 2 tasks | 4 files |
 | Phase 02 P02 | 13 | 3 tasks | 6 files |
 | Phase 02 P04 | 2 | 2 tasks | 1 files |
+| Phase 03 P01 | 4 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,7 @@ Recent decisions affecting current work:
 - [Phase ?]: scale_demand applied in _aggregate_demand (D-10)
 - [Phase ?]: Four new override penalties in round2_cost only (T-02-05..T-02-08)
 - [Phase ?]: TEST-03 tests pass at write time (GREEN immediate): implementation pre-exists from plan 02-02
+- [Phase ?]: sync-def insight route runs on anyio threadpool (D-02); grounding guard runs before cache write (D-06)
 
 ### Pending Todos
 
@@ -103,6 +105,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-06-30T06:35:09.391Z
+Last session: 2026-06-30T09:54:39.804Z
 Stopped at: Phase 3 context gathered
 Resume file: .planning/phases/03-on-demand-insight-reports/03-CONTEXT.md
