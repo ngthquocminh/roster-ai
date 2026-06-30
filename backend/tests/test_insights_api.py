@@ -1,12 +1,21 @@
-"""Tests for GET /runs/{run_id}/insights — happy path, not-ready, and cache.
+"""Tests for GET /runs/{run_id}/insights — happy path, not-ready, cache, and negative-path matrix.
 
 Exercises (plan 03-01):
 - test_insights_returns_report_for_completed_run: COMPLETED run -> 200 ready=true with
   a non-empty report that cites the run's metric values (D-01, INS-01).
 - test_insights_not_ready_returns_200_body: not-COMPLETED run -> 200 (NOT 409) with
   ready=false and a status field (D-07).
-- test_second_fetch_uses_cache: second sequential GET returns the identical report
-  without re-calling the provider (INS-04).
+
+Exercises (plan 03-02 — negative-path + edge matrix):
+- test_second_fetch_uses_cache: CountingInsightProvider proves call_count stays 1 across
+  two sequential GETs and both return identical bodies (INS-04).
+- test_provider_failure_leaves_run_completed: forcing the provider to fail returns 502 and
+  leaves run COMPLETED with result_json untouched; nothing is cached (D-08, INS-02).
+- test_grounding_guard_rejects_fabricated_number: FabricatingInsightProvider returns a
+  number absent from metrics -> 502, nothing cached (D-06, INS-03).
+- test_report_narrates_degenerate_warnings: solve result with a zero-coverage warning ->
+  200, report narrates the warning honestly (D-05 item 3, INS-03).
+- test_unknown_and_failed_run: unknown run id -> 404; FAILED run -> 200 ready=false (D-07).
 """
 from __future__ import annotations
 
@@ -144,7 +153,16 @@ def test_insights_not_ready_returns_200_body(client):
 
 
 def test_second_fetch_uses_cache(client):
-    """Second sequential GET returns an identical report (INS-04 cache hit)."""
+    """Two sequential GETs yield identical bodies; CountingInsightProvider proves call_count stays 1 (INS-04).
+
+    Only asserts sequential behaviour — do NOT assert call_count under parallel load (Open Question 1).
+    """
+    from api.deps import get_llm_provider
+    from api.main import app
+
+    counter = CountingInsightProvider()
+    app.dependency_overrides[get_llm_provider] = lambda: counter
+
     _, run_id = _create_and_complete_run(client)
 
     r1 = client.get(f"/runs/{run_id}/insights")
@@ -155,7 +173,242 @@ def test_second_fetch_uses_cache(client):
     assert r2.status_code == 200, r2.text
     assert r2.json()["ready"] is True
 
-    # Both calls return identical reports (cache hit means same text, INS-04).
     assert r1.json()["report"] == r2.json()["report"], (
         "Second fetch must return cached report identical to first fetch"
     )
+    assert counter.call_count == 1, (
+        f"generate_insights must be called exactly once (cache hit on second call); got {counter.call_count}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test doubles for negative-path + edge testing (plan 03-02)
+# ---------------------------------------------------------------------------
+
+
+class FailingInsightProvider:
+    """Raises on generate_insights — tests failure isolation (D-08, INS-02)."""
+
+    name = "failing-stub"
+
+    def parse_constraints(self, text: str) -> list:
+        return []
+
+    def generate_insights(self, summary: dict) -> str:
+        raise RuntimeError("provider down")
+
+
+class FabricatingInsightProvider:
+    """Returns a fabricated number absent from the run metrics — tests D-06 grounding guard (INS-03)."""
+
+    name = "fabricating-stub"
+
+    def parse_constraints(self, text: str) -> list:
+        return []
+
+    def generate_insights(self, summary: dict) -> str:
+        # 99999 is never produced by StubEngine (total_cost=123, unmet=2); guard must reject this.
+        return "Total cost was 99999."
+
+
+class CountingInsightProvider:
+    """Counts generate_insights calls — tests INS-04 cache (sequential only, Open Question 1)."""
+
+    name = "counting-stub"
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def parse_constraints(self, text: str) -> list:
+        return []
+
+    def generate_insights(self, summary: dict) -> str:
+        self.call_count += 1
+        m = summary["metrics"]
+        cost = m.get("total_cost")
+        return f"Cost {cost:g} unmet {m.get('total_unmet_hours'):g}."
+
+
+# ---------------------------------------------------------------------------
+# Negative-path + edge tests (plan 03-02)
+# ---------------------------------------------------------------------------
+
+
+def test_provider_failure_leaves_run_completed(client):
+    """Forcing the provider to fail returns 502 but leaves run COMPLETED and result_json intact (D-08, INS-02).
+
+    After a 502, a subsequent GET with a working provider returns 200 ready=True —
+    proving nothing was cached on the failed call.
+    """
+    from api.deps import get_llm_provider
+    from api.main import app
+    from llm.stub import StubLLMProvider
+
+    _, run_id = _create_and_complete_run(client)
+
+    # Capture result_json before any insight call to use as a reference for the integrity check.
+    r = client.get(f"/runs/{run_id}/result")
+    assert r.status_code == 200
+    original_result = r.json()
+
+    # Install failing provider.
+    app.dependency_overrides[get_llm_provider] = lambda: FailingInsightProvider()
+
+    r = client.get(f"/runs/{run_id}/insights")
+    assert r.status_code == 502, (
+        f"Expected 502 from failing provider; got {r.status_code}: {r.text}"
+    )
+
+    # Run status must remain COMPLETED — insight path must never mutate it (D-08).
+    r = client.get(f"/runs/{run_id}")
+    assert r.status_code == 200
+    assert r.json()["status"] == "COMPLETED", (
+        f"Run status was corrupted after provider failure: {r.json()}"
+    )
+
+    # result_json must be unchanged.
+    r = client.get(f"/runs/{run_id}/result")
+    assert r.status_code == 200
+    assert r.json() == original_result, "result_json was modified after provider failure"
+
+    # Nothing was cached — restoring a working provider must generate successfully
+    # (proves the failed call cached nothing, INS-02).
+    app.dependency_overrides[get_llm_provider] = lambda: StubLLMProvider()
+    r = client.get(f"/runs/{run_id}/insights")
+    assert r.status_code == 200, (
+        f"Expected 200 from working provider after failure; got {r.status_code}: {r.text}"
+    )
+    assert r.json()["ready"] is True
+    assert r.json()["report"], "Report must be non-empty after recovery from provider failure"
+
+
+def test_grounding_guard_rejects_fabricated_number(client):
+    """FabricatingInsightProvider returns 99999 (absent from metrics) → 502; nothing is cached (D-06, INS-03).
+
+    After the 502, a subsequent GET with a working provider returns 200 ready=True,
+    proving the ungrounded report was never persisted to insight_json.
+    """
+    from api.deps import get_llm_provider
+    from api.main import app
+    from llm.stub import StubLLMProvider
+
+    _, run_id = _create_and_complete_run(client)
+
+    # Install fabricating provider (emits 99999 which is not in StubEngine's metric values).
+    app.dependency_overrides[get_llm_provider] = lambda: FabricatingInsightProvider()
+
+    r = client.get(f"/runs/{run_id}/insights")
+    assert r.status_code == 502, (
+        f"Expected 502 from grounding guard rejection; got {r.status_code}: {r.text}"
+    )
+
+    # Nothing was cached — restoring a working provider must generate successfully.
+    app.dependency_overrides[get_llm_provider] = lambda: StubLLMProvider()
+    r = client.get(f"/runs/{run_id}/insights")
+    assert r.status_code == 200, (
+        f"Expected 200 from working provider after grounding rejection; got {r.status_code}: {r.text}"
+    )
+    assert r.json()["ready"] is True
+    assert r.json()["report"], "Report must be non-empty after recovery from grounding rejection"
+
+
+def test_report_narrates_degenerate_warnings(client):
+    """A solve result with a zero-coverage warning must be narrated honestly in the report (D-05 item 3, INS-03).
+
+    The warning text must appear in the insight report — the stub must not mask it with a
+    generic "coverage was adequate" phrase.
+    """
+    from api.deps import get_engine
+    from api.main import app
+
+    warning_msg = "Zero coverage for the 'Pick' function on day 0"
+
+    class DegenerateStubEngine:
+        """Stub engine that returns a SolveResult with a zero-coverage degenerate warning."""
+
+        name = "degenerate-stub"
+
+        def solve(self, problem, config) -> SolveResult:
+            return SolveResult(
+                status="OPTIMAL",
+                schedule=[ScheduleRow(
+                    contact_id="c1", member_name="Tester", task_id="t1",
+                    function="Pick", shift_id="s1", start_h=0.0, end_h=8.0)],
+                metrics=SummaryMetrics(
+                    coverage_by_function={"Pick": CoverageStat(required_h=10.0, served_h=0.0)},
+                    coverage_by_day={0: 0.0},
+                    total_cost=123.0, total_unmet_hours=10.0,
+                    scheduled_shifts=1, scheduled_members=1),
+                stats=SolverStats(status="OPTIMAL", wall_time_s=0.01,
+                                  unmet_objective_hours=10.0, cost_objective=123.0),
+                warnings=[warning_msg],
+            )
+
+    app.dependency_overrides[get_engine] = lambda: DegenerateStubEngine()
+
+    r = client.post("/scenarios", json={
+        "name": "degenerate-warning-test", "fixture": "sample_tiny_input.json", "time_limit_s": 5})
+    assert r.status_code == 201
+    scenario_id = r.json()["id"]
+
+    r = client.post(f"/scenarios/{scenario_id}/runs")
+    assert r.status_code == 201
+    run_id = r.json()["id"]
+
+    done = _wait_terminal(client, run_id)
+    assert done["status"] == "COMPLETED"
+
+    r = client.get(f"/runs/{run_id}/insights")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ready"] is True, f"Run is COMPLETED but ready=False: {body}"
+    report = body["report"]
+    assert "WARNING" in report, (
+        f"Report must narrate the degenerate-family warning; got: {report!r}"
+    )
+    assert warning_msg in report, (
+        f"Report must contain the exact warning text; got: {report!r}"
+    )
+
+
+def test_unknown_and_failed_run(client):
+    """GET on an unknown run id → 404; GET on a FAILED run → 200 ready=false (D-07, INS-02)."""
+    from api.deps import get_engine
+    from api.main import app
+
+    # Unknown run id → 404.
+    r = client.get("/runs/nonexistent-run-id/insights")
+    assert r.status_code == 404, (
+        f"Expected 404 for unknown run id; got {r.status_code}: {r.text}"
+    )
+
+    # FAILED run → 200 ready=false (D-07: HTTP 200 for any non-COMPLETED status, not 409).
+    class FailingStubEngine:
+        """Raises on solve — causes the run to end in FAILED status."""
+
+        name = "failing-engine-stub"
+
+        def solve(self, problem, config):
+            raise RuntimeError("engine failed deliberately for test_unknown_and_failed_run")
+
+    app.dependency_overrides[get_engine] = lambda: FailingStubEngine()
+
+    r = client.post("/scenarios", json={
+        "name": "failed-run-test", "fixture": "sample_tiny_input.json", "time_limit_s": 5})
+    assert r.status_code == 201
+    scenario_id = r.json()["id"]
+
+    r = client.post(f"/scenarios/{scenario_id}/runs")
+    assert r.status_code == 201
+    run_id = r.json()["id"]
+
+    done = _wait_terminal(client, run_id)
+    assert done["status"] == "FAILED", f"Expected FAILED status but got {done['status']}"
+
+    r = client.get(f"/runs/{run_id}/insights")
+    assert r.status_code == 200, (
+        f"Expected 200 (not 409) for FAILED run insights; got {r.status_code}: {r.text}"
+    )
+    body = r.json()
+    assert body["ready"] is False, f"FAILED run must return ready=False; got: {body}"
+    assert "status" in body, f"Not-ready body must include a status field: {body}"
