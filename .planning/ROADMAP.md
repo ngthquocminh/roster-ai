@@ -121,5 +121,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. First NL Constraint End-to-End | 3/3 | Complete    | 2026-06-28 |
 | 2. Full 5-Tool Set + Safe Validation | 4/4 | Complete    | 2026-06-29 |
-| 3. On-Demand Insight Reports | 2/2 | Complete   | 2026-06-30 |
+| 3. On-Demand Insight Reports | 2/2 | Complete    | 2026-06-30 |
 | 4. Real Claude Provider + Penalty Calibration | 0/TBD | Not started | - |
