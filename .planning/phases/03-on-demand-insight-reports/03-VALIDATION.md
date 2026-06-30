@@ -2,7 +2,7 @@
 phase: 3
 slug: on-demand-insight-reports
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-06-30
 ---
@@ -38,7 +38,11 @@ created: 2026-06-30
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| _to be filled by planner_ | | | INS-01..04 | T-3-xx | | unit/api | `uv run pytest ...` | | ⬜ pending |
+| 03-01 T1 | 03-01 | 1 | INS-01, INS-04 | — | RED: happy-path/not-ready/cache tests fail before impl | api | `uv run --directory backend pytest tests/test_insights_api.py -x` | ❌ creates it | ⬜ pending |
+| 03-01 T2 | 03-01 | 1 | INS-03, INS-04 | T-3-01 | set_insight parameterized SQL; deterministic stub; insight_json column/migration | unit | `uv run --directory backend pytest tests/test_llm_provider.py -x` | ✅ extends | ⬜ pending |
+| 03-01 T3 | 03-01 | 1 | INS-01, INS-03 (criterion 1, 4) | T-3-02, T-3-04 | grounding guard before persist; sync def off event loop; cache short-circuit | api | `uv run --directory backend pytest tests/test_insights_api.py -x` | ✅ | ⬜ pending |
+| 03-02 T1 | 03-02 | 2 | INS-02, INS-03 (criterion 2, 3) | T-3-02, T-3-03, T-3-05 | provider-failure isolation (run stays COMPLETED, nothing cached); fabrication rejected 502; honest warning narration | api | `uv run --directory backend pytest tests/test_insights_api.py -x` | ✅ extends | ⬜ pending |
+| 03-02 T2 | 03-02 | 2 | INS-03 (LLM-01/TEST-01) | — | deterministic, I/O-free generate_insights | unit | `uv run --directory backend pytest tests/test_llm_provider.py -x` | ✅ extends | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -68,11 +72,11 @@ created: 2026-06-30
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (03-01 Task 1 creates test_insights_api.py as the RED test)
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s (stub-driven, no network)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** planner-approved 2026-06-30

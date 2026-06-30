@@ -89,7 +89,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Forcing the provider to fail leaves the run status COMPLETED and the schedule result untouched; only the insight call returns an error.
   4. A second fetch returns the cached `runs.insight_json` without re-calling the provider.
 
-**Plans**: TBD
+**Plans**: 2 plans
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Happy-path vertical slice: insight_json column + migration, RunRepo.set_insight, generate_insights Protocol op + deterministic stub, InsightOut schema, insight_service (gate/cache/generate/D-06 guard), GET /runs/{id}/insights sync route + happy/not-ready/cache tests (INS-01, INS-03, INS-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-02-PLAN.md — Failure-isolation + grounding-honesty hardening: provider-failure leaves run COMPLETED + nothing cached, fabricated-number rejection (502), degenerate-warning narration, unknown/FAILED edges, generate_insights determinism unit test (INS-02, INS-03)
 
 ### Phase 4: Real Claude Provider + Penalty Calibration
 
@@ -114,5 +121,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. First NL Constraint End-to-End | 3/3 | Complete    | 2026-06-28 |
 | 2. Full 5-Tool Set + Safe Validation | 4/4 | Complete    | 2026-06-29 |
-| 3. On-Demand Insight Reports | 0/TBD | Not started | - |
+| 3. On-Demand Insight Reports | 0/2 | Not started | - |
 | 4. Real Claude Provider + Penalty Calibration | 0/TBD | Not started | - |
