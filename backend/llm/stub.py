@@ -258,5 +258,7 @@ class StubLLMProvider:
         for w in summary.get("warnings", []):
             lines.append(f"- WARNING: {w}")
         for ov in summary.get("overrides", []):
-            lines.append(f"- override applied: {ov['tool']} {ov['args']}")
+            # Omit ov['args'] — constraint arg values (n, max_hours, factor) are not run
+            # metrics and will fail the D-06 grounding guard.
+            lines.append(f"- override applied: {ov['tool']}")
         return "\n".join(lines)

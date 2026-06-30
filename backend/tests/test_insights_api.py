@@ -412,3 +412,42 @@ def test_unknown_and_failed_run(client):
     body = r.json()
     assert body["ready"] is False, f"FAILED run must return ready=False; got: {body}"
     assert "status" in body, f"Not-ready body must include a status field: {body}"
+
+
+def test_insights_succeeds_when_scenario_has_overrides(client):
+    """Insight generation must return 200 when the scenario has numeric constraint args (CR-01 regression).
+
+    A constraint with a numeric arg (n=4 from 'at least 4 on Pick') stores that arg value
+    in scenario.overrides. Before the CR-01 fix, StubLLMProvider.generate_insights emitted
+    ov['args'] as a Python dict repr, so '4' appeared in the report as an ungrounded numeric
+    token that the D-06 grounding guard rejected with 502. The fix omits ov['args'] and only
+    emits the tool name, so any constrained scenario can generate insights successfully.
+    """
+    r = client.post("/scenarios", json={
+        "name": "with-override", "fixture": "sample_tiny_input.json", "time_limit_s": 5})
+    assert r.status_code == 201, r.text
+    scenario_id = r.json()["id"]
+
+    # Apply a constraint with a numeric arg — this populates scenario.overrides with n=4.
+    # "Amb Rec" uniquely matches "Amb Rec | Unloader" in the tiny fixture (avoids the
+    # multi-match clarification that generic tokens like "Pick" trigger).
+    r = client.post("/constraints", json={
+        "scenario_id": scenario_id, "text": "at least 4 on Amb Rec"})
+    assert r.status_code == 200, r.text
+    assert r.json()["applied"], (
+        f"Constraint must be applied (not rejected/clarification): {r.json()}"
+    )
+
+    r = client.post(f"/scenarios/{scenario_id}/runs")
+    assert r.status_code == 201, r.text
+    run_id = r.json()["id"]
+    _wait_terminal(client, run_id)
+
+    r = client.get(f"/runs/{run_id}/insights")
+    assert r.status_code == 200, (
+        f"Insight generation returned {r.status_code} for a scenario with numeric override args; "
+        f"expected 200. Body: {r.text}"
+    )
+    assert r.json()["ready"] is True, (
+        f"ready must be True for a COMPLETED run with a grounded report; got: {r.json()}"
+    )
