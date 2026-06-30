@@ -35,6 +35,9 @@ CREATE INDEX IF NOT EXISTS idx_runs_scenario ON runs(scenario_id);
 
 def _has_column(conn: sqlite3.Connection, table: str, col: str) -> bool:
     """Return True if the given column exists on the table (used for additive migrations)."""
+    # PRAGMA does not support parameterised names; validate to prevent injection-style errors.
+    if not table.replace("_", "").isalnum():
+        raise ValueError(f"Invalid table name: {table!r}")
     return any(r["name"] == col
                for r in conn.execute(f"PRAGMA table_info({table})"))
 
