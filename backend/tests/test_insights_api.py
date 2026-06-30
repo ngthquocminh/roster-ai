@@ -108,36 +108,39 @@ def test_insights_returns_report_for_completed_run(client):
 
 
 def test_insights_not_ready_returns_200_body(client):
-    """Not-COMPLETED run -> 200 (NOT 409) with ready=false and a status field (D-07)."""
+    """Not-COMPLETED run -> 200 (NOT 409) with ready=false and a status field (D-07).
+
+    The key D-07 property is always verified: HTTP 200 is returned for any run status
+    (not 409).  The body-shape check (ready=False + status field) is exercised when the
+    insights call races ahead of completion; if the stub engine completes first the run
+    is COMPLETED and ready=True, which is also correct — the test checks both branches.
+    We never assert based on pre-fetched status to avoid a TOCTOU race.
+    """
     r = client.post("/scenarios", json={
         "name": "not-ready-test", "fixture": "sample_tiny_input.json", "time_limit_s": 5})
     assert r.status_code == 201
     scenario_id = r.json()["id"]
 
-    # We fetch insights immediately after creating the run (before it completes).
-    # To guarantee the run is not yet COMPLETED we do NOT call _wait_terminal.
-    # Instead we create the run and immediately call insights — PENDING status.
-    # NOTE: the run may complete before we call GET; in that case we accept
-    # ready=true as correct behavior and skip the not-ready assertion.
     r = client.post(f"/scenarios/{scenario_id}/runs")
     assert r.status_code == 201
     run_id = r.json()["id"]
 
-    # Poll until status is something we can test.
-    # If PENDING: check not-ready. If COMPLETED: verify ready=true (also correct).
-    r_poll = client.get(f"/runs/{run_id}")
-    status = r_poll.json()["status"]
-
+    # Call insights immediately; the run may be in any state.
     r_insights = client.get(f"/runs/{run_id}/insights")
+
+    # D-07 core property: HTTP 200 regardless of run status (never 409).
     assert r_insights.status_code == 200, (
-        f"Must return 200 (not 409) for any run status; got {r_insights.status_code}"
+        f"Must return 200 (not 409) for any run status; got {r_insights.status_code}: {r_insights.text}"
     )
     body = r_insights.json()
-    if status not in ("COMPLETED",):
-        # Run was still not-COMPLETED when we called insights.
-        assert body["ready"] is False, f"Expected ready=false for status={status!r}: {body}"
+    assert "run_id" in body and body["run_id"] == run_id
+
+    if not body["ready"]:
+        # Not-ready body shape: must include status field with the run's current status (D-07).
         assert "status" in body, f"Not-ready body must include a status field: {body}"
-    # If run completed before we queried, ready may be True — both are correct.
+    else:
+        # Run completed before insights was called — ready=True with a report is also correct.
+        assert body.get("report"), "ready=True body must include a non-empty report"
 
 
 def test_second_fetch_uses_cache(client):

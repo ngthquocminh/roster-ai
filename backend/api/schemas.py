@@ -31,6 +31,14 @@ class RunOut(BaseModel):
     error: Optional[str] = None
 
 
+class InsightOut(BaseModel):
+    ready: bool
+    run_id: str
+    report: Optional[str] = None    # present when ready=True (INS-01)
+    status: Optional[str] = None    # present when ready=False (D-07)
+    reason: Optional[str] = None    # present when ready=False (D-07)
+
+
 class ConstraintParseRequest(BaseModel):
     scenario_id: str = Field(min_length=1)
     text: str = Field(min_length=1, max_length=2000)
