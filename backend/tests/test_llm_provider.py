@@ -118,3 +118,67 @@ def test_get_llm_provider_parse_constraints_works():
     assert isinstance(result, list)
     # either 1 result (matched the number+task pattern) or 0 — either valid
     assert len(result) in (0, 1)
+
+
+# ---------------------------------------------------------------------------
+# StubLLMProvider.generate_insights — determinism + grounding (plan 03-02, LLM-01/TEST-01)
+# ---------------------------------------------------------------------------
+
+def test_generate_insights_deterministic():
+    """Two calls with the same summary return identical non-empty text (LLM-01 / TEST-01).
+
+    Also spot-checks that the rendered cost and unmet-hours values appear in the output
+    and that no foreign number is introduced — confirming the stub is safe to drive
+    the D-06 grounding guard in CI without any live API calls.
+    """
+    from llm.stub import StubLLMProvider
+
+    # Representative summary dict matching the serialize_result metrics shape (serialize.py).
+    summary = {
+        "metrics": {
+            "total_cost": 450.0,
+            "total_unmet_hours": 3.5,
+            "scheduled_shifts": 12,
+            "scheduled_members": 8,
+            "coverage_by_function": {
+                "Pick": {
+                    "required_h": 40.0,
+                    "served_h": 36.0,
+                    "pct": 0.9,   # 90% — fraction, not percentage
+                },
+                "Pack": {
+                    "required_h": 20.0,
+                    "served_h": 20.0,
+                    "pct": 1.0,
+                },
+            },
+            "coverage_by_day": {
+                "0": 0.9,
+                "1": 1.0,
+            },
+        },
+        "warnings": ["Low coverage on day 2 for Pick"],
+        "overrides": [{"tool": "set_min_workers_per_task", "args": {"task_id": "Pick", "n": 4}}],
+    }
+
+    provider = StubLLMProvider()
+
+    result_a = provider.generate_insights(summary)
+    result_b = provider.generate_insights(summary)
+
+    # Must be non-empty str.
+    assert isinstance(result_a, str), f"generate_insights must return str; got {type(result_a)}"
+    assert result_a, "generate_insights must return non-empty text"
+
+    # Determinism: two calls with the same input must return identical text (TEST-01 / LLM-01).
+    assert result_a == result_b, (
+        "generate_insights is not deterministic — two identical calls produced different output"
+    )
+
+    # Spot-check that the cost and unmet-hours values from the summary appear in the text.
+    assert "450" in result_a, (
+        f"Report must cite total_cost=450; got: {result_a!r}"
+    )
+    assert "3.5" in result_a, (
+        f"Report must cite total_unmet_hours=3.5; got: {result_a!r}"
+    )
