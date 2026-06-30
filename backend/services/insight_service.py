@@ -126,8 +126,13 @@ def get_or_generate(
         return {"ready": True, "run_id": run_id, "report": run["insight_json"]}
 
     # Cache miss: build grounded summary dict -> generate -> guard -> persist -> return.
-    result = json.loads(run["result_json"])
-    metrics = result["metrics"]
+    try:
+        result = json.loads(run["result_json"])
+        metrics = result["metrics"]
+    except (json.JSONDecodeError, KeyError) as exc:
+        raise InsightGenerationError(
+            f"result_json is malformed or missing 'metrics': {exc}"
+        ) from exc
     warnings = result.get("warnings", [])
 
     # Read current scenario overrides (no snapshot stored on the run — Research Pitfall 5).
