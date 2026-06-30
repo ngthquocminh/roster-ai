@@ -82,3 +82,10 @@ class RunRepo:
             "UPDATE runs SET status='FAILED', error=?, finished_at=? WHERE id=?",
             (error, finished_at, run_id),
         )
+
+    def set_insight(self, run_id: str, insight_json: str) -> None:
+        """Cache the generated NL report. Caller commits. Never touches status/result_json (D-08)."""
+        self.conn.execute(
+            "UPDATE runs SET insight_json=? WHERE id=?",
+            (insight_json, run_id),
+        )

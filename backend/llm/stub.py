@@ -232,3 +232,31 @@ class StubLLMProvider:
             # No match — fragment contributes nothing
 
         return results
+
+    def generate_insights(self, summary: dict) -> str:
+        """Deterministic insight report — no external I/O (TEST-01).
+
+        Emits only numbers that appear verbatim in summary["metrics"] so the D-06
+        grounding guard passes by construction.  Small structural counts (e.g. the
+        number of functions) are spelled as words, not digits, to avoid false-positive
+        guard failures (Research A2).
+        """
+        m = summary.get("metrics", {})
+        cost = m.get("total_cost")
+        unmet = m.get("total_unmet_hours")
+        cost_s = f"{cost:g}" if cost is not None else "not available"
+        unmet_s = f"{unmet:g}" if unmet is not None else "not available"
+        lines = [
+            f"Schedule solved with total cost {cost_s} and {unmet_s} unmet hours.",
+        ]
+        for fn, c in (m.get("coverage_by_function") or {}).items():
+            if c.get("pct") is not None:
+                pct = c["pct"] * 100
+                lines.append(
+                    f"- {fn}: served {c['served_h']:g}/{c['required_h']:g} h ({pct:g}%)"
+                )
+        for w in summary.get("warnings", []):
+            lines.append(f"- WARNING: {w}")
+        for ov in summary.get("overrides", []):
+            lines.append(f"- override applied: {ov['tool']} {ov['args']}")
+        return "\n".join(lines)

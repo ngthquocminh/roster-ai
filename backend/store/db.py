@@ -25,11 +25,18 @@ CREATE TABLE IF NOT EXISTS runs (
     finished_at   TEXT,
     solver_status TEXT,                         -- OPTIMAL / FEASIBLE / UNKNOWN / ...
     error         TEXT,
-    result_json   TEXT                          -- serialized SolveResult (metrics + schedule)
+    result_json   TEXT,                         -- serialized SolveResult (metrics + schedule)
+    insight_json  TEXT                          -- cached NL insight report (INS-04)
 );
 
 CREATE INDEX IF NOT EXISTS idx_runs_scenario ON runs(scenario_id);
 """
+
+
+def _has_column(conn: sqlite3.Connection, table: str, col: str) -> bool:
+    """Return True if the given column exists on the table (used for additive migrations)."""
+    return any(r["name"] == col
+               for r in conn.execute(f"PRAGMA table_info({table})"))
 
 
 def connect(path: str) -> sqlite3.Connection:
@@ -46,7 +53,9 @@ def connect(path: str) -> sqlite3.Connection:
 def init_db(path: str) -> None:
     conn = connect(path)
     try:
-        conn.executescript(_SCHEMA)
+        conn.executescript(_SCHEMA)                            # fresh DBs: column already in DDL
+        if not _has_column(conn, "runs", "insight_json"):     # existing DBs: additive migration
+            conn.execute("ALTER TABLE runs ADD COLUMN insight_json TEXT")
         conn.commit()
     finally:
         conn.close()

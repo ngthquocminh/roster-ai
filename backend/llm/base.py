@@ -14,6 +14,7 @@ from domain.overrides import OverrideCall
 
 class LLMProvider(Protocol):
     def parse_constraints(self, text: str) -> list[OverrideCall]: ...
+    def generate_insights(self, summary: dict) -> str: ...   # D-09 second operation
 
     @property
     def name(self) -> str: ...
