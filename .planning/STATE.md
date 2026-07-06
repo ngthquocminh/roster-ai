@@ -6,7 +6,7 @@ current_phase: 4
 current_phase_name: Real Claude Provider + Penalty Calibration
 status: verifying
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-06T15:42:22.630Z"
+last_updated: "2026-07-06T15:47:43.344Z"
 last_activity: 2026-06-30
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
@@ -96,6 +96,10 @@ Recent decisions affecting current work:
 [Issues that affect future work]
 
 - [Phase 4]: Penalty-weight calibration needs an empirical matrix of solver runs against the committed full-week fixture — flag for a focused validation pass at plan time (per research SUMMARY.md research flags).
+
+### Roadmap Evolution
+
+- Phase 4 edited: reworded Claude-specific title/goal/criteria to provider-generic (free-tier LLM, Gemini first); also updated REQUIREMENTS LLM-02/TEST-04
 
 ## Deferred Items
 

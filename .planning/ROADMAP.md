@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: First NL Constraint End-to-End** - One plain-English constraint flows through the stub provider into a soft CP-SAT penalty and re-solve, proving the seam (completed 2026-06-28)
 - [x] **Phase 2: Full 5-Tool Set + Safe Validation** - All five solver tools, with arg/ID validation, plain-English errors, and parse-UX fields (completed 2026-06-29)
 - [x] **Phase 3: On-Demand Insight Reports** - Decoupled, metric-grounded, cached natural-language insight endpoint (completed 2026-06-30)
-- [ ] **Phase 4: Real Claude Provider + Penalty Calibration** - Live Claude behind the Protocol, calibrated weights, one CI-excluded integration test
+- [ ] **Phase 4: Real LLM Provider (free-tier first) + Penalty Calibration** - Real network-backed provider (Gemini free tier first) behind the Protocol, calibrated weights, one CI-excluded integration test
 
 ## Phase Details
 
@@ -98,17 +98,17 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] 03-02-PLAN.md — Failure-isolation + grounding-honesty hardening: provider-failure leaves run COMPLETED + nothing cached, fabricated-number rejection (502), degenerate-warning narration, unknown/FAILED edges, generate_insights determinism unit test (INS-02, INS-03)
 
-### Phase 4: Real Claude Provider + Penalty Calibration
+### Phase 4: Real LLM Provider (free-tier first) + Penalty Calibration
 
-**Goal**: The real Claude provider drops in behind the `LLMProvider` Protocol with a config-driven model id, override penalty weights are empirically calibrated against the committed full-week fixture, and a live integration test confirms wire-format parity — while the default CI run stays stub-only and needs no API key.
+**Goal**: A real, network-backed LLM provider — Google Gemini's free tier first — drops in behind the `LLMProvider` Protocol with a config-driven provider + model id, override penalty weights are empirically calibrated against the committed full-week fixture, and a live integration test confirms the real provider's parse path matches the stub — while the default CI run stays stub-only and needs no API key. Claude and other vendors remain trivial future swaps behind the same seam.
 **Mode:** mvp
 **Depends on**: Phases 1–3
 **Requirements**: LLM-02, ENG-04, TEST-04
 **Success Criteria** (what must be TRUE):
 
-  1. Setting `ANTHROPIC_MODEL` selects the Claude model (default `claude-sonnet-4-6`); switching the configured provider from stub to claude requires no changes to service or route code (the seam holds).
+  1. Config selects the LLM backend — a provider setting (default `stub`, keeping CI keyless) plus a model-id setting (a current Gemini model as the default real provider); switching the configured provider from stub to the real provider requires no changes to service or route code (the seam holds).
   2. Override penalty weights are calibrated against the committed full-week fixture so a satisfiable override is honored while an unsatisfiable one degrades gracefully to baseline coverage — respected, but not dominating the round-2 cost objective.
-  3. One live-Claude integration test exercises the same parse code path as the stub and confirms `tool_use` wire-format parity; it is excluded from the default CI run, which stays green with no API key present.
+  3. One live-provider integration test exercises the same parse code path as the stub and confirms the real provider yields the same validated `OverrideCall` results (function-calling parity through the seam); it is excluded from the default CI run, which stays green with no API key present.
 
 **Plans**: TBD
 
@@ -122,4 +122,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. First NL Constraint End-to-End | 3/3 | Complete    | 2026-06-28 |
 | 2. Full 5-Tool Set + Safe Validation | 4/4 | Complete    | 2026-06-29 |
 | 3. On-Demand Insight Reports | 2/2 | Complete    | 2026-06-30 |
-| 4. Real Claude Provider + Penalty Calibration | 0/TBD | Not started | - |
+| 4. Real LLM Provider (free-tier first) + Penalty Calibration | 0/TBD | Not started | - |

@@ -10,7 +10,7 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 ### LLM Provider Seam
 
 - [x] **LLM-01**: An `LLMProvider` Protocol defines a synchronous interface with two operations — parse constraints, and generate insights
-- [ ] **LLM-02**: A Claude implementation sits behind the Protocol with a config-driven model id (default `claude-sonnet-4-6` via an `ANTHROPIC_MODEL` setting)
+- [ ] **LLM-02**: A real, network-backed provider (Google Gemini free tier first) sits behind the Protocol with a config-driven provider + model id (default provider `stub` so CI stays keyless; a current Gemini model as the default real provider). Claude and other vendors remain trivial future swaps behind the same seam
 - [x] **LLM-03**: The provider is injected via a FastAPI dependency seam (mirroring `get_engine`), so a stub can be substituted in tests
 
 ### NL Constraint Parsing
@@ -49,7 +49,7 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 - [x] **TEST-01**: A `StubLLMProvider` implements the Protocol with Claude-faithful tool-use wire format; no live LLM API runs in CI
 - [x] **TEST-02**: Tests cover the full NL → override → re-solve round trip driven by the stub
 - [x] **TEST-03**: Validation tests cover unknown IDs and out-of-bounds arguments
-- [ ] **TEST-04**: One live-Claude integration test exists but is excluded from the default CI run
+- [ ] **TEST-04**: One live-provider integration test exists but is excluded from the default CI run
 
 ## v2 Requirements
 
