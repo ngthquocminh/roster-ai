@@ -25,4 +25,7 @@ def create_provider(name: str, *, settings=None) -> LLMProvider:
     if name == "stub":
         from llm.stub import StubLLMProvider
         return StubLLMProvider()
-    raise ValueError(f"Unknown LLM provider: {name!r}. Available: ['stub']")
+    if name == "gemini":
+        from llm.gemini import GeminiLLMProvider
+        return GeminiLLMProvider(api_key=settings.llm_api_key, model=settings.llm_model)
+    raise ValueError(f"Unknown LLM provider: {name!r}. Available: ['stub', 'gemini']")

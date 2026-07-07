@@ -9,6 +9,7 @@ dependencies = [
     "pandas",
     "fastapi",
     "uvicorn[standard]",
+    "google-genai>=2.10.0",
 ]
 
 [dependency-groups]
@@ -19,3 +20,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "live: exercises a real network-backed LLM provider; excluded by default (run with `pytest -m live`)",
+]
+addopts = "-m \"not live\""
