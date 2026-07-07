@@ -2,8 +2,8 @@
 
 Mirror of engine/base.py: Protocol + factory with lazy imports. The Protocol
 returns provider-neutral list[OverrideCall]; no vendor-specific payload crosses
-this boundary (D-08). The real Claude SDK is Phase 4; only the stub is registered
-here.
+this boundary (D-08). A real (network-backed) provider is registered behind
+this factory in a later plan; only the stub is registered here so far.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ class LLMProvider(Protocol):
     def name(self) -> str: ...
 
 
-def create_provider(name: str) -> LLMProvider:
+def create_provider(name: str, *, settings=None) -> LLMProvider:
     """Registry of available LLM providers. Add a backend here to make it swappable."""
     if name == "stub":
         from llm.stub import StubLLMProvider

@@ -32,5 +32,5 @@ def get_engine() -> SchedulerEngine:
     return create_engine("cpsat")
 
 
-def get_llm_provider() -> LLMProvider:
-    return create_provider("stub")
+def get_llm_provider(settings: Settings = Depends(get_settings)) -> LLMProvider:
+    return create_provider(settings.llm_provider, settings=settings)
