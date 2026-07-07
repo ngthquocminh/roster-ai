@@ -106,18 +106,51 @@ def test_parse_constraints_general_question_returns_empty():
 
 def test_get_llm_provider_returns_stub():
     from api.deps import get_llm_provider
-    provider = get_llm_provider()
+    from settings import default_settings
+    provider = get_llm_provider(default_settings())
     assert provider.name == "stub"
 
 
 def test_get_llm_provider_parse_constraints_works():
     from api.deps import get_llm_provider
-    provider = get_llm_provider()
+    from settings import default_settings
+    provider = get_llm_provider(default_settings())
     result = provider.parse_constraints("at least 3 on Pack")
     # "Pack" token — stub should still parse even if it's not a real task id
     assert isinstance(result, list)
     # either 1 result (matched the number+task pattern) or 0 — either valid
     assert len(result) in (0, 1)
+
+
+# ---------------------------------------------------------------------------
+# Config-driven provider selection (Phase 4 plan 04-01, D-04/D-05)
+# ---------------------------------------------------------------------------
+
+def test_default_settings_llm_defaults_keyless(monkeypatch):
+    """No LLM env vars set -> stub provider, default model, no key (keyless CI, D-04)."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    from settings import default_settings
+    s = default_settings()
+    assert s.llm_provider == "stub"
+    assert s.llm_model == "gemini-2.5-flash"
+    assert s.llm_api_key is None
+
+
+def test_get_llm_provider_respects_env(monkeypatch):
+    """settings.llm_provider (env-driven) selects the backend get_llm_provider returns."""
+    monkeypatch.setenv("LLM_PROVIDER", "stub")
+    from api.deps import get_llm_provider
+    from settings import default_settings
+    assert get_llm_provider(default_settings()).name == "stub"
+
+
+def test_create_provider_threads_settings():
+    """create_provider accepts the settings kwarg (signature required for later providers)."""
+    from llm.base import create_provider
+    from settings import default_settings
+    assert create_provider("stub", settings=default_settings()).name == "stub"
 
 
 # ---------------------------------------------------------------------------
