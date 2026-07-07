@@ -1,0 +1,160 @@
+"""Tests for the Gemini-backed LLM provider (LLM-02, TEST-04).
+
+Verifies:
+- create_provider("gemini") returns a GeminiLLMProvider named "gemini",
+  without requiring a real API key (client construction is deferred to first
+  use, keeping the keyless-default-CI invariant intact, D-04).
+- parse_constraints translates a fake client's function_calls into
+  list[OverrideCall] via the shared to_override_call helper (parity with the
+  stub's translation path, D-06/D-07).
+- An empty/None function_calls response yields [] (matches the stub's
+  "no constraint found" behavior, NLC-03).
+- generate_insights returns the fake client's response.text verbatim.
+- Exactly one gated @pytest.mark.live test exists, excluded from the default
+  suite (addopts = -m "not live") and skipped when GEMINI_API_KEY is absent.
+
+All non-live tests use a hand-rolled fake client (mirroring the StubEngine
+idiom in test_api.py) injected onto the provider's `_client` attribute — no
+network access, no real API key required.
+"""
+from __future__ import annotations
+
+import os
+
+import pytest
+
+from domain.overrides import OverrideCall, override_id
+
+_HAS_KEY = bool(os.environ.get("GEMINI_API_KEY"))
+
+
+# ---------------------------------------------------------------------------
+# Fake genai client — mirrors the StubEngine hand-built-fake idiom in
+# test_api.py. Exposes only the surface GeminiLLMProvider actually calls:
+# `.models.generate_content(...)`.
+# ---------------------------------------------------------------------------
+
+class _FakeFunctionCall:
+    """Mirrors google.genai.types.FunctionCall's .name/.args surface."""
+
+    def __init__(self, name: str, args: dict) -> None:
+        self.name = name
+        self.args = args
+
+
+class _FakeResponse:
+    def __init__(self, function_calls=None, text=None) -> None:
+        self.function_calls = function_calls
+        self.text = text
+
+
+class _FakeModels:
+    def __init__(self, response: _FakeResponse) -> None:
+        self._response = response
+
+    def generate_content(self, **kwargs):
+        return self._response
+
+
+class _FakeClient:
+    def __init__(self, response: _FakeResponse) -> None:
+        self.models = _FakeModels(response)
+
+
+# ---------------------------------------------------------------------------
+# create_provider factory — keyless
+# ---------------------------------------------------------------------------
+
+def test_create_provider_gemini_returns_gemini_llm_provider():
+    from llm.base import create_provider
+    from settings import default_settings
+
+    p = create_provider("gemini", settings=default_settings())
+    assert p.name == "gemini"
+
+
+# ---------------------------------------------------------------------------
+# parse_constraints — fake client, no network
+# ---------------------------------------------------------------------------
+
+def test_parse_constraints_translates_one_function_call():
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    fake_call = _FakeFunctionCall(name="set_min_workers_per_task", args={"task_id": "Pick", "n": 2})
+    provider._client = _FakeClient(_FakeResponse(function_calls=[fake_call]))
+
+    result = provider.parse_constraints("at least 2 on Pick")
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+    call = result[0]
+    assert isinstance(call, OverrideCall)
+    assert call.tool == "set_min_workers_per_task"
+    assert call.args == {"task_id": "Pick", "n": 2}
+    assert call.id == override_id("set_min_workers_per_task", {"task_id": "Pick", "n": 2})
+
+
+def test_parse_constraints_empty_function_calls_returns_empty_list():
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    provider._client = _FakeClient(_FakeResponse(function_calls=None))
+
+    assert provider.parse_constraints("hello there") == []
+
+
+def test_parse_constraints_no_function_calls_list_returns_empty_list():
+    """response.function_calls == [] (not None) is also treated as no match."""
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    provider._client = _FakeClient(_FakeResponse(function_calls=[]))
+
+    assert provider.parse_constraints("show me the schedule") == []
+
+
+# ---------------------------------------------------------------------------
+# generate_insights — fake client, no network
+# ---------------------------------------------------------------------------
+
+def test_generate_insights_returns_fake_text():
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    provider._client = _FakeClient(_FakeResponse(text="Schedule solved with total cost 450."))
+
+    result = provider.generate_insights({"metrics": {"total_cost": 450.0}})
+
+    assert result == "Schedule solved with total cost 450."
+
+
+# ---------------------------------------------------------------------------
+# Live parity test (TEST-04, D-09) — excluded by default, gated on a real key
+# ---------------------------------------------------------------------------
+
+@pytest.mark.live
+@pytest.mark.skipif(not _HAS_KEY, reason="GEMINI_API_KEY not set — live test requires a real key")
+def test_gemini_parse_constraints_matches_stub_parity():
+    from llm.base import create_provider
+    from settings import default_settings
+
+    settings = default_settings()  # picks up LLM_MODEL / GEMINI_API_KEY from env
+    gemini = create_provider("gemini", settings=settings)
+    stub = create_provider("stub")
+
+    text = "at least 2 on Pick"
+    gemini_calls = gemini.parse_constraints(text)
+    stub_calls = stub.parse_constraints(text)
+
+    # D-06 reframed parity: same neutral OverrideCall shape, not byte-identical
+    # vendor payload. task_id token matching is looser (LLM phrasing may vary
+    # casing/wording) — constraint_service's substring resolver (VAL-02)
+    # handles this either way.
+    assert len(gemini_calls) == len(stub_calls) == 1
+    assert gemini_calls[0].tool == stub_calls[0].tool == "set_min_workers_per_task"
+    assert gemini_calls[0].args["n"] == stub_calls[0].args["n"] == 2

@@ -65,7 +65,10 @@ _LOCK_WORKER_SHIFT = types.FunctionDeclaration(
         "type": "object",
         "properties": {
             "member_id": {"type": "string", "description": "Worker name or id, e.g. 'Alice'"},
-            "day": {"type": "integer", "description": "0-indexed day from scenario start (0=Monday)"},
+            "day": {
+                "type": "integer",
+                "description": "0-indexed day from scenario start (0=Monday)",
+            },
         },
         "required": ["member_id", "day"],
     },
