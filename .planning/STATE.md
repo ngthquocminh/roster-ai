@@ -5,15 +5,15 @@ milestone_name: milestone
 current_phase: 04
 current_phase_name: real-claude-provider-penalty-calibration
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-07-07T02:31:01.334Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-07-07T08:58:47.518Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 75
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 ## Current Position
 
 Phase: 04 (real-claude-provider-penalty-calibration) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-07 — Phase 04 execution started
 
@@ -66,6 +66,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P01 | 4 | 3 tasks | 8 files |
 | Phase 03 P02 | 17 | 2 tasks | 2 files |
 | Phase 04 P01 | 8min | 3 tasks | 6 files |
+| Phase 04 P03 | 45min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Shared to_override_call helper (D-07): stub and future providers both call llm/translate.to_override_call(tool_name, args); no vendor payload shape crosses it
 - [Phase ?]: create_provider(name, *, settings=None) threads Settings through the factory ahead of the gemini branch landing in 04-02
 - [Phase ?]: LLM-02 spans plans 04-01 and 04-02; requirement checkbox intentionally left pending until 04-02 lands the real Gemini provider branch
+- [Phase 04]: 04-03 calibration regression tests were rebased from the full-week fixture onto small hand-built deterministic problems for fast/reliable CI, because CP-SAT wall-clock convergence on the full week is non-deterministic; the sweep harness (scripts/calibrate_penalties.py) retains the full-week target for on-demand magnitude calibration.
 
 ### Pending Todos
 
@@ -115,6 +117,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-07T02:29:14.025Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-real-claude-provider-penalty-calibration/04-CONTEXT.md
+Last session: 2026-07-07T08:58:47.507Z
+Stopped at: Completed 04-03-PLAN.md
+Resume file: None

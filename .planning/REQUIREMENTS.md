@@ -33,7 +33,7 @@ Requirements for this milestone (Phase 3). Each maps to a roadmap phase.
 - [x] **ENG-01**: `OverrideCall` domain types live in `domain/` so the engine references them without an engine→llm import cycle
 - [x] **ENG-02**: `SolverConfig` carries the overrides; the `SchedulerEngine.solve(problem, config)` signature is unchanged
 - [x] **ENG-03**: The CP-SAT builder applies each override as a **soft** penalty term — never a hard constraint that can make the model infeasible
-- [ ] **ENG-04**: Overrides enter the correct lexicographic round with calibrated penalty weights (respected, but not dominating the cost objective)
+- [x] **ENG-04**: Overrides enter the correct lexicographic round with calibrated penalty weights (respected, but not dominating the cost objective)
 - [x] **ENG-05**: Re-solving a scenario with overrides yields a schedule reflecting them; degenerate solves (e.g. coverage collapsing to zero) are detected and flagged
 - [x] **ENG-06**: A scenario with no overrides solves identically to today (no regression)
 
@@ -107,7 +107,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | INS-03 | Phase 3 | Complete |
 | INS-04 | Phase 3 | Complete |
 | LLM-02 | Phase 4 | Pending |
-| ENG-04 | Phase 4 | Pending |
+| ENG-04 | Phase 4 | Complete |
 | TEST-04 | Phase 4 | Pending |
 
 **Coverage:**

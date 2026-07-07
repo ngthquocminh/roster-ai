@@ -110,12 +110,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Override penalty weights are calibrated against the committed full-week fixture so a satisfiable override is honored while an unsatisfiable one degrades gracefully to baseline coverage — respected, but not dominating the round-2 cost objective.
   3. One live-provider integration test exercises the same parse code path as the stub and confirms the real provider yields the same validated `OverrideCall` results (function-calling parity through the seam); it is excluded from the default CI run, which stays green with no API key present.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 **Wave 1** *(parallel)*
 
 - [x] 04-01-PLAN.md — Provider-selection seam: shared `to_override_call` (D-07) + env-driven `Settings`/`get_llm_provider` + `create_provider(..., settings=)` (LLM-02, keyless CI)
-- [ ] 04-03-PLAN.md — Penalty calibration: sweep harness + real-engine regression tests (satisfiable honored / unsatisfiable bounded-degrade) + folded WR-05 degeneracy + calibrated constants (ENG-04)
+- [x] 04-03-PLAN.md — Penalty calibration: sweep harness + real-engine regression tests (satisfiable honored / unsatisfiable bounded-degrade) + folded WR-05 degeneracy + calibrated constants (ENG-04)
 
 **Wave 2** *(blocked on 04-01)*
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. First NL Constraint End-to-End | 3/3 | Complete    | 2026-06-28 |
 | 2. Full 5-Tool Set + Safe Validation | 4/4 | Complete    | 2026-06-29 |
 | 3. On-Demand Insight Reports | 2/2 | Complete    | 2026-06-30 |
-| 4. Real LLM Provider (free-tier first) + Penalty Calibration | 1/3 | In Progress|  |
+| 4. Real LLM Provider (free-tier first) + Penalty Calibration | 2/3 | In Progress|  |
