@@ -7,12 +7,16 @@ test_engine_overrides.py, extended into pytest assertions that lock the
 calibrated constants in config/constants.py in place (D-08 + folded WR-05).
 
 Timing note (discovered empirically while writing this suite): this fixture
-(11 members, 6 tasks, 168h horizon, 1547 demand bands) needs ~150-210s of real
+(11 members, 6 tasks, 168h horizon, 1547 demand bands) needs ~150-220s of real
 wall time for round 2 (cost minimization) to reach a genuine OPTIMAL/FEASIBLE
 result -- a 30-60s bound (as originally sketched in RESEARCH.md, based on an
 untested design.md estimate) never gets past the round-1-locked fallback
 snapshot (status="UNKNOWN"), which cannot exercise the round-2 cost mechanism
-these tests lock in. COST_TIME_LIMIT_S below reflects the measured value.
+these tests lock in. Convergence time also varies run-to-run with system load
+(CP-SAT's parallel portfolio search is not wall-clock-deterministic even with
+a fixed seed) -- a run at 220s once landed on UNKNOWN instead of OPTIMAL for
+the scale_demand override. COST_TIME_LIMIT_S=300 below adds headroom above
+the ~220s worst case observed so the tests aren't flaky under load.
 
 Fixture reality also constrains *which* override cleanly demonstrates each
 behavior: with only 11 members covering demand that vastly exceeds their
@@ -42,7 +46,7 @@ FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "samp
 
 # Empirically required for round 2 to reach a real (not fallback-snapshot)
 # cost result on the full-week fixture -- see module docstring.
-COST_TIME_LIMIT_S = 220.0
+COST_TIME_LIMIT_S = 300.0
 # Structural degeneracy doesn't depend on cost-round convergence (a task with
 # zero qualified members can never be served in round 1 OR round 2, so even
 # the fast round-1 solve already shows zero served hours) -- a short bound
