@@ -6,10 +6,12 @@ from free text, with conjunction splitting and partial-match clarification
 signalling.
 
 Design (D-08/D-09): this module builds a Claude-faithful tool_use dict
-internally (type, id, name, input) and translates it to an OverrideCall before
-returning. The tool_use wire format stays fully inside this module and never
-crosses the LLMProvider Protocol boundary — callers only ever receive
-list[OverrideCall].
+internally (type, id, name, input) and hands the (name, input) pair to the
+shared llm.translate.to_override_call (D-07) — the single provider-neutral
+translation point used by every LLMProvider implementation — to produce an
+OverrideCall before returning. The tool_use wire format stays fully inside
+this module and never crosses the LLMProvider Protocol boundary — callers
+only ever receive list[OverrideCall].
 
 Routing (D-10): text is first split on conjunctions (and/but/comma) into
 fragments. Each fragment is matched against each tool regex in priority order.
@@ -28,7 +30,8 @@ from __future__ import annotations
 import re
 import uuid
 
-from domain.overrides import OverrideCall, override_id
+from domain.overrides import OverrideCall
+from llm.translate import to_override_call
 
 # Splits text on conjunctions and commas to produce independent constraint fragments.
 # e.g. "at least 2 on Pick and more people on packing" -> ["at least 2 on Pick",
@@ -102,22 +105,6 @@ def _split_fragments(text: str) -> list[str]:
     return [f.strip() for f in _SPLIT_RE.split(text) if f.strip()]
 
 
-def _to_override_call(block: dict) -> OverrideCall:
-    """Translate a Claude-faithful tool_use dict to a provider-neutral OverrideCall.
-
-    The block has keys: type, id, name, input. The OverrideCall id is the
-    content-hash of (tool, args) from domain.overrides.override_id (D-05) —
-    this is stable across re-submissions of the same constraint.
-    """
-    tool = block["name"]
-    args = block["input"]
-    return OverrideCall(
-        id=override_id(tool, args),
-        tool=tool,
-        args=args,
-    )
-
-
 class StubLLMProvider:
     """Keyword-routed stub. Deterministic and test-friendly; no external I/O."""
 
@@ -150,7 +137,7 @@ class StubLLMProvider:
                     "name": "set_min_workers_per_task",
                     "input": {"task_id": task_token, "n": n},
                 }
-                results.append(_to_override_call(tool_use_block))
+                results.append(to_override_call(tool_use_block["name"], tool_use_block["input"]))
                 continue
 
             # Tool 2: scale_demand — "scale/increase/boost <task> demand by Nx"
@@ -164,7 +151,7 @@ class StubLLMProvider:
                     "name": "scale_demand",
                     "input": {"task_id": task_token, "factor": factor},
                 }
-                results.append(_to_override_call(tool_use_block))
+                results.append(to_override_call(tool_use_block["name"], tool_use_block["input"]))
                 continue
 
             # Tool 3: lock_worker_shift — "keep/lock/assign <member> on <day>"
@@ -186,7 +173,7 @@ class StubLLMProvider:
                     "name": "lock_worker_shift",
                     "input": {"member_id": member_token, "day": day},
                 }
-                results.append(_to_override_call(tool_use_block))
+                results.append(to_override_call(tool_use_block["name"], tool_use_block["input"]))
                 continue
 
             # Tool 4: exclude_worker_from_task — "exclude/remove/don't assign <member> from/to <task>"
@@ -200,7 +187,7 @@ class StubLLMProvider:
                     "name": "exclude_worker_from_task",
                     "input": {"member_id": member_token, "task_id": task_token},
                 }
-                results.append(_to_override_call(tool_use_block))
+                results.append(to_override_call(tool_use_block["name"], tool_use_block["input"]))
                 continue
 
             # Tool 5: set_max_hours — "cap/limit/max <member> at/to N hours"
@@ -214,7 +201,7 @@ class StubLLMProvider:
                     "name": "set_max_hours",
                     "input": {"member_id": member_token, "max_hours": max_hours},
                 }
-                results.append(_to_override_call(tool_use_block))
+                results.append(to_override_call(tool_use_block["name"], tool_use_block["input"]))
                 continue
 
             # Partial phrasing (no number) -> emit clarification sentinel
