@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Real Claude Provider + Penalty Calibration
+current_phase: 04
+current_phase_name: real-claude-provider-penalty-calibration
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-07T00:58:32.462Z"
-last_activity: 2026-06-30
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
+last_updated: "2026-07-07T02:31:01.334Z"
+last_activity: 2026-07-07
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 12
+  completed_plans: 10
   percent: 75
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** Phase 03 — on-demand-insight-reports
+**Current focus:** Phase 04 — real-claude-provider-penalty-calibration
 
 ## Current Position
 
-Phase: 4 — Real Claude Provider + Penalty Calibration
-Plan: Not started
+Phase: 04 (real-claude-provider-penalty-calibration) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-06-30 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-07-07 — Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P04 | 2 | 2 tasks | 1 files |
 | Phase 03 P01 | 4 | 3 tasks | 8 files |
 | Phase 03 P02 | 17 | 2 tasks | 2 files |
+| Phase 04 P01 | 8min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,9 @@ Recent decisions affecting current work:
 - [Phase ?]: Four new override penalties in round2_cost only (T-02-05..T-02-08)
 - [Phase ?]: TEST-03 tests pass at write time (GREEN immediate): implementation pre-exists from plan 02-02
 - [Phase ?]: sync-def insight route runs on anyio threadpool (D-02); grounding guard runs before cache write (D-06)
+- [Phase ?]: Shared to_override_call helper (D-07): stub and future providers both call llm/translate.to_override_call(tool_name, args); no vendor payload shape crosses it
+- [Phase ?]: create_provider(name, *, settings=None) threads Settings through the factory ahead of the gemini branch landing in 04-02
+- [Phase ?]: LLM-02 spans plans 04-01 and 04-02; requirement checkbox intentionally left pending until 04-02 lands the real Gemini provider branch
 
 ### Pending Todos
 
@@ -111,6 +115,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-06T15:42:22.618Z
+Last session: 2026-07-07T02:29:14.025Z
 Stopped at: Phase 4 context gathered
 Resume file: .planning/phases/04-real-claude-provider-penalty-calibration/04-CONTEXT.md
