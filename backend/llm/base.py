@@ -26,6 +26,11 @@ def create_provider(name: str, *, settings=None) -> LLMProvider:
         from llm.stub import StubLLMProvider
         return StubLLMProvider()
     if name == "gemini":
+        if settings is None:
+            raise ValueError(
+                "create_provider('gemini') requires settings=... carrying "
+                "llm_api_key and llm_model (e.g. default_settings())."
+            )
         from llm.gemini import GeminiLLMProvider
         return GeminiLLMProvider(api_key=settings.llm_api_key, model=settings.llm_model)
     raise ValueError(f"Unknown LLM provider: {name!r}. Available: ['stub', 'gemini']")
