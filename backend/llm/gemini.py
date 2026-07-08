@@ -175,4 +175,8 @@ class GeminiLLMProvider:
         """
         prompt = _INSIGHT_PROMPT_TEMPLATE.format(summary=summary)
         response = self._get_client().models.generate_content(model=self._model, contents=prompt)
-        return response.text
+        # response.text is None when the model returns no text part (safety-blocked,
+        # empty candidate, or a non-STOP finish reason). The Protocol promises -> str
+        # and the downstream D-06 grounding guard does string ops, so degrade to ""
+        # rather than propagate None and crash an otherwise-successful solve.
+        return response.text or ""
