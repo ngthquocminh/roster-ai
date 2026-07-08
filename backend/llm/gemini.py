@@ -24,7 +24,7 @@ from google import genai
 from google.genai import types
 
 from domain.overrides import OverrideCall
-from llm.translate import to_override_call
+from llm.translate import normalize_args, to_override_call
 
 # ---------------------------------------------------------------------------
 # Tool schemas — one FunctionDeclaration per stub tool (mirrors llm/stub.py's
@@ -164,7 +164,10 @@ class GeminiLLMProvider:
             ),
         )
         calls = response.function_calls or []
-        return [to_override_call(fc.name, dict(fc.args)) for fc in calls]
+        # `fc.args or {}` tolerates an argument-less call (fc.args is None) without
+        # a TypeError; normalize_args coerces numeric arg types so the resulting
+        # override_id matches the stub's for the same constraint (D-06 parity).
+        return [to_override_call(fc.name, normalize_args(dict(fc.args or {}))) for fc in calls]
 
     def generate_insights(self, summary: dict) -> str:
         """Generate a plain-text insight report from a run summary (no tools).

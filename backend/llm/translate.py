@@ -12,6 +12,31 @@ from __future__ import annotations
 
 from domain.overrides import OverrideCall, override_id
 
+# Canonical types for the numeric constraint args across every tool. Providers
+# may hand back the same value with a different Python type (e.g. Gemini can
+# return n as 2.0 even under an "integer" schema); normalizing here keeps the
+# content-hash override_id identical regardless of provider (D-06 parity).
+_INT_ARGS = frozenset({"n", "day"})
+_FLOAT_ARGS = frozenset({"factor", "max_hours"})
+
+
+def normalize_args(args: dict) -> dict:
+    """Coerce known numeric constraint args to canonical types.
+
+    Casts n/day to int and factor/max_hours to float so the same constraint
+    yields the same override_id across providers (the stub already produces
+    these types; this brings other providers into parity). Unknown keys and
+    None values pass through untouched. Returns a new dict.
+    """
+    out = dict(args)
+    for key in _INT_ARGS:
+        if out.get(key) is not None:
+            out[key] = int(out[key])
+    for key in _FLOAT_ARGS:
+        if out.get(key) is not None:
+            out[key] = float(out[key])
+    return out
+
 
 def to_override_call(tool_name: str, args: dict) -> OverrideCall:
     """Translate a (tool_name, args) pair into a provider-neutral OverrideCall.
