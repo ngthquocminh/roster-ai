@@ -4,17 +4,17 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 04
 current_phase_name: real-claude-provider-penalty-calibration
-status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-07-07T08:58:47.518Z"
+status: verifying
+stopped_at: Completed 04-02-PLAN.md
+last_updated: "2026-07-08T01:53:32.417Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 11
-  percent: 75
+  completed_plans: 12
+  percent: 100
 ---
 
 # Project State
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 
 Phase: 04 (real-claude-provider-penalty-calibration) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-07 — Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -67,6 +67,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P02 | 17 | 2 tasks | 2 files |
 | Phase 04 P01 | 8min | 3 tasks | 6 files |
 | Phase 04 P03 | 45min | 3 tasks | 3 files |
+| Phase 04 P02 | 60min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Recent decisions affecting current work:
 - [Phase ?]: create_provider(name, *, settings=None) threads Settings through the factory ahead of the gemini branch landing in 04-02
 - [Phase ?]: LLM-02 spans plans 04-01 and 04-02; requirement checkbox intentionally left pending until 04-02 lands the real Gemini provider branch
 - [Phase 04]: 04-03 calibration regression tests were rebased from the full-week fixture onto small hand-built deterministic problems for fast/reliable CI, because CP-SAT wall-clock convergence on the full week is non-deterministic; the sweep harness (scripts/calibrate_penalties.py) retains the full-week target for on-demand magnitude calibration.
+- [Phase ?]: GeminiLLMProvider defers genai.Client construction to first use (_get_client) instead of eager construction in __init__, so create_provider('gemini', settings=...) succeeds keylessly (D-04 invariant).
+- [Phase 04]: parse_constraints uses AUTO tool-calling mode (not ANY) so non-constraint text can legitimately yield zero function calls, matching the stub's NLC-03 no-constraint-found behavior.
+- [Phase 04]: Task 1's blocking human-verify supply-chain checkpoint for google-genai (SUS legitimacy verdict) was approved via the official Google SDK cookbook sample before this session.
 
 ### Pending Todos
 
@@ -117,6 +121,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-07T08:58:47.507Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-07-08T01:53:32.406Z
+Stopped at: Completed 04-02-PLAN.md
 Resume file: None

@@ -25,7 +25,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: First NL Constraint End-to-End** - One plain-English constraint flows through the stub provider into a soft CP-SAT penalty and re-solve, proving the seam (completed 2026-06-28)
 - [x] **Phase 2: Full 5-Tool Set + Safe Validation** - All five solver tools, with arg/ID validation, plain-English errors, and parse-UX fields (completed 2026-06-29)
 - [x] **Phase 3: On-Demand Insight Reports** - Decoupled, metric-grounded, cached natural-language insight endpoint (completed 2026-06-30)
-- [ ] **Phase 4: Real LLM Provider (free-tier first) + Penalty Calibration** - Real network-backed provider (Gemini free tier first) behind the Protocol, calibrated weights, one CI-excluded integration test
+- [x] **Phase 4: Real LLM Provider (free-tier first) + Penalty Calibration** - Real network-backed provider (Gemini free tier first) behind the Protocol, calibrated weights, one CI-excluded integration test (completed 2026-07-08)
 
 ## Phase Details
 
@@ -110,7 +110,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Override penalty weights are calibrated against the committed full-week fixture so a satisfiable override is honored while an unsatisfiable one degrades gracefully to baseline coverage — respected, but not dominating the round-2 cost objective.
   3. One live-provider integration test exercises the same parse code path as the stub and confirms the real provider yields the same validated `OverrideCall` results (function-calling parity through the seam); it is excluded from the default CI run, which stays green with no API key present.
 
-**Plans**: 2/3 plans executed
+**Plans**: 3/3 plans complete
 
 **Wave 1** *(parallel)*
 
@@ -119,7 +119,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 **Wave 2** *(blocked on 04-01)*
 
-- [ ] 04-02-PLAN.md — Real Gemini provider (`google-genai`, gemini-2.5-flash) behind the seam + `live` marker + one gated live parity test (LLM-02, TEST-04)
+- [x] 04-02-PLAN.md — Real Gemini provider (`google-genai`, gemini-2.5-flash) behind the seam + `live` marker + one gated live parity test (LLM-02, TEST-04)
 
 ## Progress
 
@@ -131,4 +131,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. First NL Constraint End-to-End | 3/3 | Complete    | 2026-06-28 |
 | 2. Full 5-Tool Set + Safe Validation | 4/4 | Complete    | 2026-06-29 |
 | 3. On-Demand Insight Reports | 2/2 | Complete    | 2026-06-30 |
-| 4. Real LLM Provider (free-tier first) + Penalty Calibration | 2/3 | In Progress|  |
+| 4. Real LLM Provider (free-tier first) + Penalty Calibration | 3/3 | Complete   | 2026-07-08 |
