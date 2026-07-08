@@ -73,6 +73,14 @@ def test_create_provider_gemini_returns_gemini_llm_provider():
     assert p.name == "gemini"
 
 
+def test_create_provider_gemini_without_settings_raises_value_error():
+    """WR-02: gemini branch requires settings; None yields a clear ValueError."""
+    from llm.base import create_provider
+
+    with pytest.raises(ValueError, match="requires settings"):
+        create_provider("gemini")
+
+
 # ---------------------------------------------------------------------------
 # parse_constraints — fake client, no network
 # ---------------------------------------------------------------------------
@@ -94,6 +102,51 @@ def test_parse_constraints_translates_one_function_call():
     assert call.tool == "set_min_workers_per_task"
     assert call.args == {"task_id": "Pick", "n": 2}
     assert call.id == override_id("set_min_workers_per_task", {"task_id": "Pick", "n": 2})
+
+
+def test_parse_constraints_coerces_float_int_arg_for_stub_parity():
+    """WR-03: n returned as 2.0 must coerce to int 2 so override_id matches the stub."""
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    fake_call = _FakeFunctionCall(name="set_min_workers_per_task", args={"task_id": "Pick", "n": 2.0})
+    provider._client = _FakeClient(_FakeResponse(function_calls=[fake_call]))
+
+    result = provider.parse_constraints("at least 2 on Pick")
+
+    call = result[0]
+    assert call.args["n"] == 2
+    assert isinstance(call.args["n"], int)
+    assert call.id == override_id("set_min_workers_per_task", {"task_id": "Pick", "n": 2})
+
+
+def test_parse_constraints_coerces_float_arg():
+    """WR-03: factor/max_hours are floated (e.g. an int 2 -> 2.0) to match the stub."""
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    fake_call = _FakeFunctionCall(name="scale_demand", args={"task_id": "Pick", "factor": 2})
+    provider._client = _FakeClient(_FakeResponse(function_calls=[fake_call]))
+
+    call = provider.parse_constraints("scale Pick demand by 2x")[0]
+    assert call.args["factor"] == 2.0
+    assert isinstance(call.args["factor"], float)
+
+
+def test_parse_constraints_none_args_does_not_raise():
+    """WR-03: an argument-less function call (fc.args is None) must not raise TypeError."""
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    fake_call = _FakeFunctionCall(name="set_min_workers_per_task", args=None)
+    provider._client = _FakeClient(_FakeResponse(function_calls=[fake_call]))
+
+    result = provider.parse_constraints("do the thing")
+    assert len(result) == 1
+    assert result[0].args == {}
 
 
 def test_parse_constraints_empty_function_calls_returns_empty_list():
@@ -131,6 +184,20 @@ def test_generate_insights_returns_fake_text():
     result = provider.generate_insights({"metrics": {"total_cost": 450.0}})
 
     assert result == "Schedule solved with total cost 450."
+
+
+def test_generate_insights_none_text_returns_empty_string():
+    """WR-01: a safety-blocked/empty response (response.text is None) degrades to ""."""
+    from llm.base import create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    provider._client = _FakeClient(_FakeResponse(text=None))
+
+    result = provider.generate_insights({"metrics": {"total_cost": 450.0}})
+
+    assert result == ""
+    assert isinstance(result, str)
 
 
 # ---------------------------------------------------------------------------
