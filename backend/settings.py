@@ -7,7 +7,7 @@ at a temp DB / data dir, or select an LLM provider/model, without touching code.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _BACKEND_DIR = Path(__file__).resolve().parent
@@ -20,7 +20,9 @@ class Settings:
     data_dir: str           # directory holding input fixtures (*.json)
     llm_provider: str       # "stub" (default) | "gemini"
     llm_model: str          # model id passed to the selected provider
-    llm_api_key: str | None  # from GEMINI_API_KEY; None for stub
+    # T-04-01: keep the API key out of the auto-generated __repr__ so it never
+    # surfaces in logs, FastAPI dependency errors, or unhandled-exception dumps.
+    llm_api_key: str | None = field(repr=False, default=None)  # from GEMINI_API_KEY; None for stub
 
 
 def default_settings() -> Settings:
