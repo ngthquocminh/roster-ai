@@ -2,7 +2,6 @@
 created: 2026-06-29T16:06:51.278Z
 title: Harden scenario fixture path against traversal (WR-04)
 area: api
-resolves_phase: 4
 source: 02-REVIEW.md (WR-04), 02-SECURITY.md (Out-of-Register Findings)
 severity: warning (potential high)
 files:

@@ -42,13 +42,19 @@ explanation of what changed — without touching solver code or JSON.
   five tools penalize, never make the model infeasible (verified) — Phases 1–2
 - ✓ Degenerate-re-solve detection: `SolveResult.warnings` flags families with real
   demand but zero served hours, without touching solver status (ENG-05) — Phase 2
+- ✓ Real network-backed LLM provider behind the `LLMProvider` Protocol —
+  **Google Gemini (free tier) via `google-genai`**, config-driven provider + model id
+  (default `stub` keeps CI keyless); native function-calling → shared `to_override_call`
+  parity path with the stub; one `@pytest.mark.live` parity test excluded from default CI
+  (LLM-02, TEST-04) — Phase 4
+- ✓ Penalty weights empirically calibrated against the committed full-week fixture
+  (sweep harness + real-engine regressions: satisfiable honored, unsatisfiable degrades
+  without dominating round-2 cost; folded ENG-05 real-engine degeneracy test) (ENG-04) — Phase 4
 
 ### Active
 
 <!-- This milestone — Phase 3 LLM layer. Hypotheses until shipped and validated. -->
 
-- [ ] Live Claude implementation behind the `LLMProvider` Protocol (config-driven
-      model id) + penalty calibration — Phase 4
 - [ ] Insight generator: run metrics → structured natural-language report
 - [ ] Insights generated as a **separate step** after the run (an LLM failure
       can't fail a valid schedule)
@@ -100,7 +106,7 @@ explanation of what changed — without touching solver code or JSON.
 | Milestone scope = Phase 3 only (LLM layer) | Tight, shippable increment on top of the done engine+backend | — Pending |
 | Include both NL constraint editing AND insight generation | Full Phase 3 as designed; the two halves of the "assistant" value | — Pending |
 | Full engine wiring: apply overrides as soft constraints and re-solve | Delivers a real re-solved schedule, not just parsed intent | — Pending |
-| Claude as default LLM provider behind `LLMProvider` Protocol | Vendor-swap seam; matches design.md | — Pending |
+| First real LLM provider = Google Gemini (free tier), not Claude | No free Claude API tier; "use a free API first". Seam is provider-neutral, so Claude/others stay trivial future swaps | ✓ Phase 4 — `google-genai`, default `stub` keeps CI keyless |
 | Stubbed provider for tests (no live API in CI) | Deterministic, cost-free CI | — Pending |
 
 ## Evolution
@@ -121,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-06-29 — Phase 2 (Full 5-Tool Set + Safe Validation) complete*
+*Last updated: 2026-07-08 — Phase 4 (Real LLM Provider + Penalty Calibration) complete; final phase of the milestone*
