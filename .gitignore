@@ -25,6 +25,11 @@ backend/var/
 # not committed. Only the small generated data/sample_tiny_input.json is tracked.
 data/sample_weekly_input.json
 
+# Env files (secrets) — keep the documented example tracked
+.env
+.env.*
+!.env.example
+
 # OS / editor
 .DS_Store
 Thumbs.db
