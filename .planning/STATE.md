@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 Phase: 04
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-08 — Completed quick task 260708-e7z: Add .env support for backend LLM provider config
+Last activity: 2026-07-08 — Completed quick task 260708-jov: Gemini parse reliability + conftest .env (live parity verified against real Gemini)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -113,6 +113,7 @@ Recent decisions affecting current work:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260708-e7z | Add .env support for backend LLM provider config (python-dotenv; committed .env.example, gitignored .env) | 2026-07-08 | 2d2510b | [260708-e7z-add-env-support-for-backend-llm-provider](./quick/260708-e7z-add-env-support-for-backend-llm-provider/) |
+| 260708-jov | Make Gemini parse_constraints reliable (system instruction, keeps AUTO/NLC-03) + load .env in conftest so `-m live` works from .env; live parity test now passes against real Gemini | 2026-07-08 | 734a146 | [260708-jov-make-gemini-parse-constraints-reliable-s](./quick/260708-jov-make-gemini-parse-constraints-reliable-s/) |
 
 ### Roadmap Evolution
 
