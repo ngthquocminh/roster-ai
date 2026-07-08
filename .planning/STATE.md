@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 Phase: 04
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-08 — Phase 04 complete
+Last activity: 2026-07-08 — Completed quick task 260708-e7z: Add .env support for backend LLM provider config
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -107,6 +107,12 @@ Recent decisions affecting current work:
 [Issues that affect future work]
 
 - [Phase 4]: Penalty-weight calibration needs an empirical matrix of solver runs against the committed full-week fixture — flag for a focused validation pass at plan time (per research SUMMARY.md research flags).
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260708-e7z | Add .env support for backend LLM provider config (python-dotenv; committed .env.example, gitignored .env) | 2026-07-08 | 2d2510b | [260708-e7z-add-env-support-for-backend-llm-provider](./quick/260708-e7z-add-env-support-for-backend-llm-provider/) |
 
 ### Roadmap Evolution
 
