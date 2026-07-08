@@ -1,8 +1,9 @@
 """Runtime settings — filesystem paths and LLM provider config, resolved from
 env with sane defaults.
 
-Kept dependency-free so any layer can import it. Env overrides let tests point
-at a temp DB / data dir, or select an LLM provider/model, without touching code.
+Kept to a single lightweight config-layer dependency (python-dotenv) so any
+layer can import it. Env overrides let tests point at a temp DB / data dir, or
+select an LLM provider/model, without touching code.
 """
 from __future__ import annotations
 
@@ -10,8 +11,16 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 _BACKEND_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _BACKEND_DIR.parent
+
+# Load backend/.env once at import time, resolved relative to this file so it
+# works regardless of process CWD (API server, run.py CLI, pytest). A real OS
+# env var always wins (override=False); an empty `GEMINI_API_KEY=` in the file
+# does not clobber an already-set OS key.
+load_dotenv(_BACKEND_DIR / ".env", override=False)
 
 
 @dataclass(frozen=True)
