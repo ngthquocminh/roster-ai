@@ -41,9 +41,10 @@ ROSTER_UNFILL_WEIGHT: int = 1  # small nudge (in scaled hours) to fill rosters i
 # COST_SCALE = 32_000) — large enough that adding one extra body to clear a
 # single-hour shortfall beats that body's marginal wage cost — and ~8.7% of
 # baseline_total_cost * COST_SCALE (1_154_900), well short of "two-plus orders
-# of magnitude larger than baseline" (Pitfall 4). Sweeping this scale up to
-# 5_000_000 (50x) against the same fixture/override produced no change in the
-# resulting schedule: this fixture's supply is scarce enough that round 1's
+# of magnitude larger than baseline" (Pitfall 4). Sweeping this scale across the
+# committed SCALES grid (10_000 .. 500_000, up to 5x) against the same
+# fixture/override produced no change in the resulting schedule: this fixture's
+# supply is scarce enough that round 1's
 # unmet-hours lock leaves round 2 no slack to reallocate a body onto the
 # overridden task regardless of penalty magnitude, so raising the constant
 # further only makes the CP-SAT search harder without changing behavior.
