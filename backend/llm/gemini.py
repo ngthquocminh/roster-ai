@@ -10,8 +10,10 @@ never leaves `parse_constraints` (D-02).
 
 Tool-calling mode is AUTO (never ANY): genuinely non-constraint text must be
 able to yield zero function calls, matching the stub's "no constraint found"
-behavior (NLC-03). `AutomaticFunctionCallingConfig(disable=True)` is set as a
-defense-in-depth guard even though the five declared tools carry no attached
+behavior (NLC-03). `_PARSE_SYSTEM_INSTRUCTION` steers the model toward calling
+a tool for constraint-bearing text while AUTO mode still lets it decline for
+non-constraint text. `AutomaticFunctionCallingConfig(disable=True)` is set as
+a defense-in-depth guard even though the five declared tools carry no attached
 callables (Pitfall 1, RESEARCH.md).
 
 SECURITY (T-04-01): the API key must never be interpolated into any string,
@@ -108,6 +110,21 @@ _TOOL_SCHEMAS = [
     _SET_MAX_HOURS,
 ]
 
+# Steers parse_constraints toward reliably calling a tool for terse
+# constraint text (e.g. "at least 2 on Pick") while still allowing zero
+# calls for genuinely non-constraint text — AUTO mode stays the enforcement
+# point for NLC-03, this instruction only reduces spurious declines.
+_PARSE_SYSTEM_INSTRUCTION = (
+    "You are a workforce scheduling assistant. The user describes a change to a shift "
+    "schedule in plain English. Translate the request into exactly one of the provided "
+    "function calls, choosing the single tool and arguments that best capture it. Use "
+    "task and worker names exactly as they appear in the user's text. Call a function "
+    "whenever the text expresses any scheduling constraint or change (for example a "
+    "minimum headcount, scaling demand, locking or excluding a worker, or capping hours). "
+    "Respond WITHOUT calling any function only when the text expresses no scheduling "
+    "constraint at all."
+)
+
 _INSIGHT_PROMPT_TEMPLATE = """You are summarizing the results of a workforce schedule solve for an operator.
 
 Using ONLY the figures present in the summary below, write a short, plain-language
@@ -151,9 +168,10 @@ class GeminiLLMProvider:
 
         AUTO tool-calling mode lets the model legitimately decline to call any
         tool for non-constraint text (matches the stub's "no constraint found"
-        behavior, NLC-03). The vendor `FunctionCall` object never leaves this
-        method — each call is unpacked to a plain (name, args) pair before
-        `to_override_call` (D-02).
+        behavior, NLC-03); `_PARSE_SYSTEM_INSTRUCTION` steers it toward calling
+        a tool for constraint-bearing text so terse input isn't dropped. The
+        vendor `FunctionCall` object never leaves this method — each call is
+        unpacked to a plain (name, args) pair before `to_override_call` (D-02).
         """
         response = self._get_client().models.generate_content(
             model=self._model,
@@ -161,6 +179,7 @@ class GeminiLLMProvider:
             config=types.GenerateContentConfig(
                 tools=[types.Tool(function_declarations=_TOOL_SCHEMAS)],
                 automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                system_instruction=_PARSE_SYSTEM_INSTRUCTION,
             ),
         )
         calls = response.function_calls or []
