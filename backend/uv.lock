@@ -885,6 +885,7 @@ dependencies = [
     { name = "ortools" },
     { name = "pandas", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pandas", version = "3.0.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "python-dotenv" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -900,6 +901,7 @@ requires-dist = [
     { name = "google-genai", specifier = ">=2.10.0" },
     { name = "ortools", specifier = "==9.11.4210" },
     { name = "pandas" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "uvicorn", extras = ["standard"] },
 ]
 
