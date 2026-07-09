@@ -232,6 +232,46 @@ def test_post_constraints_unknown_scenario_returns_404(client):
     assert r.status_code == 404
 
 
+def test_post_constraints_provider_failure_returns_503(tmp_path, monkeypatch):
+    """A raised LLMProviderError must map to a clean 503, never a bare 500 (quick-260709-m9m)."""
+    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "test-503.db"))
+    monkeypatch.setenv("ROSTERAI_DATA_DIR", _DATA_DIR)
+
+    from api.deps import get_engine, get_llm_provider
+    from api.main import app
+    from llm.base import LLMProviderError
+
+    class _FailingProvider:
+        name = "failing"
+
+        def parse_constraints(self, text: str):
+            raise LLMProviderError("boom")
+
+        def generate_insights(self, summary: dict) -> str:
+            raise LLMProviderError("boom")
+
+    app.dependency_overrides[get_engine] = lambda: StubEngine()
+    app.dependency_overrides[get_llm_provider] = lambda: _FailingProvider()
+    with TestClient(app) as c:
+        r = c.post("/scenarios", json={
+            "name": "test-503",
+            "fixture": "sample_tiny_input.json",
+            "time_limit_s": 5,
+        })
+        assert r.status_code == 201
+        scenario_id = r.json()["id"]
+
+        r2 = c.post("/constraints", json={
+            "scenario_id": scenario_id,
+            "text": "at least 2 on C Pick",
+        })
+        assert r2.status_code == 503
+        assert r2.json()["detail"] == (
+            "The scheduling assistant is temporarily unavailable. Please try again shortly."
+        )
+    app.dependency_overrides.clear()
+
+
 def test_no_constraint_found_in_text_returns_200_with_flag(client, scenario_id):
     """Gibberish text -> 200 with no_constraint_found=True (NLC-03/D-03)."""
     r = client.post("/constraints", json={
