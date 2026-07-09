@@ -171,6 +171,42 @@ def test_parse_constraints_no_function_calls_list_returns_empty_list():
 
 
 # ---------------------------------------------------------------------------
+# Vendor API errors -> provider-neutral LLMProviderError (quick-260709-m9m)
+# ---------------------------------------------------------------------------
+
+class _FailingModels:
+    """Fake `.models` surface whose generate_content always raises a vendor APIError."""
+
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def generate_content(self, **kwargs):
+        raise self._exc
+
+
+class _FailingClient:
+    def __init__(self, exc: Exception) -> None:
+        self.models = _FailingModels(exc)
+
+
+def test_parse_constraints_maps_vendor_api_error_to_llm_provider_error():
+    """A vendor google.genai.errors.APIError must never cross the LLMProvider seam (D-02)."""
+    from google.genai import errors as genai_errors
+
+    from llm.base import LLMProviderError, create_provider
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+    vendor_exc = genai_errors.ClientError(
+        400, {"error": {"message": "bad key", "status": "INVALID_ARGUMENT"}}
+    )
+    provider._client = _FailingClient(vendor_exc)
+
+    with pytest.raises(LLMProviderError):
+        provider.parse_constraints("at least 2 on Pick")
+
+
+# ---------------------------------------------------------------------------
 # generate_insights — fake client, no network
 # ---------------------------------------------------------------------------
 
