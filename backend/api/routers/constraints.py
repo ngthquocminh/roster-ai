@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import get_db, get_llm_provider, get_settings
 from api.schemas import ConstraintParseRequest, ConstraintParseResponse
-from llm.base import LLMProvider
+from llm.base import LLMProvider, LLMProviderError
 from services import constraint_service
 from settings import Settings
 
@@ -25,6 +25,7 @@ router = APIRouter(prefix="/constraints", tags=["constraints"])
     response_model=ConstraintParseResponse,
     responses={
         404: {"description": "Scenario not found"},
+        503: {"description": "LLM provider unavailable"},
     },
 )
 def parse_constraint(
@@ -43,4 +44,9 @@ def parse_constraint(
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except LLMProviderError:
+        raise HTTPException(
+            status_code=503,
+            detail="The scheduling assistant is temporarily unavailable. Please try again shortly.",
+        )
     # ValueError no longer raised by service — per-call failures go to rejected[]
