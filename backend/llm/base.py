@@ -12,6 +12,13 @@ from typing import Protocol
 from domain.overrides import OverrideCall
 
 
+class LLMProviderError(RuntimeError):
+    """Raised when an LLM provider's backend call fails (auth, quota, overload,
+    network). Provider-neutral so vendor exception types never cross the
+    LLMProvider seam; callers map this to an appropriate HTTP status.
+    """
+
+
 class LLMProvider(Protocol):
     def parse_constraints(self, text: str) -> list[OverrideCall]: ...
     def generate_insights(self, summary: dict) -> str: ...   # D-09 second operation
