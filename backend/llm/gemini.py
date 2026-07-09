@@ -23,9 +23,11 @@ log line, or exception message in this module. It only ever flows into
 from __future__ import annotations
 
 from google import genai
+from google.genai import errors as genai_errors
 from google.genai import types
 
 from domain.overrides import OverrideCall
+from llm.base import LLMProviderError
 from llm.translate import normalize_args, to_override_call
 
 # ---------------------------------------------------------------------------
@@ -173,15 +175,18 @@ class GeminiLLMProvider:
         vendor `FunctionCall` object never leaves this method — each call is
         unpacked to a plain (name, args) pair before `to_override_call` (D-02).
         """
-        response = self._get_client().models.generate_content(
-            model=self._model,
-            contents=text,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(function_declarations=_TOOL_SCHEMAS)],
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-                system_instruction=_PARSE_SYSTEM_INSTRUCTION,
-            ),
-        )
+        try:
+            response = self._get_client().models.generate_content(
+                model=self._model,
+                contents=text,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(function_declarations=_TOOL_SCHEMAS)],
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                    system_instruction=_PARSE_SYSTEM_INSTRUCTION,
+                ),
+            )
+        except genai_errors.APIError as exc:
+            raise LLMProviderError("Gemini request failed") from exc
         calls = response.function_calls or []
         # `fc.args or {}` tolerates an argument-less call (fc.args is None) without
         # a TypeError; normalize_args coerces numeric arg types so the resulting
@@ -196,7 +201,12 @@ class GeminiLLMProvider:
         a rejection by instructing the model to cite supplied figures only.
         """
         prompt = _INSIGHT_PROMPT_TEMPLATE.format(summary=summary)
-        response = self._get_client().models.generate_content(model=self._model, contents=prompt)
+        try:
+            response = self._get_client().models.generate_content(
+                model=self._model, contents=prompt
+            )
+        except genai_errors.APIError as exc:
+            raise LLMProviderError("Gemini request failed") from exc
         # response.text is None when the model returns no text part (safety-blocked,
         # empty candidate, or a non-STOP finish reason). The Protocol promises -> str
         # and the downstream D-06 grounding guard does string ops, so degrade to ""
