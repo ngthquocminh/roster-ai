@@ -305,3 +305,35 @@ def test_gemini_generate_insights_passes_grounding_guard():
     # Gemini phrasing varies (98%, 98.1%, 98.15%). The guard passing on genuine
     # model output, without raising InsightGenerationError, is the assertion.
     _grounding_guard(report, metrics)
+
+
+@pytest.mark.live
+@pytest.mark.skipif(not _HAS_KEY, reason="GEMINI_API_KEY not set — live test requires a real key")
+@pytest.mark.parametrize(
+    "text, tool, arg_key, arg_value",
+    [
+        ("scale Pick demand by 2x", "scale_demand", "factor", 2.0),
+        ("cap Alice at 40 hours", "set_max_hours", "max_hours", 40.0),
+    ],
+)
+def test_gemini_parse_constraints_more_phrasings_match_stub(text, tool, arg_key, arg_value):
+    """Broadens live parse_constraints parity beyond the single "at least 2 on
+    Pick" case (D-06 reframed parity: same neutral OverrideCall shape, not
+    byte-identical vendor payload). Only tool name and coerced numeric arg are
+    the parity contract — task_id/member_id token matching is deliberately not
+    asserted, since constraint_service's substring resolver (VAL-02) handles
+    LLM phrasing variance either way.
+    """
+    from llm.base import create_provider
+    from settings import default_settings
+
+    settings = default_settings()
+    gemini = create_provider("gemini", settings=settings)
+    stub = create_provider("stub")
+
+    gemini_calls = gemini.parse_constraints(text)
+    stub_calls = stub.parse_constraints(text)
+
+    assert len(gemini_calls) == len(stub_calls) == 1
+    assert gemini_calls[0].tool == stub_calls[0].tool == tool
+    assert gemini_calls[0].args[arg_key] == stub_calls[0].args[arg_key] == arg_value
