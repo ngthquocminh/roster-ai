@@ -40,9 +40,12 @@ _NUM_RE = re.compile(r"\d[\d,]*\.?\d*")
 def _allowed_values(metrics: dict) -> set[float]:
     """Build the set of floating-point values derivable from the run metrics dict.
 
-    Admits each metric value plus round(.,1)/round(.,2) variants.  For coverage
-    pct values (stored as fractions, e.g. 0.8 = 80%) also admits value×100 so
-    a report line "80%" passes the guard (Pitfall 3).
+    Admits each metric value plus round(.,0)/round(.,1)/round(.,2) variants.  The
+    whole-number rung (round(.,0)) matters because insight prose naturally cites
+    metrics as integers ("98%", "212 hours", "11,550 cost") — a faithful rounding
+    of a real metric, not a fabrication.  For coverage pct values (stored as
+    fractions, e.g. 0.8 = 80%) the value×100 percentage form is admitted with the
+    same rounding rungs so a report line "80%" passes the guard (Pitfall 3).
     None metrics contribute nothing — any number emitted for a null metric is caught.
     """
     vals: set[float] = set()
@@ -50,8 +53,19 @@ def _allowed_values(metrics: dict) -> set[float]:
     def admit(x):
         if x is None or not isinstance(x, (int, float)):
             return
-        for y in (x, round(x, 1), round(x, 2)):
+        for y in (x, round(x, 0), round(x, 1), round(x, 2)):
             vals.add(float(y))
+
+    def admit_pct(fraction):
+        """Admit a coverage fraction as-is and as a percentage (fraction×100).
+
+        Both forms get the full rounding ladder so either "0.98"/"98.1%"/"98%"
+        passes for the same underlying value (Pitfall 3).
+        """
+        if not isinstance(fraction, (int, float)):
+            return
+        admit(fraction)
+        admit(fraction * 100)
 
     admit(metrics.get("total_cost"))
     admit(metrics.get("total_unmet_hours"))
@@ -60,15 +74,9 @@ def _allowed_values(metrics: dict) -> set[float]:
     for c in (metrics.get("coverage_by_function") or {}).values():
         admit(c.get("required_h"))
         admit(c.get("served_h"))
-        admit(c.get("pct"))
-        pct = c.get("pct")
-        if isinstance(pct, (int, float)):  # fraction -> percentage (Pitfall 3)
-            for y in (pct * 100, round(pct * 100, 1)):
-                vals.add(float(y))
+        admit_pct(c.get("pct"))
     for p in (metrics.get("coverage_by_day") or {}).values():
-        admit(p)
-        if isinstance(p, (int, float)):
-            vals.add(float(p * 100))
+        admit_pct(p)
     return vals
 
 

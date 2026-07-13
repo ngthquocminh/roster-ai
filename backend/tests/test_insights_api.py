@@ -451,3 +451,39 @@ def test_insights_succeeds_when_scenario_has_overrides(client):
     assert r.json()["ready"] is True, (
         f"ready must be True for a COMPLETED run with a grounded report; got: {r.json()}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Grounding-guard rounding regression (insight-api-502-ungrounded)
+# ---------------------------------------------------------------------------
+
+
+def test_grounding_guard_accepts_whole_number_roundings():
+    """Whole-number roundings of real metrics must pass the D-06 guard (regression).
+
+    A real run had Putaways coverage pct=0.9814814814814815 (=98.148%). Gemini's report
+    cited it as "98%" — a faithful rounding of a real metric — but the guard's rounding
+    ladder omitted round(x, 0) and rejected '98' with a 502 (Ungrounded number '98').
+    The guard must admit the whole-number rung for percentages, hours, and cost while
+    still rejecting a genuinely fabricated number.
+    """
+    from services.insight_service import InsightGenerationError, _grounding_guard
+
+    metrics = {
+        "total_cost": 11549.71,
+        "total_unmet_hours": 212.12665040229803,
+        "scheduled_shifts": 40,
+        "scheduled_members": 10,
+        "coverage_by_function": {
+            "Putaways": {"required_h": 54.0, "served_h": 53.0, "pct": 0.9814814814814815},
+        },
+        "coverage_by_day": {"0": 0.6121622186845017},
+    }
+
+    # Faithful whole-number roundings an operator-facing report naturally uses.
+    for tok in ("98", "98%", "Putaways served 53/54 h (98%)", "212", "11,550", "61%"):
+        _grounding_guard(tok, metrics)  # must not raise
+
+    # A genuinely fabricated figure is still rejected (D-06 anti-fabrication preserved).
+    with pytest.raises(InsightGenerationError):
+        _grounding_guard("Total cost was 99999.", metrics)
