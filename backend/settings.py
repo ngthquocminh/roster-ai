@@ -23,7 +23,8 @@ _REPO_ROOT = _BACKEND_DIR.parent
 load_dotenv(_BACKEND_DIR / ".env", override=False)
 
 
-_OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+# Live-verified tool-capable as of 2026-07-13; replaces meta-llama/llama-3.3-70b-instruct:free, which started returning upstream 429 rate-limit errors.
+_OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 
 
 @dataclass(frozen=True)
