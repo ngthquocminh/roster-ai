@@ -2,8 +2,8 @@
 
 Mirror of engine/base.py: Protocol + factory with lazy imports. The Protocol
 returns provider-neutral list[OverrideCall]; no vendor-specific payload crosses
-this boundary (D-08). A real (network-backed) provider is registered behind
-this factory in a later plan; only the stub is registered here so far.
+this boundary (D-08). Registered providers: "stub" (keyless default), "gemini",
+and "openrouter" (both real, network-backed, requiring settings=...).
 """
 from __future__ import annotations
 
@@ -40,4 +40,16 @@ def create_provider(name: str, *, settings=None) -> LLMProvider:
             )
         from llm.gemini import GeminiLLMProvider
         return GeminiLLMProvider(api_key=settings.llm_api_key, model=settings.llm_model)
-    raise ValueError(f"Unknown LLM provider: {name!r}. Available: ['stub', 'gemini']")
+    if name == "openrouter":
+        if settings is None:
+            raise ValueError(
+                "create_provider('openrouter') requires settings=... carrying "
+                "openrouter_api_key and openrouter_model (e.g. default_settings())."
+            )
+        from llm.openrouter import OpenRouterLLMProvider
+        return OpenRouterLLMProvider(
+            api_key=settings.openrouter_api_key, model=settings.openrouter_model
+        )
+    raise ValueError(
+        f"Unknown LLM provider: {name!r}. Available: ['stub', 'gemini', 'openrouter']"
+    )
