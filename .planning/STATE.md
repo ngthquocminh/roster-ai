@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 Phase: 04
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-13 — Completed quick task 260713-pn3: add openrouter as default provider, gemini qutas limit only 50 requrest per day. not enough for testing
+Last activity: 2026-07-13 — Completed quick task 260713-stq: swap OpenRouter default model to openai/gpt-oss-20b:free (old default hit upstream 429s); surfaced an unrelated pre-existing grounding-guard gap for follow-up
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -109,6 +109,7 @@ Recent decisions affecting current work:
 [Issues that affect future work]
 
 - [Phase 4]: Penalty-weight calibration needs an empirical matrix of solver runs against the committed full-week fixture — flag for a focused validation pass at plan time (per research SUMMARY.md research flags).
+- [llm / insight_service]: `_grounding_guard`/`_allowed_values` in `services/insight_service.py` never admits `coverage_by_day` dict KEYS (day-index labels like "Day 0"), only their percentage VALUES — a model that writes "Day 0: 61.22%" gets the bare `0` rejected as ungrounded (D-06 false positive). Surfaced 2026-07-13 by the live OpenRouter `generate_insights` test once the upstream-429 blocker on the old default model was fixed (quick task 260713-stq); was invisible before because no live run had reached the guard with a real completion. Needs a follow-up decision: widen `_allowed_values()` to admit day-index integers, or adjust the insight prompt to avoid citing bare day-index numbers.
 
 ### Quick Tasks Completed
 
@@ -119,6 +120,7 @@ Recent decisions affecting current work:
 | 260709-m9m | Map LLM provider errors → clean 503 (neutral `LLMProviderError`, no vendor exception crosses the seam) instead of bare 500; also scoped conftest `.env` load to GEMINI_API_KEY only so a dev's `LLM_PROVIDER=gemini` no longer breaks stub-default tests | 2026-07-09 | 8d0c785 | [260709-m9m-map-llm-provider-errors-to-a-clean-503-i](./quick/260709-m9m-map-llm-provider-errors-to-a-clean-503-i/) |
 | 260713-o5e | Add `@pytest.mark.live` tests covering all LLMProvider ops vs real Gemini: `generate_insights` now runs the real D-06 grounding guard (regression net for insight-api-502-ungrounded), and live `parse_constraints` parity broadened to scale_demand/set_max_hours | 2026-07-13 | 1623dae | [260713-o5e-add-pytest-mark-live-tests-covering-all-](./quick/260713-o5e-add-pytest-mark-live-tests-covering-all-/) |
 | 260713-pn3 | Register `openrouter` as a third selectable LLMProvider (openai SDK against OpenRouter's OpenAI-compatible API), mirroring GeminiLLMProvider's contract exactly, so a dev can set `LLM_PROVIDER=openrouter` locally to avoid Gemini's 50-req/day free-tier quota during testing; keyless-default-CI invariant (stub) untouched | 2026-07-13 | ee156bd | [260713-pn3-add-openroute-as-default-provider-gemini](./quick/260713-pn3-add-openroute-as-default-provider-gemini/) |
+| 260713-stq | Verified user's real OPENROUTER_API_KEY works; swapped `_OPENROUTER_DEFAULT_MODEL` from `meta-llama/llama-3.3-70b-instruct:free` (upstream 429) to live-verified `openai/gpt-oss-20b:free`. Non-live suite stays green (123 passed); 1 of 2 live OpenRouter tests pass — the other surfaced an unrelated pre-existing grounding-guard gap (see Blockers/Concerns), reported not silently fixed | 2026-07-13 | 77134de | [260713-stq-swap-openrouter-default-model-to-openai-](./quick/260713-stq-swap-openrouter-default-model-to-openai-/) |
 
 ### Roadmap Evolution
 
