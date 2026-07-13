@@ -261,3 +261,47 @@ def test_gemini_parse_constraints_matches_stub_parity():
     assert len(gemini_calls) == len(stub_calls) == 1
     assert gemini_calls[0].tool == stub_calls[0].tool == "set_min_workers_per_task"
     assert gemini_calls[0].args["n"] == stub_calls[0].args["n"] == 2
+
+
+@pytest.mark.live
+@pytest.mark.skipif(not _HAS_KEY, reason="GEMINI_API_KEY not set — live test requires a real key")
+def test_gemini_generate_insights_passes_grounding_guard():
+    """Regression test for insight-api-502-ungrounded: real Gemini prose over
+    real run-418577f3-shaped metrics must pass the REAL D-06 grounding guard.
+
+    The bug was whole-number roundings ("98%", "212", "11,550", "61%") emitted
+    by genuine model prose being rejected by the guard's rounding ladder — the
+    fix was human-verified once against the live endpoint but had no automated
+    (opt-in) regression coverage until this test.
+    """
+    from llm.base import create_provider
+    from services.insight_service import _grounding_guard
+    from settings import default_settings
+
+    provider = create_provider("gemini", settings=default_settings())
+
+    metrics = {
+        "total_cost": 11549.71,
+        "total_unmet_hours": 212.127,
+        "scheduled_shifts": 42,
+        "scheduled_members": 18,
+        "coverage_by_function": {
+            # 265/270 = 0.9814814814814815 -> whole-number rounding "98%" is the
+            # exact case that broke the guard in insight-api-502-ungrounded.
+            "Putaways": {"required_h": 270.0, "served_h": 265.0, "pct": 0.9814814814814815},
+            "Pick": {"required_h": 300.0, "served_h": 300.0, "pct": 1.0},
+        },
+        "coverage_by_day": {"0": 0.6122, "1": 0.95},
+    }
+    summary = {"metrics": metrics, "warnings": [], "overrides": []}
+
+    report = provider.generate_insights(summary)
+
+    # A blank/safety-blocked response would vacuously pass the guard (no numeric
+    # tokens to check) and hide the regression — require real prose.
+    assert report.strip()
+
+    # We deliberately do not hard-assert a specific token like "98%" here — real
+    # Gemini phrasing varies (98%, 98.1%, 98.15%). The guard passing on genuine
+    # model output, without raising InsightGenerationError, is the assertion.
+    _grounding_guard(report, metrics)
