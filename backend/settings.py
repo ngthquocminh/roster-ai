@@ -23,15 +23,23 @@ _REPO_ROOT = _BACKEND_DIR.parent
 load_dotenv(_BACKEND_DIR / ".env", override=False)
 
 
+_OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+
+
 @dataclass(frozen=True)
 class Settings:
     db_path: str            # SQLite file
     data_dir: str           # directory holding input fixtures (*.json)
-    llm_provider: str       # "stub" (default) | "gemini"
+    llm_provider: str       # "stub" (default) | "gemini" | "openrouter"
     llm_model: str          # model id passed to the selected provider
     # T-04-01: keep the API key out of the auto-generated __repr__ so it never
     # surfaces in logs, FastAPI dependency errors, or unhandled-exception dumps.
     llm_api_key: str | None = field(repr=False, default=None)  # from GEMINI_API_KEY; None for stub
+    # Same repr=False treatment as llm_api_key (T-04-01) — from OPENROUTER_API_KEY.
+    openrouter_api_key: str | None = field(repr=False, default=None)
+    # Separate from llm_model because llm_model's default "gemini-2.5-flash" is
+    # not a valid OpenRouter slug.
+    openrouter_model: str = _OPENROUTER_DEFAULT_MODEL
 
 
 def default_settings() -> Settings:
@@ -41,10 +49,14 @@ def default_settings() -> Settings:
     llm_provider = os.environ.get("LLM_PROVIDER", "stub")
     llm_model = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
     llm_api_key = os.environ.get("GEMINI_API_KEY")
+    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+    openrouter_model = os.environ.get("OPENROUTER_MODEL", _OPENROUTER_DEFAULT_MODEL)
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
         llm_provider=llm_provider,
         llm_model=llm_model,
         llm_api_key=llm_api_key,
+        openrouter_api_key=openrouter_api_key,
+        openrouter_model=openrouter_model,
     )
