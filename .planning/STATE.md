@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 Phase: 04
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-13 — Completed quick task 260713-o5e: add @pytest.mark.live tests covering all LLMProvider operations
+Last activity: 2026-07-13 — Completed quick task 260713-pn3: add openrouter as default provider, gemini qutas limit only 50 requrest per day. not enough for testing
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -118,6 +118,7 @@ Recent decisions affecting current work:
 | 260708-jov | Make Gemini parse_constraints reliable (system instruction, keeps AUTO/NLC-03) + load .env in conftest so `-m live` works from .env; live parity test now passes against real Gemini | 2026-07-08 | 734a146 | [260708-jov-make-gemini-parse-constraints-reliable-s](./quick/260708-jov-make-gemini-parse-constraints-reliable-s/) |
 | 260709-m9m | Map LLM provider errors → clean 503 (neutral `LLMProviderError`, no vendor exception crosses the seam) instead of bare 500; also scoped conftest `.env` load to GEMINI_API_KEY only so a dev's `LLM_PROVIDER=gemini` no longer breaks stub-default tests | 2026-07-09 | 8d0c785 | [260709-m9m-map-llm-provider-errors-to-a-clean-503-i](./quick/260709-m9m-map-llm-provider-errors-to-a-clean-503-i/) |
 | 260713-o5e | Add `@pytest.mark.live` tests covering all LLMProvider ops vs real Gemini: `generate_insights` now runs the real D-06 grounding guard (regression net for insight-api-502-ungrounded), and live `parse_constraints` parity broadened to scale_demand/set_max_hours | 2026-07-13 | 1623dae | [260713-o5e-add-pytest-mark-live-tests-covering-all-](./quick/260713-o5e-add-pytest-mark-live-tests-covering-all-/) |
+| 260713-pn3 | Register `openrouter` as a third selectable LLMProvider (openai SDK against OpenRouter's OpenAI-compatible API), mirroring GeminiLLMProvider's contract exactly, so a dev can set `LLM_PROVIDER=openrouter` locally to avoid Gemini's 50-req/day free-tier quota during testing; keyless-default-CI invariant (stub) untouched | 2026-07-13 | ee156bd | [260713-pn3-add-openroute-as-default-provider-gemini](./quick/260713-pn3-add-openroute-as-default-provider-gemini/) |
 
 ### Roadmap Evolution
 
