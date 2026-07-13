@@ -487,3 +487,41 @@ def test_grounding_guard_accepts_whole_number_roundings():
     # A genuinely fabricated figure is still rejected (D-06 anti-fabrication preserved).
     with pytest.raises(InsightGenerationError):
         _grounding_guard("Total cost was 99999.", metrics)
+
+
+def test_grounding_guard_accepts_day_index_labels():
+    """0-based day-index labels cited in prose must pass the D-06 guard (regression).
+
+    The summary handed to the model contains coverage_by_day as {"0": 0.61, "1": 0.95, ...}
+    and the prompt tells it to cite figures from the summary. A faithful line like
+    "Day 0: 61%" cites the key "0" — a real figure in the summary — but the guard only
+    admitted the .values() percentages, never the day-index keys, so the bare "0" was
+    rejected with a 502 (Ungrounded number '0'), unless a metric happened to round to 0.
+    The guard must admit the actual day indices of the run while still rejecting a
+    fabricated index (e.g. "Day 42" for a 3-day run).
+    """
+    from services.insight_service import InsightGenerationError, _grounding_guard
+
+    # total_unmet_hours != 0 so no metric coincidentally rounds to 0 — isolates the
+    # day-index key as the only possible source of a grounded bare "0".
+    metrics = {
+        "total_cost": 11549.71,
+        "total_unmet_hours": 212.12665040229803,
+        "scheduled_shifts": 40,
+        "scheduled_members": 10,
+        "coverage_by_function": {
+            "Putaways": {"required_h": 54.0, "served_h": 53.0, "pct": 0.9814814814814815},
+        },
+        "coverage_by_day": {"0": 0.6121622186845017, "1": 0.95, "2": 0.88},
+    }
+
+    # Faithful per-day citations that reference the 0-based day-index labels.
+    for tok in (
+        "Coverage by day: Day 0: 61%, Day 1: 95%, Day 2: 88%.",
+        "The lowest coverage was on Day 0.",
+    ):
+        _grounding_guard(tok, metrics)  # must not raise
+
+    # A fabricated day index outside the run's actual days is still rejected.
+    with pytest.raises(InsightGenerationError):
+        _grounding_guard("Day 42 had 61% coverage.", metrics)

@@ -75,7 +75,19 @@ def _allowed_values(metrics: dict) -> set[float]:
         admit(c.get("required_h"))
         admit(c.get("served_h"))
         admit_pct(c.get("pct"))
-    for p in (metrics.get("coverage_by_day") or {}).values():
+    for d, p in (metrics.get("coverage_by_day") or {}).items():
+        # Admit the day-index LABEL (the dict key, 0-based "0".."6") in addition
+        # to its coverage percentage.  The summary handed to the model contains
+        # coverage_by_day as {"0": 0.61, "1": 0.95, ...}; a faithful line like
+        # "Day 0: 61%" cites the key "0" — a real figure present in the summary,
+        # not a fabrication.  Keys arrive as strings from serialize (str(day));
+        # coerce to a number and skip any non-numeric key.  This admits only the
+        # actual day indices of THIS run (a bounded, known set), so a fabricated
+        # index such as "Day 42" is still rejected — D-06 anti-fabrication holds.
+        try:
+            admit(float(d))
+        except (TypeError, ValueError):
+            pass
         admit_pct(p)
     return vals
 
