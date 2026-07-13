@@ -5,16 +5,20 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-# Surface ONLY GEMINI_API_KEY from a local backend/.env so the @pytest.mark.live
-# gate can detect a developer's key. Deliberately do NOT load LLM_PROVIDER /
-# LLM_MODEL from .env — the test suite must observe the keyless `stub` default
-# regardless of a developer's .env (stub-only-CI invariant). A real shell env
-# var still wins (we only set the key when it is not already present).
+# Surface ONLY GEMINI_API_KEY / OPENROUTER_API_KEY from a local backend/.env so
+# the @pytest.mark.live gate can detect a developer's key. Deliberately do NOT
+# load LLM_PROVIDER / LLM_MODEL / OPENROUTER_MODEL from .env — the test suite
+# must observe the keyless `stub` default regardless of a developer's .env
+# (stub-only-CI invariant). A real shell env var still wins (we only set the
+# key when it is not already present).
 _env_file = Path(__file__).resolve().parent / ".env"
 _dotenv = dotenv_values(_env_file) if _env_file.exists() else {}
 _gemini_key = _dotenv.get("GEMINI_API_KEY")
 if _gemini_key and not os.environ.get("GEMINI_API_KEY"):
     os.environ["GEMINI_API_KEY"] = _gemini_key
+_openrouter_key = _dotenv.get("OPENROUTER_API_KEY")
+if _openrouter_key and not os.environ.get("OPENROUTER_API_KEY"):
+    os.environ["OPENROUTER_API_KEY"] = _openrouter_key
 
 sys.path.insert(0, os.path.dirname(__file__))
 
