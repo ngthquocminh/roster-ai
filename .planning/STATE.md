@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 Phase: 04
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-13 — Completed quick task 260713-stq: swap OpenRouter default model to openai/gpt-oss-20b:free (old default hit upstream 429s); surfaced an unrelated pre-existing grounding-guard gap for follow-up
+Last activity: 2026-07-14 — Completed quick task 260714-owo: create new data fixture variant with more Team Member supply, to test whether set_min_workers_per_task n=3 becomes satisfiable
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -121,6 +121,7 @@ Recent decisions affecting current work:
 | 260713-o5e | Add `@pytest.mark.live` tests covering all LLMProvider ops vs real Gemini: `generate_insights` now runs the real D-06 grounding guard (regression net for insight-api-502-ungrounded), and live `parse_constraints` parity broadened to scale_demand/set_max_hours | 2026-07-13 | 1623dae | [260713-o5e-add-pytest-mark-live-tests-covering-all-](./quick/260713-o5e-add-pytest-mark-live-tests-covering-all-/) |
 | 260713-pn3 | Register `openrouter` as a third selectable LLMProvider (openai SDK against OpenRouter's OpenAI-compatible API), mirroring GeminiLLMProvider's contract exactly, so a dev can set `LLM_PROVIDER=openrouter` locally to avoid Gemini's 50-req/day free-tier quota during testing; keyless-default-CI invariant (stub) untouched | 2026-07-13 | ee156bd | [260713-pn3-add-openroute-as-default-provider-gemini](./quick/260713-pn3-add-openroute-as-default-provider-gemini/) |
 | 260713-stq | Verified user's real OPENROUTER_API_KEY works; swapped `_OPENROUTER_DEFAULT_MODEL` from `meta-llama/llama-3.3-70b-instruct:free` (upstream 429) to live-verified `openai/gpt-oss-20b:free`. Non-live suite stays green (123 passed); 1 of 2 live OpenRouter tests pass — the other surfaced an unrelated pre-existing grounding-guard gap (see Blockers/Concerns), reported not silently fixed | 2026-07-13 | 77134de | [260713-stq-swap-openrouter-default-model-to-openai-](./quick/260713-stq-swap-openrouter-default-model-to-openai-/) |
+| 260714-owo | Added throwaway `data/sample_tiny_input_more_tm.json` fixture (superset of `sample_tiny_input.json`) with 12 new qualified+rostered Team Members for task 99260066-B32A-423D-97A1-8A649BABBAAD, raising qualified-member coverage from a sub-3 ceiling to a floor of 4 across all 98 demanded hourly buckets — built to test whether more staff supply lets `set_min_workers_per_task n=3` actually become satisfiable in round-2 of the CP-SAT solve (previously stuck at 0/98 hours even at OPTIMAL/300s) | 2026-07-14 | c7709ff | [260714-owo-create-a-new-data-fixture-variant-of-dat](./quick/260714-owo-create-a-new-data-fixture-variant-of-dat/) |
 
 ### Roadmap Evolution
 
