@@ -101,10 +101,15 @@ explanation of what changed — without touching solver code or JSON.
   the override mechanism extends that established penalty pattern, and all
   four override penalty constants are now empirically calibrated (ENG-04)
   rather than placeholder round numbers.
-- `design.md` is the source-of-truth engineering design; `PLAN.md` is the
-  hand-written phase tracker; `docs/decisions/` holds ADRs. This GSD project
-  tracked Phases 1–4 (v0.3) in the GSD planning structure; see
-  `.planning/milestones/v0.3-ROADMAP.md` for full phase detail.
+- `docs/design.md` is the source-of-truth engineering design (the durable
+  "why"); `.planning/` (`STATE.md`/`ROADMAP.md`/`MILESTONES.md`) owns the
+  planning lifecycle — the hand-written phase tracker it replaced was retired
+  at the v0.3/v0.4 boundary. No ADR directory exists in this repo; decisions
+  live in this file's own Key Decisions table, `.planning/RETROSPECTIVE.md`,
+  and `docs/design.md` §6 (open decisions). `docs/vision.md` is the origin
+  snapshot this document descends from. This GSD project tracked Phases 1–4
+  (v0.3) in the GSD planning structure; see `.planning/milestones/v0.3-ROADMAP.md`
+  for full phase detail.
 - Known issues carried into the next milestone: a D-06 grounding-guard
   false-positive class on `coverage_by_day` dict-key citations (surfaced by
   live-provider testing, not yet fixed); no path-traversal containment check

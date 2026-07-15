@@ -30,17 +30,21 @@ backend/      # domain/ engine/ ingest/ config/ fixtures/ run.py tests/
               # api/ services/ store/ settings.py   (Phase 2 backend)
 data/         # sample_tiny_input.json  (small coherent fixture, real schema)
 docs/         # all project docs:
+              #   README.md   — one-owner-per-audience boundary statement
               #   design.md   — system design (architecture, the model, decisions)
-              #   PLAN.md     — build plan + phase status tracker
               #   API.md      — HTTP API reference
               #   vision.md   — original project idea, archived for reference
+              #   archive/    — superseded Phase 1-2 plan docs (historical)
 ```
+
+Project/phase status lives in `.planning/`, not `docs/` — see `docs/README.md`
+for the ownership split.
 
 ## Documentation
 
-- [`docs/design.md`](docs/design.md) — system design and architecture (start here).
+- [`docs/README.md`](docs/README.md) — start here: which doc owns what.
+- [`docs/design.md`](docs/design.md) — system design and architecture.
 - [`docs/API.md`](docs/API.md) — HTTP API reference.
-- [`docs/PLAN.md`](docs/PLAN.md) — phase plan and status.
 - [`docs/vision.md`](docs/vision.md) — the original idea, kept for reference (not maintained).
 
 ## Quick start
