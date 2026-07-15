@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04
-status: complete
-stopped_at: Phase 04 UAT + security review passed — milestone v1.0 complete
-last_updated: "2026-07-15T10:30:18.731Z"
+current_phase: 0
+status: Awaiting next milestone
+stopped_at: Phase 04 UAT + security review complete — milestone v1.0 100% complete, ready for /gsd-complete-milestone
+last_updated: "2026-07-15T10:38:59.155Z"
 last_activity: 2026-07-15
-last_activity_desc: Phase 04 UAT (17/17 passed) + security review (threats_open 0) complete — milestone v1.0 100% complete
+last_activity_desc: Milestone v1.0 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
@@ -28,12 +28,10 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 
 ## Current Position
 
-Phase: 04
-Plan: Not started
-Status: Milestone v1.0 complete — Phase 04 UAT (17/17 passed, 0 issues) and security review (threats_open: 0) both passed
-Last activity: 2026-07-15 — Phase 04 UAT + security review complete
-
-Progress: [██████████] 100%
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-15 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -131,14 +129,21 @@ Recent decisions affecting current work:
 
 ## Deferred Items
 
-Items acknowledged and carried forward from previous milestone close:
+Items acknowledged and deferred at milestone close on 2026-07-15:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| *(none)* | | | |
+| debug | knowledge-base (running KB log of resolved sessions; audit flags it as open due to no explicit closed status) | unknown | v1.0 close (2026-07-15) |
+| todo | 2026-06-29-harden-scenario-fixture-path-against-traversal.md (api) | pending | v1.0 close (2026-07-15) |
+| todo | 2026-07-09-demand-deadline-scheduling-instead-of-flat-hourly.md (engine) | pending | v1.0 close (2026-07-15) |
+| todo | 2026-07-09-extract-engine-as-separate-service.md (architecture) | pending | v1.0 close (2026-07-15) |
 
 ## Session Continuity
 
 Last session: 2026-07-15
 Stopped at: Phase 04 UAT + security review complete — milestone v1.0 100% complete, ready for /gsd-complete-milestone
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
