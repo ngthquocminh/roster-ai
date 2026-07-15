@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-06-28)
 Phase: 04
 Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-14 — Completed quick task 260714-owo: create new data fixture variant with more Team Member supply, to test whether set_min_workers_per_task n=3 becomes satisfiable
+Last activity: 2026-07-15 — Completed quick task 260715-hm2: fixed set_max_hours penalty scaling bug (~100x inflated cost vs documented $1,000/hour)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -122,6 +122,7 @@ Recent decisions affecting current work:
 | 260713-pn3 | Register `openrouter` as a third selectable LLMProvider (openai SDK against OpenRouter's OpenAI-compatible API), mirroring GeminiLLMProvider's contract exactly, so a dev can set `LLM_PROVIDER=openrouter` locally to avoid Gemini's 50-req/day free-tier quota during testing; keyless-default-CI invariant (stub) untouched | 2026-07-13 | ee156bd | [260713-pn3-add-openroute-as-default-provider-gemini](./quick/260713-pn3-add-openroute-as-default-provider-gemini/) |
 | 260713-stq | Verified user's real OPENROUTER_API_KEY works; swapped `_OPENROUTER_DEFAULT_MODEL` from `meta-llama/llama-3.3-70b-instruct:free` (upstream 429) to live-verified `openai/gpt-oss-20b:free`. Non-live suite stays green (123 passed); 1 of 2 live OpenRouter tests pass — the other surfaced an unrelated pre-existing grounding-guard gap (see Blockers/Concerns), reported not silently fixed | 2026-07-13 | 77134de | [260713-stq-swap-openrouter-default-model-to-openai-](./quick/260713-stq-swap-openrouter-default-model-to-openai-/) |
 | 260714-owo | Added throwaway `data/sample_tiny_input_more_tm.json` fixture (superset of `sample_tiny_input.json`) with 12 new qualified+rostered Team Members for task 99260066-B32A-423D-97A1-8A649BABBAAD, raising qualified-member coverage from a sub-3 ceiling to a floor of 4 across all 98 demanded hourly buckets — built to test whether more staff supply lets `set_min_workers_per_task n=3` actually become satisfiable in round-2 of the CP-SAT solve (previously stuck at 0/98 hours even at OPTIMAL/300s) | 2026-07-14 | c7709ff | [260714-owo-create-a-new-data-fixture-variant-of-dat](./quick/260714-owo-create-a-new-data-fixture-variant-of-dat/) |
+| 260715-hm2 | Fixed `set_max_hours` override penalty scaling bug in `engine/cpsat/builder.py`'s `round2_cost`: the `over` overflow var is VOL_SCALE-scaled (hundredths-of-hour) but was multiplied directly by `MAX_HOURS_PENALTY` with no division back out, silently inflating the real penalty ~100x beyond the documented $1,000/hour (empirically found via live API testing: a 24.62h-over-cap override produced a ~$2.46M cost delta instead of the intended ~$24,620). Fix: `(C.MAX_HOURS_PENALTY // C.VOL_SCALE) * sum(maxh_terms)`. Full suite (124 tests) green | 2026-07-15 | 5bf1689 | [260715-hm2-fix-set-max-hours-penalty-scaling-bug-in](./quick/260715-hm2-fix-set-max-hours-penalty-scaling-bug-in/) |
 
 ### Roadmap Evolution
 
