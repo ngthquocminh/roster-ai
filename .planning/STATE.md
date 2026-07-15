@@ -81,9 +81,19 @@ for the next milestone's decisions.
 [From .planning/todos/pending/ — ideas captured during sessions]
 
 - [Phase 4 / api]: Harden scenario fixture path against traversal (WR-04) — add containment check before `json.load` in `constraint_service.py:152`
-- [testing]: Add real-engine test for ENG-05 degeneracy detection (WR-05) — current tests validate a copied mirror, not `CpSatEngine.solve()`
+- [testing]: Add real-engine test for ENG-05 degeneracy detection (WR-05) — current tests validate a copied mirror, not `CpSatEngine.solve()` — ⚠️ no file in `todos/pending/`; STATE-only entry, needs capture or removal
 - [engine / improvement]: Demand scheduling should target deadline fill, not flat hourly distribution — `_aggregate_demand` spreads volume demand evenly per hour but real requirement is to accumulate labour before `b.end_h`; INDIRECT (headcount) demand is fine as-is (`builder.py:111`)
 - [architecture / post-POC]: Extract solver engine into a separate service + master run-manager — FastAPI becomes thin API+LLM layer; `SchedulerEngine` Protocol is already the clean seam for this split
+
+Migrated out of `docs/PLAN.md` at the v0.3/v0.4 boundary, when that hand-written
+tracker was retired in favour of `.planning/`. These were its Phase 1/2
+"⏸ deferred/optional" follow-ups and existed nowhere in GSD:
+
+- [engine / tuning]: Tune DEMAND_LOAD and task mix for even coverage band — Receiving ~10%, Pick ~35% on the committed fixture; cosmetic/demo-quality only (`build_short_input.py:49`)
+- [engine / performance]: Add round-2 relative-gap stop to bound solve time — cost-optimality proof is a ~2min tail vs ~20s round 1; matters now runs are interactive; rationale in `design.md` §5 (`objective.py:47`)
+- [api / concurrency]: Add run cancellation and concurrency limits — single-worker pool, no way to stop an in-flight solve; overlaps the engine-as-a-service todo (`run_service.py:38`)
+- [api / ingest]: Add input upload endpoint — scenarios only creatable from fixtures already in `data/`; `vision.md`'s pitch opens with "Upload workforce & demand data", so this is intent-vs-built drift. **Explicit v0.4 scoping question**; must land after WR-04 traversal hardening (`fixtures.py:14`)
+- [api / engine]: Add per-scenario engine selection — always `cpsat`; `SchedulerEngine` seam unproven by a second real solver (`base.py:33`)
 
 ### Blockers/Concerns
 
