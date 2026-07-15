@@ -1,13 +1,17 @@
-# ShiftMind — LLM Layer (Phase 3)
+# ShiftMind — LLM Layer (v1.0, shipped)
 
 ## What This Is
 
 ShiftMind (repo `rosterai`) is a workforce scheduling assistant: it loads a
 distribution-centre week of workforce + demand data, runs a constraint solver
 (OR-Tools CP-SAT) to produce a weekly schedule, and serves the result over an
-HTTP API. This GSD milestone adds the **LLM layer**: describe constraint tweaks
-in plain English and have them applied to the solve, and turn run metrics into a
-plain-language insight report.
+HTTP API. Milestone v1.0 shipped the **LLM layer**: a user describes a
+scheduling constraint change in plain English (any of five solver-hook tools),
+it's validated and applied to the solve as a calibrated soft penalty, and a
+separate on-demand endpoint turns run metrics into a grounded, plain-language
+insight report. Two real, network-backed LLM providers (Gemini, OpenRouter)
+sit behind a config-driven `LLMProvider` seam alongside the deterministic stub
+that keeps default CI keyless.
 
 ## Core Value
 
@@ -50,42 +54,61 @@ explanation of what changed — without touching solver code or JSON.
 - ✓ Penalty weights empirically calibrated against the committed full-week fixture
   (sweep harness + real-engine regressions: satisfiable honored, unsatisfiable degrades
   without dominating round-2 cost; folded ENG-05 real-engine degeneracy test) (ENG-04) — Phase 4
+- ✓ Insight generator: run metrics → structured, metric-grounded natural-language
+  report; D-06 anti-fabrication guard rejects any uncited numeric token — Phase 3
+- ✓ Insights generated as a **separate on-demand step** after the run, cached
+  (`runs.insight_json`) — an LLM failure never invalidates a completed schedule
+  (INS-01..04) — Phase 3
+- ✓ Tests with a stubbed provider drive all default CI (no live LLM API); one
+  gated `@pytest.mark.live` parity test per real provider confirms translation
+  parity without running in CI — Phases 1–4
+- ✓ Second real provider (OpenRouter, OpenAI-compatible SDK) added behind the
+  same seam post-Phase-4, as a lower-friction alternative to Gemini's tight
+  free-tier quota — quick tasks 260713-pn3/260713-stq
 
 ### Active
 
-<!-- This milestone — Phase 3 LLM layer. Hypotheses until shipped and validated. -->
+<!-- Next milestone candidates — surfaced during v1.0 but not yet scoped. -->
 
-- [ ] Insight generator: run metrics → structured natural-language report
-- [ ] Insights generated as a **separate step** after the run (an LLM failure
-      can't fail a valid schedule)
-- [ ] Tests with a stubbed provider (no live LLM API in CI)
+- [ ] Frontend / UI for constraint editing and insight viewing
+- [ ] Fixture path traversal hardening in `constraint_service.py` (WR-04)
+- [ ] `_grounding_guard` `coverage_by_day` dict-key admission fix (D-06 false-positive class)
+- [ ] Demand scheduling: deadline-fill semantics instead of flat hourly distribution
 
 ### Out of Scope
 
-<!-- Explicit boundaries for this milestone. -->
+<!-- Explicit boundaries, reviewed at v1.0 close. -->
 
-- Frontend / React UI (Phase 4) — this milestone is API + engine only
-- What-if compare + delta explanation (Phase 5) — depends on the LLM layer landing first
-- Deploy / AWS infra (Phase 5) — out of scope until the feature set is complete
-- Live LLM calls in CI — tests use a stubbed provider
-- Hard/infeasible-making constraints from NL — all overrides apply as soft penalties
+- Frontend / React UI — deferred to a future milestone; v1.0 is API + engine only
+- What-if compare + delta explanation — depends on the LLM layer having shipped (now true; still not scheduled)
+- Deploy / AWS infra — out of scope until the feature set for a public-facing release is complete
+- Hard/infeasible-making constraints from NL — all overrides apply as soft penalties only, by design (reaffirmed through v1.0)
 - Production-model fidelity deferrals carried from design.md (OT1/OT2 cost split,
   two-layer coverage, task flow, capacity/load management) — not part of the LLM layer
+- Extracting the solver engine into a separate service — noted as a clean future seam
+  (`SchedulerEngine` Protocol) but not needed at current scale
 
 ## Context
 
-- The backend (`backend/`) already exposes the engine over FastAPI with a clean
-  service/domain/engine layering; the `overrides` JSON column on scenarios was
-  reserved in Phase 2 specifically for these NL constraints.
-- Two Protocol seams exist by design: `SchedulerEngine` (engine swap) and the
-  planned `LLMProvider` (vendor swap). Claude is the default LLM provider; Gemini
-  is a later possibility behind the same seam.
+- The backend (`backend/`) exposes the engine over FastAPI with a clean
+  service/domain/engine layering; ~7,360 LOC Python as of v1.0 close.
+- Two Protocol seams exist by design and both proved themselves under real
+  swaps: `SchedulerEngine` (engine swap, unexercised beyond CP-SAT so far) and
+  `LLMProvider` (vendor swap — stub → Gemini → OpenRouter, zero service/route
+  changes required for either real-provider addition).
 - The CP-SAT model is integer-only (time in minutes, volume/rate ×100). Soft
-  constraints already exist in the model (e.g. `unfilled_roster`, `unmet_*`), so
-  the override mechanism extends an established penalty pattern.
+  constraints already exist in the model (e.g. `unfilled_roster`, `unmet_*`);
+  the override mechanism extends that established penalty pattern, and all
+  four override penalty constants are now empirically calibrated (ENG-04)
+  rather than placeholder round numbers.
 - `design.md` is the source-of-truth engineering design; `PLAN.md` is the
   hand-written phase tracker; `docs/decisions/` holds ADRs. This GSD project
-  formalizes Phase 3 into the GSD planning structure.
+  tracked Phases 1–4 (v1.0) in the GSD planning structure; see
+  `.planning/milestones/v1.0-ROADMAP.md` for full phase detail.
+- Known issues carried into the next milestone: a D-06 grounding-guard
+  false-positive class on `coverage_by_day` dict-key citations (surfaced by
+  live-provider testing, not yet fixed); no path-traversal containment check
+  on the scenario fixture path in `constraint_service.py` (WR-04).
 
 ## Constraints
 
@@ -103,11 +126,29 @@ explanation of what changed — without touching solver code or JSON.
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Milestone scope = Phase 3 only (LLM layer) | Tight, shippable increment on top of the done engine+backend | — Pending |
-| Include both NL constraint editing AND insight generation | Full Phase 3 as designed; the two halves of the "assistant" value | — Pending |
-| Full engine wiring: apply overrides as soft constraints and re-solve | Delivers a real re-solved schedule, not just parsed intent | — Pending |
-| First real LLM provider = Google Gemini (free tier), not Claude | No free Claude API tier; "use a free API first". Seam is provider-neutral, so Claude/others stay trivial future swaps | ✓ Phase 4 — `google-genai`, default `stub` keeps CI keyless |
-| Stubbed provider for tests (no live API in CI) | Deterministic, cost-free CI | — Pending |
+| Milestone scope = LLM layer only (4 phases) | Tight, shippable increment on top of the done engine+backend | ✓ Good — all 4 phases shipped, 100% v1 requirements complete |
+| Include both NL constraint editing AND insight generation | Full "assistant" value needs both halves | ✓ Good — Phases 1–2 (constraints) and Phase 3 (insights) both shipped |
+| Full engine wiring: apply overrides as soft constraints and re-solve | Delivers a real re-solved schedule, not just parsed intent | ✓ Good — verified never-infeasible across all 5 tools |
+| First real LLM provider = Google Gemini (free tier), not Claude | No free Claude API tier; "use a free API first". Seam is provider-neutral, so Claude/others stay trivial future swaps | ✓ Good — `google-genai`, default `stub` keeps CI keyless |
+| Stubbed provider for tests (no live API in CI) | Deterministic, cost-free CI | ✓ Good — 124 non-live tests, zero network calls in default CI |
+| Add OpenRouter as a second real provider (post-Phase-4) | Gemini's 50-req/day free tier proved too tight for iterative live testing | ✓ Good — zero service/route changes needed, seam held |
+| Provider-neutral translation boundary (`to_override_call`) | No vendor payload shape should leak past the LLM seam | ✓ Good — enabled 2 real-provider additions with zero seam changes |
+| Defer penalty-weight calibration to Phase 4 | Needed real solver-run data to size constants correctly | ⚠️ Revisit — 3 phases of uncalibrated placeholders let a 100x `set_max_hours` scaling bug ship silently; calibrate earlier next time (see RETROSPECTIVE.md) |
+
+## Current State
+
+**Shipped:** v1.0 — LLM Layer (2026-07-15). All 4 phases complete, all v1
+requirements validated, UAT (17/17) and security review (threats_open: 0)
+both passed. See `.planning/MILESTONES.md` for the full entry and
+`.planning/RETROSPECTIVE.md` for lessons learned.
+
+## Next Milestone Goals
+
+Candidates surfaced during v1.0 but not yet scoped into a milestone (see
+`### Active` above for the full list):
+- A frontend/UI so the NL constraint + insight flows are usable outside raw HTTP calls
+- Closing the two known-issue carry-overs (D-06 `coverage_by_day` gap, fixture path traversal hardening)
+- What-if compare + delta explanation, now that the LLM layer it depends on has shipped
 
 ## Evolution
 
@@ -127,4 +168,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-08 — Phase 4 (Real LLM Provider + Penalty Calibration) complete; final phase of the milestone*
+*Last updated: 2026-07-15 — v1.0 (LLM Layer) milestone complete and archived*

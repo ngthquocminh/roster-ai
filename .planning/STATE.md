@@ -14,17 +14,17 @@ progress:
   total_plans: 12
   completed_plans: 12
   percent: 100
-current_phase_name: real-claude-provider-penalty-calibration
+current_phase_name: null
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-28)
+See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** Milestone v1.0 complete — all 4 phases shipped and verified
+**Current focus:** Planning next milestone
 
 ## Current Position
 
@@ -72,27 +72,9 @@ Last activity: 2026-07-15 — Milestone v1.0 completed and archived
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Roadmap]: Vertical-slice MVP — Phase 1 proves the LLM→solver seam with ONE tool end-to-end (stub-driven); later phases broaden the tool set, add insights, swap in real Claude.
-- [Roadmap]: `OverrideCall` types live in `domain/` (not `llm/`) to avoid an engine→llm import cycle.
-- [Roadmap]: Overrides apply as SOFT penalties in round-2 (cost) only; never round-1, never infeasible.
-- [Roadmap]: Insights are a separate on-demand, cached step — an LLM failure never fails a valid schedule.
-- [Phase ?]: MIN_WORKERS_PENALTY = 100_000 scaled cents; Phase-4 calibration deferred (ENG-04)
-- [Phase ?]: Plan 01-03 decision
-- [Phase ?]: scale_demand applied in _aggregate_demand (D-10)
-- [Phase ?]: Four new override penalties in round2_cost only (T-02-05..T-02-08)
-- [Phase ?]: TEST-03 tests pass at write time (GREEN immediate): implementation pre-exists from plan 02-02
-- [Phase ?]: sync-def insight route runs on anyio threadpool (D-02); grounding guard runs before cache write (D-06)
-- [Phase ?]: Shared to_override_call helper (D-07): stub and future providers both call llm/translate.to_override_call(tool_name, args); no vendor payload shape crosses it
-- [Phase ?]: create_provider(name, *, settings=None) threads Settings through the factory ahead of the gemini branch landing in 04-02
-- [Phase ?]: LLM-02 spans plans 04-01 and 04-02; requirement checkbox intentionally left pending until 04-02 lands the real Gemini provider branch
-- [Phase 04]: 04-03 calibration regression tests were rebased from the full-week fixture onto small hand-built deterministic problems for fast/reliable CI, because CP-SAT wall-clock convergence on the full week is non-deterministic; the sweep harness (scripts/calibrate_penalties.py) retains the full-week target for on-demand magnitude calibration.
-- [Phase ?]: GeminiLLMProvider defers genai.Client construction to first use (_get_client) instead of eager construction in __init__, so create_provider('gemini', settings=...) succeeds keylessly (D-04 invariant).
-- [Phase 04]: parse_constraints uses AUTO tool-calling mode (not ANY) so non-constraint text can legitimately yield zero function calls, matching the stub's NLC-03 no-constraint-found behavior.
-- [Phase 04]: Task 1's blocking human-verify supply-chain checkpoint for google-genai (SUS legitimacy verdict) was approved via the official Google SDK cookbook sample before this session.
-- [Phase 04]: UAT (2026-07-15) live-provider checkpoints exercised OpenRouter (not Gemini) per user preference — Gemini's free-tier quota had proven unreliable in prior sessions (see 260713-pn3/260713-stq); ROADMAP.md Phase 4 Goal reworded into user-story format to satisfy the MVP-mode UAT gate (Mode: mvp was already set, unchanged).
+v1.0 decisions are logged in full in PROJECT.md's Key Decisions table and
+`.planning/RETROSPECTIVE.md`. Cleared here at milestone close — start fresh
+for the next milestone's decisions.
 
 ### Pending Todos
 
@@ -105,9 +87,8 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-[Issues that affect future work]
+[Issues that affect future work — carried forward from v1.0]
 
-- [Phase 4]: Penalty-weight calibration needs an empirical matrix of solver runs against the committed full-week fixture — flag for a focused validation pass at plan time (per research SUMMARY.md research flags).
 - [llm / insight_service]: `_grounding_guard`/`_allowed_values` in `services/insight_service.py` never admits `coverage_by_day` dict KEYS (day-index labels like "Day 0"), only their percentage VALUES — a model that writes "Day 0: 61.22%" gets the bare `0` rejected as ungrounded (D-06 false positive). Surfaced 2026-07-13 by the live OpenRouter `generate_insights` test once the upstream-429 blocker on the old default model was fixed (quick task 260713-stq); was invisible before because no live run had reached the guard with a real completion. Needs a follow-up decision: widen `_allowed_values()` to admit day-index integers, or adjust the insight prompt to avoid citing bare day-index numbers.
 
 ### Quick Tasks Completed
