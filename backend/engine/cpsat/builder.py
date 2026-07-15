@@ -408,7 +408,10 @@ class CpSatBuilder:
             + C.MIN_WORKERS_PENALTY * sum(shortfall_terms)
             + C.LOCK_SHIFT_PENALTY * sum(lock_terms)
             + C.EXCLUDE_WORKER_PENALTY * sum(excl_terms)
-            + C.MAX_HOURS_PENALTY * sum(maxh_terms)
+            # `over` (built above) is VOL_SCALE-scaled (hundredths-of-an-hour), unlike the
+            # other three penalty terms which sum unscaled headcount/bool vars already in
+            # cents-space — divide VOL_SCALE back out here or this term inflates ~100x.
+            + (C.MAX_HOURS_PENALTY // C.VOL_SCALE) * sum(maxh_terms)
             if (cost_terms or shortfall_terms or lock_terms or excl_terms or maxh_terms)
             else 0
         )
