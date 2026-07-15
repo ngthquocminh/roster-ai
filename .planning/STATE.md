@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 04
-status: verifying
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-07-08T02:38:11.096Z"
-last_activity: 2026-07-08
-last_activity_desc: Phase 04 complete
+status: complete
+stopped_at: Phase 04 UAT + security review passed — milestone v1.0 complete
+last_updated: "2026-07-15T10:30:18.731Z"
+last_activity: 2026-07-15
+last_activity_desc: Phase 04 UAT (17/17 passed) + security review (threats_open 0) complete — milestone v1.0 100% complete
 progress:
   total_phases: 4
   completed_phases: 4
@@ -24,16 +24,16 @@ current_phase_name: real-claude-provider-penalty-calibration
 See: .planning/PROJECT.md (updated 2026-06-28)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** Phase 04 — real-claude-provider-penalty-calibration
+**Current focus:** Milestone v1.0 complete — all 4 phases shipped and verified
 
 ## Current Position
 
 Phase: 04
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-07-15 — Completed quick task 260715-hm2: fixed set_max_hours penalty scaling bug (~100x inflated cost vs documented $1,000/hour)
+Status: Milestone v1.0 complete — Phase 04 UAT (17/17 passed, 0 issues) and security review (threats_open: 0) both passed
+Last activity: 2026-07-15 — Phase 04 UAT + security review complete
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -94,6 +94,7 @@ Recent decisions affecting current work:
 - [Phase ?]: GeminiLLMProvider defers genai.Client construction to first use (_get_client) instead of eager construction in __init__, so create_provider('gemini', settings=...) succeeds keylessly (D-04 invariant).
 - [Phase 04]: parse_constraints uses AUTO tool-calling mode (not ANY) so non-constraint text can legitimately yield zero function calls, matching the stub's NLC-03 no-constraint-found behavior.
 - [Phase 04]: Task 1's blocking human-verify supply-chain checkpoint for google-genai (SUS legitimacy verdict) was approved via the official Google SDK cookbook sample before this session.
+- [Phase 04]: UAT (2026-07-15) live-provider checkpoints exercised OpenRouter (not Gemini) per user preference — Gemini's free-tier quota had proven unreliable in prior sessions (see 260713-pn3/260713-stq); ROADMAP.md Phase 4 Goal reworded into user-story format to satisfy the MVP-mode UAT gate (Mode: mvp was already set, unchanged).
 
 ### Pending Todos
 
@@ -138,6 +139,6 @@ Items acknowledged and carried forward from previous milestone close:
 
 ## Session Continuity
 
-Last session: 2026-07-08T01:53:32.406Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-07-15
+Stopped at: Phase 04 UAT + security review complete — milestone v1.0 100% complete, ready for /gsd-complete-milestone
 Resume file: None
