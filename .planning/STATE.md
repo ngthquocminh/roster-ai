@@ -1,13 +1,13 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
+milestone: v0.3
 milestone_name: milestone
 current_phase: 0
 status: Awaiting next milestone
-stopped_at: Phase 04 UAT + security review complete — milestone v1.0 100% complete, ready for /gsd-complete-milestone
+stopped_at: Phase 04 UAT + security review complete — milestone v0.3 100% complete, ready for /gsd-complete-milestone
 last_updated: "2026-07-15T10:38:59.155Z"
 last_activity: 2026-07-15
-last_activity_desc: Milestone v1.0 completed and archived
+last_activity_desc: Milestone v0.3 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: Milestone v1.0 complete
+Phase: Milestone v0.3 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-07-15 — Milestone v1.0 completed and archived
+Last activity: 2026-07-15 — Milestone v0.3 completed and archived
 
 ## Performance Metrics
 
@@ -72,7 +72,7 @@ Last activity: 2026-07-15 — Milestone v1.0 completed and archived
 
 ### Decisions
 
-v1.0 decisions are logged in full in PROJECT.md's Key Decisions table and
+v0.3 decisions are logged in full in PROJECT.md's Key Decisions table and
 `.planning/RETROSPECTIVE.md`. Cleared here at milestone close — start fresh
 for the next milestone's decisions.
 
@@ -87,7 +87,7 @@ for the next milestone's decisions.
 
 ### Blockers/Concerns
 
-[Issues that affect future work — carried forward from v1.0]
+[Issues that affect future work — carried forward from v0.3]
 
 - [llm / insight_service]: `_grounding_guard`/`_allowed_values` in `services/insight_service.py` never admits `coverage_by_day` dict KEYS (day-index labels like "Day 0"), only their percentage VALUES — a model that writes "Day 0: 61.22%" gets the bare `0` rejected as ungrounded (D-06 false positive). Surfaced 2026-07-13 by the live OpenRouter `generate_insights` test once the upstream-429 blocker on the old default model was fixed (quick task 260713-stq); was invisible before because no live run had reached the guard with a real completion. Needs a follow-up decision: widen `_allowed_values()` to admit day-index integers, or adjust the insight prompt to avoid citing bare day-index numbers.
 
@@ -114,15 +114,15 @@ Items acknowledged and deferred at milestone close on 2026-07-15:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| debug | knowledge-base (running KB log of resolved sessions; audit flags it as open due to no explicit closed status) | unknown | v1.0 close (2026-07-15) |
-| todo | 2026-06-29-harden-scenario-fixture-path-against-traversal.md (api) | pending | v1.0 close (2026-07-15) |
-| todo | 2026-07-09-demand-deadline-scheduling-instead-of-flat-hourly.md (engine) | pending | v1.0 close (2026-07-15) |
-| todo | 2026-07-09-extract-engine-as-separate-service.md (architecture) | pending | v1.0 close (2026-07-15) |
+| debug | knowledge-base (running KB log of resolved sessions; audit flags it as open due to no explicit closed status) | unknown | v0.3 close (2026-07-15) |
+| todo | 2026-06-29-harden-scenario-fixture-path-against-traversal.md (api) | pending | v0.3 close (2026-07-15) |
+| todo | 2026-07-09-demand-deadline-scheduling-instead-of-flat-hourly.md (engine) | pending | v0.3 close (2026-07-15) |
+| todo | 2026-07-09-extract-engine-as-separate-service.md (architecture) | pending | v0.3 close (2026-07-15) |
 
 ## Session Continuity
 
 Last session: 2026-07-15
-Stopped at: Phase 04 UAT + security review complete — milestone v1.0 100% complete, ready for /gsd-complete-milestone
+Stopped at: Phase 04 UAT + security review complete — milestone v0.3 100% complete, ready for /gsd-complete-milestone
 Resume file: None
 
 ## Operator Next Steps

@@ -1,6 +1,6 @@
 # Milestones
 
-## v1.0 LLM Layer (Shipped: 2026-07-15)
+## v0.3 LLM Layer (Shipped: 2026-07-15)
 
 **Phases completed:** 4 phases, 12 plans, 19 tasks
 

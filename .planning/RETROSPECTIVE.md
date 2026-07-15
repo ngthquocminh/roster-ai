@@ -2,7 +2,7 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
-## Milestone: v1.0 — LLM Layer
+## Milestone: v0.3 — LLM Layer
 
 **Shipped:** 2026-07-15
 **Phases:** 4 | **Plans:** 12 | **Tasks:** 19
@@ -47,13 +47,13 @@
 
 | Milestone | Sessions | Phases | Key Change |
 |-----------|----------|--------|------------|
-| v1.0 | multiple | 4 | Established vertical-slice MVP roadmap (stub-first, real-provider-last); introduced plan-time STRIDE threat modelling and coverage-block UAT classification |
+| v0.3 | multiple | 4 | Established vertical-slice MVP roadmap (stub-first, real-provider-last); introduced plan-time STRIDE threat modelling and coverage-block UAT classification |
 
 ### Cumulative Quality
 
 | Milestone | Tests | Coverage | Zero-Dep Additions |
 |-----------|-------|----------|---------------------|
-| v1.0 | 124 (non-live) + 1 gated live | — | `google-genai`, OpenAI SDK (OpenRouter) |
+| v0.3 | 124 (non-live) + 1 gated live | — | `google-genai`, OpenAI SDK (OpenRouter) |
 
 ### Top Lessons (Verified Across Milestones)
 

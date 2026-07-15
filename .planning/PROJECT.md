@@ -1,11 +1,11 @@
-# ShiftMind — LLM Layer (v1.0, shipped)
+# ShiftMind — LLM Layer (v0.3, shipped)
 
 ## What This Is
 
 ShiftMind (repo `rosterai`) is a workforce scheduling assistant: it loads a
 distribution-centre week of workforce + demand data, runs a constraint solver
 (OR-Tools CP-SAT) to produce a weekly schedule, and serves the result over an
-HTTP API. Milestone v1.0 shipped the **LLM layer**: a user describes a
+HTTP API. Milestone v0.3 shipped the **LLM layer**: a user describes a
 scheduling constraint change in plain English (any of five solver-hook tools),
 it's validated and applied to the solve as a calibrated soft penalty, and a
 separate on-demand endpoint turns run metrics into a grounded, plain-language
@@ -68,7 +68,7 @@ explanation of what changed — without touching solver code or JSON.
 
 ### Active
 
-<!-- Next milestone candidates — surfaced during v1.0 but not yet scoped. -->
+<!-- Next milestone candidates — surfaced during v0.3 but not yet scoped. -->
 
 - [ ] Frontend / UI for constraint editing and insight viewing
 - [ ] Fixture path traversal hardening in `constraint_service.py` (WR-04)
@@ -77,12 +77,12 @@ explanation of what changed — without touching solver code or JSON.
 
 ### Out of Scope
 
-<!-- Explicit boundaries, reviewed at v1.0 close. -->
+<!-- Explicit boundaries, reviewed at v0.3 close. -->
 
-- Frontend / React UI — deferred to a future milestone; v1.0 is API + engine only
+- Frontend / React UI — deferred to a future milestone; v0.3 is API + engine only
 - What-if compare + delta explanation — depends on the LLM layer having shipped (now true; still not scheduled)
 - Deploy / AWS infra — out of scope until the feature set for a public-facing release is complete
-- Hard/infeasible-making constraints from NL — all overrides apply as soft penalties only, by design (reaffirmed through v1.0)
+- Hard/infeasible-making constraints from NL — all overrides apply as soft penalties only, by design (reaffirmed through v0.3)
 - Production-model fidelity deferrals carried from design.md (OT1/OT2 cost split,
   two-layer coverage, task flow, capacity/load management) — not part of the LLM layer
 - Extracting the solver engine into a separate service — noted as a clean future seam
@@ -91,7 +91,7 @@ explanation of what changed — without touching solver code or JSON.
 ## Context
 
 - The backend (`backend/`) exposes the engine over FastAPI with a clean
-  service/domain/engine layering; ~7,360 LOC Python as of v1.0 close.
+  service/domain/engine layering; ~7,360 LOC Python as of v0.3 close.
 - Two Protocol seams exist by design and both proved themselves under real
   swaps: `SchedulerEngine` (engine swap, unexercised beyond CP-SAT so far) and
   `LLMProvider` (vendor swap — stub → Gemini → OpenRouter, zero service/route
@@ -103,8 +103,8 @@ explanation of what changed — without touching solver code or JSON.
   rather than placeholder round numbers.
 - `design.md` is the source-of-truth engineering design; `PLAN.md` is the
   hand-written phase tracker; `docs/decisions/` holds ADRs. This GSD project
-  tracked Phases 1–4 (v1.0) in the GSD planning structure; see
-  `.planning/milestones/v1.0-ROADMAP.md` for full phase detail.
+  tracked Phases 1–4 (v0.3) in the GSD planning structure; see
+  `.planning/milestones/v0.3-ROADMAP.md` for full phase detail.
 - Known issues carried into the next milestone: a D-06 grounding-guard
   false-positive class on `coverage_by_day` dict-key citations (surfaced by
   live-provider testing, not yet fixed); no path-traversal containment check
@@ -137,14 +137,14 @@ explanation of what changed — without touching solver code or JSON.
 
 ## Current State
 
-**Shipped:** v1.0 — LLM Layer (2026-07-15). All 4 phases complete, all v1
+**Shipped:** v0.3 — LLM Layer (2026-07-15). All 4 phases complete, all v1
 requirements validated, UAT (17/17) and security review (threats_open: 0)
 both passed. See `.planning/MILESTONES.md` for the full entry and
 `.planning/RETROSPECTIVE.md` for lessons learned.
 
 ## Next Milestone Goals
 
-Candidates surfaced during v1.0 but not yet scoped into a milestone (see
+Candidates surfaced during v0.3 but not yet scoped into a milestone (see
 `### Active` above for the full list):
 - A frontend/UI so the NL constraint + insight flows are usable outside raw HTTP calls
 - Closing the two known-issue carry-overs (D-06 `coverage_by_day` gap, fixture path traversal hardening)
@@ -168,4 +168,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-15 — v1.0 (LLM Layer) milestone complete and archived*
+*Last updated: 2026-07-15 — v0.3 (LLM Layer) milestone complete and archived*
