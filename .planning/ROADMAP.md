@@ -100,7 +100,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 ### Phase 4: Real LLM Provider (free-tier first) + Penalty Calibration
 
-**Goal**: A real, network-backed LLM provider — Google Gemini's free tier first — drops in behind the `LLMProvider` Protocol with a config-driven provider + model id, override penalty weights are empirically calibrated against the committed full-week fixture, and a live integration test confirms the real provider's parse path matches the stub — while the default CI run stays stub-only and needs no API key. Claude and other vendors remain trivial future swaps behind the same seam.
+**Goal**: As a developer, I want to swap the stub LLM provider for a real, network-backed Gemini provider via config alone, so that plain-English constraint parsing works against a live model with calibrated penalty weights while CI stays keyless and green.
 **Mode:** mvp
 **Depends on**: Phases 1–3
 **Requirements**: LLM-02, ENG-04, TEST-04
