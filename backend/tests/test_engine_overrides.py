@@ -191,8 +191,9 @@ def test_set_max_hours_honored():
     """set_max_hours(M0, 4.0) reduces M0's scheduled hours relative to baseline.
 
     M0 is cheaper (wage=35) so baseline assigns M0 to meet demand (1 member).
-    With max_hours=4.0: M0's 8h shift incurs penalty=MAX_HOURS_PENALTY * 4h *
-    VOL_SCALE (much larger than M1's shift cost) -> solver picks M1 instead.
+    With max_hours=4.0: M0's 8h shift incurs penalty=(MAX_HOURS_PENALTY / VOL_SCALE) * 4h
+    = $4,000, which still dwarfs the ~$80 wage delta of switching to M1 (M1 wage $45/h vs
+    M0 wage $35/h = $10/h * 8h shift) -> solver picks M1 instead.
     """
     problem = _make_problem_max_hours()
     engine = create_engine("cpsat")
