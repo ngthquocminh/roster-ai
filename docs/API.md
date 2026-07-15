@@ -1,8 +1,9 @@
 # ShiftMind API Reference
 
-HTTP API for the ShiftMind backend (Phase 2): create **scenarios** from input
-fixtures, trigger solver **runs** that execute off the request thread, and fetch
-**results** (coverage, cost, schedule).
+HTTP API for the ShiftMind backend: create **scenarios** from input fixtures,
+trigger solver **runs** that execute off the request thread, fetch **results**
+(coverage, cost, schedule), edit constraints in plain English, and fetch a
+plain-language **insight** report for a completed run.
 
 This document is the human-readable contract. The live, machine-readable schema
 is always available from the running app:
@@ -137,6 +138,66 @@ Fetch one scenario.
 
 ---
 
+### `POST /constraints`
+
+Parse a plain-English scheduling constraint against a scenario, validate it,
+and persist the entries that pass. Top-level route (**not** nested under
+`/scenarios/{id}`) — `scenario_id` is a body field (D-07). Does **not** trigger
+a solve (D-06); trigger a run separately via `POST /scenarios/{id}/runs` to see
+the effect.
+
+**Request body** — `ConstraintParseRequest`
+
+| field | type | required | rules |
+|---|---|---|---|
+| `scenario_id` | string | yes | non-empty; must reference an existing scenario |
+| `text` | string | yes | 1–2000 chars |
+
+```bash
+curl -X POST localhost:8000/constraints \
+  -H 'content-type: application/json' \
+  -d '{"scenario_id":"86a1...","text":"keep at least 2 workers on Pick at all times"}'
+```
+
+**200** — `ConstraintParseResponse`. The parser may call more than one tool per
+request (conjunction splitting), and each call is validated independently — a
+per-call validation failure (unknown member/task reference, out-of-bounds
+argument) lands in `rejected[]` rather than failing the whole request. Only
+entries in `applied[]` are persisted to the scenario's `overrides` column;
+`rejected[]` and an ambiguous/unparseable `clarification_needed` question are
+response-only and never stored.
+
+```json
+{
+  "applied": [
+    {
+      "id": "ov_1a2b3c4d",
+      "tool": "set_min_workers_per_task",
+      "args": { "task_id": "T123", "n": 2 },
+      "parsed_constraint": "At least 2 workers on Pick (every demanded hour)"
+    }
+  ],
+  "rejected": [
+    { "tool": "scale_demand", "error": "factor must be positive, got -1. Use a value > 0 (e.g. 1.5 to scale demand up by 50%)." }
+  ],
+  "clarification_needed": null,
+  "no_constraint_found": false
+}
+```
+
+Five tools are supported: `lock_worker_shift`, `set_min_workers_per_task`,
+`exclude_worker_from_task`, `scale_demand`, `set_max_hours`. All resolve
+human-readable member/task references against the scenario's real fixture data
+and are applied as **soft** solver penalties only — never able to make a solve
+infeasible.
+
+**Errors**
+- `404` — scenario not found.
+- `503` — LLM provider unavailable (upstream auth/quota/network failure).
+- `422` — body fails validation (missing `scenario_id`/`text`, `text` too long).
+
+---
+
 ### `POST /scenarios/{scenario_id}/runs`
 
 Create and start a run for the scenario. Returns immediately with a `PENDING`
@@ -245,6 +306,49 @@ Fetch the solved schedule and metrics. Only available once the run is
 
 ---
 
+### `GET /runs/{run_id}/insights`
+
+Fetch (or, on first call, generate) a plain-language insight report for a
+completed run. Synchronous — runs in FastAPI's thread pool, entirely separate
+from the single-worker solve pool, so it never competes with an in-flight
+solve. The generated report is cached on the run (`runs.insight_json`); a
+second call for the same run returns the cached report without calling the
+LLM provider again.
+
+```bash
+curl localhost:8000/runs/1bb1.../insights
+```
+
+**200** — `InsightOut`. Two distinct shapes share the same status code:
+
+- **Ready** (`ready: true`) — the run is `COMPLETED` and a report is available
+  (freshly generated or returned from cache):
+  ```json
+  { "ready": true, "run_id": "1bb1...", "report": "Overall, coverage reached 68%..." }
+  ```
+- **Not ready** (`ready: false`) — the run has not reached `COMPLETED` yet.
+  This is a **deliberate `200`, not a `409`** (unlike `GET /runs/{id}/result`,
+  which does 409 before completion) — polling for insight-readiness is not an
+  error condition:
+  ```json
+  { "ready": false, "run_id": "1bb1...", "status": "RUNNING", "reason": "Insights available only for COMPLETED runs (status: RUNNING)" }
+  ```
+
+Every number the report cites is checked against the run's own metrics
+(a numeric-grounding guard): any token that isn't a real, run-derived value
+(within a small rounding tolerance) is treated as a fabrication and the
+request fails rather than returning an untrustworthy report. A report is only
+cached once it passes this check.
+
+**Errors**
+- `404` — run not found.
+- `502` — the LLM provider failed, or the grounding guard rejected the
+  generated report as containing an ungrounded number. Nothing is cached in
+  either case, and the run's status/result are untouched — an insight failure
+  can never invalidate a completed schedule.
+
+---
+
 ## Data models
 
 ### `ScenarioOut`
@@ -301,18 +405,51 @@ Fetch the solved schedule and metrics. Only available once the run is
 | `start_h` | number | hours from horizon start |
 | `end_h` | number | hours from horizon start |
 
+### `ConstraintParseResponse`
+| field | type | notes |
+|---|---|---|
+| `applied` | array of `AppliedConstraint` | validated and persisted to the scenario |
+| `rejected` | array of `RejectedConstraint` | failed validation; not persisted |
+| `clarification_needed` | string \| null | a question, if the text was ambiguous |
+| `no_constraint_found` | boolean | true if no tool call and no clarification signal |
+
+**`AppliedConstraint`**
+| field | type | notes |
+|---|---|---|
+| `id` | string | content-hash override id (`ov_...`); stable across re-submissions of the same constraint |
+| `tool` | string | one of the five solver-hook tool names |
+| `args` | object | resolved, validated tool arguments (real task/member ids) |
+| `parsed_constraint` | string | human-readable echo of what was understood |
+
+**`RejectedConstraint`**
+| field | type | notes |
+|---|---|---|
+| `tool` | string | tool name the call would have used |
+| `error` | string | plain-English reason, naming the offending reference/argument |
+
+### `InsightOut`
+| field | type | notes |
+|---|---|---|
+| `ready` | boolean | whether a report is available |
+| `run_id` | string | |
+| `report` | string \| null | present when `ready` is true |
+| `status` | string \| null | present when `ready` is false — the run's current status |
+| `reason` | string \| null | present when `ready` is false |
+
 ---
 
 ## Status code summary
 
 | Code | Meaning |
 |---|---|
-| `200` | OK |
+| `200` | OK (includes `GET /runs/{id}/insights` with `ready: false`) |
 | `201` | Created (scenario, run) |
 | `400` | Bad request (unknown fixture) |
 | `404` | Resource not found (scenario, run) |
 | `409` | Run result requested before completion |
 | `422` | Request body failed validation |
+| `502` | Insight generation failed (LLM provider failure or grounding-guard rejection) |
+| `503` | LLM provider unavailable (constraint parsing) |
 
 ## Configuration
 
@@ -320,3 +457,8 @@ Fetch the solved schedule and metrics. Only available once the run is
 |---|---|---|
 | `ROSTERAI_DB` | `backend/var/rosterai.db` | SQLite database file |
 | `ROSTERAI_DATA_DIR` | `<repo>/data` | directory scanned by `GET /fixtures` |
+| `LLM_PROVIDER` | `stub` | LLM backend for constraint parsing + insights: `stub` \| `gemini` \| `openrouter`. `stub` is keyless and deterministic — keeps default CI green with no network calls. |
+| `LLM_MODEL` | `gemini-2.5-flash` | model id passed to the `gemini` provider |
+| `GEMINI_API_KEY` | *(none)* | required when `LLM_PROVIDER=gemini` |
+| `OPENROUTER_API_KEY` | *(none)* | required when `LLM_PROVIDER=openrouter` |
+| `OPENROUTER_MODEL` | `openai/gpt-oss-20b:free` | model id passed to the `openrouter` provider |

@@ -2,22 +2,29 @@
 
 > **Repo:** `rosterai` · **Product name:** ShiftMind
 >
-> This is the primary design doc — how the system is built. To run it see
-> [`../README.md`](../README.md); for the HTTP API see [`API.md`](API.md); for
-> status see [`PLAN.md`](PLAN.md). (The original project idea is archived in
+> This is the primary design doc — the durable *why*, not the current-status
+> tracker. To run it see [`../README.md`](../README.md); for the HTTP API see
+> [`API.md`](API.md); for project status see `.planning/` (`STATE.md` /
+> `ROADMAP.md` / `MILESTONES.md`). (The original project idea is archived in
 > [`vision.md`](vision.md) for reference only.)
+>
+> This document is hand-written and answers "why is the system this shape,
+> and what did we deliberately not build" — not "what does the code look like
+> today". If `/gsd-map-codebase` could regenerate a fact, it belongs in
+> `.planning/codebase/*` (generated, descriptive, agent-facing), not here.
 
 **What it is.** A workforce scheduling assistant: load a distribution-centre week of
 workforce + demand data → a constraint solver produces a weekly schedule →
-(later) describe constraint tweaks in plain English and have an LLM explain the
-result. The **Scheduling Engine** is an open-source-solver (OR-Tools CP-SAT)
-reimplementation of the core logic of a production weekly scheduling model
-(CPLEX/docplex, ~2,500 lines of constraints, ~759 team members).
+describe constraint tweaks in plain English and have an LLM apply them and
+explain the result. The **Scheduling Engine** is an open-source-solver
+(OR-Tools CP-SAT) reimplementation of the core logic of a production weekly
+scheduling model (CPLEX/docplex, ~2,500 lines of constraints, ~759 team
+members).
 
-**Status.** Phases 1–2 (Scheduling Engine + data spine, backend skeleton) are
-complete; **Phase 3 (LLM layer)** is next. See [`PLAN.md`](PLAN.md) for the
-live tracker. The rest of the system is described here for context and to keep
-the architecture honest.
+**Status.** The engine, backend, and LLM layer described in this document have
+all shipped (v0.3). For current phase/milestone status, see `.planning/`. The
+rest of the system is described here for context and to keep the architecture
+honest.
 
 ---
 
@@ -44,8 +51,9 @@ React UI  ──HTTP──▶  FastAPI routers
               ┌──────────┴───────────────┐
        Scheduling Engine             LLM providers
    (SchedulerEngine Protocol)    (LLMProvider Protocol)
-       CP-SAT now; PuLP/CPLEX     Claude now; Gemini later
-       later                          │
+       CP-SAT now; PuLP/CPLEX     stub (default, keyless CI) now;
+       later                     Gemini (google-genai) + OpenRouter
+              │                  (openai SDK) as real providers
               │                       │
         Domain types (pure Python, zero solver/web deps)
               ▲
@@ -53,14 +61,9 @@ React UI  ──HTTP──▶  FastAPI routers
 ```
 
 The two **Protocol seams** (engine, LLM) are the extensibility guarantee:
-swapping the solver library or LLM vendor touches only one infra package.
-
-**Phase map**
-1. **Engine + data spine** ← *current.* Fixture tool → adapter → domain → CP-SAT engine → CLI run on a short input. No web, no LLM.
-2. Backend skeleton: SQLite + sessions/scenarios/fixtures + threaded run execution + results endpoints.
-3. LLM: NL constraint parser (soft overrides) + insight generator, wired into runs.
-4. Frontend: results, constraints, run flow.
-5. What-if + delta explanation, polish, deploy.
+swapping the solver library or LLM vendor touches only one infra package. The
+LLM seam has now been proven twice over: two real providers (Gemini,
+OpenRouter) were added behind it with zero service/route changes (see §6).
 
 ---
 
@@ -95,7 +98,7 @@ rosterai/                           # one git repo
       test_adapter.py test_engine_small.py
     pyproject.toml uv.lock          # uv-managed deps + lockfile
   frontend/                         # added in Phase 4
-  docs/                             # design.md, PLAN.md, API.md, vision.md
+  docs/                             # design.md, API.md, README.md, vision.md, archive/
   README.md  docker-compose.yml
 ```
 
@@ -270,32 +273,88 @@ Brief rationale for the choices most likely to be questioned:
 - **Lightweight infra: stdlib `sqlite3` + dataclass settings.** Two small tables
   don't justify SQLAlchemy/Alembic/pydantic-settings yet; revisit when the schema
   grows (sessions, files, constraints). Pydantic is still used for API schemas.
-- **Single-tenant for now.** No sessions/auth yet — fine for local/demo, not for
-  shared public hosting. Sessions are additive when needed (see §4).
+- **Single-tenant for now.** No sessions/auth as of v0.3 — fine for local/demo,
+  not for shared public hosting. Sessions would be additive when needed; not
+  yet scoped into a milestone.
 
 ---
 
-## 4. Later phases (summary, for architectural continuity)
+## 4. LLM layer (shipped)
 
-- **Backend (FastAPI):** sessions, scenarios CRUD, fixture select/upload,
-  constraint preview/save, run trigger/status/results/schedule, insights,
-  what-if/compare. SQLite (WAL). **Solve runs in a worker thread** (never blocks
-  the event loop). Run marked `COMPLETED` on solve; **insights generated as a
-  separate step** so an LLM failure can't fail a valid schedule.
-- **LLM layer:** NL → solver-hook tools (`lock_worker_shift`,
-  `set_min_workers_per_task`, `exclude_worker_from_task`, `scale_demand`,
-  `set_max_hours`), **validated against scenario IDs**, applied as **soft**
-  constraints (a bad tweak penalizes, never infeasible). Insight generator
-  (metrics → structured report). Delta explainer (what-if). `LLMProvider`
-  Protocol, Claude default.
+The natural-language constraint editing and insight-generation layer, built on
+top of the Phase 1 engine and Phase 2 backend. Two protocol seams carry the
+whole design: `LLMProvider` decouples the vendor, and a single translation
+function inside it decouples the wire format.
+
+**`LLMProvider` Protocol.** `llm/base.py` defines the seam:
+`parse_constraints(text) -> list[OverrideCall]` and
+`generate_insights(summary) -> str`. Three implementations register behind it
+— `stub` (deterministic regex-based parser, the default, keeps CI keyless),
+`gemini` (`google-genai`), and `openrouter` (`openai` SDK, OpenAI-compatible).
+Selecting a provider is a config change (`LLM_PROVIDER`); no service or route
+code changes for either real-provider addition — the seam held both times.
+
+**`llm/translate.to_override_call` — the provider-neutral translation
+boundary.** Every provider implementation, regardless of vendor wire format
+(a Claude-style `tool_use` block, a Gemini function-call object, an
+OpenAI-compatible tool-call dict), must unpack its own native shape into a
+plain `(tool_name, args)` pair *before* calling `to_override_call`. No vendor
+payload shape ever crosses this boundary. This is what let two real providers
+get added with zero changes to `constraint_service` or the routers.
+
+**`OverrideCall` domain seam.** A frozen dataclass (`domain/overrides.py`,
+pure Python, no solver/web/LLM imports) carrying `id`, `tool`, `args`. The id
+is a content-hash of `(tool, canonicalized args)` — re-submitting the same NL
+constraint maps to the same id and overwrites in place, so constraint editing
+is idempotent by construction.
+
+**Overrides apply as soft round-2 penalties only.** Every one of the five
+tools enters the CP-SAT model as a cost-round penalty term, never a hard
+constraint — verified across all five that a bad or unsatisfiable override
+degrades the schedule rather than making the solve infeasible. The five
+tools: `lock_worker_shift`, `set_min_workers_per_task`,
+`exclude_worker_from_task`, `scale_demand`, `set_max_hours`. `scale_demand` is
+the one exception to "penalty term": it reshapes demand before the solve
+rather than adding a round-2 term, since it changes what "covered" means
+rather than penalizing a shortfall.
+
+**Validation against real scenario IDs.** Before a parsed constraint is
+persisted, `constraint_service` resolves human-readable member/task tokens
+(name, partial name, or real id) against the scenario's actual fixture data.
+An unknown reference is rejected with a plain-English error listing the valid
+options; an ambiguous one (multiple matches) returns a clarification question
+instead of guessing. Per-call failures are bucketed into the response
+(`rejected[]` / `clarification_needed`) rather than failing the whole
+request — a partial-apply contract, not all-or-nothing.
+
+**D-06 numeric grounding guard.** The insight generator's output is checked
+token-by-token: every number the report cites must be traceable (within a
+small rounding tolerance) to a real value in the run's own metrics. Any
+number that isn't is treated as a fabrication and the request fails rather
+than persisting an untrustworthy report — see `services/insight_service.py`.
+
+**Insights as a separate, cached, on-demand step.** Insight generation is not
+part of the run lifecycle — it's a distinct endpoint (`GET
+/runs/{id}/insights`) called after a run reaches `COMPLETED`, and the result
+is cached on the run row so a provider is only ever called once per run. This
+means an LLM failure (or a grounding-guard rejection) can never invalidate a
+successfully computed schedule; the run stays `COMPLETED` regardless of
+whether its insight report was ever successfully generated.
+
+---
+
+## 5. Later phases (frontend, deploy)
+
 - **Frontend:** Home → ScenarioEditor → RunHistory → ResultsView (coverage cards,
   demand-vs-served chart, insights, schedule table) → WhatIfView.
-- **Deploy:** Docker Compose; Render free tier (persistent disk for SQLite,
-  static frontend).
+- **Deploy:** **AWS** — frontend → S3 + CloudFront; backend container → ECR +
+  App Runner/ECS/EC2 (container compute, not Lambda — CP-SAT solves are
+  CPU-heavy and long-running), matching §3.1 and `README.md`. Docker Compose
+  for local development only.
 
 ---
 
-## 5. Open decisions (revisit before later phases)
+## 6. Open decisions (revisit before later phases)
 - OT/cost fidelity: flat $/hr now; if cost realism matters, add an
   ordinary-vs-overtime split (real model splits normal/OT1/OT2, day & week).
 - Coverage formulation: single per-hour `supply ≥ demand − unmet` (this doc) vs.
