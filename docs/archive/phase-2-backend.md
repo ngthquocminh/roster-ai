@@ -1,9 +1,12 @@
 # Phase 2 — Backend skeleton
 
+> **Archived historical plan doc — not maintained.** Kept as a record of how
+> this phase was built. Its durable design now lives in [`../design.md`](../design.md);
+> the HTTP contract in [`../API.md`](../API.md); project status lives in `.planning/`.
+>
 > **Status: ✅ Completed** (commit `203db1b`). Written retroactively to match the
-> per-phase doc workflow in [`PLAN.md`](PLAN.md); it records the plan and design
-> as built. The durable design also lives in [`design.md`](design.md); the HTTP
-> contract in [`API.md`](API.md).
+> per-phase doc workflow the project used at the time; it records the plan and
+> design as built.
 
 ## Goal
 
@@ -71,7 +74,7 @@ repeated app lifespans (and tests) work.
 canned `SolveResult` instantly, so the whole lifecycle is exercised without
 running CP-SAT.
 
-**Endpoints** (full reference in [`API.md`](API.md)):
+**Endpoints** (full reference in [`API.md`](../API.md)):
 
 | Method & path | Purpose |
 |---|---|
@@ -99,7 +102,7 @@ running CP-SAT.
 
 - **Async via worker thread pool, not FastAPI BackgroundTasks** — a solve is
   CPU-bound and long; the pool keeps it off the event loop with bounded
-  concurrency and a DB-persisted status lifecycle. (See [`design.md`](design.md) §3.7.)
+  concurrency and a DB-persisted status lifecycle. (See [`design.md`](../design.md) §3.7.)
 - **Persistence: stdlib `sqlite3` + thin repos, not SQLAlchemy/Alembic** — two
   tables don't justify an ORM yet. Pydantic is still used for API schemas.
 - **Input = fixtures in `data/`, no upload endpoint yet** — scenarios reference a

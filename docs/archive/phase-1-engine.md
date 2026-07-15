@@ -1,9 +1,12 @@
 # Phase 1 — Scheduling Engine + data spine
 
+> **Archived historical plan doc — not maintained.** Kept as a record of how
+> this phase was built. Its durable design now lives in [`../design.md`](../design.md)
+> §3; project status lives in `.planning/`.
+>
 > **Status: ✅ Completed** (engine `06799e9`; fixture + lex hardening `44436bd`).
-> Written retroactively to match the per-phase doc workflow in
-> [`PLAN.md`](PLAN.md); it records the plan and design as built. The durable
-> design lives in [`design.md`](design.md) §3.
+> Written retroactively to match the per-phase doc workflow the project used at
+> the time; it records the plan and design as built.
 
 ## Goal
 
@@ -87,7 +90,7 @@ families, full 7-day week.
 (`{"cpsat": CpSatEngine}`). Swapping a backend = add `engine/<x>/` + a registry
 entry; domain/adapter untouched.
 
-See [`design.md`](design.md) §3.4 for the full model and §3.5 for the
+See [`design.md`](../design.md) §3.4 for the full model and §3.5 for the
 distilled-scope (kept vs deferred) table.
 
 ## Step-by-step plan
@@ -108,7 +111,7 @@ distilled-scope (kept vs deferred) table.
 - **Real-schema JSON input via an adapter, not demo CSVs**, and **consume the
   materialized Workload tables** rather than regenerating demand from Order
   Volume (site-flow/conversions out of scope). Validates the model on real data
-  shapes from day one. (See [`design.md`](design.md) §3.2, §3.7.)
+  shapes from day one. (See [`design.md`](../design.md) §3.2, §3.7.)
 - **Lexicographic objective, not a weighted sum** — coverage must never be traded
   for cost; lex makes that a hard guarantee, not a weight-tuning artifact.
 - **Shift templates from input data, not hardcoded** — templates + breaks vary by
@@ -117,7 +120,7 @@ distilled-scope (kept vs deferred) table.
   coverage report is informative across all 7 days rather than ~2% or 100%.
 - **Single-layer coverage** (`supply ≥ demand − unmet`) for the distilled engine;
   the production two-layer (order-volume balance + supply≥produced) is an open
-  decision in [`design.md`](design.md) §5.
+  decision in [`design.md`](../design.md) §5.
 
 ## Outcome
 
@@ -129,4 +132,4 @@ under a fixed seed. 5 tests pass (2 engine + 3 adapter).
 **Notes / open items carried forward:** proving cost-optimality is slow on the
 full week — consider a round-2 relative-gap stop (raised again when the API/UI
 drive runs interactively); fixture realism (member/task counts) can scale up once
-the engine is proven. (See [`design.md`](design.md) §5.)
+the engine is proven. (See [`design.md`](../design.md) §5.)

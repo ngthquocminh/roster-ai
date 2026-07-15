@@ -5,7 +5,6 @@
 > of the original idea — **not** a description of the current system, and it is
 > **not maintained**. For how the project actually works, see
 > [`../README.md`](../README.md), [`design.md`](design.md), and [`API.md`](API.md).
-> This file may be removed once it's no longer a useful reference.
 
 > **Repo name:** `rosterai` · **Product / brand name:** ShiftMind
 
