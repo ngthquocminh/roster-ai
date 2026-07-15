@@ -22,9 +22,9 @@ This matters now that the API/UI drive runs interactively — a user waiting on 
 HTTP poll doesn't want to sit through a 2-minute optimality proof for a solution
 that was within a fraction of a percent of optimal after 15 seconds.
 
-Also tracked as an open decision in `docs/design.md` §5 ("Solve-time vs.
+Also tracked as an open decision in `docs/design.md` §6 ("Solve-time vs.
 optimality"), which survives as the engineering design record. This todo is the
-actionable half; §5 holds the rationale.
+actionable half; §6 holds the rationale.
 
 Carried over from `docs/PLAN.md` Phase 1 follow-ups (marked deferred/optional),
 migrated into GSD when that hand-written tracker was retired at the v0.3/v0.4

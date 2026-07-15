@@ -1,4 +1,4 @@
-# ShiftMind — LLM Layer (v0.3, shipped)
+# ShiftMind — Frontend (v0.4, in progress)
 
 ## What This Is
 
@@ -68,9 +68,18 @@ explanation of what changed — without touching solver code or JSON.
 
 ### Active
 
-<!-- Next milestone candidates — surfaced during v0.3 but not yet scoped. -->
+<!-- v0.4 scope — building toward these. -->
 
-- [ ] Frontend / UI for constraint editing and insight viewing
+- [ ] Vite + React + TypeScript app under `frontend/`, typed against `docs/API.md`
+- [ ] Home — scenario list / create from an existing fixture
+- [ ] ScenarioEditor — fixture select, NL constraint box, applied-overrides list
+- [ ] RunHistory — trigger a run, poll status, list prior runs
+- [ ] ResultsView — coverage cards, demand-vs-served chart, insights, schedule table
+- [ ] CORS middleware on the FastAPI app (enabler — no browser origin can call the API without it)
+
+<!-- Deferred: scoped out of v0.4, still live. See todos/pending/ for the full set. -->
+
+- [ ] Input upload endpoint — deferred to v0.5; vision.md's pitch opens with it, but v0.4 demos against committed fixtures. Hard prerequisite: WR-04 must land first.
 - [ ] Fixture path traversal hardening in `constraint_service.py` (WR-04)
 - [ ] `_grounding_guard` `coverage_by_day` dict-key admission fix (D-06 false-positive class)
 - [ ] Demand scheduling: deadline-fill semantics instead of flat hourly distribution
@@ -79,8 +88,11 @@ explanation of what changed — without touching solver code or JSON.
 
 <!-- Explicit boundaries, reviewed at v0.3 close. -->
 
-- Frontend / React UI — deferred to a future milestone; v0.3 is API + engine only
-- What-if compare + delta explanation — depends on the LLM layer having shipped (now true; still not scheduled)
+- What-if compare + delta explanation — unblocked (the LLM layer it depends on shipped),
+  but deliberately held out of v0.4: it's a second large feature on top of a from-scratch
+  React app, and two big things in one milestone is how scope slips. Revisit for v0.5.
+- Auth / sessions — never built; vision.md's localStorage session UUID never happened.
+  Out of scope until a deploy makes it necessary (see v0.4 key context #1).
 - Deploy / AWS infra — out of scope until the feature set for a public-facing release is complete
 - Hard/infeasible-making constraints from NL — all overrides apply as soft penalties only, by design (reaffirmed through v0.3)
 - Production-model fidelity deferrals carried from design.md (OT1/OT2 cost split,
@@ -140,20 +152,36 @@ explanation of what changed — without touching solver code or JSON.
 | Provider-neutral translation boundary (`to_override_call`) | No vendor payload shape should leak past the LLM seam | ✓ Good — enabled 2 real-provider additions with zero seam changes |
 | Defer penalty-weight calibration to Phase 4 | Needed real solver-run data to size constants correctly | ⚠️ Revisit — 3 phases of uncalibrated placeholders let a 100x `set_max_hours` scaling bug ship silently; calibrate earlier next time (see RETROSPECTIVE.md) |
 
-## Current State
+## Current Milestone: v0.4 Frontend (React UI)
 
-**Shipped:** v0.3 — LLM Layer (2026-07-15). All 4 phases complete, all v1
-requirements validated, UAT (17/17) and security review (threats_open: 0)
-both passed. See `.planning/MILESTONES.md` for the full entry and
-`.planning/RETROSPECTIVE.md` for lessons learned.
+**Goal:** Make the shipped engine + LLM layer usable in a browser — create a
+scenario from a fixture, express a constraint in plain English, run a solve, and
+read the schedule + insights without touching curl.
 
-## Next Milestone Goals
+**Target features:**
+- Vite + React + TypeScript app under `frontend/`
+- Home → scenario list / create
+- ScenarioEditor → fixture select, NL constraint box, applied-overrides list
+- RunHistory → trigger run, poll status, list runs
+- ResultsView → coverage cards, demand-vs-served chart, insights, schedule table
+- Typed API client written against `docs/API.md`
+- CORS middleware on FastAPI — the one backend change, a mandatory enabler
 
-Candidates surfaced during v0.3 but not yet scoped into a milestone (see
-`### Active` above for the full list):
-- A frontend/UI so the NL constraint + insight flows are usable outside raw HTTP calls
-- Closing the two known-issue carry-overs (D-06 `coverage_by_day` gap, fixture path traversal hardening)
-- What-if compare + delta explanation, now that the LLM layer it depends on has shipped
+**Explicitly deferred from v0.4:** input upload (v0.5), what-if compare + delta
+explanation, D-06 grounding-guard fix, WR-04 traversal hardening.
+
+### v0.4 key context — noted for later handling
+
+Surfaced during v0.4 scoping (2026-07-15). None block the milestone; recorded
+here so they are not rediscovered mid-build or lost between sessions.
+
+| # | Context | Bearing on v0.4 |
+|---|---------|-----------------|
+| 1 | **No auth exists.** vision.md assumed a localStorage session UUID; it was never built. Every scenario is globally visible to any caller. | v0.4 ships without auth. Any public/shared deploy needs this resolved first — a real gate on the AWS deploy already in Out of Scope. **Handle later.** |
+| 2 | **Insights use a two-shape contract behind one status code.** `GET /runs/{id}/insights` returns `200` with `ready:false` when the run isn't `COMPLETED` — deliberately *not* 409 — and `502` on generation failure. `/runs/{id}/result` by contrast *does* 409 before completion. | **v0.4 implementation fact, not deferrable.** The client must branch on `ready`, not on status code, and must not treat the two endpoints alike. Documented in `docs/API.md`. |
+| 3 | **Solves are slow and uncancellable.** Round-2 cost-optimality is a ~2min tail vs ~20s for round 1, on a single-worker `ThreadPoolExecutor` with no cancel path. | v0.4 needs honest loading/progress states for a wait it can neither shorten nor abort. Cancellation + concurrency limits and the round-2 relative-gap stop are both in `todos/pending/`. **Handle later.** |
+| 4 | **`LLM_PROVIDER` defaults to `stub`** — keyless, deterministic, regex-routed. Real NL parsing needs `gemini` or `openrouter` configured. | Config, not code. A demo showing genuine NL understanding must set a real provider; default CI stays keyless and must remain so. |
+| 5 | **No CORS on the FastAPI app.** | Promoted from context to a v0.4 requirement — a browser origin cannot call the API without it. |
 
 ## Evolution
 
@@ -173,4 +201,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-15 — v0.3 (LLM Layer) milestone complete and archived*
+*Last updated: 2026-07-15 — v0.4 (Frontend) milestone started*

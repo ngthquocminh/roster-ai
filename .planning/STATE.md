@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3
-milestone_name: milestone
-current_phase: 0
-status: Awaiting next milestone
-stopped_at: Phase 04 UAT + security review complete — milestone v0.3 100% complete, ready for /gsd-complete-milestone
-last_updated: "2026-07-15T10:38:59.155Z"
+milestone: v0.4
+milestone_name: Frontend (React UI)
+status: planning
+last_updated: "2026-07-15T16:16:31.468Z"
 last_activity: 2026-07-15
-last_activity_desc: "Completed quick task 260715-vel: retired docs/ as planning tracker, split by lifecycle"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
-current_phase_name: null
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,14 +20,14 @@ current_phase_name: null
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** Planning next milestone
+**Current focus:** v0.4 Frontend (React UI) — defining requirements
 
 ## Current Position
 
-Phase: Milestone v0.3 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-15 — Milestone v0.3 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-15 — Milestone v0.4 started
 
 ## Performance Metrics
 
@@ -90,7 +86,7 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 "⏸ deferred/optional" follow-ups and existed nowhere in GSD:
 
 - [engine / tuning]: Tune DEMAND_LOAD and task mix for even coverage band — Receiving ~10%, Pick ~35% on the committed fixture; cosmetic/demo-quality only (`build_short_input.py:49`)
-- [engine / performance]: Add round-2 relative-gap stop to bound solve time — cost-optimality proof is a ~2min tail vs ~20s round 1; matters now runs are interactive; rationale in `design.md` §5 (`objective.py:47`)
+- [engine / performance]: Add round-2 relative-gap stop to bound solve time — cost-optimality proof is a ~2min tail vs ~20s round 1; matters now runs are interactive; rationale in `design.md` §6 (`objective.py:47`)
 - [api / concurrency]: Add run cancellation and concurrency limits — single-worker pool, no way to stop an in-flight solve; overlaps the engine-as-a-service todo (`run_service.py:38`)
 - [api / ingest]: Add input upload endpoint — scenarios only creatable from fixtures already in `data/`; `vision.md`'s pitch opens with "Upload workforce & demand data", so this is intent-vs-built drift. **Explicit v0.4 scoping question**; must land after WR-04 traversal hardening (`fixtures.py:14`)
 - [api / engine]: Add per-scenario engine selection — always `cpsat`; `SchedulerEngine` seam unproven by a second real solver (`base.py:33`)
