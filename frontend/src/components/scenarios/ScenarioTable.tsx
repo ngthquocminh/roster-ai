@@ -25,6 +25,11 @@
  * `name` is rendered only as a JSX text child (T-1-03) — React's default
  * text-node escaping is the complete mitigation; no raw-HTML injection API
  * is used or imported here.
+ *
+ * `onCreateScenario` (plan 01-07): the empty-state "New Scenario" button was
+ * left deliberately inert by plan 01-06 — this optional callback is how
+ * `Home` wires it to the same create-scenario dialog as the header button,
+ * without this component owning any dialog-open state itself.
  */
 import { useNavigate } from "react-router";
 import { LoaderCircle } from "lucide-react";
@@ -41,7 +46,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export function ScenarioTable() {
+export function ScenarioTable({
+  onCreateScenario,
+}: {
+  onCreateScenario?: () => void;
+} = {}) {
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = useScenarios();
 
@@ -74,9 +83,9 @@ export function ScenarioTable() {
         <p className="text-sm leading-[1.5] text-muted-foreground">
           Create one from a fixture to get started.
         </p>
-        {/* Rendered inert here — plan 01-07 wires the create-scenario
-            dialog onto this same "New Scenario" button. */}
-        <Button type="button">New Scenario</Button>
+        <Button type="button" onClick={onCreateScenario}>
+          New Scenario
+        </Button>
       </div>
     );
   }
