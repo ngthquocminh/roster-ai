@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Frontend (React UI)
-status: planning
+status: roadmapped
 last_updated: "2026-07-15T16:16:31.468Z"
 last_activity: 2026-07-15
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** v0.4 Frontend (React UI) — defining requirements
+**Current focus:** v0.4 Frontend (React UI) — roadmap created (Phases 1-4), ready to plan Phase 1
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 — Browser-Callable API + App Shell + Scenario List (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-15 — Milestone v0.4 started
+Status: Roadmapped — awaiting `/gsd-plan-phase 1`
+Last activity: 2026-07-15 — v0.4 roadmap created, 24/24 requirements mapped across Phases 1-4
 
 ## Performance Metrics
 
@@ -72,11 +72,19 @@ v0.3 decisions are logged in full in PROJECT.md's Key Decisions table and
 `.planning/RETROSPECTIVE.md`. Cleared here at milestone close — start fresh
 for the next milestone's decisions.
 
+v0.4 decisions:
+
+- **Roadmap = 4 phases, numbered 1-4 — phase numbering RESTARTS at each milestone.** Chosen 2026-07-15 (reversing the roadmapper's initial continue-from-4 default, which would have made v0.4 Phases 5-8). Each milestone now owns its own 1..N sequence; shipped milestones keep their numbering in their archived roadmaps. Safe because `.planning/phases/` was empty — v0.3's phase directories were archived to `milestones/v0.3-phases/` at milestone close, so `/gsd-plan-phase 1` cannot collide on disk. ROADMAP.md's Progress table is scoped to the current milestone only, so "Phase 1" is unambiguous within it.
+- **BE-01 (CORS) placed in Phase 1, not a phase of its own.** It is a hard gate (no browser origin can call the API without it) but a small change; bundling it with the scaffold makes Phase 1 an observable slice instead of a one-line phase.
+- **SCEN-03 grouped with CONS, not with SCEN-01/02.** "See the overrides currently applied" *is* the ScenarioEditor surface that constraint submission populates — splitting them would strand a half-built view across two phases.
+- **SHELL-03 (four-view nav) assigned to Phase 1** as the routing/nav capability; later phases mount their views into the shell. Phase 1's criterion is scoped to what is verifiable then (nav + deep-linkable routes, later views as reachable placeholders).
+- **No research phase for v0.4.** A React SPA over a documented REST API was judged well-trodden; the open choices (charting library, polling strategy, client typing approach) are deliberately left to plan-phase where they are concrete.
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
 
-- [Phase 4 / api]: Harden scenario fixture path against traversal (WR-04) — add containment check before `json.load` in `constraint_service.py:152`
+- [WR-04 / api]: Harden scenario fixture path against traversal — add containment check before `json.load` in `constraint_service.py:152`
 - [testing]: Add real-engine test for ENG-05 degeneracy detection (WR-05) — current tests validate a copied mirror, not `CpSatEngine.solve()` — ⚠️ no file in `todos/pending/`; STATE-only entry, needs capture or removal
 - [engine / improvement]: Demand scheduling should target deadline fill, not flat hourly distribution — `_aggregate_demand` spreads volume demand evenly per hour but real requirement is to accumulate labour before `b.end_h`; INDIRECT (headcount) demand is fine as-is (`builder.py:111`)
 - [architecture / post-POC]: Extract solver engine into a separate service + master run-manager — FastAPI becomes thin API+LLM layer; `SchedulerEngine` Protocol is already the clean seam for this split
@@ -86,16 +94,16 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 "⏸ deferred/optional" follow-ups and existed nowhere in GSD:
 
 - [engine / tuning]: Tune DEMAND_LOAD and task mix for even coverage band — Receiving ~10%, Pick ~35% on the committed fixture; cosmetic/demo-quality only (`build_short_input.py:49`)
-- [engine / performance]: Add round-2 relative-gap stop to bound solve time — cost-optimality proof is a ~2min tail vs ~20s round 1; matters now runs are interactive; rationale in `design.md` §6 (`objective.py:47`)
-- [api / concurrency]: Add run cancellation and concurrency limits — single-worker pool, no way to stop an in-flight solve; overlaps the engine-as-a-service todo (`run_service.py:38`)
-- [api / ingest]: Add input upload endpoint — scenarios only creatable from fixtures already in `data/`; `vision.md`'s pitch opens with "Upload workforce & demand data", so this is intent-vs-built drift. **Explicit v0.4 scoping question**; must land after WR-04 traversal hardening (`fixtures.py:14`)
+- [engine / performance]: Add round-2 relative-gap stop to bound solve time — cost-optimality proof is a ~2min tail vs ~20s round 1; matters now runs are interactive; rationale in `design.md` §6 (`objective.py:47`) — **bears on v0.4 Phase 3 (RUN-03)**: the wait this todo would shorten is the wait Phase 3 must communicate honestly
+- [api / concurrency]: Add run cancellation and concurrency limits — single-worker pool, no way to stop an in-flight solve; overlaps the engine-as-a-service todo (`run_service.py:38`) — **bears on v0.4 Phase 3 (RUN-03)**: v0.4 ships an honest "cannot be cancelled" wait rather than a cancel path (v2 OPS-01)
+- [api / ingest]: Add input upload endpoint — scenarios only creatable from fixtures already in `data/`; `vision.md`'s pitch opens with "Upload workforce & demand data", so this is intent-vs-built drift. Deferred to v0.5 (v2 UP-01); must land after WR-04 traversal hardening (`fixtures.py:14`)
 - [api / engine]: Add per-scenario engine selection — always `cpsat`; `SchedulerEngine` seam unproven by a second real solver (`base.py:33`)
 
 ### Blockers/Concerns
 
 [Issues that affect future work — carried forward from v0.3]
 
-- [llm / insight_service]: `_grounding_guard`/`_allowed_values` in `services/insight_service.py` never admits `coverage_by_day` dict KEYS (day-index labels like "Day 0"), only their percentage VALUES — a model that writes "Day 0: 61.22%" gets the bare `0` rejected as ungrounded (D-06 false positive). Surfaced 2026-07-13 by the live OpenRouter `generate_insights` test once the upstream-429 blocker on the old default model was fixed (quick task 260713-stq); was invisible before because no live run had reached the guard with a real completion. Needs a follow-up decision: widen `_allowed_values()` to admit day-index integers, or adjust the insight prompt to avoid citing bare day-index numbers.
+- [llm / insight_service]: `_grounding_guard`/`_allowed_values` in `services/insight_service.py` never admits `coverage_by_day` dict KEYS (day-index labels like "Day 0"), only their percentage VALUES — a model that writes "Day 0: 61.22%" gets the bare `0` rejected as ungrounded (D-06 false positive). Surfaced 2026-07-13 by the live OpenRouter `generate_insights` test once the upstream-429 blocker on the old default model was fixed (quick task 260713-stq); was invisible before because no live run had reached the guard with a real completion. Needs a follow-up decision: widen `_allowed_values()` to admit day-index integers, or adjust the insight prompt to avoid citing bare day-index numbers. **Bears on v0.4 Phase 4 (RES-05):** this is a live path to a `502` from `GET /runs/{id}/insights` — it is exactly the failure RES-05's "results view stays intact" criterion must survive. The fix itself stays out of v0.4 (v2 D-06-FIX); the UI must simply not fall over when it fires.
 
 ### Quick Tasks Completed
 
@@ -114,6 +122,7 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 ### Roadmap Evolution
 
 - Phase 4 edited: reworded Claude-specific title/goal/criteria to provider-generic (free-tier LLM, Gemini first); also updated REQUIREMENTS LLM-02/TEST-04
+- v0.4 roadmap added: 4 phases, 24/24 v1 requirements mapped, no orphans, no duplicates. Initially numbered 5-8 (continuing v0.3), then **renumbered to 1-4** on operator instruction — phase numbering now restarts per milestone.
 
 ## Deferred Items
 
@@ -129,9 +138,11 @@ Items acknowledged and deferred at milestone close on 2026-07-15:
 ## Session Continuity
 
 Last session: 2026-07-15
-Stopped at: Phase 04 UAT + security review complete — milestone v0.3 100% complete, ready for /gsd-complete-milestone
+Stopped at: v0.4 roadmap created — Phases 1-4 written to ROADMAP.md, REQUIREMENTS.md traceability populated (24/24 mapped)
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan the first v0.4 phase with `/gsd-plan-phase 1`
+- Phases 1-4 are all UI-bearing (`UI hint: yes` in ROADMAP.md) — `/gsd-ui-phase` is available for a design contract before planning
+</content>

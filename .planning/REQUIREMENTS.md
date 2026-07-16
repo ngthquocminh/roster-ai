@@ -92,36 +92,47 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHELL-01 | TBD | Pending |
-| SHELL-02 | TBD | Pending |
-| SHELL-03 | TBD | Pending |
-| SHELL-04 | TBD | Pending |
-| BE-01 | TBD | Pending |
-| SCEN-01 | TBD | Pending |
-| SCEN-02 | TBD | Pending |
-| SCEN-03 | TBD | Pending |
-| CONS-01 | TBD | Pending |
-| CONS-02 | TBD | Pending |
-| CONS-03 | TBD | Pending |
-| CONS-04 | TBD | Pending |
-| CONS-05 | TBD | Pending |
-| RUN-01 | TBD | Pending |
-| RUN-02 | TBD | Pending |
-| RUN-03 | TBD | Pending |
-| RUN-04 | TBD | Pending |
-| RUN-05 | TBD | Pending |
-| RES-01 | TBD | Pending |
-| RES-02 | TBD | Pending |
-| RES-03 | TBD | Pending |
-| RES-04 | TBD | Pending |
-| RES-05 | TBD | Pending |
-| RES-06 | TBD | Pending |
+| SHELL-01 | Phase 1 | Pending |
+| SHELL-02 | Phase 1 | Pending |
+| SHELL-03 | Phase 1 | Pending |
+| SHELL-04 | Phase 1 | Pending |
+| BE-01 | Phase 1 | Pending |
+| SCEN-01 | Phase 1 | Pending |
+| SCEN-02 | Phase 1 | Pending |
+| SCEN-03 | Phase 2 | Pending |
+| CONS-01 | Phase 2 | Pending |
+| CONS-02 | Phase 2 | Pending |
+| CONS-03 | Phase 2 | Pending |
+| CONS-04 | Phase 2 | Pending |
+| CONS-05 | Phase 2 | Pending |
+| RUN-01 | Phase 3 | Pending |
+| RUN-02 | Phase 3 | Pending |
+| RUN-03 | Phase 3 | Pending |
+| RUN-04 | Phase 3 | Pending |
+| RUN-05 | Phase 3 | Pending |
+| RES-01 | Phase 4 | Pending |
+| RES-02 | Phase 4 | Pending |
+| RES-03 | Phase 4 | Pending |
+| RES-04 | Phase 4 | Pending |
+| RES-05 | Phase 4 | Pending |
+| RES-06 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 24 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 24 ⚠️ (expected until roadmap creation)
+- Mapped to phases: 24 ✓
+- Unmapped: 0
+- Duplicates: 0
+
+**By phase:**
+
+| Phase | Requirements | Count |
+|-------|--------------|-------|
+| Phase 1 — Browser-Callable API + App Shell + Scenario List | BE-01, SHELL-01, SHELL-02, SHELL-03, SHELL-04, SCEN-01, SCEN-02 | 7 |
+| Phase 2 — Scenario Detail + Plain-English Constraints | SCEN-03, CONS-01, CONS-02, CONS-03, CONS-04, CONS-05 | 6 |
+| Phase 3 — Run Execution & History | RUN-01, RUN-02, RUN-03, RUN-04, RUN-05 | 5 |
+| Phase 4 — Results & Insights | RES-01, RES-02, RES-03, RES-04, RES-05, RES-06 | 6 |
 
 ---
 *Requirements defined: 2026-07-15*
-*Last updated: 2026-07-15 after v0.4 milestone scoping*
+*Last updated: 2026-07-15 — traceability populated at v0.4 roadmap creation (Phases 1-4; numbering restarts per milestone)*
+</content>
