@@ -3,15 +3,16 @@ gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Frontend
 current_phase: 1
-status: roadmapped
-stopped_at: Phase 1 UI-SPEC approved (6/6 dimensions, 2 FLAGs closed, 29 UI considerations resolved)
-last_updated: "2026-07-16T04:12:40.762Z"
-last_activity: 2026-07-15
-last_activity_desc: v0.4 roadmap created, 24/24 requirements mapped across Phases 1-4
+current_phase_name: Browser-Callable API + App Shell + Scenario List
+status: executing
+stopped_at: Phase 1 planned — 7 plans in 5 waves, plan-checker VERIFICATION PASSED
+last_updated: "2026-07-16T05:32:59.201Z"
+last_activity: 2026-07-16
+last_activity_desc: Phase 1 planning complete (7 plans, 5 waves)
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
+  total_plans: 7
   completed_plans: 0
   percent: 0
 ---
@@ -23,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** v0.4 Frontend (React UI) — roadmap created (Phases 1-4), ready to plan Phase 1
+**Current focus:** v0.4 Frontend (React UI) — Phase 1 planned (7 plans, 5 waves), ready to execute
 
 ## Current Position
 
-Phase: 1 — Browser-Callable API + App Shell + Scenario List (not started)
+Phase: 1 — Browser-Callable API + App Shell + Scenario List
 Plan: —
-Status: Roadmapped — awaiting `/gsd-plan-phase 1`
-Last activity: 2026-07-15 — v0.4 roadmap created, 24/24 requirements mapped across Phases 1-4
+Status: Ready to execute
+Last activity: 2026-07-16 — Phase 1 planning complete (7 plans, 5 waves)
 
 ## Performance Metrics
 
@@ -140,13 +141,14 @@ Items acknowledged and deferred at milestone close on 2026-07-15:
 
 ## Session Continuity
 
-Last session: 2026-07-16T04:12:40.750Z
-Stopped at: Phase 1 UI-SPEC approved (6/6 dimensions, 2 FLAGs closed, 29 UI considerations resolved)
-Resume file: .planning/phases/01-browser-callable-api-app-shell-scenario-list/01-UI-SPEC.md
+Last session: 2026-07-16T05:32:59.185Z
+Stopped at: Phase 1 planned — 7 plans in 5 waves, plan-checker VERIFICATION PASSED
+Resume file: .planning/phases/01-browser-callable-api-app-shell-scenario-list/01-01-PLAN.md
 
 ## Operator Next Steps
 
-- Plan the first v0.4 phase with `/gsd-plan-phase 1`
-- Phases 1-4 are all UI-bearing (`UI hint: yes` in ROADMAP.md) — `/gsd-ui-phase` is available for a design contract before planning
+- Execute the planned phase with `/gsd-execute-phase 1` — 7 plans across 5 waves
+- `01-02-PLAN.md` is a **blocking human checkpoint** (npm package legitimacy gate) and runs in Wave 1 — execution pauses there for your approval before any package is installed
+- Phases 2-4 are all UI-bearing (`UI hint: yes` in ROADMAP.md) — `/gsd-ui-phase` is available for a design contract before planning each
 
 </content>
