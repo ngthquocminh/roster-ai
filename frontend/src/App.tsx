@@ -1,122 +1,58 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { createBrowserRouter, Outlet, type RouteObject } from "react-router";
 
-function App() {
-  const [count, setCount] = useState(0)
+import { AppBar } from "@/components/layout/AppBar";
+import { EditorPlaceholder } from "@/routes/EditorPlaceholder";
+import { Home } from "@/routes/Home";
+import { ResultsPlaceholder } from "@/routes/ResultsPlaceholder";
+import { RunsPlaceholder } from "@/routes/RunsPlaceholder";
+import { ScenarioLayout } from "@/routes/ScenarioLayout";
 
+/**
+ * Persistent global app bar (UI-SPEC tier 1 nav) + an `Outlet` for whichever
+ * top-level view is active. Mounted as the root route's component.
+ */
+function RootLayout() {
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    <div className="min-h-screen bg-background">
+      <AppBar />
+      <Outlet />
+    </div>
+  );
 }
 
-export default App
+/**
+ * SHELL-03's four-route shell, exactly per UI-SPEC's Application Structure
+ * route table: `/`, `/scenarios/:scenarioId`, `/scenarios/:scenarioId/runs`,
+ * `/scenarios/:scenarioId/runs/:runId`. Editor sits at ScenarioLayout's
+ * *index* route, not a `/editor` segment UI-SPEC never specified.
+ *
+ * Exported as a plain route-config array (rather than only the constructed
+ * browser router) so `router.test.tsx` can build a `createMemoryRouter`
+ * against the exact same route tree the app ships — deep-link tests then
+ * prove real route ranking instead of a hand-duplicated test-only config
+ * that could silently drift from what actually ships.
+ *
+ * NOTE: the root route's `errorElement` (crash backstop + unmatched-URL
+ * catch, SHELL-04) is wired in plan 01-05's Task 2 once RootErrorBoundary
+ * exists — not yet present in this Task 1 commit.
+ */
+export const routes: RouteObject[] = [
+  {
+    path: "/",
+    Component: RootLayout,
+    children: [
+      { index: true, Component: Home },
+      {
+        path: "scenarios/:scenarioId",
+        Component: ScenarioLayout,
+        children: [
+          { index: true, Component: EditorPlaceholder },
+          { path: "runs", Component: RunsPlaceholder },
+          { path: "runs/:runId", Component: ResultsPlaceholder },
+        ],
+      },
+    ],
+  },
+];
+
+export const router = createBrowserRouter(routes);
