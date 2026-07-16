@@ -18,5 +18,13 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // `src/lib/env.ts` throws loudly at import time if VITE_API_BASE_URL is
+    // unset (deliberately — see that file). Tests must not depend on a
+    // developer's local, gitignored `.env`; this is a fixed test-only value,
+    // never read by `npm run dev`/`build` (those load real `.env` files via
+    // Vite's own mechanism, unaffected by this `test`-scoped block).
+    env: {
+      VITE_API_BASE_URL: 'http://127.0.0.1:8000',
+    },
   },
 })

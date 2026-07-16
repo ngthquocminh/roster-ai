@@ -9,8 +9,8 @@
  * `navigate` spy) so the assertion proves an actual route transition
  * happened, matching this phase's `router.test.tsx` convention.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider, useParams } from "react-router";
 
 import { ScenarioTable } from "./ScenarioTable";
@@ -36,6 +36,15 @@ function renderTable() {
     { initialEntries: ["/"] },
   );
   return render(<RouterProvider router={router} />);
+}
+
+/** Data rows only — excludes the header row (`getAllByRole("row")` includes it). */
+function getBodyRows() {
+  const table = screen.getByRole("table");
+  return within(table).getAllByRole("rowgroup").flatMap((group) => {
+    if (group.tagName.toLowerCase() !== "tbody") return [];
+    return within(group).getAllByRole("row");
+  });
 }
 
 function queryResult(overrides: Record<string, unknown>) {
@@ -125,7 +134,7 @@ describe("ScenarioTable: populated [UI-SPEC E1/populated]", () => {
     expect(fixtureCell.className).toMatch(/font-mono/);
     expect(screen.getByText("2026-07-10T09:00:00Z")).toBeInTheDocument();
 
-    const rows = screen.getAllByRole("row");
+    const rows = getBodyRows();
     expect(rows.map((row) => row.textContent)).toEqual([
       expect.stringContaining("Week 1"),
       expect.stringContaining("Week 2"),
@@ -198,7 +207,7 @@ describe("ScenarioTable: ordering [edge: SCEN-01/ordering]", () => {
     mockUseScenarios.mockReturnValue(queryResult({ data: rows }));
     renderTable();
 
-    const renderedRows = screen.getAllByRole("row");
+    const renderedRows = getBodyRows();
     expect(renderedRows.map((row) => row.textContent)).toEqual([
       expect.stringContaining("third"),
       expect.stringContaining("first"),
@@ -224,7 +233,7 @@ describe("ScenarioTable: zero-one-many [UI-SPEC E1/zero-one-many]", () => {
     );
     const { container } = renderTable();
 
-    expect(screen.getAllByRole("row")).toHaveLength(1);
+    expect(getBodyRows()).toHaveLength(1);
     expect(container.textContent).not.toMatch(/\b1 scenario\b/i);
     expect(container.textContent).not.toMatch(/\bscenarios? \(/i);
   });
