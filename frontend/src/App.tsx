@@ -1,6 +1,7 @@
 import { createBrowserRouter, Outlet, type RouteObject } from "react-router";
 
 import { AppBar } from "@/components/layout/AppBar";
+import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 import { EditorPlaceholder } from "@/routes/EditorPlaceholder";
 import { Home } from "@/routes/Home";
 import { ResultsPlaceholder } from "@/routes/ResultsPlaceholder";
@@ -32,14 +33,17 @@ function RootLayout() {
  * prove real route ranking instead of a hand-duplicated test-only config
  * that could silently drift from what actually ships.
  *
- * NOTE: the root route's `errorElement` (crash backstop + unmatched-URL
- * catch, SHELL-04) is wired in plan 01-05's Task 2 once RootErrorBoundary
- * exists — not yet present in this Task 1 commit.
+ * The root route's crash-backstop wiring below covers two distinct failures
+ * at once: a render exception anywhere below the root, and an unmatched URL
+ * (react-router surfaces a no-match as a route error) — without it, an
+ * unknown path renders react-router's own default error page, a
+ * developer-facing artifact that violates SHELL-04.
  */
 export const routes: RouteObject[] = [
   {
     path: "/",
     Component: RootLayout,
+    errorElement: <RootErrorBoundary />,
     children: [
       { index: true, Component: Home },
       {

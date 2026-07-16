@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { routes } from "@/App";
+import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 
 /**
  * SHELL-03 coverage: proves the four-route shell deep-links correctly and
@@ -132,5 +133,57 @@ describe("router: four-route shell (SHELL-03)", () => {
     expect(
       screen.getByText("This view ships in a later phase of the v0.4 milestone."),
     ).toBeInTheDocument();
+  });
+});
+
+/**
+ * SHELL-04 coverage: the crash backstop. One `errorElement` wiring on the
+ * root route covers both an unmatched URL and a render exception anywhere
+ * below the root — react-router surfaces a no-match as a route error, so
+ * both land on RootErrorBoundary rather than a blank screen.
+ */
+describe("router: crash backstop (SHELL-04)", () => {
+  it("renders RootErrorBoundary's heading, body, and Reload button on an undeclared path [edge: SHELL-03/boundary]", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    renderAt("/nope");
+
+    expect(
+      screen.getByRole("heading", { name: "Something went wrong." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Reload the page. If this keeps happening, check the browser console.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+
+    vi.restoreAllMocks();
+  });
+
+  it("renders RootErrorBoundary, not a white screen, when a child route component throws during render", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    function Throws(): never {
+      throw new Error("boom — simulated render crash");
+    }
+
+    const throwRouter = createMemoryRouter(
+      [
+        {
+          path: "/",
+          Component: Throws,
+          errorElement: <RootErrorBoundary />,
+        },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={throwRouter} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Something went wrong." }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/boom — simulated render crash/)).not.toBeInTheDocument();
+
+    vi.restoreAllMocks();
   });
 });
