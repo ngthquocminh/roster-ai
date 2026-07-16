@@ -132,7 +132,10 @@ export function CreateScenarioDialog({
             New Scenario
           </DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {/* min-w-0 lets the grid/flex children shrink below their content's
+            intrinsic width, so a long fixture name is clamped by the Select
+            trigger instead of widening the whole dialog (UAT gap, test 4). */}
+        <form onSubmit={handleSubmit} className="flex min-w-0 flex-col gap-4">
           <div
             className="flex flex-col gap-1.5"
             data-testid="scenario-name-field"
@@ -155,7 +158,7 @@ export function CreateScenarioDialog({
             )}
           </div>
           <div
-            className="flex flex-col gap-1.5"
+            className="flex min-w-0 flex-col gap-1.5"
             data-testid="scenario-fixture-field"
           >
             <label
@@ -169,7 +172,7 @@ export function CreateScenarioDialog({
               onValueChange={setFixture}
               disabled={fixturesUnusable || isSubmitting}
             >
-              <SelectTrigger id="scenario-fixture" className="w-full">
+              <SelectTrigger id="scenario-fixture" className="w-full min-w-0">
                 <SelectValue
                   placeholder={fixtureSelectPlaceholder(
                     fixturesLoading,
@@ -180,7 +183,7 @@ export function CreateScenarioDialog({
               <SelectContent>
                 {fixtures.map((fixtureName) => (
                   <SelectItem key={fixtureName} value={fixtureName}>
-                    {fixtureName}
+                    <span className="truncate">{fixtureName}</span>
                   </SelectItem>
                 ))}
               </SelectContent>

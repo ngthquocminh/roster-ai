@@ -92,12 +92,15 @@ export function ScenarioTable({
 
   return (
     <div className="max-h-[420px] overflow-y-auto rounded-md border border-border">
-      <Table>
+      {/* table-fixed keeps an over-long name (or fixture) inside its column and
+          truncates it, rather than widening the table and forcing the whole
+          grid into horizontal scroll (UAT gap, 01-UAT.md test 3). */}
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead>Name</TableHead>
-            <TableHead>Fixture</TableHead>
-            <TableHead>Created</TableHead>
+            <TableHead className="w-[30%]">Fixture</TableHead>
+            <TableHead className="w-[180px]">Created</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -114,9 +117,15 @@ export function ScenarioTable({
                 }
               }}
             >
-              <TableCell>{scenario.name}</TableCell>
-              <TableCell className="font-mono">{scenario.fixture}</TableCell>
-              <TableCell>{scenario.created_at}</TableCell>
+              <TableCell className="truncate" title={scenario.name}>
+                {scenario.name}
+              </TableCell>
+              <TableCell className="truncate font-mono" title={scenario.fixture}>
+                {scenario.fixture}
+              </TableCell>
+              <TableCell className="whitespace-nowrap">
+                {scenario.created_at}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
