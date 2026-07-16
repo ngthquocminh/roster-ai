@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { routes } from "@/App";
@@ -13,10 +14,25 @@ import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
  * Builds a `createMemoryRouter` from the exact same `routes` config `App.tsx`
  * ships (not a hand-duplicated test-only tree) — so a route-ranking bug in
  * production would fail here too, not just in a copy.
+ *
+ * Wrapped in a fresh `QueryClientProvider` per render (plan 01-06 added):
+ * `Home` now mounts `ScenarioTable`, which calls `useScenarios()`. In the
+ * real app `main.tsx` provides this above the router; this test builds its
+ * own router directly, so it needs the same provider or `useQuery` throws.
+ * A real (unmocked) `listScenarios()` call is expected to reject in jsdom
+ * (no backend, no `fetch`) — these tests never assert on the resulting
+ * error/loading UI, only on nav/shell chrome that renders regardless.
  */
 function renderAt(path: string) {
   const memoryRouter = createMemoryRouter(routes, { initialEntries: [path] });
-  return render(<RouterProvider router={memoryRouter} />);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={memoryRouter} />
+    </QueryClientProvider>,
+  );
 }
 
 describe("router: four-route shell (SHELL-03)", () => {
