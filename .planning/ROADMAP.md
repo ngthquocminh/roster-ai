@@ -48,7 +48,17 @@ Full detail: `.planning/milestones/v0.3-ROADMAP.md`
   - BE-01 is the milestone's only backend change and a hard gate: no browser origin can call the API without it. It lands here, first, not late.
   - SHELL-03 is the routing/nav capability; each later phase mounts its view into the shell established here. Criterion 3 is what is verifiable at this phase — the full four-view surface completes as Phases 2-4 land.
   - The typed client (SHELL-02) mirrors `docs/API.md`, which is the accurate contract as of commit 93ca4e0. Notably `POST /constraints` is top-level with `scenario_id` in the body, and `/runs/{id}/insights` is not shaped like `/runs/{id}/result`.
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — BE-01: configurable CORS origins on the FastAPI app (Wave 1)
+- [ ] 01-02-PLAN.md — Blocking human legitimacy gate for the 10 [SUS]-flagged npm packages (Wave 1)
+- [ ] 01-03-PLAN.md — SHELL-01: Vite + React + TS scaffold, shadcn/Tailwind v4, Vitest harness (Wave 2)
+- [ ] 01-04-PLAN.md — SHELL-02: typed client generated from the backend's OpenAPI schema (Wave 3)
+- [ ] 01-05-PLAN.md — SHELL-03/04: four-route shell with persistent nav, honest placeholders, error surfaces (Wave 3)
+- [ ] 01-06-PLAN.md — SCEN-01: scenario list on Home across all five states (Wave 4)
+- [ ] 01-07-PLAN.md — SCEN-02: create a scenario from a backend-offered fixture (Wave 5)
+
 **UI hint**: yes
 
 ### Phase 2: Scenario Detail + Plain-English Constraints
@@ -109,7 +119,7 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|-----------------|--------|-----------|
-| 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 0/TBD | Not started | - |
+| 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 0/7 | Planned | - |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 0/TBD | Not started | - |
 | 3. Run Execution & History | v0.4 | 0/TBD | Not started | - |
 | 4. Results & Insights | v0.4 | 0/TBD | Not started | - |
