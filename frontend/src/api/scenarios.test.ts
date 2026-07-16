@@ -95,7 +95,9 @@ describe("createScenario", () => {
 
     const result = await createScenario(body);
 
-    expect(mockPOST).toHaveBeenCalledWith("/scenarios", { body });
+    // time_limit_s defaults to 60 (docs/API.md) when the caller omits it —
+    // SCEN-02's UI never collects it.
+    expect(mockPOST).toHaveBeenCalledWith("/scenarios", { body: { time_limit_s: 60, ...body } });
     expect(result).toEqual(created);
   });
 

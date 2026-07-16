@@ -10,6 +10,18 @@
  * 01-07), not here.
  */
 import { client } from "./client";
+import type { paths } from "./schema";
+
+// Derived (not hand-authored) via indexed access into the generated `paths`
+// type — see 01-04-PLAN.md: "Deriving a parameter type from the generated
+// types (e.g. via an indexed access into paths) is fine and encouraged;
+// declaring the field list by hand is not." `time_limit_s` is made optional
+// here because openapi-typescript types every property carrying a JSON
+// Schema `default` as non-optional (a codegen-tool artifact, not an API
+// contract fact) — the real `ScenarioCreate` schema's own `required` array
+// omits it, matching docs/API.md's documented `time_limit_s` default of 60,
+// and SCEN-02's UI never collects it.
+type CreateScenarioBody = paths["/scenarios"]["post"]["requestBody"]["content"]["application/json"];
 
 export async function listScenarios() {
   const { data, error } = await client.GET("/scenarios");
@@ -23,8 +35,12 @@ export async function listFixtures() {
   return data;
 }
 
-export async function createScenario(body: { name: string; fixture: string }) {
-  const { data, error, response } = await client.POST("/scenarios", { body });
+export async function createScenario(
+  body: Omit<CreateScenarioBody, "time_limit_s"> & Partial<Pick<CreateScenarioBody, "time_limit_s">>,
+) {
+  const { data, error, response } = await client.POST("/scenarios", {
+    body: { time_limit_s: 60, ...body },
+  });
   if (error) {
     // T-1-02: attach the HTTP status so callers can *branch* (400 unknown
     // fixture vs 422 validation — UI-SPEC gives these two distinct inline
