@@ -1,10 +1,12 @@
 ---
 phase: 01-browser-callable-api-app-shell-scenario-list
 verified: 2026-07-16T22:35:00Z
-status: human_needed
+status: passed
+human_verification_resolved: 2026-07-16T15:45:00Z
 score: 15/15 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+human_verification_outcome: "All 5 human-verification items PASS (see 01-UAT.md). Items 1/2/5 confirmed by the user in a real browser; items 3/4 (long-name / long-fixture visual backstops) initially FAILED — a long scenario name forced horizontal table scroll and a long fixture name overflowed the create dialog — were fixed (ScenarioTable.tsx table-fixed+truncate; CreateScenarioDialog.tsx min-w-0+truncate) and re-verified in a real browser during the same UAT session."
 human_verification:
   - test: "Real-browser DevTools CORS round trip: open the app at http://localhost:5173 with the backend running at http://127.0.0.1:8000, load Home, and confirm (a) no CORS error appears in the console and (b) the Network tab shows a genuine cross-origin request to the backend succeeding."
     expected: "Scenario list loads with no console CORS error; Network tab shows the cross-origin GET /scenarios request completing with access-control-allow-origin present."
@@ -27,7 +29,7 @@ human_verification:
 
 **Phase Goal:** A user can open ShiftMind in a browser and see and create scenarios against the live backend.
 **Verified:** 2026-07-16T22:35:00Z
-**Status:** human_needed
+**Status:** passed (all 5 human-verification items resolved via UAT — see 01-UAT.md; 2 visual gaps fixed and re-verified in-browser)
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
