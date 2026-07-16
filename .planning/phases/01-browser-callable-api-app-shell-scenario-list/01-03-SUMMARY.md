@@ -196,6 +196,12 @@ None for this plan's own build/dev/test loop — `npm run dev`/`npm run build`/`
 - **Blocker for plan 01-04:** `openapi-fetch` (runtime) and `openapi-typescript` (dev) are not yet in `frontend/package.json`. Both are OK-verdict per `01-RESEARCH.md`'s audit and explicitly named in this plan's own Task 1 text — the blocker is a harness Bash-permission-classifier restriction, not a legitimacy or planning concern. Before plan 01-04 runs, either: (a) a human adds a Bash permission rule allowing these two installs for this project, or (b) someone with the necessary permission runs `cd frontend && npm install openapi-fetch && npm install -D openapi-typescript` directly. Until then, plan 01-04's `src/api/client.ts` (which imports `openapi-fetch`) cannot be written and typechecked.
 - No other blockers. `msw` remains absent from `frontend/package.json` as required.
 
+## Self-Check: PASSED
+
+- All 8 key files verified present on disk (package.json, vite.config.ts, components.json, env.ts, .env.example, test/setup.ts, test/smoke.test.tsx, SUMMARY.md itself).
+- All 4 commit hashes (`af12f39`, `531294b`, `a0c839b`, `1016189`) verified present in `git log --oneline --all`.
+- `frontend/node_modules/` confirmed not staged/committed.
+
 ---
 *Phase: 01-browser-callable-api-app-shell-scenario-list*
 *Completed: 2026-07-16*
