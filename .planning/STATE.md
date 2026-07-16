@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Frontend
-current_phase: 01
-current_phase_name: browser-callable-api-app-shell-scenario-list
-status: executing
+current_phase: 2
+current_phase_name: Scenario Detail + Plain-English Constraints
+status: planning
 stopped_at: Phase 1 planned — 7 plans in 5 waves, plan-checker VERIFICATION PASSED
-last_updated: "2026-07-16T05:54:13.992Z"
+last_updated: "2026-07-16T16:15:24.954Z"
 last_activity: 2026-07-16
-last_activity_desc: Phase 01 execution started
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 0
-  percent: 0
+  completed_plans: 7
+  percent: 25
 ---
 
 # Project State
@@ -28,16 +28,16 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: 01 (browser-callable-api-app-shell-scenario-list) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 01
-Last activity: 2026-07-16 — Phase 01 execution started
+Phase: 2 — Scenario Detail + Plain-English Constraints
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-07-16 — Phase 01 complete, transitioned to Phase 2
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 12
+- Total plans completed: 16
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -45,7 +45,7 @@ Last activity: 2026-07-16 — Phase 01 execution started
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 3 | - | - |
+| 01 | 7 | - | - |
 | 02 | 4 | - | - |
 | 03 | 2 | - | - |
 | 04 | 3 | - | - |

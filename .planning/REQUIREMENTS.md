@@ -9,10 +9,10 @@ Requirements for milestone v0.4. Each maps to exactly one roadmap phase.
 
 ### App Shell & API Client
 
-- [ ] **SHELL-01**: A Vite + React + TypeScript app lives under `frontend/`, runs against a local backend in dev, and builds to static assets
-- [ ] **SHELL-02**: A typed API client wraps every endpoint the UI uses; request/response types mirror the contracts in `docs/API.md`
-- [ ] **SHELL-03**: User can navigate between the four views (Home, ScenarioEditor, RunHistory, ResultsView)
-- [ ] **SHELL-04**: Network and API failures surface as a readable message; the UI never shows a silent blank state on error
+- [x] **SHELL-01**: A Vite + React + TypeScript app lives under `frontend/`, runs against a local backend in dev, and builds to static assets
+- [x] **SHELL-02**: A typed API client wraps every endpoint the UI uses; request/response types mirror the contracts in `docs/API.md`
+- [x] **SHELL-03**: User can navigate between the four views (Home, ScenarioEditor, RunHistory, ResultsView)
+- [x] **SHELL-04**: Network and API failures surface as a readable message; the UI never shows a silent blank state on error
 
 ### Backend Enablement
 
@@ -20,8 +20,8 @@ Requirements for milestone v0.4. Each maps to exactly one roadmap phase.
 
 ### Scenario Management
 
-- [ ] **SCEN-01**: User can see a list of existing scenarios
-- [ ] **SCEN-02**: User can create a scenario by picking from the fixtures the backend offers (`GET /fixtures`) — no file upload in v0.4
+- [x] **SCEN-01**: User can see a list of existing scenarios
+- [x] **SCEN-02**: User can create a scenario by picking from the fixtures the backend offers (`GET /fixtures`) — no file upload in v0.4
 - [ ] **SCEN-03**: User can open a scenario and see its details, including the overrides currently applied to it
 
 ### Constraint Editing
@@ -92,13 +92,13 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SHELL-01 | Phase 1 | Pending |
-| SHELL-02 | Phase 1 | Pending |
-| SHELL-03 | Phase 1 | Pending |
-| SHELL-04 | Phase 1 | Pending |
+| SHELL-01 | Phase 1 | Complete |
+| SHELL-02 | Phase 1 | Complete |
+| SHELL-03 | Phase 1 | Complete |
+| SHELL-04 | Phase 1 | Complete |
 | BE-01 | Phase 1 | Complete |
-| SCEN-01 | Phase 1 | Pending |
-| SCEN-02 | Phase 1 | Pending |
+| SCEN-01 | Phase 1 | Complete |
+| SCEN-02 | Phase 1 | Complete |
 | SCEN-03 | Phase 2 | Pending |
 | CONS-01 | Phase 2 | Pending |
 | CONS-02 | Phase 2 | Pending |
