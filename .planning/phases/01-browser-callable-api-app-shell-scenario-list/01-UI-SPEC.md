@@ -55,6 +55,8 @@ Not in the base template, added because SHELL-03/04 require a concrete route map
 
 Clicking a row in the Home scenario list navigates to `/scenarios/:scenarioId` (the Editor tab, placeholder in this phase). This is how criterion 3 ("move between routes through persistent nav, deep-link by URL") is satisfied end-to-end without inventing four flat global links that don't make sense before a scenario is selected.
 
+**Visual hierarchy — Home (populated state):** the **scenario list table is the primary focal point**; the eye should land there first. The "New Scenario" button is a secondary action anchored top-right in the page header — it carries the lone accent (indigo-600) for affordance, not for dominance. Rationale: on every visit after the first, the user's intent is *resume an existing scenario*, not *create another one*; the table is the content and the button is the escape hatch. This inverts only in the empty state, where no table exists and the repeated inline "New Scenario" button becomes the sole focal point by default.
+
 ---
 
 ## Spacing Scale
@@ -110,7 +112,7 @@ Destructive is declared for design-system consistency across the milestone but *
 | Element | Copy |
 |---------|------|
 | Primary CTA | "New Scenario" (button, top-right of the Home page header; opens the create modal) |
-| Modal submit CTA | "Create" (disabled + spinner while the `POST /scenarios` request is in flight) |
+| Modal submit CTA | "Create Scenario" (disabled + spinner while the `POST /scenarios` request is in flight) — noun retained so the button reads unambiguously out of context |
 | Empty state heading | "No scenarios yet" |
 | Empty state body | "Create one from a fixture to get started." — with the same "New Scenario" button repeated inline as the sole action |
 | Error state — backend unreachable | "Can't reach the ShiftMind API. Make sure the backend is running (`uv run uvicorn api.main:app --reload` in `backend/`) and reload." — rendered as a persistent inline banner, not a toast (see UI Considerations) |
@@ -124,32 +126,55 @@ Destructive is declared for design-system consistency across the milestone but *
 
 ## UI Considerations
 
-> Populated by the ui-phase UI-consideration probe (Step 9.5). Shape-rooted UI *state* coverage (empty / loading / error / populated / partial / overflow / zero-one-many / long-text). Empty-state and error-state COPY live in `## Copywriting Contract` above — this section covers state coverage and references those rows.
+> Populated by the ui-phase UI-consideration probe (Step 9.5), run **after** checker approval against the compiled `ui-consideration-probe` engine. Shape-rooted UI *state* coverage only (empty / loading / error / populated / partial / overflow / zero-one-many / long-text). Empty-state and error-state **copy** lives in `## Copywriting Contract` above — this section covers state *coverage* and references those rows rather than restating them.
 
-Applicable state considerations resolved: 9 covered, 2 backstop, 0 unresolved.
+**Element kinds are authored, not inferred.** The engine's prose classifier over-tagged three surfaces (E3, E5, E7 each raised all 8 categories — including `zero-one-many` on a static placeholder). Kinds were corrected via an authored `elements` override at the propose-then-confirm step: E1 `list-collection`, E2 `form`, E3 `form`+`interactive-control`, E4/E5 `nav`, E6/E7 `static-content`. Applicable considerations fell 43 → 29; all 29 are resolved below.
 
-| Category | Element(s) | Status | Resolution / Reason |
-|----------|------------|--------|---------------------|
-| empty | Scenario list (0 scenarios) | ✅ covered | Renders the "No scenarios yet" empty state (see Copywriting Contract) with the same "New Scenario" CTA — no blank div, ever. |
-| loading | Scenario list initial fetch | ✅ covered | Centered spinner + "Loading scenarios…" text while `GET /scenarios` is in flight. No skeleton rows — avoids flashing fake content before real data exists. |
-| loading | Create-scenario submit | ✅ covered | "Create" button shows a spinner and is disabled for the duration of `POST /scenarios`; the Select and name input are also disabled to prevent a second submit. |
-| error | Backend unreachable (network error on any fetch) | ✅ covered | Persistent inline banner at the top of the page content (see Copywriting Contract) — not a toast, because the condition persists until the backend starts and must stay visible, not auto-dismiss. |
-| error | `POST /scenarios` → `400` unknown fixture | ✅ covered | Inline error under the fixture Select inside the still-open modal — user's in-progress input (name) is not lost. |
-| error | `POST /scenarios` → `422` empty name | ✅ covered | Client-side check blocks submit before the request fires; inline error under the name field. |
-| error | Render-time exception anywhere in the tree | ✅ covered | A top-level React error boundary renders the crash-backstop full-page message — last resort, not the primary error path. |
-| zero-one-many | Fixture picker options from `GET /fixtures` | ✅ covered | Zero fixtures: Select renders disabled with placeholder "No fixtures available" and the Create button is disabled. One or many: normal Select behavior, no special-casing. |
-| zero-one-many | Scenario list row count | ✅ covered | 1 row renders identically to the populated-many case; no pagination in v0.4 — list scrolls within a fixed-height container past roughly 10 rows (portfolio-scale data, not a shipped multi-tenant product). |
-| long-text | Scenario name, fixture filename in the table | 🧪 backstop | Both truncate with ellipsis + a native `title` tooltip on hover; fixture filename renders in a monospace font to read as a file identifier. Name has no server-side max length (`ScenarioCreate.name` is just non-empty), so this is a held-out visual check at execution, not a hard-coded truncation width verified here. |
-| overflow | Create-scenario modal on a very long fixture list | 🧪 backstop | Select's own internal scroll (Radix `Select` default) is assumed sufficient; not verified against an actual long fixture list in this spec — held out as a backstop for execution/QA. |
+**Resolution: 18 covered · 3 backstop · 8 dismissed · 0 unresolved.**
+
+| # | Element | Category | Status | Resolution / Reason |
+|---|---------|----------|--------|---------------------|
+| E1 | Scenario list table | empty | ✅ covered | Renders the "No scenarios yet" empty state (see Copywriting Contract) with the "New Scenario" CTA repeated inline as sole action. Never a blank div. |
+| E1 | Scenario list table | loading | ✅ covered | Centered spinner + "Loading scenarios…" while `GET /scenarios` is in flight. No skeleton rows — avoids flashing fake content before real data exists. |
+| E1 | Scenario list table | error | ✅ covered | Fetch failure renders the persistent inline backend-unreachable banner (Copywriting Contract); the table area shows no partial or stale rows. |
+| E1 | Scenario list table | populated | ✅ covered | Rows newest-first per `GET /scenarios` ordering: name, fixture filename (monospace), created timestamp. Row click navigates to `/scenarios/:scenarioId`. |
+| E1 | Scenario list table | partial | ⛔ dismissed | Every `ScenarioOut` field (`id`, `name`, `fixture`, `created_at`) is non-null by schema, so a half-populated row cannot occur. A fixture deleted from `data/` after creation still leaves the row fully renderable — that staleness surfaces at run time, not list time. |
+| E1 | Scenario list table | overflow | ✅ covered | List scrolls inside a fixed-height container past roughly 10 rows. No pagination in v0.4 — portfolio-scale data, not a multi-tenant product. |
+| E1 | Scenario list table | zero-one-many | ✅ covered | One row renders identically to many; there is no count label and no singular/plural copy that could disagree with itself. Zero is the empty state above. |
+| E2 | Create-scenario modal form | empty | ✅ covered | The unfilled form IS the default modal state: empty name, no fixture selected, "Create Scenario" disabled. |
+| E2 | Create-scenario modal form | loading | ✅ covered | "Create Scenario" shows a spinner and disables for the duration of `POST /scenarios`; the name input and fixture Select also disable, preventing a double submit. |
+| E2 | Create-scenario modal form | error | ✅ covered | `400` unknown fixture → inline under the Select; `422` / empty name → inline under the name field. Modal stays open and in-progress input is preserved (Copywriting Contract). |
+| E2 | Create-scenario modal form | partial | ✅ covered | Partially-filled is the normal intermediate state: "Create Scenario" stays disabled until the name is non-empty AND a fixture is selected. No submit-then-reject round trip for a condition knowable client-side. |
+| E2 | Create-scenario modal form | long-text | 🧪 backstop | A very long scenario name in the input. `ScenarioCreate.name` has no server-side max length (only non-empty), so no truncation width can be asserted here. Held out as a visual check at execution. |
+| E3 | Fixture picker Select | empty | ✅ covered | Zero fixtures → Select renders disabled with placeholder "No fixtures available"; "Create Scenario" stays disabled. The user is told why they cannot proceed rather than facing an inert control. |
+| E3 | Fixture picker Select | loading | ✅ covered | Select renders disabled with a "Loading fixtures…" placeholder while `GET /fixtures` is in flight. |
+| E3 | Fixture picker Select | error | ✅ covered | A failed `GET /fixtures` surfaces the same backend-unreachable banner; the Select stays disabled rather than presenting an empty-looking but apparently-ready dropdown. |
+| E3 | Fixture picker Select | partial | ⛔ dismissed | A fixture option is a single filename string returned by `GET /fixtures`; there is no partially-populated option state. |
+| E3 | Fixture picker Select | long-text | 🧪 backstop | A long fixture filename inside the Select trigger and option list. Radix `Select` truncation is assumed adequate but is not verified against a real long filename at spec time. |
+| E4 | Global app bar | loading | ⛔ dismissed | Static chrome with no data dependency — renders immediately on mount. Nothing to load. |
+| E4 | Global app bar | error | ⛔ dismissed | No data dependency, so it cannot fail independently. Errors surface in the content area below; the bar deliberately persists so the user always has a route Home. |
+| E4 | Global app bar | overflow | ✅ covered | Wordmark plus one link at desktop widths only (D-06 — responsive polish out of scope). Cannot overflow its container. |
+| E4 | Global app bar | long-text | ⛔ dismissed | Content is fixed literals ("ShiftMind", "Home") — no dynamic text can lengthen it. |
+| E5 | Scenario tab nav | loading | ⛔ dismissed | Tabs are static chrome and render immediately; each tab's *body* owns its own loading state in Phases 2-4. |
+| E5 | Scenario tab nav | error | 🧪 backstop | **Deep-link to a nonexistent `:scenarioId`.** Criterion 3 makes every route deep-linkable, so `/scenarios/bogus-id` is reachable. In Phase 1 all three tab bodies are placeholders that fetch nothing, so a bad id renders the placeholder *as if the scenario were valid* — no 404, no error. This is a real gap created by the phase's own success criteria. It cannot resolve as `covered` here because SCEN-03 (fetch scenario detail) is **Phase 2**, so Phase 1 has no scenario fetch to hang a 404 on. Held out: Phase 2 must render "Scenario not found" with a route Home when `GET /scenarios/{id}` returns 404. |
+| E5 | Scenario tab nav | overflow | ✅ covered | Exactly three fixed tabs at desktop widths; cannot overflow. |
+| E5 | Scenario tab nav | long-text | ⛔ dismissed | Tab labels are fixed literals ("Editor", "Runs", "Results"). |
+| E6 | Backend-unreachable banner | overflow | ✅ covered | Banner wraps to multiple lines within the fixed-width content column; never clipped, never internally scrolled. |
+| E6 | Backend-unreachable banner | long-text | ✅ covered | Copy is a fixed literal (including the `uv run uvicorn …` command); it wraps rather than truncating — truncating a remediation command would destroy the reason the banner exists. |
+| E7 | Placeholder view | overflow | ⛔ dismissed | Two short fixed literal strings at desktop widths; cannot exceed the container. |
+| E7 | Placeholder view | long-text | ⛔ dismissed | Fixed literal copy; the only interpolation is the view name, one of three known short words. |
 
 <!-- Status vocabulary (locked by probe-core projectTruths):
      ✅ covered   → a plain truth string lifted into must_haves.truths
      🧪 backstop  → a flat scalar { statement, verification: backstop }; at verify time, no explicit
                     evidence → insufficient_spec → human_needed (never a silent pass, #1154)
+     ⛔ dismissed → resolved with a reason; NOT lifted into must_haves (the reason is the audit trail)
      ⚠ unresolved → an explicit planner assumption (surfaced, never silently dropped)
      Rows are REPLACED (not appended) on a probe re-run — idempotent. -->
 
-**Note on CORS/network-error honesty:** browser `fetch` cannot reliably distinguish a CORS-blocked request from a server that is simply not running — both surface as a generic network error. The "Can't reach the ShiftMind API" copy is deliberately non-diagnostic rather than falsely claiming to know *which* of the two failed; over-claiming here would itself be a dishonest surface.
+**Planner note — the three backstops.** Each lifts into `must_haves` as `{ statement, verification: backstop }`, not as a plain truth. At verify time a backstop with no wired evidence routes to `insufficient_spec → human_needed` rather than passing silently. Two are visual truncation checks that genuinely cannot be asserted at spec time. The third (E5 deep-link) is a **scope boundary, not an oversight** — recorded here so Phase 2 inherits it explicitly instead of rediscovering it.
+
+**Note on CORS / network-error honesty:** browser `fetch` cannot reliably distinguish a CORS-blocked request from a server that is simply not running — both surface as a generic network error. The "Can't reach the ShiftMind API" copy is deliberately non-diagnostic rather than falsely claiming to know *which* of the two failed; over-claiming there would itself be a dishonest surface.
 
 ---
 
