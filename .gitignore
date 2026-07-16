@@ -39,3 +39,6 @@ Thumbs.db
 # Node (future frontend)
 node_modules/
 dist/
+
+# Codegen intermediate (frontend/src/api/schema.d.ts is the committed derivative — see 01-04-PLAN.md)
+frontend/openapi.json
