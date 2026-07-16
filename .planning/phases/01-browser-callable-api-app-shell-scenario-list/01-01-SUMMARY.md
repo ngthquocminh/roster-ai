@@ -143,6 +143,10 @@ None - no external service configuration required. `backend/.env.example` docume
 - This was the phase's sole hard-gate backend dependency — every later plan in this phase (frontend scaffold, API client, scenario list) can now assume the browser can call the API from `http://localhost:5173`/`:4173` without a CORS error.
 - No blockers for Wave 1's other plan (01-02, the npm package legitimacy checkpoint) or subsequent waves.
 
+## Self-Check: PASSED
+
+All created/modified files found on disk; all task and metadata commits (`a78b694`, `fb41df7`, `51673b5`) found in git log.
+
 ---
 *Phase: 01-browser-callable-api-app-shell-scenario-list*
 *Completed: 2026-07-16*
