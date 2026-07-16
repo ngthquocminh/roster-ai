@@ -41,6 +41,10 @@ class Settings:
     # Separate from llm_model because llm_model's default "gemini-2.5-flash" is
     # not a valid OpenRouter slug.
     openrouter_model: str = _OPENROUTER_DEFAULT_MODEL
+    # Browser origins allowed to call this API (BE-01, D-04). Not secret, so
+    # this field carries no repr override — that treatment is reserved for the
+    # two API key fields above.
+    cors_origins: tuple[str, ...] = field(default=())
 
 
 def default_settings() -> Settings:
@@ -52,6 +56,12 @@ def default_settings() -> Settings:
     llm_api_key = os.environ.get("GEMINI_API_KEY")
     openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
     openrouter_model = os.environ.get("OPENROUTER_MODEL", _OPENROUTER_DEFAULT_MODEL)
+    # The os.environ.get default only applies when CORS_ORIGINS is absent from
+    # env entirely; an explicitly empty CORS_ORIGINS="" yields an empty
+    # allow-list (a valid "no browser origin may call this" posture), not a
+    # silent fallback to the default two Vite origins.
+    cors_origins_raw = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
+    cors_origins = tuple(o.strip() for o in cors_origins_raw.split(",") if o.strip())
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
@@ -60,4 +70,5 @@ def default_settings() -> Settings:
         llm_api_key=llm_api_key,
         openrouter_api_key=openrouter_api_key,
         openrouter_model=openrouter_model,
+        cors_origins=cors_origins,
     )

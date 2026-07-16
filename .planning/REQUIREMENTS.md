@@ -16,7 +16,7 @@ Requirements for milestone v0.4. Each maps to exactly one roadmap phase.
 
 ### Backend Enablement
 
-- [ ] **BE-01**: The FastAPI app accepts cross-origin requests from the frontend's dev-server and built origins, with allowed origins configurable rather than hardcoded
+- [x] **BE-01**: The FastAPI app accepts cross-origin requests from the frontend's dev-server and built origins, with allowed origins configurable rather than hardcoded
 
 ### Scenario Management
 
@@ -96,7 +96,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SHELL-02 | Phase 1 | Pending |
 | SHELL-03 | Phase 1 | Pending |
 | SHELL-04 | Phase 1 | Pending |
-| BE-01 | Phase 1 | Pending |
+| BE-01 | Phase 1 | Complete |
 | SCEN-01 | Phase 1 | Pending |
 | SCEN-02 | Phase 1 | Pending |
 | SCEN-03 | Phase 2 | Pending |
@@ -118,6 +118,7 @@ Which phases cover which requirements. Populated during roadmap creation.
 | RES-06 | Phase 4 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 24 total
 - Mapped to phases: 24 ✓
 - Unmapped: 0
