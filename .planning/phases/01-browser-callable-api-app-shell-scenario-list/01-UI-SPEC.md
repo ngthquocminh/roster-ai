@@ -2,8 +2,8 @@
 phase: 1
 slug: browser-callable-api-app-shell-scenario-list
 status: draft
-shadcn_initialized: false
-preset: "not generated — frontend/ does not exist yet (see Design System note); init params pinned below instead of a preset token"
+shadcn_initialized: true
+preset: "radix-nova (see Design System note — shadcn CLI 4.13.0 replaced the new-york/default style tokens with named presets; nova was chosen as the closest match: base color neutral and icon library lucide both preserved exactly as pinned, its bundled Geist web font was removed to keep the system-font-stack decision)"
 created: 2026-07-16
 ---
 
@@ -32,6 +32,17 @@ created: 2026-07-16
 **Why init is deferred, not run now:** `npx shadcn init` requires an existing `package.json`/Vite project to attach `components.json` to (verified against current CLI docs via context7 — `shadcn init -t vite -b radix -y --css-variables`, non-interactive). `frontend/` does not exist until Phase 1's plan/execute creates the Vite scaffold (SHELL-01). Running init is therefore a **mechanical first step of Phase 1 execution**, not a UI-SPEC action — this contract pins the parameters (template `vite`, base `radix`, style `new-york`, base color `neutral`, CSS variables on) so that step requires no design judgment when it happens. Note from context7 lookup: the CLI's non-interactive minimal-config path hardcodes base color to `neutral` — this pin matches that default rather than fighting it.
 
 Registry safety gate: not applicable this phase (shadcn official registry only, no third-party blocks — see Registry Safety below).
+
+**Execution-time correction (01-03):** The live `shadcn@4.13.0` CLI (newer than what this
+contract's params were pinned against) replaced the `new-york`/`default` style tokens with
+named presets (`nova`, `vega`, `maia`, ...) bundling icon library + font + base color. `init`
+was run with `-p nova` — the preset whose bundled icon library (`lucide`) and base color
+(`neutral`) exactly match this contract's pins. Its bundled `@fontsource-variable/geist` web
+font was removed immediately after init (uninstalled + CSS import stripped) because it
+contradicts this file's explicit "System font stack... No web font load" pin — Tailwind's
+default `font-sans` (system stack) is restored. `components.json` therefore records
+`"style": "radix-nova"`, not `"new-york"` — the latter is no longer a producible value on this
+CLI version. No visual-contract intent changed; only the tool's naming did.
 
 ---
 
