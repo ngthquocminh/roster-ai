@@ -73,6 +73,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scenarios/{scenario_id}/overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Scenario Overrides */
+        get: operations["get_scenario_overrides_scenarios__scenario_id__overrides_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scenarios/{scenario_id}/runs": {
         parameters: {
             query?: never;
@@ -223,6 +240,19 @@ export interface components {
             status?: string | null;
             /** Reason */
             reason?: string | null;
+        };
+        /** OverrideOut */
+        OverrideOut: {
+            /** Id */
+            id: string;
+            /** Tool */
+            tool: string;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+            /** Parsed Constraint */
+            parsed_constraint?: string | null;
         };
         /** RejectedConstraint */
         RejectedConstraint: {
@@ -417,6 +447,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScenarioOut"];
+                };
+            };
+            /** @description Scenario not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scenario_overrides_scenarios__scenario_id__overrides_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverrideOut"][];
                 };
             };
             /** @description Scenario not found */

@@ -49,3 +49,25 @@ export async function createScenario(
   }
   return data;
 }
+
+export async function getScenario(scenarioId: string) {
+  const { data, error, response } = await client.GET("/scenarios/{scenario_id}", {
+    params: { path: { scenario_id: scenarioId } },
+  });
+  if (error) {
+    // Editor needs response.status to distinguish 404 (terminal "not found"
+    // view, E7) from other failures (ErrorBanner) — same T-1-02 convention.
+    throw { status: response.status, ...error };
+  }
+  return data;
+}
+
+export async function getScenarioOverrides(scenarioId: string) {
+  const { data, error, response } = await client.GET("/scenarios/{scenario_id}/overrides", {
+    params: { path: { scenario_id: scenarioId } },
+  });
+  if (error) {
+    throw { status: response.status, ...error };
+  }
+  return data;
+}
