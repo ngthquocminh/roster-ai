@@ -22,12 +22,12 @@ Requirements for milestone v0.4. Each maps to exactly one roadmap phase.
 
 - [x] **SCEN-01**: User can see a list of existing scenarios
 - [x] **SCEN-02**: User can create a scenario by picking from the fixtures the backend offers (`GET /fixtures`) — no file upload in v0.4
-- [ ] **SCEN-03**: User can open a scenario and see its details, including the overrides currently applied to it
+- [x] **SCEN-03**: User can open a scenario and see its details, including the overrides currently applied to it
 
 ### Constraint Editing
 
 - [ ] **CONS-01**: User can type a plain-English constraint for a scenario and submit it
-- [ ] **CONS-02**: The UI shows a readable echo of what was understood (`parsed_constraint`) rather than raw tool-call JSON
+- [x] **CONS-02**: The UI shows a readable echo of what was understood (`parsed_constraint`) rather than raw tool-call JSON
 - [ ] **CONS-03**: When a submission partially applies, the UI shows both what was applied and what was rejected — with the rejection reason and valid options
 - [ ] **CONS-04**: When the parser needs clarification, the UI shows the question and lets the user rephrase
 - [ ] **CONS-05**: When the LLM provider is unavailable (`503`), the UI says so honestly — distinct from "your constraint was invalid"
@@ -99,9 +99,9 @@ Which phases cover which requirements. Populated during roadmap creation.
 | BE-01 | Phase 1 | Complete |
 | SCEN-01 | Phase 1 | Complete |
 | SCEN-02 | Phase 1 | Complete |
-| SCEN-03 | Phase 2 | Pending |
+| SCEN-03 | Phase 2 | Complete |
 | CONS-01 | Phase 2 | Pending |
-| CONS-02 | Phase 2 | Pending |
+| CONS-02 | Phase 2 | Complete |
 | CONS-03 | Phase 2 | Pending |
 | CONS-04 | Phase 2 | Pending |
 | CONS-05 | Phase 2 | Pending |

@@ -159,3 +159,7 @@ None - no external service configuration required.
 ---
 *Phase: 02-scenario-detail-plain-english-constraints*
 *Completed: 2026-07-17*
+
+## Self-Check: PASSED
+
+All created/modified files found on disk; all task commit hashes (`cc57ef5`, `7d2472d`, `dda8d49`) found in git log.

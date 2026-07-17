@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Frontend
-current_phase: 2
-current_phase_name: Scenario Detail + Plain-English Constraints
+current_phase: 02
+current_phase_name: scenario-detail-plain-english-constraints
 status: executing
-stopped_at: Phase 2 UI-SPEC approved
-last_updated: "2026-07-17T03:29:59.135Z"
-last_activity: 2026-07-16
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-07-17T08:04:42.816Z"
+last_activity: 2026-07-17
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 14
+  completed_plans: 8
   percent: 25
 ---
 
@@ -24,14 +24,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-07-15)
 
 **Core value:** A user can express a scheduling constraint change in plain English and get back a re-solved schedule that honors it (as a soft constraint) plus a readable explanation of what changed.
-**Current focus:** Phase 01 — browser-callable-api-app-shell-scenario-list
+**Current focus:** Phase 02 — scenario-detail-plain-english-constraints
 
 ## Current Position
 
-Phase: 2 — Scenario Detail + Plain-English Constraints
-Plan: Not started
+Phase: 02 (scenario-detail-plain-english-constraints) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-07-16 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-07-17 — Phase 02 execution started
 
 ## Performance Metrics
 
@@ -67,6 +67,11 @@ Last activity: 2026-07-16 — Phase 01 complete, transitioned to Phase 2
 | Phase 04 P01 | 8min | 3 tasks | 6 files |
 | Phase 04 P03 | 45min | 3 tasks | 3 files |
 | Phase 04 P02 | 60min | 3 tasks | 5 files |
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 02 P01 | 20min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -83,6 +88,7 @@ v0.4 decisions:
 - **SCEN-03 grouped with CONS, not with SCEN-01/02.** "See the overrides currently applied" *is* the ScenarioEditor surface that constraint submission populates — splitting them would strand a half-built view across two phases.
 - **SHELL-03 (four-view nav) assigned to Phase 1** as the routing/nav capability; later phases mount their views into the shell. Phase 1's criterion is scoped to what is verifiable then (nav + deep-linkable routes, later views as reachable placeholders).
 - **No research phase for v0.4.** A React SPA over a documented REST API was judged well-trodden; the open choices (charting library, polling strategy, client typing approach) are deliberately left to plan-phase where they are concrete.
+- [Phase ?]: Dedicated GET /scenarios/{id}/overrides endpoint (not a ScenarioOut field) so scenario-detail and overrides fetches resolve/error independently per UI-SPEC
 
 ### Pending Todos
 
@@ -141,9 +147,9 @@ Items acknowledged and deferred at milestone close on 2026-07-15:
 
 ## Session Continuity
 
-Last session: 2026-07-17T01:59:10.664Z
-Stopped at: Phase 2 UI-SPEC approved
-Resume file: .planning/phases/02-scenario-detail-plain-english-constraints/02-UI-SPEC.md
+Last session: 2026-07-17T08:04:42.804Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
 
 ## Operator Next Steps
 
