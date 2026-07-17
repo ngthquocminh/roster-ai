@@ -2,7 +2,7 @@ import { createBrowserRouter, Outlet, type RouteObject } from "react-router";
 
 import { AppBar } from "@/components/layout/AppBar";
 import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
-import { EditorPlaceholder } from "@/routes/EditorPlaceholder";
+import { Editor } from "@/routes/Editor";
 import { Home } from "@/routes/Home";
 import { ResultsPlaceholder } from "@/routes/ResultsPlaceholder";
 import { RunsPlaceholder } from "@/routes/RunsPlaceholder";
@@ -50,7 +50,7 @@ export const routes: RouteObject[] = [
         path: "scenarios/:scenarioId",
         Component: ScenarioLayout,
         children: [
-          { index: true, Component: EditorPlaceholder },
+          { index: true, Component: Editor },
           { path: "runs", Component: RunsPlaceholder },
           { path: "runs/:runId", Component: ResultsPlaceholder },
         ],
