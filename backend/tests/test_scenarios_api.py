@@ -114,6 +114,39 @@ def test_overrides_legacy(client, scenario_id):
     assert body[0]["parsed_constraint"] is None
 
 
+def test_overrides_colliding_stored_id_never_shadows_the_real_key(client, scenario_id):
+    """A stored override value carrying its own 'id' field must never clobber the
+    dict's real key (WR-02). Not a shape any current writer produces, but the
+    endpoint's spread order must be defensive against it regardless.
+    """
+    from settings import default_settings
+    from store import db
+    from store.repositories import ScenarioRepo
+
+    colliding_overrides = {
+        "ov_real_key": {
+            "tool": "set_min_workers_per_task",
+            "args": {"task_id": "99260066-B32A-423D-97A1-8A649BABBAAD", "n": 3},
+            "parsed_constraint": "At least 3 workers",
+            "id": "ov_should_never_win",
+        }
+    }
+    conn = db.connect(default_settings().db_path)
+    try:
+        ScenarioRepo(conn).update_overrides(scenario_id, json.dumps(colliding_overrides))
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.get(f"/scenarios/{scenario_id}/overrides")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert body[0]["id"] == "ov_real_key", (
+        "The dict's own key must always win over a same-named field in the stored value"
+    )
+
+
 def test_overrides_empty(client, scenario_id):
     """A scenario with no overrides returns 200 + []."""
     r = client.get(f"/scenarios/{scenario_id}/overrides")

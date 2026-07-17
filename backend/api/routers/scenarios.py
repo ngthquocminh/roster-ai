@@ -55,4 +55,6 @@ def get_scenario_overrides(
         raise HTTPException(status_code=404, detail="Scenario not found")
     raw = json.loads(s["overrides"] or "{}")
     # Natural insertion order (first-applied-first), no server-side re-sort — deliberate (D-01).
-    return [{"id": k, **v} for k, v in raw.items()]
+    # Spread `v` first so the dict's own "id" key (the JSON store key) always
+    # wins over any same-named field a stored value might ever carry (WR-02).
+    return [{**v, "id": k} for k, v in raw.items()]
