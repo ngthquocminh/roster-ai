@@ -26,11 +26,11 @@ Requirements for milestone v0.4. Each maps to exactly one roadmap phase.
 
 ### Constraint Editing
 
-- [ ] **CONS-01**: User can type a plain-English constraint for a scenario and submit it
+- [x] **CONS-01**: User can type a plain-English constraint for a scenario and submit it
 - [x] **CONS-02**: The UI shows a readable echo of what was understood (`parsed_constraint`) rather than raw tool-call JSON
 - [ ] **CONS-03**: When a submission partially applies, the UI shows both what was applied and what was rejected — with the rejection reason and valid options
 - [ ] **CONS-04**: When the parser needs clarification, the UI shows the question and lets the user rephrase
-- [ ] **CONS-05**: When the LLM provider is unavailable (`503`), the UI says so honestly — distinct from "your constraint was invalid"
+- [x] **CONS-05**: When the LLM provider is unavailable (`503`), the UI says so honestly — distinct from "your constraint was invalid"
 
 ### Run Execution & History
 
@@ -100,11 +100,11 @@ Which phases cover which requirements. Populated during roadmap creation.
 | SCEN-01 | Phase 1 | Complete |
 | SCEN-02 | Phase 1 | Complete |
 | SCEN-03 | Phase 2 | Complete |
-| CONS-01 | Phase 2 | Pending |
+| CONS-01 | Phase 2 | Complete |
 | CONS-02 | Phase 2 | Complete |
 | CONS-03 | Phase 2 | Pending |
 | CONS-04 | Phase 2 | Pending |
-| CONS-05 | Phase 2 | Pending |
+| CONS-05 | Phase 2 | Complete |
 | RUN-01 | Phase 3 | Pending |
 | RUN-02 | Phase 3 | Pending |
 | RUN-03 | Phase 3 | Pending |

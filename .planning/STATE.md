@@ -5,15 +5,15 @@ milestone_name: Frontend
 current_phase: 02
 current_phase_name: scenario-detail-plain-english-constraints
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-07-17T08:04:42.816Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-07-17T08:11:44.460Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 14
-  completed_plans: 8
+  completed_plans: 9
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 02 (scenario-detail-plain-english-constraints) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 02 execution started
 
@@ -72,6 +72,7 @@ Last activity: 2026-07-17 — Phase 02 execution started
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 02 P01 | 20min | 2 tasks | 5 files |
+| Phase 02 P02 | 20min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ v0.4 decisions:
 - **SHELL-03 (four-view nav) assigned to Phase 1** as the routing/nav capability; later phases mount their views into the shell. Phase 1's criterion is scoped to what is verifiable then (nav + deep-linkable routes, later views as reachable placeholders).
 - **No research phase for v0.4.** A React SPA over a documented REST API was judged well-trodden; the open choices (charting library, polling strategy, client typing approach) are deliberately left to plan-phase where they are concrete.
 - [Phase ?]: Dedicated GET /scenarios/{id}/overrides endpoint (not a ScenarioOut field) so scenario-detail and overrides fetches resolve/error independently per UI-SPEC
+- [Phase ?]: constraints.test.ts mirrors scenarios.test.ts's vi.mock("./client") boundary-mock pattern verbatim (not msw) for the applyConstraint wrapper
+- [Phase ?]: Textarea added via npx shadcn add textarea from the official registry (source-file copy), verified zero new package.json dependencies
 
 ### Pending Todos
 
@@ -147,8 +150,8 @@ Items acknowledged and deferred at milestone close on 2026-07-15:
 
 ## Session Continuity
 
-Last session: 2026-07-17T08:04:42.804Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-07-17T08:11:44.443Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
