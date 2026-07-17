@@ -69,9 +69,16 @@ export function ConstraintInput({
       onSuccess: (data) => {
         onOutcome({ id: freshId(), submittedText: text, response: data });
         // Input-preservation rule (generalizes CONS-04): clear ONLY on a
-        // genuine full apply without a pending clarification. Rejected-only,
-        // clarification, and no-match outcomes all preserve the typed text.
-        if (data.applied.length > 0 && data.clarification_needed === null) {
+        // genuine full apply with nothing rejected and no pending
+        // clarification. Rejected-only, mixed applied+rejected, clarification,
+        // and no-match outcomes all preserve the typed text — a rejected
+        // fragment means part of what the user typed still needs attention
+        // (WR-01).
+        if (
+          data.applied.length > 0 &&
+          data.rejected.length === 0 &&
+          data.clarification_needed === null
+        ) {
           setText("");
         }
       },

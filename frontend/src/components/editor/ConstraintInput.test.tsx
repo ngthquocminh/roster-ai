@@ -3,7 +3,9 @@
  * submit issues the mutation, in-flight disables textarea+button, char
  * counter/limit backstop, 503-vs-422 status branching (CONS-05), and the
  * Input-preservation rule (CONS-04) — text preserved on every non-full-
- * success outcome, cleared ONLY on applied.length>0 && clarification===null.
+ * success outcome, cleared ONLY on applied.length>0 && rejected.length===0
+ * && clarification===null (WR-01: a mixed applied+rejected 200 must NOT
+ * clear the text — part of what the user typed still needs attention).
  *
  * Mocks `useApplyConstraint` at the hook boundary (not `@/api/constraints`)
  * so `.mutate`'s `onSuccess` callback can be driven synchronously per test.
@@ -188,7 +190,39 @@ describe("ConstraintInput: input-preservation [CONS-04, generalized rule]", () =
     expect(textarea.value).toBe("some constraint text");
   });
 
-  it("clears the textarea ONLY when applied.length > 0 && clarification_needed === null", () => {
+  it("preserves the typed text on a mixed applied+rejected (no clarification) outcome [WR-01]", () => {
+    const mutate = vi.fn((_text, options) => {
+      options.onSuccess(
+        response({
+          applied: [
+            {
+              id: "c1",
+              tool: "set_max_hours",
+              args: {},
+              parsed_constraint: "x",
+            },
+          ],
+          rejected: [{ tool: "scale_demand", error: "bad" }],
+        }),
+      );
+    });
+    mockHook({ mutate });
+    render(<ConstraintInput scenarioId="s1" onOutcome={vi.fn()} />);
+
+    const textarea = screen.getByLabelText(
+      "Constraint text",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "keep 2 workers on Pick and some garbled fragment" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply Constraint" }));
+
+    expect(textarea.value).toBe(
+      "keep 2 workers on Pick and some garbled fragment",
+    );
+  });
+
+  it("clears the textarea ONLY when applied.length > 0 && rejected.length === 0 && clarification_needed === null", () => {
     const mutate = vi.fn((_text, options) => {
       options.onSuccess(
         response({
