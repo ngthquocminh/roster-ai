@@ -99,7 +99,7 @@ Plans:
   - Works against the default `LLM_PROVIDER=stub` (keyless, deterministic, regex-routed). Nothing here may require a live key; default CI stays keyless. Only a demo of genuine NL understanding needs `gemini`/`openrouter`.
   - The response is a partial-apply shape (`applied[]` + `rejected[]`) — criterion 3 is about rendering both halves of one `200`, not an error path.
 
-**Plans**: 6/7 plans executed
+**Plans**: 7/7 plans executed
 
 Plans:
 **Wave 1**
@@ -125,7 +125,7 @@ Plans:
 
 **Wave 6** *(blocked on Wave 5)*
 
-- [ ] 02-07-PLAN.md — Blocking human-verify checkpoint: five outcome treatments, layout, reload durability, backstops (Wave 6)
+- [x] 02-07-PLAN.md — Blocking human-verify checkpoint: five outcome treatments, layout, reload durability, backstops (Wave 6)
 
 **UI hint**: yes
 
@@ -181,6 +181,6 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|-----------------|--------|-----------|
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
-| 2. Scenario Detail + Plain-English Constraints | v0.4 | 6/7 | In Progress|  |
+| 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | In Progress|  |
 | 3. Run Execution & History | v0.4 | 0/TBD | Not started | - |
 | 4. Results & Insights | v0.4 | 0/TBD | Not started | - |
