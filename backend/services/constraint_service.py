@@ -42,6 +42,21 @@ class _ResolveResult(NamedTuple):
     clarification: str | None
 
 
+def _dedupe_by_key(items, key_fn):
+    """Collapse `items` to one entry per `key_fn(item)`, keeping first occurrence.
+
+    The ingest adapter creates one Member (and could in principle create one
+    Task) object per underlying row, so the same real-world entity can appear
+    more than once in `problem.members`/`problem.tasks`. Both ambiguity
+    counting and "valid options" listings must count/list distinct entities,
+    not distinct rows (CR-01/WR-04).
+    """
+    seen: dict = {}
+    for item in items:
+        seen.setdefault(key_fn(item), item)
+    return list(seen.values())
+
+
 def _resolve_task(problem, token: str) -> _ResolveResult:
     """Resolve a human task token to a real task_id from the loaded problem.
 
@@ -96,15 +111,21 @@ def _resolve_member(problem, token: str) -> _ResolveResult:
 
     # Substring match against id and name
     token_lower = token.lower()
-    matches = [
+    raw_matches = [
         m for m in problem.members
         if token_lower in m.contact_id.lower() or token_lower in m.name.lower()
     ]
+    # Dedupe by contact_id — multiple roster/availability rows for the same
+    # person must not be treated as multiple distinct candidates (CR-01).
+    matches = _dedupe_by_key(raw_matches, lambda m: m.contact_id)
 
     if len(matches) == 1:
         return _ResolveResult(resolved_id=matches[0].contact_id, error=None, clarification=None)
 
-    valid_names = ", ".join(f"{m.name!r} ({m.contact_id})" for m in problem.members)
+    valid_names = ", ".join(
+        f"{m.name!r} ({m.contact_id})"
+        for m in _dedupe_by_key(problem.members, lambda m: m.contact_id)
+    )
     if len(matches) == 0:
         return _ResolveResult(
             resolved_id=None,
@@ -112,7 +133,7 @@ def _resolve_member(problem, token: str) -> _ResolveResult:
             clarification=None,
         )
 
-    # Multiple matches — ask for clarification
+    # Multiple distinct people matched — ask for clarification
     matched_names = ", ".join(f"{m.name!r}" for m in matches)
     return _ResolveResult(
         resolved_id=None,

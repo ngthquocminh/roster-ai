@@ -679,19 +679,29 @@ def test_lock_out_of_horizon_day_rejected(client, scenario_id):
 # Plan 02-02: Multi-match member -> clarification_needed (NLC-05)
 # ---------------------------------------------------------------------------
 
-def test_multi_match_member_clarification(client, scenario_id):
-    """'Jae' matches two members in the fixture -> clarification_needed (NLC-05)."""
-    # The fixture has two roster entries for Jae Rerekura (same contact_id but two
-    # Member objects from two windows), triggering the multi-match path.
+def test_multi_row_same_person_resolves_without_clarification(client, scenario_id):
+    """'Jae' matches two Member rows sharing one contact_id -> resolves cleanly, no
+    clarification (CR-01 regression test).
+
+    The fixture has two roster entries for Jae Rerekura (same contact_id but two
+    Member objects from two windows). Before CR-01, `_resolve_member` counted these
+    as two distinct candidates and always asked an unanswerable clarification
+    question ("'Jae Rerekura' matches multiple members: 'Jae Rerekura', 'Jae
+    Rerekura'"). Deduping by contact_id means a single real person triggers a
+    normal apply, not a clarification.
+    """
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
         "text": "cap Jae at 40 hours",
     })
     assert r.status_code == 200
     body = r.json()
-    assert body["clarification_needed"] is not None, (
-        "'Jae' matches two members -> clarification_needed must be non-null (NLC-05)"
+    assert body["clarification_needed"] is None, (
+        "A single real person spanning multiple roster rows must not trigger "
+        "clarification (CR-01)"
     )
+    assert len(body["applied"]) == 1, "The constraint must apply once dedup resolves 'Jae' uniquely"
+    assert body["applied"][0]["args"]["member_id"] == "DF47249E-8864-41B6-93CB-004100655A58"
 
 
 # ---------------------------------------------------------------------------
