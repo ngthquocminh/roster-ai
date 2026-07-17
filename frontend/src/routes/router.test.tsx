@@ -43,11 +43,15 @@ describe("router: four-route shell (SHELL-03)", () => {
     ).toBeInTheDocument();
   });
 
-  it("mounts the Editor placeholder at /scenarios/:scenarioId (index)", () => {
+  it("mounts the Editor at /scenarios/:scenarioId (index)", () => {
+    // `@/api/scenarios` is intentionally unmocked here (see file header
+    // comment) — the real `getScenario` fetch has nowhere to resolve in
+    // jsdom, so the assertion targets the synchronous initial-render state
+    // (`useScenario`'s query is `isLoading` before the fetch ever settles),
+    // not a later success/error outcome. Full Editor behavior (populated,
+    // 404-gate, transcript) is covered by `Editor.test.tsx`.
     renderAt("/scenarios/abc123");
-    expect(
-      screen.getByRole("heading", { name: /Editor — not built yet/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Loading scenario…")).toBeInTheDocument();
   });
 
   it("mounts the Runs placeholder at /scenarios/:scenarioId/runs — not the Editor index with scenarioId 'runs' [edge: SHELL-03/precision]", () => {
@@ -56,7 +60,7 @@ describe("router: four-route shell (SHELL-03)", () => {
       screen.getByRole("heading", { name: /Runs — not built yet/ }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: /Editor — not built yet/ }),
+      screen.queryByText("Loading scenario…"),
     ).not.toBeInTheDocument();
     // Route ranking has teeth: no element anywhere renders a scenarioId of
     // "runs" — the only place the word "runs" may legitimately appear is the
@@ -144,8 +148,8 @@ describe("router: four-route shell (SHELL-03)", () => {
     );
   });
 
-  it("each placeholder renders the UI-SPEC honest-not-built-yet copy with no mock data", () => {
-    renderAt("/scenarios/abc123");
+  it("the still-placeholder Runs view renders the UI-SPEC honest-not-built-yet copy with no mock data", () => {
+    renderAt("/scenarios/abc123/runs");
     expect(
       screen.getByText("This view ships in a later phase of the v0.4 milestone."),
     ).toBeInTheDocument();
