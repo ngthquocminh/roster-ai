@@ -26,6 +26,7 @@ import { LoaderCircle } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useApplyConstraint } from "@/hooks/useApplyConstraint";
+import { getErrorStatus } from "@/lib/errors";
 import { ProviderDownBanner } from "./ProviderDownBanner";
 import type { TranscriptEntryData } from "./ConstraintTranscript";
 
@@ -53,13 +54,13 @@ export function ConstraintInput({
   const canSubmit =
     text.trim().length > 0 && text.length <= MAX_LENGTH && !isSubmitting;
 
-  const applyError = applyConstraint.error as { status?: number } | null;
-  const isProviderDown = applyError?.status === 503;
+  const applyErrorStatus = getErrorStatus(applyConstraint.error);
+  const isProviderDown = applyErrorStatus === 503;
   // Structural backstop only (UI-SPEC E4/422) — client-side length gating
   // above makes this unreachable in the ordinary flow, but the server
   // remains the source of truth (ASVS V5), so the branch stays. Keyed off
   // `status`, never error message text (T-02-14 discriminator).
-  const isValidationError = applyError?.status === 422;
+  const isValidationError = applyErrorStatus === 422;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

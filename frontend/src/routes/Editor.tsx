@@ -40,6 +40,7 @@ import {
 import { ConstraintInput } from "@/components/editor/ConstraintInput";
 import { useScenario } from "@/hooks/useScenario";
 import { useOverrides } from "@/hooks/useOverrides";
+import { getErrorStatus } from "@/lib/errors";
 
 export function Editor() {
   const { scenarioId } = useParams();
@@ -53,8 +54,7 @@ export function Editor() {
     setEntries((previous) => [...previous, entry]);
   }, []);
 
-  const errorStatus = (scenarioQuery.error as { status?: number } | null)
-    ?.status;
+  const errorStatus = getErrorStatus(scenarioQuery.error);
   const isNotFound = scenarioQuery.isError && errorStatus === 404;
 
   if (isNotFound) {

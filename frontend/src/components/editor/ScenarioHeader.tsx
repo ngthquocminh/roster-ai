@@ -26,6 +26,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 
 import { ErrorBanner } from "@/components/layout/ErrorBanner";
 import { buttonVariants } from "@/components/ui/button";
+import { getErrorStatus } from "@/lib/errors";
 import type { components } from "@/api/schema";
 
 type ScenarioOut = components["schemas"]["ScenarioOut"];
@@ -52,7 +53,7 @@ export function ScenarioHeader({
   }
 
   if (isError) {
-    const status = (error as { status?: number } | null)?.status;
+    const status = getErrorStatus(error);
     if (status === 404) {
       return (
         <div className="flex flex-col items-center gap-4 py-16 text-center">
