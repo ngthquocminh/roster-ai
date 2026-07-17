@@ -69,3 +69,10 @@ class ConstraintParseResponse(BaseModel):
     rejected: list[RejectedConstraint]
     clarification_needed: str | None
     no_constraint_found: bool
+
+
+class OverrideOut(BaseModel):
+    id: str
+    tool: str
+    args: dict
+    parsed_constraint: str | None = None  # None for pre-D-02 legacy entries

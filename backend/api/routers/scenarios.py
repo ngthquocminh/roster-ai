@@ -1,13 +1,14 @@
 """Scenario CRUD."""
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import get_db, get_settings
-from api.schemas import ScenarioCreate, ScenarioOut
+from api.schemas import OverrideOut, ScenarioCreate, ScenarioOut
 from services import scenario_service
 from settings import Settings
 
@@ -39,3 +40,16 @@ def get_scenario(scenario_id: str, conn: sqlite3.Connection = Depends(get_db)) -
     if s is None:
         raise HTTPException(status_code=404, detail="Scenario not found")
     return s
+
+
+@router.get("/{scenario_id}/overrides", response_model=list[OverrideOut],
+            responses={404: {"description": "Scenario not found"}})
+def get_scenario_overrides(
+    scenario_id: str, conn: sqlite3.Connection = Depends(get_db)
+) -> list[dict]:
+    s = scenario_service.get_scenario(conn, scenario_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+    raw = json.loads(s["overrides"] or "{}")
+    # Natural insertion order (first-applied-first), no server-side re-sort — deliberate (D-01).
+    return [{"id": k, **v} for k, v in raw.items()]

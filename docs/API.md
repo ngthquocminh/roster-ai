@@ -138,6 +138,32 @@ Fetch one scenario.
 
 ---
 
+### `GET /scenarios/{scenario_id}/overrides`
+
+Fetch a scenario's persisted overrides — every constraint currently applied
+(SCEN-03). Returned in the stored dict's natural insertion order
+(first-applied-first, stable across idempotent re-applies); the server never
+re-sorts.
+
+**200** — array of `OverrideOut` · **404** — scenario not found.
+
+```json
+[
+  {
+    "id": "ov_1a2b3c4d",
+    "tool": "set_min_workers_per_task",
+    "args": { "task_id": "T123", "n": 2 },
+    "parsed_constraint": "At least 2 workers on Pick (every demanded hour)"
+  }
+]
+```
+
+`parsed_constraint` is nullable: overrides persisted before this field existed
+(legacy entries) deserialize with `parsed_constraint: null` rather than
+failing — the endpoint never 500s on old data.
+
+---
+
 ### `POST /constraints`
 
 Parse a plain-English scheduling constraint against a scenario, validate it,
@@ -420,6 +446,14 @@ cached once it passes this check.
 | `tool` | string | one of the five solver-hook tool names |
 | `args` | object | resolved, validated tool arguments (real task/member ids) |
 | `parsed_constraint` | string | human-readable echo of what was understood |
+
+### `OverrideOut`
+| field | type | notes |
+|---|---|---|
+| `id` | string | content-hash override id (`ov_...`), same id space as `AppliedConstraint.id` |
+| `tool` | string | one of the five solver-hook tool names |
+| `args` | object | resolved, validated tool arguments (real task/member ids) |
+| `parsed_constraint` | string \| null | human-readable echo; `null` for overrides persisted before this field existed (legacy entries) |
 
 **`RejectedConstraint`**
 | field | type | notes |

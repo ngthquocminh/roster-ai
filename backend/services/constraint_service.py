@@ -368,7 +368,11 @@ def parse_and_store(
     if applied:
         existing = json.loads(scenario["overrides"] or "{}")
         for entry in applied:
-            existing[entry["id"]] = {"tool": entry["tool"], "args": entry["args"]}
+            existing[entry["id"]] = {
+                "tool": entry["tool"],
+                "args": entry["args"],
+                "parsed_constraint": entry["parsed_constraint"],  # D-02
+            }
         repo.update_overrides(scenario_id, json.dumps(existing))
         conn.commit()
 
