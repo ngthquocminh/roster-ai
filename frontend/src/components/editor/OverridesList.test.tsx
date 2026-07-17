@@ -25,6 +25,11 @@ function queryResult(
     isLoading: false,
     isError: false,
     error: null,
+    // Real TanStack Query only ever reports isSuccess: true once a fetch has
+    // genuinely completed — default to false here (matching an idle/disabled
+    // query) so tests that want the populated/empty branches must opt in
+    // explicitly (CR-04), the same way a real successful query would.
+    isSuccess: false,
     ...overrides,
   } as UseQueryResult<OverrideOut[], unknown>;
 }
@@ -39,7 +44,11 @@ describe("OverridesList: loading [UI-SPEC E2/loading]", () => {
 
 describe("OverridesList: empty [UI-SPEC E2/empty]", () => {
   it("renders the empty-state heading and body", () => {
-    render(<OverridesList overridesQuery={queryResult({ data: [] })} />);
+    render(
+      <OverridesList
+        overridesQuery={queryResult({ data: [], isSuccess: true })}
+      />,
+    );
 
     expect(
       screen.getByRole("heading", { name: "No constraints applied yet" }),
@@ -47,6 +56,43 @@ describe("OverridesList: empty [UI-SPEC E2/empty]", () => {
     expect(
       screen.getByText("Type a plain-English constraint below to add one."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("OverridesList: disabled/not-yet-run [CR-04]", () => {
+  it("renders the loading state (never the empty state) while the query is disabled/idle", () => {
+    // Mirrors the real dependent-query idle shape: isLoading false,
+    // isError false, isSuccess false, data undefined (TanStack Query v5,
+    // enabled: false) — the exact state the pre-CR-04 component
+    // misrendered as "No constraints applied yet".
+    render(
+      <OverridesList
+        overridesQuery={queryResult({ data: undefined, isSuccess: false })}
+      />,
+    );
+
+    expect(screen.getByText("Loading overrides…")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No constraints applied yet"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the loading state (never the empty state) when the parent scenario query errored non-404, leaving this query permanently disabled", () => {
+    // Editor.tsx only gates the terminal 404 view; a non-404 scenario error
+    // falls through to the full layout with overridesQuery still disabled
+    // forever. Same idle shape as above — asserted separately because this
+    // is the persistent (not transient) case the review flagged as "actively
+    // misinformative" beside ScenarioHeader's ErrorBanner.
+    render(
+      <OverridesList
+        overridesQuery={queryResult({ data: undefined, isSuccess: false })}
+      />,
+    );
+
+    expect(screen.getByText("Loading overrides…")).toBeInTheDocument();
+    expect(
+      screen.queryByText("No constraints applied yet"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -80,7 +126,11 @@ describe("OverridesList: populated [UI-SPEC E2/populated, CONS-02]", () => {
         parsed_constraint: "Cap member m1 at 40 hours per week",
       },
     ];
-    render(<OverridesList overridesQuery={queryResult({ data: overrides })} />);
+    render(
+      <OverridesList
+        overridesQuery={queryResult({ data: overrides, isSuccess: true })}
+      />,
+    );
 
     expect(
       screen.getByText("Cap member m1 at 40 hours per week"),
@@ -104,7 +154,11 @@ describe("OverridesList: legacy fallback [UI-SPEC E2/partial, D-02 migration]", 
         parsed_constraint: null,
       },
     ];
-    render(<OverridesList overridesQuery={queryResult({ data: overrides })} />);
+    render(
+      <OverridesList
+        overridesQuery={queryResult({ data: overrides, isSuccess: true })}
+      />,
+    );
 
     expect(screen.getByText("Scale demand: factor=1.2")).toBeInTheDocument();
     expect(screen.getByText("(legacy entry)")).toBeInTheDocument();
@@ -119,7 +173,11 @@ describe("OverridesList: legacy fallback [UI-SPEC E2/partial, D-02 migration]", 
         parsed_constraint: undefined,
       },
     ];
-    render(<OverridesList overridesQuery={queryResult({ data: overrides })} />);
+    render(
+      <OverridesList
+        overridesQuery={queryResult({ data: overrides, isSuccess: true })}
+      />,
+    );
 
     expect(screen.getByText("some_future_tool: x=1")).toBeInTheDocument();
   });
@@ -131,7 +189,9 @@ describe("OverridesList: zero-one-many [UI-SPEC E2/zero-one-many]", () => {
       { id: "o1", tool: "set_max_hours", args: {}, parsed_constraint: "A" },
     ];
     const { container } = render(
-      <OverridesList overridesQuery={queryResult({ data: overrides })} />,
+      <OverridesList
+        overridesQuery={queryResult({ data: overrides, isSuccess: true })}
+      />,
     );
 
     expect(container.textContent).not.toMatch(/\b1 override\b/i);
@@ -144,7 +204,11 @@ describe("OverridesList: zero-one-many [UI-SPEC E2/zero-one-many]", () => {
       { id: "o2", tool: "scale_demand", args: {}, parsed_constraint: "First" },
       { id: "o3", tool: "lock_worker_shift", args: {}, parsed_constraint: "Second" },
     ];
-    render(<OverridesList overridesQuery={queryResult({ data: overrides })} />);
+    render(
+      <OverridesList
+        overridesQuery={queryResult({ data: overrides, isSuccess: true })}
+      />,
+    );
 
     const rendered = screen.getAllByText(/^(Third|First|Second)$/);
     expect(rendered.map((el) => el.textContent)).toEqual([

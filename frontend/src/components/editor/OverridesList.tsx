@@ -43,29 +43,44 @@ function legacyFallbackText(override: OverrideOut): string {
   return `${toolLabel(override.tool)}: ${argsText}`;
 }
 
+function LoadingOverrides() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16">
+      <LoaderCircle
+        className="size-6 animate-spin text-muted-foreground"
+        aria-hidden="true"
+      />
+      <p className="text-sm leading-[1.5] text-muted-foreground">
+        Loading overrides…
+      </p>
+    </div>
+  );
+}
+
 export function OverridesList({
   overridesQuery,
 }: {
   overridesQuery: UseQueryResult<OverrideOut[], unknown>;
 }) {
-  const { data, isLoading, isError, error } = overridesQuery;
+  const { data, isLoading, isError, error, isSuccess } = overridesQuery;
 
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16">
-        <LoaderCircle
-          className="size-6 animate-spin text-muted-foreground"
-          aria-hidden="true"
-        />
-        <p className="text-sm leading-[1.5] text-muted-foreground">
-          Loading overrides…
-        </p>
-      </div>
-    );
+    return <LoadingOverrides />;
   }
 
   if (isError) {
     return <ErrorBanner error={error} />;
+  }
+
+  // CR-04: the query is a dependent query gated by the parent scenario query
+  // (enabled: scenarioQuery.isSuccess). While disabled/idle — every mount,
+  // until the parent resolves, or permanently if the parent errors with a
+  // non-404 status — neither isLoading nor isError is true, so without this
+  // branch the component fell through to the "No constraints applied yet"
+  // empty state even though the query never actually ran. Only a genuinely
+  // successful fetch may report the real (possibly empty) result below.
+  if (!isSuccess) {
+    return <LoadingOverrides />;
   }
 
   const overrides = data ?? [];
