@@ -4,9 +4,9 @@ milestone: v0.4
 milestone_name: Frontend
 current_phase: 2
 current_phase_name: Scenario Detail + Plain-English Constraints
-status: planning
-stopped_at: Phase 2 context gathered
-last_updated: "2026-07-17T01:37:51.106Z"
+status: executing
+stopped_at: Phase 2 UI-SPEC approved
+last_updated: "2026-07-17T03:29:59.135Z"
 last_activity: 2026-07-16
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
 progress:
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 Phase: 2 — Scenario Detail + Plain-English Constraints
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-07-16 — Phase 01 complete, transitioned to Phase 2
 
 ## Performance Metrics
@@ -141,9 +141,9 @@ Items acknowledged and deferred at milestone close on 2026-07-15:
 
 ## Session Continuity
 
-Last session: 2026-07-17T01:37:51.079Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-scenario-detail-plain-english-constraints/02-CONTEXT.md
+Last session: 2026-07-17T01:59:10.664Z
+Stopped at: Phase 2 UI-SPEC approved
+Resume file: .planning/phases/02-scenario-detail-plain-english-constraints/02-UI-SPEC.md
 
 ## Operator Next Steps
 
