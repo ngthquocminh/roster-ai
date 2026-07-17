@@ -47,6 +47,29 @@ class Settings:
     cors_origins: tuple[str, ...] = field(default=())
 
 
+def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
+    """Resolve `fixture` against `data_dir`, rejecting any path that escapes it
+    (an absolute path, or a relative path containing `../` sequences) — CR-03.
+
+    `os.path.join(data_dir, fixture)` silently discards `data_dir` when
+    `fixture` is absolute, and a relative `fixture` containing `../` can
+    normalize outside `data_dir` even without being absolute; either lets a
+    caller reference an arbitrary file on disk (path traversal).
+
+    Returns the resolved absolute path, or None if `fixture` is invalid.
+    Callers translate None into the appropriate "unknown fixture" response
+    for their layer (400 at scenario-creation time, 404/LookupError at
+    constraint-parse time) — never a bare filesystem error.
+    """
+    if os.path.isabs(fixture):
+        return None
+    data_dir_abs = os.path.abspath(data_dir)
+    candidate = os.path.normpath(os.path.join(data_dir_abs, fixture))
+    if candidate != data_dir_abs and not candidate.startswith(data_dir_abs + os.sep):
+        return None
+    return candidate
+
+
 def default_settings() -> Settings:
     """Read settings fresh each call so env overrides apply at request time."""
     db_path = os.environ.get("ROSTERAI_DB", str(_BACKEND_DIR / "var" / "rosterai.db"))

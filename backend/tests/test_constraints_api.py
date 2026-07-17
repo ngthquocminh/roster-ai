@@ -251,6 +251,52 @@ def test_post_constraints_unknown_scenario_returns_404(client):
     assert r.status_code == 404
 
 
+def test_post_constraints_rejects_tampered_path_traversal_fixture(tmp_path, monkeypatch):
+    """A scenario row whose stored fixture escapes data_dir (e.g. written by a
+    path other than the validated POST /scenarios route) must still be
+    rejected cleanly at parse time — 404, never a 500 (CR-03 defense-in-depth).
+    """
+    import sqlite3
+
+    db_path = tmp_path / "test-traversal.db"
+    monkeypatch.setenv("ROSTERAI_DB", str(db_path))
+    monkeypatch.setenv("ROSTERAI_DATA_DIR", _DATA_DIR)
+
+    from api.deps import get_engine, get_llm_provider
+    from api.main import app
+    from llm.stub import StubLLMProvider
+
+    app.dependency_overrides[get_engine] = lambda: StubEngine()
+    app.dependency_overrides[get_llm_provider] = lambda: StubLLMProvider()
+    with TestClient(app) as c:
+        r = c.post("/scenarios", json={
+            "name": "test-traversal",
+            "fixture": "sample_tiny_input.json",
+            "time_limit_s": 5,
+        })
+        assert r.status_code == 201
+        scenario_id = r.json()["id"]
+
+        # Simulate a stored fixture value that escapes data_dir — bypasses the
+        # POST /scenarios validation (e.g. legacy row, manual DB edit).
+        conn = sqlite3.connect(str(db_path))
+        conn.execute(
+            "UPDATE scenarios SET fixture=? WHERE id=?",
+            ("../../backend/settings.py", scenario_id),
+        )
+        conn.commit()
+        conn.close()
+
+        r2 = c.post("/constraints", json={
+            "scenario_id": scenario_id,
+            "text": "at least 2 on C Pick",
+        })
+        assert r2.status_code == 404, (
+            f"A tampered/escaping fixture path must map to 404, got {r2.status_code}: {r2.text}"
+        )
+    app.dependency_overrides.clear()
+
+
 def test_post_constraints_provider_failure_returns_503(tmp_path, monkeypatch):
     """A raised LLMProviderError must map to a clean 503, never a bare 500 (quick-260709-m9m)."""
     monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "test-503.db"))

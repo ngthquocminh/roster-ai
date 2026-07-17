@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.deps import get_db, get_settings
 from api.schemas import OverrideOut, ScenarioCreate, ScenarioOut
 from services import scenario_service
-from settings import Settings
+from settings import Settings, resolve_fixture_path
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -22,7 +22,10 @@ def create_scenario(
     conn: sqlite3.Connection = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    if not os.path.isfile(os.path.join(settings.data_dir, body.fixture)):
+    # CR-03: reject a fixture value that is absolute or that normalizes
+    # outside data_dir (path traversal) before ever touching the filesystem.
+    fixture_path = resolve_fixture_path(settings.data_dir, body.fixture)
+    if fixture_path is None or not os.path.isfile(fixture_path):
         raise HTTPException(status_code=400, detail=f"Unknown fixture: {body.fixture!r}")
     return scenario_service.create_scenario(
         conn, name=body.name, fixture=body.fixture, time_limit_s=body.time_limit_s)

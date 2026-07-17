@@ -17,14 +17,13 @@ Flow:
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 from typing import NamedTuple
 
 from domain.overrides import OverrideCall, override_id
 from ingest.input_adapter import load_problem
 from llm.base import LLMProvider
-from settings import default_settings
+from settings import default_settings, resolve_fixture_path
 from store.repositories import ScenarioRepo
 
 
@@ -170,7 +169,16 @@ def parse_and_store(
     if data_dir is None:
         data_dir = default_settings().data_dir
 
-    fixture_path = os.path.join(data_dir, scenario["fixture"])
+    # CR-03: defense-in-depth — scenarios.py already rejects an escaping
+    # fixture at creation time, but re-validate here too rather than trusting
+    # the stored value blindly (e.g. if data_dir changes between creation and
+    # parse, or the row was written by another path). Route failure through
+    # the existing LookupError -> 404 mapping (never a bare 500).
+    fixture_path = resolve_fixture_path(data_dir, scenario["fixture"])
+    if fixture_path is None:
+        raise LookupError(
+            f"Scenario {scenario_id!r} references an invalid fixture path"
+        )
     problem = load_problem(fixture_path)
 
     # Partition _clarification sentinel signals before processing real tool calls

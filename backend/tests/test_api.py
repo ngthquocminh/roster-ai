@@ -82,6 +82,24 @@ def test_create_scenario_rejects_unknown_fixture(client):
     assert r.status_code == 400
 
 
+@pytest.mark.parametrize(
+    "fixture",
+    [
+        "../../backend/settings.py",       # relative traversal out of data_dir
+        "..\\..\\backend\\settings.py",    # Windows-style traversal
+        "/etc/passwd",                     # POSIX absolute path
+        "C:\\Windows\\win.ini",            # Windows absolute path
+    ],
+)
+def test_create_scenario_rejects_path_traversal_fixture(client, fixture):
+    """A fixture value that escapes data_dir must be rejected with 400, never
+    resolve to an arbitrary file on disk (CR-03)."""
+    r = client.post("/scenarios", json={"name": "bad", "fixture": fixture})
+    assert r.status_code == 400, (
+        f"Path-traversal fixture {fixture!r} must be rejected with 400, got {r.status_code}"
+    )
+
+
 def test_full_run_lifecycle(client):
     # create scenario
     r = client.post("/scenarios", json={
