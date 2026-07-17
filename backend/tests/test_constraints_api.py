@@ -198,7 +198,8 @@ def test_post_constraints_persists_override_to_scenario(client, scenario_id):
         "text": "at least 2 on C Pick",
     })
     assert r.status_code == 200
-    override_id = r.json()["applied"][0]["id"]
+    applied = r.json()["applied"][0]
+    override_id = applied["id"]
 
     # Direct verification: re-submit same constraint, should return same id.
     r2 = client.post("/constraints", json={
@@ -207,6 +208,24 @@ def test_post_constraints_persists_override_to_scenario(client, scenario_id):
     })
     assert r2.status_code == 200
     assert r2.json()["applied"][0]["id"] == override_id  # idempotent (D-04/D-05)
+
+    # D-02: the stored overrides JSON must carry parsed_constraint alongside
+    # tool/args, matching the value returned in applied[] (persistence fidelity).
+    from settings import default_settings
+    from store import db as db_module
+
+    conn = db_module.connect(default_settings().db_path)
+    try:
+        row = conn.execute(
+            "SELECT overrides FROM scenarios WHERE id = ?", (scenario_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    stored = json.loads(row["overrides"])
+    assert override_id in stored
+    assert stored[override_id]["parsed_constraint"] == applied["parsed_constraint"]
+    assert stored[override_id]["tool"] == applied["tool"]
+    assert stored[override_id]["args"] == applied["args"]
 
 
 def test_post_constraints_idempotent_same_id(client, scenario_id):
