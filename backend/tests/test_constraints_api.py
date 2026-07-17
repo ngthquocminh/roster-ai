@@ -291,6 +291,74 @@ def test_post_constraints_provider_failure_returns_503(tmp_path, monkeypatch):
     app.dependency_overrides.clear()
 
 
+def test_malformed_llm_tool_args_rejected_not_500(tmp_path, monkeypatch):
+    """A provider that emits malformed/missing tool-call args must yield a clean
+    200 with rejected[] entries, never an uncaught 500 (CR-02).
+
+    Exercises all five tool branches with a mix of a missing required key and a
+    non-numeric value in a single request, proving the KeyError/ValueError guard
+    added around each branch's arg extraction routes failures into rejected[]
+    instead of letting them escape.
+    """
+    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "test-malformed-args.db"))
+    monkeypatch.setenv("ROSTERAI_DATA_DIR", _DATA_DIR)
+
+    from api.deps import get_engine, get_llm_provider
+    from api.main import app
+    from domain.overrides import OverrideCall
+
+    class _MalformedArgsProvider:
+        name = "malformed"
+
+        def parse_constraints(self, text: str):
+            return [
+                # Missing required numeric key entirely. "C Pick" resolves
+                # uniquely (unlike bare "Pick", which is ambiguous across
+                # three tasks) so this exercises the numeric-arg guard, not
+                # the clarification path.
+                OverrideCall(id="c1", tool="set_min_workers_per_task",
+                             args={"task_id": "C Pick"}),
+                # Non-numeric value the LLM might emit for a free-text slot.
+                OverrideCall(id="c2", tool="scale_demand",
+                             args={"task_id": "C Pick", "factor": "a lot"}),
+                # Missing member_id entirely.
+                OverrideCall(id="c3", tool="lock_worker_shift", args={"day": 0}),
+                # Non-string member_id (e.g. a stray null from the LLM).
+                OverrideCall(id="c4", tool="exclude_worker_from_task",
+                             args={"member_id": None, "task_id": "C Pick"}),
+                OverrideCall(id="c5", tool="set_max_hours",
+                             args={"member_id": "Gary", "max_hours": "forty"}),
+            ]
+
+        def generate_insights(self, summary: dict) -> str:
+            return "n/a"
+
+    app.dependency_overrides[get_engine] = lambda: StubEngine()
+    app.dependency_overrides[get_llm_provider] = lambda: _MalformedArgsProvider()
+    with TestClient(app) as c:
+        r = c.post("/scenarios", json={
+            "name": "test-malformed-args",
+            "fixture": "sample_tiny_input.json",
+            "time_limit_s": 5,
+        })
+        assert r.status_code == 201
+        scenario_id = r.json()["id"]
+
+        r2 = c.post("/constraints", json={
+            "scenario_id": scenario_id,
+            "text": "irrelevant — provider is stubbed to emit malformed args",
+        })
+        assert r2.status_code == 200, (
+            f"Malformed LLM tool args must never 500, got {r2.status_code}: {r2.text}"
+        )
+        body = r2.json()
+        assert body["applied"] == [], "No malformed call should ever apply"
+        assert len(body["rejected"]) == 5, (
+            f"All five malformed calls must land in rejected[], got: {body['rejected']}"
+        )
+    app.dependency_overrides.clear()
+
+
 def test_no_constraint_found_in_text_returns_200_with_flag(client, scenario_id):
     """Gibberish text -> 200 with no_constraint_found=True (NLC-03/D-03)."""
     r = client.post("/constraints", json={

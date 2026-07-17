@@ -195,8 +195,15 @@ def parse_and_store(
         args = dict(call.args)  # mutable copy
 
         if tool == "set_min_workers_per_task":
-            # Resolve human task token to a real task_id (VAL-02)
-            rr = _resolve_task(problem, args["task_id"])
+            # Resolve human task token to a real task_id (VAL-02). Guarded
+            # against a missing/non-string LLM tool arg (CR-02) — never let a
+            # KeyError/TypeError/AttributeError from untrusted `args` escape
+            # as an uncaught 500; route it into rejected[] instead.
+            try:
+                rr = _resolve_task(problem, args["task_id"])
+            except (KeyError, TypeError, AttributeError):
+                rejected.append({"tool": tool, "error": "Missing or invalid 'task_id' argument."})
+                continue
             if rr.clarification is not None:
                 if clarification_needed is None:
                     clarification_needed = rr.clarification
@@ -207,8 +214,15 @@ def parse_and_store(
             resolved_task_id = rr.resolved_id
             args["task_id"] = resolved_task_id
 
-            # Validate n > 0 (VAL-01)
-            n = int(args["n"])
+            # Validate n > 0 (VAL-01) — guard the numeric coercion (CR-02).
+            try:
+                n = int(args["n"])
+            except (KeyError, TypeError, ValueError):
+                rejected.append({
+                    "tool": tool,
+                    "error": "Missing or non-numeric 'n' argument.",
+                })
+                continue
             if n <= 0:
                 rejected.append({
                     "tool": tool,
@@ -228,8 +242,12 @@ def parse_and_store(
             })
 
         elif tool == "scale_demand":
-            # Resolve task token (VAL-02)
-            rr = _resolve_task(problem, args["task_id"])
+            # Resolve task token (VAL-02), guarded against malformed args (CR-02).
+            try:
+                rr = _resolve_task(problem, args["task_id"])
+            except (KeyError, TypeError, AttributeError):
+                rejected.append({"tool": tool, "error": "Missing or invalid 'task_id' argument."})
+                continue
             if rr.clarification is not None:
                 if clarification_needed is None:
                     clarification_needed = rr.clarification
@@ -239,8 +257,15 @@ def parse_and_store(
                 continue
             args["task_id"] = rr.resolved_id
 
-            # Validate factor > 0 (VAL-01/T-02-05)
-            factor = float(args["factor"])
+            # Validate factor > 0 (VAL-01/T-02-05) — guard the coercion (CR-02).
+            try:
+                factor = float(args["factor"])
+            except (KeyError, TypeError, ValueError):
+                rejected.append({
+                    "tool": tool,
+                    "error": "Missing or non-numeric 'factor' argument.",
+                })
+                continue
             if factor <= 0:
                 rejected.append({
                     "tool": tool,
@@ -263,8 +288,12 @@ def parse_and_store(
             })
 
         elif tool == "lock_worker_shift":
-            # Resolve member token (VAL-02/D-11)
-            rr = _resolve_member(problem, args["member_id"])
+            # Resolve member token (VAL-02/D-11), guarded against malformed args (CR-02).
+            try:
+                rr = _resolve_member(problem, args["member_id"])
+            except (KeyError, TypeError, AttributeError):
+                rejected.append({"tool": tool, "error": "Missing or invalid 'member_id' argument."})
+                continue
             if rr.clarification is not None:
                 if clarification_needed is None:
                     clarification_needed = rr.clarification
@@ -274,8 +303,16 @@ def parse_and_store(
                 continue
             args["member_id"] = rr.resolved_id
 
-            # Validate day within scenario horizon (VAL-01/T-02-07)
-            day = int(args["day"])
+            # Validate day within scenario horizon (VAL-01/T-02-07) — guard
+            # the coercion (CR-02).
+            try:
+                day = int(args["day"])
+            except (KeyError, TypeError, ValueError):
+                rejected.append({
+                    "tool": tool,
+                    "error": "Missing or non-numeric 'day' argument.",
+                })
+                continue
             max_day = int(problem.horizon_h // 24) - 1
             if day < 0 or day > max_day:
                 rejected.append({
@@ -301,9 +338,18 @@ def parse_and_store(
             })
 
         elif tool == "exclude_worker_from_task":
-            # Resolve both member and task tokens (VAL-02/D-11)
-            rr_member = _resolve_member(problem, args["member_id"])
-            rr_task = _resolve_task(problem, args["task_id"])
+            # Resolve both member and task tokens (VAL-02/D-11), each guarded
+            # against a malformed/missing LLM arg (CR-02).
+            try:
+                rr_member = _resolve_member(problem, args["member_id"])
+            except (KeyError, TypeError, AttributeError):
+                rejected.append({"tool": tool, "error": "Missing or invalid 'member_id' argument."})
+                continue
+            try:
+                rr_task = _resolve_task(problem, args["task_id"])
+            except (KeyError, TypeError, AttributeError):
+                rejected.append({"tool": tool, "error": "Missing or invalid 'task_id' argument."})
+                continue
 
             # Collect any clarification or rejection from either resolution
             got_clarification = False
@@ -341,8 +387,12 @@ def parse_and_store(
             })
 
         elif tool == "set_max_hours":
-            # Resolve member token (VAL-02/D-11)
-            rr = _resolve_member(problem, args["member_id"])
+            # Resolve member token (VAL-02/D-11), guarded against malformed args (CR-02).
+            try:
+                rr = _resolve_member(problem, args["member_id"])
+            except (KeyError, TypeError, AttributeError):
+                rejected.append({"tool": tool, "error": "Missing or invalid 'member_id' argument."})
+                continue
             if rr.clarification is not None:
                 if clarification_needed is None:
                     clarification_needed = rr.clarification
@@ -352,8 +402,15 @@ def parse_and_store(
                 continue
             args["member_id"] = rr.resolved_id
 
-            # Validate max_hours > 0 (VAL-01/T-02-06)
-            max_hours = float(args["max_hours"])
+            # Validate max_hours > 0 (VAL-01/T-02-06) — guard the coercion (CR-02).
+            try:
+                max_hours = float(args["max_hours"])
+            except (KeyError, TypeError, ValueError):
+                rejected.append({
+                    "tool": tool,
+                    "error": "Missing or non-numeric 'max_hours' argument.",
+                })
+                continue
             if max_hours <= 0:
                 rejected.append({
                     "tool": tool,
