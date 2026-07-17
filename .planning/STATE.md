@@ -5,15 +5,15 @@ milestone_name: Frontend
 current_phase: 02
 current_phase_name: scenario-detail-plain-english-constraints
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-07-17T08:11:44.460Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-07-17T08:17:57.150Z"
 last_activity: 2026-07-17
 last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 14
-  completed_plans: 9
+  completed_plans: 10
   percent: 25
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 ## Current Position
 
 Phase: 02 (scenario-detail-plain-english-constraints) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-07-17 — Phase 02 execution started
 
@@ -73,6 +73,7 @@ Last activity: 2026-07-17 — Phase 02 execution started
 |------|----------|-------|-------|
 | Phase 02 P01 | 20min | 2 tasks | 5 files |
 | Phase 02 P02 | 20min | 2 tasks | 5 files |
+| Phase 02 P03 | 15min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,7 @@ v0.4 decisions:
 - [Phase ?]: Dedicated GET /scenarios/{id}/overrides endpoint (not a ScenarioOut field) so scenario-detail and overrides fetches resolve/error independently per UI-SPEC
 - [Phase ?]: constraints.test.ts mirrors scenarios.test.ts's vi.mock("./client") boundary-mock pattern verbatim (not msw) for the applyConstraint wrapper
 - [Phase ?]: Textarea added via npx shadcn add textarea from the official registry (source-file copy), verified zero new package.json dependencies
+- [Phase ?]: useApplyConstraint's docstring avoids literal 'textarea-clear'/'transcript-append' substrings so the plan's own no-textarea/transcript-logic acceptance grep can't false-positive on an explanatory comment.
 
 ### Pending Todos
 
@@ -150,8 +152,8 @@ Items acknowledged and deferred at milestone close on 2026-07-15:
 
 ## Session Continuity
 
-Last session: 2026-07-17T08:11:44.443Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-07-17T08:17:57.137Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
