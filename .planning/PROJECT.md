@@ -72,7 +72,7 @@ explanation of what changed — without touching solver code or JSON.
 
 - [ ] Vite + React + TypeScript app under `frontend/`, typed against `docs/API.md`
 - [ ] Home — scenario list / create from an existing fixture
-- [ ] ScenarioEditor — fixture select, NL constraint box, applied-overrides list
+- [x] ScenarioEditor — fixture select, NL constraint box, applied-overrides list — ✓ v0.4 Phase 2 (scenario detail header + 404 gate, plain-English constraint transcript with distinct outcome treatments, durable applied-overrides list over GET /scenarios/{id}/overrides)
 - [ ] RunHistory — trigger a run, poll status, list prior runs
 - [ ] ResultsView — coverage cards, demand-vs-served chart, insights, schedule table
 - [ ] CORS middleware on the FastAPI app (enabler — no browser origin can call the API without it)
