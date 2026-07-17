@@ -78,7 +78,13 @@ def _resolve_task(problem, token: str) -> _ResolveResult:
     if len(matches) == 1:
         return _ResolveResult(resolved_id=matches[0].task_id, error=None, clarification=None)
 
-    valid_names = ", ".join(f"{t.name!r} ({t.task_id})" for t in problem.tasks)
+    # Dedupe by task_id (WR-04) — same rationale as _resolve_member's dedup
+    # (CR-01): if problem.tasks ever contains more than one row for the same
+    # task_id, the "valid options" listing must not repeat it.
+    valid_names = ", ".join(
+        f"{t.name!r} ({t.task_id})"
+        for t in _dedupe_by_key(problem.tasks, lambda t: t.task_id)
+    )
     if len(matches) == 0:
         return _ResolveResult(
             resolved_id=None,
