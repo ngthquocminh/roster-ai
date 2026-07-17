@@ -99,7 +99,7 @@ Plans:
   - Works against the default `LLM_PROVIDER=stub` (keyless, deterministic, regex-routed). Nothing here may require a live key; default CI stays keyless. Only a demo of genuine NL understanding needs `gemini`/`openrouter`.
   - The response is a partial-apply shape (`applied[]` + `rejected[]`) — criterion 3 is about rendering both halves of one `200`, not an error path.
 
-**Plans**: 3/7 plans executed
+**Plans**: 4/7 plans executed
 
 Plans:
 **Wave 1**
@@ -116,7 +116,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 — two parallel plans)*
 
-- [ ] 02-04-PLAN.md — Read surface: ScenarioHeader (404 terminal) + OverridesList (legacy fallback) (Wave 4)
+- [x] 02-04-PLAN.md — Read surface: ScenarioHeader (404 terminal) + OverridesList (legacy fallback) (Wave 4)
 - [ ] 02-05-PLAN.md — Write surface: TranscriptEntry/ConstraintTranscript + ConstraintInput + ProviderDownBanner (Wave 4)
 
 **Wave 5** *(blocked on Wave 4)*
@@ -181,6 +181,6 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|-----------------|--------|-----------|
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
-| 2. Scenario Detail + Plain-English Constraints | v0.4 | 3/7 | In Progress|  |
+| 2. Scenario Detail + Plain-English Constraints | v0.4 | 4/7 | In Progress|  |
 | 3. Run Execution & History | v0.4 | 0/TBD | Not started | - |
 | 4. Results & Insights | v0.4 | 0/TBD | Not started | - |
