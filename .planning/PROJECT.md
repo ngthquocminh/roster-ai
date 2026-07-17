@@ -79,8 +79,8 @@ explanation of what changed — without touching solver code or JSON.
 
 <!-- Deferred: scoped out of v0.4, still live. See todos/pending/ for the full set. -->
 
-- [ ] Input upload endpoint — deferred to v0.5; vision.md's pitch opens with it, but v0.4 demos against committed fixtures. Hard prerequisite: WR-04 must land first.
-- [ ] Fixture path traversal hardening in `constraint_service.py` (WR-04)
+- [ ] Input upload endpoint — deferred to v0.5; vision.md's pitch opens with it, but v0.4 demos against committed fixtures. Hard prerequisite WR-04 is now resolved (see below).
+- [x] Fixture path traversal hardening (WR-04) — ✓ resolved in Phase 2 code-review fix: `settings.resolve_fixture_path()` constrains the fixture path to `data_dir`, rejecting absolute / `../`-escaping values (400 on scenario create, 404 on constraint parse)
 - [ ] `_grounding_guard` `coverage_by_day` dict-key admission fix (D-06 false-positive class)
 - [ ] Demand scheduling: deadline-fill semantics instead of flat hourly distribution
 
@@ -124,8 +124,8 @@ explanation of what changed — without touching solver code or JSON.
   for full phase detail.
 - Known issues carried into the next milestone: a D-06 grounding-guard
   false-positive class on `coverage_by_day` dict-key citations (surfaced by
-  live-provider testing, not yet fixed); no path-traversal containment check
-  on the scenario fixture path in `constraint_service.py` (WR-04).
+  live-provider testing, not yet fixed). WR-04 (no path-traversal containment
+  on the scenario fixture path) was resolved in Phase 2's code-review fix pass.
 
 ## Constraints
 
