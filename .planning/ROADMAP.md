@@ -148,7 +148,7 @@ Plans:
   - No cancellation path exists in the engine (see `todos/pending/`, OPS-01). Criterion 3 requires an honest wait, not a spinner that lies. Do not build a cancel button.
   - A time-limited solve still ends `COMPLETED` with `solver_status = UNKNOWN` — that is success, not failure. `FAILED` is reserved for unexpected errors.
 
-**Plans**: 5/5 plans executed
+**Plans**: 5/5 executed + 1 gap-closure plan
 
 Plans:
 **Wave 1**
@@ -164,6 +164,10 @@ Plans:
 **Wave 3** *(blocked on Wave 2)*
 
 - [x] 03-05-PLAN.md — RunHistory view composition + App.tsx route swap; retire RunsPlaceholder (Wave 3)
+
+**Gap Closure** *(from UAT G-03-1 / RUN-04)*
+
+- [ ] 03-06-PLAN.md — Format Run History timestamps to fixed-width YYYY-MM-DD HH:MM; regression test on real 32-char backend format (Wave 1)
 
 **UI hint**: yes
 
