@@ -38,6 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RunStatusLabel } from "./RunStatusLabel";
+import { formatTimestamp } from "@/lib/formatTimestamp";
 import type { components } from "@/api/schema";
 
 type RunOut = components["schemas"]["RunOut"];
@@ -48,7 +49,7 @@ function TimestampCell({ value }: { value?: string | null }) {
   if (!value) {
     return <span className="text-muted-foreground">—</span>;
   }
-  return <>{value}</>;
+  return <>{formatTimestamp(value)}</>;
 }
 
 export function RunHistoryTable({
@@ -136,7 +137,7 @@ export function RunHistoryTable({
                 )}
               </TableCell>
               <TableCell className="align-top whitespace-nowrap">
-                {run.created_at}
+                <TimestampCell value={run.created_at} />
               </TableCell>
               <TableCell className="align-top whitespace-nowrap">
                 <TimestampCell value={run.started_at} />
