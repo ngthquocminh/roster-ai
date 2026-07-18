@@ -5,7 +5,7 @@ import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 import { Editor } from "@/routes/Editor";
 import { Home } from "@/routes/Home";
 import { ResultsPlaceholder } from "@/routes/ResultsPlaceholder";
-import { RunsPlaceholder } from "@/routes/RunsPlaceholder";
+import { RunHistory } from "@/routes/RunHistory";
 import { ScenarioLayout } from "@/routes/ScenarioLayout";
 
 /**
@@ -51,7 +51,7 @@ export const routes: RouteObject[] = [
         Component: ScenarioLayout,
         children: [
           { index: true, Component: Editor },
-          { path: "runs", Component: RunsPlaceholder },
+          { path: "runs", Component: RunHistory },
           { path: "runs/:runId", Component: ResultsPlaceholder },
         ],
       },
