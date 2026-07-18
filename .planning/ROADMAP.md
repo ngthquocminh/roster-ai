@@ -148,7 +148,7 @@ Plans:
   - No cancellation path exists in the engine (see `todos/pending/`, OPS-01). Criterion 3 requires an honest wait, not a spinner that lies. Do not build a cancel button.
   - A time-limited solve still ends `COMPLETED` with `solver_status = UNKNOWN` — that is success, not failure. `FAILED` is reserved for unexpected errors.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -163,7 +163,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 03-05-PLAN.md — RunHistory view composition + App.tsx route swap; retire RunsPlaceholder (Wave 3)
+- [x] 03-05-PLAN.md — RunHistory view composition + App.tsx route swap; retire RunsPlaceholder (Wave 3)
 
 **UI hint**: yes
 
@@ -198,5 +198,5 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 |-------|-----------|-----------------|--------|-----------|
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | Complete    | 2026-07-17 |
-| 3. Run Execution & History | v0.4 | 4/5 | In Progress|  |
+| 3. Run Execution & History | v0.4 | 5/5 | In Progress|  |
 | 4. Results & Insights | v0.4 | 0/TBD | Not started | - |
