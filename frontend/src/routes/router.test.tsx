@@ -54,18 +54,21 @@ describe("router: four-route shell (SHELL-03)", () => {
     expect(screen.getByText("Loading scenario…")).toBeInTheDocument();
   });
 
-  it("mounts the Runs placeholder at /scenarios/:scenarioId/runs — not the Editor index with scenarioId 'runs' [edge: SHELL-03/precision]", () => {
+  it("mounts the real RunHistory view at /scenarios/:scenarioId/runs — not the Editor index with scenarioId 'runs' [edge: SHELL-03/precision]", () => {
     renderAt("/scenarios/abc123/runs");
     expect(
-      screen.getByRole("heading", { name: /Runs — not built yet/ }),
+      screen.getByRole("heading", { name: "Run History" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Run Scenario" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Loading scenario…"),
     ).not.toBeInTheDocument();
     // Route ranking has teeth: no element anywhere renders a scenarioId of
     // "runs" — the only place the word "runs" may legitimately appear is the
-    // "Runs" tab label and the "Runs — not built yet" heading already
-    // asserted above, never a literal id value.
+    // "Runs" tab label and the "Run History" heading already asserted above,
+    // never a literal id value.
     expect(screen.queryByText(/scenarioId.*runs/i)).not.toBeInTheDocument();
   });
 
@@ -148,12 +151,6 @@ describe("router: four-route shell (SHELL-03)", () => {
     );
   });
 
-  it("the still-placeholder Runs view renders the UI-SPEC honest-not-built-yet copy with no mock data", () => {
-    renderAt("/scenarios/abc123/runs");
-    expect(
-      screen.getByText("This view ships in a later phase of the v0.4 milestone."),
-    ).toBeInTheDocument();
-  });
 });
 
 /**
