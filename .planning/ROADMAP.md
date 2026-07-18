@@ -148,12 +148,12 @@ Plans:
   - No cancellation path exists in the engine (see `todos/pending/`, OPS-01). Criterion 3 requires an honest wait, not a spinner that lies. Do not build a cancel button.
   - A time-limited solve still ends `COMPLETED` with `solver_status = UNKNOWN` — that is success, not failure. `FAILED` is reserved for unexpected errors.
 
-**Plans**: 5 plans
+**Plans**: 1/5 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — Run API wrappers (listRuns/triggerRun) + run-status vocabulary/terminal predicates (Wave 1)
+- [x] 03-01-PLAN.md — Run API wrappers (listRuns/triggerRun) + run-status vocabulary/terminal predicates (Wave 1)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -198,5 +198,5 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 |-------|-----------|-----------------|--------|-----------|
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | Complete    | 2026-07-17 |
-| 3. Run Execution & History | v0.4 | 0/TBD | Not started | - |
+| 3. Run Execution & History | v0.4 | 1/5 | In Progress|  |
 | 4. Results & Insights | v0.4 | 0/TBD | Not started | - |
