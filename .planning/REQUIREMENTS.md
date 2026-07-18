@@ -37,8 +37,8 @@ Requirements for milestone v0.4. Each maps to exactly one roadmap phase.
 - [ ] **RUN-01**: User can trigger a run for a scenario
 - [ ] **RUN-02**: The UI polls run status until terminal and reflects `PENDING → RUNNING → COMPLETED/FAILED`
 - [ ] **RUN-03**: While a run is in flight the UI communicates the wait honestly — it can take minutes, and it cannot be cancelled
-- [ ] **RUN-04**: User can see prior runs for a scenario with their status and timing
-- [ ] **RUN-05**: A `FAILED` run shows its recorded error rather than appearing merely absent
+- [x] **RUN-04**: User can see prior runs for a scenario with their status and timing
+- [x] **RUN-05**: A `FAILED` run shows its recorded error rather than appearing merely absent
 
 ### Results & Insights
 
@@ -108,8 +108,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | RUN-01 | Phase 3 | Pending |
 | RUN-02 | Phase 3 | Pending |
 | RUN-03 | Phase 3 | Pending |
-| RUN-04 | Phase 3 | Pending |
-| RUN-05 | Phase 3 | Pending |
+| RUN-04 | Phase 3 | Complete |
+| RUN-05 | Phase 3 | Complete |
 | RES-01 | Phase 4 | Pending |
 | RES-02 | Phase 4 | Pending |
 | RES-03 | Phase 4 | Pending |
