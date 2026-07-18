@@ -268,6 +268,30 @@ describe("RunHistoryTable: HTML-looking error [T-3-05/T-1-03]", () => {
   });
 });
 
+describe("RunHistoryTable: timestamp formatting [gap G-03-1/RUN-04]", () => {
+  it("renders the real 32-char microsecond+offset backend format as short 'YYYY-MM-DD HH:MM' with no raw noise", () => {
+    const runs: RunOut[] = [
+      {
+        id: "run-ts",
+        scenario_id: "scenario-1",
+        status: "COMPLETED",
+        created_at: "2026-07-18T15:53:53.702354+00:00",
+        started_at: "2026-07-18T15:54:10.123456+00:00",
+        finished_at: "2026-07-18T15:58:42.987654+00:00",
+        solver_status: "OPTIMAL",
+        error: null,
+      },
+    ];
+    const { container } = renderTable(queryResult({ data: runs }));
+
+    expect(screen.getByText("2026-07-18 15:53")).toBeInTheDocument();
+    expect(screen.getByText("2026-07-18 15:54")).toBeInTheDocument();
+    expect(screen.getByText("2026-07-18 15:58")).toBeInTheDocument();
+    expect(container.textContent).not.toContain(".702354");
+    expect(container.textContent).not.toContain("+00:00");
+  });
+});
+
 describe("RunHistoryTable: zero-one-many [UI-SPEC E2/zero-one-many]", () => {
   it("renders one row with identical chrome to many, with no count label anywhere", () => {
     const runs: RunOut[] = [
