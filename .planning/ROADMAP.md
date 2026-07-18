@@ -148,7 +148,23 @@ Plans:
   - No cancellation path exists in the engine (see `todos/pending/`, OPS-01). Criterion 3 requires an honest wait, not a spinner that lies. Do not build a cancel button.
   - A time-limited solve still ends `COMPLETED` with `solver_status = UNKNOWN` — that is success, not failure. `FAILED` is reserved for unexpected errors.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 03-01-PLAN.md — Run API wrappers (listRuns/triggerRun) + run-status vocabulary/terminal predicates (Wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 03-02-PLAN.md — Hooks: useRuns (self-terminating poll) + useTriggerRun (immediate-refetch mutation) (Wave 2)
+- [ ] 03-03-PLAN.md — Read surface: RunStatusLabel + RunHistoryTable (prior runs, inline FAILED error) (Wave 2)
+- [ ] 03-04-PLAN.md — Write/status surface: TriggerRunButton (all states) + honest RunInFlightPanel (Wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 03-05-PLAN.md — RunHistory view composition + App.tsx route swap; retire RunsPlaceholder (Wave 3)
+
 **UI hint**: yes
 
 ### Phase 4: Results & Insights
