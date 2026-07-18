@@ -118,3 +118,7 @@ Gap G-03-1 (RUN-04) is closed: the Run History table's Created/Started/Finished 
 ---
 *Phase: 03-run-execution-history*
 *Completed: 2026-07-18*
+
+## Self-Check: PASSED
+
+All created/modified files confirmed present on disk; all 5 commit hashes (2eff8d5, 8bd0617, eba8883, 1074f28, 8418e73) confirmed in `git log`.
