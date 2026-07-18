@@ -6,8 +6,7 @@
  * is driven directly via props.
  */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 import { TriggerRunButton } from "./TriggerRunButton";
 
@@ -97,12 +96,11 @@ describe("TriggerRunButton: error other [UI-SPEC E1/error-other]", () => {
 });
 
 describe("TriggerRunButton: click [RUN-01]", () => {
-  it("calls onTrigger exactly once when the enabled button is clicked", async () => {
-    const user = userEvent.setup();
+  it("calls onTrigger exactly once when the enabled button is clicked", () => {
     const props = baseProps();
     render(<TriggerRunButton {...props} />);
 
-    await user.click(screen.getByRole("button", { name: "Run Scenario" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run Scenario" }));
 
     expect(props.onTrigger).toHaveBeenCalledTimes(1);
   });
