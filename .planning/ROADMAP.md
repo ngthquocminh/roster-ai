@@ -148,7 +148,7 @@ Plans:
   - No cancellation path exists in the engine (see `todos/pending/`, OPS-01). Criterion 3 requires an honest wait, not a spinner that lies. Do not build a cancel button.
   - A time-limited solve still ends `COMPLETED` with `solver_status = UNKNOWN` — that is success, not failure. `FAILED` is reserved for unexpected errors.
 
-**Plans**: 5/5 executed + 1 gap-closure plan
+**Plans**: 6/6 plans executed
 
 Plans:
 **Wave 1**
@@ -167,7 +167,7 @@ Plans:
 
 **Gap Closure** *(from UAT G-03-1 / RUN-04)*
 
-- [ ] 03-06-PLAN.md — Format Run History timestamps to fixed-width YYYY-MM-DD HH:MM; regression test on real 32-char backend format (Wave 1)
+- [x] 03-06-PLAN.md — Format Run History timestamps to fixed-width YYYY-MM-DD HH:MM; regression test on real 32-char backend format (Wave 1)
 
 **UI hint**: yes
 
@@ -202,5 +202,5 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 |-------|-----------|-----------------|--------|-----------|
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | Complete    | 2026-07-17 |
-| 3. Run Execution & History | v0.4 | 5/5 | In Progress|  |
+| 3. Run Execution & History | v0.4 | 6/6 | In Progress|  |
 | 4. Results & Insights | v0.4 | 0/TBD | Not started | - |
