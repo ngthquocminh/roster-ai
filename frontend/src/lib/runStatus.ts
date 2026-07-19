@@ -39,8 +39,10 @@ export function runStatusMeta(status: string): RunStatusMeta {
   );
 }
 
+const ACTIVE_STATUSES = new Set(["PENDING", "RUNNING"]);
+
 export function isTerminalStatus(status: string): boolean {
-  return status === "COMPLETED" || status === "FAILED";
+  return !ACTIVE_STATUSES.has(status);
 }
 
 export function hasActiveRun(runs: RunOut[]): boolean {
