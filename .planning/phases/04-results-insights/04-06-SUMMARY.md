@@ -136,3 +136,12 @@ None - no external service configuration required.
 ---
 *Phase: 04-results-insights*
 *Completed: 2026-07-20*
+
+## Self-Check: PASSED
+
+- FOUND: frontend/src/components/results/InsightPanel.tsx
+- FOUND: frontend/src/components/results/InsightPanel.test.tsx
+- FOUND: .planning/phases/04-results-insights/04-06-SUMMARY.md
+- FOUND: 990133a (feat: InsightPanel component)
+- FOUND: c9d9cbf (test: InsightPanel.test.tsx)
+- FOUND: 10d9572 (docs: plan metadata commit)
