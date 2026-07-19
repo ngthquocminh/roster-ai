@@ -72,11 +72,16 @@ describe("router: four-route shell (SHELL-03)", () => {
     expect(screen.queryByText(/scenarioId.*runs/i)).not.toBeInTheDocument();
   });
 
-  it("mounts the Results placeholder at /scenarios/:scenarioId/runs/:runId", () => {
+  it("mounts the real ResultsView at /scenarios/:scenarioId/runs/:runId", () => {
+    // `@/hooks/useRun` is intentionally unmocked here (matching the Editor
+    // and RunHistory route tests above) — the real `getRun` fetch has
+    // nowhere to resolve in jsdom, so the assertion targets ResultsView's
+    // synchronous initial-render state (`useRun`'s query is `isLoading`
+    // before the fetch ever settles), not a later branch. Full ResultsView
+    // branching (D-12 status gate, RES-05 isolation) is covered by
+    // ResultsView.test.tsx.
     renderAt("/scenarios/abc123/runs/run789");
-    expect(
-      screen.getByRole("heading", { name: /Results — not built yet/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Loading run…")).toBeInTheDocument();
   });
 
   it("renders the app bar with a link to / on all four routes", () => {

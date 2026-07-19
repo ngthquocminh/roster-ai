@@ -4,7 +4,7 @@ import { AppBar } from "@/components/layout/AppBar";
 import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 import { Editor } from "@/routes/Editor";
 import { Home } from "@/routes/Home";
-import { ResultsPlaceholder } from "@/routes/ResultsPlaceholder";
+import { ResultsView } from "@/routes/ResultsView";
 import { RunHistory } from "@/routes/RunHistory";
 import { ScenarioLayout } from "@/routes/ScenarioLayout";
 
@@ -52,7 +52,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, Component: Editor },
           { path: "runs", Component: RunHistory },
-          { path: "runs/:runId", Component: ResultsPlaceholder },
+          { path: "runs/:runId", Component: ResultsView },
         ],
       },
     ],
