@@ -12,6 +12,10 @@
  * identically in both tables. A null per-day value renders the literal
  * "Not computed" (plain text, no tooltip — that granularity is reserved for
  * the coverage stat row's D-07 tooltip treatment).
+ *
+ * Values are fractions in [0, 1] per docs/API.md ("day index (string) ->
+ * fraction covered (0-1)"), matching CoverageStat.pct on the backend — scale
+ * to a percentage for display, never render the raw fraction with a bare "%".
  */
 import {
   Table,
@@ -21,6 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+function formatCoveragePct(value: number): string {
+  return `${Number((value * 100).toFixed(1))}%`;
+}
 
 export function CoverageByDayTable({
   coverage_by_day,
@@ -39,7 +47,9 @@ export function CoverageByDayTable({
         {Object.entries(coverage_by_day).map(([dayKey, value]) => (
           <TableRow key={dayKey}>
             <TableCell>{`Day ${Number(dayKey) + 1}`}</TableCell>
-            <TableCell>{value == null ? "Not computed" : `${value}%`}</TableCell>
+            <TableCell>
+              {value == null ? "Not computed" : formatCoveragePct(value)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

@@ -10,8 +10,10 @@ import { CoverageByDayTable } from "./CoverageByDayTable";
 
 describe("CoverageByDayTable: populated [UI-SPEC E4/populated]", () => {
   it("renders 1-indexed 'Day N' rows with percent-formatted values", () => {
+    // coverage_by_day is a fraction in [0, 1] per docs/API.md, not a
+    // pre-scaled percentage — 0.612 must render as "61.2%", not "0.612%".
     render(
-      <CoverageByDayTable coverage_by_day={{ "0": 61.2, "1": 88.0 }} />,
+      <CoverageByDayTable coverage_by_day={{ "0": 0.612, "1": 0.88 }} />,
     );
 
     expect(screen.getByText("Day 1")).toBeInTheDocument();
@@ -24,7 +26,7 @@ describe("CoverageByDayTable: populated [UI-SPEC E4/populated]", () => {
 describe("CoverageByDayTable: partial null [UI-SPEC E4/partial]", () => {
   it("renders 'Not computed' (plain text, no tooltip) for a null day value", () => {
     render(
-      <CoverageByDayTable coverage_by_day={{ "0": 61.2, "1": null }} />,
+      <CoverageByDayTable coverage_by_day={{ "0": 0.612, "1": null }} />,
     );
 
     expect(screen.getByText("Day 2")).toBeInTheDocument();
