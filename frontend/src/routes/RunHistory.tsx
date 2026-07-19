@@ -51,7 +51,7 @@ export function RunHistory() {
         </h2>
         <TriggerRunButton
           onTrigger={() => trigger.mutate()}
-          isLoadingList={runsQuery.isLoading}
+          isLoadingList={runsQuery.isLoading || runsQuery.isFetching}
           runInProgress={runInProgress}
           isPending={trigger.isPending}
           error={trigger.error}
