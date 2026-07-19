@@ -64,5 +64,5 @@ export async function getRunResult(runId: string): Promise<RunResult> {
     // before COMPLETED, though callers should gate on RunOut.status first).
     throw { status: response.status, ...error };
   }
-  return data as RunResult;
+  return data as unknown as RunResult;
 }
