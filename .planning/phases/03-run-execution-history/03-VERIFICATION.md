@@ -1,22 +1,31 @@
 ---
 phase: 03-run-execution-history
-verified: 2026-07-18T20:30:00Z
-status: human_needed
+verified: 2026-07-19T10:00:00Z
+status: passed
 score: 5/5 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Start the backend (`uvicorn api.main:app --reload`) and the frontend (`npm run dev`). Open a scenario's Runs tab and click 'Run Scenario'."
-    expected: "A new run appears immediately as 'Queued' with no manual refresh (RUN-01); the button then disables with 'A run is already in progress for this scenario.'; the in-flight panel shows the honest 'Solving…' / multi-minute / cannot-be-cancelled copy with NO cancel button and NO progress bar (RUN-03); the run advances to 'Completed' on its own without a manual refresh (RUN-02); reloading mid-flight resumes state from polling; prior runs list with created/started/finished timing (RUN-04); a deep link to /scenarios/<bogus-id>/runs shows the ordinary 'No runs yet' empty state, not a 'Scenario not found' gate; a FAILED run (if available) shows its error text inline and wraps without breaking table columns (RUN-05)."
-    why_human: "Requires a live backend, real timers/HTTP polling, and visual/layout judgment (column-width wrap under real browser rendering) that unit tests with mocked hooks and jsdom cannot exercise. Deferred by the plan's own human_verify_mode=end-of-phase checklist (03-05-PLAN.md verification block) and by 03-03's D9 backstop (long/multi-line FAILED error wrap)."
+re_verification:
+  previous_status: human_needed
+  previous_score: 5/5
+  gaps_closed:
+    - "G-03-1: RunHistoryTable timestamp overflow/layout break (RUN-04) — closed by 03-06-PLAN.md (formatTimestamp utility)"
+    - "CR-01: Table empty-state 'Run Scenario' CTA had no duplicate-submission guard — closed by code-review-fix commit f072617"
+    - "WR-01: isTerminalStatus hardcoded terminal literals instead of deriving from known-active statuses — closed by commit a61ce10"
+    - "WR-02: Header trigger button re-enabled during background refetch race window — closed by commit 81006c2"
+    - "WR-03: Clickable run rows lacked accessible role/name — closed by commit 22356f5"
+    - "Human verification item 1 (end-to-end browser walkthrough, RUN-01..RUN-05) — confirmed via 03-UAT.md test 1, result: pass"
+    - "Human verification item 2 (long/multi-line FAILED error text wrap) — confirmed via 03-UAT.md test 2, result: pass"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 3: Run Execution & History Verification Report
 
 **Phase Goal:** A user can trigger a solve and follow it to a terminal state without leaving the browser.
-**Verified:** 2026-07-18T20:30:00Z
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Verified:** 2026-07-19T10:00:00Z
+**Status:** passed
+**Re-verification:** Yes — after gap closure (G-03-1), a code-review --fix pass (CR-01, WR-01, WR-02, WR-03), and a completed 25/25 UAT retest that confirms both items previously marked human_needed.
 
 ## Goal Achievement
 
@@ -24,11 +33,11 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | User can trigger a run for a scenario and see it appear immediately as `PENDING` | ✓ VERIFIED | `frontend/src/api/runs.ts` `triggerRun()` POSTs `/scenarios/{id}/runs`; `frontend/src/hooks/useTriggerRun.ts` invalidates the byte-identical `["runs", scenarioId]` key on success (asserted in `useTriggerRun.test.tsx`); `RunHistory.tsx` wires `onTrigger={() => trigger.mutate()}` on the header CTA and passes the same callback into the table's empty-state CTA; `RunHistory.test.tsx` asserts the click invokes the mutation exactly once. |
-| 2 | User can watch a run advance through `PENDING → RUNNING → COMPLETED/FAILED` without manually refreshing | ✓ VERIFIED | `frontend/src/hooks/useRuns.ts`'s `refetchInterval` predicate calls `hasActiveRun(query.state.data ?? [])`; `useRuns.test.tsx` mounts the real hook and drives the actual wired predicate (read off `query.options.refetchInterval`) against RUNNING (returns interval), all-terminal (returns `false`), and empty (returns `false`) snapshots — proving the self-terminating poll logic, not a reimplementation. |
-| 3 | While a run is in flight the user is told honestly it can take minutes and cannot be cancelled — no progress affordance, no abort control | ✓ VERIFIED | `frontend/src/components/runs/RunInFlightPanel.tsx` renders the verbatim UI-SPEC "Solving…" / "This can take a few minutes… It can't be cancelled once started" copy for RUNNING and "Queued" / "next in line" for PENDING; `RunInFlightPanel.test.tsx` and `TriggerRunButton.test.tsx` both assert **no** `/cancel/i`-named control and **no** `progressbar`-role element exists in any rendered state; a repo-wide grep of the `components/runs/`, `hooks/useRuns.ts`, `hooks/useTriggerRun.ts`, and `routes/RunHistory.tsx` sources found no cancel/abort implementation, only the honesty copy and its tests. |
-| 4 | User can see prior runs for a scenario with their status and timing (created/started/finished) | ✓ VERIFIED | `frontend/src/components/runs/RunHistoryTable.tsx` renders one row per `RunOut` (Status/Created/Started/Finished columns), newest-first in server order (no client `.sort()`), nullable `started_at`/`finished_at` render `—`; `RunHistoryTable.test.tsx` (11 tests) covers loading/error/empty/populated/nullable-timestamp/overflow states. |
-| 5 | A `FAILED` run shows its recorded `error` text rather than appearing merely absent or permanently stuck | ✓ VERIFIED | `RunHistoryTable.tsx` renders `run.error` verbatim (JSX text child only, no `dangerouslySetInnerHTML`) beneath the "Failed" label, with `"Failed — no error details were recorded."` fallback when `error` is null; `RunHistoryTable.test.tsx` asserts both the verbatim case and the null-fallback case, plus an HTML-looking-error-string-renders-as-literal-text negative assertion (XSS mitigation, T-3-05). |
+| 1 | User can trigger a run for a scenario and see it appear immediately as `PENDING` | ✓ VERIFIED | `frontend/src/api/runs.ts` `triggerRun()` POSTs `/scenarios/{id}/runs`; `useTriggerRun.ts` invalidates `["runs", scenarioId]` on success; `RunHistory.tsx` wires the header CTA and the table's empty-state CTA to the same mutation, both now sharing the `trigger.isPending \|\| runInProgress` disabled guard (CR-01, commit `f072617`); confirmed live end-to-end in `03-UAT.md` test 1 ("clicking either repeatedly should not fire duplicate run requests") — result: pass. |
+| 2 | User can watch a run advance through `PENDING → RUNNING → COMPLETED/FAILED` without manually refreshing | ✓ VERIFIED | `useRuns.ts`'s `refetchInterval` predicate calls `hasActiveRun`; `hasActiveRun`/`isTerminalStatus` (`frontend/src/lib/runStatus.ts:42-49`) now derive terminality from a known-active set (`ACTIVE_STATUSES = new Set(["PENDING","RUNNING"])`, fail-safe: unrecognized future statuses stop polling instead of polling forever — WR-01, commit `a61ce10`); `runStatus.test.ts` (14 tests) confirms COMPLETED/FAILED/PENDING/RUNNING behavior unchanged; `03-UAT.md` test 1 confirms live auto-advance without manual refresh — result: pass. |
+| 3 | While a run is in flight the user is told honestly it can take minutes and cannot be cancelled — no progress affordance, no abort control | ✓ VERIFIED | `RunInFlightPanel.tsx` renders the verbatim "Solving…"/"can't be cancelled" copy; negative tests in `RunInFlightPanel.test.tsx`/`TriggerRunButton.test.tsx` assert no cancel control and no `progressbar` role in any state; header button now also stays disabled through the invalidated query's background refetch, not just the initial load (WR-02, commit `81006c2`, `RunHistory.tsx:54` — `runsQuery.isLoading \|\| runsQuery.isFetching`); confirmed live in `03-UAT.md` test 1 — result: pass. |
+| 4 | User can see prior runs for a scenario with their status and timing (created/started/finished) | ✓ VERIFIED | `RunHistoryTable.tsx` renders one row per `RunOut`, newest-first, Status/Created/Started/Finished columns; Created/Started/Finished cells now route through `formatTimestamp()` (`frontend/src/lib/formatTimestamp.ts`) producing a fixed-width "YYYY-MM-DD HH:MM" string instead of the raw 32-char microsecond+offset ISO value that previously broke column layout (gap G-03-1, closed by 03-06-PLAN.md, commits `2eff8d5`/`8bd0617`/`eba8883`/`1074f28`); `RunHistoryTable.test.tsx`'s new "timestamp formatting [gap G-03-1/RUN-04]" test pins the real backend format; confirmed live in `03-UAT.md` test 1 ("shown as a short fixed-width timestamp... no cell overflow, no whole-table horizontal scroll") — result: pass. Clickable rows also now carry `role="button"` + `aria-label` for accessibility (WR-03, commit `22356f5`). |
+| 5 | A `FAILED` run shows its recorded `error` text rather than appearing merely absent or permanently stuck | ✓ VERIFIED | `RunHistoryTable.tsx` renders `run.error` verbatim as a JSX text child beneath "Failed", with a defensive fallback when `error` is null; `RunHistoryTable.test.tsx` asserts both cases plus an HTML-looking-error-renders-as-literal-text negative assertion (XSS mitigation); confirmed live in `03-UAT.md` test 2 (long/multi-line error wrap) — result: pass. |
 
 **Score:** 5/5 truths verified (0 present-but-behavior-unverified)
 
@@ -36,63 +45,63 @@ human_verification:
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `frontend/src/api/runs.ts` | Typed `listRuns`/`triggerRun` wrappers | ✓ VERIFIED | Two exported functions, routes through shared `./client`, throws `{status, ...error}` on non-2xx, no hand-authored `RunOut` type. |
-| `frontend/src/lib/runStatus.ts` | Status vocabulary + terminal/active predicates | ✓ VERIFIED | `RUN_STATUS_META`, `runStatusMeta`, `isTerminalStatus`, `hasActiveRun`, `newestActiveRun` all present, pure (no React import), typed via generated `components["schemas"]["RunOut"]`. |
-| `frontend/src/hooks/useRuns.ts` | Self-terminating polling query | ✓ VERIFIED | `useQuery` with `queryKey: ["runs", scenarioId]`, `refetchInterval` predicate using `hasActiveRun`; no `setInterval`. |
-| `frontend/src/hooks/useTriggerRun.ts` | Trigger mutation w/ immediate invalidation | ✓ VERIFIED | `useMutation` invalidating exactly `["runs", scenarioId]` on success; error propagates untouched. |
-| `frontend/src/components/runs/RunStatusLabel.tsx` | Icon+text status cell (no Badge) | ✓ VERIFIED | Reads `runStatusMeta`, no Badge import. |
-| `frontend/src/components/runs/RunHistoryTable.tsx` | Prior-runs read surface | ✓ VERIFIED | Full loading/error/empty/populated/overflow state machine; `solver_status` never rendered (confirmed by grep — no reference in file). |
-| `frontend/src/components/runs/TriggerRunButton.tsx` | Presentational trigger CTA | ✓ VERIFIED | 5-prop presentational component, `getErrorStatus`-based 404-vs-other branching, no internal hook. |
-| `frontend/src/components/runs/RunInFlightPanel.tsx` | Honest wait panel | ✓ VERIFIED | Renders nothing for null/terminal run; PENDING/RUNNING verbatim copy; no cancel/progress affordance. |
-| `frontend/src/routes/RunHistory.tsx` | Composed route | ✓ VERIFIED | Calls `useRuns`/`useTriggerRun` exactly once each, derives `runInProgress`/`activeRun` from the same response, passes into all three children. |
+| `frontend/src/api/runs.ts` | Typed `listRuns`/`triggerRun` wrappers | ✓ VERIFIED | Unchanged this cycle; still routes through shared `./client`. |
+| `frontend/src/lib/runStatus.ts` | Status vocabulary + terminal/active predicates | ✓ VERIFIED | `isTerminalStatus` now derives from `ACTIVE_STATUSES` set (WR-01 fix), not hardcoded terminal literals; `runStatus.test.ts` (14 tests) passes. |
+| `frontend/src/lib/formatTimestamp.ts` | Pure ISO-timestamp shortener | ✓ VERIFIED | New in 03-06; regex-slices leading `YYYY-MM-DDTHH:MM`, defensive fallback on unrecognized input, never throws; 5 unit tests pass. |
+| `frontend/src/hooks/useRuns.ts` | Self-terminating polling query | ✓ VERIFIED | Unchanged this cycle. |
+| `frontend/src/hooks/useTriggerRun.ts` | Trigger mutation w/ immediate invalidation | ✓ VERIFIED | Unchanged this cycle. |
+| `frontend/src/components/runs/RunStatusLabel.tsx` | Icon+text status cell | ✓ VERIFIED | Unchanged this cycle. |
+| `frontend/src/components/runs/RunHistoryTable.tsx` | Prior-runs read surface | ✓ VERIFIED | Timestamp cells route through `formatTimestamp`; empty-state CTA now accepts `triggerDisabled` (CR-01); body rows carry `role="button"`/`aria-label` (WR-03); `solver_status` still never rendered. |
+| `frontend/src/components/runs/TriggerRunButton.tsx` | Presentational trigger CTA | ✓ VERIFIED | Unchanged this cycle; still receives `isLoadingList = runsQuery.isLoading \|\| runsQuery.isFetching` from the route (WR-02). |
+| `frontend/src/components/runs/RunInFlightPanel.tsx` | Honest wait panel | ✓ VERIFIED | Unchanged this cycle. |
+| `frontend/src/routes/RunHistory.tsx` | Composed route | ✓ VERIFIED | Now passes `triggerDisabled={trigger.isPending \|\| runInProgress}` to `RunHistoryTable` and `isLoadingList={runsQuery.isLoading \|\| runsQuery.isFetching}` to `TriggerRunButton`. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|----|--------|---------|
-| `useTriggerRun` onSuccess | `useRuns` query cache | `queryClient.invalidateQueries({queryKey: ["runs", scenarioId]})` vs `useQuery({queryKey: ["runs", scenarioId]})` | ✓ WIRED | Keys are byte-identical string literals in both files; asserted in both hooks' tests. |
-| `RunHistory.tsx` | `TriggerRunButton`/`RunInFlightPanel`/`RunHistoryTable` | props derived from one `useRuns()` call | ✓ WIRED | Single `runsQuery` object passed to `RunHistoryTable`; `hasActiveRun(runs)`/`newestActiveRun(runs)` derived from the same `runsQuery.data` feed `TriggerRunButton`/`RunInFlightPanel`. Confirmed by direct file read — no second `useRuns()` call anywhere in the phase's files. |
-| `App.tsx` `runs` route | `RunHistory` | `Component: RunHistory` (import swap from `RunsPlaceholder`) | ✓ WIRED | Confirmed by reading `App.tsx`; `runs/:runId` route unchanged (`ResultsPlaceholder`), `RunsPlaceholder.tsx` deleted and no remaining import (`grep` confirms only a stale comment reference in `RunHistory.tsx`'s docstring). |
-| `RunHistoryTable` row click | `/scenarios/:scenarioId/runs/:runId` | `useNavigate()` | ✓ WIRED | `onClick`/`onKeyDown` (Enter/Space) call `navigate(...)`, tested via memory-router probe. |
-| Backend `RunOut` schema (`backend/api/schemas.py`) | Frontend generated `schema.d.ts` `RunOut` | `openapi-typescript` generation | ✓ WIRED | Both agree: `status: string`, `started_at`/`finished_at`/`solver_status`/`error` all `Optional[str]`/`string | null`. |
-| `GET /scenarios/{id}/runs` (backend) | E4 backstop: no scenario-existence gate for unknown `scenarioId` | `RunRepo.list_by_scenario` SQL | ✓ VERIFIED | `store/repositories.py:59-64` runs `SELECT * FROM runs WHERE scenario_id = ? ORDER BY created_at DESC` with no existence pre-check — an unknown `scenario_id` returns `[]`, confirming `RunHistoryTable`'s ordinary empty-state fallthrough (not a 404 gate) is correct as implemented. |
+| `useTriggerRun` onSuccess | `useRuns` query cache | `queryClient.invalidateQueries({queryKey: ["runs", scenarioId]})` | ✓ WIRED | Unchanged; byte-identical keys. |
+| `RunHistory.tsx` | `TriggerRunButton`/`RunInFlightPanel`/`RunHistoryTable` | props derived from one `useRuns()` call | ✓ WIRED | Single `runsQuery` still drives all three children; `triggerDisabled` and `isLoadingList` additions both derive from the same `trigger`/`runsQuery` objects, no new fetch/mutation introduced. |
+| `RunHistoryTable`'s empty-state CTA | `useTriggerRun` mutation guard | `triggerDisabled` prop | ✓ WIRED | `RunHistory.tsx:65` passes `triggerDisabled={trigger.isPending \|\| runInProgress}`; `RunHistoryTable.tsx:98` applies it to the `Button`'s `disabled` prop — confirmed by direct read; behaviorally confirmed live via `03-UAT.md` test 1. |
+| `RunHistoryTable.tsx` Created/Started/Finished cells | `formatTimestamp()` | direct call in `TimestampCell` | ✓ WIRED | `RunHistoryTable.tsx:52` — `<>{formatTimestamp(value)}</>`; regression test pins the real 32-char backend format; behaviorally confirmed live via `03-UAT.md` test 1. |
+| `App.tsx` `runs` route | `RunHistory` | `Component: RunHistory` | ✓ WIRED | Unchanged this cycle. |
 
 ### Prohibitions
 
 | Prohibition | Status | Evidence |
 |-------------|--------|----------|
-| A COMPLETED run must not be rendered as failure/warning due to `solver_status: "UNKNOWN"` | ✓ VERIFIED (test) | `RunHistoryTable.test.tsx` asserts a COMPLETED+`solver_status:"UNKNOWN"` run renders "Completed" and the DOM never contains "UNKNOWN"; `solver_status` is never read in `RunHistoryTable.tsx`. |
-| No cancel affordance anywhere in the trigger/panel/table/view | ✓ VERIFIED (test) | Negative assertions (`queryByRole("button", {name: /cancel/i})` → null) in `TriggerRunButton.test.tsx` and `RunInFlightPanel.test.tsx`; repo grep across `components/runs/`, hooks, and `RunHistory.tsx` finds no cancel/abort implementation. |
-| No determinate progress affordance (progress bar/percentage/ETA) | ✓ VERIFIED (test) | Negative `progressbar`-role assertions in the same two test files; only motion is the indeterminate `animate-spin` icon. |
-| ScenarioLayout's Results tab must not be enabled; no ResultsView content built | ✓ VERIFIED | `ScenarioLayout.tsx` still renders the Results tab with `disabled`/`aria-disabled="true"` (unchanged in this phase's diff); `runs/:runId` route still mounts `ResultsPlaceholder`. |
+| A COMPLETED run must not be rendered as failure/warning due to `solver_status: "UNKNOWN"` | ✓ VERIFIED (test) | Unchanged; `RunHistoryTable.test.tsx` still asserts this. |
+| No cancel affordance anywhere in the trigger/panel/table/view | ✓ VERIFIED (test) | Unchanged; negative assertions still pass. |
+| No determinate progress affordance (progress bar/percentage/ETA) | ✓ VERIFIED (test) | Unchanged; negative assertions still pass. |
+| ScenarioLayout's Results tab must not be enabled; no ResultsView content built | ✓ VERIFIED | Unchanged this cycle; `git diff` on `ScenarioLayout.tsx` across the phase's full commit range (including this cycle's fix commits) remains empty. |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan(s) | Description | Status | Evidence |
 |-------------|-----------------|-------------|--------|----------|
-| RUN-01 | 03-01, 03-02, 03-04, 03-05 | User can trigger a run for a scenario | ✓ SATISFIED | `triggerRun` + `useTriggerRun` + `TriggerRunButton` + `RunHistory` composition, all tested. |
-| RUN-02 | 03-01, 03-02, 03-05 | UI polls run status until terminal, reflects PENDING→RUNNING→COMPLETED/FAILED | ✓ SATISFIED | `useRuns`'s self-terminating `refetchInterval`, unit-tested against the real predicate. |
-| RUN-03 | 03-04, 03-05 | Honest in-flight wait, no cancel, no false-progress affordance | ✓ SATISFIED | `RunInFlightPanel` + `TriggerRunButton` copy/negative-assertion tests. |
-| RUN-04 | 03-01, 03-03, 03-05 | Prior runs visible with status/timing | ✓ SATISFIED | `RunHistoryTable` full state machine, tested. |
-| RUN-05 | 03-03, 03-05 | FAILED run shows recorded error | ✓ SATISFIED | `RunHistoryTable`'s inline FAILED error + null-fallback + XSS-safe rendering, tested. |
+| RUN-01 | 03-01, 03-02, 03-04, 03-05 | User can trigger a run for a scenario | ✓ SATISFIED | `triggerRun` + `useTriggerRun` + `TriggerRunButton` + `RunHistory` composition, now with the CR-01 duplicate-submission guard closed on both trigger affordances; confirmed live in UAT test 1. |
+| RUN-02 | 03-01, 03-02, 03-05 | UI polls run status until terminal, reflects PENDING→RUNNING→COMPLETED/FAILED | ✓ SATISFIED | `useRuns`'s self-terminating `refetchInterval`, now backed by the fail-safe `isTerminalStatus` (WR-01); confirmed live in UAT test 1. |
+| RUN-03 | 03-04, 03-05 | Honest in-flight wait, no cancel, no false-progress affordance | ✓ SATISFIED | `RunInFlightPanel` + `TriggerRunButton` copy/negative-assertion tests; WR-02 closes the re-enable race window; confirmed live in UAT test 1. |
+| RUN-04 | 03-01, 03-03, 03-05, 03-06 | Prior runs visible with status/timing | ✓ SATISFIED | `RunHistoryTable` full state machine, now rendering fixed-width formatted timestamps (gap G-03-1 closed); confirmed live in UAT test 1. |
+| RUN-05 | 03-03, 03-05 | FAILED run shows recorded error | ✓ SATISFIED | `RunHistoryTable`'s inline FAILED error + null-fallback + XSS-safe rendering, tested; long/multi-line wrap confirmed live in UAT test 2. |
 
-**Orphaned requirements check:** REQUIREMENTS.md maps exactly RUN-01..RUN-05 to Phase 3; all 5 appear in at least one plan's `requirements` frontmatter field. No orphans.
+**Orphaned requirements check:** REQUIREMENTS.md maps exactly RUN-01..RUN-05 to Phase 3; all 5 appear in at least one plan's `requirements` frontmatter field (03-01 through 03-06). No orphans.
 
-**Documentation note (non-blocking):** `.planning/REQUIREMENTS.md`'s checkbox/traceability table currently shows RUN-01/RUN-02/RUN-03 as unchecked/"Pending" while RUN-04/RUN-05 show checked/"Complete" — this is stale bookkeeping (likely mid-phase snapshot from when only 03-01/03-03 had landed), not a functional gap: all five requirements are demonstrably implemented and tested in the current codebase per the table above. Recommend updating REQUIREMENTS.md's checkboxes as part of phase close-out.
+**Documentation staleness (non-blocking, still open):** `.planning/REQUIREMENTS.md`'s checkbox/traceability table (lines 37-41, 108-112) still shows RUN-01/RUN-02/RUN-03 as unchecked/"Pending" while RUN-04/RUN-05 show checked/"Complete" — this was flagged in the previous (2026-07-18) verification as stale bookkeeping and remains unfixed. Not a functional gap: all five requirements are demonstrably implemented, tested, and now UAT-confirmed live. Recommend updating REQUIREMENTS.md's checkboxes as part of phase close-out.
 
 ### Anti-Patterns Found
 
-None. Grep for `TBD|FIXME|XXX|TODO|HACK|PLACEHOLDER` (case-insensitive) across all phase-created files under `frontend/src/api/runs.ts`, `frontend/src/lib/runStatus.ts`, `frontend/src/hooks/useRuns.ts`, `frontend/src/hooks/useTriggerRun.ts`, `frontend/src/components/runs/*.tsx`, and `frontend/src/routes/RunHistory.tsx` returned only benign incidental matches (the word "placeholder" describing UI copy/the retired route name, and doc comments referencing the pre-existing `ResultsPlaceholder`/`RunsPlaceholder` route names) — no debt markers.
+None. Re-scanned `frontend/src/api/runs.ts`, `frontend/src/lib/runStatus.ts`, `frontend/src/lib/formatTimestamp.ts`, `frontend/src/hooks/useRuns.ts`, `frontend/src/hooks/useTriggerRun.ts`, `frontend/src/components/runs/*.tsx`, and `frontend/src/routes/RunHistory.tsx` for `TBD|FIXME|XXX|TODO|HACK|PLACEHOLDER` (case-insensitive). Only benign matches: the word "placeholder" in a test description ("nullable-timestamp placeholder") and a doc-comment reference to the retired `RunsPlaceholder` route name — no debt markers.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| All phase-specific unit/component tests pass | `cd frontend && npx vitest run src/api/runs.test.ts src/lib/runStatus.test.ts src/hooks/useRuns.test.tsx src/hooks/useTriggerRun.test.tsx src/components/runs/RunStatusLabel.test.tsx src/components/runs/RunHistoryTable.test.tsx src/components/runs/TriggerRunButton.test.tsx src/components/runs/RunInFlightPanel.test.tsx src/routes/RunHistory.test.tsx src/routes/router.test.tsx` | 10 files, 74 tests passed | ✓ PASS |
-| Full frontend suite has no regressions | `cd frontend && npm run test` | 28 files, 175 tests passed | ✓ PASS |
-| TypeScript compiles clean (no `RunOut` drift) | `cd frontend && npm run typecheck` | exit 0, no output | ✓ PASS |
-| All phase task commits exist in git history | `git log --oneline --all \| grep <18 commit hashes from SUMMARYs>` | all 18 hashes found | ✓ PASS |
-| `RunsPlaceholder.tsx` fully retired | `ls frontend/src/routes/RunsPlaceholder.tsx` / repo grep for imports | file absent; no import references remain | ✓ PASS |
+| Fix-affected unit/component tests pass | `cd frontend && npx vitest run src/lib/runStatus.test.ts src/components/runs/RunHistoryTable.test.tsx src/routes/RunHistory.test.tsx src/components/runs/TriggerRunButton.test.tsx src/lib/formatTimestamp.test.ts` | 5 files, 46 tests passed | ✓ PASS |
+| Full frontend suite has no regressions | `cd frontend && npm run test` | 29 files, 181 tests passed | ✓ PASS |
+| TypeScript compiles clean | `cd frontend && npm run typecheck` | exit 0, no output | ✓ PASS |
+| All 4 code-review-fix commits exist in git history | `git log --oneline --all \| grep -E "f072617\|a61ce10\|81006c2\|22356f5"` | all 4 hashes found | ✓ PASS |
+| Gap-closure commits (formatTimestamp) exist in git history | `git log --oneline --all \| grep -E "2eff8d5\|8bd0617\|eba8883\|1074f28"` | (confirmed via 03-06-SUMMARY self-check; hashes present) | ✓ PASS |
 
 ### Probe Execution
 
@@ -100,22 +109,22 @@ No `scripts/*/tests/probe-*.sh` probes declared or found for this phase (fronten
 
 ### Human Verification Required
 
-### 1. End-to-end browser walkthrough (RUN-01..RUN-05 against a live backend)
+None. Both items previously flagged `human_needed` in the 2026-07-18 verification are now confirmed via the completed `03-UAT.md` retest (25/25 passed, 2026-07-19):
 
-**Test:** Start the backend and `npm run dev`. Open a scenario's Runs tab. Click "Run Scenario".
-**Expected:** A run appears immediately as "Queued" without a manual refresh; the button disables with the in-progress caption; the in-flight panel shows the honest "Solving…" copy with no cancel button and no progress bar; the run advances to "Completed" on its own; reloading mid-flight resumes from polling; prior runs list with timing; a bogus `scenarioId` deep link shows the ordinary empty state.
-**Why human:** Requires a live backend, real HTTP polling over wall-clock time, and a real browser session — none of which the mocked-hook unit tests exercise end-to-end. This is the plan's own `human_verify_mode=end-of-phase` checklist item (03-05-PLAN.md).
-
-### 2. Long/multi-line FAILED error text wraps without breaking table column widths
-
-**Test:** Trigger or otherwise produce a FAILED run whose `error` text is long or multi-line; view it in the Run History table.
-**Expected:** The error text wraps within its cell; the Status/Created/Started/Finished column widths stay stable (do not widen or shift).
-**Why human:** A genuine visual layout/wrap check under real browser rendering — the `table-fixed` + `whitespace-pre-wrap break-words` CSS is present and correct by inspection, but jsdom text-content assertions cannot prove visual wrap behavior. Flagged explicitly as a backstop in 03-03-PLAN.md's `must_haves.truths` (`verification: backstop`) and reported as `human_judgment: true` in 03-03-SUMMARY.md's coverage (D9).
+1. **End-to-end browser walkthrough (RUN-01..RUN-05 against a live backend)** — `03-UAT.md` test 1, result: pass, including a live retest of the gap-closure timestamp fix and the CR-01/WR-02 duplicate-submission guards.
+2. **Long/multi-line FAILED error text wraps without breaking table column widths** — `03-UAT.md` test 2, result: pass.
 
 ### Gaps Summary
 
-No gaps found. All 5 ROADMAP success criteria, all plan-level must-have truths, artifacts, and key links are verified present, substantive, and wired, backed by 74 phase-specific tests (175 in the full suite) and a clean typecheck. The only open items are two explicitly-flagged human-verification backstops (live end-to-end browser walkthrough, and visual text-wrap under real rendering) that the plans themselves deferred to end-of-phase human review rather than claiming as automated — this is honest self-reporting, not a gap being papered over. A non-blocking documentation staleness note (REQUIREMENTS.md checkbox state for RUN-01/02/03) is recorded for phase close-out.
+No gaps found. Since the prior (2026-07-18, `human_needed`) verification:
+
+- Gap G-03-1 (RunHistoryTable timestamp overflow) is closed by 03-06-PLAN.md and confirmed both by unit test and live UAT retest.
+- All 4 code-review findings (1 critical CR-01, 3 warning WR-01/WR-02/WR-03) are fixed, confirmed present and correctly wired in the current codebase, and covered by a passing 181-test full suite plus a clean typecheck. CR-01 and WR-02 are additionally confirmed live via `03-UAT.md` test 1's explicit duplicate-submission check.
+- Both previously outstanding human-verification items are now closed via the completed 25/25 `03-UAT.md` retest.
+- The only remaining note is the non-blocking REQUIREMENTS.md checkbox staleness carried forward from the prior verification — recommended for phase close-out, not a functional gap.
+
+Phase goal — "A user can trigger a solve and follow it to a terminal state without leaving the browser" — is achieved and confirmed both by automated tests and a live UAT walkthrough.
 
 ---
-_Verified: 2026-07-18T20:30:00Z_
+_Verified: 2026-07-19T10:00:00Z_
 _Verifier: Claude (gsd-verifier)_
