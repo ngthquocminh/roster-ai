@@ -62,6 +62,7 @@ export function RunHistory() {
         runsQuery={runsQuery}
         scenarioId={scenarioId as string}
         onTriggerRun={() => trigger.mutate()}
+        triggerDisabled={trigger.isPending || runInProgress}
       />
     </div>
   );

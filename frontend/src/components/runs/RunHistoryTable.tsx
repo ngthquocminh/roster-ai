@@ -56,10 +56,12 @@ export function RunHistoryTable({
   runsQuery,
   scenarioId,
   onTriggerRun,
+  triggerDisabled,
 }: {
   runsQuery: UseQueryResult<RunOut[], unknown>;
   scenarioId: string;
   onTriggerRun?: () => void;
+  triggerDisabled?: boolean;
 }) {
   const navigate = useNavigate();
   const { data, isLoading, isError, error } = runsQuery;
@@ -93,7 +95,7 @@ export function RunHistoryTable({
         <p className="text-sm leading-[1.5] text-muted-foreground">
           Trigger a run to solve this scenario.
         </p>
-        <Button type="button" onClick={onTriggerRun}>
+        <Button type="button" disabled={triggerDisabled} onClick={onTriggerRun}>
           Run Scenario
         </Button>
       </div>
