@@ -65,6 +65,10 @@ explanation of what changed — without touching solver code or JSON.
 - ✓ Second real provider (OpenRouter, OpenAI-compatible SDK) added behind the
   same seam post-Phase-4, as a lower-friction alternative to Gemini's tight
   free-tier quota — quick tasks 260713-pn3/260713-stq
+- ✓ RunHistory — trigger a run, poll status (self-terminating), list prior
+  runs with created/started/finished timing, honest in-flight copy with no
+  cancel/progress affordance, inline FAILED error text — Validated in Phase 3:
+  run-execution-history
 
 ### Active
 
@@ -73,7 +77,6 @@ explanation of what changed — without touching solver code or JSON.
 - [ ] Vite + React + TypeScript app under `frontend/`, typed against `docs/API.md`
 - [ ] Home — scenario list / create from an existing fixture
 - [x] ScenarioEditor — fixture select, NL constraint box, applied-overrides list — ✓ v0.4 Phase 2 (scenario detail header + 404 gate, plain-English constraint transcript with distinct outcome treatments, durable applied-overrides list over GET /scenarios/{id}/overrides)
-- [ ] RunHistory — trigger a run, poll status, list prior runs
 - [ ] ResultsView — coverage cards, demand-vs-served chart, insights, schedule table
 - [ ] CORS middleware on the FastAPI app (enabler — no browser origin can call the API without it)
 
@@ -201,4 +204,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-15 — v0.4 (Frontend) milestone started*
+*Last updated: 2026-07-19 — Phase 3 (run-execution-history) complete*
