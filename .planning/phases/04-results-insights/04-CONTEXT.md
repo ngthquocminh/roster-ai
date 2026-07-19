@@ -56,16 +56,14 @@ Four gray areas were discussed. All four landed on the recommended option.
   qualifies, per ROADMAP's explicit framing ("RES-01 folds RES-06 in — the
   warnings are a coverage-honesty signal and belong next to the coverage
   they qualify"). Not inline-per-function (too easy to miss on skim).
-- **D-07: Null `total_cost`/`total_unmet_hours` render as "Not computed"
-  with an explanatory tooltip** (not a bare em dash) — the solver hitting
+- **D-07: Null `total_cost`/`total_unmet_hours` render as "Not computed" with an explanatory tooltip.** (Not a bare em dash) — the solver hitting
   its time limit before optimizing cost is a real, honest fact worth
   surfacing, consistent with this project's established
   never-hide-solver-limitations pattern (RUN-03's honest in-flight wait is
   the direct precedent).
 
 ### Schedule table (RES-03)
-- **D-08: Scrollable container, reusing `RunHistoryTable.tsx`'s exact
-  pattern** (fixed max-height, all rows rendered, internal scroll) — no new
+- **D-08: Scrollable container, reusing `RunHistoryTable.tsx`'s exact pattern.** (Fixed max-height, all rows rendered, internal scroll) — no new
   pagination or grouping-by-day component.
 - **D-09: Server order only, no client-side sort/filter** — matches
   `RunHistoryTable`'s explicit "server ordering, no client re-sort"
@@ -89,8 +87,7 @@ Four gray areas were discussed. All four landed on the recommended option.
   run's `error` text treatment already built in `RunHistoryTable.tsx`
   (`FAILED_NO_ERROR_COPY` fallback). No new copy invented for states
   already solved in Phase 3.
-- **D-13: 502 insight failure → inline error message + re-enabled retry
-  button**, styled distinctly from the loading/ready states (mirrors Phase
+- **D-13: 502 insight failure → inline error message + re-enabled retry button.** Styled distinctly from the loading/ready states (mirrors Phase
   2's D-04 precedent of visibly distinct outcome treatments). Not silent —
   the user gets an explanation, not just a reset button. Per RES-05, this
   failure must not touch the rest of the view (coverage/chart/schedule stay
