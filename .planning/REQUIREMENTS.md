@@ -43,8 +43,8 @@ Requirements for milestone v0.4. Each maps to exactly one roadmap phase.
 ### Results & Insights
 
 - [ ] **RES-01**: User can see coverage summary cards for a completed run
-- [ ] **RES-02**: User can see a demand-vs-served chart for a completed run
-- [ ] **RES-03**: User can see the schedule as a readable table
+- [x] **RES-02**: User can see a demand-vs-served chart for a completed run
+- [x] **RES-03**: User can see the schedule as a readable table
 - [ ] **RES-04**: User can fetch a plain-language insight report on demand; the UI branches on the response's `ready` field, not on the status code
 - [ ] **RES-05**: An insight failure (`502`) leaves the rest of the results view intact — a completed schedule is never invalidated by a failed report
 - [ ] **RES-06**: Degenerate-solve warnings recorded on the run (`SolveResult.warnings`) are surfaced rather than silently dropped
@@ -111,8 +111,8 @@ Which phases cover which requirements. Populated during roadmap creation.
 | RUN-04 | Phase 3 | Complete |
 | RUN-05 | Phase 3 | Complete |
 | RES-01 | Phase 4 | Pending |
-| RES-02 | Phase 4 | Pending |
-| RES-03 | Phase 4 | Pending |
+| RES-02 | Phase 4 | Complete |
+| RES-03 | Phase 4 | Complete |
 | RES-04 | Phase 4 | Pending |
 | RES-05 | Phase 4 | Pending |
 | RES-06 | Phase 4 | Pending |
