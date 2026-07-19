@@ -166,3 +166,13 @@ None - no external service configuration required.
 ---
 *Phase: 04-results-insights*
 *Completed: 2026-07-20*
+
+## Self-Check: PASSED
+
+- FOUND: frontend/src/routes/ResultsView.tsx
+- FOUND: frontend/src/routes/ResultsView.test.tsx
+- FOUND: .planning/phases/04-results-insights/04-07-SUMMARY.md
+- CONFIRMED DELETED: frontend/src/routes/ResultsPlaceholder.tsx
+- FOUND commit: b1249c2 (Task 1)
+- FOUND commit: 2cb1492 (Task 2)
+- FOUND commit: b737b15 (SUMMARY)
