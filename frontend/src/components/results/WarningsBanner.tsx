@@ -28,8 +28,8 @@ export function WarningsBanner({ warnings }: { warnings: string[] }) {
       <TriangleAlert aria-hidden="true" />
       <AlertTitle>Heads up</AlertTitle>
       <AlertDescription className="whitespace-normal break-words">
-        {warnings.map((warning) => (
-          <p key={warning}>{warning}</p>
+        {warnings.map((warning, i) => (
+          <p key={i}>{warning}</p>
         ))}
       </AlertDescription>
     </Alert>

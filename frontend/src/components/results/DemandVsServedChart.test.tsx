@@ -14,8 +14,8 @@ import type { CoverageStat } from "@/api/results";
 describe("toChartData", () => {
   it("maps each function to one entry, preserving keys and required/served values", () => {
     const coverage: Record<string, CoverageStat> = {
-      Pick: { required_h: 40, served_h: 32, pct: 80 },
-      Receiving: { required_h: 12, served_h: 12, pct: 100 },
+      Pick: { required_h: 40, served_h: 32, pct: 0.8 },
+      Receiving: { required_h: 12, served_h: 12, pct: 1.0 },
     };
 
     const result = toChartData(coverage);
@@ -53,8 +53,8 @@ describe("toChartData", () => {
 describe("DemandVsServedChart: render smoke test", () => {
   it("mounts without throwing given populated coverage_by_function", () => {
     const coverage: Record<string, CoverageStat> = {
-      Pick: { required_h: 40, served_h: 32, pct: 80 },
-      Receiving: { required_h: 12, served_h: 12, pct: 100 },
+      Pick: { required_h: 40, served_h: 32, pct: 0.8 },
+      Receiving: { required_h: 12, served_h: 12, pct: 1.0 },
     };
 
     expect(() =>

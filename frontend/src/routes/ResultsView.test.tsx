@@ -117,10 +117,10 @@ const RUN_RESULT: RunResult = {
     scheduled_shifts: 2,
     scheduled_members: 2,
     coverage_by_function: {
-      Pick: { required_h: 40, served_h: 38, pct: 95 },
-      Receiving: { required_h: 10, served_h: 10, pct: 100 },
+      Pick: { required_h: 40, served_h: 38, pct: 0.95 },
+      Receiving: { required_h: 10, served_h: 10, pct: 1.0 },
     },
-    coverage_by_day: { "0": 95, "1": 100 },
+    coverage_by_day: { "0": 0.95, "1": 1.0 },
   },
   stats: {
     status: "OPTIMAL",
@@ -169,7 +169,7 @@ function renderResultsView(path = "/scenarios/s1/runs/r1") {
       </QueryClientProvider>
     );
   }
-  return render(<RouterProvider router={router} />, { wrapper: Wrapper });
+  return { ...render(<RouterProvider router={router} />, { wrapper: Wrapper }), router };
 }
 
 beforeEach(() => {
@@ -228,8 +228,13 @@ describe("ResultsView: D-12 status gate [RES-01..RES-06]", () => {
     // Coverage stat cards (D-04)
     expect(screen.getByText("Total Cost")).toBeInTheDocument();
     expect(screen.getByText("Total Unmet Hours")).toBeInTheDocument();
-    // Coverage-by-day table (D-05)
+    // Coverage-by-day table (D-05) — coverage_by_day is a [0,1] fraction
+    // (docs/API.md); assert the scaled percentage text, not just the label,
+    // so this test actually guards against the CoverageByDayTable scaling
+    // regression it previously missed (WR-01).
     expect(screen.getByText("Day 1")).toBeInTheDocument();
+    expect(screen.getByText("95%")).toBeInTheDocument();
+    expect(screen.getByText("100%")).toBeInTheDocument();
     // Schedule table (RES-03)
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("Bob")).toBeInTheDocument();
@@ -264,5 +269,38 @@ describe("ResultsView: RES-05 insight failure isolation", () => {
     expect(screen.getByText("Total Cost")).toBeInTheDocument();
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getAllByRole("table").length).toBeGreaterThan(0);
+  });
+});
+
+describe("ResultsView: CR-01 regression — insight report must not leak across runs", () => {
+  it("navigating from run r1 to run r2 (param-only route change, no remount) does not keep r1's insight report visible under r2", async () => {
+    mockUseRun.mockReturnValue(runQueryResult({ data: COMPLETED_RUN }));
+    mockUseRunResult.mockReturnValue(
+      resultQueryResult({ data: RUN_RESULT, isSuccess: true }),
+    );
+    mockGetRunInsights.mockResolvedValueOnce({
+      ready: true,
+      report: "REPORT FOR R1",
+    });
+    const { router } = renderResultsView("/scenarios/s1/runs/r1");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get Insight Report" }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("REPORT FOR R1")).toBeInTheDocument(),
+    );
+
+    // React Router reuses the same ResultsView instance across a
+    // param-only navigation on the same route pattern — this is the
+    // exact re-render (not remount) that exposed CR-01.
+    await router.navigate("/scenarios/s1/runs/r2");
+
+    await waitFor(() =>
+      expect(screen.queryByText("REPORT FOR R1")).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Get Insight Report" }),
+    ).toBeInTheDocument();
   });
 });

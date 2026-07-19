@@ -135,7 +135,12 @@ export function ResultsView() {
         coverage_by_function={result.metrics.coverage_by_function}
       />
       <ScheduleTable schedule={result.schedule} />
-      <InsightPanel runId={runId as string} />
+      {/* key={runId}: forces a remount on navigation between runs (React
+          Router re-renders the same ResultsView instance across a
+          param-only route change) — otherwise useRunInsights' mutation
+          state isn't keyed by runId and a previous run's report stays
+          displayed, mislabeled as the new run's (CR-01). */}
+      <InsightPanel key={runId} runId={runId as string} />
     </div>
   );
 }
