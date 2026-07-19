@@ -190,7 +190,28 @@ Plans:
   - Numeric fields in `metrics` may be `null` (a non-finite solver cost serializes as `null`, not `NaN`). Cards and chart must render that without breaking.
   - Criterion 1 folds RES-01 and RES-06 together: the warnings are a coverage-honesty signal and belong next to the coverage they qualify.
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — recharts [SUS] blocking-human legitimacy gate + shadcn card/chart/tooltip install (Wave 1)
+- [ ] 04-02-PLAN.md — Typed read contract: hand-written RunResult + getRunResult/getRunInsights/getRun, formatShiftWindow, docs/API.md warnings fix (Wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-03-PLAN.md — Hooks: useRun + useRunResult (enabled-gated dependent query) + useRunInsights (isolated mutation) (Wave 2)
+- [ ] 04-04-PLAN.md — Coverage cluster: WarningsBanner (D-06), CoverageSummary null-safe cards (D-04/D-07), CoverageByDayTable (D-05) (Wave 2)
+- [ ] 04-05-PLAN.md — DemandVsServedChart (D-02/D-03 recharts) + ScheduleTable (D-08/D-09/D-10) (Wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-06-PLAN.md — InsightPanel: five states, branch-on-ready (RES-04), isolated 502 + retry (RES-05/D-13) (Wave 3)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 04-07-PLAN.md — ResultsView composition + App.tsx route swap (retire ResultsPlaceholder) + D-12/RES-05 integration test (Wave 4)
+
 **UI hint**: yes
 
 ## Progress
@@ -203,4 +224,4 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | Complete    | 2026-07-17 |
 | 3. Run Execution & History | v0.4 | 6/6 | Complete    | 2026-07-19 |
-| 4. Results & Insights | v0.4 | 0/TBD | Not started | - |
+| 4. Results & Insights | v0.4 | 0/7 | Planned | - |
