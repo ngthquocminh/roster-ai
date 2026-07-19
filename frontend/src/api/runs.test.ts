@@ -16,7 +16,7 @@ vi.mock("./client", () => ({
 }));
 
 import { client } from "./client";
-import { listRuns, triggerRun } from "./runs";
+import { listRuns, triggerRun, getRun } from "./runs";
 
 const mockGET = client.GET as unknown as ReturnType<typeof vi.fn>;
 const mockPOST = client.POST as unknown as ReturnType<typeof vi.fn>;
@@ -101,5 +101,56 @@ describe("triggerRun", () => {
     });
 
     await expect(triggerRun("does-not-exist")).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe("getRun", () => {
+  it("issues GET /runs/{run_id} with the run_id path param and resolves to RunOut for a non-terminal status (D-12)", async () => {
+    const run = {
+      id: "r1",
+      scenario_id: "s1",
+      status: "RUNNING",
+      created_at: "2026-01-01T00:00:00Z",
+      started_at: "2026-01-01T00:00:01Z",
+      finished_at: null,
+      solver_status: null,
+      error: null,
+    };
+    mockGET.mockResolvedValueOnce({ data: run, error: undefined, response: { status: 200 } });
+
+    const result = await getRun("r1");
+
+    expect(mockGET).toHaveBeenCalledWith("/runs/{run_id}", {
+      params: { path: { run_id: "r1" } },
+    });
+    expect(result).toEqual(run);
+  });
+
+  it("resolves to RunOut for a COMPLETED run without throwing", async () => {
+    const run = {
+      id: "r1",
+      scenario_id: "s1",
+      status: "COMPLETED",
+      created_at: "2026-01-01T00:00:00Z",
+      started_at: "2026-01-01T00:00:01Z",
+      finished_at: "2026-01-01T00:00:05Z",
+      solver_status: "OPTIMAL",
+      error: null,
+    };
+    mockGET.mockResolvedValueOnce({ data: run, error: undefined, response: { status: 200 } });
+
+    const result = await getRun("r1");
+
+    expect(result).toEqual(run);
+  });
+
+  it("rejects with an error carrying status === 404 (unknown run)", async () => {
+    mockGET.mockResolvedValueOnce({
+      data: undefined,
+      error: { detail: "not found" },
+      response: { status: 404 },
+    });
+
+    await expect(getRun("does-not-exist")).rejects.toMatchObject({ status: 404 });
   });
 });

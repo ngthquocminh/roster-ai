@@ -326,7 +326,8 @@ Fetch the solved schedule and metrics. Only available once the run is
       "start_h": 5.5,
       "end_h": 10.9
     }
-  ]
+  ],
+  "warnings": []
 }
 ```
 
@@ -405,6 +406,7 @@ cached once it passes this check.
 | `metrics` | object | see below |
 | `stats` | object | `status`, `wall_time_s`, `unmet_objective_hours`, `cost_objective` |
 | `schedule` | array | schedule rows |
+| `warnings` | array of string | degenerate-solve caveats (e.g. a family with real demand but zero served hours); always present, `[]` when there are none |
 
 **`metrics`**
 | field | type | notes |
