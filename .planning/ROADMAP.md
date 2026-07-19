@@ -190,7 +190,7 @@ Plans:
   - Numeric fields in `metrics` may be `null` (a non-finite solver cost serializes as `null`, not `NaN`). Cards and chart must render that without breaking.
   - Criterion 1 folds RES-01 and RES-06 together: the warnings are a coverage-honesty signal and belong next to the coverage they qualify.
 
-**Plans**: 5/7 plans executed
+**Plans**: 6/7 plans executed
 
 Plans:
 **Wave 1**
@@ -206,7 +206,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-06-PLAN.md — InsightPanel: five states, branch-on-ready (RES-04), isolated 502 + retry (RES-05/D-13) (Wave 3)
+- [x] 04-06-PLAN.md — InsightPanel: five states, branch-on-ready (RES-04), isolated 502 + retry (RES-05/D-13) (Wave 3)
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -224,4 +224,4 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | Complete    | 2026-07-17 |
 | 3. Run Execution & History | v0.4 | 6/6 | Complete    | 2026-07-19 |
-| 4. Results & Insights | v0.4 | 5/7 | In Progress|  |
+| 4. Results & Insights | v0.4 | 6/7 | In Progress|  |
