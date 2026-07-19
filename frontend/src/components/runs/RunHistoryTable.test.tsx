@@ -63,14 +63,19 @@ function renderTable(
   return render(<RouterProvider router={router} />);
 }
 
-/** Data rows only — excludes the header row (`getAllByRole("row")` includes it). */
+/**
+ * Data rows only — excludes the header row. Body `TableRow`s carry an
+ * explicit `role="button"` (WR-03: accessible name for row-as-navigation),
+ * which overrides the implicit `row` role, so they're queried by "button"
+ * here rather than "row".
+ */
 function getBodyRows() {
   const table = screen.getByRole("table");
   return within(table)
     .getAllByRole("rowgroup")
     .flatMap((group) => {
       if (group.tagName.toLowerCase() !== "tbody") return [];
-      return within(group).getAllByRole("row");
+      return within(group).getAllByRole("button");
     });
 }
 

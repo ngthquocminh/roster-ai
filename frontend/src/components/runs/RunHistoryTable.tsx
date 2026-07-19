@@ -120,6 +120,8 @@ export function RunHistoryTable({
           {runs.map((run) => (
             <TableRow
               key={run.id}
+              role="button"
+              aria-label={`View run ${run.id} details`}
               tabIndex={0}
               className="cursor-pointer"
               onClick={() => goToRun(run.id)}
