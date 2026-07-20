@@ -30,7 +30,7 @@ Full detail: `.planning/milestones/v0.3-ROADMAP.md`
 - [x] **Phase 1: Browser-Callable API + App Shell + Scenario List** - CORS, Vite/React/TS scaffold, typed client, and a Home view that lists and creates scenarios (completed 2026-07-16)
 - [x] **Phase 2: Scenario Detail + Plain-English Constraints** - ScenarioEditor: applied-overrides list, NL constraint box, partial-apply and provider-down handling (completed 2026-07-17)
 - [x] **Phase 3: Run Execution & History** - Trigger a run, poll to terminal, honest waiting, prior-run list with failures shown (completed 2026-07-19)
-- [ ] **Phase 4: Results & Insights** - Coverage cards, demand-vs-served chart, schedule table, on-demand insight report
+- [x] **Phase 4: Results & Insights** - Coverage cards, demand-vs-served chart, schedule table, on-demand insight report (completed 2026-07-20)
 
 ## Phase Details
 
@@ -228,4 +228,4 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | Complete    | 2026-07-17 |
 | 3. Run Execution & History | v0.4 | 6/6 | Complete    | 2026-07-19 |
-| 4. Results & Insights | v0.4 | 8/8 | In Progress|  |
+| 4. Results & Insights | v0.4 | 8/8 | Complete    | 2026-07-20 |

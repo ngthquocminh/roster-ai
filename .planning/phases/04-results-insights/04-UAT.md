@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 04-results-insights
 source: [04-VERIFICATION.md]
 started: 2026-07-20T03:07:47Z
-updated: 2026-07-20T04:49:30Z
+updated: 2026-07-20T05:24:00Z
 ---
 
 ## Current Test
@@ -124,7 +124,8 @@ blocked: 0
 
 - gap_id: G-04-4
   truth: "DemandVsServedChart renders an honest empty/absent chart state when coverage_by_function is empty"
-  status: failed
+  status: resolved
+  resolved_by: 04-08-PLAN.md
   reason: "User (via Claude-driven verification) confirmed: chart renders a completely blank box (no bars, no axis labels, no text) with no way to distinguish 'no demand for this run' from broken/loading, against a real zero-demand run"
   severity: minor
   test: 4
