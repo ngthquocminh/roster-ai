@@ -109,7 +109,7 @@ explanation of what changed — without touching solver code or JSON.
   Out of scope until a deploy makes it necessary (see Context).
 - Deploy / AWS infra — out of scope until the feature set for a public-facing release is complete
 - Hard/infeasible-making constraints from NL — all overrides apply as soft penalties only, by design (reaffirmed through v0.3)
-- Production-model fidelity deferrals carried from design.md (OT1/OT2 cost split,
+- Production-model fidelity deferrals carried from ARCHITECTURE.md (OT1/OT2 cost split,
   two-layer coverage, task flow, capacity/load management) — not part of the LLM layer
 - Extracting the solver engine into a separate service — noted as a clean future seam
   (`SchedulerEngine` Protocol) but not needed at current scale
@@ -129,11 +129,11 @@ explanation of what changed — without touching solver code or JSON.
   the override mechanism extends that established penalty pattern, and all
   four override penalty constants are now empirically calibrated (ENG-04)
   rather than placeholder round numbers.
-- `docs/design.md` is the source-of-truth engineering design (the durable
+- `docs/ARCHITECTURE.md` is the source-of-truth engineering design (the durable
   "why"); `.planning/` (`STATE.md`/`ROADMAP.md`/`MILESTONES.md`) owns the
   planning lifecycle. No ADR directory exists in this repo; decisions live in
   this file's own Key Decisions table, `.planning/RETROSPECTIVE.md`, and
-  `docs/design.md` §6 (open decisions). `docs/vision.md` is the origin
+  `docs/ARCHITECTURE.md` §6 (open decisions). `docs/vision.md` is the origin
   snapshot this document descends from. Full phase detail for both shipped
   milestones lives in `.planning/milestones/v0.3-ROADMAP.md` and
   `.planning/milestones/v0.4-ROADMAP.md`.

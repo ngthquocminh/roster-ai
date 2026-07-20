@@ -1,3 +1,4 @@
+<!-- generated-by: gsd-doc-writer -->
 # ShiftMind API Reference
 
 HTTP API for the ShiftMind backend: create **scenarios** from input fixtures,
@@ -24,10 +25,23 @@ Base URL in examples: `http://127.0.0.1:8000`.
 ## Conventions
 
 - **Content type:** requests and responses are `application/json`.
-- **IDs** are opaque 32-char hex strings (UUID4 without dashes).
+- **IDs** are opaque 32-char hex strings (UUID4 without dashes), except
+  override ids, which are `ov_` + an 8-char content hash (see `OverrideOut`
+  below).
 - **Timestamps** are ISO-8601 UTC strings (e.g. `2026-06-07T19:57:46.123456+00:00`).
 - **Time is in hours from the scenario horizon start** in schedule rows
   (`start_h`, `end_h`); e.g. day-2 06:00 = `30.0`.
+- **Authentication:** none. Every route is unauthenticated; there is no API
+  key, session, or bearer-token check anywhere in the request path. This is
+  consistent with the CORS posture below (`allow_credentials` is left at its
+  default `False` — the app never expects a cookie or `Authorization`
+  header). Do not expose this API on an untrusted network without adding an
+  auth layer in front of it.
+- **CORS:** the FastAPI app in `backend/api/main.py` only allows browser
+  requests from the origins listed in `CORS_ORIGINS` (`GET`/`POST` only). See
+  [Configuration → CORS configuration](CONFIGURATION.md#cors-configuration)
+  for the env var, defaults, and the at-import-time resolution caveat — not
+  duplicated here.
 - **Errors** use the standard FastAPI shape:
   ```json
   { "detail": "Scenario not found" }
@@ -56,9 +70,9 @@ POST /scenarios/{id}/runs
   `OPTIMAL` | `FEASIBLE` | `UNKNOWN` | `INFEASIBLE` | `MODEL_INVALID`.
 
 A time-limited solve still ends `COMPLETED`: if the solver hits its limit before
-proving cost-optimality it returns the unmet-optimal schedule with
-`solver_status = UNKNOWN`. `FAILED` is reserved for unexpected errors (bad input,
-exceptions); the reason is in `error`.
+proving cost-optimality it returns the best schedule found so far, with
+`solver_status = UNKNOWN`. `FAILED` is reserved for unexpected errors (bad
+input, exceptions); the reason is in `error`.
 
 ---
 
@@ -78,7 +92,8 @@ Liveness probe.
 ### `GET /fixtures`
 
 List input files available in the data directory (`*.json`). Use one of these as
-a scenario's `fixture`.
+a scenario's `fixture`. Returns `[]` if the configured data directory does not
+exist.
 
 **200**
 ```json
@@ -117,7 +132,8 @@ curl -X POST localhost:8000/scenarios \
 ```
 
 **Errors**
-- `400` — `fixture` does not exist in the data directory.
+- `400` — `fixture` is unknown: absent from the data directory, or an
+  absolute/traversal path that resolves outside it.
 - `422` — body fails validation (missing/empty `name`, `time_limit_s <= 0`).
 
 ---
@@ -140,10 +156,9 @@ Fetch one scenario.
 
 ### `GET /scenarios/{scenario_id}/overrides`
 
-Fetch a scenario's persisted overrides — every constraint currently applied
-(SCEN-03). Returned in the stored dict's natural insertion order
-(first-applied-first, stable across idempotent re-applies); the server never
-re-sorts.
+Fetch a scenario's persisted overrides — every constraint currently applied.
+Returned in the stored dict's natural insertion order (first-applied-first,
+stable across idempotent re-applies); the server never re-sorts.
 
 **200** — array of `OverrideOut` · **404** — scenario not found.
 
@@ -167,10 +182,10 @@ failing — the endpoint never 500s on old data.
 ### `POST /constraints`
 
 Parse a plain-English scheduling constraint against a scenario, validate it,
-and persist the entries that pass. Top-level route (**not** nested under
-`/scenarios/{id}`) — `scenario_id` is a body field (D-07). Does **not** trigger
-a solve (D-06); trigger a run separately via `POST /scenarios/{id}/runs` to see
-the effect.
+and persist the entries that pass. This is a **top-level** route (**not**
+nested under `/scenarios/{id}`) — `scenario_id` is a body field, not a path
+parameter. Does **not** trigger a solve; trigger a run separately via
+`POST /scenarios/{id}/runs` to see the effect.
 
 **Request body** — `ConstraintParseRequest`
 
@@ -185,13 +200,18 @@ curl -X POST localhost:8000/constraints \
   -d '{"scenario_id":"86a1...","text":"keep at least 2 workers on Pick at all times"}'
 ```
 
-**200** — `ConstraintParseResponse`. The parser may call more than one tool per
-request (conjunction splitting), and each call is validated independently — a
-per-call validation failure (unknown member/task reference, out-of-bounds
-argument) lands in `rejected[]` rather than failing the whole request. Only
-entries in `applied[]` are persisted to the scenario's `overrides` column;
-`rejected[]` and an ambiguous/unparseable `clarification_needed` question are
-response-only and never stored.
+**200** — `ConstraintParseResponse`, always `200` regardless of how many (or
+how few) constraints were understood. The parser may emit more than one tool
+call per request (a sentence can express multiple constraints), and each call
+is validated independently — a per-call failure (unknown member/task
+reference, out-of-bounds argument, non-positive numeric value) lands in
+`rejected[]` rather than failing the whole request. This is a **partial-apply
+contract**: only entries in `applied[]` are persisted to the scenario's
+`overrides`; `rejected[]` entries and an ambiguous/unparseable
+`clarification_needed` question are response-only and never stored.
+`no_constraint_found` is `true` only when the model produced no tool call at
+all and no clarification question either (e.g. the text wasn't a scheduling
+constraint).
 
 ```json
 {
@@ -211,14 +231,15 @@ response-only and never stored.
 }
 ```
 
-Five tools are supported: `lock_worker_shift`, `set_min_workers_per_task`,
-`exclude_worker_from_task`, `scale_demand`, `set_max_hours`. All resolve
-human-readable member/task references against the scenario's real fixture data
-and are applied as **soft** solver penalties only — never able to make a solve
-infeasible.
+Five tools are supported: `set_min_workers_per_task`, `scale_demand`,
+`lock_worker_shift`, `exclude_worker_from_task`, `set_max_hours`. All resolve
+human-readable member/task references (name or id, case-insensitive substring
+match) against the scenario's real fixture data, and are applied as **soft**
+solver penalties only — never able to make a solve infeasible.
 
 **Errors**
-- `404` — scenario not found.
+- `404` — scenario not found (or the scenario references a fixture path that
+  no longer resolves).
 - `503` — LLM provider unavailable (upstream auth/quota/network failure).
 - `422` — body fails validation (missing `scenario_id`/`text`, `text` too long).
 
@@ -227,7 +248,8 @@ infeasible.
 ### `POST /scenarios/{scenario_id}/runs`
 
 Create and start a run for the scenario. Returns immediately with a `PENDING`
-run; the solve proceeds in the background.
+run; the solve proceeds in the background on a single-worker thread pool
+(solves are serialized — at most one in flight at a time).
 
 ```bash
 curl -X POST localhost:8000/scenarios/86a1.../runs
@@ -283,8 +305,14 @@ Fetch a run's current state. Poll this until `status` is `COMPLETED` or `FAILED`
 
 ### `GET /runs/{run_id}/result`
 
-Fetch the solved schedule and metrics. Only available once the run is
-`COMPLETED`.
+Fetch the solved schedule and metrics.
+
+> **Contract: strict — 409 before completion.** This endpoint raises `409`
+> for any non-`COMPLETED` status (`PENDING`, `RUNNING`, or `FAILED`). Contrast
+> this with `GET /runs/{id}/insights` immediately below, which returns `200`
+> in the equivalent "not ready yet" case. The two endpoints use **different**
+> not-ready conventions on purpose — clients must not assume they behave the
+> same way.
 
 **200** — `RunResult` (see model below).
 
@@ -336,43 +364,47 @@ Fetch the solved schedule and metrics. Only available once the run is
 ### `GET /runs/{run_id}/insights`
 
 Fetch (or, on first call, generate) a plain-language insight report for a
-completed run. Synchronous — runs in FastAPI's thread pool, entirely separate
-from the single-worker solve pool, so it never competes with an in-flight
-solve. The generated report is cached on the run (`runs.insight_json`); a
-second call for the same run returns the cached report without calling the
-LLM provider again.
+run. Runs synchronously on FastAPI's own thread pool — a separate pool from
+the single-worker solve pool, so an insight request never competes with, or
+blocks, an in-flight solve. The generated report is cached on the run
+(`runs.insight_json`); a second call for the same run returns the cached
+report without calling the LLM provider again (at most one generation per
+run).
 
 ```bash
 curl localhost:8000/runs/1bb1.../insights
 ```
 
-**200** — `InsightOut`. Two distinct shapes share the same status code:
+**200** — `InsightOut`, **always `200`, never `409`**. This is the opposite
+convention from `GET /runs/{id}/result` above: clients must branch on the
+`ready` field in the body, **never** on the HTTP status code. Two distinct
+body shapes share this one status code:
 
-- **Ready** (`ready: true`) — the run is `COMPLETED` and a report is available
-  (freshly generated or returned from cache):
+- **Ready** (`ready: true`) — the run is `COMPLETED` and a report is
+  available (freshly generated or returned from cache):
   ```json
   { "ready": true, "run_id": "1bb1...", "report": "Overall, coverage reached 68%..." }
   ```
 - **Not ready** (`ready: false`) — the run has not reached `COMPLETED` yet.
-  This is a **deliberate `200`, not a `409`** (unlike `GET /runs/{id}/result`,
-  which does 409 before completion) — polling for insight-readiness is not an
-  error condition:
+  This is a **deliberate `200`, not a `409`**:
   ```json
   { "ready": false, "run_id": "1bb1...", "status": "RUNNING", "reason": "Insights available only for COMPLETED runs (status: RUNNING)" }
   ```
 
-Every number the report cites is checked against the run's own metrics
-(a numeric-grounding guard): any token that isn't a real, run-derived value
-(within a small rounding tolerance) is treated as a fabrication and the
-request fails rather than returning an untrustworthy report. A report is only
-cached once it passes this check.
+Every number the report cites is checked against the run's own metrics (a
+numeric-grounding guard, with a small rounding tolerance): any token that
+isn't a real, run-derived value is treated as a fabrication and the request
+fails with `502` rather than returning an untrustworthy report. A report is
+only cached once it passes this check — a rejected report is never persisted
+and never returned again on a later call (the next call regenerates from
+scratch).
 
 **Errors**
 - `404` — run not found.
 - `502` — the LLM provider failed, or the grounding guard rejected the
   generated report as containing an ungrounded number. Nothing is cached in
-  either case, and the run's status/result are untouched — an insight failure
-  can never invalidate a completed schedule.
+  either case, and the run's status/result are untouched — an insight
+  failure can never invalidate a completed schedule.
 
 ---
 
@@ -444,7 +476,7 @@ cached once it passes this check.
 **`AppliedConstraint`**
 | field | type | notes |
 |---|---|---|
-| `id` | string | content-hash override id (`ov_...`); stable across re-submissions of the same constraint |
+| `id` | string | content-hash override id (`ov_` + 8-char sha256 prefix of `tool` + canonical args); stable across re-submissions of the same constraint |
 | `tool` | string | one of the five solver-hook tool names |
 | `args` | object | resolved, validated tool arguments (real task/member ids) |
 | `parsed_constraint` | string | human-readable echo of what was understood |
@@ -466,7 +498,7 @@ cached once it passes this check.
 ### `InsightOut`
 | field | type | notes |
 |---|---|---|
-| `ready` | boolean | whether a report is available |
+| `ready` | boolean | whether a report is available — branch on this, not on status code |
 | `run_id` | string | |
 | `report` | string \| null | present when `ready` is true |
 | `status` | string \| null | present when `ready` is false — the run's current status |
@@ -478,23 +510,20 @@ cached once it passes this check.
 
 | Code | Meaning |
 |---|---|
-| `200` | OK (includes `GET /runs/{id}/insights` with `ready: false`) |
+| `200` | OK, including `GET /runs/{id}/insights` when the body carries `ready: false` |
 | `201` | Created (scenario, run) |
-| `400` | Bad request (unknown fixture) |
+| `400` | Bad request (unknown or path-escaping `fixture`) |
 | `404` | Resource not found (scenario, run) |
-| `409` | Run result requested before completion |
+| `409` | `GET /runs/{id}/result` requested before the run reached `COMPLETED` — **not** used by `GET /runs/{id}/insights`, which uses `200` + `ready: false` for the same "not there yet" case |
 | `422` | Request body failed validation |
 | `502` | Insight generation failed (LLM provider failure or grounding-guard rejection) |
 | `503` | LLM provider unavailable (constraint parsing) |
 
 ## Configuration
 
-| Env var | Default | Purpose |
-|---|---|---|
-| `ROSTERAI_DB` | `backend/var/rosterai.db` | SQLite database file |
-| `ROSTERAI_DATA_DIR` | `<repo>/data` | directory scanned by `GET /fixtures` |
-| `LLM_PROVIDER` | `stub` | LLM backend for constraint parsing + insights: `stub` \| `gemini` \| `openrouter`. `stub` is keyless and deterministic — keeps default CI green with no network calls. |
-| `LLM_MODEL` | `gemini-2.5-flash` | model id passed to the `gemini` provider |
-| `GEMINI_API_KEY` | *(none)* | required when `LLM_PROVIDER=gemini` |
-| `OPENROUTER_API_KEY` | *(none)* | required when `LLM_PROVIDER=openrouter` |
-| `OPENROUTER_MODEL` | `openai/gpt-oss-20b:free` | model id passed to the `openrouter` provider |
+Every backend environment variable that affects this API (`ROSTERAI_DB`,
+`ROSTERAI_DATA_DIR`, `LLM_PROVIDER`, `LLM_MODEL`, `GEMINI_API_KEY`,
+`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `CORS_ORIGINS`) is documented in
+[Configuration](CONFIGURATION.md), including defaults, required-vs-optional
+status, and the CORS at-import-time resolution caveat. That table is the
+source of truth — it is not duplicated here.

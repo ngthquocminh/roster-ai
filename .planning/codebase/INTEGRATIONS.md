@@ -119,7 +119,7 @@
 
 **CI Pipeline:**
 - None detected in current state (`.github/workflows`, `.gitlab-ci.yml`, `.circleci`, etc. absent)
-- Planned: Path-filtered CI per subdir (backend/, frontend/) per design.md
+- Planned: Path-filtered CI per subdir (backend/, frontend/) per ARCHITECTURE.md
 
 ## Environment Configuration
 

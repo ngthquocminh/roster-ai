@@ -9,7 +9,7 @@ current. The fix isn't a better tracker; it's not having two.
   `.planning/` (`STATE.md`, `ROADMAP.md`, `MILESTONES.md`). This is GSD's job.
   Nothing in `docs/` tracks phase status any more.
 - **Reference + rationale** → `docs/`. [`API.md`](API.md) is the live HTTP
-  contract. [`design.md`](design.md) is *why* the system is shaped the way it
+  contract. [`ARCHITECTURE.md`](ARCHITECTURE.md) is *why* the system is shaped the way it
   is and what was deliberately not built. Neither has a GSD equivalent —
   `.planning/` tracks progress, not durable design.
 - **Origin** → `docs/`. [`vision.md`](vision.md) is the initial idea the

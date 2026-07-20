@@ -117,7 +117,7 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 "⏸ deferred/optional" follow-ups and existed nowhere in GSD:
 
 - [engine / tuning]: Tune DEMAND_LOAD and task mix for even coverage band — Receiving ~10%, Pick ~35% on the committed fixture; cosmetic/demo-quality only (`build_short_input.py:49`)
-- [engine / performance]: Add round-2 relative-gap stop to bound solve time — cost-optimality proof is a ~2min tail vs ~20s round 1; matters now runs are interactive; rationale in `design.md` §6 (`objective.py:47`) — **bears on v0.4 Phase 3 (RUN-03)**: the wait this todo would shorten is the wait Phase 3 must communicate honestly
+- [engine / performance]: Add round-2 relative-gap stop to bound solve time — cost-optimality proof is a ~2min tail vs ~20s round 1; matters now runs are interactive; rationale in `ARCHITECTURE.md` §6 (`objective.py:47`) — **bears on v0.4 Phase 3 (RUN-03)**: the wait this todo would shorten is the wait Phase 3 must communicate honestly
 - [api / concurrency]: Add run cancellation and concurrency limits — single-worker pool, no way to stop an in-flight solve; overlaps the engine-as-a-service todo (`run_service.py:38`) — **bears on v0.4 Phase 3 (RUN-03)**: v0.4 ships an honest "cannot be cancelled" wait rather than a cancel path (v2 OPS-01)
 - [api / ingest]: Add input upload endpoint — scenarios only creatable from fixtures already in `data/`; `vision.md`'s pitch opens with "Upload workforce & demand data", so this is intent-vs-built drift. Deferred to v0.5 (v2 UP-01); must land after WR-04 traversal hardening (`fixtures.py:14`)
 - [api / engine]: Add per-scenario engine selection — always `cpsat`; `SchedulerEngine` seam unproven by a second real solver (`base.py:33`)

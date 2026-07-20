@@ -4,7 +4,7 @@
 > in the repo so we don't need to reference anything outside it. It is a snapshot
 > of the original idea — **not** a description of the current system, and it is
 > **not maintained**. For how the project actually works, see
-> [`../README.md`](../README.md), [`design.md`](design.md), and [`API.md`](API.md).
+> [`../README.md`](../README.md), [`ARCHITECTURE.md`](ARCHITECTURE.md), and [`API.md`](API.md).
 
 > **Repo name:** `rosterai` · **Product / brand name:** ShiftMind
 

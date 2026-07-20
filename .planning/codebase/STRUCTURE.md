@@ -197,7 +197,7 @@ rosterai/
 │
 ├── docs/                       # Project documentation
 │   ├── API.md                  # OpenAPI endpoint reference (hand-authored)
-│   ├── design.md               # Design decisions, constraint model details
+│   ├── ARCHITECTURE.md         # Design decisions, constraint model details
 │   ├── PROJECT.md              # Phase notes, retrospectives
 │   └── *.md                    # Phase-specific docs
 │
@@ -322,7 +322,7 @@ rosterai/
 **docs/**
 - Purpose: Project documentation
 - API.md: OpenAPI reference (hand-authored, canonical endpoint docs)
-- design.md: Design decisions, constraint model theory
+- ARCHITECTURE.md: Design decisions, constraint model theory
 - PROJECT.md: Phase notes, retrospectives
 
 ## Key File Locations
