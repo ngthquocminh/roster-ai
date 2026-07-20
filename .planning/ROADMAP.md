@@ -190,7 +190,7 @@ Plans:
   - Numeric fields in `metrics` may be `null` (a non-finite solver cost serializes as `null`, not `NaN`). Cards and chart must render that without breaking.
   - Criterion 1 folds RES-01 and RES-06 together: the warnings are a coverage-honesty signal and belong next to the coverage they qualify.
 
-**Plans**: 7/7 plans executed
+**Plans**: 8/8 plans executed
 
 Plans:
 **Wave 1**
@@ -214,7 +214,7 @@ Plans:
 
 **Gap Closure** *(from UAT G-04-4 / RES-02)*
 
-- [ ] 04-08-PLAN.md — DemandVsServedChart honest empty-state when coverage_by_function is {} (Wave 1)
+- [x] 04-08-PLAN.md — DemandVsServedChart honest empty-state when coverage_by_function is {} (Wave 1)
 
 **UI hint**: yes
 
@@ -228,4 +228,4 @@ detailed in `.planning/milestones/v0.3-ROADMAP.md`.
 | 1. Browser-Callable API + App Shell + Scenario List | v0.4 | 7/7 | Complete    | 2026-07-16 |
 | 2. Scenario Detail + Plain-English Constraints | v0.4 | 7/7 | Complete    | 2026-07-17 |
 | 3. Run Execution & History | v0.4 | 6/6 | Complete    | 2026-07-19 |
-| 4. Results & Insights | v0.4 | 7/7 | In Progress|  |
+| 4. Results & Insights | v0.4 | 8/8 | In Progress|  |
