@@ -114,3 +114,12 @@ None - no external service configuration required.
 ---
 *Phase: 04-results-insights*
 *Completed: 2026-07-20*
+
+## Self-Check: PASSED
+
+- FOUND: frontend/src/components/results/DemandVsServedChart.tsx
+- FOUND: frontend/src/components/results/DemandVsServedChart.test.tsx
+- FOUND: .planning/phases/04-results-insights/04-08-SUMMARY.md
+- FOUND commit: 092a38b (test)
+- FOUND commit: d52a71a (feat)
+- FOUND commit: 6a9a2b8 (docs)
