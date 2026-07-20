@@ -212,6 +212,10 @@ Plans:
 
 - [x] 04-07-PLAN.md — ResultsView composition + App.tsx route swap (retire ResultsPlaceholder) + D-12/RES-05 integration test (Wave 4)
 
+**Gap Closure** *(from UAT G-04-4 / RES-02)*
+
+- [ ] 04-08-PLAN.md — DemandVsServedChart honest empty-state when coverage_by_function is {} (Wave 1)
+
 **UI hint**: yes
 
 ## Progress
