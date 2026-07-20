@@ -75,7 +75,7 @@ export function InsightPanel({ runId }: { runId: string }) {
       )}
 
       {insights.isSuccess && insights.data?.ready === true && (
-        <p className="mt-1 text-sm whitespace-pre-wrap">
+        <p className="mt-1 text-sm whitespace-pre-wrap break-words">
           {insights.data.report}
         </p>
       )}

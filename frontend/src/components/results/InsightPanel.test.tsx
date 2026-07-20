@@ -70,6 +70,23 @@ describe("InsightPanel: ready [UI-SPEC E7/populated, RES-04]", () => {
     await waitFor(() => expect(screen.getByText("R")).toBeInTheDocument());
     expect(screen.getByText("R").tagName).toBe("P");
   });
+
+  it("applies break-words so a long unbroken token in the report cannot force horizontal page overflow", async () => {
+    const longToken = "X".repeat(300);
+    mockGetRunInsights.mockResolvedValueOnce({
+      ready: true,
+      run_id: "r1",
+      report: longToken,
+    });
+    renderPanel();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get Insight Report" }),
+    );
+
+    const reportEl = await waitFor(() => screen.getByText(longToken));
+    expect(reportEl.className).toContain("break-words");
+  });
 });
 
 describe("InsightPanel: not-ready [UI-SPEC E7/edge, RES-04 guard]", () => {
