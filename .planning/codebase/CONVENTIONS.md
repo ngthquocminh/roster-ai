@@ -1,168 +1,155 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-06-26
+**Analysis Date:** 2026-07-20
 
-## Naming Patterns
+This document covers conventions for both the **backend** (Python, `backend/`) and **frontend** (React + TypeScript, `frontend/`) parts of the RosterAI codebase.
+
+---
+
+## BACKEND (Python)
+
+### Naming Patterns
 
 **Files:**
-- Snake_case for all Python modules: `input_adapter.py`, `run_service.py`, `scenarios.py`
+- `snake_case` for all modules: `run_service.py`, `input_adapter.py`, `scenarios.py`
 - Router files grouped in subdirectories: `api/routers/scenarios.py`, `api/routers/runs.py`
-- Config files and settings: `settings.py`, `constants.py`
+- Config and constant files: `settings.py`, `constants.py`
 
 **Functions:**
-- Snake_case for all functions: `create_scenario()`, `load_problem()`, `set_running()`
+- `snake_case` for all function names: `create_scenario()`, `load_problem()`, `set_running()`
 - Private functions prefixed with underscore: `_now()`, `_rows()`, `_to_float()`, `_dict()`, `_clip()`
-- Async context managers: `lifespan()` defined with `@asynccontextmanager` decorator
+- Async context managers use `@asynccontextmanager` decorator and lowercase names: `lifespan()`
 
 **Variables:**
-- Snake_case for all variables: `scenario_id`, `contact_id`, `time_limit_s`
-- Dictionary keys use snake_case: `"time_limit_s"`, `"solver_status"`
-- Constants use UPPERCASE: `DEFAULT_TASK_RATE` (in `config/constants.py`)
+- `snake_case` for all variables and attributes: `scenario_id`, `contact_id`, `time_limit_s`
+- Dictionary keys use `snake_case`: `"time_limit_s"`, `"solver_status"`
 - Loop variables use short names: `i`, `r`, `s`, `e`, `m` for meaningful context
 
-**Types:**
-- PascalCase for all classes: `ScenarioCreate`, `RunOut`, `SchedulingProblem`, `Member`
-- Enums use PascalCase: `WindowKind`, `DemandFamily`
-- Type hints use modern Python 3.10+ syntax with `|` for unions: `float | None`, `str | None`
+**Classes:**
+- `PascalCase` for all classes: `SchedulingProblem`, `RunOut`, `Member`, `Task`, `Window`
+- `PascalCase` for enum types: `WindowKind`, `DemandFamily`
 
-## Code Style
+**Constants:**
+- `UPPERCASE` with underscores: `DEFAULT_TASK_RATE`, `MAX_ITERATIONS`
+
+**Type Hints:**
+- Modern Python 3.10+ syntax with `|` for unions (not `Union[]`): `float | None`, `str | None`, `dict[str, int]`
+- Always present on function parameters and return types
+- Example from `domain/types.py`:
+  ```python
+  def rate_for(self, task_id: str) -> float | None:
+  ```
+
+### Code Style
 
 **Formatting:**
-- No explicit formatter configured (likely PEP 8 default)
+- No explicit formatter configured; follows PEP 8 implicitly
 - 100-character line length observed in multi-line constructs
-- Proper spacing around operators and after commas
-- Example from `api/schemas.py`:
-  ```python
-  class ScenarioCreate(BaseModel):
-      name: str = Field(min_length=1)
-      fixture: str = Field(min_length=1)
-      time_limit_s: float = Field(default=60.0, gt=0)
-  ```
+- Proper spacing around operators (`=`, `==`, `+`) and after commas
 
 **Linting:**
-- No explicit linter configured (.eslintrc, .pylintrc, ruff.toml, etc. absent)
-- Code follows PEP 8 implicitly via conventions observed:
-  - Two blank lines between top-level definitions
-  - One blank line between methods
-  - Imports properly organized
+- No explicit linter configured (`.pylintrc`, `ruff.toml` absent)
+- Code adheres to PEP 8 via convention
 
-## Import Organization
+### Import Organization
 
 **Order:**
-1. Future imports: `from __future__ import annotations` (used in every file)
-2. Standard library: `import os`, `import sqlite3`, `import json`, `from datetime import datetime`
-3. Third-party: `from fastapi import FastAPI`, `from pydantic import BaseModel`, `from ortools.sat.python import cp_model`
-4. Local project: `from domain.types import Member`, `from api.deps import get_db`
+1. `from __future__ import annotations` (always first)
+2. Standard library: `import os`, `import json`, `import sqlite3`
+3. Third-party: `from fastapi import`, `from google.genai import`
+4. Local absolute imports: `from domain.types import`, `from api.schemas import`
 
-**Example from `api/routers/scenarios.py`:**
-```python
-from __future__ import annotations
-
-import os
-import sqlite3
-
-from fastapi import APIRouter, Depends, HTTPException
-
-from api.deps import get_db, get_settings
-from api.schemas import ScenarioCreate, ScenarioOut
-```
-
-**Path Aliases:**
-- No path aliases configured; absolute imports from project root (`from domain.types import...` not relative `from ..domain.types import...`)
-- Imports work because `conftest.py` adds backend directory to sys.path
-
-## Error Handling
-
-**Patterns:**
-- **API endpoints:** Use `HTTPException` with status codes and detail messages
+**Pattern:**
+- Absolute imports from project root (not relative): `from domain.types import Member` not `from ..domain.types import`
+- No path aliases configured; `conftest.py` adds backend directory to `sys.path` so absolute imports resolve
+- Example from `api/routers/scenarios.py`:
   ```python
-  # from api/routers/scenarios.py
-  if not os.path.isfile(os.path.join(settings.data_dir, body.fixture)):
-      raise HTTPException(status_code=400, detail=f"Unknown fixture: {body.fixture!r}")
+  from domain.types import Member
+  from services import scenario_service
   ```
-  
-- **Services:** Raise exceptions; let caller (router/parent) handle with HTTPException
-  
-- **Background tasks:** Catch all exceptions (`except Exception as exc: # noqa: BLE001`) and persist to database
+
+### Error Handling
+
+**API Layer (routers):**
+- Raise `HTTPException` with status codes and detail messages
+- Example from `api/routers/scenarios.py`:
   ```python
-  # from services/run_service.py
+  if s is None:
+      raise HTTPException(status_code=404, detail="Scenario not found")
+  ```
+
+**Service Layer:**
+- Raise domain exceptions; let caller (router/parent) handle with `HTTPException`
+- Exceptions propagate upward; caller (API) determines HTTP response
+
+**Background Tasks (worker threads):**
+- Catch **all** exceptions: `except Exception as exc: # noqa: BLE001`
+- Persist error string to database (`run.error` field), never crash worker
+- Example from `services/run_service.py:97`:
+  ```python
   except Exception as exc:  # noqa: BLE001 - persist any failure as run state
       repo.set_failed(run_id, f"{type(exc).__name__}: {exc}", _now())
   ```
 
-- **Data validation:** Use Pydantic models (FastAPI schemas) for request validation
-  - `ScenarioCreate`, `RunOut` in `api/schemas.py`
+**Data Validation:**
+- Use Pydantic models (FastAPI schemas) for request validation
+- FastAPI automatically validates and returns 422 on validation errors
+- Example: `ScenarioCreate` schema validates `name`, `fixture`, `time_limit_s`
 
-## Logging
+### Logging
 
-**Framework:** None explicitly configured (print statements only for CLI)
+- **CLI operations** (`run.py`): Use `print()` for output
+- **API routes**: No logging framework configured; errors persisted to database via service layer
+- **Background tasks**: No logging; exceptions caught and stored in `runs.error` column
+- **Test setup** (`conftest.py`): Uses `dotenv_values()` to read local `.env` without overriding test defaults
 
-**Patterns:**
-- **CLI:** Use `print()` for output (see `run.py`)
+### Comments
+
+**Module-level Docstrings:**
+- Always present; explain module purpose, usage, or design decisions
+- Example from `run_service.py`:
   ```python
-  print(f"Loading {path} ...")
-  print(f"Solved with '{engine.name}' in {time.time() - t:.1f}s  -> status={result.status}")
-  ```
+  """Run use-cases: create a run row, then execute the solve in a worker thread.
   
-- **API:** No logging; errors persisted to database via service layer
-- **Background tasks:** No logging; exceptions caught and stored in `runs.error` column
-
-## Comments
-
-**When to Comment:**
-- Module-level docstrings always present: explain module purpose, usage, or design decisions
-  ```python
-  """ShiftMind backend API.
-  
-  Run from backend/:
-      uv run uvicorn api.main:app --reload
+  The solve is CPU-heavy and long (seconds to minutes), so it must never run on
+  the event loop. We submit it to a single-worker pool...
   """
   ```
-  
-- Function docstrings: minimal; rely on type hints and name clarity
-- Inline comments: explain "why", not "what"
+
+**Function Docstrings:**
+- Minimal; rely on type hints and name clarity
+- Include if docstring adds value beyond the signature
+
+**Inline Comments:**
+- Explain "why", not "what"
+- Example from `api/main.py:28-34`:
   ```python
-  # WAL mode so a background solve thread can write run status while request threads read
+  # NOTE: CORS origins are resolved once here, at process/import time — unlike
+  # every other Settings field, which default_settings() re-reads fresh on every
+  # call so env overrides apply at request time...
   ```
 
-**JSDoc/TSDoc:**
-- Not used; this is Python, not TypeScript
+### Function Design
 
-## Function Design
-
-**Size:** Most functions 10-30 lines; larger functions broken into logical blocks
-
-**Parameters:**
-- Type hints on all parameters: `def create_scenario(conn: sqlite3.Connection, name: str, fixture: str, ...)`
+**Signatures:**
+- Type hints on all parameters: `def create_scenario(conn: sqlite3.Connection, name: str, fixture: str)`
 - Default values at the end: `time_limit_s: float = 60.0`
-- Use keyword-only arguments after `*` when appropriate (not common in this codebase)
+- Return type always annotated: `-> dict`, `-> Optional[dict]`, `-> SolveResult`
 
-**Return Values:**
-- Always annotated: `-> dict`, `-> Optional[dict]`, `-> SolveResult`
+**Body:**
 - Return early for error cases
-- Example from `domain/types.py`:
-  ```python
-  def rate_for(self, task_id: str) -> float | None:
-      for q in self.qualifications:
-          if q.task_id == task_id:
-              return q.rate
-      return None
-  ```
+- Single exit path preferred but not enforced
 
-## Module Design
+### Module Design
 
 **Exports:**
-- Modules export classes, functions, and constants used by other modules
-- No explicit `__all__` lists (all public names exported)
+- All public names exported (no explicit `__all__` lists)
 - Example: `engine/base.py` exports `SchedulerEngine`, `SolverConfig`, `create_engine()`
 
-**Barrel Files:**
-- Minimal use; most `__init__.py` files empty or minimal
-- `api/__init__.py`, `domain/__init__.py` are empty
-- `engine/__init__.py` is empty
-
-**Common Patterns:**
-- **Dataclasses:** Use `@dataclass` or `@dataclass(frozen=True)` for immutable types
+**Dataclasses:**
+- Immutable types use `@dataclass(frozen=True)` (hashable, thread-safe)
+- Mutable types use `@dataclass` with `field(default_factory=list)` for mutable defaults
+- Example from `domain/types.py`:
   ```python
   @dataclass(frozen=True)
   class Window:
@@ -172,49 +159,250 @@ from api.schemas import ScenarioCreate, ScenarioOut
       kind: WindowKind
   ```
 
-- **Protocols:** Use `typing.Protocol` for engine abstraction
-  ```python
-  class SchedulerEngine(Protocol):
-      def solve(self, problem: SchedulingProblem, config: SolverConfig) -> SolveResult: ...
-      @property
-      def name(self) -> str: ...
-  ```
+**Protocols:**
+- Use `typing.Protocol` for abstract interfaces (pluggable backends)
+- Example: `engine/base.py:18` defines `SchedulerEngine` protocol; `engine/cpsat/engine.py:22` implements
 
-- **Pydantic models:** Use for API request/response validation
-  ```python
-  class ScenarioCreate(BaseModel):
-      name: str = Field(min_length=1)
-  ```
+**Repository Pattern:**
+- Thin data-access layer wrapping SQLite queries
+- Returns `sqlite3.Row` objects (dict-like)
+- Example: `store/repositories.py:ScenarioRepo.get(scenario_id)`
 
-- **Repository pattern:** Thin data-access layer wrapping SQLite
-  ```python
-  class ScenarioRepo:
-      def __init__(self, conn: sqlite3.Connection):
-          self.conn = conn
-      def get(self, scenario_id: str) -> Optional[dict]:
-          return _dict(self.conn.execute(...).fetchone())
-  ```
+**Service Layer:**
+- Orchestrates business logic; operates on repos
+- Example: `services/scenario_service.py` manages scenario CRUD and fixture loading
 
-- **Service layer:** Business logic; operates on repos
-  ```python
-  def create_scenario(conn: sqlite3.Connection, name: str, ...) -> dict:
-      sid = uuid.uuid4().hex
-      repo = ScenarioRepo(conn)
-      repo.insert({...})
-      conn.commit()
-      return repo.get(sid)
-  ```
-
-- **Router layer:** FastAPI endpoints; use dependency injection
-  ```python
-  @router.post("", response_model=ScenarioOut, status_code=201)
-  def create_scenario(
-      body: ScenarioCreate,
-      conn: sqlite3.Connection = Depends(get_db),
-      settings: Settings = Depends(get_settings),
-  ) -> dict:
-  ```
+**Router Layer:**
+- FastAPI endpoints; use dependency injection for DB connections and engine
+- Example: `api/routers/scenarios.py:create_scenario()` uses `Depends(get_db)`, `Depends(get_settings)`
 
 ---
 
-*Convention analysis: 2026-06-26*
+## FRONTEND (React + TypeScript)
+
+### Naming Patterns
+
+**Files:**
+- React components: `PascalCase.tsx` (e.g., `ScenarioHeader.tsx`, `ConstraintInput.tsx`)
+- Hooks: `camelCase`, prefixed `use`: `useScenarios.ts`, `useApplyConstraint.ts`
+- Utilities/libraries: `camelCase.ts` (e.g., `errors.ts`, `formatShiftWindow.ts`)
+- Test files: co-located with implementation: `Component.test.tsx`, `lib.test.ts`
+
+**Functions and Variables:**
+- `camelCase` for all function names and variables: `getErrorStatus()`, `scenarioId`, `isLoading`
+- Abbreviated loop variables: `r` for row, `i` for index
+
+**React Components:**
+- `PascalCase` component names: `ScenarioHeader`, `ConstraintInput`
+- Export as named exports: `export function ScenarioHeader({ ... })`
+- Props as destructured object parameter with inline type annotation
+
+**Hooks:**
+- `camelCase`, prefixed `use`: `useScenarios()`, `useApplyConstraint()`
+- Thin TanStack Query wrappers: `useScenarios()` wraps `listScenarios()`
+
+**Constants:**
+- `UPPERCASE` or `camelCase` depending on scope
+- Example: `MAX_LENGTH = 2000`, `COUNTER_THRESHOLD = 1800`
+
+**Type Hints:**
+- TypeScript strict mode enabled (`noUnusedLocals`, `noUnusedParameters`)
+- Union types with `|`: `string | null`, `number | undefined`
+- Derived types from generated OpenAPI schema preferred over hand-authored interfaces
+- Example from `src/api/scenarios.ts`:
+  ```typescript
+  type CreateScenarioBody = paths["/scenarios"]["post"]["requestBody"]["content"]["application/json"];
+  ```
+
+### Code Style
+
+**Formatting:**
+- No explicit formatter configured (likely Prettier defaults); follows eslint/oxlint rules
+- Consistent spacing around operators and after commas
+- Multi-line JSX fragments use readable indentation
+
+**Linting:**
+- `oxlint` (Rust-based linter)
+- Config: `.oxlintrc.json` enables React and TypeScript plugins
+- Rules enforced:
+  - `react/rules-of-hooks`: error (enforce Hook rules)
+  - `react/only-export-components`: warn (components should be default/named exports)
+
+**Strict Compiler Flags:**
+- `noUnusedLocals`: true — unused variables error
+- `noUnusedParameters`: true — unused parameters error
+- `noFallthroughCasesInSwitch`: true — enforce default case
+
+### Import Organization
+
+**Order:**
+1. React and core libraries: `import * as React from "react"`
+2. Third-party UI/utility: `import { Button } from "@shadcn/ui"`, `import { useQuery } from "@tanstack/react-query"`
+3. Project code: `import { useScenario } from "@/hooks"`
+4. Types: `import type { ComponentProps }` or co-located with imports
+
+**Path Aliases:**
+- `@/*` resolves to `./src/*` (configured in `vite.config.ts` and `tsconfig.json`)
+- All imports use absolute `@` alias: `@/api/scenarios`, `@/hooks/useScenarios`, `@/components/ui/button`
+
+**Imports from Generated Types:**
+- OpenAPI schema imported as: `import type { paths, components } from "@/api/schema"`
+- Derived types: `type CreateScenarioBody = paths["/scenarios"]["post"]["requestBody"]["content"]["application/json"]`
+
+### Error Handling
+
+**API Layer (`src/api/*.ts`):**
+- Throw error objects with HTTP status attached: `throw { status: response.status, ...error }`
+- Example from `src/api/scenarios.ts:48`:
+  ```typescript
+  if (error) {
+    throw { status: response.status, ...error };
+  }
+  ```
+
+**Components and Hooks:**
+- TanStack Query surfaces thrown errors as `query.error`/`mutation.error` (typed `unknown`)
+- Use `getErrorStatus(error)` helper to safely extract status: `const status = getErrorStatus(error)`
+- Status discrimination drives branching (404 → terminal view, 503 → provider-down banner)
+
+**Helper Functions:**
+- Example `src/lib/errors.ts`: Centralized `getErrorStatus()` prevents repeated type casts
+  ```typescript
+  export function getErrorStatus(error: unknown): number | undefined {
+    if (typeof error !== "object" || error === null) return undefined;
+    const status = (error as { status?: unknown }).status;
+    return typeof status === "number" ? status : undefined;
+  }
+  ```
+
+### Comments
+
+**Module-level Docstrings:**
+- Always present; explain purpose and reference design docs or tickets
+- Example from `src/components/editor/ConstraintInput.tsx:1-22`:
+  ```typescript
+  /**
+   * CONS-01 constraint input box (UI-SPEC E4) — Textarea + "Apply Constraint",
+   * status-branching for CONS-05 (503-vs-422, keyed strictly off
+   * `response.status`, never error message text)...
+   */
+  ```
+
+**Inline Comments:**
+- Explain "why", cite relevant design tickets
+- Example from `src/components/editor/ConstraintInput.tsx:72-76`:
+  ```typescript
+  // Input-preservation rule (generalizes CONS-04): clear ONLY on a
+  // genuine full apply with nothing rejected and no pending
+  // clarification...
+  ```
+
+### React Patterns
+
+**Controlled Components:**
+- State-driven forms with `useState`, clear on success conditions (not always on HTTP 200)
+- Example from `src/components/editor/ConstraintInput.tsx:70-75`:
+  ```typescript
+  applyConstraint.mutate(text, {
+    onSuccess: (data) => {
+      // Only clear if the response indicates full success (no rejects/clarifications)
+      if (data.applied.length > 0 && data.rejected.length === 0 && data.clarifications.length === 0) {
+        setText("");
+      }
+    },
+  });
+  ```
+
+**Custom Hooks:**
+- Thin TanStack Query wrappers; business logic belongs in components
+- Example `src/hooks/useScenarios.ts`:
+  ```typescript
+  export function useScenarios() {
+    return useQuery({
+      queryKey: ["scenarios"],
+      queryFn: listScenarios,
+    });
+  }
+  ```
+
+**Dependencies and Injection:**
+- TanStack Query `enabled` gates conditional queries
+- Props passed to components for flexibility; dependency overrides in tests
+
+**Router Integration:**
+- Use `react-router` for navigation; real route tests use `createMemoryRouter`
+- Example from `src/components/editor/ScenarioHeader.test.tsx:35-45`:
+  ```typescript
+  const router = createMemoryRouter(
+    [{ path: "/scenarios/:scenarioId", Component: () => <ScenarioHeader ... /> }],
+    { initialEntries: ["/scenarios/abc"] },
+  );
+  ```
+
+### Module Design
+
+**API Layer (`src/api/`):**
+- Thin typed wrappers over `openapi-fetch` client
+- No hand-authored interfaces; derive from generated OpenAPI schema
+- Every endpoint request/response shape comes from `./schema.d.ts`
+
+**Hooks (`src/hooks/`):**
+- TanStack Query wrappers; no business logic
+- Thin pass-through of query configuration
+- Query keys are cross-plan contracts (e.g., `["scenarios"]` invalidated on creation)
+
+**Utilities (`src/lib/`):**
+- Pure functions: `getErrorStatus()`, `formatTimestamp()`, `formatShiftWindow()`
+- Type safety via TypeScript; centralize repeated type casts
+
+**Components (`src/components/`):**
+- Organize by feature/domain: `layout/`, `editor/`, `results/`
+- Props interface inline or as dedicated type
+- Export as named exports (not default)
+
+---
+
+## Cross-Codebase Patterns
+
+### Type Safety Philosophy
+
+**Backend (Python):**
+- Static type hints on all functions (PEP 484)
+- Pydantic models for validation
+- Strict-by-design (exceptions throw, don't return error codes)
+
+**Frontend (TypeScript):**
+- Strict TypeScript compiler flags
+- Types derived from generated OpenAPI schema (source of truth)
+- Hand-authored types only when schema generation cannot provide them
+
+### Error Handling Philosophy
+
+**Backend:** Exceptions propagate; caller decides HTTP response
+**Frontend:** Errors thrown with status attached; components discriminate on status codes
+
+### Documentation Style
+
+**Both:** Module-level docstrings explain "why", not "what". Reference design docs and tickets.
+
+Example (backend):
+```python
+"""Run use-cases: create a run row, then execute the solve in a worker thread.
+
+The solve is CPU-heavy and long (seconds to minutes), so it must never run on
+the event loop...
+"""
+```
+
+Example (frontend):
+```typescript
+/**
+ * CONS-01 constraint input box (UI-SPEC E4) — Textarea + "Apply Constraint",
+ * status-branching for CONS-05 (503-vs-422, keyed strictly off
+ * `response.status`, never error message text)...
+ */
+```
+
+---
+
+*Convention analysis: 2026-07-20*
