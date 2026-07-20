@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 04-results-insights
 source: [04-VERIFICATION.md]
 started: 2026-07-20T03:07:47Z
-updated: 2026-07-20T04:47:55Z
+updated: 2026-07-20T04:49:30Z
 ---
 
 ## Current Test
@@ -128,7 +128,11 @@ blocked: 0
   reason: "User (via Claude-driven verification) confirmed: chart renders a completely blank box (no bars, no axis labels, no text) with no way to distinguish 'no demand for this run' from broken/loading, against a real zero-demand run"
   severity: minor
   test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "frontend/src/components/results/DemandVsServedChart.tsx has no empty-data branch. toChartData(coverage_by_function) returns [] when the input is {}; that [] is passed straight to Recharts' BarChart, which silently renders empty axes with zero bars and zero category labels — no conditional check for data.length === 0 exists anywhere in the component. Contrast with ScheduleTable.tsx and CoverageByDayTable's sibling components in this same phase, which do have explicit empty-state handling (ScheduleTable renders \"No shifts were scheduled for this run.\"; CoverageByDayTable at least renders its header row)."
+  artifacts:
+    - path: "frontend/src/components/results/DemandVsServedChart.tsx"
+      issue: "No empty-state branch before the ChartContainer/BarChart render; needs an `if (data.length === 0) return <emptyState/>` (or equivalent) guard analogous to ScheduleTable.tsx's empty-state pattern"
+  missing:
+    - "An explicit empty-state message (e.g. \"No coverage data for this run.\") rendered instead of an empty BarChart when coverage_by_function is {}"
+    - "A test asserting the empty-state message renders when coverage_by_function is {} (mirrors ScheduleTable.test.tsx's existing empty-state test)"
   debug_session: ""
