@@ -54,6 +54,18 @@ dist/
 .claude/gsd-install-state.json
 .claude/.gsd-profile
 .claude/settings.local.json
+.claude/skills/
 
 # Codegen intermediate (frontend/src/api/schema.d.ts is the committed derivative — see 01-04-PLAN.md)
 frontend/openapi.json
+.bmad-loop/runs/
+.bmad-loop/cache/
+.bmad-loop/policy.toml
+
+# BMad: personal install answers, never shared across teammates/machines
+_bmad/config.user.yaml
+_bmad/config.user.toml
+
+# BMad: reinstallable skill-package mirror for Codex/Gemini (bmad-loop init
+# regenerates it) — same treatment as the already-ignored .claude/skills/
+.agents/skills/
