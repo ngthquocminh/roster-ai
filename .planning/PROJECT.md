@@ -69,6 +69,11 @@ explanation of what changed — without touching solver code or JSON.
   runs with created/started/finished timing, honest in-flight copy with no
   cancel/progress affordance, inline FAILED error text — Validated in Phase 3:
   run-execution-history
+- ✓ ResultsView — coverage summary cards + warnings banner + by-day table,
+  demand-vs-served chart (with honest empty-state for zero-demand runs,
+  closed via gap-closure G-04-4), scrollable schedule table, on-demand
+  insight report with five-state branching on the response's `ready` field
+  (never the status code) — Validated in Phase 4: results-insights
 
 ### Active
 
@@ -77,7 +82,7 @@ explanation of what changed — without touching solver code or JSON.
 - [ ] Vite + React + TypeScript app under `frontend/`, typed against `docs/API.md`
 - [ ] Home — scenario list / create from an existing fixture
 - [x] ScenarioEditor — fixture select, NL constraint box, applied-overrides list — ✓ v0.4 Phase 2 (scenario detail header + 404 gate, plain-English constraint transcript with distinct outcome treatments, durable applied-overrides list over GET /scenarios/{id}/overrides)
-- [ ] ResultsView — coverage cards, demand-vs-served chart, insights, schedule table
+- [x] ResultsView — coverage cards, demand-vs-served chart, insights, schedule table — ✓ v0.4 Phase 4 (see Validated above)
 - [ ] CORS middleware on the FastAPI app (enabler — no browser origin can call the API without it)
 
 <!-- Deferred: scoped out of v0.4, still live. See todos/pending/ for the full set. -->
@@ -204,4 +209,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-19 — Phase 3 (run-execution-history) complete*
+*Last updated: 2026-07-20 — Phase 4 (results-insights) complete — all v0.4 target features shipped*
