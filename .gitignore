@@ -69,3 +69,18 @@ _bmad/config.user.toml
 # BMad: reinstallable skill-package mirror for Codex/Gemini (bmad-loop init
 # regenerates it) — same treatment as the already-ignored .claude/skills/
 .agents/skills/
+
+# GSD Core for Codex — project-local, reinstallable tooling
+.codex/agents/gsd-*
+.codex/gsd-core/
+.codex/gsd-migration-journal/
+.codex/hooks/gsd-*
+.codex/scripts/
+.codex/config.toml
+.codex/gsd-file-manifest.json
+.codex/gsd-install-state.json
+.codex/.gsd-profile
+.codex/hooks.json
+
+# Generated GSD research cache
+.planning/research/.cache/

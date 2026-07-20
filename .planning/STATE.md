@@ -4,17 +4,17 @@ milestone: v0.4
 milestone_name: Frontend
 status: Awaiting next milestone
 stopped_at: Phase 04 UI-SPEC approved
-last_updated: "2026-07-20T08:06:31.014Z"
+last_updated: "2026-07-20T17:28:42.197Z"
 last_activity: 2026-07-20
 last_activity_desc: Milestone v0.4 completed and archived
+current_phase: 04
+current_phase_name: results-insights
 progress:
   total_phases: 4
   completed_phases: 4
   total_plans: 28
   completed_plans: 28
   percent: 100
-current_phase: 04
-current_phase_name: results-insights
 ---
 
 # Project State
@@ -141,6 +141,7 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 | 260714-owo | Added throwaway `data/sample_tiny_input_more_tm.json` fixture (superset of `sample_tiny_input.json`) with 12 new qualified+rostered Team Members for task 99260066-B32A-423D-97A1-8A649BABBAAD, raising qualified-member coverage from a sub-3 ceiling to a floor of 4 across all 98 demanded hourly buckets — built to test whether more staff supply lets `set_min_workers_per_task n=3` actually become satisfiable in round-2 of the CP-SAT solve (previously stuck at 0/98 hours even at OPTIMAL/300s) | 2026-07-14 | c7709ff | [260714-owo-create-a-new-data-fixture-variant-of-dat](./quick/260714-owo-create-a-new-data-fixture-variant-of-dat/) |
 | 260715-hm2 | Fixed `set_max_hours` override penalty scaling bug in `engine/cpsat/builder.py`'s `round2_cost`: the `over` overflow var is VOL_SCALE-scaled (hundredths-of-hour) but was multiplied directly by `MAX_HOURS_PENALTY` with no division back out, silently inflating the real penalty ~100x beyond the documented $1,000/hour (empirically found via live API testing: a 24.62h-over-cap override produced a ~$2.46M cost delta instead of the intended ~$24,620). Fix: `(C.MAX_HOURS_PENALTY // C.VOL_SCALE) * sum(maxh_terms)`. Full suite (124 tests) green | 2026-07-15 | 5bf1689 | [260715-hm2-fix-set-max-hours-penalty-scaling-bug-in](./quick/260715-hm2-fix-set-max-hours-penalty-scaling-bug-in/) |
 | 260715-vel | Retired `docs/` as a planning tracker and split it by lifecycle, closing the drift left by adopting GSD mid-project (phases 1–2 were hand-documented; `docs/` unmaintained since Phase 3). Deleted `docs/PLAN.md` (superseded by `.planning/`; its 5 deferred follow-ups migrated to `todos/pending/` in a84ddec first, so zero loss). Fixed `docs/API.md` — it was missing the entire LLM layer and is about to be the contract v0.4's frontend is written against; added `POST /constraints` + `GET /runs/{id}/insights` + `LLM_PROVIDER`, verified against source (caught that insights fails **502** not 503, and the not-ready case is a deliberate **200 `ready:false`** not 409). Trimmed `design.md` to the durable "why", fixing two inverted claims (provider diagram said "Claude now; Gemini later" — reality is stub-default + Gemini + OpenRouter, Claude never built; deploy said Render — reality is AWS) and folding in the shipped LLM-layer design as §4. Archived phase-1/2 docs via `git mv` (history intact); froze `vision.md` in place as the permanent origin snapshot (1-line diff); added `docs/README.md` stating the one-owner-per-audience boundary so the drift can't silently recur. Fixed PROJECT.md's false `docs/decisions/` ADR claim (no ADR system created). Docs-only — `git diff -- backend/` empty | 2026-07-15 | 0729b21 | [260715-vel-retire-docs-as-planning-tracker-split-by](./quick/260715-vel-retire-docs-as-planning-tracker-split-by/) |
+| 10 | Ignore project-local Codex GSD tooling and stop tracking machine-local hooks and research caches | 2026-07-20 | — | — |
 
 ### Roadmap Evolution
 
