@@ -60,6 +60,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 const NOT_COMPUTED = "Not computed";
+const EMPTY_COVERAGE_COPY = "No coverage data for this run.";
 
 type BarKey = "required_h" | "served_h";
 
@@ -73,6 +74,22 @@ export function DemandVsServedChart({
   coverage_by_function: Record<string, CoverageStat>;
 }) {
   const data = toChartData(coverage_by_function);
+
+  // G-04-4: an empty coverage_by_function (zero-demand run) must render an
+  // honest empty-state message, not a blank axes-only chart box. Gated on
+  // the mapped-data length (mirroring ScheduleTable.tsx's zero-state guard)
+  // so a non-empty map with null required_h/served_h still reaches the
+  // chart render below.
+  if (data.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-16 text-center">
+        <p className="text-sm leading-[1.5] text-muted-foreground">
+          {EMPTY_COVERAGE_COPY}
+        </p>
+      </div>
+    );
+  }
+
   // Recharts requires a number to compute bar height — a `null` value
   // renders as a zero-height bar here, but the original `null` survives on
   // the row (`*_raw`) so the tooltip formatter below can still render "Not

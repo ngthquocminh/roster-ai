@@ -6,7 +6,7 @@
  * manual/E2E verification, not this unit suite.
  */
 import { describe, it, expect } from "vitest";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 import { DemandVsServedChart, toChartData } from "./DemandVsServedChart";
 import type { CoverageStat } from "@/api/results";
@@ -70,5 +70,18 @@ describe("DemandVsServedChart: render smoke test", () => {
     expect(() =>
       render(<DemandVsServedChart coverage_by_function={coverage} />),
     ).not.toThrow();
+  });
+});
+
+describe("DemandVsServedChart: empty", () => {
+  it("renders the empty-state copy instead of a chart for empty coverage_by_function", () => {
+    const { container } = render(
+      <DemandVsServedChart coverage_by_function={{}} />,
+    );
+
+    expect(
+      screen.getByText("No coverage data for this run."),
+    ).toBeInTheDocument();
+    expect(container.querySelector("svg")).not.toBeInTheDocument();
   });
 });
