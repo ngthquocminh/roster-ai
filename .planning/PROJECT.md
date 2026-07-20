@@ -1,4 +1,4 @@
-# ShiftMind — Frontend (v0.4, in progress)
+# ShiftMind
 
 ## What This Is
 
@@ -11,7 +11,11 @@ it's validated and applied to the solve as a calibrated soft penalty, and a
 separate on-demand endpoint turns run metrics into a grounded, plain-language
 insight report. Two real, network-backed LLM providers (Gemini, OpenRouter)
 sit behind a config-driven `LLMProvider` seam alongside the deterministic stub
-that keeps default CI keyless.
+that keeps default CI keyless. Milestone v0.4 shipped the **frontend**: the
+full assistant is now usable end-to-end from a browser — create a scenario
+from a fixture, shape it with plain-English constraints, trigger a solve and
+watch it run, and read the resulting schedule, coverage, and insight report —
+without ever touching curl or raw JSON.
 
 ## Core Value
 
@@ -74,23 +78,25 @@ explanation of what changed — without touching solver code or JSON.
   closed via gap-closure G-04-4), scrollable schedule table, on-demand
   insight report with five-state branching on the response's `ready` field
   (never the status code) — Validated in Phase 4: results-insights
+- ✓ Vite + React + TypeScript app under `frontend/`, typed against `docs/API.md`
+  (openapi-typescript/openapi-fetch codegen, zero hand-authored payload shapes) — v0.4 Phase 1
+- ✓ CORS middleware on the FastAPI app, env-driven allow-list, no wildcard/credentials — v0.4 Phase 1 (BE-01)
+- ✓ Home — scenario list (all 5 UI states) / create from a backend-offered fixture, no upload path — v0.4 Phase 1
+- ✓ Persistent 4-route nav shell with deep-linkable routes and honest
+  not-built-yet placeholders (fully retired as each real view landed) — v0.4 Phase 1
+- ✓ Fixture path traversal hardening (WR-04) — resolved in Phase 2 code-review fix:
+  `settings.resolve_fixture_path()` constrains the fixture path to `data_dir`,
+  rejecting absolute / `../`-escaping values (400 on scenario create, 404 on constraint parse)
 
 ### Active
 
-<!-- v0.4 scope — building toward these. -->
+<!-- Carried forward from v0.4, still unaddressed. Candidates for v0.5 scoping. -->
 
-- [ ] Vite + React + TypeScript app under `frontend/`, typed against `docs/API.md`
-- [ ] Home — scenario list / create from an existing fixture
-- [x] ScenarioEditor — fixture select, NL constraint box, applied-overrides list — ✓ v0.4 Phase 2 (scenario detail header + 404 gate, plain-English constraint transcript with distinct outcome treatments, durable applied-overrides list over GET /scenarios/{id}/overrides)
-- [x] ResultsView — coverage cards, demand-vs-served chart, insights, schedule table — ✓ v0.4 Phase 4 (see Validated above)
-- [ ] CORS middleware on the FastAPI app (enabler — no browser origin can call the API without it)
-
-<!-- Deferred: scoped out of v0.4, still live. See todos/pending/ for the full set. -->
-
-- [ ] Input upload endpoint — deferred to v0.5; vision.md's pitch opens with it, but v0.4 demos against committed fixtures. Hard prerequisite WR-04 is now resolved (see below).
-- [x] Fixture path traversal hardening (WR-04) — ✓ resolved in Phase 2 code-review fix: `settings.resolve_fixture_path()` constrains the fixture path to `data_dir`, rejecting absolute / `../`-escaping values (400 on scenario create, 404 on constraint parse)
-- [ ] `_grounding_guard` `coverage_by_day` dict-key admission fix (D-06 false-positive class)
+- [ ] Input upload endpoint — vision.md's pitch opens with it, but v0.3/v0.4 demoed against committed fixtures. Hard prerequisite WR-04 is now resolved, so this is unblocked (v2 UP-01).
+- [ ] `_grounding_guard` `coverage_by_day` dict-key admission fix (D-06 false-positive class) — live path to a 502 from `GET /runs/{id}/insights`; v0.4's ResultsView survives it (RES-05) but the root cause is unfixed (v2 D-06-FIX)
 - [ ] Demand scheduling: deadline-fill semantics instead of flat hourly distribution
+- [ ] What-if compare + delta explanation — unblocked (LLM layer + frontend both shipped), deliberately held out of v0.3 and v0.4 as a second large feature
+- [ ] Run cancellation + concurrency limits (v2 OPS-01) and round-2 relative-gap stop (v2 OPS-02) — single-worker pool, no cancel path; v0.4 ships an honest uncancellable wait instead
 
 ### Out of Scope
 
@@ -100,7 +106,7 @@ explanation of what changed — without touching solver code or JSON.
   but deliberately held out of v0.4: it's a second large feature on top of a from-scratch
   React app, and two big things in one milestone is how scope slips. Revisit for v0.5.
 - Auth / sessions — never built; vision.md's localStorage session UUID never happened.
-  Out of scope until a deploy makes it necessary (see v0.4 key context #1).
+  Out of scope until a deploy makes it necessary (see Context).
 - Deploy / AWS infra — out of scope until the feature set for a public-facing release is complete
 - Hard/infeasible-making constraints from NL — all overrides apply as soft penalties only, by design (reaffirmed through v0.3)
 - Production-model fidelity deferrals carried from design.md (OT1/OT2 cost split,
@@ -111,7 +117,9 @@ explanation of what changed — without touching solver code or JSON.
 ## Context
 
 - The backend (`backend/`) exposes the engine over FastAPI with a clean
-  service/domain/engine layering; ~7,360 LOC Python as of v0.3 close.
+  service/domain/engine layering; ~7,360 LOC Python as of v0.3 close. The
+  frontend (`frontend/`) adds ~10,287 LOC TypeScript as of v0.4 close: Vite +
+  React 19 + TanStack Query + shadcn/ui (Tailwind v4) + recharts.
 - Two Protocol seams exist by design and both proved themselves under real
   swaps: `SchedulerEngine` (engine swap, unexercised beyond CP-SAT so far) and
   `LLMProvider` (vendor swap — stub → Gemini → OpenRouter, zero service/route
@@ -123,17 +131,30 @@ explanation of what changed — without touching solver code or JSON.
   rather than placeholder round numbers.
 - `docs/design.md` is the source-of-truth engineering design (the durable
   "why"); `.planning/` (`STATE.md`/`ROADMAP.md`/`MILESTONES.md`) owns the
-  planning lifecycle — the hand-written phase tracker it replaced was retired
-  at the v0.3/v0.4 boundary. No ADR directory exists in this repo; decisions
-  live in this file's own Key Decisions table, `.planning/RETROSPECTIVE.md`,
-  and `docs/design.md` §6 (open decisions). `docs/vision.md` is the origin
-  snapshot this document descends from. This GSD project tracked Phases 1–4
-  (v0.3) in the GSD planning structure; see `.planning/milestones/v0.3-ROADMAP.md`
-  for full phase detail.
-- Known issues carried into the next milestone: a D-06 grounding-guard
-  false-positive class on `coverage_by_day` dict-key citations (surfaced by
-  live-provider testing, not yet fixed). WR-04 (no path-traversal containment
-  on the scenario fixture path) was resolved in Phase 2's code-review fix pass.
+  planning lifecycle. No ADR directory exists in this repo; decisions live in
+  this file's own Key Decisions table, `.planning/RETROSPECTIVE.md`, and
+  `docs/design.md` §6 (open decisions). `docs/vision.md` is the origin
+  snapshot this document descends from. Full phase detail for both shipped
+  milestones lives in `.planning/milestones/v0.3-ROADMAP.md` and
+  `.planning/milestones/v0.4-ROADMAP.md`.
+- `GET /runs/{id}/insights` returns `200` with `ready:false` when the run
+  isn't `COMPLETED` (deliberately not `409`) and `502` on generation failure —
+  `GET /runs/{id}/result` by contrast does `409` before completion. Any client
+  against this API must branch on `ready`, never on status code, and must not
+  treat the two endpoints alike. Documented in `docs/API.md`; the frontend's
+  `InsightPanel` (v0.4 Phase 4) is the reference implementation of this rule.
+- `LLM_PROVIDER` defaults to `stub` (keyless, deterministic, regex-routed).
+  Real NL parsing needs `gemini` or `openrouter` configured — config, not
+  code. Default CI stays keyless and must remain so.
+- No auth exists anywhere in the stack; every scenario is globally visible to
+  any caller. Out of scope until a public/shared deploy makes it necessary
+  (see Out of Scope).
+- Known issue carried forward: a D-06 grounding-guard false-positive class on
+  `coverage_by_day` dict-key citations (surfaced by live-provider testing,
+  not yet fixed) — still a live path to a `502` from `GET /runs/{id}/insights`,
+  which the frontend's RES-05 isolation now survives without being fixed at
+  the source. WR-04 (fixture path traversal) was resolved in v0.4 Phase 2's
+  code-review fix pass — no longer an open issue.
 
 ## Constraints
 
@@ -159,14 +180,20 @@ explanation of what changed — without touching solver code or JSON.
 | Add OpenRouter as a second real provider (post-Phase-4) | Gemini's 50-req/day free tier proved too tight for iterative live testing | ✓ Good — zero service/route changes needed, seam held |
 | Provider-neutral translation boundary (`to_override_call`) | No vendor payload shape should leak past the LLM seam | ✓ Good — enabled 2 real-provider additions with zero seam changes |
 | Defer penalty-weight calibration to Phase 4 | Needed real solver-run data to size constants correctly | ⚠️ Revisit — 3 phases of uncalibrated placeholders let a 100x `set_max_hours` scaling bug ship silently; calibrate earlier next time (see RETROSPECTIVE.md) |
+| Roadmap = 4 phases, numbered 1-4; phase numbering restarts every milestone | Each milestone owns its own 1..N sequence, unambiguous within its own ROADMAP.md; shipped milestones keep numbering in their archives | ✓ Good — no on-disk collisions, adopted as the standing convention |
+| BE-01 (CORS) bundled into Phase 1 rather than its own phase | Hard gate but a small change; keeps Phase 1 an observable slice instead of a one-line phase | ✓ Good |
+| SCEN-03 grouped with CONS-* in Phase 2, not with SCEN-01/02 in Phase 1 | The overrides-list view IS the surface constraint submission populates; splitting would strand a half-built view across two phases | ✓ Good |
+| SHELL-03 (four-view nav) assigned to Phase 1 as the routing/nav capability | Later phases mount their view into the shell established here; Phase 1's criterion scoped to what's verifiable then | ✓ Good |
+| No dedicated research phase for v0.4 | React SPA over a documented REST API judged well-trodden; open choices (charting library, polling strategy, client typing) deliberately left to plan-phase | ✓ Good — zero rework traced to this omission |
 
-## Current Milestone: v0.4 Frontend (React UI)
+<details>
+<summary>Archived: v0.4 Frontend (React UI) milestone scope — SHIPPED 2026-07-20</summary>
 
 **Goal:** Make the shipped engine + LLM layer usable in a browser — create a
 scenario from a fixture, express a constraint in plain English, run a solve, and
 read the schedule + insights without touching curl.
 
-**Target features:**
+**Target features (all shipped):**
 - Vite + React + TypeScript app under `frontend/`
 - Home → scenario list / create
 - ScenarioEditor → fixture select, NL constraint box, applied-overrides list
@@ -175,21 +202,14 @@ read the schedule + insights without touching curl.
 - Typed API client written against `docs/API.md`
 - CORS middleware on FastAPI — the one backend change, a mandatory enabler
 
-**Explicitly deferred from v0.4:** input upload (v0.5), what-if compare + delta
-explanation, D-06 grounding-guard fix, WR-04 traversal hardening.
+**Deferred from v0.4** (see Requirements → Active): input upload, what-if
+compare + delta explanation, D-06 grounding-guard fix, run cancellation.
 
-### v0.4 key context — noted for later handling
+Full phase detail: `.planning/milestones/v0.4-ROADMAP.md`. Full requirements
+traceability: `.planning/milestones/v0.4-REQUIREMENTS.md`. Milestone audit:
+`.planning/milestones/v0.4-MILESTONE-AUDIT.md`.
 
-Surfaced during v0.4 scoping (2026-07-15). None block the milestone; recorded
-here so they are not rediscovered mid-build or lost between sessions.
-
-| # | Context | Bearing on v0.4 |
-|---|---------|-----------------|
-| 1 | **No auth exists.** vision.md assumed a localStorage session UUID; it was never built. Every scenario is globally visible to any caller. | v0.4 ships without auth. Any public/shared deploy needs this resolved first — a real gate on the AWS deploy already in Out of Scope. **Handle later.** |
-| 2 | **Insights use a two-shape contract behind one status code.** `GET /runs/{id}/insights` returns `200` with `ready:false` when the run isn't `COMPLETED` — deliberately *not* 409 — and `502` on generation failure. `/runs/{id}/result` by contrast *does* 409 before completion. | **v0.4 implementation fact, not deferrable.** The client must branch on `ready`, not on status code, and must not treat the two endpoints alike. Documented in `docs/API.md`. |
-| 3 | **Solves are slow and uncancellable.** Round-2 cost-optimality is a ~2min tail vs ~20s for round 1, on a single-worker `ThreadPoolExecutor` with no cancel path. | v0.4 needs honest loading/progress states for a wait it can neither shorten nor abort. Cancellation + concurrency limits and the round-2 relative-gap stop are both in `todos/pending/`. **Handle later.** |
-| 4 | **`LLM_PROVIDER` defaults to `stub`** — keyless, deterministic, regex-routed. Real NL parsing needs `gemini` or `openrouter` configured. | Config, not code. A demo showing genuine NL understanding must set a real provider; default CI stays keyless and must remain so. |
-| 5 | **No CORS on the FastAPI app.** | Promoted from context to a v0.4 requirement — a browser origin cannot call the API without it. |
+</details>
 
 ## Evolution
 
@@ -209,4 +229,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-20 — Phase 4 (results-insights) complete — all v0.4 target features shipped*
+*Last updated: 2026-07-20 — after v0.4 milestone completion (full evolution review)*

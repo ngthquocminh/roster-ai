@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.4
 milestone_name: Frontend
-current_phase: 04
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 04 UI-SPEC approved
-last_updated: "2026-07-20T05:28:33.093Z"
+last_updated: "2026-07-20T08:06:31.014Z"
 last_activity: 2026-07-20
-last_activity_desc: Phase 04 complete
+last_activity_desc: Milestone v0.4 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
   total_plans: 28
   completed_plans: 28
   percent: 100
+current_phase: 04
 current_phase_name: results-insights
 ---
 
@@ -28,10 +28,10 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 
 ## Current Position
 
-Phase: 04
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-07-20 — Phase 04 complete
+Phase: Milestone v0.4 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-20 — Milestone v0.4 completed and archived
 
 ## Performance Metrics
 
@@ -149,14 +149,21 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 
 ## Deferred Items
 
-Items acknowledged and deferred at milestone close on 2026-07-15:
+Items acknowledged and deferred at milestone close on 2026-07-20 (v0.4):
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
-| debug | knowledge-base (running KB log of resolved sessions; audit flags it as open due to no explicit closed status) | unknown | v0.3 close (2026-07-15) |
-| todo | 2026-06-29-harden-scenario-fixture-path-against-traversal.md (api) | pending | v0.3 close (2026-07-15) |
-| todo | 2026-07-09-demand-deadline-scheduling-instead-of-flat-hourly.md (engine) | pending | v0.3 close (2026-07-15) |
-| todo | 2026-07-09-extract-engine-as-separate-service.md (architecture) | pending | v0.3 close (2026-07-15) |
+| debug | knowledge-base (running KB log of resolved sessions; audit flags it as open due to no explicit closed status) | unknown (persistent tool false-positive) | v0.3 close (2026-07-15), still open at v0.4 close |
+| debug | run-status-layout-broken-time (RunHistoryTable timestamp overflow) | diagnosed — fix already shipped via 03-06-PLAN.md and confirmed in 03-VERIFICATION.md as gap G-03-1 closed; debug session file itself was never marked resolved | v0.4 close (2026-07-20) |
+| uat_gap | Phase 01 01-UAT.md | tool false-positive — file's own status is `passed`, 0 pending scenarios | v0.4 close (2026-07-20) |
+| todo | 2026-07-09-demand-deadline-scheduling-instead-of-flat-hourly.md (engine) | pending | v0.4 close (2026-07-20) |
+| todo | 2026-07-09-extract-engine-as-separate-service.md (architecture) | pending | v0.4 close (2026-07-20) |
+| todo | 2026-07-15-add-input-upload-endpoint.md (api) | pending — v2 UP-01, hard prereq WR-04 now resolved | v0.4 close (2026-07-20) |
+| todo | 2026-07-15-add-per-scenario-engine-selection.md (api) | pending | v0.4 close (2026-07-20) |
+| todo | 2026-07-15-add-round-2-relative-gap-stop-to-bound-solve-time.md (engine) | pending — v2 OPS-02 | v0.4 close (2026-07-20) |
+| todo | 2026-07-15-tune-demand-load-and-task-mix-for-even-coverage-band.md (engine) | pending — cosmetic/demo-quality only | v0.4 close (2026-07-20) |
+| todo | 2026-07-15-add-run-cancellation-and-concurrency-limits.md (api) | pending — v2 OPS-01 | v0.4 close (2026-07-20) |
+| todo | 2026-06-29-harden-scenario-fixture-path-against-traversal.md (api) | resolved in Phase 2 code-review fix (WR-04) — stale entry, superseded | v0.3 close (2026-07-15) |
 
 ## Session Continuity
 
@@ -166,8 +173,4 @@ Resume file: .planning/phases/04-results-insights/04-UI-SPEC.md
 
 ## Operator Next Steps
 
-- Execute the planned phase with `/gsd-execute-phase 1` — 7 plans across 5 waves
-- `01-02-PLAN.md` is a **blocking human checkpoint** (npm package legitimacy gate) and runs in Wave 1 — execution pauses there for your approval before any package is installed
-- Phases 2-4 are all UI-bearing (`UI hint: yes` in ROADMAP.md) — `/gsd-ui-phase` is available for a design contract before planning each
-
-</content>
+- Start the next milestone with /gsd-new-milestone
