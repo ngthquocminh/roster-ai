@@ -381,7 +381,7 @@ describe("Home: fixtures-alone failure [UI-SPEC E3/error]", () => {
 
     await waitFor(() =>
       expect(
-        screen.getAllByText("Can't reach the ShiftMind API.").length,
+        screen.getAllByText("Couldn't load this content.").length,
       ).toBe(1),
     );
 
@@ -398,7 +398,7 @@ describe("Home: concurrent failure [edge: SHELL-04/concurrency]", () => {
 
     await waitFor(() =>
       expect(
-        screen.getAllByText("Can't reach the ShiftMind API.").length,
+        screen.getAllByText("Couldn't load this content.").length,
       ).toBe(1),
     );
 

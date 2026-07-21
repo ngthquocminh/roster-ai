@@ -10,16 +10,28 @@ import { ErrorBanner } from "./ErrorBanner";
  * happening to work for one shape.
  */
 describe("ErrorBanner", () => {
-  it("renders the exact UI-SPEC backend-unreachable copy, including the remediation command", () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    render(<ErrorBanner error={new Error("network error")} />);
+  it("renders safe retry copy and keeps diagnostic-rich errors out of the DOM", () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const diagnostic =
+      "RuntimeError: solver crashed\n" +
+      'File "C:\\srv\\backend\\services\\run_service.py", line 90\n' +
+      "uv run uvicorn api.main:app --reload";
+    const error = new Error(diagnostic);
+    const { container } = render(<ErrorBanner error={error} />);
 
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("uv run uvicorn api.main:app --reload"),
+      screen.getByText(
+        "Try again. If the problem continues, reload the page.",
+      ),
     ).toBeInTheDocument();
+    expect(container.textContent).not.toContain("RuntimeError");
+    expect(container.textContent).not.toContain("run_service.py");
+    expect(container.textContent).not.toContain("uv run uvicorn");
+    expect(container.textContent).not.toContain("backend");
+    expect(consoleError).toHaveBeenCalledWith(error);
 
     vi.restoreAllMocks();
   });
@@ -29,7 +41,7 @@ describe("ErrorBanner", () => {
     render(<ErrorBanner error={new Error("")} />);
 
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
 
     vi.restoreAllMocks();
@@ -39,12 +51,12 @@ describe("ErrorBanner", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     render(<ErrorBanner error={{ message: null }} />);
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
 
     render(<ErrorBanner error={undefined} />);
     expect(
-      screen.getAllByText("Can't reach the ShiftMind API.").length,
+      screen.getAllByText("Couldn't load this content.").length,
     ).toBeGreaterThan(0);
 
     vi.restoreAllMocks();
@@ -64,19 +76,27 @@ describe("ErrorBanner", () => {
       screen.queryByText(/solver crashed unexpectedly/),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
 
     vi.restoreAllMocks();
   });
 
-  it("renders the remediation command as a literal, unwrapped text node [edge: SHELL-04/encoding]", () => {
+  it("never renders developer remediation for a non-Error input [edge: SHELL-04/encoding]", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const { container } = render(<ErrorBanner error={new Error("boom")} />);
-
-    expect(container.textContent).toContain(
-      "uv run uvicorn api.main:app --reload",
+    const { container } = render(
+      <ErrorBanner
+        error={{
+          message: "uv run uvicorn api.main:app --reload in backend/",
+        }}
+      />,
     );
+
+    expect(container.textContent).not.toContain("uv run uvicorn");
+    expect(container.textContent).not.toContain("backend/");
+    expect(
+      screen.getByText("Couldn't load this content."),
+    ).toBeInTheDocument();
 
     vi.restoreAllMocks();
   });

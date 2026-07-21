@@ -98,7 +98,7 @@ describe("ScenarioTable: error [UI-SPEC E1/error]", () => {
     renderTable();
 
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
     expect(screen.queryAllByRole("row")).toHaveLength(0);
 

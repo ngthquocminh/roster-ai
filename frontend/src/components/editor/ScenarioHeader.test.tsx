@@ -75,7 +75,7 @@ describe("ScenarioHeader: non-404 error [UI-SPEC E1/error-network]", () => {
     renderHeader(queryResult({ isError: true, error: { status: 500 } }));
 
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Scenario not found"),
@@ -89,7 +89,7 @@ describe("ScenarioHeader: non-404 error [UI-SPEC E1/error-network]", () => {
     renderHeader(queryResult({ isError: true, error: new Error("network error") }));
 
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
 
     vi.restoreAllMocks();

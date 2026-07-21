@@ -173,11 +173,10 @@ describe("router: crash backstop (SHELL-04)", () => {
       screen.getByRole("heading", { name: "Something went wrong." }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Reload the page. If this keeps happening, check the browser console.",
-      ),
+      screen.getByText("Reload the page and try again."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    expect(screen.queryByText(/browser console/i)).not.toBeInTheDocument();
 
     vi.restoreAllMocks();
   });
@@ -186,7 +185,9 @@ describe("router: crash backstop (SHELL-04)", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     function Throws(): never {
-      throw new Error("boom — simulated render crash");
+      throw new Error(
+        "RuntimeError: boom — simulated render crash at C:\\srv\\backend\\api\\main.py",
+      );
     }
 
     const throwRouter = createMemoryRouter(
@@ -204,7 +205,11 @@ describe("router: crash backstop (SHELL-04)", () => {
     expect(
       screen.getByRole("heading", { name: "Something went wrong." }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Reload the page and try again.")).toBeInTheDocument();
+    expect(screen.queryByText(/RuntimeError/)).not.toBeInTheDocument();
     expect(screen.queryByText(/boom — simulated render crash/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/main\.py/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/browser console/i)).not.toBeInTheDocument();
 
     vi.restoreAllMocks();
   });

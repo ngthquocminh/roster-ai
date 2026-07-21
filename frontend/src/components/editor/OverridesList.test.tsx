@@ -109,7 +109,7 @@ describe("OverridesList: error [UI-SPEC E2/error]", () => {
     );
 
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
 
     vi.restoreAllMocks();

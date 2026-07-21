@@ -1,6 +1,7 @@
 import { useRouteError } from "react-router";
 
 import { Button } from "@/components/ui/button";
+import { USER_ERROR_COPY } from "@/lib/errors";
 
 /**
  * The crash backstop (SHELL-04). Mounted as the root route's `errorElement`
@@ -10,10 +11,9 @@ import { Button } from "@/components/ui/button";
  *     so an unknown path lands here too, instead of react-router's own
  *     developer-facing default error page).
  *
- * Renders only UI-SPEC's fixed crash-backstop copy — never the caught
- * error's message or stack (T-1-02, ASVS V7). The error is accepted only so
- * it can be logged to the console for whoever can act on it; the body copy
- * already tells the user that's where the diagnostic detail lives.
+ * Renders only shared crash-backstop copy — never the caught error's message
+ * or stack (T-1-02, ASVS V7). The error is retained solely for console
+ * diagnostics and never used as render input.
  */
 export function RootErrorBoundary() {
   const error = useRouteError();
@@ -24,10 +24,10 @@ export function RootErrorBoundary() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
       <h1 className="text-[20px] leading-[1.2] font-semibold">
-        Something went wrong.
+        {USER_ERROR_COPY.unexpectedCrash.title}
       </h1>
       <p className="text-sm leading-[1.5] text-muted-foreground">
-        Reload the page. If this keeps happening, check the browser console.
+        {USER_ERROR_COPY.unexpectedCrash.description}
       </p>
       <Button type="button" onClick={() => window.location.reload()}>
         Reload
