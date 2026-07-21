@@ -19,10 +19,9 @@
  *      /runs/{id}` itself is a different failure than a `FAILED` run.
  *   3. `PENDING`/`RUNNING` — `RunInFlightPanel` reused verbatim (Phase 3, no
  *      new copy); nothing else renders below it.
- *   4. `FAILED` — a page-level destructive `Alert` titled "Run Failed",
- *      `run.error` or `RunHistoryTable`'s exact `FAILED_NO_ERROR_COPY`
- *      fallback (verbatim reuse, not a rephrase); nothing else renders below
- *      it.
+ *   4. `FAILED` — a page-level destructive `Alert` with shared fixed copy;
+ *      persisted `run.error` diagnostics never become render input, and
+ *      nothing else renders below it.
  *   5. `COMPLETED` — gated on `resultQuery`: while the result is still
  *      loading/erroring, an honest interim state (spinner / `ErrorBanner`);
  *      once `resultQuery.isSuccess`, the full results body renders in the
@@ -49,11 +48,8 @@ import { WarningsBanner } from "@/components/results/WarningsBanner";
 import { RunInFlightPanel } from "@/components/runs/RunInFlightPanel";
 import { useRun } from "@/hooks/useRun";
 import { useRunResult } from "@/hooks/useRunResult";
+import { USER_ERROR_COPY } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/formatTimestamp";
-
-// Reused verbatim from RunHistoryTable.tsx (D-12: "no new copy invented for
-// states already solved in Phase 3" — this is that exact fallback string).
-const FAILED_NO_ERROR_COPY = "Failed — no error details were recorded.";
 
 function CenteredSpinner({ label }: { label: string }) {
   return (
@@ -91,9 +87,9 @@ export function ResultsView() {
   if (run?.status === "FAILED") {
     return (
       <Alert variant="destructive" className="mx-6 my-4 max-w-3xl">
-        <AlertTitle>Run Failed</AlertTitle>
+        <AlertTitle>{USER_ERROR_COPY.runFailure.title}</AlertTitle>
         <AlertDescription className="whitespace-normal break-words">
-          {run.error || FAILED_NO_ERROR_COPY}
+          {USER_ERROR_COPY.runFailure.description}
         </AlertDescription>
       </Alert>
     );

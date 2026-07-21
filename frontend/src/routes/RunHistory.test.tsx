@@ -138,7 +138,10 @@ describe("RunHistory: composition [RUN-01..RUN-04]", () => {
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
-    expect(screen.getByText("Solver crashed")).toBeInTheDocument();
+    expect(
+      screen.getByText("This run couldn't be completed. Try starting a new run."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Solver crashed")).not.toBeInTheDocument();
   });
 
   it("calls the trigger mutation when the header 'Run Scenario' button is clicked", () => {

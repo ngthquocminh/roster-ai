@@ -19,9 +19,9 @@
  * COMPLETED run always reads as unambiguous, neutral success here,
  * regardless of what the solver actually achieved.
  *
- * `run.error` and every other cell value render only as JSX text children
- * (T-3-05/T-1-03 convention) — React's default text-node escaping is the
- * complete mitigation; no dangerouslySetInnerHTML anywhere in this file.
+ * Persisted `run.error` is diagnostic data and is deliberately never read as
+ * render input. Failed rows use shared fixed product copy, so future backend
+ * exception formats remain non-disclosive by default (T-3-05/T-1-03).
  */
 import { useNavigate } from "react-router";
 import { LoaderCircle } from "lucide-react";
@@ -38,12 +38,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { RunStatusLabel } from "./RunStatusLabel";
+import { USER_ERROR_COPY } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/formatTimestamp";
 import type { components } from "@/api/schema";
 
 type RunOut = components["schemas"]["RunOut"];
-
-const FAILED_NO_ERROR_COPY = "Failed — no error details were recorded.";
 
 function TimestampCell({ value }: { value?: string | null }) {
   if (!value) {
@@ -136,7 +135,7 @@ export function RunHistoryTable({
                 <RunStatusLabel status={run.status} />
                 {run.status === "FAILED" && (
                   <p className="mt-1 text-sm leading-[1.5] break-words whitespace-pre-wrap text-destructive">
-                    {run.error || FAILED_NO_ERROR_COPY}
+                    {USER_ERROR_COPY.runFailure.description}
                   </p>
                 )}
               </TableCell>

@@ -88,7 +88,9 @@ const FAILED_RUN: RunOut = {
   started_at: "2026-07-18T09:00:05Z",
   finished_at: "2026-07-18T09:01:00Z",
   solver_status: null,
-  error: "Solver crashed",
+  error:
+    "RuntimeError: solver crashed at C:\\srv\\backend\\services\\run_service.py\n" +
+    "uv run uvicorn api.main:app --reload",
 };
 
 const FAILED_RUN_NO_ERROR: RunOut = {
@@ -191,26 +193,38 @@ describe("ResultsView: D-12 status gate [RES-01..RES-06]", () => {
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("FAILED (with error) → renders the 'Run Failed' alert with run.error and no results body", () => {
+  it("FAILED (with diagnostic) → renders safe copy and no results body or backend details", () => {
     mockUseRun.mockReturnValue(runQueryResult({ data: FAILED_RUN }));
     mockUseRunResult.mockReturnValue(resultQueryResult());
-    renderResultsView();
+    const { container } = renderResultsView();
 
     expect(screen.getByText("Run Failed")).toBeInTheDocument();
-    expect(screen.getByText("Solver crashed")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This run couldn't be completed. Try starting a new run.",
+      ),
+    ).toBeInTheDocument();
+    expect(container.textContent).not.toContain("RuntimeError");
+    expect(container.textContent).not.toContain("run_service.py");
+    expect(container.textContent).not.toContain("uv run uvicorn");
     expect(
       screen.queryByRole("heading", { name: "Run Results" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("FAILED (no error) → falls back to RunHistoryTable's exact FAILED_NO_ERROR_COPY", () => {
-    mockUseRun.mockReturnValue(runQueryResult({ data: FAILED_RUN_NO_ERROR }));
+  it.each([
+    ["null", FAILED_RUN_NO_ERROR],
+    ["empty", { ...FAILED_RUN, error: "" }],
+  ])("FAILED (%s error) → renders the same safe copy", (_label, run) => {
+    mockUseRun.mockReturnValue(runQueryResult({ data: run }));
     mockUseRunResult.mockReturnValue(resultQueryResult());
     renderResultsView();
 
     expect(
-      screen.getByText("Failed — no error details were recorded."),
+      screen.getByText(
+        "This run couldn't be completed. Try starting a new run.",
+      ),
     ).toBeInTheDocument();
   });
 

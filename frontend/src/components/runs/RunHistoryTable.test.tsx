@@ -1,7 +1,7 @@
 /**
  * RUN-04/RUN-05 coverage (UI-SPEC E2/E5): loading/error/empty/populated
- * state machine, nullable-timestamp placeholder, FAILED inline error (with
- * its null-defensive fallback), the solver_status-never-rendered
+ * state machine, nullable-timestamp placeholder, safe FAILED copy, the
+ * solver_status-never-rendered
  * prohibition, the T-3-05/T-1-03 HTML-escaping guarantee, zero-one-many
  * chrome parity, and row-click navigation.
  *
@@ -94,7 +94,7 @@ describe("RunHistoryTable: error [UI-SPEC E2/error]", () => {
     renderTable(queryResult({ isError: true, error: new Error("boom") }));
 
     expect(
-      screen.getByText("Can't reach the ShiftMind API."),
+      screen.getByText("Couldn't load this content."),
     ).toBeInTheDocument();
     expect(screen.queryAllByRole("row")).toHaveLength(0);
 
@@ -188,7 +188,10 @@ describe("RunHistoryTable: populated [UI-SPEC E2/populated]", () => {
 });
 
 describe("RunHistoryTable: FAILED inline error [UI-SPEC E5/RUN-05]", () => {
-  it("renders run.error verbatim, wrapped, directly beneath 'Failed'", () => {
+  it("renders shared safe copy and suppresses diagnostic-rich run.error", () => {
+    const diagnostic =
+      "ValueError: solver crashed at C:\\srv\\backend\\services\\run_service.py\n" +
+      "uv run uvicorn api.main:app --reload";
     const runs: RunOut[] = [
       {
         id: "run-failed",
@@ -198,34 +201,44 @@ describe("RunHistoryTable: FAILED inline error [UI-SPEC E5/RUN-05]", () => {
         started_at: "2026-07-18T09:00:05Z",
         finished_at: "2026-07-18T09:01:00Z",
         solver_status: null,
-        error: "Solver crashed: division by zero",
+        error: diagnostic,
       },
     ];
-    renderTable(queryResult({ data: runs }));
+    const { container } = renderTable(queryResult({ data: runs }));
 
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(
-      screen.getByText("Solver crashed: division by zero"),
+      screen.getByText(
+        "This run couldn't be completed. Try starting a new run.",
+      ),
     ).toBeInTheDocument();
+    expect(container.textContent).not.toContain("ValueError");
+    expect(container.textContent).not.toContain("run_service.py");
+    expect(container.textContent).not.toContain("uv run uvicorn");
   });
 
-  it("renders the defensive fallback when error is null [UI-SPEC E5/empty]", () => {
+  it.each([
+    ["null", null],
+    ["empty", ""],
+  ] as const)("renders the same safe copy when error is %s [UI-SPEC E5/empty]", (_label, error) => {
     const runs: RunOut[] = [
       {
-        id: "run-failed-null",
+        id: `run-failed-${_label}`,
         scenario_id: "scenario-1",
         status: "FAILED",
         created_at: "2026-07-18T09:00:00Z",
         started_at: null,
         finished_at: null,
         solver_status: null,
-        error: null,
+        error,
       },
     ];
     renderTable(queryResult({ data: runs }));
 
     expect(
-      screen.getByText("Failed — no error details were recorded."),
+      screen.getByText(
+        "This run couldn't be completed. Try starting a new run.",
+      ),
     ).toBeInTheDocument();
   });
 });
@@ -252,7 +265,7 @@ describe("RunHistoryTable: solver_status never rendered [prohibition]", () => {
 });
 
 describe("RunHistoryTable: HTML-looking error [T-3-05/T-1-03]", () => {
-  it("renders an HTML-looking error string as literal text with no element created from it", () => {
+  it("does not render an HTML-looking diagnostic or create an element from it", () => {
     const maliciousError = '<img src=x onerror="alert(1)">';
     const runs: RunOut[] = [
       {
@@ -268,7 +281,12 @@ describe("RunHistoryTable: HTML-looking error [T-3-05/T-1-03]", () => {
     ];
     const { container } = renderTable(queryResult({ data: runs }));
 
-    expect(screen.getByText(maliciousError)).toBeInTheDocument();
+    expect(screen.queryByText(maliciousError)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This run couldn't be completed. Try starting a new run.",
+      ),
+    ).toBeInTheDocument();
     expect(container.querySelector("img")).not.toBeInTheDocument();
   });
 });
