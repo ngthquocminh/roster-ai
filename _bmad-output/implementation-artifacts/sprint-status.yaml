@@ -1,0 +1,123 @@
+# generated: 2026-07-24
+# last_updated: 2026-07-24
+# project: ShiftMind
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {project-root}/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; sprint-status surfaces open ones
+
+generated: 2026-07-24
+last_updated: 2026-07-24
+project: ShiftMind
+project_key: NOKEY
+tracking_system: file-system
+story_location: "{project-root}/_bmad-output/implementation-artifacts"
+
+development_status:
+  # Epic 1: Inspectable Single-Site Scenario Workspace
+  epic-1: backlog
+  1-1-establish-governed-fixture-history: backlog
+  1-2-sign-in-to-the-seeded-site-safely: backlog
+  1-3-choose-an-immutable-fixture: backlog
+  1-4-serve-the-normalized-scenario-read-contract: backlog
+  1-5-resolve-exact-evidence-targets: backlog
+  1-6-establish-shiftmind-design-tokens-and-shared-primitives: backlog
+  1-7-open-the-read-only-scenario-data-workspace: backlog
+  1-8-control-scenario-data-tables: backlog
+  1-9-prove-viewer-parity-and-mutation-denial: backlog
+  1-10-prove-scenario-data-accessibility-and-responsiveness: backlog
+  1-11-confirm-gate-a-readiness: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: Grounded Conversational Investigation
+  epic-2: backlog
+  2-1-establish-the-owned-agent-runtime-boundary: backlog
+  2-2-establish-the-deterministic-evaluation-harness: backlog
+  2-3-create-and-revisit-durable-conversations: backlog
+  2-4-replay-conversation-events-live: backlog
+  2-5-inspect-scenario-facts-through-a-governed-capability: backlog
+  2-6-add-and-remove-a-governed-capability-module: backlog
+  2-7-ground-schedule-claims-in-exact-evidence: backlog
+  2-8-jump-to-evidence-and-return-to-the-claim: backlog
+  2-9-clarify-refuse-and-fail-safely: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Governed and Recoverable Schedule Repair
+  epic-3: backlog
+  3-1-create-and-revise-a-reversible-repair-draft: backlog
+  3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: backlog
+  3-3-lease-solver-jobs-with-fencing: backlog
+  3-4-provide-the-safe-cancellation-command: backlog
+  3-5-persist-literal-run-state-and-replay-progress: backlog
+  3-6-start-explicit-bounded-optimization: backlog
+  3-7-monitor-cancel-and-reopen-runs: backlog
+  3-8-compare-candidate-and-baseline-results: backlog
+  3-9-continue-deterministic-work-during-model-outage: backlog
+  3-10-prove-repair-correctness: backlog
+  3-11-prove-recovery-and-idempotency: backlog
+  3-12-prove-the-repair-browser-journey: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: Exact Baseline Decision and Decision Record
+  epic-4: backlog
+  4-1-request-approval-for-one-exact-feasible-candidate: backlog
+  4-2-review-and-decide-the-exact-approval: backlog
+  4-3-promote-the-baseline-atomically-with-audit: backlog
+  4-4-inspect-complete-decision-provenance: backlog
+  4-5-prove-approval-and-audit-invariants: backlog
+  4-6-prove-approval-journey-accessibility: backlog
+  4-7-prove-cross-workflow-visual-consistency: backlog
+  4-8-prove-literal-state-semantics: backlog
+  4-9-prove-responsive-wcag-conformance: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Reliable Hosted Planner Workspace
+  epic-5: backlog
+  5-1-operate-with-structured-logs-metrics-and-correlation: backlog
+  5-2-prevent-telemetry-content-and-secret-leaks: backlog
+  5-3-preserve-operation-across-telemetry-failure-and-document-retention: backlog
+  5-4-alert-operators-with-tested-runbooks: backlog
+  5-5-provision-aws-edge-identity-and-network-boundaries: backlog
+  5-6-provision-aws-data-and-least-privilege-runtime: backlog
+  5-7-deploy-immutable-api-worker-and-web-releases: backlog
+  5-8-demonstrate-backup-and-restore: backlog
+  5-9-roll-out-compatible-mixed-versions: backlog
+  5-10-prove-rollback: backlog
+  5-11-prove-hosted-security-and-authority: backlog
+  5-12-prove-hosted-scenario-data-parity-and-immutability: backlog
+  5-13-prove-hosted-recovery-and-continuity: backlog
+  epic-5-retrospective: optional
