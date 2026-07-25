@@ -31,6 +31,8 @@ _OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 class Settings:
     db_path: str            # SQLite file
     data_dir: str           # directory holding input fixtures (*.json)
+    database_url: str       # governed PostgreSQL history
+    maintenance_flag_path: str  # persistent Gate A legacy-write lock
     llm_provider: str       # "stub" (default) | "gemini" | "openrouter"
     llm_model: str          # model id passed to the selected provider
     # T-04-01: keep the API key out of the auto-generated __repr__ so it never
@@ -74,6 +76,14 @@ def default_settings() -> Settings:
     """Read settings fresh each call so env overrides apply at request time."""
     db_path = os.environ.get("ROSTERAI_DB", str(_BACKEND_DIR / "var" / "rosterai.db"))
     data_dir = os.environ.get("ROSTERAI_DATA_DIR", str(_REPO_ROOT / "data"))
+    database_url = os.environ.get(
+        "ROSTERAI_DATABASE_URL",
+        "postgresql+psycopg://rosterai:rosterai@localhost:5432/rosterai",
+    )
+    maintenance_flag_path = os.environ.get(
+        "ROSTERAI_MAINTENANCE_FLAG",
+        str(_BACKEND_DIR / "var" / "gate-a-maintenance"),
+    )
     llm_provider = os.environ.get("LLM_PROVIDER", "stub")
     llm_model = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
     llm_api_key = os.environ.get("GEMINI_API_KEY")
@@ -88,6 +98,8 @@ def default_settings() -> Settings:
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
+        database_url=database_url,
+        maintenance_flag_path=maintenance_flag_path,
         llm_provider=llm_provider,
         llm_model=llm_model,
         llm_api_key=llm_api_key,

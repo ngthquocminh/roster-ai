@@ -12,6 +12,9 @@ dependencies = [
     "google-genai>=2.10.0",
     "openai>=1.40",
     "python-dotenv>=1.2.2",
+    "sqlalchemy==2.0.51",
+    "psycopg[binary]==3.3.4",
+    "alembic==1.18.5",
 ]
 
 [dependency-groups]
@@ -24,5 +27,6 @@ dev = [
 testpaths = ["tests"]
 markers = [
     "live: exercises a real network-backed LLM provider; excluded by default (run with `pytest -m live`)",
+    "postgres: exercises the local PostgreSQL integration service",
 ]
 addopts = "-m \"not live\""
