@@ -5,10 +5,17 @@ be exercised without a real (slow) solve.
 """
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Iterator
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import Connection, Engine, create_engine as create_postgres_engine, text
 
+from adapters.postgres.identity import PostgresIdentitySessionStore
+from api.auth_security import SESSION_COOKIE_NAME, hash_secret
+from application.ports.identity import OidcProvider, create_provider as create_oidc_provider
+from application.ports.session import IdentitySessionStore, ResolvedSession
 from engine.base import SchedulerEngine, create_engine
 from llm.base import LLMProvider, create_provider
 from settings import Settings, default_settings
@@ -34,3 +41,84 @@ def get_engine() -> SchedulerEngine:
 
 def get_llm_provider(settings: Settings = Depends(get_settings)) -> LLMProvider:
     return create_provider(settings.llm_provider, settings=settings)
+
+
+@lru_cache(maxsize=8)
+def _identity_store(database_url: str) -> PostgresIdentitySessionStore:
+    return PostgresIdentitySessionStore(database_url)
+
+
+def get_identity_store(
+    settings: Settings = Depends(get_settings),
+) -> IdentitySessionStore:
+    return _identity_store(settings.database_url)
+
+
+@lru_cache(maxsize=8)
+def _oidc_provider(
+    name: str,
+    issuer: str,
+    client_id: str,
+    client_secret: str | None,
+) -> OidcProvider:
+    class _ProviderSettings:
+        oidc_issuer = issuer
+        oidc_client_id = client_id
+        oidc_client_secret = client_secret
+
+    return create_oidc_provider(name, settings=_ProviderSettings())
+
+
+def get_oidc_provider(
+    settings: Settings = Depends(get_settings),
+) -> OidcProvider:
+    return _oidc_provider(
+        settings.oidc_provider,
+        settings.oidc_issuer,
+        settings.oidc_client_id,
+        settings.oidc_client_secret,
+    )
+
+
+async def get_session(
+    request: Request,
+    store: IdentitySessionStore = Depends(get_identity_store),
+) -> ResolvedSession:
+    """Re-resolve the current server-side session and active membership."""
+    state_session = getattr(request.state, "shiftmind_session", None)
+    if state_session is not None:
+        return state_session
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    resolved = await run_in_threadpool(store.resolve_session, hash_secret(token))
+    if resolved is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    request.state.shiftmind_session = resolved
+    request.state.shiftmind_session_token = token
+    return resolved
+
+
+@lru_cache(maxsize=8)
+def _site_context_engine(database_url: str) -> Engine:
+    return create_postgres_engine(database_url)
+
+
+def get_site_context(
+    session: ResolvedSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Iterator[Connection]:
+    """Yield the sole supported site-scoped PostgreSQL transaction."""
+    engine = _site_context_engine(settings.database_url)
+    with engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.site_id', :site_id, true)"),
+            {"site_id": str(session.site_id)},
+        )
+        connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
+        try:
+            yield connection
+        finally:
+            connection.execute(
+                text("SELECT set_config('app.site_id', '', true)")
+            )

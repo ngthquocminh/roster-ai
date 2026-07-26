@@ -17,8 +17,18 @@ EXPECTED_TABLES = {
     "scenario_version",
     "fixture_lineage",
     "evidence_reference",
+    "app_user",
+    "membership",
+    "auth.session_index",
+    "auth.login_handshake",
 }
-SITE_OWNED_TABLES = EXPECTED_TABLES - {"organization", "site"}
+SITE_OWNED_TABLES = {
+    "scenario",
+    "scenario_version",
+    "fixture_lineage",
+    "evidence_reference",
+    "membership",
+}
 
 
 def test_metadata_contains_only_story_owned_tables() -> None:
@@ -72,11 +82,20 @@ def test_fixture_lineage_points_to_a_source_and_scenario_version() -> None:
 
 
 def test_first_revision_enforces_rls_and_runtime_immutability() -> None:
-    revisions = list((BACKEND_ROOT / "migrations" / "versions").glob("*.py"))
-    assert len(revisions) == 1
-    migration = revisions[0].read_text(encoding="utf-8")
+    migration = (
+        BACKEND_ROOT
+        / "migrations"
+        / "versions"
+        / "d128d081ab48_establish_governed_fixture_history.py"
+    ).read_text(encoding="utf-8")
 
-    for table_name in EXPECTED_TABLES - {"organization"}:
+    for table_name in {
+        "site",
+        "scenario",
+        "scenario_version",
+        "fixture_lineage",
+        "evidence_reference",
+    }:
         assert f'"{table_name}":' in migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
     assert "FORCE ROW LEVEL SECURITY" in migration

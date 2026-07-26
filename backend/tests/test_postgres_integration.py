@@ -5,6 +5,7 @@ import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,7 +16,16 @@ from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 
 from adapters.postgres.fixture_history import PostgresFixtureHistoryAdapter
-from adapters.postgres.schema import organization, scenario_version, site
+from adapters.postgres.schema import (
+    app_user,
+    membership,
+    organization,
+    scenario_version,
+    session_index,
+    site,
+)
+from api.deps import _site_context_engine, get_site_context
+from application.ports.session import ResolvedSession
 from scripts.gate_a_cutover import FixtureSpec, REPO_ROOT, run_cutover
 from services import run_service
 from settings import default_settings
@@ -28,6 +38,8 @@ EXPECTED_TABLES = {
     "scenario_version",
     "fixture_lineage",
     "evidence_reference",
+    "app_user",
+    "membership",
 }
 
 
@@ -47,11 +59,21 @@ def test_migration_upgrade_and_downgrade_round_trip_on_fresh_database(
         alembic_config.attributes["connection"] = connection
         command.upgrade(alembic_config, "head")
     assert EXPECTED_TABLES.issubset(set(inspect(engine).get_table_names()))
+    assert {"session_index", "login_handshake"} == set(
+        inspect(engine).get_table_names(schema="auth")
+    )
+    with engine.begin() as connection:
+        alembic_config.attributes["connection"] = connection
+        command.check(alembic_config)
 
     with engine.begin() as connection:
         alembic_config.attributes["connection"] = connection
         command.downgrade(alembic_config, "base")
     assert EXPECTED_TABLES.isdisjoint(set(inspect(engine).get_table_names()))
+    with engine.begin() as connection:
+        alembic_config.attributes["connection"] = connection
+        command.upgrade(alembic_config, "head")
+    assert EXPECTED_TABLES.issubset(set(inspect(engine).get_table_names()))
     engine.dispose()
 
 
@@ -64,8 +86,9 @@ def test_transaction_local_site_scope_hides_and_rejects_cross_site_rows(
         engine=postgres_engine,
     )
     suffix = uuid4().hex
-    site_a = adapter.ensure_seed_site(f"Organization A {suffix}", f"Site A {suffix}")
-    site_b = adapter.ensure_seed_site(f"Organization B {suffix}", f"Site B {suffix}")
+    organization_name = f"Shared Organization {suffix}"
+    site_a = adapter.ensure_seed_site(organization_name, f"Site A {suffix}")
+    site_b = adapter.ensure_seed_site(organization_name, f"Site B {suffix}")
     version_a = adapter.import_fixture(
         site_id=site_a,
         fixture_id=f"fixture-a-{suffix}",
@@ -131,6 +154,142 @@ def test_transaction_local_site_scope_hides_and_rejects_cross_site_rows(
             ).one_or_none()
             is None
         )
+
+
+@pytest.mark.postgres
+def test_internal_auth_tables_and_resolver_follow_ad23_privileges(
+    postgres_engine,
+) -> None:
+    with postgres_engine.connect() as connection:
+        table_privileges = connection.execute(
+            text(
+                "SELECT "
+                "has_table_privilege('shiftmind_runtime', "
+                "'auth.session_index', 'SELECT') AS session_select, "
+                "has_table_privilege('shiftmind_runtime', "
+                "'auth.login_handshake', 'SELECT') AS handshake_select"
+            )
+        ).one()
+        function = connection.execute(
+            text(
+                "SELECT p.prosecdef, p.proconfig, "
+                "has_function_privilege("
+                "'shiftmind_runtime', p.oid, 'EXECUTE') AS runtime_execute, "
+                "EXISTS ("
+                "  SELECT 1 FROM aclexplode(p.proacl) AS acl "
+                "  WHERE acl.grantee = 0 AND acl.privilege_type = 'EXECUTE'"
+                ") AS public_execute "
+                "FROM pg_proc AS p "
+                "JOIN pg_namespace AS n ON n.oid = p.pronamespace "
+                "WHERE n.nspname = 'auth' AND p.proname = 'resolve_session'"
+            )
+        ).one()
+
+    assert table_privileges.session_select is False
+    assert table_privileges.handshake_select is False
+    assert function.prosecdef is True
+    assert function.runtime_execute is True
+    assert function.public_execute is False
+    assert "search_path=auth, pg_catalog" in function.proconfig
+
+
+@pytest.mark.postgres
+def test_resolve_session_rechecks_current_membership_on_every_request(
+    postgres_engine,
+) -> None:
+    suffix = uuid4().hex
+    site_id = PostgresFixtureHistoryAdapter(
+        default_settings().database_url,
+        engine=postgres_engine,
+    ).ensure_seed_site(
+        f"Session Organization {suffix}",
+        f"Session Site {suffix}",
+    )
+    session_token_hash = "a" * 64
+    with postgres_engine.begin() as connection:
+        app_user_id = connection.execute(
+            app_user.insert()
+            .values(
+                idp_subject=f"session-planner-{suffix}",
+                email=f"session-{suffix}@example.test",
+            )
+            .returning(app_user.c.id)
+        ).scalar_one()
+        membership_id = connection.execute(
+            membership.insert()
+            .values(app_user_id=app_user_id, site_id=site_id)
+            .returning(membership.c.id)
+        ).scalar_one()
+        connection.execute(
+            session_index.insert().values(
+                session_token_hash=session_token_hash,
+                csrf_token_hash="b" * 64,
+                app_user_id=app_user_id,
+                site_id=site_id,
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            )
+        )
+
+    with postgres_engine.begin() as connection:
+        connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
+        resolved = connection.execute(
+            text(
+                "SELECT app_user_id, site_id "
+                "FROM auth.resolve_session(:token_hash)"
+            ),
+            {"token_hash": session_token_hash},
+        ).one()
+    assert resolved.app_user_id == app_user_id
+    assert resolved.site_id == site_id
+
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            membership.update()
+            .where(membership.c.id == membership_id)
+            .values(revoked_at=func.now())
+        )
+    with postgres_engine.begin() as connection:
+        connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
+        assert connection.execute(
+            text(
+                "SELECT app_user_id "
+                "FROM auth.resolve_session(:token_hash)"
+            ),
+            {"token_hash": session_token_hash},
+        ).one_or_none() is None
+
+
+@pytest.mark.postgres
+def test_site_context_dependency_uses_only_the_resolved_session_site(
+    postgres_engine,
+) -> None:
+    session_site_id = uuid4()
+    settings = replace(
+        default_settings(),
+        database_url=postgres_engine.url.render_as_string(hide_password=False),
+    )
+    session = ResolvedSession(
+        app_user_id=uuid4(),
+        site_id=session_site_id,
+        csrf_token_hash="a" * 64,
+        expires_at=datetime.now(timezone.utc),
+    )
+
+    context = get_site_context(session=session, settings=settings)
+    connection = next(context)
+    assert connection.execute(
+        text("SELECT current_setting('app.site_id', true)")
+    ).scalar_one() == str(session_site_id)
+    assert connection.execute(text("SELECT current_user")).scalar_one() == (
+        "shiftmind_runtime"
+    )
+    context.close()
+
+    engine = _site_context_engine(settings.database_url)
+    with engine.connect() as fresh_connection:
+        assert fresh_connection.execute(
+            text("SELECT current_setting('app.site_id', true)")
+        ).scalar_one() in (None, "")
 
 
 @pytest.mark.postgres

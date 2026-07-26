@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     MetaData,
     String,
     Table,
@@ -189,4 +190,100 @@ evidence_reference = Table(
         name="fk_evidence_reference_version_site",
         ondelete="RESTRICT",
     ),
+)
+
+app_user = Table(
+    "app_user",
+    metadata,
+    _id_column(),
+    Column("idp_subject", String(255), nullable=False, unique=True),
+    Column("email", String(320), nullable=False),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    ),
+    Column("disabled_at", DateTime(timezone=True), nullable=True),
+)
+Index(
+    "uq_app_user_singleton",
+    text("(true)"),
+    unique=True,
+    _table=app_user,
+)
+
+membership = Table(
+    "membership",
+    metadata,
+    _id_column(),
+    Column(
+        "app_user_id",
+        UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    _site_id_column(),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    ),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),
+)
+Index(
+    "uq_membership_single_active",
+    text("(true)"),
+    unique=True,
+    postgresql_where=membership.c.revoked_at.is_(None),
+    _table=membership,
+)
+
+session_index = Table(
+    "session_index",
+    metadata,
+    _id_column(),
+    Column("session_token_hash", String(64), nullable=False, unique=True),
+    Column("csrf_token_hash", String(64), nullable=False),
+    Column(
+        "app_user_id",
+        UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column(
+        "site_id",
+        UUID(as_uuid=True),
+        ForeignKey("site.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    ),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("revoked_at", DateTime(timezone=True), nullable=True),
+    schema="auth",
+)
+
+login_handshake = Table(
+    "login_handshake",
+    metadata,
+    _id_column(),
+    Column("state", String(128), nullable=False, unique=True),
+    Column("nonce", String(128), nullable=False),
+    Column("code_verifier", String(128), nullable=False),
+    Column("redirect_target", Text, nullable=False),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    ),
+    Column("expires_at", DateTime(timezone=True), nullable=False),
+    Column("consumed_at", DateTime(timezone=True), nullable=True),
+    schema="auth",
 )

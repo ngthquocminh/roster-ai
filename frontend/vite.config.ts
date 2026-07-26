@@ -9,6 +9,13 @@ import tailwindcss from '@tailwindcss/vite'
 // `@` alias and plugins cannot drift between build and test.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -24,7 +31,7 @@ export default defineConfig({
     // never read by `npm run dev`/`build` (those load real `.env` files via
     // Vite's own mechanism, unaffected by this `test`-scoped block).
     env: {
-      VITE_API_BASE_URL: 'http://127.0.0.1:8000',
+      VITE_API_BASE_URL: 'http://localhost:5173',
     },
   },
 })

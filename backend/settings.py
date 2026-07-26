@@ -47,6 +47,13 @@ class Settings:
     # this field carries no repr override — that treatment is reserved for the
     # two API key fields above.
     cors_origins: tuple[str, ...] = field(default=())
+    oidc_provider: str = "fake"
+    oidc_issuer: str = "http://shiftmind.test/oidc"
+    oidc_client_id: str = "shiftmind-local"
+    oidc_client_secret: str | None = field(repr=False, default=None)
+    oidc_redirect_uri: str = "http://shiftmind.test/api/v1/auth/callback"
+    app_base_url: str = "http://shiftmind.test"
+    session_ttl_s: int = 3600
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
@@ -95,6 +102,16 @@ def default_settings() -> Settings:
     # silent fallback to the default two Vite origins.
     cors_origins_raw = os.environ.get("CORS_ORIGINS", "http://localhost:5173,http://localhost:4173")
     cors_origins = tuple(o.strip() for o in cors_origins_raw.split(",") if o.strip())
+    oidc_provider = os.environ.get("OIDC_PROVIDER", "fake")
+    oidc_issuer = os.environ.get("OIDC_ISSUER", "http://shiftmind.test/oidc")
+    oidc_client_id = os.environ.get("OIDC_CLIENT_ID", "shiftmind-local")
+    oidc_client_secret = os.environ.get("OIDC_CLIENT_SECRET")
+    oidc_redirect_uri = os.environ.get(
+        "OIDC_REDIRECT_URI",
+        "http://shiftmind.test/api/v1/auth/callback",
+    )
+    app_base_url = os.environ.get("APP_BASE_URL", "http://shiftmind.test")
+    session_ttl_s = int(os.environ.get("SESSION_TTL_S", "3600"))
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
@@ -106,4 +123,11 @@ def default_settings() -> Settings:
         openrouter_api_key=openrouter_api_key,
         openrouter_model=openrouter_model,
         cors_origins=cors_origins,
+        oidc_provider=oidc_provider,
+        oidc_issuer=oidc_issuer.rstrip("/"),
+        oidc_client_id=oidc_client_id,
+        oidc_client_secret=oidc_client_secret,
+        oidc_redirect_uri=oidc_redirect_uri,
+        app_base_url=app_base_url.rstrip("/"),
+        session_ttl_s=session_ttl_s,
     )

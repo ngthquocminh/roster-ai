@@ -1,7 +1,9 @@
 """Pydantic request/response models for the API."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -76,3 +78,18 @@ class OverrideOut(BaseModel):
     tool: str
     args: dict
     parsed_constraint: str | None = None  # None for pre-D-02 legacy entries
+
+
+class ProblemDetailsV1(BaseModel):
+    type: str
+    title: str
+    status: int
+    detail: str
+    code: str
+
+
+class AuthSessionOut(BaseModel):
+    app_user_id: UUID
+    site_id: UUID
+    csrf_token: str
+    expires_at: datetime

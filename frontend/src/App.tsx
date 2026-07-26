@@ -5,8 +5,10 @@ import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 import { Editor } from "@/routes/Editor";
 import { Home } from "@/routes/Home";
 import { ResultsView } from "@/routes/ResultsView";
+import { RequireSession } from "@/routes/RequireSession";
 import { RunHistory } from "@/routes/RunHistory";
 import { ScenarioLayout } from "@/routes/ScenarioLayout";
+import { SignIn } from "@/routes/SignIn";
 
 /**
  * Persistent global app bar (UI-SPEC tier 1 nav) + an `Outlet` for whichever
@@ -41,18 +43,29 @@ function RootLayout() {
  */
 export const routes: RouteObject[] = [
   {
-    path: "/",
-    Component: RootLayout,
+    path: "/signin",
+    Component: SignIn,
+    errorElement: <RootErrorBoundary />,
+  },
+  {
+    Component: RequireSession,
     errorElement: <RootErrorBoundary />,
     children: [
-      { index: true, Component: Home },
       {
-        path: "scenarios/:scenarioId",
-        Component: ScenarioLayout,
+        path: "/",
+        Component: RootLayout,
+        errorElement: <RootErrorBoundary />,
         children: [
-          { index: true, Component: Editor },
-          { path: "runs", Component: RunHistory },
-          { path: "runs/:runId", Component: ResultsView },
+          { index: true, Component: Home },
+          {
+            path: "scenarios/:scenarioId",
+            Component: ScenarioLayout,
+            children: [
+              { index: true, Component: Editor },
+              { path: "runs", Component: RunHistory },
+              { path: "runs/:runId", Component: ResultsView },
+            ],
+          },
         ],
       },
     ],

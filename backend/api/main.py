@@ -6,15 +6,25 @@ Run from backend/:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import hmac
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from api.deps import get_settings
-from api.routers import constraints, fixtures, health, runs, scenarios
+from api.auth_security import SESSION_COOKIE_NAME, hash_secret
+from api.deps import get_identity_store, get_settings
+from api.problems import problem_response
+from api.routers import auth, constraints, fixtures, health, runs, scenarios
 from services import run_service
 from store import db
 
@@ -27,6 +37,53 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ShiftMind API", version="0.1.0", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def versioned_validation_problem(
+    request: Request,
+    exc: RequestValidationError,
+):
+    if request.url.path.startswith("/api/v1/"):
+        return problem_response(
+            status=422,
+            code="invalid_request",
+            title="Invalid request",
+            detail="The request could not be validated.",
+        )
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.exception_handler(HTTPException)
+async def versioned_http_problem(request: Request, exc: HTTPException):
+    if not request.url.path.startswith("/api/v1/"):
+        return await http_exception_handler(request, exc)
+    code, title, detail = {
+        401: (
+            "authentication_required",
+            "Authentication required",
+            "A valid application session is required.",
+        ),
+        403: (
+            "request_forbidden",
+            "Request forbidden",
+            "The request is not allowed.",
+        ),
+        404: (
+            "resource_not_found",
+            "Resource not found",
+            "The requested resource was not found.",
+        ),
+    }.get(
+        exc.status_code,
+        ("request_failed", "Request failed", "The request could not be completed."),
+    )
+    return problem_response(
+        status=exc.status_code,
+        code=code,
+        title=title,
+        detail=detail,
+    )
 
 # Legacy SQLite-backed routes: gated in full (reads and writes) once Gate A's
 # flag is set. /health and /fixtures are not SQLite-backed and stay available.
@@ -62,6 +119,77 @@ async def refuse_legacy_routes_during_gate_a(request: Request, call_next):
     return await call_next(request)
 
 
+_UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+_PUBLIC_VERSIONED_PATHS = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/callback",
+    "/api/v1/auth/session",
+}
+
+
+def _request_origin(request: Request) -> str | None:
+    origin = request.headers.get("origin")
+    if origin:
+        return origin.rstrip("/")
+    referer = request.headers.get("referer")
+    if not referer:
+        return None
+    parsed = urlsplit(referer)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+
+@app.middleware("http")
+async def enforce_versioned_session_and_csrf(request: Request, call_next):
+    """Authenticate only /api/v1 and enforce same-origin unsafe requests."""
+    path = request.url.path
+    if not path.startswith("/api/v1/") or path in _PUBLIC_VERSIONED_PATHS:
+        return await call_next(request)
+
+    settings_override = request.app.dependency_overrides.get(get_settings)
+    settings = settings_override() if settings_override else get_settings()
+    store_override = request.app.dependency_overrides.get(get_identity_store)
+    store = store_override() if store_override else get_identity_store(settings)
+    session_token = request.cookies.get(SESSION_COOKIE_NAME)
+    resolved = None
+    if session_token:
+        resolved = await run_in_threadpool(
+            store.resolve_session,
+            hash_secret(session_token),
+        )
+    if session_token is None or resolved is None:
+        return problem_response(
+            status=401,
+            code="authentication_required",
+            title="Authentication required",
+            detail="A valid application session is required.",
+        )
+
+    request.state.shiftmind_session = resolved
+    request.state.shiftmind_session_token = session_token
+    if request.method in _UNSAFE_METHODS:
+        allowed_origins = {
+            settings.app_base_url.rstrip("/"),
+            *(origin.rstrip("/") for origin in settings.cors_origins),
+        }
+        supplied_csrf = request.headers.get("x-csrf-token")
+        supplied_origin = _request_origin(request)
+        csrf_valid = bool(supplied_csrf) and hmac.compare_digest(
+            hash_secret(supplied_csrf),
+            resolved.csrf_token_hash,
+        )
+        if supplied_origin not in allowed_origins or not csrf_valid:
+            return problem_response(
+                status=403,
+                code="csrf_validation_failed",
+                title="Request forbidden",
+                detail="Origin and CSRF validation failed.",
+            )
+
+    return await call_next(request)
+
+
 # NOTE: CORS origins are resolved once here, at process/import time — unlike
 # every other Settings field, which default_settings() re-reads fresh on every
 # call so env overrides apply at request time. That promise does not hold
@@ -84,3 +212,4 @@ app.include_router(fixtures.router)
 app.include_router(scenarios.router)
 app.include_router(runs.router)
 app.include_router(constraints.router)
+app.include_router(auth.router, prefix="/api/v1")

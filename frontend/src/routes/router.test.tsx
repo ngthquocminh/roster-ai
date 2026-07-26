@@ -1,10 +1,37 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 
+vi.mock("@/hooks/useSession", () => ({
+  useSession: vi.fn(),
+  useSignOut: vi.fn(),
+}));
+
 import { routes } from "@/App";
 import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
+import { useSession, useSignOut } from "@/hooks/useSession";
+
+
+const mockUseSession = useSession as unknown as ReturnType<typeof vi.fn>;
+const mockUseSignOut = useSignOut as unknown as ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  mockUseSession.mockReturnValue({
+    data: {
+      app_user_id: "00000000-0000-0000-0000-000000000001",
+      site_id: "00000000-0000-0000-0000-000000000002",
+      csrf_token: "csrf",
+      expires_at: "2030-01-01T00:00:00Z",
+    },
+    isPending: false,
+    isError: false,
+  });
+  mockUseSignOut.mockReturnValue({
+    mutateAsync: vi.fn().mockResolvedValue(undefined),
+    isPending: false,
+  });
+});
 
 /**
  * SHELL-03 coverage: proves the four-route shell deep-links correctly and
@@ -36,6 +63,30 @@ function renderAt(path: string) {
 }
 
 describe("router: four-route shell (SHELL-03)", () => {
+  it("redirects an unauthenticated deep link to /signin", async () => {
+    mockUseSession.mockReturnValue({
+      data: null,
+      isPending: false,
+      isError: false,
+    });
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: ["/scenarios/abc123/runs"],
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={memoryRouter} />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(memoryRouter.state.location.pathname).toBe("/signin"));
+    expect(
+      screen.getByRole("link", { name: "Sign in" }),
+    ).toHaveAttribute("href", "http://localhost:5173/api/v1/auth/login");
+  });
+
   it("mounts Home at /", () => {
     renderAt("/");
     expect(

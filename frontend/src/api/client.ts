@@ -4,8 +4,28 @@
  * never hand-edit). `baseUrl` comes from `src/lib/env.ts`'s `API_BASE_URL`
  * and nowhere else — do not construct a second client anywhere in `src/`.
  */
-import createClient from "openapi-fetch";
+import createClient, { type Middleware } from "openapi-fetch";
 import type { paths } from "./schema";
 import { API_BASE_URL } from "../lib/env";
 
-export const client = createClient<paths>({ baseUrl: API_BASE_URL });
+let csrfToken: string | null = null;
+
+export function setCsrfToken(token: string | null) {
+  csrfToken = token;
+}
+
+const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const csrfMiddleware: Middleware = {
+  async onRequest({ request }) {
+    if (csrfToken && unsafeMethods.has(request.method.toUpperCase())) {
+      request.headers.set("X-CSRF-Token", csrfToken);
+    }
+    return request;
+  },
+};
+
+export const client = createClient<paths>({
+  baseUrl: API_BASE_URL,
+  credentials: "include",
+});
+client.use(csrfMiddleware);
