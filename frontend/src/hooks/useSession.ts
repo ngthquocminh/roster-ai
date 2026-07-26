@@ -1,5 +1,5 @@
 /** Thin TanStack Query wrappers around the application-session API. */
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getSession, signOut } from "@/api/auth";
 
@@ -15,7 +15,11 @@ export function useSession() {
 }
 
 export function useSignOut() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: signOut,
+    onSuccess: () => {
+      queryClient.setQueryData(sessionQueryKey, null);
+    },
   });
 }

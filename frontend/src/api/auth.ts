@@ -19,10 +19,19 @@ export async function getSession(): Promise<AuthSession | null> {
   return data;
 }
 
-export async function signOut(): Promise<void> {
+export type SignOutResult = Readonly<{
+  /** Set when the OIDC provider also holds a browser-side SSO session that
+   * only the browser (not this server) can end — navigate there when set. */
+  postLogoutRedirectUrl: string | null;
+}>;
+
+export async function signOut(): Promise<SignOutResult> {
   const { error, response } = await client.POST("/api/v1/auth/logout");
   if (error) {
     throw { status: response.status, ...error };
   }
   setCsrfToken(null);
+  return {
+    postLogoutRedirectUrl: response.headers.get("X-Post-Logout-Redirect"),
+  };
 }

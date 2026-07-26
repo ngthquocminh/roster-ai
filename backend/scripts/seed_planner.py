@@ -131,7 +131,9 @@ def seed_planner_from_env(
         raise ValueError("SHIFTMIND_SEED_PLANNER_EMAIL is required")
 
     resolved_settings = settings or default_settings()
-    resolved_engine = engine or create_engine(resolved_settings.database_url)
+    resolved_engine = engine or create_engine(
+        resolved_settings.provisioning_database_url
+    )
     owns_engine = engine is None
     try:
         with resolved_engine.connect() as connection:

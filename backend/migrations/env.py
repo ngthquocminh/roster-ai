@@ -19,7 +19,7 @@ from settings import default_settings  # noqa: E402
 config = context.config
 config.set_main_option(
     "sqlalchemy.url",
-    default_settings().database_url.replace("%", "%%"),
+    default_settings().provisioning_database_url.replace("%", "%%"),
 )
 
 # Interpret the config file for Python logging.
@@ -47,7 +47,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = default_settings().database_url
+    url = default_settings().provisioning_database_url
     context.configure(
         url=url,
         target_metadata=target_metadata,

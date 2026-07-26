@@ -1,9 +1,18 @@
+import { useLocation } from "react-router";
+
 import { API_BASE_URL } from "@/lib/env";
 
 
-const loginUrl = `${API_BASE_URL.replace(/\/$/, "")}/api/v1/auth/login`;
+const LOGIN_URL = `${API_BASE_URL.replace(/\/$/, "")}/api/v1/auth/login`;
 
 export function SignIn() {
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from;
+  const loginUrl =
+    from && from.startsWith("/") && !from.startsWith("//")
+      ? `${LOGIN_URL}?${new URLSearchParams({ return_to: from })}`
+      : LOGIN_URL;
+
   return (
     <main className="mx-auto max-w-md px-6 py-16">
       <h1 className="text-2xl font-semibold">ShiftMind</h1>

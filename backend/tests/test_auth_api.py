@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlparse
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +18,7 @@ from application.ports.session import (
     ResolvedSession,
 )
 from settings import default_settings
+from api.auth_security import csrf_token_for_session
 from api.routers.auth import SESSION_COOKIE_NAME, hash_secret
 
 
@@ -38,28 +39,25 @@ class MemoryIdentityStore:
             return None
         return handshake
 
-    def resolve_active_identity(self, subject: str) -> ActiveIdentity | None:
+    def establish_session_for_subject(
+        self,
+        *,
+        subject: str,
+        session_token_hash: str,
+        csrf_token_hash: str,
+        expires_at: datetime,
+    ) -> ActiveIdentity | None:
         if subject != self.subject:
             return None
+        self.sessions[session_token_hash] = ResolvedSession(
+            app_user_id=self.app_user_id,
+            site_id=self.site_id,
+            csrf_token_hash=csrf_token_hash,
+            expires_at=expires_at,
+        )
         return ActiveIdentity(
             app_user_id=self.app_user_id,
             site_id=self.site_id,
-        )
-
-    def create_session(
-        self,
-        *,
-        session_token_hash: str,
-        csrf_token_hash: str,
-        app_user_id: UUID,
-        site_id: UUID,
-        expires_at: datetime,
-    ) -> None:
-        self.sessions[session_token_hash] = ResolvedSession(
-            app_user_id=app_user_id,
-            site_id=site_id,
-            csrf_token_hash=csrf_token_hash,
-            expires_at=expires_at,
         )
 
     def resolve_session(self, session_token_hash: str) -> ResolvedSession | None:
@@ -67,6 +65,21 @@ class MemoryIdentityStore:
 
     def revoke_session(self, session_token_hash: str) -> bool:
         return self.sessions.pop(session_token_hash, None) is not None
+
+
+def test_csrf_token_is_not_reconstructible_from_the_session_token_alone() -> None:
+    """A leaked session_token must not be enough to derive the CSRF token —
+    the per-deployment csrf_secret is also required."""
+    session_token = "shared-session-token"
+
+    assert csrf_token_for_session(
+        session_token, "secret-a"
+    ) != csrf_token_for_session(session_token, "secret-b")
+    # Deterministic for a fixed (session_token, secret) pair, so /auth/session
+    # can keep re-deriving it without persisting a second plaintext secret.
+    assert csrf_token_for_session(
+        session_token, "secret-a"
+    ) == csrf_token_for_session(session_token, "secret-a")
 
 
 @pytest.fixture()
@@ -311,3 +324,125 @@ def test_application_exposes_no_registration_or_membership_creation_route(
         for path, operations in openapi_paths.items()
         for method in operations
     )
+
+
+def test_login_accepts_a_safe_return_to_and_uses_it_as_the_post_login_target(
+    auth_client,
+) -> None:
+    client, provider, store = auth_client
+
+    login = client.get("/api/v1/auth/login", params={"return_to": "/scenarios/abc"})
+    assert login.status_code == 302
+    state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+    handshake = store.handshakes[state]
+    code = provider.issue_authorization_code(
+        subject=store.subject,
+        email="planner@example.test",
+        nonce=handshake.nonce,
+        code_verifier=handshake.code_verifier,
+    )
+
+    callback = client.get(
+        "/api/v1/auth/callback", params={"code": code, "state": state}
+    )
+    assert callback.status_code == 302
+    assert callback.headers["location"] == "https://testserver/scenarios/abc"
+
+
+@pytest.mark.parametrize(
+    "return_to",
+    ["https://evil.example/", "//evil.example", "not-even-a-path"],
+)
+def test_login_rejects_an_unsafe_return_to_and_falls_back_to_app_base_url(
+    auth_client, return_to
+) -> None:
+    client, provider, store = auth_client
+
+    login = client.get("/api/v1/auth/login", params={"return_to": return_to})
+    state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
+    handshake = store.handshakes[state]
+    code = provider.issue_authorization_code(
+        subject=store.subject,
+        email="planner@example.test",
+        nonce=handshake.nonce,
+        code_verifier=handshake.code_verifier,
+    )
+
+    callback = client.get(
+        "/api/v1/auth/callback", params={"code": code, "state": state}
+    )
+    assert callback.headers["location"] == "https://testserver"
+
+
+def test_trailing_slash_on_a_public_auth_path_does_not_require_a_session(
+    auth_client,
+) -> None:
+    client, _, _ = auth_client
+
+    response = client.get("/api/v1/auth/login/")
+
+    assert response.status_code != 401
+
+
+def test_logout_surfaces_the_idp_end_session_redirect_when_the_provider_offers_one(
+    auth_client,
+) -> None:
+    client, provider, store = auth_client
+
+    class _EndSessionProvider(type(provider)):
+        def end_session_url(self, post_logout_redirect_uri: str) -> str | None:
+            return f"https://fake-idp.test/logout?redirect={post_logout_redirect_uri}"
+
+    end_session_provider = _EndSessionProvider(
+        issuer=provider.issuer, client_id=provider.client_id
+    )
+    app.dependency_overrides[get_oidc_provider] = lambda: end_session_provider
+
+    callback, _ = _complete_login(client, end_session_provider, store)
+    assert callback.status_code == 302
+    csrf_token = client.get("/api/v1/auth/session").json()["csrf_token"]
+
+    response = client.post(
+        "/api/v1/auth/logout",
+        headers={"Origin": "https://testserver", "X-CSRF-Token": csrf_token},
+    )
+
+    assert response.status_code == 204
+    assert response.headers["X-Post-Logout-Redirect"] == (
+        "https://fake-idp.test/logout?redirect=https://testserver"
+    )
+
+
+def test_login_returns_bad_gateway_when_the_oidc_provider_is_unreachable(
+    auth_client,
+) -> None:
+    client, provider, _ = auth_client
+
+    async def _raise(*args, **kwargs):
+        raise RuntimeError("provider unreachable")
+
+    provider.authorization_url = _raise
+
+    response = client.get("/api/v1/auth/login")
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "oidc_provider_unavailable"
+
+
+def test_versioned_api_returns_bad_gateway_when_the_session_store_is_unavailable(
+    auth_client,
+) -> None:
+    client, _, store = auth_client
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("store unavailable")
+
+    store.resolve_session = _raise
+
+    response = client.get(
+        "/api/v1/not-a-real-resource",
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}=whatever-token"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "session_store_unavailable"

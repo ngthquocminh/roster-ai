@@ -134,7 +134,7 @@ def run_cutover(
     resolved_settings = settings or default_settings()
     resolved_fixtures = tuple(fixtures or default_fixtures())
     resolved_importer = importer or PostgresFixtureHistoryAdapter(
-        resolved_settings.database_url
+        resolved_settings.provisioning_database_url
     )
     flag_path = Path(resolved_settings.maintenance_flag_path).resolve()
 

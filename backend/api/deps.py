@@ -119,6 +119,14 @@ def get_site_context(
         try:
             yield connection
         finally:
-            connection.execute(
-                text("SELECT set_config('app.site_id', '', true)")
-            )
+            # If the transaction was already aborted by an exception raised
+            # while the caller used `connection`, this cleanup statement
+            # would itself raise InFailedSqlTransaction and mask the real
+            # error — the surrounding `with engine.begin()` still rolls
+            # back correctly either way, so swallow that specific failure.
+            try:
+                connection.execute(
+                    text("SELECT set_config('app.site_id', '', true)")
+                )
+            except Exception:
+                pass

@@ -293,6 +293,35 @@ def test_site_context_dependency_uses_only_the_resolved_session_site(
 
 
 @pytest.mark.postgres
+def test_site_context_cleanup_does_not_mask_the_original_error(
+    postgres_engine,
+) -> None:
+    """Regression test for the review finding that the app.site_id reset in
+    get_site_context's `finally` could itself raise InFailedSqlTransaction
+    on an already-aborted transaction, hiding the real downstream error."""
+    settings = replace(
+        default_settings(),
+        database_url=postgres_engine.url.render_as_string(hide_password=False),
+    )
+    session = ResolvedSession(
+        app_user_id=uuid4(),
+        site_id=uuid4(),
+        csrf_token_hash="a" * 64,
+        expires_at=datetime.now(timezone.utc),
+    )
+    context = get_site_context(session=session, settings=settings)
+    connection = next(context)
+    with pytest.raises(DBAPIError):
+        connection.execute(text("SELECT 1/0"))  # aborts the PG transaction
+
+    class _DownstreamFailure(Exception):
+        pass
+
+    with pytest.raises(_DownstreamFailure):
+        context.throw(_DownstreamFailure("simulated downstream failure"))
+
+
+@pytest.mark.postgres
 def test_cutover_snapshots_throwaway_sqlite_and_imports_both_real_fixtures(
     postgres_engine,
     tmp_path: Path,
@@ -321,6 +350,9 @@ def test_cutover_snapshots_throwaway_sqlite_and_imports_both_real_fixtures(
         default_settings(),
         db_path=str(legacy_db),
         database_url=postgres_engine.url.render_as_string(hide_password=False),
+        provisioning_database_url=postgres_engine.url.render_as_string(
+            hide_password=False
+        ),
         maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
     )
     pool = ThreadPoolExecutor(max_workers=1)

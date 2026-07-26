@@ -61,12 +61,36 @@ describe("useSession", () => {
 
 describe("useSignOut", () => {
   it("calls the thin sign-out wrapper", async () => {
-    mockSignOut.mockResolvedValueOnce(undefined);
+    mockSignOut.mockResolvedValueOnce({ postLogoutRedirectUrl: null });
 
     const { result } = renderHook(() => useSignOut(), { wrapper });
     result.current.mutate();
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the cached session on success so a stale session cannot render post-logout", async () => {
+    mockSignOut.mockResolvedValueOnce({ postLogoutRedirectUrl: null });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(["auth", "session"], {
+      app_user_id: "00000000-0000-0000-0000-000000000001",
+      site_id: "00000000-0000-0000-0000-000000000002",
+      csrf_token: "csrf",
+      expires_at: "2030-01-01T00:00:00Z",
+    });
+    function localWrapper({ children }: { children: ReactNode }) {
+      return (
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      );
+    }
+
+    const { result } = renderHook(() => useSignOut(), { wrapper: localWrapper });
+    result.current.mutate();
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(["auth", "session"])).toBeNull();
   });
 });

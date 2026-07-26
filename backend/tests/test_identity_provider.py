@@ -69,6 +69,26 @@ def test_oidc_client_secret_is_redacted_from_settings_repr(monkeypatch) -> None:
     assert "do-not-log-me" not in repr(default_settings())
 
 
+def test_malformed_session_ttl_s_falls_back_to_the_default_instead_of_crashing(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SESSION_TTL_S", "not-a-number")
+
+    assert default_settings().session_ttl_s == 3600
+
+
+def test_csrf_secret_is_redacted_from_settings_repr(monkeypatch) -> None:
+    monkeypatch.setenv("CSRF_SECRET", "do-not-log-this-either")
+
+    assert "do-not-log-this-either" not in repr(default_settings())
+
+
+def test_csrf_secret_can_be_overridden(monkeypatch) -> None:
+    monkeypatch.setenv("CSRF_SECRET", "a-different-deployment-secret")
+
+    assert default_settings().csrf_secret == "a-different-deployment-secret"
+
+
 def test_fake_provider_completes_deterministic_oidc_exchange() -> None:
     asyncio.run(_exercise_fake_provider())
 

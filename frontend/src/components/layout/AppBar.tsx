@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { useSignOut } from "@/hooks/useSession";
+import { USER_ERROR_COPY } from "@/lib/errors";
 
 /**
  * Persistent global nav (UI-SPEC Application Structure, tier 1) — the only
@@ -10,23 +12,37 @@ import { useSignOut } from "@/hooks/useSession";
  * ScenarioLayout's tab nav instead of here (see RESEARCH.md's flat-nav
  * anti-pattern warning).
  *
- * D-02 (no auth) means there is no session to represent, so this bar
- * deliberately carries nothing implying otherwise. Wordmark plus one link
- * only, at desktop widths (D-06) — cannot overflow its container.
+ * The bar is session-aware (Story 1.2's BFF auth) — the Sign out button is
+ * the one piece of session UI it carries; everything else stays unchanged.
  */
 export function AppBar() {
   const navigate = useNavigate();
   const signOut = useSignOut();
+  const [signOutFailed, setSignOutFailed] = useState(false);
 
   async function handleSignOut() {
-    await signOut.mutateAsync();
-    navigate("/signin", { replace: true });
+    setSignOutFailed(false);
+    try {
+      const { postLogoutRedirectUrl } = await signOut.mutateAsync();
+      if (postLogoutRedirectUrl) {
+        window.location.href = postLogoutRedirectUrl;
+        return;
+      }
+      navigate("/signin", { replace: true });
+    } catch {
+      setSignOutFailed(true);
+    }
   }
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-[#F5F5F5] px-6">
       <span className="text-sm font-semibold text-foreground">ShiftMind</span>
       <div className="flex items-center gap-3">
+        {signOutFailed && (
+          <span className="text-sm text-destructive">
+            {USER_ERROR_COPY.connection.title}
+          </span>
+        )}
         <NavLink
           to="/"
           end

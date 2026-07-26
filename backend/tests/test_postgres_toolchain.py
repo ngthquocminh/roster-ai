@@ -23,7 +23,7 @@ def test_database_url_uses_psycopg3_default(monkeypatch) -> None:
 
     assert (
         default_settings().database_url
-        == "postgresql+psycopg://rosterai:rosterai@localhost:5432/rosterai"
+        == "postgresql+psycopg://shiftmind_login:shiftmind_login@localhost:5432/rosterai"
     )
 
 
@@ -32,6 +32,24 @@ def test_database_url_can_be_overridden(monkeypatch) -> None:
     monkeypatch.setenv("ROSTERAI_DATABASE_URL", url)
 
     assert default_settings().database_url == url
+
+
+def test_provisioning_database_url_defaults_to_the_privileged_superuser(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("ROSTERAI_PROVISIONING_DATABASE_URL", raising=False)
+
+    assert (
+        default_settings().provisioning_database_url
+        == "postgresql+psycopg://rosterai:rosterai@localhost:5432/rosterai"
+    )
+
+
+def test_provisioning_database_url_can_be_overridden(monkeypatch) -> None:
+    url = "postgresql+psycopg://migrator:migrator@db:5432/test_db"
+    monkeypatch.setenv("ROSTERAI_PROVISIONING_DATABASE_URL", url)
+
+    assert default_settings().provisioning_database_url == url
 
 
 def test_compose_defines_only_the_postgres_18_service() -> None:
@@ -56,7 +74,7 @@ def test_alembic_is_wired_to_application_settings_and_metadata() -> None:
     env = (BACKEND_ROOT / "migrations" / "env.py").read_text(encoding="utf-8")
 
     assert "script_location = %(here)s/backend/migrations" in config
-    assert "default_settings().database_url" in env
+    assert "default_settings().provisioning_database_url" in env
     assert "target_metadata = metadata" in env
     assert "context.configure(" in env
     assert "connection=connection" in env

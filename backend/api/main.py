@@ -144,6 +144,8 @@ def _request_origin(request: Request) -> str | None:
 async def enforce_versioned_session_and_csrf(request: Request, call_next):
     """Authenticate only /api/v1 and enforce same-origin unsafe requests."""
     path = request.url.path
+    if len(path) > 1 and path.endswith("/"):
+        path = path[:-1]
     if not path.startswith("/api/v1/") or path in _PUBLIC_VERSIONED_PATHS:
         return await call_next(request)
 
@@ -154,10 +156,18 @@ async def enforce_versioned_session_and_csrf(request: Request, call_next):
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
     resolved = None
     if session_token:
-        resolved = await run_in_threadpool(
-            store.resolve_session,
-            hash_secret(session_token),
-        )
+        try:
+            resolved = await run_in_threadpool(
+                store.resolve_session,
+                hash_secret(session_token),
+            )
+        except Exception:
+            return problem_response(
+                status=502,
+                code="session_store_unavailable",
+                title="Authentication unavailable",
+                detail="The application session could not be verified.",
+            )
     if session_token is None or resolved is None:
         return problem_response(
             status=401,

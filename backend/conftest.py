@@ -48,7 +48,7 @@ os.environ.pop("LLM_MODEL", None)
 @contextmanager
 def _temporary_postgres_database():
     """Yield an isolated database URL and force-drop it after the test."""
-    base_url = make_url(_settings.default_settings().database_url)
+    base_url = make_url(_settings.default_settings().provisioning_database_url)
     database_name = f"rosterai_test_{uuid4().hex}"
     admin_engine = create_engine(
         base_url.set(database="postgres"),

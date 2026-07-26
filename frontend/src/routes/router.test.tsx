@@ -84,7 +84,32 @@ describe("router: four-route shell (SHELL-03)", () => {
     await waitFor(() => expect(memoryRouter.state.location.pathname).toBe("/signin"));
     expect(
       screen.getByRole("link", { name: "Sign in" }),
-    ).toHaveAttribute("href", "http://localhost:5173/api/v1/auth/login");
+    ).toHaveAttribute(
+      "href",
+      "http://localhost:5173/api/v1/auth/login?return_to=%2Fscenarios%2Fabc123%2Fruns",
+    );
+  });
+
+  it("does not redirect an already-authenticated user off a protected route on a transient session-check error", async () => {
+    mockUseSession.mockReturnValue({
+      data: undefined,
+      isPending: false,
+      isError: true,
+    });
+    const memoryRouter = createMemoryRouter(routes, {
+      initialEntries: ["/scenarios/abc123/runs"],
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={memoryRouter} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Couldn't load this content.")).toBeInTheDocument();
+    expect(memoryRouter.state.location.pathname).toBe("/scenarios/abc123/runs");
   });
 
   it("mounts Home at /", () => {

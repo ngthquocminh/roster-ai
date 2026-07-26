@@ -34,6 +34,20 @@ def _pkce_challenge(code_verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
+def _redirect_target(settings: Settings, return_to: str | None) -> str:
+    """Resolve the post-login redirect target, rejecting anything that
+    isn't a same-origin relative path — a `return_to` of `//evil.example`
+    or `https://evil.example` must never be honored (open-redirect)."""
+    if (
+        return_to
+        and return_to.startswith("/")
+        and not return_to.startswith("//")
+        and "://" not in return_to
+    ):
+        return f"{settings.app_base_url}{return_to}"
+    return settings.app_base_url
+
+
 async def _resolved_session(request: Request, store: IdentitySessionStore):
     state_session = getattr(request.state, "shiftmind_session", None)
     state_token = getattr(request.state, "shiftmind_session_token", None)
@@ -52,13 +66,17 @@ async def _resolved_session(request: Request, store: IdentitySessionStore):
 @router.get(
     "/login",
     status_code=302,
-    responses={302: {"description": "Redirect to the configured OIDC provider"}},
+    responses={
+        302: {"description": "Redirect to the configured OIDC provider"},
+        502: {"model": ProblemDetailsV1},
+    },
 )
 async def login(
+    return_to: str | None = None,
     settings: Settings = Depends(get_settings),
     provider: OidcProvider = Depends(get_oidc_provider),
     store: IdentitySessionStore = Depends(get_identity_store),
-) -> RedirectResponse:
+) -> Response:
     state = secrets.token_urlsafe(32)
     nonce = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(64)
@@ -66,16 +84,24 @@ async def login(
         state=state,
         nonce=nonce,
         code_verifier=code_verifier,
-        redirect_target=settings.app_base_url,
+        redirect_target=_redirect_target(settings, return_to),
         expires_at=datetime.now(timezone.utc) + _HANDSHAKE_TTL,
     )
-    await run_in_threadpool(store.create_login_handshake, handshake)
-    authorization_url = await provider.authorization_url(
-        state=state,
-        nonce=nonce,
-        code_challenge=_pkce_challenge(code_verifier),
-        redirect_uri=settings.oidc_redirect_uri,
-    )
+    try:
+        await run_in_threadpool(store.create_login_handshake, handshake)
+        authorization_url = await provider.authorization_url(
+            state=state,
+            nonce=nonce,
+            code_challenge=_pkce_challenge(code_verifier),
+            redirect_uri=settings.oidc_redirect_uri,
+        )
+    except Exception:
+        return problem_response(
+            status=502,
+            code="oidc_provider_unavailable",
+            title="Sign-in failed",
+            detail="The identity provider could not be reached.",
+        )
     return RedirectResponse(authorization_url, status_code=302)
 
 
@@ -117,10 +143,28 @@ async def callback(
             detail="The identity provider response could not be accepted.",
         )
 
-    active_identity = await run_in_threadpool(
-        store.resolve_active_identity,
-        identity.subject,
+    now = datetime.now(timezone.utc)
+    expires_at = min(
+        now + timedelta(seconds=settings.session_ttl_s),
+        identity.expires_at,
     )
+    session_token = secrets.token_urlsafe(32)
+    csrf_token = csrf_token_for_session(session_token, settings.csrf_secret)
+    try:
+        active_identity = await run_in_threadpool(
+            store.establish_session_for_subject,
+            subject=identity.subject,
+            session_token_hash=hash_secret(session_token),
+            csrf_token_hash=hash_secret(csrf_token),
+            expires_at=expires_at,
+        )
+    except Exception:
+        return problem_response(
+            status=502,
+            code="session_store_unavailable",
+            title="Sign-in failed",
+            detail="The application session could not be created.",
+        )
     if active_identity is None:
         return problem_response(
             status=401,
@@ -128,22 +172,6 @@ async def callback(
             title="Sign-in failed",
             detail="This identity is not provisioned for the application.",
         )
-
-    now = datetime.now(timezone.utc)
-    expires_at = min(
-        now + timedelta(seconds=settings.session_ttl_s),
-        identity.expires_at,
-    )
-    session_token = secrets.token_urlsafe(32)
-    csrf_token = csrf_token_for_session(session_token)
-    await run_in_threadpool(
-        store.create_session,
-        session_token_hash=hash_secret(session_token),
-        csrf_token_hash=hash_secret(csrf_token),
-        app_user_id=active_identity.app_user_id,
-        site_id=active_identity.site_id,
-        expires_at=expires_at,
-    )
     response = RedirectResponse(handshake.redirect_target, status_code=302)
     response.set_cookie(
         SESSION_COOKIE_NAME,
@@ -164,6 +192,7 @@ async def callback(
 )
 async def session(
     request: Request,
+    settings: Settings = Depends(get_settings),
     store: IdentitySessionStore = Depends(get_identity_store),
 ) -> AuthSessionOut | JSONResponse:
     session_token, resolved = await _resolved_session(request, store)
@@ -174,7 +203,7 @@ async def session(
             title="Authentication required",
             detail="A valid application session is required.",
         )
-    csrf_token = csrf_token_for_session(session_token)
+    csrf_token = csrf_token_for_session(session_token, settings.csrf_secret)
     if not hmac.compare_digest(
         hash_secret(csrf_token),
         resolved.csrf_token_hash,
@@ -200,6 +229,8 @@ async def session(
 )
 async def logout(
     request: Request,
+    settings: Settings = Depends(get_settings),
+    provider: OidcProvider = Depends(get_oidc_provider),
     store: IdentitySessionStore = Depends(get_identity_store),
 ) -> Response:
     session_token, resolved = await _resolved_session(request, store)
@@ -219,4 +250,12 @@ async def logout(
         httponly=True,
         samesite="lax",
     )
+    # Revoking the local session does not end the IdP's own browser-side
+    # SSO session — only navigating the browser to end_session_url does.
+    # A server-to-server call here would accomplish nothing (it isn't the
+    # user's browser), so surface the target via a header for the frontend
+    # to navigate to when present; fake/default config never sets it.
+    post_logout_redirect_url = provider.end_session_url(settings.app_base_url)
+    if post_logout_redirect_url:
+        response.headers["X-Post-Logout-Redirect"] = post_logout_redirect_url
     return response

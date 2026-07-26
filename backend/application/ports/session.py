@@ -35,17 +35,20 @@ class IdentitySessionStore(Protocol):
 
     def consume_login_handshake(self, state: str) -> LoginHandshake | None: ...
 
-    def resolve_active_identity(self, subject: str) -> ActiveIdentity | None: ...
-
-    def create_session(
+    def establish_session_for_subject(
         self,
         *,
+        subject: str,
         session_token_hash: str,
         csrf_token_hash: str,
-        app_user_id: UUID,
-        site_id: UUID,
         expires_at: datetime,
-    ) -> None: ...
+    ) -> ActiveIdentity | None:
+        """Atomically resolve `subject`'s active identity and create its
+        session in one step. Returns None (no session created) if the
+        subject has no provisioned, active membership — the caller never
+        supplies app_user_id/site_id itself, so it cannot establish a
+        session for an identity other than the one PostgreSQL resolved."""
+        ...
 
     def resolve_session(self, session_token_hash: str) -> ResolvedSession | None: ...
 

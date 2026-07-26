@@ -31,7 +31,8 @@ _OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 class Settings:
     db_path: str            # SQLite file
     data_dir: str           # directory holding input fixtures (*.json)
-    database_url: str       # governed PostgreSQL history
+    database_url: str       # restricted API runtime connection (shiftmind_login)
+    provisioning_database_url: str  # privileged: Alembic migrations, seed_planner.py
     maintenance_flag_path: str  # persistent Gate A legacy-write lock
     llm_provider: str       # "stub" (default) | "gemini" | "openrouter"
     llm_model: str          # model id passed to the selected provider
@@ -54,6 +55,11 @@ class Settings:
     oidc_redirect_uri: str = "http://shiftmind.test/api/v1/auth/callback"
     app_base_url: str = "http://shiftmind.test"
     session_ttl_s: int = 3600
+    # HMAC pepper for deriving the CSRF token from the session token (see
+    # api/auth_security.py). Not itself persisted; a per-deployment secret
+    # so a leaked session token alone can't also reconstruct the CSRF
+    # token. repr=False for the same reason as the API keys above (T-04-01).
+    csrf_secret: str = field(repr=False, default="shiftmind-local-csrf-secret")
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
@@ -83,8 +89,19 @@ def default_settings() -> Settings:
     """Read settings fresh each call so env overrides apply at request time."""
     db_path = os.environ.get("ROSTERAI_DB", str(_BACKEND_DIR / "var" / "rosterai.db"))
     data_dir = os.environ.get("ROSTERAI_DATA_DIR", str(_REPO_ROOT / "data"))
+    # The API's own connection: a non-superuser login that carries no table
+    # grants of its own and cannot bypass RLS. It authenticates only to reach
+    # `SET LOCAL ROLE shiftmind_runtime` (domain reads) and the `auth.*`
+    # SECURITY DEFINER functions (identity/session lifecycle) — see AD-23.
     database_url = os.environ.get(
         "ROSTERAI_DATABASE_URL",
+        "postgresql+psycopg://shiftmind_login:shiftmind_login@localhost:5432/rosterai",
+    )
+    # A genuinely privileged connection, used only by Alembic (schema/role
+    # DDL) and the operator-only seed_planner.py script — never by the
+    # request-serving API process.
+    provisioning_database_url = os.environ.get(
+        "ROSTERAI_PROVISIONING_DATABASE_URL",
         "postgresql+psycopg://rosterai:rosterai@localhost:5432/rosterai",
     )
     maintenance_flag_path = os.environ.get(
@@ -111,11 +128,16 @@ def default_settings() -> Settings:
         "http://shiftmind.test/api/v1/auth/callback",
     )
     app_base_url = os.environ.get("APP_BASE_URL", "http://shiftmind.test")
-    session_ttl_s = int(os.environ.get("SESSION_TTL_S", "3600"))
+    try:
+        session_ttl_s = int(os.environ.get("SESSION_TTL_S", "3600"))
+    except ValueError:
+        session_ttl_s = 3600
+    csrf_secret = os.environ.get("CSRF_SECRET", "shiftmind-local-csrf-secret")
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
         database_url=database_url,
+        provisioning_database_url=provisioning_database_url,
         maintenance_flag_path=maintenance_flag_path,
         llm_provider=llm_provider,
         llm_model=llm_model,
@@ -130,4 +152,5 @@ def default_settings() -> Settings:
         oidc_redirect_uri=oidc_redirect_uri,
         app_base_url=app_base_url.rstrip("/"),
         session_ttl_s=session_ttl_s,
+        csrf_secret=csrf_secret,
     )
