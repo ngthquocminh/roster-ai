@@ -4,7 +4,7 @@ baseline_commit: 4677bbb37c896a6d1b8e535442c3ba9078c303d0
 
 # Story 1.3: Choose an Immutable Fixture
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -148,6 +148,21 @@ so that I can deliberately choose the exact fixture and version I will inspect.
 - [x] [Review][Defer] Defensive-value gaps that the current backend cannot produce: empty-string `baseline_schedule_version` bypasses the `??` fallback and renders a blank cell instead of "Not established" (backend hardcodes SQL `NULL`); empty-string `scenario_name` yields a link with no accessible name (backend sets `name = fixture_id`); null/non-ISO `imported_at` renders blank (column is `NOT NULL`); an empty `:scenarioId` leaves a disabled query in `isPending` forever (unreachable through the shipped route tree). All probe-confirmed but currently unreachable. [multiple] — deferred, not reachable with today's contract
 - [x] [Review][Defer] Focus does not move on a cache-warm scenario→scenario navigation, because `ScenarioVersionContext`'s focus effect has a `[]` dependency array rather than keying on `context.scenario_id`. Not reachable in this story (Task 4 forbids a switcher, so changing scenario always unmounts through the catalogue), but fragile once Story 1.7 lands. [frontend/src/features/scenario-workspace/ScenarioVersionContext.tsx:14-16] — deferred, unreachable until Story 1.7
 - [x] [Review][Defer] `title` tooltips sit on cells that are already `break-all` and therefore never truncate, adding a redundant 64-character UUID to some screen-reader output while remaining unreachable for keyboard and touch users. [frontend/src/features/fixture-catalogue/FixtureCatalogueView.tsx:66,72] — deferred, low impact
+
+---
+
+#### Chunk 3 — legacy route cutover (Task 5 + the Task 7 router rewrite)
+
+> Reviewed 2026-07-27: `App.tsx`, `router.test.tsx`, the eight deleted legacy route files, and `CreateScenarioDialog.test.tsx` (1674 diff lines, 98 insertions / 1357 deletions). Acceptance Auditor plus an inline pass; the blind layers were deliberately skipped on a deletion-shaped diff, where they report removed code as missing functionality.
+> Both required router invariants were **mutation-verified**: rewriting `RequireSession`'s `state={{ from: … }}` to a constant, and replacing its `session.isError` branch with a redirect, each produced exactly one failure.
+
+- [x] [Review][Patch] The `router.test.tsx` rewrite silently reduced `RootErrorBoundary` coverage that no deletion forced. `RootErrorBoundary.tsx` still ships and has **no test file of its own** — `router.test.tsx` was its only coverage. The old file asserted the Reload button, the body copy "Reload the page and try again.", and two non-disclosure checks (`/browser console/i` absent on both the no-match and the render-crash path); the rewrite keeps only the heading and a single `queryByText("secret diagnostic")`. None of the dropped assertions depended on `Home`/`Editor`/`ScenarioLayout`/`RunHistory`/`ResultsView`, so this is coverage loss on a live component rather than a consequence of the cutover. [frontend/src/routes/router.test.tsx:153-194]
+- [x] [Review][Patch] The orphan inventory Task 5 mandates is incomplete. It records `components/{editor,runs,results,scenarios}/**` and eleven hooks, but three shared modules are now transitively dead while sitting **outside** those four directories, so Story 1.9's audit will not find them in "the list": `components/layout/ErrorBanner.tsx` (every remaining importer is inside the orphaned tree), `lib/runStatus.ts` (RunInFlightPanel, RunStatusLabel, useRuns), and `lib/formatShiftWindow.ts` (CoverageByDayTable, ScheduleTable). [_bmad-output/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] `AppBar.tsx`'s docstring still directs the reader to a file this story deleted — "Editor/Runs/Results … live in ScenarioLayout's tab nav instead of here". `ScenarioLayout.tsx` and all three tabs are gone. Task 5 says AppBar "stays exactly as it is", which is about wiring rather than comments, but the comment now misdescribes the app. [frontend/src/components/layout/AppBar.tsx:9-13]
+
+**Checked and compliant (chunk 3):** the `App.tsx` route tree matches Task 5 literally — `{ index: true, Component: FixtureCatalogue }` and `{ path: "scenarios/:scenarioId", Component: ScenarioWorkspace }`, with the `Home` index, the `ScenarioLayout` wrapper and its three tabs, and the `runs` / `runs/:runId` children all removed; `RootLayout`, `AppBar`, `RequireSession`, `/signin` and all three `errorElement` wirings are byte-identical. Exactly the named deletion set was removed and nothing beyond it (the baseline has no `Home.test.tsx` or `ScenarioLayout.test.tsx`, so the list is complete rather than short), and all of `components/{editor,runs,results,scenarios}/**` plus every legacy hook remain in place as instructed. `CreateScenarioDialog.test.tsx` lost no coverage of a still-shipping component — both removed `describe`s rendered the deleted `Home`, and `ScenarioTable`'s error-banner state is independently covered in `ScenarioTable.test.tsx`. No dangling imports anywhere; a repo-wide grep for the deleted modules returns only prose. No noise findings were raised.
+
+---
 
 **Dismissed as noise (3, chunk 2):** duplicate `scenario_version_id` React keys — the column is a globally unique PK and RLS scopes results to one site, so a collision is unreachable. Checksum/`site_id`/`schema_version` fetched but never displayed — Task 3 specifies exactly four columns and Task 4 exactly four context fields; checksum display is not in scope. Unbounded catalogue rendering with no virtualization — cursor/window APIs are explicitly Story 1.4's, and the same finding was dismissed in chunk 1.
 

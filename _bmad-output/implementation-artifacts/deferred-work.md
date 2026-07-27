@@ -14,6 +14,7 @@
 ## Deferred from: story-1-3-choose-an-immutable-fixture (2026-07-27)
 
 - The legacy route components were retired, leaving the intentionally orphaned `frontend/src/components/{editor,runs,results,scenarios}/**` trees and their hooks: `useApplyConstraint`, `useCreateScenario`, `useFixtures`, `useOverrides`, `useRun`, `useRunInsights`, `useRunResult`, `useRuns`, `useScenario`, `useScenarios`, and `useTriggerRun`. Keep them unreachable; Story 1.9's mutation-path audit and a later cleanup should verify and remove this inventory without re-mounting it.
+- **Three shared modules are transitively orphaned by the same cutover but live OUTSIDE those four directories**, so an audit scoped to the list above will miss them. Every remaining non-test importer of each is itself inside the orphaned tree: `frontend/src/components/layout/ErrorBanner.tsx` (OverridesList, ProviderDownBanner, ScenarioHeader, RunHistoryTable, ScenarioTable, InsightPanel, WarningsBanner), `frontend/src/lib/runStatus.ts` (RunInFlightPanel, RunStatusLabel, `useRuns`), and `frontend/src/lib/formatShiftWindow.ts` (CoverageByDayTable, ScheduleTable). Note `ErrorBanner.tsx` sits in `components/layout/` beside components that are very much live (`AppBar`, `RootErrorBoundary`), so it must not be swept by directory alone — check importers before removing.
 
 ## Deferred from: code review of story-1-3-choose-an-immutable-fixture (2026-07-27) — backend chunk
 

@@ -161,18 +161,32 @@ describe("governed route tree", () => {
       expect(
         screen.getByRole("heading", { name: "Something went wrong." }),
       ).toBeInTheDocument();
+      expect(
+        screen.getByText("Reload the page and try again."),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Reload" }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/browser console/i)).not.toBeInTheDocument();
       unmount();
     }
     vi.restoreAllMocks();
   });
 });
 
+/**
+ * RootErrorBoundary still ships and has no test file of its own, so this is
+ * its only coverage — the assertions below are kept whole rather than
+ * trimmed to the heading. None of them depend on the retired legacy routes.
+ */
 describe("route crash backstop", () => {
   it("renders RootErrorBoundary without diagnostics when a child throws", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     function Throws(): never {
-      throw new Error("secret diagnostic");
+      throw new Error(
+        "RuntimeError: boom — simulated render crash at C:\\srv\\backend\\api\\main.py",
+      );
     }
     const router = createMemoryRouter(
       [
@@ -189,7 +203,16 @@ describe("route crash backstop", () => {
     expect(
       screen.getByRole("heading", { name: "Something went wrong." }),
     ).toBeInTheDocument();
-    expect(screen.queryByText("secret diagnostic")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Reload the page and try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reload" })).toBeInTheDocument();
+    expect(screen.queryByText(/RuntimeError/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/boom — simulated render crash/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/main\.py/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/browser console/i)).not.toBeInTheDocument();
     vi.restoreAllMocks();
   });
 });

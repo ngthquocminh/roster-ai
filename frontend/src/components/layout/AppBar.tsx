@@ -7,10 +7,11 @@ import { USER_ERROR_COPY } from "@/lib/errors";
 
 /**
  * Persistent global nav (UI-SPEC Application Structure, tier 1) — the only
- * *global* nav destination in Phase 1: Editor/Runs/Results are
- * scenario-scoped and meaningless without a `:scenarioId`, so they live in
- * ScenarioLayout's tab nav instead of here (see RESEARCH.md's flat-nav
- * anti-pattern warning).
+ * *global* nav destination: scenario-scoped surfaces are meaningless without
+ * a `:scenarioId`, so they belong to the scenario workspace rather than here
+ * (see RESEARCH.md's flat-nav anti-pattern warning). Story 1.3 retired the
+ * legacy Editor/Runs/Results tabs and the `ScenarioLayout` that hosted them;
+ * the workspace's peer tabs arrive with Story 1.7.
  *
  * The bar is session-aware (Story 1.2's BFF auth) — the Sign out button is
  * the one piece of session UI it carries; everything else stays unchanged.
