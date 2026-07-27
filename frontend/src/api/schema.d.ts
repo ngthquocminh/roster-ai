@@ -256,6 +256,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Fixture Versions */
+        get: operations["list_fixture_versions_api_v1_scenarios_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Scenario Context */
+        get: operations["get_scenario_context_api_v1_scenarios__scenario_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -310,6 +344,46 @@ export interface components {
             clarification_needed: string | null;
             /** No Constraint Found */
             no_constraint_found: boolean;
+        };
+        /** FixtureCatalogueEntryOut */
+        FixtureCatalogueEntryOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /** Fixture Id */
+            fixture_id: string;
+            /** Scenario Name */
+            scenario_name: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /** Fixture Version */
+            fixture_version: string;
+            /** Checksum Algorithm */
+            checksum_algorithm: string;
+            /** Checksum Schema Version */
+            checksum_schema_version: string;
+            /** Checksum Digest */
+            checksum_digest: string;
+            /**
+             * Imported At
+             * Format: date-time
+             */
+            imported_at: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -380,6 +454,36 @@ export interface components {
             solver_status?: string | null;
             /** Error */
             error?: string | null;
+        };
+        /** ScenarioContextOut */
+        ScenarioContextOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /** Scenario Name */
+            scenario_name: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /** Fixture Version */
+            fixture_version: string;
+            /** Checksum Algorithm */
+            checksum_algorithm: string;
+            /** Checksum Schema Version */
+            checksum_schema_version: string;
+            /** Checksum Digest */
+            checksum_digest: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
         };
         /** ScenarioCreate */
         ScenarioCreate: {
@@ -854,7 +958,9 @@ export interface operations {
     };
     login_api_v1_auth_login_get: {
         parameters: {
-            query?: never;
+            query?: {
+                return_to?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -868,6 +974,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
         };
@@ -965,6 +1089,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    list_fixture_versions_api_v1_scenarios_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FixtureCatalogueEntryOut"][];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_scenario_context_api_v1_scenarios__scenario_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioContextOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

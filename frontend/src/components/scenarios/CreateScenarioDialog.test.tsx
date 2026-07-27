@@ -7,31 +7,24 @@
  * loading/success/error state transitions through a real `QueryClient`
  * rather than a hand-rolled mock of react-query's internals.
  *
- * The two concurrency/single-banner tests render the real `Home` route
- * instead (mocking `useScenarios`/`useFixtures` directly, matching
- * `ScenarioTable.test.tsx`'s convention) because the single-decision-point
- * banner logic this plan adds lives in `Home`, not in this dialog.
+ * This legacy component remains covered while its former route owner is
+ * intentionally retired by Story 1.3.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMemoryRouter, RouterProvider } from "react-router";
 
 import { CreateScenarioDialog } from "./CreateScenarioDialog";
 
 vi.mock("@/api/scenarios", () => ({
   listFixtures: vi.fn(),
   createScenario: vi.fn(),
-  listScenarios: vi.fn(),
 }));
 
-import { listFixtures, createScenario, listScenarios } from "@/api/scenarios";
+import { listFixtures, createScenario } from "@/api/scenarios";
 
 const mockListFixtures = listFixtures as unknown as ReturnType<typeof vi.fn>;
 const mockCreateScenario = createScenario as unknown as ReturnType<
-  typeof vi.fn
->;
-const mockListScenarios = listScenarios as unknown as ReturnType<
   typeof vi.fn
 >;
 
@@ -77,9 +70,7 @@ function submitButton() {
 beforeEach(() => {
   mockListFixtures.mockReset();
   mockCreateScenario.mockReset();
-  mockListScenarios.mockReset();
 });
-
 describe("CreateScenarioDialog: default/empty state [UI-SPEC E2/empty]", () => {
   it("opens with an empty name, no fixture selected, and a disabled Create Scenario button", async () => {
     mockListFixtures.mockResolvedValueOnce(SAMPLE_FIXTURES);
@@ -344,64 +335,5 @@ describe("CreateScenarioDialog: no invented uniqueness rule", () => {
     expect(container.textContent?.toLowerCase()).not.toContain(
       duplicateNamePhrase,
     );
-  });
-});
-
-/**
- * SHELL-04/concurrency: the single-decision-point banner logic lives in
- * `Home`, not in this dialog — `ScenarioTable` already renders its own
- * `ErrorBanner` on a scenarios-query failure (plan 01-06, unchanged), and
- * `Home` adds exactly one more banner ONLY for the case `ScenarioTable`
- * cannot cover (fixtures failing alone). These two tests render the real
- * `Home` route (real `useScenarios`/`useFixtures`, same `@/api/scenarios`
- * mock as the rest of this file) to prove the composed result.
- */
-import { Home } from "@/routes/Home";
-
-function renderHome() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const router = createMemoryRouter([{ path: "/", Component: Home }], {
-    initialEntries: ["/"],
-  });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
-  );
-}
-
-describe("Home: fixtures-alone failure [UI-SPEC E3/error]", () => {
-  it("renders exactly one backend-unreachable banner when only the fixtures query fails", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    mockListScenarios.mockResolvedValueOnce([]);
-    mockListFixtures.mockRejectedValueOnce(new Error("network error"));
-    renderHome();
-
-    await waitFor(() =>
-      expect(
-        screen.getAllByText("Couldn't load this content.").length,
-      ).toBe(1),
-    );
-
-    vi.restoreAllMocks();
-  });
-});
-
-describe("Home: concurrent failure [edge: SHELL-04/concurrency]", () => {
-  it("renders exactly one backend-unreachable banner when BOTH the scenarios and fixtures queries fail", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    mockListScenarios.mockRejectedValueOnce(new Error("scenarios down"));
-    mockListFixtures.mockRejectedValueOnce(new Error("fixtures down"));
-    renderHome();
-
-    await waitFor(() =>
-      expect(
-        screen.getAllByText("Couldn't load this content.").length,
-      ).toBe(1),
-    );
-
-    vi.restoreAllMocks();
   });
 });

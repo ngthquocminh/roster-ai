@@ -2,12 +2,9 @@ import { createBrowserRouter, Outlet, type RouteObject } from "react-router";
 
 import { AppBar } from "@/components/layout/AppBar";
 import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
-import { Editor } from "@/routes/Editor";
-import { Home } from "@/routes/Home";
-import { ResultsView } from "@/routes/ResultsView";
+import { FixtureCatalogue } from "@/routes/FixtureCatalogue";
 import { RequireSession } from "@/routes/RequireSession";
-import { RunHistory } from "@/routes/RunHistory";
-import { ScenarioLayout } from "@/routes/ScenarioLayout";
+import { ScenarioWorkspace } from "@/routes/ScenarioWorkspace";
 import { SignIn } from "@/routes/SignIn";
 
 /**
@@ -24,10 +21,8 @@ function RootLayout() {
 }
 
 /**
- * SHELL-03's four-route shell, exactly per UI-SPEC's Application Structure
- * route table: `/`, `/scenarios/:scenarioId`, `/scenarios/:scenarioId/runs`,
- * `/scenarios/:scenarioId/runs/:runId`. Editor sits at ScenarioLayout's
- * *index* route, not a `/editor` segment UI-SPEC never specified.
+ * Governed planner route tree: the fixture catalogue at `/` and one
+ * immutable scenario workspace at `/scenarios/:scenarioId`.
  *
  * Exported as a plain route-config array (rather than only the constructed
  * browser router) so `router.test.tsx` can build a `createMemoryRouter`
@@ -56,15 +51,10 @@ export const routes: RouteObject[] = [
         Component: RootLayout,
         errorElement: <RootErrorBoundary />,
         children: [
-          { index: true, Component: Home },
+          { index: true, Component: FixtureCatalogue },
           {
             path: "scenarios/:scenarioId",
-            Component: ScenarioLayout,
-            children: [
-              { index: true, Component: Editor },
-              { path: "runs", Component: RunHistory },
-              { path: "runs/:runId", Component: ResultsView },
-            ],
+            Component: ScenarioWorkspace,
           },
         ],
       },

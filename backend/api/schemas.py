@@ -93,3 +93,29 @@ class AuthSessionOut(BaseModel):
     site_id: UUID
     csrf_token: str
     expires_at: datetime
+
+
+class FixtureCatalogueEntryOut(BaseModel):
+    schema_version: str = "v1"
+    scenario_id: UUID
+    fixture_id: str
+    scenario_name: str
+    scenario_version_id: UUID
+    fixture_version: str
+    checksum_algorithm: str
+    checksum_schema_version: str
+    checksum_digest: str
+    imported_at: datetime
+    site_id: UUID
+
+
+class ScenarioContextOut(BaseModel):
+    schema_version: str = "v1"
+    scenario_name: str
+    scenario_id: UUID
+    fixture_version: str
+    checksum_algorithm: str
+    checksum_schema_version: str
+    checksum_digest: str
+    site_id: UUID
+    baseline_schedule_version: str | None

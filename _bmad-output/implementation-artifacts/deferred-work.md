@@ -10,3 +10,7 @@
 
 - No cleanup/retention job for expired `auth.login_handshake` / `auth.session_index` rows — both tables grow unbounded over time [backend/migrations/versions/5e2a4c9d1f70_add_seeded_site_identity.py]. Operational housekeeping reasonably arrives with Epic 3's job-queue infrastructure; no acceptance criterion requires it now.
 - No `X-Frame-Options` / CSP `frame-ancestors` header on the new sign-in surface [backend/api/main.py]. Clickjacking hardening is an app-wide/infra concern better addressed holistically (e.g. at a reverse proxy or in a dedicated hardening pass) rather than piecemeal in this identity story.
+
+## Deferred from: story-1-3-choose-an-immutable-fixture (2026-07-27)
+
+- The legacy route components were retired, leaving the intentionally orphaned `frontend/src/components/{editor,runs,results,scenarios}/**` trees and their hooks: `useApplyConstraint`, `useCreateScenario`, `useFixtures`, `useOverrides`, `useRun`, `useRunInsights`, `useRunResult`, `useRuns`, `useScenario`, `useScenarios`, and `useTriggerRun`. Keep them unreachable; Story 1.9's mutation-path audit and a later cleanup should verify and remove this inventory without re-mounting it.

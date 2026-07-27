@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from uuid import uuid4
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 
@@ -24,7 +26,14 @@ from adapters.postgres.schema import (
     session_index,
     site,
 )
-from api.deps import _site_context_engine, get_site_context
+from api.auth_security import SESSION_COOKIE_NAME
+from api.deps import (
+    _site_context_engine,
+    get_identity_store,
+    get_settings,
+    get_site_context,
+)
+from api.main import app
 from application.ports.session import ResolvedSession
 from scripts.gate_a_cutover import FixtureSpec, REPO_ROOT, run_cutover
 from services import run_service
@@ -46,6 +55,229 @@ EXPECTED_TABLES = {
 @pytest.fixture(scope="module")
 def postgres_engine(governed_postgres_engine):
     return governed_postgres_engine
+
+
+class _ResolvedIdentityStore:
+    def __init__(self, session: ResolvedSession) -> None:
+        self._session = session
+
+    def resolve_session(self, _token_hash: str) -> ResolvedSession:
+        return self._session
+
+
+@contextmanager
+def _catalogue_client(postgres_engine, *, site_id, tmp_path):
+    restricted_url = postgres_engine.url.set(
+        username="shiftmind_login",
+        password="shiftmind_login",
+    ).render_as_string(hide_password=False)
+    settings = replace(
+        default_settings(),
+        database_url=restricted_url,
+        provisioning_database_url=postgres_engine.url.render_as_string(
+            hide_password=False
+        ),
+        db_path=str(tmp_path / "legacy.db"),
+        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
+    )
+    session = ResolvedSession(
+        app_user_id=uuid4(),
+        site_id=site_id,
+        csrf_token_hash="a" * 64,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_identity_store] = lambda: (
+        _ResolvedIdentityStore(session)
+    )
+    try:
+        with TestClient(app) as client:
+            yield client
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def catalogue_site_rows(postgres_engine):
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url,
+        engine=postgres_engine,
+    )
+    suffix = uuid4().hex
+    site_a = adapter.ensure_seed_site(
+        f"Catalogue Organization A {suffix}",
+        f"Catalogue Site A {suffix}",
+    )
+    site_b = adapter.ensure_seed_site(
+        f"Catalogue Organization B {suffix}",
+        f"Catalogue Site B {suffix}",
+    )
+    imports_a = (
+        adapter.import_fixture(
+            site_id=site_a,
+            fixture_id=f"fixture-z-{suffix}",
+            version="v1",
+            payload={"fixture": "z"},
+            source_package="tests",
+            source_path="z.json",
+        ),
+        adapter.import_fixture(
+            site_id=site_a,
+            fixture_id=f"fixture-a-{suffix}",
+            version="v2",
+            payload={"fixture": "a", "version": 2},
+            source_package="tests",
+            source_path="a-v2.json",
+        ),
+        adapter.import_fixture(
+            site_id=site_a,
+            fixture_id=f"fixture-a-{suffix}",
+            version="v1",
+            payload={"fixture": "a", "version": 1},
+            source_package="tests",
+            source_path="a-v1.json",
+        ),
+    )
+    import_b = adapter.import_fixture(
+        site_id=site_b,
+        fixture_id=f"fixture-b-{suffix}",
+        version="v1",
+        payload={"fixture": "b"},
+        source_package="tests",
+        source_path="b.json",
+    )
+    with postgres_engine.connect() as connection:
+        rows = connection.execute(
+            select(
+                scenario_version.c.id,
+                scenario_version.c.scenario_id,
+                scenario_version.c.site_id,
+                scenario_version.c.fixture_id,
+                scenario_version.c.version,
+                scenario_version.c.checksum_digest,
+            )
+            .where(scenario_version.c.site_id.in_((site_a, site_b)))
+            .order_by(scenario_version.c.id)
+        ).all()
+    return {
+        "site_a": site_a,
+        "site_b": site_b,
+        "imports_a": imports_a,
+        "import_b": import_b,
+        "rows": rows,
+    }
+
+
+@pytest.mark.postgres
+def test_catalogue_api_is_ordered_complete_and_read_only(
+    postgres_engine,
+    catalogue_site_rows,
+    tmp_path,
+) -> None:
+    site_a = catalogue_site_rows["site_a"]
+    rows_a = [
+        row for row in catalogue_site_rows["rows"] if row.site_id == site_a
+    ]
+    before = [
+        (row.id, row.checksum_digest)
+        for row in catalogue_site_rows["rows"]
+    ]
+
+    with _catalogue_client(
+        postgres_engine,
+        site_id=site_a,
+        tmp_path=tmp_path,
+    ) as client:
+        response = client.get(
+            "/api/v1/scenarios",
+            headers={"Cookie": f"{SESSION_COOKIE_NAME}=site-a-session"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body) == len(rows_a)
+        assert [
+            (entry["fixture_id"], entry["fixture_version"], entry["scenario_version_id"])
+            for entry in body
+        ] == sorted(
+            (
+                row.fixture_id,
+                row.version,
+                str(row.id),
+            )
+            for row in rows_a
+        )
+        assert {entry["scenario_id"] for entry in body} == {
+            str(row.scenario_id) for row in rows_a
+        }
+        assert all(
+            entry["checksum_algorithm"] == "sha256"
+            and entry["checksum_schema_version"] == "rfc8785-v1"
+            and len(entry["checksum_digest"]) == 64
+            for entry in body
+        )
+        for scenario_id in {entry["scenario_id"] for entry in body}:
+            detail = client.get(
+                f"/api/v1/scenarios/{scenario_id}",
+                headers={"Cookie": f"{SESSION_COOKIE_NAME}=site-a-session"},
+            )
+            assert detail.status_code == 200
+
+    with postgres_engine.connect() as connection:
+        after = connection.execute(
+            select(
+                scenario_version.c.id,
+                scenario_version.c.checksum_digest,
+            )
+            .where(scenario_version.c.site_id.in_(
+                (
+                    catalogue_site_rows["site_a"],
+                    catalogue_site_rows["site_b"],
+                )
+            ))
+            .order_by(scenario_version.c.id)
+        ).all()
+    assert [(row.id, row.checksum_digest) for row in after] == before
+
+
+@pytest.mark.postgres
+def test_catalogue_api_hides_cross_site_rows_like_unknown_rows(
+    postgres_engine,
+    catalogue_site_rows,
+    tmp_path,
+) -> None:
+    site_a = catalogue_site_rows["site_a"]
+    site_b_version = catalogue_site_rows["import_b"]
+    with postgres_engine.connect() as connection:
+        site_b_scenario_id = connection.execute(
+            select(scenario_version.c.scenario_id).where(
+                scenario_version.c.site_id == catalogue_site_rows["site_b"],
+                scenario_version.c.id == site_b_version.scenario_version_id,
+            )
+        ).scalar_one()
+
+    with _catalogue_client(
+        postgres_engine,
+        site_id=site_a,
+        tmp_path=tmp_path,
+    ) as client:
+        headers = {"Cookie": f"{SESSION_COOKIE_NAME}=site-a-session"}
+        catalogue = client.get("/api/v1/scenarios", headers=headers)
+        foreign = client.get(
+            f"/api/v1/scenarios/{site_b_scenario_id}",
+            headers=headers,
+        )
+        unknown = client.get(
+            f"/api/v1/scenarios/{uuid4()}",
+            headers=headers,
+        )
+
+    assert catalogue.status_code == 200
+    assert str(site_b_version.scenario_version_id) not in {
+        entry["scenario_version_id"] for entry in catalogue.json()
+    }
+    assert foreign.status_code == 404
+    assert unknown.status_code == 404
+    assert foreign.content == unknown.content
 
 
 @pytest.mark.postgres

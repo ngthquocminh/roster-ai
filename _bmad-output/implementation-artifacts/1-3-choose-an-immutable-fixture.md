@@ -4,7 +4,7 @@ baseline_commit: 4677bbb37c896a6d1b8e535442c3ba9078c303d0
 
 # Story 1.3: Choose an Immutable Fixture
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,72 +29,72 @@ so that I can deliberately choose the exact fixture and version I will inspect.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Owned catalogue read port + PostgreSQL adapter (AC: #1, #3)
-  - [ ] `backend/application/ports/scenario_catalogue.py` — a `ScenarioCatalogueReader` `Protocol` with `list_fixture_versions(connection) -> tuple[FixtureCatalogueEntry, ...]` and `get_scenario_context(connection, scenario_id) -> ScenarioContext | None`, plus the two frozen dataclasses. Mirror the shape of `backend/application/ports/session.py` (frozen dataclasses + `Protocol`, no SQLAlchemy import in the port module beyond the `Connection` type — if that bothers the boundary, type the parameter as `Any` in the port and keep SQLAlchemy in the adapter).
-  - [ ] `backend/adapters/postgres/scenario_catalogue.py` — the adapter. **It takes an already-open, already-site-scoped `Connection`; it must NOT create its own engine.** `get_site_context` (`backend/api/deps.py:107-133`) is the only supported way to reach domain data: it opens the transaction, sets `app.site_id` from the session row, and `SET LOCAL ROLE shiftmind_runtime`. A second engine would run as `shiftmind_login`, which holds no table grants of its own (NOINHERIT) — every query would fail, and if it somehow didn't, it would bypass the site scoping AD-3 requires.
-  - [ ] **Never accept a `site_id` from the request** — not from path, query, body, or header. Row visibility comes entirely from the transaction-local `app.site_id` that `get_site_context` set from the session row, backed by Story 1.1's `USING (site_id = NULLIF(current_setting('app.site_id', true), '')::uuid)` policy on `scenario` and `scenario_version` (`backend/migrations/versions/d128d081ab48_...py:241-263`). Queries carry no site predicate at all.
-  - [ ] Catalogue row = one `scenario_version` joined to its `scenario`. Select: `scenario.id`, `scenario.fixture_id`, `scenario.name`, `scenario_version.id`, `scenario_version.version`, `checksum_algorithm`, `checksum_schema_version`, `checksum_digest`, `imported_at`, `site_id`.
-  - [ ] **Deterministic ordering is server-defined and must include a stable-ID tie-break** (AD-4, UX-DR24): `ORDER BY scenario.fixture_id, scenario_version.version, scenario_version.id`. No client-supplied sort in this story (sorting/filtering is Story 1.8, and only for Scenario Data tables).
-  - [ ] `get_scenario_context` returns scenario name, scenario ID, the immutable fixture version, checksum, `site_id`, and `baseline_schedule_version` — see the Dev Notes entry **"Baseline version does not exist yet"** before you implement that last field.
-  - [ ] **Multiple versions of one fixture:** the route map has no version segment (`/scenarios/:scenarioId` only — UX-DR1), so `get_scenario_context` resolves the scenario's governed version deterministically with the same server-defined ordering, taking the last: `ORDER BY version DESC, id DESC LIMIT 1`. Today exactly one version exists per fixture, so this is a documented tie-break, not a behavior change — and it is why the catalogue row still names the version explicitly. Do not invent `/scenarios/:id/versions/:version`.
-  - [ ] **No migration.** Story 1.1 already granted `SELECT` on `scenario`/`scenario_version` to `shiftmind_runtime` (`d128d081ab48_...py:265-269`). This story adds no table, no column, no grant, and no Alembic revision. `alembic check` must still report zero drift.
+- [x] Task 1: Owned catalogue read port + PostgreSQL adapter (AC: #1, #3)
+  - [x] `backend/application/ports/scenario_catalogue.py` — a `ScenarioCatalogueReader` `Protocol` with `list_fixture_versions(connection) -> tuple[FixtureCatalogueEntry, ...]` and `get_scenario_context(connection, scenario_id) -> ScenarioContext | None`, plus the two frozen dataclasses. Mirror the shape of `backend/application/ports/session.py` (frozen dataclasses + `Protocol`, no SQLAlchemy import in the port module beyond the `Connection` type — if that bothers the boundary, type the parameter as `Any` in the port and keep SQLAlchemy in the adapter).
+  - [x] `backend/adapters/postgres/scenario_catalogue.py` — the adapter. **It takes an already-open, already-site-scoped `Connection`; it must NOT create its own engine.** `get_site_context` (`backend/api/deps.py:107-133`) is the only supported way to reach domain data: it opens the transaction, sets `app.site_id` from the session row, and `SET LOCAL ROLE shiftmind_runtime`. A second engine would run as `shiftmind_login`, which holds no table grants of its own (NOINHERIT) — every query would fail, and if it somehow didn't, it would bypass the site scoping AD-3 requires.
+  - [x] **Never accept a `site_id` from the request** — not from path, query, body, or header. Row visibility comes entirely from the transaction-local `app.site_id` that `get_site_context` set from the session row, backed by Story 1.1's `USING (site_id = NULLIF(current_setting('app.site_id', true), '')::uuid)` policy on `scenario` and `scenario_version` (`backend/migrations/versions/d128d081ab48_...py:241-263`). Queries carry no site predicate at all.
+  - [x] Catalogue row = one `scenario_version` joined to its `scenario`. Select: `scenario.id`, `scenario.fixture_id`, `scenario.name`, `scenario_version.id`, `scenario_version.version`, `checksum_algorithm`, `checksum_schema_version`, `checksum_digest`, `imported_at`, `site_id`.
+  - [x] **Deterministic ordering is server-defined and must include a stable-ID tie-break** (AD-4, UX-DR24): `ORDER BY scenario.fixture_id, scenario_version.version, scenario_version.id`. No client-supplied sort in this story (sorting/filtering is Story 1.8, and only for Scenario Data tables).
+  - [x] `get_scenario_context` returns scenario name, scenario ID, the immutable fixture version, checksum, `site_id`, and `baseline_schedule_version` — see the Dev Notes entry **"Baseline version does not exist yet"** before you implement that last field.
+  - [x] **Multiple versions of one fixture:** the route map has no version segment (`/scenarios/:scenarioId` only — UX-DR1), so `get_scenario_context` resolves the scenario's governed version deterministically with the same server-defined ordering, taking the last: `ORDER BY version DESC, id DESC LIMIT 1`. Today exactly one version exists per fixture, so this is a documented tie-break, not a behavior change — and it is why the catalogue row still names the version explicitly. Do not invent `/scenarios/:id/versions/:version`.
+  - [x] **No migration.** Story 1.1 already granted `SELECT` on `scenario`/`scenario_version` to `shiftmind_runtime` (`d128d081ab48_...py:265-269`). This story adds no table, no column, no grant, and no Alembic revision. `alembic check` must still report zero drift.
 
-- [ ] Task 2: Versioned read endpoints (AC: #1, #3)
-  - [ ] New router `backend/api/routers/scenario_catalogue.py`, mounted with `app.include_router(scenario_catalogue.router, prefix="/api/v1")` in `backend/api/main.py` beside the existing `auth` include. The legacy unversioned `/scenarios` router stays mounted and untouched — it is Gate-A-503'd (AD-25) and nothing here modifies it. There is no path collision: the new paths are `/api/v1/scenarios` and `/api/v1/scenarios/{scenario_id}`.
-  - [ ] `GET /api/v1/scenarios` → the ordered catalogue. `GET /api/v1/scenarios/{scenario_id}` → the workspace context for one scenario.
-  - [ ] **Both handlers are `def`, not `async def`.** They depend on `get_site_context`, which drives a *synchronous* SQLAlchemy engine. A sync `def` path operation runs in FastAPI's threadpool; an `async def` one would block the event loop on every request. This is the explicit closure of Story 1.1's deferred item: *"the next story that calls it from a live FastAPI request handler must route it through a worker thread."*
-  - [ ] **Add no auth code.** `enforce_versioned_session_and_csrf` (`backend/api/main.py:143-200`) already 401s any `/api/v1/*` path outside `_PUBLIC_VERSIONED_PATHS` and stashes the resolved session on `request.state`. `Depends(get_site_context)` reuses that session. Do not register a second middleware, a second cookie read, or a route-level session check.
-  - [ ] **GET only.** Do not define `POST`/`PUT`/`PATCH`/`DELETE` on any `/api/v1/scenarios*` path — not even a stub, not even one returning 405. FR22 and Story 1.9's mutation-path audit read the OpenAPI document; an unused write verb there is a Gate A failure.
-  - [ ] Unknown scenario id, or one belonging to another site: **404 with the same problem shape as absence** — never 403, never a distinguishing message. RLS makes the row invisible, so the adapter naturally returns `None`; raise `HTTPException(404)` and let `versioned_http_problem` (`backend/api/main.py:57-86`) render `resource_not_found`. Response bodies for 401/404 must contain no fixture name, scenario name, site name, or membership field.
-  - [ ] Response models in `backend/api/schemas.py` next to `AuthSessionOut`: `FixtureCatalogueEntryOut` and `ScenarioContextOut`. Each carries `schema_version: str = "v1"` and `site_id` (the Structural Seed's normative contract minimum: *"Every contract carries `schema_version`; site-owned resources carry `site_id`"*). **Do not name anything `ScenarioProjectionV1` or put normalized workforce/demand/assignment data in these models** — that contract is Story 1.4's, and duplicating a partial version of it here is exactly the viewer/agent fact drift AD-4 exists to prevent.
-  - [ ] Regenerate contracts after the routes exist: `npm run codegen` from `frontend/`. `frontend/src/api/schema.d.ts` is generated — never hand-edit (AD-13).
+- [x] Task 2: Versioned read endpoints (AC: #1, #3)
+  - [x] New router `backend/api/routers/scenario_catalogue.py`, mounted with `app.include_router(scenario_catalogue.router, prefix="/api/v1")` in `backend/api/main.py` beside the existing `auth` include. The legacy unversioned `/scenarios` router stays mounted and untouched — it is Gate-A-503'd (AD-25) and nothing here modifies it. There is no path collision: the new paths are `/api/v1/scenarios` and `/api/v1/scenarios/{scenario_id}`.
+  - [x] `GET /api/v1/scenarios` → the ordered catalogue. `GET /api/v1/scenarios/{scenario_id}` → the workspace context for one scenario.
+  - [x] **Both handlers are `def`, not `async def`.** They depend on `get_site_context`, which drives a *synchronous* SQLAlchemy engine. A sync `def` path operation runs in FastAPI's threadpool; an `async def` one would block the event loop on every request. This is the explicit closure of Story 1.1's deferred item: *"the next story that calls it from a live FastAPI request handler must route it through a worker thread."*
+  - [x] **Add no auth code.** `enforce_versioned_session_and_csrf` (`backend/api/main.py:143-200`) already 401s any `/api/v1/*` path outside `_PUBLIC_VERSIONED_PATHS` and stashes the resolved session on `request.state`. `Depends(get_site_context)` reuses that session. Do not register a second middleware, a second cookie read, or a route-level session check.
+  - [x] **GET only.** Do not define `POST`/`PUT`/`PATCH`/`DELETE` on any `/api/v1/scenarios*` path — not even a stub, not even one returning 405. FR22 and Story 1.9's mutation-path audit read the OpenAPI document; an unused write verb there is a Gate A failure.
+  - [x] Unknown scenario id, or one belonging to another site: **404 with the same problem shape as absence** — never 403, never a distinguishing message. RLS makes the row invisible, so the adapter naturally returns `None`; raise `HTTPException(404)` and let `versioned_http_problem` (`backend/api/main.py:57-86`) render `resource_not_found`. Response bodies for 401/404 must contain no fixture name, scenario name, site name, or membership field.
+  - [x] Response models in `backend/api/schemas.py` next to `AuthSessionOut`: `FixtureCatalogueEntryOut` and `ScenarioContextOut`. Each carries `schema_version: str = "v1"` and `site_id` (the Structural Seed's normative contract minimum: *"Every contract carries `schema_version`; site-owned resources carry `site_id`"*). **Do not name anything `ScenarioProjectionV1` or put normalized workforce/demand/assignment data in these models** — that contract is Story 1.4's, and duplicating a partial version of it here is exactly the viewer/agent fact drift AD-4 exists to prevent.
+  - [x] Regenerate contracts after the routes exist: `npm run codegen` from `frontend/`. `frontend/src/api/schema.d.ts` is generated — never hand-edit (AD-13).
 
-- [ ] Task 3: Fixture catalogue route and its five states (AC: #1, #2)
-  - [ ] `frontend/src/api/scenarioCatalogue.ts` — thin typed wrappers over the one `client` (`frontend/src/api/client.ts`; its docstring forbids a second client). Derive every shape from the generated `paths` type; hand-author no response interface. Throw `{ status: response.status, ...error }` on failure, matching `api/auth.ts` / `api/scenarios.ts`.
-  - [ ] `frontend/src/hooks/useFixtureCatalogue.ts` and `useScenarioContext.ts` — thin TanStack Query wrappers, no business logic (the repo rule; see `useSession.ts`). Query keys: `["fixture-catalogue"]` and `["scenario-context", scenarioId]`.
-  - [ ] `frontend/src/routes/FixtureCatalogue.tsx` — route composition only; presentational parts go in `frontend/src/features/fixture-catalogue/`. **This story creates `frontend/src/features/`**, the Structural Seed's home for new UI work (AR26), the way Story 1.2 created `backend/application/`. Do not add to `frontend/src/components/{editor,runs,results,scenarios}/` — those are legacy leaves.
-  - [ ] View heading is literally **“Fixture catalogue”** (the surface's name in the experience contract), focused on route change per Task 6. Render the catalogue as a **semantic table**: `<caption>`, `<th scope="col">`, one row per fixture version. Columns: scenario name, scenario ID, fixture version, imported at. Format `imported_at` with the existing `frontend/src/lib/formatTimestamp.ts` — do not write a second date formatter. Row activation is a **real link** to `/scenarios/:scenarioId` (anchor semantics, so Enter works natively and middle-click/Back behave — UX-DR26). No checkbox, no row-selection styling, no overflow menu, no editable-cell affordance (UX-DR4).
-  - [ ] Implement all five states with the **exact copy from the experience contract's State Patterns table** (`EXPERIENCE.md:122`):
+- [x] Task 3: Fixture catalogue route and its five states (AC: #1, #2)
+  - [x] `frontend/src/api/scenarioCatalogue.ts` — thin typed wrappers over the one `client` (`frontend/src/api/client.ts`; its docstring forbids a second client). Derive every shape from the generated `paths` type; hand-author no response interface. Throw `{ status: response.status, ...error }` on failure, matching `api/auth.ts` / `api/scenarios.ts`.
+  - [x] `frontend/src/hooks/useFixtureCatalogue.ts` and `useScenarioContext.ts` — thin TanStack Query wrappers, no business logic (the repo rule; see `useSession.ts`). Query keys: `["fixture-catalogue"]` and `["scenario-context", scenarioId]`.
+  - [x] `frontend/src/routes/FixtureCatalogue.tsx` — route composition only; presentational parts go in `frontend/src/features/fixture-catalogue/`. **This story creates `frontend/src/features/`**, the Structural Seed's home for new UI work (AR26), the way Story 1.2 created `backend/application/`. Do not add to `frontend/src/components/{editor,runs,results,scenarios}/` — those are legacy leaves.
+  - [x] View heading is literally **“Fixture catalogue”** (the surface's name in the experience contract), focused on route change per Task 6. Render the catalogue as a **semantic table**: `<caption>`, `<th scope="col">`, one row per fixture version. Columns: scenario name, scenario ID, fixture version, imported at. Format `imported_at` with the existing `frontend/src/lib/formatTimestamp.ts` — do not write a second date formatter. Row activation is a **real link** to `/scenarios/:scenarioId` (anchor semantics, so Enter works natively and middle-click/Back behave — UX-DR26). No checkbox, no row-selection styling, no overflow menu, no editable-cell affordance (UX-DR4).
+  - [x] Implement all five states with the **exact copy from the experience contract's State Patterns table** (`EXPERIENCE.md:122`):
     - Cold/loading → skeleton rows plus “Loading predefined scenarios…”. Skeleton shapes match the final table region and impersonate no values.
     - Empty → “No predefined scenarios are available.” **No creation CTA.**
     - Error/unavailable → inline alert with retry. Authentication failure (401) routes to sign-in **without exposing fixture names** — `RequireSession` already handles a null session; make sure a 401 from *this* query never renders a partially-populated table.
     - Cached-stale → label “Saved catalogue — refresh unavailable”; selecting still requires current authorization (the navigation target re-fetches under the session; nothing is authorized from cache).
     - Loaded → the ordered table.
-  - [ ] **There is no create, upload, import, edit, or delete control anywhere on this route.** Concretely: the “New Scenario” button, `CreateScenarioDialog`, and `ScenarioTable` that `routes/Home.tsx` renders today are all removed from `/` (Task 5).
-  - [ ] Copy discipline (UX-DR5): literal, operational, bounded. No “Get started”, no “Create your first scenario”, no celebration, no invented counts.
+  - [x] **There is no create, upload, import, edit, or delete control anywhere on this route.** Concretely: the “New Scenario” button, `CreateScenarioDialog`, and `ScenarioTable` that `routes/Home.tsx` renders today are all removed from `/` (Task 5).
+  - [x] Copy discipline (UX-DR5): literal, operational, bounded. No “Get started”, no “Create your first scenario”, no celebration, no invented counts.
 
-- [ ] Task 4: Scenario workspace shell with persistent context (AC: #3)
-  - [ ] `frontend/src/routes/ScenarioWorkspace.tsx` at `/scenarios/:scenarioId`, with `frontend/src/features/scenario-workspace/ScenarioVersionContext.tsx` for the context row.
-  - [ ] The context row names, on every scenario surface: **scenario name** (primary), **stable scenario ID**, **immutable fixture version**, **baseline version**. Identifiers render in a monospace treatment (`DESIGN.md` `{typography.identifier}` — 12px `ui-monospace`); ordinary names stay sans-serif.
-  - [ ] Baseline version renders the literal **“Not established”** when the API returns null. Read the Dev Notes entry on this before writing the code — do not invent a version string, a `v0`, an em dash, or a baseline table.
-  - [ ] Changing scenario **returns through the catalogue**: the workspace carries an explicit “Change scenario” link back to `/`. Build **no** scenario switcher, dropdown, or sibling-scenario list in the workspace (UX-DR2: never switch scenario implicitly).
-  - [ ] Scenario id not found / not this site → 404 from the API → a terminal, non-disclosing “not found” view with a link back to the catalogue. Do not fall back to another scenario or version.
-  - [ ] **Do not build the four peer workspace tabs (Chat / Scenario Data / Runs / Results).** UX-DR1/UX-DR3 tabs are Story 1.7's acceptance boundary. This story delivers the persistent context and a placeholder body naming what arrives next, in literal copy. Building tabs here means Story 1.7 rewrites them and Story 1.9's route audit has two shells to reason about.
-  - [ ] **Do not build the ShiftMind token layer.** Design tokens and the shared Status badge / Inline alert / Skeleton / Empty state / Reconnect banner / Evidence link primitives are Story 1.6's acceptance boundary. Use inherited shadcn/Tailwind, matching how `AppBar.tsx` and `ScenarioLayout.tsx` currently inline `#4F46E5`. If you need a Skeleton, add the standard shadcn `frontend/src/components/ui/skeleton.tsx` primitive (it is part of the inherited system, not a new token system) — Story 1.6 will govern it, not replace it.
+- [x] Task 4: Scenario workspace shell with persistent context (AC: #3)
+  - [x] `frontend/src/routes/ScenarioWorkspace.tsx` at `/scenarios/:scenarioId`, with `frontend/src/features/scenario-workspace/ScenarioVersionContext.tsx` for the context row.
+  - [x] The context row names, on every scenario surface: **scenario name** (primary), **stable scenario ID**, **immutable fixture version**, **baseline version**. Identifiers render in a monospace treatment (`DESIGN.md` `{typography.identifier}` — 12px `ui-monospace`); ordinary names stay sans-serif.
+  - [x] Baseline version renders the literal **“Not established”** when the API returns null. Read the Dev Notes entry on this before writing the code — do not invent a version string, a `v0`, an em dash, or a baseline table.
+  - [x] Changing scenario **returns through the catalogue**: the workspace carries an explicit “Change scenario” link back to `/`. Build **no** scenario switcher, dropdown, or sibling-scenario list in the workspace (UX-DR2: never switch scenario implicitly).
+  - [x] Scenario id not found / not this site → 404 from the API → a terminal, non-disclosing “not found” view with a link back to the catalogue. Do not fall back to another scenario or version.
+  - [x] **Do not build the four peer workspace tabs (Chat / Scenario Data / Runs / Results).** UX-DR1/UX-DR3 tabs are Story 1.7's acceptance boundary. This story delivers the persistent context and a placeholder body naming what arrives next, in literal copy. Building tabs here means Story 1.7 rewrites them and Story 1.9's route audit has two shells to reason about.
+  - [x] **Do not build the ShiftMind token layer.** Design tokens and the shared Status badge / Inline alert / Skeleton / Empty state / Reconnect banner / Evidence link primitives are Story 1.6's acceptance boundary. Use inherited shadcn/Tailwind, matching how `AppBar.tsx` and `ScenarioLayout.tsx` currently inline `#4F46E5`. If you need a Skeleton, add the standard shadcn `frontend/src/components/ui/skeleton.tsx` primitive (it is part of the inherited system, not a new token system) — Story 1.6 will govern it, not replace it.
 
-- [ ] Task 5: Retire the legacy route tree (AC: #1, #2)
-  - [ ] In `frontend/src/App.tsx`, `/` becomes `FixtureCatalogue` and `/scenarios/:scenarioId` becomes `ScenarioWorkspace`. **Remove** the legacy `Home` index, the `ScenarioLayout` wrapper with its three legacy tabs, and the `runs` / `runs/:runId` children. `RootLayout`, `AppBar`, `RequireSession`, `/signin`, and the `RootErrorBoundary` wiring stay exactly as they are.
-  - [ ] Delete the now-unreachable legacy **route** components and their co-located tests: `routes/Home.tsx`, `routes/Editor.tsx(+.test)`, `routes/ScenarioLayout.tsx`, `routes/RunHistory.tsx(+.test)`, `routes/ResultsView.tsx(+.test)`. Their only purpose was routing; leaving them is dead code a future story could re-mount by accident, and they render “New Scenario”, “Run Scenario”, and constraint-mutation controls that FR22 and Story 1.9's mutation-path audit forbid on a governed surface.
-  - [ ] **Expect the frontend test count to drop** (currently 250 passing) as those route tests are removed. That is the intended outcome, not a regression — say so in the completion notes with the before/after numbers.
-  - [ ] **Leave `frontend/src/components/{editor,runs,results,scenarios}/**` and their hooks in place.** They become orphaned, their tests keep passing, and a full legacy sweep is a bigger cleanup than this story owns. Add one entry to `_bmad-output/implementation-artifacts/deferred-work.md` recording the orphaned legacy component/hook tree so Story 1.9's audit and a later cleanup have the list.
-  - [ ] Rewrite `frontend/src/routes/router.test.tsx` against the new tree, keeping its two existing invariants intact: an unauthenticated deep link redirects to `/signin` with the `return_to` query, and a transient session-check error does **not** bounce an authenticated user off a protected route.
-  - [ ] **Do not touch the backend legacy routers** (`/scenarios`, `/runs`, `/constraints`) or `services/`, `store/`, `llm/`. They stay offline exactly as they are (AD-25). Story 1.2's dev notes are still in force: don't "repair" legacy screens.
+- [x] Task 5: Retire the legacy route tree (AC: #1, #2)
+  - [x] In `frontend/src/App.tsx`, `/` becomes `FixtureCatalogue` and `/scenarios/:scenarioId` becomes `ScenarioWorkspace`. **Remove** the legacy `Home` index, the `ScenarioLayout` wrapper with its three legacy tabs, and the `runs` / `runs/:runId` children. `RootLayout`, `AppBar`, `RequireSession`, `/signin`, and the `RootErrorBoundary` wiring stay exactly as they are.
+  - [x] Delete the now-unreachable legacy **route** components and their co-located tests: `routes/Home.tsx`, `routes/Editor.tsx(+.test)`, `routes/ScenarioLayout.tsx`, `routes/RunHistory.tsx(+.test)`, `routes/ResultsView.tsx(+.test)`. Their only purpose was routing; leaving them is dead code a future story could re-mount by accident, and they render “New Scenario”, “Run Scenario”, and constraint-mutation controls that FR22 and Story 1.9's mutation-path audit forbid on a governed surface.
+  - [x] **Expect the frontend test count to drop** (currently 250 passing) as those route tests are removed. That is the intended outcome, not a regression — say so in the completion notes with the before/after numbers.
+  - [x] **Leave `frontend/src/components/{editor,runs,results,scenarios}/**` and their hooks in place.** They become orphaned, their tests keep passing, and a full legacy sweep is a bigger cleanup than this story owns. Add one entry to `_bmad-output/implementation-artifacts/deferred-work.md` recording the orphaned legacy component/hook tree so Story 1.9's audit and a later cleanup have the list.
+  - [x] Rewrite `frontend/src/routes/router.test.tsx` against the new tree, keeping its two existing invariants intact: an unauthenticated deep link redirects to `/signin` with the `return_to` query, and a transient session-check error does **not** bounce an authenticated user off a protected route.
+  - [x] **Do not touch the backend legacy routers** (`/scenarios`, `/runs`, `/constraints`) or `services/`, `store/`, `llm/`. They stay offline exactly as they are (AD-25). Story 1.2's dev notes are still in force: don't "repair" legacy screens.
 
-- [ ] Task 6: Accessibility contract for this story's surfaces (AC: #2, #3)
-  - [ ] The epic is explicit that each UI story implements its own visual/a11y contract rather than deferring it to Story 1.10. For these two surfaces that means: table `<caption>` and `<th scope>` associations; on route change, focus moves to the view heading (UX-DR27); visible focus rings; 44×44 CSS px minimum touch targets; no hover-only affordance; no meaning carried by color alone; the loading skeleton respects reduced motion.
-  - [ ] Long identifiers wrap or truncate with an accessible full value — they never force the page into horizontal scroll (UX-DR31, `DESIGN.md` Typography).
+- [x] Task 6: Accessibility contract for this story's surfaces (AC: #2, #3)
+  - [x] The epic is explicit that each UI story implements its own visual/a11y contract rather than deferring it to Story 1.10. For these two surfaces that means: table `<caption>` and `<th scope>` associations; on route change, focus moves to the view heading (UX-DR27); visible focus rings; 44×44 CSS px minimum touch targets; no hover-only affordance; no meaning carried by color alone; the loading skeleton respects reduced motion.
+  - [x] Long identifiers wrap or truncate with an accessible full value — they never force the page into horizontal scroll (UX-DR31, `DESIGN.md` Typography).
 
-- [ ] Task 7: Tests
-  - [ ] Backend — catalogue: returns every seeded fixture version for the session's site in the exact documented order, including the stable-ID tie-break; each row carries scenario ID, fixture version, and checksum.
-  - [ ] Backend — isolation (`@pytest.mark.postgres`): a Site A session sees zero Site B rows from `GET /api/v1/scenarios`, and `GET /api/v1/scenarios/{site_b_scenario_id}` returns **404 with the identical body** as a random unknown UUID. Extend the existing `backend/tests/test_postgres_integration.py` RLS proof rather than starting a parallel one; reuse `governed_postgres_engine` / `fresh_postgres_database_url` from `backend/conftest.py:79-98` (they already skip cleanly when no local PostgreSQL is up — keep a keyless, serviceless run green).
-  - [ ] Backend — no session → 401 problem details on both paths; assert the body contains no fixture name, scenario name, or site name.
-  - [ ] Backend — mutation denial: iterate `app.routes` **and** `app.openapi()` and assert no `/api/v1/scenarios*` path exposes POST/PUT/PATCH/DELETE. This is the FR22 proof at this story's boundary and the seed of Story 1.9's audit.
-  - [ ] Backend — read-only proof: after listing and opening a scenario, `scenario_version` row count, ids, and `checksum_digest` values are byte-identical (AC #1's "without changing or copying its source data").
-  - [ ] Backend — the endpoints do not block the event loop: assert the handlers are sync `def` (e.g. `not inspect.iscoroutinefunction(...)`), the cheap regression guard for the async trap above.
-  - [ ] Frontend — all five catalogue states render their specified copy; the loaded table has no button/control matching create/upload/import/edit/delete; each row is a link whose `href` is `/scenarios/{id}`.
-  - [ ] Frontend — the workspace context renders all four fields, with baseline showing “Not established” when the API returns null, and exposes a “Change scenario” link to `/`; there is no scenario-switching control.
-  - [ ] Frontend — `createMemoryRouter` deep-link tests over the real `routes` array from `@/App` (the established pattern in `router.test.tsx`): `/` mounts the catalogue, `/scenarios/:id` mounts the workspace, an unknown path still lands on `RootErrorBoundary`.
-  - [ ] Full regression before done: `uv run --frozen pytest` (backend, default `-m "not live"`), `alembic check` (must report no drift — this story adds no migration), `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
+- [x] Task 7: Tests
+  - [x] Backend — catalogue: returns every seeded fixture version for the session's site in the exact documented order, including the stable-ID tie-break; each row carries scenario ID, fixture version, and checksum.
+  - [x] Backend — isolation (`@pytest.mark.postgres`): a Site A session sees zero Site B rows from `GET /api/v1/scenarios`, and `GET /api/v1/scenarios/{site_b_scenario_id}` returns **404 with the identical body** as a random unknown UUID. Extend the existing `backend/tests/test_postgres_integration.py` RLS proof rather than starting a parallel one; reuse `governed_postgres_engine` / `fresh_postgres_database_url` from `backend/conftest.py:79-98` (they already skip cleanly when no local PostgreSQL is up — keep a keyless, serviceless run green).
+  - [x] Backend — no session → 401 problem details on both paths; assert the body contains no fixture name, scenario name, or site name.
+  - [x] Backend — mutation denial: iterate `app.routes` **and** `app.openapi()` and assert no `/api/v1/scenarios*` path exposes POST/PUT/PATCH/DELETE. This is the FR22 proof at this story's boundary and the seed of Story 1.9's audit.
+  - [x] Backend — read-only proof: after listing and opening a scenario, `scenario_version` row count, ids, and `checksum_digest` values are byte-identical (AC #1's "without changing or copying its source data").
+  - [x] Backend — the endpoints do not block the event loop: assert the handlers are sync `def` (e.g. `not inspect.iscoroutinefunction(...)`), the cheap regression guard for the async trap above.
+  - [x] Frontend — all five catalogue states render their specified copy; the loaded table has no button/control matching create/upload/import/edit/delete; each row is a link whose `href` is `/scenarios/{id}`.
+  - [x] Frontend — the workspace context renders all four fields, with baseline showing “Not established” when the API returns null, and exposes a “Change scenario” link to `/`; there is no scenario-switching control.
+  - [x] Frontend — `createMemoryRouter` deep-link tests over the real `routes` array from `@/App` (the established pattern in `router.test.tsx`): `/` mounts the catalogue, `/scenarios/:id` mounts the workspace, an unknown path still lands on `RootErrorBoundary`.
+  - [x] Full regression before done: `uv run --frozen pytest` (backend, default `-m "not live"`), `alembic check` (must report no drift — this story adds no migration), `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`.
 
 ## Dev Notes
 
@@ -145,14 +145,69 @@ so that I can deliberately choose the exact fixture and version I will inspect.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 Codex
+
+### Implementation Plan
+
+- Implement each story task in its documented order using focused failing tests, minimal production changes, refactoring, and a full regression gate before checking the task complete.
+- Keep site authority exclusively in `get_site_context`; the catalogue adapter accepts only its existing connection and relies on PostgreSQL RLS rather than request-supplied site predicates.
+- Preserve the single generated frontend contract/client path and replace only the legacy route tree explicitly owned by this story.
 
 ### Debug Log References
 
 ### Completion Notes List
 
 - Ultimate context engine analysis completed - comprehensive developer guide created
+- Task 1: Added frozen catalogue/context contracts and a connection-scoped PostgreSQL reader with server-defined ordering, deterministic latest-version resolution, null baseline state, and no site input or write path. Added 3 focused unit tests; full backend regression: 242 passed, 21 skipped, 6 deselected.
+- Task 2: Added authenticated GET-only `/api/v1/scenarios` catalogue/context endpoints with versioned site-owned response models, standard non-disclosing problem details, sync handlers, and regenerated OpenAPI types. Added 6 API contract tests; regressions: backend 248 passed / 21 skipped / 6 deselected, frontend 250 passed.
+- Task 3: Added generated-type API wrappers, exact TanStack Query keys, a route-focused catalogue surface, semantic linked table, reduced-motion skeleton, and literal loading/empty/error/cached-stale/loaded states with non-disclosing 401 routing. Added 12 focused tests; full frontend regression: 262 passed.
+- Task 4: Added the scenario workspace shell with a focused persistent context row, monospace identifiers, literal null-baseline state, explicit catalogue return, safe retry/404 states, and a bounded Scenario Data placeholder without peer tabs or switching controls. Added 5 focused tests; full frontend regression: 267 passed.
+- Task 5: Replaced the legacy Home/Editor/Runs/Results route tree with the governed catalogue/workspace pair, deleted the named route-only files/tests, preserved auth/layout/error-boundary invariants, and recorded the intentionally orphaned component/hook inventory. The full frontend suite intentionally changed from 250 tests before this story to 242 passing tests after the cutover.
+- Task 6: Enforced the surfaces' accessibility floor with focused route headings, semantic table associations, visible focus rings, 44px targets, persistent underlined link affordance, reduced-motion skeletons, and wrapped identifiers retaining their full value via `title`. Full frontend regression: 243 passed; typecheck and lint passed (four pre-existing Fast Refresh warnings).
+- Task 7: Added live PostgreSQL catalogue ordering/read-only and cross-site non-disclosure proofs to the existing integration module. Final serviced backend regression: 271 passed / 6 live-network tests deselected; frontend: 243 passed. OpenAPI mutation audit, sync-handler guard, typecheck, lint, production build, and isolated `alembic check` all passed; Alembic reported “No new upgrade operations detected.”
+- Story 1.9 audit note: `shiftmind_runtime` still retains Story 1.1's importer-only `INSERT` grant on `scenario_version`; this story adds no write call, route, OpenAPI operation, or UI control that can reach it.
 
 ### File List
 
+- _bmad-output/implementation-artifacts/1-3-choose-an-immutable-fixture.md
+- _bmad-output/implementation-artifacts/deferred-work.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- backend/adapters/postgres/scenario_catalogue.py
+- backend/api/main.py
+- backend/api/routers/scenario_catalogue.py
+- backend/api/schemas.py
+- backend/application/ports/scenario_catalogue.py
+- backend/tests/test_scenario_catalogue_adapter.py
+- backend/tests/test_scenario_catalogue_api.py
+- backend/tests/test_postgres_integration.py
+- frontend/openapi.json
+- frontend/src/api/scenarioCatalogue.test.ts
+- frontend/src/api/scenarioCatalogue.ts
+- frontend/src/api/schema.d.ts
+- frontend/src/App.tsx
+- frontend/src/components/scenarios/CreateScenarioDialog.test.tsx
+- frontend/src/components/ui/skeleton.tsx
+- frontend/src/features/fixture-catalogue/FixtureCatalogueView.test.tsx
+- frontend/src/features/fixture-catalogue/FixtureCatalogueView.tsx
+- frontend/src/features/scenario-workspace/ScenarioVersionContext.test.tsx
+- frontend/src/features/scenario-workspace/ScenarioVersionContext.tsx
+- frontend/src/hooks/useFixtureCatalogue.test.tsx
+- frontend/src/hooks/useFixtureCatalogue.ts
+- frontend/src/hooks/useScenarioContext.ts
+- frontend/src/routes/FixtureCatalogue.test.tsx
+- frontend/src/routes/FixtureCatalogue.tsx
+- frontend/src/routes/ScenarioWorkspace.test.tsx
+- frontend/src/routes/ScenarioWorkspace.tsx
+- frontend/src/routes/router.test.tsx
+- frontend/src/routes/Editor.test.tsx (deleted)
+- frontend/src/routes/Editor.tsx (deleted)
+- frontend/src/routes/Home.tsx (deleted)
+- frontend/src/routes/ResultsView.test.tsx (deleted)
+- frontend/src/routes/ResultsView.tsx (deleted)
+- frontend/src/routes/RunHistory.test.tsx (deleted)
+- frontend/src/routes/RunHistory.tsx (deleted)
+- frontend/src/routes/ScenarioLayout.tsx (deleted)
+
 ### Change Log
+
+- 2026-07-27: Implemented the governed immutable fixture catalogue, versioned read API, persistent scenario workspace context, legacy route cutover, accessibility contract, and full automated proof suite.

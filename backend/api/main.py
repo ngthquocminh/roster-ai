@@ -24,7 +24,15 @@ from starlette.responses import JSONResponse
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import get_identity_store, get_settings
 from api.problems import problem_response
-from api.routers import auth, constraints, fixtures, health, runs, scenarios
+from api.routers import (
+    auth,
+    constraints,
+    fixtures,
+    health,
+    runs,
+    scenario_catalogue,
+    scenarios,
+)
 from services import run_service
 from store import db
 
@@ -223,3 +231,4 @@ app.include_router(scenarios.router)
 app.include_router(runs.router)
 app.include_router(constraints.router)
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(scenario_catalogue.router, prefix="/api/v1")
