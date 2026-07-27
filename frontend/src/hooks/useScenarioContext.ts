@@ -9,5 +9,9 @@ export function useScenarioContext(scenarioId: string) {
     queryKey: ["scenario-context", scenarioId] as const,
     queryFn: () => getScenarioContext(scenarioId),
     enabled: Boolean(scenarioId),
+    // See useFixtureCatalogue: terminal statuses must not be retried, and the
+    // context is immutable for the life of a scenario version.
+    retry: false,
+    staleTime: Infinity,
   });
 }

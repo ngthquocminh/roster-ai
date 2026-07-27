@@ -13,8 +13,10 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Connection, Engine, create_engine as create_postgres_engine, text
 
 from adapters.postgres.identity import PostgresIdentitySessionStore
+from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from application.ports.identity import OidcProvider, create_provider as create_oidc_provider
+from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.session import IdentitySessionStore, ResolvedSession
 from engine.base import SchedulerEngine, create_engine
 from llm.base import LLMProvider, create_provider
@@ -52,6 +54,16 @@ def get_identity_store(
     settings: Settings = Depends(get_settings),
 ) -> IdentitySessionStore:
     return _identity_store(settings.database_url)
+
+
+_catalogue_reader: ScenarioCatalogueReader = PostgresScenarioCatalogueReader()
+
+
+def get_catalogue_reader() -> ScenarioCatalogueReader:
+    """The catalogue read port. A seam, like `get_identity_store`: tests
+    substitute an implementation through `dependency_overrides` rather than
+    reaching into a router's module globals."""
+    return _catalogue_reader
 
 
 @lru_cache(maxsize=8)

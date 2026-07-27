@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import {
   createMemoryRouter,
@@ -16,6 +17,25 @@ import { FixtureCatalogue } from "./FixtureCatalogue";
 const mockCatalogue =
   useFixtureCatalogue as unknown as ReturnType<typeof vi.fn>;
 
+function renderCatalogue() {
+  const router = createMemoryRouter(
+    [
+      { path: "/", Component: FixtureCatalogue },
+      { path: "/signin", element: <p>Sign-in route</p> },
+    ],
+    { initialEntries: ["/"] },
+  );
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  return { queryClient, router };
+}
+
 beforeEach(() => {
   mockCatalogue.mockReset();
 });
@@ -28,11 +48,8 @@ it("focuses the catalogue heading when the route opens", async () => {
     isPending: false,
     refetch: vi.fn(),
   });
-  const router = createMemoryRouter(
-    [{ path: "/", Component: FixtureCatalogue }],
-    { initialEntries: ["/"] },
-  );
-  render(<RouterProvider router={router} />);
+
+  renderCatalogue();
 
   await waitFor(() =>
     expect(screen.getByRole("heading", { name: "Fixture catalogue" })).toHaveFocus(),
@@ -52,17 +69,14 @@ it("routes a catalogue-query 401 to sign-in without rendering cached rows", asyn
     isPending: false,
     refetch: vi.fn(),
   });
-  const router = createMemoryRouter(
-    [
-      { path: "/", Component: FixtureCatalogue },
-      { path: "/signin", element: <p>Sign-in route</p> },
-    ],
-    { initialEntries: ["/"] },
-  );
-  render(<RouterProvider router={router} />);
+
+  const { queryClient, router } = renderCatalogue();
 
   expect(screen.queryByText("Secret fixture")).not.toBeInTheDocument();
   await screen.findByText("Sign-in route");
   expect(router.state.location.pathname).toBe("/signin");
   expect(router.state.location.state).toEqual({ from: "/" });
+  // The server rejected this session, so the cached copy RequireSession reads
+  // must go with it — otherwise Back re-enters the authenticated shell.
+  expect(queryClient.getQueryData(["auth", "session"])).toBeNull();
 });

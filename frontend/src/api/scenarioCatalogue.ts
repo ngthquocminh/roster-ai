@@ -14,9 +14,13 @@ export async function listFixtureVersions(): Promise<
 > {
   const { data, error, response } = await client.GET("/api/v1/scenarios");
   if (error) {
-    throw { status: response.status, ...error };
+    // Transport status last: ProblemDetailsV1 carries its own `status`, and a
+    // gateway-rewritten body must never decide the sign-in redirect.
+    throw { ...error, status: response.status };
   }
-  return data;
+  // A 200 with no body would otherwise resolve undefined, which TanStack
+  // reports as a query error — a success rendered as a connection failure.
+  return data ?? [];
 }
 
 export async function getScenarioContext(
@@ -27,7 +31,7 @@ export async function getScenarioContext(
     { params: { path: { scenario_id: scenarioId } } },
   );
   if (error) {
-    throw { status: response.status, ...error };
+    throw { ...error, status: response.status };
   }
   return data;
 }

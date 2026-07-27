@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import inspect
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -10,9 +10,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.auth_security import SESSION_COOKIE_NAME
-from api.deps import get_identity_store, get_settings, get_site_context
+from api.deps import (
+    get_catalogue_reader,
+    get_identity_store,
+    get_settings,
+    get_site_context,
+)
 from api.main import app
 from api.routers import scenario_catalogue
+from api.schemas import FixtureCatalogueEntryOut, ScenarioContextOut
 from application.ports.scenario_catalogue import (
     FixtureCatalogueEntry,
     ScenarioContext,
@@ -46,7 +52,7 @@ class _Reader:
 
 
 @pytest.fixture()
-def catalogue_client(tmp_path, monkeypatch):
+def catalogue_client(tmp_path):
     site_id = uuid4()
     scenario_id = uuid4()
     version_id = uuid4()
@@ -85,13 +91,21 @@ def catalogue_client(tmp_path, monkeypatch):
         maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
     )
     reader = _Reader((entry,), {scenario_id: context})
-    monkeypatch.setattr(scenario_catalogue, "_reader", reader)
+    # Restore rather than clear on teardown, and do it in a finally: a failing
+    # assertion propagates in at the yield, and a bare clear() after the with
+    # block would leave these overrides installed on the module-global app for
+    # the rest of the session.
+    previous_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_identity_store] = lambda: _IdentityStore(resolved)
     app.dependency_overrides[get_site_context] = lambda: object()
-    with TestClient(app) as client:
-        yield client, entry
-    app.dependency_overrides.clear()
+    app.dependency_overrides[get_catalogue_reader] = lambda: reader
+    try:
+        with TestClient(app) as client:
+            yield client, entry
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
 
 
 def _authenticated_headers() -> dict[str, str]:
@@ -151,12 +165,16 @@ def test_catalogue_paths_without_session_are_non_disclosing(path: str) -> None:
         response = client.get(path)
 
     assert response.status_code == 401
-    assert response.json()["code"] == "authentication_required"
-    body = response.text.lower()
-    assert "fixture a" not in body
-    assert "scenario name" not in body
-    assert "site name" not in body
-    assert "membership" not in body
+    # Assert the whole body, not the absence of a few sample phrases: an
+    # exact match is what actually proves no fixture, scenario, site, or
+    # membership field leaked into the unauthenticated response.
+    assert response.json() == {
+        "type": "https://shiftmind.app/problems/authentication_required",
+        "title": "Authentication required",
+        "status": 401,
+        "detail": "A valid application session is required.",
+        "code": "authentication_required",
+    }
 
 
 def test_unknown_scenario_is_the_standard_non_disclosing_404(
@@ -210,6 +228,24 @@ def test_catalogue_exposes_only_get_in_routes_and_openapi() -> None:
         not {method.upper() for method in operations}.intersection(unsafe)
         for operations in matching_paths.values()
     )
+
+
+@pytest.mark.parametrize(
+    ("port_type", "response_model"),
+    [
+        (FixtureCatalogueEntry, FixtureCatalogueEntryOut),
+        (ScenarioContext, ScenarioContextOut),
+    ],
+)
+def test_response_models_carry_every_port_field(port_type, response_model) -> None:
+    """A field added to a port dataclass must reach the wire. Pydantic ignores
+    unknown keys, so without this the API would quietly keep the old shape."""
+    port_fields = {field.name for field in fields(port_type)}
+    model_fields = set(response_model.model_fields)
+
+    assert port_fields <= model_fields
+    # schema_version is contributed by the contract, not the port.
+    assert model_fields - port_fields == {"schema_version"}
 
 
 def test_catalogue_handlers_are_sync_for_the_synchronous_database_engine() -> None:

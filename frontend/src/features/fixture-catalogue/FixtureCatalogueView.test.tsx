@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
@@ -19,15 +19,27 @@ const entry = {
   site_id: "33333333-3333-4333-8333-333333333333",
 };
 
+// Deliberately sorts BEFORE `entry` alphabetically while the server returns it
+// second, so any client-side re-sort (or a reversed map) changes the rendered
+// order and fails the ordering test below.
+const earlierByName = {
+  ...entry,
+  scenario_id: "44444444-4444-4444-8444-444444444444",
+  fixture_id: "fixture-b",
+  scenario_name: "Alpha Fixture",
+  scenario_version_id: "55555555-5555-4555-8555-555555555555",
+  fixture_version: "v2",
+  imported_at: "2026-07-25T11:00:00Z",
+};
+
 function renderView(
   props: Partial<React.ComponentProps<typeof FixtureCatalogueView>> = {},
 ) {
   const onRetry = vi.fn();
-  render(
+  const utils = render(
     <MemoryRouter>
       <FixtureCatalogueView
         data={undefined}
-        error={null}
         isError={false}
         isPending={false}
         onRetry={onRetry}
@@ -35,25 +47,18 @@ function renderView(
       />
     </MemoryRouter>,
   );
-  return onRetry;
+  return { ...utils, onRetry };
 }
 
 describe("FixtureCatalogueView", () => {
   it("renders skeleton rows and the required cold-loading copy", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <FixtureCatalogueView
-          data={undefined}
-          error={null}
-          isError={false}
-          isPending
-          onRetry={vi.fn()}
-        />
-      </MemoryRouter>,
-    );
+    const { container } = renderView({ isPending: true });
 
     expect(screen.getByText("Loading predefined scenarios…")).toBeInTheDocument();
-    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+    // Exactly 3 rows x 4 columns. A regression collapsing the skeleton to a
+    // single bar previously passed a `> 0` assertion.
+    expect(container.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(12);
+    expect(screen.getAllByRole("columnheader")).toHaveLength(4);
   });
 
   it("renders the bounded empty state without a creation action", () => {
@@ -66,26 +71,18 @@ describe("FixtureCatalogueView", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("renders safe unavailable copy and retries without exposing diagnostics", () => {
-    const onRetry = renderView({
-      error: new Error("database password at C:\\secret"),
-      isError: true,
-    });
+  it("renders the safe unavailable copy and retries", () => {
+    const { onRetry } = renderView({ isError: true });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't load this content.",
     );
-    expect(screen.queryByText(/database password/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
   it("keeps cached rows visible with the required stale label and retry", () => {
-    renderView({
-      data: [entry],
-      error: new Error("offline"),
-      isError: true,
-    });
+    renderView({ data: [entry], isError: true });
 
     expect(
       screen.getByText("Saved catalogue — refresh unavailable"),
@@ -97,12 +94,90 @@ describe("FixtureCatalogueView", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
-  it("renders an ordered semantic table of real scenario links only", () => {
-    const { container } = render(
+  it("preserves the server-defined row order rather than sorting client-side", () => {
+    renderView({ data: [entry, earlierByName] });
+
+    const rows = within(screen.getByRole("table")).getAllByRole("row");
+    // rows[0] is the header row.
+    expect(rows).toHaveLength(3);
+    expect(within(rows[1]).getByRole("link")).toHaveTextContent("Fixture A");
+    expect(within(rows[2]).getByRole("link")).toHaveTextContent("Alpha Fixture");
+  });
+
+  it("renders one real scenario link per row", () => {
+    renderView({ data: [entry, earlierByName] });
+
+    expect(
+      screen.getAllByRole("link").map((link) => link.getAttribute("href")),
+    ).toEqual([
+      `/scenarios/${entry.scenario_id}`,
+      `/scenarios/${earlierByName.scenario_id}`,
+    ]);
+  });
+
+  it("renders a semantic table with the specified columns", () => {
+    renderView({ data: [entry] });
+
+    expect(screen.getByRole("table")).toHaveAccessibleName(
+      "Predefined scenario fixture versions",
+    );
+    expect(
+      screen.getAllByRole("columnheader").map((header) => [
+        header.textContent,
+        header.getAttribute("scope"),
+      ]),
+    ).toEqual([
+      ["Scenario name", "col"],
+      ["Scenario ID", "col"],
+      ["Fixture version", "col"],
+      ["Imported at", "col"],
+    ]);
+    expect(screen.getByText("2026-07-24 09:30")).toBeInTheDocument();
+  });
+
+  it("exposes no mutation affordance of any kind in the loaded table", () => {
+    const { container } = renderView({ data: [entry, earlierByName] });
+
+    // Enumerate what IS present rather than probing for a guessed set of
+    // labels: the previous regex matched none of the controls the story
+    // actually forbids ("New Scenario", "+", an overflow menu), so inserting
+    // one left every test green.
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(
+      screen.getAllByRole("link").map((link) => link.textContent),
+    ).toEqual(["Fixture A", "Alpha Fixture"]);
+    expect(
+      container.querySelectorAll("input, select, textarea, form"),
+    ).toHaveLength(0);
+    expect(container.querySelectorAll("[contenteditable]")).toHaveLength(0);
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expect(screen.queryAllByRole("menu")).toHaveLength(0);
+    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+  });
+
+  it("marks skeletons so animation is suppressed under reduced motion", () => {
+    const { container } = renderView({ isPending: true });
+
+    const skeletons = Array.from(
+      container.querySelectorAll('[data-slot="skeleton"]'),
+    );
+    expect(skeletons).toHaveLength(12);
+    for (const skeleton of skeletons) {
+      expect(skeleton).toHaveClass("motion-reduce:animate-none");
+    }
+  });
+
+  it("keeps the status region mounted across state changes so updates announce", () => {
+    const { container, rerender } = renderView({ isPending: true });
+
+    const region = container.querySelector('[aria-live="polite"]');
+    expect(region).not.toBeNull();
+    expect(region).toHaveAttribute("aria-busy", "true");
+
+    rerender(
       <MemoryRouter>
         <FixtureCatalogueView
           data={[entry]}
-          error={null}
           isError={false}
           isPending={false}
           onRetry={vi.fn()}
@@ -110,61 +185,8 @@ describe("FixtureCatalogueView", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("table")).toHaveAccessibleName(
-      "Predefined scenario fixture versions",
-    );
-    expect(screen.getByRole("columnheader", { name: "Scenario name" })).toHaveAttribute(
-      "scope",
-      "col",
-    );
-    expect(screen.getByRole("columnheader", { name: "Scenario ID" })).toHaveAttribute(
-      "scope",
-      "col",
-    );
-    expect(screen.getByRole("link", { name: "Fixture A" })).toHaveAttribute(
-      "href",
-      `/scenarios/${entry.scenario_id}`,
-    );
-    expect(screen.getByRole("link", { name: "Fixture A" })).toHaveClass(
-      "min-h-11",
-      "underline",
-      "focus-visible:ring-3",
-    );
-    expect(screen.getByText(entry.scenario_id)).toHaveAttribute(
-      "title",
-      entry.scenario_id,
-    );
-    expect(screen.getByText(entry.scenario_id)).toHaveClass("break-all");
-    expect(screen.getByRole("table")).toHaveClass("table-fixed");
-    expect(screen.getByRole("table").parentElement).toHaveClass(
-      "overflow-hidden",
-    );
-    expect(screen.getByText("2026-07-24 09:30")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", {
-        name: /create|upload|import|edit|delete/i,
-      }),
-    ).not.toBeInTheDocument();
-    expect(container.querySelector("[data-state='selected']")).toBeNull();
-  });
-
-  it("disables skeleton animation when reduced motion is requested", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <FixtureCatalogueView
-          data={undefined}
-          error={null}
-          isError={false}
-          isPending
-          onRetry={vi.fn()}
-        />
-      </MemoryRouter>,
-    );
-
-    for (const skeleton of Array.from(
-      container.querySelectorAll('[data-slot="skeleton"]'),
-    )) {
-      expect(skeleton).toHaveClass("motion-reduce:animate-none");
-    }
+    // Same DOM node, mutated content — a replaced region announces nothing.
+    expect(container.querySelector('[aria-live="polite"]')).toBe(region);
+    expect(region).toHaveAttribute("aria-busy", "false");
   });
 });

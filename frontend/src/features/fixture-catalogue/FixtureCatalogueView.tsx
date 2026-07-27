@@ -14,11 +14,39 @@ import { USER_ERROR_COPY } from "@/lib/errors";
 
 type FixtureCatalogueViewProps = Readonly<{
   data: FixtureCatalogueEntry[] | undefined;
-  error: unknown;
   isError: boolean;
   isPending: boolean;
   onRetry: () => void;
 }>;
+
+// Single source of truth for the column contract. The skeleton and the real
+// table previously hand-duplicated these headers and had already drifted on
+// width, so a table-fixed layout reflowed all four columns the moment data
+// arrived — exactly the shift the skeleton exists to prevent.
+const COLUMNS = [
+  { label: "Scenario name", width: "w-[28%]" },
+  { label: "Scenario ID", width: "w-[34%]" },
+  { label: "Fixture version", width: "w-[16%]" },
+  { label: "Imported at", width: "w-[22%]" },
+] as const;
+
+function CatalogueHead() {
+  return (
+    <thead className="border-b bg-muted/40">
+      <tr>
+        {COLUMNS.map((column) => (
+          <th
+            className={`${column.width} px-3 py-3 font-medium`}
+            key={column.label}
+            scope="col"
+          >
+            {column.label}
+          </th>
+        ))}
+      </tr>
+    </thead>
+  );
+}
 
 function CatalogueTable({
   entries,
@@ -31,22 +59,7 @@ function CatalogueTable({
         <caption className="sr-only">
           Predefined scenario fixture versions
         </caption>
-        <thead className="border-b bg-muted/40">
-          <tr>
-            <th className="w-[28%] px-3 py-3 font-medium" scope="col">
-              Scenario name
-            </th>
-            <th className="w-[34%] px-3 py-3 font-medium" scope="col">
-              Scenario ID
-            </th>
-            <th className="w-[16%] px-3 py-3 font-medium" scope="col">
-              Fixture version
-            </th>
-            <th className="w-[22%] px-3 py-3 font-medium" scope="col">
-              Imported at
-            </th>
-          </tr>
-        </thead>
+        <CatalogueHead />
         <tbody>
           {entries.map((entry) => (
             <tr
@@ -86,7 +99,7 @@ function CatalogueTable({
 
 function LoadingCatalogue() {
   return (
-    <div aria-busy="true" aria-live="polite">
+    <div>
       <p className="mb-3 text-sm text-muted-foreground">
         Loading predefined scenarios…
       </p>
@@ -95,22 +108,12 @@ function LoadingCatalogue() {
           <caption className="sr-only">
             Predefined scenario fixture versions
           </caption>
-          <thead className="border-b bg-muted/40">
-            <tr>
-              {["Scenario name", "Scenario ID", "Fixture version", "Imported at"].map(
-                (heading) => (
-                  <th className="px-3 py-3 font-medium" key={heading} scope="col">
-                    {heading}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
+          <CatalogueHead />
           <tbody>
             {[0, 1, 2].map((row) => (
               <tr className="border-b last:border-b-0" key={row}>
-                {[0, 1, 2, 3].map((cell) => (
-                  <td className="h-[60px] px-3 py-2" key={cell}>
+                {COLUMNS.map((column) => (
+                  <td className="h-[60px] px-3 py-2" key={column.label}>
                     <Skeleton className="h-4 w-full max-w-36" />
                   </td>
                 ))}
@@ -142,14 +145,20 @@ function UnavailableCatalogue({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-export function FixtureCatalogueView({
+function EmptyCatalogue() {
+  return (
+    <p className="text-sm text-muted-foreground">
+      No predefined scenarios are available.
+    </p>
+  );
+}
+
+function CatalogueBody({
   data,
-  error,
   isError,
   isPending,
   onRetry,
 }: FixtureCatalogueViewProps) {
-  void error;
   if (isPending) {
     return <LoadingCatalogue />;
   }
@@ -161,11 +170,11 @@ export function FixtureCatalogueView({
   if (isError) {
     return (
       <div>
-        <div
-          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2"
-          role="status"
-        >
-          <span className="text-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">
+          {/* Only the message is a live region — a control inside one gets
+              re-announced on every update and can strand focus when the
+              region's contents are swapped by the retry it triggered. */}
+          <span className="text-sm" role="status">
             Saved catalogue — refresh unavailable
           </span>
           <Button
@@ -180,19 +189,25 @@ export function FixtureCatalogueView({
         {entries.length > 0 ? (
           <CatalogueTable entries={entries} />
         ) : (
-          <p className="text-sm text-muted-foreground">
-            No predefined scenarios are available.
-          </p>
+          <EmptyCatalogue />
         )}
       </div>
     );
   }
   if (entries.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No predefined scenarios are available.
-      </p>
-    );
+    return <EmptyCatalogue />;
   }
   return <CatalogueTable entries={entries} />;
+}
+
+export function FixtureCatalogueView(props: FixtureCatalogueViewProps) {
+  // The live region wraps every state and is never unmounted. Previously
+  // aria-live was mounted with its message already inside it, and live regions
+  // announce mutations to an existing region rather than content present at
+  // insertion — so nothing was announced on load *or* on completion.
+  return (
+    <div aria-busy={props.isPending} aria-live="polite">
+      <CatalogueBody {...props} />
+    </div>
+  );
 }

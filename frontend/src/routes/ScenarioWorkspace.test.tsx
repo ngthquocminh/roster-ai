@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   createMemoryRouter,
@@ -35,10 +36,20 @@ function renderWorkspace() {
         path: "/scenarios/:scenarioId",
         Component: ScenarioWorkspace,
       },
+      { path: "/signin", element: <p>Sign in surface</p> },
+      { path: "/", element: <p>Catalogue surface</p> },
     ],
     { initialEntries: [`/scenarios/${scenarioId}`] },
   );
-  render(<RouterProvider router={router} />);
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  return { queryClient, router };
 }
 
 beforeEach(() => {
@@ -66,6 +77,58 @@ it("renders persistent context and only the literal next-surface placeholder", (
   expect(screen.queryByText("Results")).not.toBeInTheDocument();
 });
 
+it("offers no scenario-switching affordance beyond the catalogue return link", () => {
+  mockContext.mockReturnValue({
+    data: context,
+    error: null,
+    isError: false,
+    isPending: false,
+    refetch: vi.fn(),
+  });
+
+  renderWorkspace();
+
+  // Enumerate every link rather than probing for a combobox: a switcher built
+  // the way this codebase builds navigation — as <Link>s — was invisible to
+  // the previous assertion.
+  expect(
+    screen.getAllByRole("link").map((link) => [
+      link.textContent,
+      link.getAttribute("href"),
+    ]),
+  ).toEqual([["Change scenario", "/"]]);
+  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  expect(screen.queryAllByRole("button")).toHaveLength(0);
+});
+
+it("keeps the persistent context when a background refetch fails", async () => {
+  const refetch = vi.fn();
+  mockContext.mockReturnValue({
+    data: context,
+    error: { status: 503 },
+    isError: true,
+    isPending: false,
+    refetch,
+  });
+
+  renderWorkspace();
+
+  // AC #3: the context is persistent. A failed refetch over good cached data
+  // must not tear the workspace down — this previously rendered a bare alert.
+  expect(screen.getByRole("heading", { name: "Fixture A" })).toBeInTheDocument();
+  expect(screen.getByText(scenarioId)).toBeInTheDocument();
+  expect(screen.getByText("Not established")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Change scenario" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("Saved context — refresh unavailable"),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(refetch).toHaveBeenCalledOnce();
+});
+
 it("renders and focuses a terminal, non-disclosing not-found view", async () => {
   mockContext.mockReturnValue({
     data: undefined,
@@ -84,12 +147,46 @@ it("renders and focuses a terminal, non-disclosing not-found view", async () => 
     "href",
     "/",
   );
-  expect(
-    screen.getByRole("link", { name: "Return to catalogue" }),
-  ).toHaveClass("min-h-11", "focus-visible:ring-3");
 });
 
-it("renders safe retry behavior for non-404 failures", () => {
+it("focuses the terminal heading even when stale cached data is present", async () => {
+  mockContext.mockReturnValue({
+    data: context,
+    error: { status: 404 },
+    isError: true,
+    isPending: false,
+    refetch: vi.fn(),
+  });
+
+  renderWorkspace();
+
+  // A 404 is authoritative: the scenario is gone, so the terminal view wins
+  // over cached data — and must still receive focus (UX-DR27).
+  const heading = screen.getByRole("heading", { name: "Scenario not found" });
+  await waitFor(() => expect(heading).toHaveFocus());
+  expect(screen.queryByRole("heading", { name: "Fixture A" })).not.toBeInTheDocument();
+});
+
+it("treats a malformed scenario id as terminal rather than retryable", () => {
+  mockContext.mockReturnValue({
+    data: undefined,
+    error: { status: 422 },
+    isError: true,
+    isPending: false,
+    refetch: vi.fn(),
+  });
+
+  renderWorkspace();
+
+  // 422 means the id in the URL is not a UUID. Retrying re-issues a request
+  // that cannot succeed, so this must land on the terminal view.
+  expect(
+    screen.getByRole("heading", { name: "Scenario not found" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+});
+
+it("renders safe retry behavior and a way back for non-terminal failures", () => {
   const refetch = vi.fn();
   mockContext.mockReturnValue({
     data: undefined,
@@ -105,6 +202,66 @@ it("renders safe retry behavior for non-404 failures", () => {
     "Couldn't load this content.",
   );
   expect(screen.queryByText("database internals")).not.toBeInTheDocument();
+  // Without this the generic error state was a navigational dead end.
+  expect(screen.getByRole("link", { name: "Return to catalogue" })).toHaveAttribute(
+    "href",
+    "/",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(refetch).toHaveBeenCalledOnce();
+});
+
+it("redirects to sign-in on 401 and clears the cached session", async () => {
+  mockContext.mockReturnValue({
+    data: undefined,
+    error: { status: 401 },
+    isError: true,
+    isPending: false,
+    refetch: vi.fn(),
+  });
+
+  const { queryClient } = renderWorkspace();
+
+  await waitFor(() =>
+    expect(screen.getByText("Sign in surface")).toBeInTheDocument(),
+  );
+  // Navigating away is not enough: RequireSession reads this cache, so a
+  // stale truthy session would let Back re-enter the authenticated shell.
+  expect(queryClient.getQueryData(["auth", "session"])).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Fixture A" })).not.toBeInTheDocument();
+});
+
+it("moves focus only once across the loading to loaded transition", async () => {
+  const focused: string[] = [];
+  document.addEventListener("focusin", (event) => {
+    const target = event.target as HTMLElement;
+    focused.push(`${target.tagName}:${target.textContent ?? ""}`);
+  });
+
+  mockContext.mockReturnValue({
+    data: undefined,
+    error: null,
+    isError: false,
+    isPending: true,
+    refetch: vi.fn(),
+  });
+  const { router } = renderWorkspace();
+
+  expect(screen.getByText("Loading scenario context…")).toBeInTheDocument();
+
+  mockContext.mockReturnValue({
+    data: context,
+    error: null,
+    isError: false,
+    isPending: false,
+    refetch: vi.fn(),
+  });
+  await router.navigate(`/scenarios/${scenarioId}`);
+
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { name: "Fixture A" })).toHaveFocus(),
+  );
+  // The transient loading heading must never take focus, or a screen reader
+  // is interrupted mid-announcement when the real heading arrives.
+  expect(focused.filter((entry) => entry.includes("Scenario workspace"))).toEqual([]);
 });

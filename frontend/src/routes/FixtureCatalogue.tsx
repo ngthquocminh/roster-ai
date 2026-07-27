@@ -1,30 +1,21 @@
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router";
 
 import { FixtureCatalogueView } from "@/features/fixture-catalogue/FixtureCatalogueView";
 import { useFixtureCatalogue } from "@/hooks/useFixtureCatalogue";
+import { useRedirectOnUnauthorized } from "@/hooks/useRedirectOnUnauthorized";
 import { getErrorStatus } from "@/lib/errors";
 
 
 export function FixtureCatalogue() {
   const query = useFixtureCatalogue();
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const location = useLocation();
-  const navigate = useNavigate();
   const errorStatus = getErrorStatus(query.error);
+
+  useRedirectOnUnauthorized(errorStatus);
 
   useEffect(() => {
     headingRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    if (errorStatus === 401) {
-      void navigate("/signin", {
-        replace: true,
-        state: { from: location.pathname + location.search },
-      });
-    }
-  }, [errorStatus, location.pathname, location.search, navigate]);
 
   if (errorStatus === 401) {
     return null;
@@ -41,7 +32,6 @@ export function FixtureCatalogue() {
       </h1>
       <FixtureCatalogueView
         data={query.data}
-        error={query.error}
         isError={query.isError}
         isPending={query.isPending}
         onRetry={() => {

@@ -215,12 +215,28 @@ def test_catalogue_api_is_ordered_complete_and_read_only(
             and len(entry["checksum_digest"]) == 64
             for entry in body
         )
+        # The documented resolution is ORDER BY version DESC, id DESC LIMIT 1,
+        # so the governed version of a multi-version fixture is the last one
+        # under the same ascending order the catalogue lists by.
+        expected_latest: dict[str, str] = {}
+        for row in sorted(rows_a, key=lambda r: (r.version, str(r.id))):
+            expected_latest[str(row.scenario_id)] = row.version
+        # Guard the guard: this proof is only meaningful while the fixture
+        # data actually contains a scenario with more than one version.
+        assert max(
+            sum(1 for row in rows_a if str(row.scenario_id) == scenario_id)
+            for scenario_id in expected_latest
+        ) > 1
+
         for scenario_id in {entry["scenario_id"] for entry in body}:
             detail = client.get(
                 f"/api/v1/scenarios/{scenario_id}",
                 headers={"Cookie": f"{SESSION_COOKIE_NAME}=site-a-session"},
             )
             assert detail.status_code == 200
+            assert (
+                detail.json()["fixture_version"] == expected_latest[scenario_id]
+            )
 
     with postgres_engine.connect() as connection:
         after = connection.execute(
