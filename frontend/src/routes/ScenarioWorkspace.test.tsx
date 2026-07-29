@@ -106,6 +106,7 @@ it("keeps the persistent context when a background refetch fails", async () => {
   const refetch = vi.fn();
   mockContext.mockReturnValue({
     data: context,
+    dataUpdatedAt: Date.parse("2026-07-27T14:32:09Z"),
     error: { status: 503 },
     isError: true,
     isPending: false,
@@ -122,8 +123,10 @@ it("keeps the persistent context when a background refetch fails", async () => {
   expect(
     screen.getByRole("link", { name: "Change scenario" }),
   ).toBeInTheDocument();
+  // EXPERIENCE.md:122's approved stale label, naming when the shown values
+  // were last confirmed rather than inventing new vocabulary.
   expect(
-    screen.getByText("Saved context — refresh unavailable"),
+    screen.getByText("Stale — last verified at 2026-07-27 14:32"),
   ).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(refetch).toHaveBeenCalledOnce();

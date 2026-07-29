@@ -13,9 +13,11 @@ export function useFixtureCatalogue() {
     // Match useSession: a 401 or 404 is terminal, so retrying three times with
     // backoff only delays the sign-in redirect behind ~7s of spinner.
     retry: false,
-    // Fixture versions are immutable by contract (AD-4), so refetching on every
-    // mount and window focus buys nothing and can only flip a good view into an
-    // error one.
-    staleTime: Infinity,
+    // Deliberately NO staleTime. Individual scenario_version rows are immutable
+    // (AD-4), but this *collection* is not — importing a fixture adds rows. More
+    // importantly, refetchOnMount/WindowFocus/Reconnect are all staleness-gated,
+    // so staleTime: Infinity would suppress every automatic refetch and make the
+    // cached-stale state (AC #2: isError with data still cached) unreachable in
+    // normal use. The background refetch is what produces that state.
   });
 }

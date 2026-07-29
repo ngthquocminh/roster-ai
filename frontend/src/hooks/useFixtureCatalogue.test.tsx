@@ -48,6 +48,26 @@ describe("catalogue query hooks", () => {
     expect(mockList).toHaveBeenCalledOnce();
   });
 
+  it("refetches over cached data on remount, keeping the stale state reachable", async () => {
+    const cached = [{ scenario_id: "scenario-a" }];
+    mockList.mockResolvedValueOnce(cached);
+    const first = renderHook(() => useFixtureCatalogue(), { wrapper });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+
+    // A refetch that fails while a good response is still cached is the only
+    // way to reach AC #2's cached-stale branch. refetchOnMount/WindowFocus are
+    // staleness-gated, so a staleTime that never expires would suppress this
+    // refetch entirely and make that acceptance criterion unreachable in the
+    // running app while every component test still passed.
+    mockList.mockRejectedValueOnce(new Error("offline"));
+    const second = renderHook(() => useFixtureCatalogue(), { wrapper });
+
+    await waitFor(() => expect(second.result.current.isError).toBe(true));
+    expect(mockList).toHaveBeenCalledTimes(2);
+    expect(second.result.current.data).toEqual(cached);
+  });
+
   it("keys scenario context by the stable scenario id", async () => {
     const context = { scenario_id: "scenario-a" };
     mockGet.mockResolvedValueOnce(context);

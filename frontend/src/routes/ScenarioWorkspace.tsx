@@ -11,6 +11,7 @@ import { ScenarioVersionContext } from "@/features/scenario-workspace/ScenarioVe
 import { useRedirectOnUnauthorized } from "@/hooks/useRedirectOnUnauthorized";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
 import { getErrorStatus, USER_ERROR_COPY } from "@/lib/errors";
+import { formatTimestamp } from "@/lib/formatTimestamp";
 
 
 // 404 is "no such scenario, or not this site" (non-disclosing by design).
@@ -125,15 +126,15 @@ export function ScenarioWorkspace() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
       {query.isError ? (
-        <div
-          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2"
-          role="status"
-        >
-          <span className="text-sm">Saved context — refresh unavailable</span>
-        </div>
-      ) : null}
-      {query.isError ? (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">
+          {/* EXPERIENCE.md:122 Scenario Data row — the approved stale label for
+              a surface in this workspace. Only the message is a live region;
+              the control stays outside it. */}
+          <span className="text-sm" role="status">
+            Stale — last verified at {formatTimestamp(
+              new Date(query.dataUpdatedAt).toISOString(),
+            )}
+          </span>
           <Button
             className="min-h-11"
             onClick={() => {
