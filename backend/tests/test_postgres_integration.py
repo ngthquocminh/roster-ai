@@ -137,6 +137,17 @@ def catalogue_site_rows(postgres_engine):
             source_package="tests",
             source_path="a-v1.json",
         ),
+        # Double digits: under a text sort "v10" lands between "v1" and "v2"
+        # and loses the latest-version race to "v9". This row is what makes
+        # the numeric ordering key observable.
+        adapter.import_fixture(
+            site_id=site_a,
+            fixture_id=f"fixture-a-{suffix}",
+            version="v10",
+            payload={"fixture": "a", "version": 10},
+            source_package="tests",
+            source_path="a-v10.json",
+        ),
     )
     import_b = adapter.import_fixture(
         site_id=site_b,
@@ -168,6 +179,19 @@ def catalogue_site_rows(postgres_engine):
     }
 
 
+def _version_order_key(row) -> tuple[int, int, str, str]:
+    """Mirror the adapter's ordering key: digits-as-number, then raw text, then
+    the stable id. Rows carrying no digit sort last (NULLS LAST)."""
+    digits = "".join(char for char in row.version if char.isdigit())
+    return (
+        (0, int(digits)) if digits else (1, 0)
+    ) + (row.version, str(row.id))
+
+
+def _catalogue_order_key(row) -> tuple:
+    return (row.fixture_id,) + _version_order_key(row)
+
+
 @pytest.mark.postgres
 def test_catalogue_api_is_ordered_complete_and_read_only(
     postgres_engine,
@@ -195,17 +219,19 @@ def test_catalogue_api_is_ordered_complete_and_read_only(
         assert response.status_code == 200
         body = response.json()
         assert len(body) == len(rows_a)
+        # Expected order mirrors the adapter's documented key: fixture id, then
+        # the version's digits read as a number, then the raw text, then the
+        # stable id. A plain Python sort() would expect the old text ordering
+        # and put v10 ahead of v2.
         assert [
             (entry["fixture_id"], entry["fixture_version"], entry["scenario_version_id"])
             for entry in body
-        ] == sorted(
-            (
-                row.fixture_id,
-                row.version,
-                str(row.id),
-            )
-            for row in rows_a
-        )
+        ] == [
+            (row.fixture_id, row.version, str(row.id))
+            for row in sorted(rows_a, key=_catalogue_order_key)
+        ]
+        # Guard the guard: without a double-digit version this proves nothing.
+        assert "v10" in {row.version for row in rows_a}
         assert {entry["scenario_id"] for entry in body} == {
             str(row.scenario_id) for row in rows_a
         }
@@ -219,8 +245,10 @@ def test_catalogue_api_is_ordered_complete_and_read_only(
         # so the governed version of a multi-version fixture is the last one
         # under the same ascending order the catalogue lists by.
         expected_latest: dict[str, str] = {}
-        for row in sorted(rows_a, key=lambda r: (r.version, str(r.id))):
+        for row in sorted(rows_a, key=_version_order_key):
             expected_latest[str(row.scenario_id)] = row.version
+        # The multi-version fixture must resolve to v10, not v9-style text max.
+        assert "v10" in expected_latest.values()
         # Guard the guard: this proof is only meaningful while the fixture
         # data actually contains a scenario with more than one version.
         assert max(

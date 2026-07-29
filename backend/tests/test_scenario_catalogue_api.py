@@ -177,6 +177,55 @@ def test_catalogue_paths_without_session_are_non_disclosing(path: str) -> None:
     }
 
 
+def test_database_failure_stays_within_the_problem_details_contract(
+    tmp_path,
+) -> None:
+    """A PostgreSQL outage must not escape to Starlette's text/plain 500 while
+    the route advertises ProblemDetailsV1, and must disclose nothing."""
+
+    def _explode():
+        raise RuntimeError(
+            "connection to server at 'db.internal' (10.0.0.5) failed"
+        )
+
+    settings = replace(
+        default_settings(),
+        db_path=str(tmp_path / "legacy.db"),
+        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
+    )
+    resolved = ResolvedSession(
+        app_user_id=uuid4(),
+        site_id=uuid4(),
+        csrf_token_hash="a" * 64,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    previous_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_identity_store] = lambda: _IdentityStore(resolved)
+    app.dependency_overrides[get_site_context] = _explode
+    try:
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get(
+                "/api/v1/scenarios",
+                headers=_authenticated_headers(),
+            )
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous_overrides)
+
+    assert response.status_code == 500
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.json() == {
+        "type": "https://shiftmind.app/problems/internal_error",
+        "title": "Internal server error",
+        "status": 500,
+        "detail": "The request could not be completed.",
+        "code": "internal_error",
+    }
+    assert "db.internal" not in response.text
+    assert "10.0.0.5" not in response.text
+
+
 def test_unknown_scenario_is_the_standard_non_disclosing_404(
     catalogue_client,
 ) -> None:

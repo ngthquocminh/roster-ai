@@ -19,7 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import get_identity_store, get_settings
@@ -92,6 +92,34 @@ async def versioned_http_problem(request: Request, exc: HTTPException):
         title=title,
         detail=detail,
     )
+
+
+@app.exception_handler(Exception)
+async def versioned_unhandled_problem(request: Request, exc: Exception):
+    """Keep the RFC 7807 contract intact when something unplanned fails.
+
+    Without this, an unhandled error on a versioned path — a PostgreSQL outage
+    reaching `get_site_context`, a statement timeout, a revoked grant — escapes
+    to Starlette's default handler and returns `text/plain` "Internal Server
+    Error", even though every `/api/v1` route advertises `ProblemDetailsV1`.
+    Clients coded against problem details get an unparseable body at exactly the
+    moment they most need a structured one.
+
+    Renders only fixed copy: the exception may carry a connection URL, a query,
+    or a traceback, and none of that may cross the boundary (AD-3). Starlette
+    re-raises after this returns, so the ASGI server still logs the original
+    error and `TestClient` still surfaces it.
+    """
+    if request.url.path.startswith("/api/v1/"):
+        return problem_response(
+            status=500,
+            code="internal_error",
+            title="Internal server error",
+            detail="The request could not be completed.",
+        )
+    # Legacy unversioned paths keep Starlette's default shape.
+    return PlainTextResponse("Internal Server Error", status_code=500)
+
 
 # Legacy SQLite-backed routes: gated in full (reads and writes) once Gate A's
 # flag is set. /health and /fixtures are not SQLite-backed and stay available.

@@ -3,12 +3,44 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import Connection, String, and_, literal, select
+from sqlalchemy import (
+    Connection,
+    Numeric,
+    String,
+    and_,
+    cast,
+    func,
+    literal,
+    nulls_last,
+    select,
+)
 
 from adapters.postgres.schema import scenario, scenario_version
 from application.ports.scenario_catalogue import (
     FixtureCatalogueEntry,
     ScenarioContext,
+)
+
+
+# `scenario_version.version` is a free-form String(100) with no format
+# constraint, so ordering it as text puts "v10" before "v2" — which would make
+# `get_scenario_context` publish v9 as the governed latest version of a fixture
+# that has a v10, along with v9's checksum_digest. On a provenance endpoint that
+# is a silent wrong answer, so ordering keys on the digits the string contains,
+# read as a number.
+#
+# Supported format: one integer with an optional non-numeric prefix ("v1", "2",
+# "rev-7"). Multi-part versions are ordered by their concatenated digits, which
+# is correct for "1.2" vs "1.10" but not for "1.2" vs "11" — introducing dotted
+# versions means revisiting this expression. Strings carrying no digit at all
+# yield NULL and sort last rather than raising, so the ordering stays total for
+# any input: (ordinal, raw text, stable id).
+_VERSION_ORDINAL = cast(
+    func.nullif(
+        func.regexp_replace(scenario_version.c.version, r"\D", "", "g"),
+        "",
+    ),
+    Numeric,
 )
 
 
@@ -45,6 +77,7 @@ class PostgresScenarioCatalogueReader:
             .select_from(self._scenario_version_join())
             .order_by(
                 scenario.c.fixture_id,
+                nulls_last(_VERSION_ORDINAL.asc()),
                 scenario_version.c.version,
                 scenario_version.c.id,
             )
@@ -86,6 +119,7 @@ class PostgresScenarioCatalogueReader:
             .select_from(self._scenario_version_join())
             .where(scenario.c.id == scenario_id)
             .order_by(
+                nulls_last(_VERSION_ORDINAL.desc()),
                 scenario_version.c.version.desc(),
                 scenario_version.c.id.desc(),
             )
