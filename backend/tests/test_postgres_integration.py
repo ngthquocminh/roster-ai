@@ -19,7 +19,11 @@ from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 
 from adapters.postgres.fixture_history import PostgresFixtureHistoryAdapter
-from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
+from adapters.postgres.scenario_projection import (
+    PostgresScenarioProjectionReader,
+    _horizon,
+    _normalize_demand,
+)
 from adapters.postgres.schema import (
     app_user,
     membership,
@@ -263,6 +267,86 @@ def test_nfr35_projection_initial_windows_meet_two_second_threshold(
     assert len(measurements) == 21
     assert all(item["duration_ms"] <= 2_000 for item in measurements)
     print("NFR35_MEASUREMENTS=" + json.dumps(measurements))
+
+
+@pytest.mark.postgres
+def test_nfr35_exact_evidence_targets_meet_two_second_threshold(
+    postgres_engine,
+    tmp_path,
+    capsys,
+) -> None:
+    payload = json.loads(
+        (REPO_ROOT / "data" / "sample_tiny_input_more_tm.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    horizon_start, _ = _horizon(payload)
+    demand = _normalize_demand(payload, horizon_start)
+    assert len(demand) == 1_547
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url,
+        engine=postgres_engine,
+    )
+    suffix = uuid4().hex
+    site_id = adapter.ensure_seed_site(
+        f"NFR35 Evidence Organization {suffix}",
+        f"NFR35 Evidence Site {suffix}",
+    )
+    imported = adapter.import_fixture(
+        site_id=site_id,
+        fixture_id=f"sample_tiny_input_more_tm-evidence-{suffix}",
+        version="v1",
+        payload=payload,
+        source_package="tests",
+        source_path="data/sample_tiny_input_more_tm.json",
+    )
+    with postgres_engine.connect() as connection:
+        scenario_id = connection.execute(
+            select(scenario_version.c.scenario_id).where(
+                scenario_version.c.id == imported.scenario_version_id
+            )
+        ).scalar_one()
+
+    base = f"/api/v1/scenarios/{scenario_id}/projection/demand"
+    targets = ((0, demand[0]), (1_546, demand[-1]))
+    headers = {"Cookie": f"{SESSION_COOKIE_NAME}=nfr35-session"}
+    params = {"scenario_version_id": str(imported.scenario_version_id)}
+    measurements = []
+    with _catalogue_client(
+        postgres_engine, site_id=site_id, tmp_path=tmp_path
+    ) as client:
+        for _, target in targets:
+            warmup = client.get(
+                f"{base}/{target.record_id}", headers=headers, params=params
+            )
+            assert warmup.status_code == 200
+        for run in range(1, 4):
+            for normalized_index, target in targets:
+                started = perf_counter()
+                response = client.get(
+                    f"{base}/{target.record_id}", headers=headers, params=params
+                )
+                duration_ms = round((perf_counter() - started) * 1_000, 3)
+                assert response.status_code == 200
+                assert response.json()["record_id"] == target.record_id
+                measurements.append(
+                    {
+                        "run": run,
+                        "endpoint": (
+                            "/api/v1/scenarios/{scenario_id}/projection/"
+                            f"demand/{target.record_id}"
+                        ),
+                        "normalized_index": normalized_index,
+                        "position": (
+                            "shallow" if normalized_index == 0 else "deepest"
+                        ),
+                        "duration_ms": duration_ms,
+                    }
+                )
+
+    assert len(measurements) == 6
+    assert all(item["duration_ms"] <= 2_000 for item in measurements)
+    print("NFR35_EVIDENCE_MEASUREMENTS=" + json.dumps(measurements))
 
 
 @pytest.mark.postgres

@@ -1,0 +1,45 @@
+{
+  "story": "1.5",
+  "requirement": "NFR35",
+  "measurement_date": "2026-08-05",
+  "fixture": {
+    "name": "sample_tiny_input_more_tm.json",
+    "version": "v1",
+    "team_member_count": 23,
+    "qualification_count": 46,
+    "roster_row_count": 67
+  },
+  "environment": {
+    "description": "Equivalent local developer reference environment; FastAPI TestClient with a local Docker PostgreSQL connection pool",
+    "operating_system": "Microsoft Windows NT 10.0.26200.0",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "python": "3.10.9",
+    "database": "PostgreSQL 18 in Docker Desktop",
+    "network_transit": "none; in-process ASGI TestClient"
+  },
+  "protocol": {
+    "process_state": "warm",
+    "database_pool_state": "warm",
+    "warmup_requests_discarded": 1,
+    "consecutive_runs": 3,
+    "threshold_ms": 2000,
+    "clock_boundary": "server-side request receipt to response completion",
+    "window": "exact demand targets at normalized indexes 0 and 1546; deepest target is outside the default limit=50 window"
+  },
+  "code_versions": {
+    "git_commit": "f1eab57fb55764baa42652f91f53c126c67b606a",
+    "working_tree_dirty": true,
+    "api_image": "local source tree",
+    "database_image": "postgres:18"
+  },
+  "measurements": [
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0", "normalized_index": 0, "position": "shallow", "duration_ms": 41.486},
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5", "normalized_index": 1546, "position": "deepest", "duration_ms": 42.858},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0", "normalized_index": 0, "position": "shallow", "duration_ms": 41.878},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5", "normalized_index": 1546, "position": "deepest", "duration_ms": 43.884},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0", "normalized_index": 0, "position": "shallow", "duration_ms": 42.187},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5", "normalized_index": 1546, "position": "deepest", "duration_ms": 44.344}
+  ],
+  "maximum_duration_ms": 44.344,
+  "passed": true
+}

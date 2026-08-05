@@ -1,12 +1,15 @@
 """Versioned read-only normalized scenario projection endpoints."""
 from __future__ import annotations
 
+from typing import Any, Callable, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Connection
+from starlette.responses import JSONResponse
 
 from api.deps import get_projection_reader, get_site_context
+from api.problems import problem_response
 from api.schemas import (
     AssignmentOut,
     AssignmentPageOut,
@@ -25,6 +28,14 @@ from api.schemas import (
     WorkerPageOut,
     WorkerProjectionOut,
 )
+from application.contracts.evidence_ref import (
+    AssignmentResolutionV1,
+    ConstraintResolutionV1,
+    DemandIntervalResolutionV1,
+    LockResolutionV1,
+    TaskResolutionV1,
+    WorkerResolutionV1,
+)
 from application.contracts.scenario_projection import (
     AssignmentV1,
     AvailabilityWindowV1,
@@ -37,6 +48,16 @@ from application.contracts.scenario_projection import (
     WorkerV1,
 )
 from application.ports.scenario_projection import ScenarioProjectionReader
+
+_ResolutionV1 = (
+    TaskResolutionV1
+    | WorkerResolutionV1
+    | DemandIntervalResolutionV1
+    | AssignmentResolutionV1
+    | LockResolutionV1
+    | ConstraintResolutionV1
+)
+_MappedT = TypeVar("_MappedT")
 
 
 router = APIRouter(prefix="/scenarios", tags=["scenario projection"])
@@ -332,3 +353,140 @@ def get_constraints(
         total_count=page.total_count,
         matching_count=page.matching_count,
     )
+
+
+def _resolve_or_problem(
+    resolution: _ResolutionV1 | None,
+    mapper: Callable[[Any], _MappedT],
+) -> _MappedT | JSONResponse:
+    """Map a resolve-endpoint outcome to its response, or a distinct 404 problem."""
+    if resolution is None:
+        raise HTTPException(status_code=404)
+    if resolution.outcome == "not_found":
+        return problem_response(
+            status=404,
+            code="evidence_not_found",
+            title="Evidence not found",
+            detail="The cited evidence record was not found.",
+        )
+    if resolution.outcome == "version_mismatch":
+        return problem_response(
+            status=404,
+            code="evidence_version_mismatch",
+            title="Evidence version mismatch",
+            detail=(
+                "The cited scenario version does not match the current "
+                f"scenario version {resolution.current_scenario_version_id}."
+            ),
+        )
+    if resolution.item is None:
+        raise HTTPException(status_code=500)
+    return mapper(resolution.item)
+
+
+@router.get(
+    "/{scenario_id}/projection/work-areas-and-tasks/{record_id}",
+    response_model=TaskProjectionOut,
+    responses=_PROBLEM_RESPONSES,
+)
+def resolve_task(
+    scenario_id: UUID,
+    record_id: str,
+    scenario_version_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    reader: ScenarioProjectionReader = Depends(get_projection_reader),
+) -> TaskProjectionOut | JSONResponse:
+    resolution = reader.resolve_task(
+        connection, scenario_id, scenario_version_id, record_id
+    )
+    return _resolve_or_problem(resolution, _task_out)
+
+
+@router.get(
+    "/{scenario_id}/projection/workers/{record_id}",
+    response_model=WorkerProjectionOut,
+    responses=_PROBLEM_RESPONSES,
+)
+def resolve_worker(
+    scenario_id: UUID,
+    record_id: str,
+    scenario_version_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    reader: ScenarioProjectionReader = Depends(get_projection_reader),
+) -> WorkerProjectionOut | JSONResponse:
+    resolution = reader.resolve_worker(
+        connection, scenario_id, scenario_version_id, record_id
+    )
+    return _resolve_or_problem(resolution, _worker_out)
+
+
+@router.get(
+    "/{scenario_id}/projection/demand/{record_id}",
+    response_model=DemandIntervalOut,
+    responses=_PROBLEM_RESPONSES,
+)
+def resolve_demand_interval(
+    scenario_id: UUID,
+    record_id: str,
+    scenario_version_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    reader: ScenarioProjectionReader = Depends(get_projection_reader),
+) -> DemandIntervalOut | JSONResponse:
+    resolution = reader.resolve_demand_interval(
+        connection, scenario_id, scenario_version_id, record_id
+    )
+    return _resolve_or_problem(resolution, _demand_out)
+
+
+@router.get(
+    "/{scenario_id}/projection/baseline-assignments/{record_id}",
+    response_model=AssignmentOut,
+    responses=_PROBLEM_RESPONSES,
+)
+def resolve_assignment(
+    scenario_id: UUID,
+    record_id: str,
+    scenario_version_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    reader: ScenarioProjectionReader = Depends(get_projection_reader),
+) -> AssignmentOut | JSONResponse:
+    resolution = reader.resolve_assignment(
+        connection, scenario_id, scenario_version_id, record_id
+    )
+    return _resolve_or_problem(resolution, _assignment_out)
+
+
+@router.get(
+    "/{scenario_id}/projection/locks/{record_id}",
+    response_model=LockOut,
+    responses=_PROBLEM_RESPONSES,
+)
+def resolve_lock(
+    scenario_id: UUID,
+    record_id: str,
+    scenario_version_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    reader: ScenarioProjectionReader = Depends(get_projection_reader),
+) -> LockOut | JSONResponse:
+    resolution = reader.resolve_lock(
+        connection, scenario_id, scenario_version_id, record_id
+    )
+    return _resolve_or_problem(resolution, _lock_out)
+
+
+@router.get(
+    "/{scenario_id}/projection/constraints-and-objectives/{record_id}",
+    response_model=ConstraintProjectionOut,
+    responses=_PROBLEM_RESPONSES,
+)
+def resolve_constraint(
+    scenario_id: UUID,
+    record_id: str,
+    scenario_version_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    reader: ScenarioProjectionReader = Depends(get_projection_reader),
+) -> ConstraintProjectionOut | JSONResponse:
+    resolution = reader.resolve_constraint(
+        connection, scenario_id, scenario_version_id, record_id
+    )
+    return _resolve_or_problem(resolution, _constraint_out)

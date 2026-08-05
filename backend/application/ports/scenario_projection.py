@@ -5,6 +5,14 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import UUID
 
+from application.contracts.evidence_ref import (
+    AssignmentResolutionV1,
+    ConstraintResolutionV1,
+    DemandIntervalResolutionV1,
+    LockResolutionV1,
+    TaskResolutionV1,
+    WorkerResolutionV1,
+)
 from application.contracts.scenario_projection import (
     AssignmentV1,
     ConstraintV1,
@@ -110,3 +118,51 @@ class ScenarioProjectionReader(Protocol):
     def get_constraints(
         self, connection: Any, scenario_id: UUID, cursor: int, limit: int
     ) -> ConstraintPageV1 | None: ...
+
+    def resolve_task(
+        self,
+        connection: Any,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> TaskResolutionV1 | None: ...
+
+    def resolve_worker(
+        self,
+        connection: Any,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> WorkerResolutionV1 | None: ...
+
+    def resolve_demand_interval(
+        self,
+        connection: Any,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> DemandIntervalResolutionV1 | None: ...
+
+    def resolve_assignment(
+        self,
+        connection: Any,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> AssignmentResolutionV1 | None: ...
+
+    def resolve_lock(
+        self,
+        connection: Any,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> LockResolutionV1 | None: ...
+
+    def resolve_constraint(
+        self,
+        connection: Any,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> ConstraintResolutionV1 | None: ...

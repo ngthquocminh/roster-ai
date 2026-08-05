@@ -3,13 +3,22 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Sequence, TypeVar
+from typing import Any, Callable, Sequence, TypeVar
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import Connection, Numeric, and_, cast, func, nulls_last, select
 
 from adapters.postgres.schema import scenario, scenario_version
+from application.contracts.evidence_ref import (
+    AssignmentResolutionV1,
+    ConstraintResolutionV1,
+    DemandIntervalResolutionV1,
+    LockResolutionV1,
+    ResolutionOutcomeV1,
+    TaskResolutionV1,
+    WorkerResolutionV1,
+)
 from application.contracts.scenario_projection import (
     AvailabilityWindowV1,
     ConstraintV1,
@@ -319,6 +328,25 @@ def _slice_window(
     return page, (end if end < total else None), total
 
 
+def _resolve_items(
+    items_factory: Callable[[], Sequence[T]],
+    requested_scenario_version_id: UUID,
+    actual_scenario_version_id: UUID,
+    record_id: str,
+) -> tuple[ResolutionOutcomeV1, T | None]:
+    if requested_scenario_version_id != actual_scenario_version_id:
+        return "version_mismatch", None
+    item = next(
+        (
+            candidate
+            for candidate in items_factory()
+            if candidate.record_id == record_id
+        ),
+        None,
+    )
+    return ("resolved", item) if item is not None else ("not_found", None)
+
+
 class PostgresScenarioProjectionReader:
     """Read one immutable payload through an already site-scoped connection."""
 
@@ -505,4 +533,118 @@ class PostgresScenarioProjectionReader:
             next_cursor,
             total,
             total,
+        )
+
+    def resolve_task(
+        self,
+        connection: Connection,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> TaskResolutionV1 | None:
+        row = self._projection_row(connection, scenario_id)
+        if row is None:
+            return None
+        outcome, item = _resolve_items(
+            lambda: _normalize_tasks(row.payload),
+            scenario_version_id,
+            row.scenario_version_id,
+            record_id,
+        )
+        return TaskResolutionV1(
+            outcome, row.scenario_id, row.scenario_version_id, item
+        )
+
+    def resolve_worker(
+        self,
+        connection: Connection,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> WorkerResolutionV1 | None:
+        row = self._projection_row(connection, scenario_id)
+        if row is None:
+            return None
+        outcome, item = _resolve_items(
+            lambda: _normalize_workers(row.payload, _horizon(row.payload)[0]),
+            scenario_version_id,
+            row.scenario_version_id,
+            record_id,
+        )
+        return WorkerResolutionV1(
+            outcome, row.scenario_id, row.scenario_version_id, item
+        )
+
+    def resolve_demand_interval(
+        self,
+        connection: Connection,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> DemandIntervalResolutionV1 | None:
+        row = self._projection_row(connection, scenario_id)
+        if row is None:
+            return None
+        outcome, item = _resolve_items(
+            lambda: _normalize_demand(row.payload, _horizon(row.payload)[0]),
+            scenario_version_id,
+            row.scenario_version_id,
+            record_id,
+        )
+        return DemandIntervalResolutionV1(
+            outcome, row.scenario_id, row.scenario_version_id, item
+        )
+
+    def resolve_assignment(
+        self,
+        connection: Connection,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> AssignmentResolutionV1 | None:
+        row = self._projection_row(connection, scenario_id)
+        if row is None:
+            return None
+        outcome, item = _resolve_items(
+            lambda: (), scenario_version_id, row.scenario_version_id, record_id
+        )
+        return AssignmentResolutionV1(
+            outcome, row.scenario_id, row.scenario_version_id, item
+        )
+
+    def resolve_lock(
+        self,
+        connection: Connection,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> LockResolutionV1 | None:
+        row = self._projection_row(connection, scenario_id)
+        if row is None:
+            return None
+        outcome, item = _resolve_items(
+            lambda: (), scenario_version_id, row.scenario_version_id, record_id
+        )
+        return LockResolutionV1(
+            outcome, row.scenario_id, row.scenario_version_id, item
+        )
+
+    def resolve_constraint(
+        self,
+        connection: Connection,
+        scenario_id: UUID,
+        scenario_version_id: UUID,
+        record_id: str,
+    ) -> ConstraintResolutionV1 | None:
+        row = self._projection_row(connection, scenario_id)
+        if row is None:
+            return None
+        outcome, item = _resolve_items(
+            lambda: _normalize_constraints(row.payload),
+            scenario_version_id,
+            row.scenario_version_id,
+            record_id,
+        )
+        return ConstraintResolutionV1(
+            outcome, row.scenario_id, row.scenario_version_id, item
         )

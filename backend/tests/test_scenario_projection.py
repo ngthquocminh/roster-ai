@@ -21,6 +21,14 @@ from application.contracts.scenario_projection import (
     TaskV1,
     WorkerV1,
 )
+from application.contracts.evidence_ref import (
+    AssignmentResolutionV1,
+    ConstraintResolutionV1,
+    DemandIntervalResolutionV1,
+    LockResolutionV1,
+    TaskResolutionV1,
+    WorkerResolutionV1,
+)
 from adapters.postgres.scenario_projection import (
     _horizon,
     _normalize_constraints,
@@ -48,6 +56,12 @@ from application.ports.session import ResolvedSession
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NFR35_EVIDENCE = (
     REPO_ROOT / "evidence" / "story-1.4" / "nfr35-scenario-data-load.json"
+)
+NFR35_EVIDENCE_TARGETS = (
+    REPO_ROOT
+    / "evidence"
+    / "story-1.5"
+    / "nfr35-evidence-target-resolution.json"
 )
 
 
@@ -298,14 +312,33 @@ class _ProjectionReader:
             lock_count=0,
             constraint_count=0,
         )
-        task = TaskV1("task-1", "task-1", "Pick", "Pick", "a", "A", None)
+        self.task = TaskV1(
+            "task-1", "task-1", "Pick", "Pick", "a", "A", None
+        )
+        self.worker = WorkerV1(
+            "worker-1", "worker-1", "Alex", "Full Time", "3", "EA", 38.0, (), ()
+        )
+        self.demand_item = DemandIntervalV1(
+            "outbound:0", "outbound", "task-1", "a", 0, 30, 2.0, "volume"
+        )
+        self.assignment = AssignmentV1(
+            "assignment-1", "worker-1", "task-1", None, 0, 30
+        )
+        self.lock = LockV1(
+            "lock-1", "assignment", "assignment-1", "exact", "planner"
+        )
+        self.constraint = ConstraintV1(
+            "constraint:0", "MaximumHours", "38", "number"
+        )
         meta = (self.scenario_id, self.scenario_version_id, self.site_id)
-        self.tasks = TaskPageV1(*meta, (task,), None, 1, 1)
-        self.workers = WorkerPageV1(*meta, (), None, 0, 0)
-        self.demand = DemandIntervalPageV1(*meta, (), None, 0, 0)
+        self.tasks = TaskPageV1(*meta, (self.task,), None, 1, 1)
+        self.workers = WorkerPageV1(*meta, (self.worker,), None, 1, 1)
+        self.demand = DemandIntervalPageV1(*meta, (self.demand_item,), None, 1, 1)
         self.assignments = AssignmentPageV1(*meta, (), None, 0, 0)
         self.locks = LockPageV1(*meta, (), None, 0, 0)
-        self.constraints = ConstraintPageV1(*meta, (), None, 0, 0)
+        self.constraints = ConstraintPageV1(
+            *meta, (self.constraint,), None, 1, 1
+        )
 
     def _known(self, scenario_id, value):
         return value if scenario_id == self.scenario_id else None
@@ -330,6 +363,67 @@ class _ProjectionReader:
 
     def get_constraints(self, _connection, scenario_id, cursor, limit):
         return self._known(scenario_id, self.constraints)
+
+    def _resolve(self, scenario_id, scenario_version_id, record_id, item, kind):
+        if scenario_id != self.scenario_id:
+            return None
+        outcome = "resolved"
+        resolved_item = item
+        if scenario_version_id != self.scenario_version_id:
+            outcome = "version_mismatch"
+            resolved_item = None
+        elif item is None or record_id != item.record_id:
+            outcome = "not_found"
+            resolved_item = None
+        return kind(outcome, self.scenario_id, self.scenario_version_id, resolved_item)
+
+    def resolve_task(self, _connection, scenario_id, scenario_version_id, record_id):
+        return self._resolve(
+            scenario_id, scenario_version_id, record_id, self.task, TaskResolutionV1
+        )
+
+    def resolve_worker(self, _connection, scenario_id, scenario_version_id, record_id):
+        return self._resolve(
+            scenario_id,
+            scenario_version_id,
+            record_id,
+            self.worker,
+            WorkerResolutionV1,
+        )
+
+    def resolve_demand_interval(
+        self, _connection, scenario_id, scenario_version_id, record_id
+    ):
+        return self._resolve(
+            scenario_id,
+            scenario_version_id,
+            record_id,
+            self.demand_item,
+            DemandIntervalResolutionV1,
+        )
+
+    def resolve_assignment(
+        self, _connection, scenario_id, scenario_version_id, record_id
+    ):
+        return self._resolve(
+            scenario_id, scenario_version_id, record_id, None, AssignmentResolutionV1
+        )
+
+    def resolve_lock(self, _connection, scenario_id, scenario_version_id, record_id):
+        return self._resolve(
+            scenario_id, scenario_version_id, record_id, None, LockResolutionV1
+        )
+
+    def resolve_constraint(
+        self, _connection, scenario_id, scenario_version_id, record_id
+    ):
+        return self._resolve(
+            scenario_id,
+            scenario_version_id,
+            record_id,
+            self.constraint,
+            ConstraintResolutionV1,
+        )
 
 
 @pytest.fixture()
@@ -423,13 +517,71 @@ def test_projection_unknown_scenario_is_non_disclosing_404(
     }
 
 
+def test_exact_target_routes_resolve_items_and_keep_failures_distinct(
+    projection_client,
+) -> None:
+    client, reader = projection_client
+    base = f"/api/v1/scenarios/{reader.scenario_id}/projection"
+    version = reader.scenario_version_id
+    resolved_cases = (
+        ("work-areas-and-tasks", reader.task.record_id),
+        ("workers", reader.worker.record_id),
+        ("demand", reader.demand_item.record_id),
+        ("constraints-and-objectives", reader.constraint.record_id),
+    )
+    for group, record_id in resolved_cases:
+        response = client.get(
+            f"{base}/{group}/{record_id}",
+            params={"scenario_version_id": str(version)},
+        )
+        assert response.status_code == 200
+        assert response.json()["record_id"] == record_id
+
+    missing = client.get(
+        f"{base}/work-areas-and-tasks/missing",
+        params={"scenario_version_id": str(version)},
+    )
+    mismatch = client.get(
+        f"{base}/work-areas-and-tasks/{reader.task.record_id}",
+        params={"scenario_version_id": str(uuid4())},
+    )
+    assert missing.status_code == mismatch.status_code == 404
+    assert missing.json()["code"] == "evidence_not_found"
+    assert mismatch.json()["code"] == "evidence_version_mismatch"
+
+    for group in ("baseline-assignments", "locks"):
+        response = client.get(
+            f"{base}/{group}/anything",
+            params={"scenario_version_id": str(version)},
+        )
+        assert response.status_code == 404
+        assert response.json()["code"] == "evidence_not_found"
+
+
+def test_exact_target_unauthorized_response_is_non_disclosing_and_identical(
+    projection_client,
+) -> None:
+    client, reader = projection_client
+    base = f"/api/v1/scenarios/{uuid4()}/projection/work-areas-and-tasks"
+    params = {"scenario_version_id": str(reader.scenario_version_id)}
+    real = client.get(f"{base}/{reader.task.record_id}", params=params)
+    fake = client.get(f"{base}/definitely-missing", params=params)
+
+    assert real.status_code == fake.status_code == 404
+    assert real.content == fake.content
+    body = real.text
+    assert reader.task.record_id not in body
+    assert "work-areas-and-tasks" not in body
+    assert "evidence" not in body
+
+
 def test_projection_routes_are_get_only_and_handlers_are_sync() -> None:
     projection_paths = {
         path: operations
         for path, operations in app.openapi()["paths"].items()
         if "/projection" in path
     }
-    assert len(projection_paths) == 7
+    assert len(projection_paths) == 13
     unsafe = {"POST", "PUT", "PATCH", "DELETE"}
     assert all(
         not {method.upper() for method in operations}.intersection(unsafe)
@@ -443,6 +595,12 @@ def test_projection_routes_are_get_only_and_handlers_are_sync() -> None:
         scenario_projection.get_baseline_assignments,
         scenario_projection.get_locks,
         scenario_projection.get_constraints,
+        scenario_projection.resolve_task,
+        scenario_projection.resolve_worker,
+        scenario_projection.resolve_demand_interval,
+        scenario_projection.resolve_assignment,
+        scenario_projection.resolve_lock,
+        scenario_projection.resolve_constraint,
     )
     assert all(not inspect.iscoroutinefunction(handler) for handler in handlers)
 
@@ -462,4 +620,29 @@ def test_nfr35_release_evidence_records_all_required_passing_runs() -> None:
     assert {item["run"] for item in measurements} == {1, 2, 3}
     assert len({item["endpoint"] for item in measurements}) == 7
     assert all(item["duration_ms"] <= 2_000 for item in measurements)
+    assert evidence["passed"] is True
+
+
+def test_nfr35_exact_target_evidence_records_shallow_and_deepest_runs() -> None:
+    evidence = json.loads(NFR35_EVIDENCE_TARGETS.read_text(encoding="utf-8"))
+    assert evidence["fixture"]["name"] == "sample_tiny_input_more_tm.json"
+    assert evidence["fixture"]["version"] == "v1"
+    assert evidence["protocol"]["warmup_requests_discarded"] == 1
+    assert evidence["protocol"]["consecutive_runs"] == 3
+    assert evidence["protocol"]["threshold_ms"] == 2_000
+    assert evidence["protocol"]["clock_boundary"] == (
+        "server-side request receipt to response completion"
+    )
+    measurements = evidence["measurements"]
+    assert len(measurements) == 6
+    assert {item["run"] for item in measurements} == {1, 2, 3}
+    assert {item["position"] for item in measurements} == {
+        "shallow",
+        "deepest",
+    }
+    assert {item["normalized_index"] for item in measurements} == {0, 1_546}
+    assert all(item["duration_ms"] <= 2_000 for item in measurements)
+    assert evidence["maximum_duration_ms"] == max(
+        item["duration_ms"] for item in measurements
+    )
     assert evidence["passed"] is True
