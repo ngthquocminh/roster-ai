@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 
 import pytest
@@ -18,6 +19,7 @@ from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 
 from adapters.postgres.fixture_history import PostgresFixtureHistoryAdapter
+from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from adapters.postgres.schema import (
     app_user,
     membership,
@@ -190,6 +192,236 @@ def _version_order_key(row) -> tuple[int, int, str, str]:
 
 def _catalogue_order_key(row) -> tuple:
     return (row.fixture_id,) + _version_order_key(row)
+
+
+@pytest.mark.postgres
+def test_nfr35_projection_initial_windows_meet_two_second_threshold(
+    postgres_engine,
+    tmp_path,
+    capsys,
+) -> None:
+    payload = json.loads(
+        (REPO_ROOT / "data" / "sample_tiny_input_more_tm.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url,
+        engine=postgres_engine,
+    )
+    suffix = uuid4().hex
+    site_id = adapter.ensure_seed_site(
+        f"NFR35 Organization {suffix}", f"NFR35 Site {suffix}"
+    )
+    imported = adapter.import_fixture(
+        site_id=site_id,
+        fixture_id=f"sample_tiny_input_more_tm-{suffix}",
+        version="v1",
+        payload=payload,
+        source_package="tests",
+        source_path="data/sample_tiny_input_more_tm.json",
+    )
+    with postgres_engine.connect() as connection:
+        scenario_id = connection.execute(
+            select(scenario_version.c.scenario_id).where(
+                scenario_version.c.id == imported.scenario_version_id
+            )
+        ).scalar_one()
+
+    base = f"/api/v1/scenarios/{scenario_id}/projection"
+    endpoints = (
+        base,
+        f"{base}/work-areas-and-tasks",
+        f"{base}/workers",
+        f"{base}/demand",
+        f"{base}/baseline-assignments",
+        f"{base}/locks",
+        f"{base}/constraints-and-objectives",
+    )
+    headers = {"Cookie": f"{SESSION_COOKIE_NAME}=nfr35-session"}
+    measurements = []
+    with _catalogue_client(
+        postgres_engine, site_id=site_id, tmp_path=tmp_path
+    ) as client:
+        for endpoint in endpoints:
+            warmup = client.get(endpoint, headers=headers)
+            assert warmup.status_code == 200
+        for run in range(1, 4):
+            for endpoint in endpoints:
+                started = perf_counter()
+                response = client.get(endpoint, headers=headers)
+                duration_ms = round((perf_counter() - started) * 1_000, 3)
+                assert response.status_code == 200
+                measurements.append(
+                    {
+                        "run": run,
+                        "endpoint": endpoint.replace(str(scenario_id), "{scenario_id}"),
+                        "duration_ms": duration_ms,
+                    }
+                )
+
+    assert len(measurements) == 21
+    assert all(item["duration_ms"] <= 2_000 for item in measurements)
+    print("NFR35_MEASUREMENTS=" + json.dumps(measurements))
+
+
+@pytest.mark.postgres
+def test_projection_api_is_complete_windowed_empty_group_safe_and_site_isolated(
+    postgres_engine,
+    tmp_path,
+) -> None:
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url,
+        engine=postgres_engine,
+    )
+    suffix = uuid4().hex
+    site_a = adapter.ensure_seed_site(
+        f"Projection Organization A {suffix}", f"Projection Site A {suffix}"
+    )
+    site_b = adapter.ensure_seed_site(
+        f"Projection Organization B {suffix}", f"Projection Site B {suffix}"
+    )
+    fixtures = (
+        ("sample_tiny_input.json", 10),
+        ("sample_tiny_input_more_tm.json", 22),
+    )
+    imports_a = []
+    for fixture_name, _worker_count in fixtures:
+        payload = json.loads(
+            (REPO_ROOT / "data" / fixture_name).read_text(encoding="utf-8")
+        )
+        imports_a.append(
+            adapter.import_fixture(
+                site_id=site_a,
+                fixture_id=f"{fixture_name}-{suffix}",
+                version="v1",
+                payload=payload,
+                source_package="tests",
+                source_path=f"data/{fixture_name}",
+            )
+        )
+    foreign_import = adapter.import_fixture(
+        site_id=site_b,
+        fixture_id=f"foreign-{suffix}",
+        version="v1",
+        payload=json.loads(
+            (REPO_ROOT / "data" / "sample_tiny_input.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+        source_package="tests",
+        source_path="data/sample_tiny_input.json",
+    )
+    version_ids = [
+        item.scenario_version_id for item in (*imports_a, foreign_import)
+    ]
+    with postgres_engine.connect() as connection:
+        scenario_rows = connection.execute(
+            select(
+                scenario_version.c.id,
+                scenario_version.c.scenario_id,
+            ).where(scenario_version.c.id.in_(version_ids))
+        ).all()
+    scenario_by_version = {row.id: row.scenario_id for row in scenario_rows}
+    site_a_scenarios = [
+        scenario_by_version[item.scenario_version_id] for item in imports_a
+    ]
+    foreign_scenario = scenario_by_version[foreign_import.scenario_version_id]
+
+    headers = {"Cookie": f"{SESSION_COOKIE_NAME}=projection-site-a"}
+    with _catalogue_client(
+        postgres_engine, site_id=site_a, tmp_path=tmp_path
+    ) as client:
+        for (fixture_name, worker_count), scenario_id in zip(
+            fixtures, site_a_scenarios
+        ):
+            base = f"/api/v1/scenarios/{scenario_id}/projection"
+            overview = client.get(base, headers=headers)
+            assert overview.status_code == 200
+            expected_counts = {
+                "work_area_count": 3,
+                "task_count": 6,
+                "worker_count": worker_count,
+                "demand_interval_count": 1_547,
+                "baseline_assignment_count": 0,
+                "lock_count": 0,
+                "constraint_count": 14,
+            }
+            body = overview.json()
+            assert {
+                key: body[key] for key in expected_counts
+            } == expected_counts
+
+            for group in ("baseline-assignments", "locks"):
+                empty = client.get(f"{base}/{group}", headers=headers)
+                assert empty.status_code == 200
+                assert empty.json()["items"] == []
+                assert empty.json()["total_count"] == 0
+                assert empty.json()["matching_count"] == 0
+                assert empty.json()["next_cursor"] is None
+
+        large_scenario = site_a_scenarios[1]
+        demand_path = (
+            f"/api/v1/scenarios/{large_scenario}/projection/demand"
+        )
+        cursor = 0
+        paged_ids: list[str] = []
+        observed_counts: set[tuple[int, int]] = set()
+        while True:
+            response = client.get(
+                f"{demand_path}?cursor={cursor}&limit=50", headers=headers
+            )
+            assert response.status_code == 200
+            page = response.json()
+            paged_ids.extend(item["record_id"] for item in page["items"])
+            observed_counts.add(
+                (page["total_count"], page["matching_count"])
+            )
+            next_cursor = page["next_cursor"]
+            if next_cursor is None:
+                break
+            assert next_cursor == cursor + len(page["items"])
+            cursor = next_cursor
+
+        assert observed_counts == {(1_547, 1_547)}
+        assert len(paged_ids) == 1_547
+        assert len(set(paged_ids)) == len(paged_ids)
+
+        projection_paths = (
+            "",
+            "/work-areas-and-tasks",
+            "/workers",
+            "/demand",
+            "/baseline-assignments",
+            "/locks",
+            "/constraints-and-objectives",
+        )
+        unknown_scenario = uuid4()
+        for suffix_path in projection_paths:
+            foreign = client.get(
+                f"/api/v1/scenarios/{foreign_scenario}/projection{suffix_path}",
+                headers=headers,
+            )
+            unknown = client.get(
+                f"/api/v1/scenarios/{unknown_scenario}/projection{suffix_path}",
+                headers=headers,
+            )
+            assert foreign.status_code == 404
+            assert foreign.content == unknown.content
+
+    reader = PostgresScenarioProjectionReader()
+    with postgres_engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.site_id', :site_id, true)"),
+            {"site_id": str(site_a)},
+        )
+        connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
+        full_page = reader.get_demand(
+            connection, site_a_scenarios[1], cursor=0, limit=2_000
+        )
+    assert full_page is not None
+    assert [item.record_id for item in full_page.items] == paged_ids
+    assert full_page.next_cursor is None
 
 
 @pytest.mark.postgres

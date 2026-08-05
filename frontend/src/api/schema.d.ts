@@ -290,6 +290,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/scenarios/{scenario_id}/projection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Projection */
+        get: operations["get_projection_api_v1_scenarios__scenario_id__projection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tasks */
+        get: operations["get_tasks_api_v1_scenarios__scenario_id__projection_work_areas_and_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/projection/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Workers */
+        get: operations["get_workers_api_v1_scenarios__scenario_id__projection_workers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/projection/demand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Demand */
+        get: operations["get_demand_api_v1_scenarios__scenario_id__projection_demand_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Baseline Assignments */
+        get: operations["get_baseline_assignments_api_v1_scenarios__scenario_id__projection_baseline_assignments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/projection/locks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Locks */
+        get: operations["get_locks_api_v1_scenarios__scenario_id__projection_locks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Constraints */
+        get: operations["get_constraints_api_v1_scenarios__scenario_id__projection_constraints_and_objectives_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -306,6 +425,57 @@ export interface components {
             };
             /** Parsed Constraint */
             parsed_constraint: string;
+        };
+        /** AssignmentOut */
+        AssignmentOut: {
+            /** Record Id */
+            record_id: string;
+            /** Worker Id */
+            worker_id: string;
+            /** Task Id */
+            task_id: string;
+            /** Shift Id */
+            shift_id: string | null;
+            /** Start Minute */
+            start_minute: number;
+            /** End Minute */
+            end_minute: number;
+        };
+        /** AssignmentPageOut */
+        AssignmentPageOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Group
+             * @constant
+             */
+            group: "baseline-assignments";
+            /** Items */
+            items: components["schemas"]["AssignmentOut"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
         };
         /** AuthSessionOut */
         AuthSessionOut: {
@@ -327,6 +497,54 @@ export interface components {
              */
             expires_at: string;
         };
+        /** AvailabilityWindowOut */
+        AvailabilityWindowOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "roster" | "availability";
+            /** Start Minute */
+            start_minute: number;
+            /** End Minute */
+            end_minute: number;
+        };
+        /** ConstraintPageOut */
+        ConstraintPageOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Group
+             * @constant
+             */
+            group: "constraints-and-objectives";
+            /** Items */
+            items: components["schemas"]["ConstraintProjectionOut"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
+        };
         /** ConstraintParseRequest */
         ConstraintParseRequest: {
             /** Scenario Id */
@@ -344,6 +562,78 @@ export interface components {
             clarification_needed: string | null;
             /** No Constraint Found */
             no_constraint_found: boolean;
+        };
+        /** ConstraintProjectionOut */
+        ConstraintProjectionOut: {
+            /** Record Id */
+            record_id: string;
+            /** Constraint Type */
+            constraint_type: string;
+            /** Value */
+            value: string;
+            /** Value Type */
+            value_type: string | null;
+        };
+        /** DemandIntervalOut */
+        DemandIntervalOut: {
+            /** Record Id */
+            record_id: string;
+            /**
+             * Family
+             * @enum {string}
+             */
+            family: "outbound" | "inbound" | "indirect";
+            /** Task Id */
+            task_id: string;
+            /** Area Id */
+            area_id: string | null;
+            /** Start Minute */
+            start_minute: number;
+            /** End Minute */
+            end_minute: number;
+            /** Amount */
+            amount: number;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "volume" | "headcount";
+        };
+        /** DemandIntervalPageOut */
+        DemandIntervalPageOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Group
+             * @constant
+             */
+            group: "demand";
+            /** Items */
+            items: components["schemas"]["DemandIntervalOut"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
         };
         /** FixtureCatalogueEntryOut */
         FixtureCatalogueEntryOut: {
@@ -403,6 +693,55 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** LockOut */
+        LockOut: {
+            /** Record Id */
+            record_id: string;
+            /** Target Type */
+            target_type: string;
+            /** Target Ref */
+            target_ref: string;
+            /** Scope */
+            scope: string;
+            /** Source */
+            source: string;
+        };
+        /** LockPageOut */
+        LockPageOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Group
+             * @constant
+             */
+            group: "locks";
+            /** Items */
+            items: components["schemas"]["LockOut"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
+        };
         /** OverrideOut */
         OverrideOut: {
             /** Id */
@@ -428,6 +767,13 @@ export interface components {
             detail: string;
             /** Code */
             code: string;
+        };
+        /** QualificationRefOut */
+        QualificationRefOut: {
+            /** Task Id */
+            task_id: string;
+            /** Rate */
+            rate: number;
         };
         /** RejectedConstraint */
         RejectedConstraint: {
@@ -510,6 +856,124 @@ export interface components {
             /** Created At */
             created_at: string;
         };
+        /** ScenarioOverviewOut */
+        ScenarioOverviewOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Fixture Id */
+            fixture_id: string;
+            /** Scenario Name */
+            scenario_name: string;
+            /** Fixture Version */
+            fixture_version: string;
+            /** Checksum Algorithm */
+            checksum_algorithm: string;
+            /** Checksum Schema Version */
+            checksum_schema_version: string;
+            /** Checksum Digest */
+            checksum_digest: string;
+            /**
+             * Horizon Start
+             * Format: date-time
+             */
+            horizon_start: string;
+            /** Site Timezone */
+            site_timezone: string;
+            /** Horizon Minutes */
+            horizon_minutes: number;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
+            /**
+             * Projection Generated At
+             * Format: date-time
+             */
+            projection_generated_at: string;
+            /** Work Area Count */
+            work_area_count: number;
+            /** Task Count */
+            task_count: number;
+            /** Worker Count */
+            worker_count: number;
+            /** Demand Interval Count */
+            demand_interval_count: number;
+            /** Baseline Assignment Count */
+            baseline_assignment_count: number;
+            /** Lock Count */
+            lock_count: number;
+            /** Constraint Count */
+            constraint_count: number;
+        };
+        /** TaskPageOut */
+        TaskPageOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Group
+             * @constant
+             */
+            group: "work-areas-and-tasks";
+            /** Items */
+            items: components["schemas"]["TaskProjectionOut"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
+        };
+        /** TaskProjectionOut */
+        TaskProjectionOut: {
+            /** Record Id */
+            record_id: string;
+            /** Task Id */
+            task_id: string;
+            /** Name */
+            name: string;
+            /** Function */
+            function: string;
+            /** Area Id */
+            area_id: string;
+            /** Area Name */
+            area_name: string;
+            /** Unit Type Id */
+            unit_type_id: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -522,6 +986,63 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WorkerPageOut */
+        WorkerPageOut: {
+            /**
+             * Schema Version
+             * @default v1
+             */
+            schema_version: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /**
+             * Group
+             * @constant
+             */
+            group: "workers";
+            /** Items */
+            items: components["schemas"]["WorkerProjectionOut"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
+        };
+        /** WorkerProjectionOut */
+        WorkerProjectionOut: {
+            /** Record Id */
+            record_id: string;
+            /** Contact Id */
+            contact_id: string;
+            /** Name */
+            name: string;
+            /** Employment Type */
+            employment_type: string;
+            /** Grade */
+            grade: string;
+            /** Eba */
+            eba: string;
+            /** Contracted Hours */
+            contracted_hours: number;
+            /** Qualifications */
+            qualifications: components["schemas"]["QualificationRefOut"][];
+            /** Availability Windows */
+            availability_windows: components["schemas"]["AvailabilityWindowOut"][];
         };
     };
     responses: never;
@@ -1167,6 +1688,367 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_projection_api_v1_scenarios__scenario_id__projection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioOverviewOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_tasks_api_v1_scenarios__scenario_id__projection_work_areas_and_tasks_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_workers_api_v1_scenarios__scenario_id__projection_workers_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_demand_api_v1_scenarios__scenario_id__projection_demand_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DemandIntervalPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_baseline_assignments_api_v1_scenarios__scenario_id__projection_baseline_assignments_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_locks_api_v1_scenarios__scenario_id__projection_locks_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LockPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_constraints_api_v1_scenarios__scenario_id__projection_constraints_and_objectives_get: {
+        parameters: {
+            query?: {
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                scenario_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConstraintPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
         };

@@ -14,9 +14,11 @@ from sqlalchemy import Connection, Engine, create_engine as create_postgres_engi
 
 from adapters.postgres.identity import PostgresIdentitySessionStore
 from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
+from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from application.ports.identity import OidcProvider, create_provider as create_oidc_provider
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
+from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.session import IdentitySessionStore, ResolvedSession
 from engine.base import SchedulerEngine, create_engine
 from llm.base import LLMProvider, create_provider
@@ -64,6 +66,14 @@ def get_catalogue_reader() -> ScenarioCatalogueReader:
     substitute an implementation through `dependency_overrides` rather than
     reaching into a router's module globals."""
     return _catalogue_reader
+
+
+_projection_reader: ScenarioProjectionReader = PostgresScenarioProjectionReader()
+
+
+def get_projection_reader() -> ScenarioProjectionReader:
+    """Depends-overridable normalized scenario projection read port."""
+    return _projection_reader
 
 
 @lru_cache(maxsize=8)

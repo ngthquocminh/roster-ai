@@ -1,0 +1,60 @@
+{
+  "story": "1.4",
+  "requirement": "NFR35",
+  "measurement_date": "2026-08-04",
+  "fixture": {
+    "name": "sample_tiny_input_more_tm.json",
+    "version": "v1",
+    "team_member_count": 23,
+    "qualification_count": 46,
+    "roster_row_count": 67
+  },
+  "environment": {
+    "description": "Equivalent local developer reference environment; FastAPI TestClient with one API task/worker and a local Docker PostgreSQL connection pool",
+    "operating_system": "Microsoft Windows NT 10.0.26200.0",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "python": "3.10.9",
+    "database": "PostgreSQL 18 in Docker Desktop",
+    "network_transit": "none; in-process ASGI TestClient"
+  },
+  "protocol": {
+    "process_state": "warm",
+    "database_pool_state": "warm",
+    "warmup_requests_discarded": 1,
+    "consecutive_runs": 3,
+    "threshold_ms": 2000,
+    "clock_boundary": "server-side request receipt to response completion",
+    "window": "cursor=0, default limit=50 for grouped endpoints"
+  },
+  "code_versions": {
+    "git_commit": "80ef64eb81a5ef8c121f1bf52a9354ac9c22970f",
+    "working_tree_dirty": true,
+    "api_image": "local source tree",
+    "database_image": "postgres:18"
+  },
+  "measurements": [
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection", "duration_ms": 43.954},
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks", "duration_ms": 16.734},
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers", "duration_ms": 22.993},
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand", "duration_ms": 74.224},
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments", "duration_ms": 16.167},
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks", "duration_ms": 13.991},
+    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives", "duration_ms": 13.199},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection", "duration_ms": 44.185},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks", "duration_ms": 16.346},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers", "duration_ms": 18.814},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand", "duration_ms": 44.216},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments", "duration_ms": 17.234},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks", "duration_ms": 14.709},
+    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives", "duration_ms": 17.182},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection", "duration_ms": 45.374},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks", "duration_ms": 17.923},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers", "duration_ms": 21.205},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand", "duration_ms": 43.981},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments", "duration_ms": 15.620},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks", "duration_ms": 19.302},
+    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives", "duration_ms": 17.441}
+  ],
+  "maximum_duration_ms": 74.224,
+  "passed": true
+}

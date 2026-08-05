@@ -31,6 +31,7 @@ from api.routers import (
     health,
     runs,
     scenario_catalogue,
+    scenario_projection,
     scenarios,
 )
 from services import run_service
@@ -260,3 +261,4 @@ app.include_router(runs.router)
 app.include_router(constraints.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(scenario_catalogue.router, prefix="/api/v1")
+app.include_router(scenario_projection.router, prefix="/api/v1")

@@ -50,8 +50,12 @@ def _temporary_postgres_database():
     """Yield an isolated database URL and force-drop it after the test."""
     base_url = make_url(_settings.default_settings().provisioning_database_url)
     database_name = f"rosterai_test_{uuid4().hex}"
+    # Bounded so a down/unreachable PostgreSQL fails fast and lets
+    # @pytest.mark.postgres tests skip cleanly instead of hanging.
     admin_engine = create_engine(
-        base_url.set(database="postgres"),
+        base_url.set(database="postgres").update_query_dict(
+            {"connect_timeout": "3"}
+        ),
         isolation_level="AUTOCOMMIT",
     )
     try:
