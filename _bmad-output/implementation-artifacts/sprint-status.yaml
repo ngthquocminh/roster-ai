@@ -43,6 +43,18 @@
 generated: 2026-07-24
 last_updated: 2026-08-06
 
+# NOTE (2026-08-06): Story 1-10 created and moved to ready-for-dev. Unlike 1-9 it
+# is NOT test-only — it carries two real implementation gaps found against the
+# landed 1.6-1.9 surface: (a) no global prefers-reduced-motion handling (only
+# ui/skeleton.tsx is guarded; Radix dialog/select/tooltip/tabs animate
+# unguarded), and (b) no viewport-responsive behavior in Scenario Data (one
+# `sm:` class exists in the entire features/ + routes/ tree). It also introduces
+# Playwright + axe-core as new frontend devDependencies, because 200% zoom,
+# reflow, text-spacing, and 44x44 touch targets are unprovable in jsdom. That
+# tooling decision is flagged as Open Question #1 in the story for reviewer
+# sign-off; the documented fallback is Layer-A-only with every browser check
+# recorded as deferred to Story 4.9 — never a silent jsdom-only pass.
+
 # NOTE (2026-08-06): Story 1-9 completed code review — 1 decision-needed
 # resolved (record_id kept as internal key only for work-areas-and-tasks and
 # workers groups, documented in Dev Notes), 2 patch findings fixed (deleted
@@ -88,7 +100,7 @@ development_status:
   1-7-open-the-read-only-scenario-data-workspace: done
   1-8-control-scenario-data-tables: done
   1-9-prove-viewer-parity-and-mutation-denial: done
-  1-10-prove-scenario-data-accessibility-and-responsiveness: backlog
+  1-10-prove-scenario-data-accessibility-and-responsiveness: ready-for-dev
   1-11-confirm-gate-a-readiness: backlog
   epic-1-retrospective: optional
 
