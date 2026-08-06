@@ -1,5 +1,5 @@
 /** TanStack Query ownership for direct, immutable scenario projection reads. */
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import {
   getBaselineAssignments,
@@ -9,6 +9,12 @@ import {
   getScenarioOverview,
   getWorkAreasAndTasks,
   getWorkers,
+  type AssignmentQuery,
+  type ConstraintQuery,
+  type DemandQuery,
+  type LockQuery,
+  type TaskQuery,
+  type WorkerQuery,
 } from "@/api/scenarioProjection";
 import { useRedirectOnUnauthorized } from "@/hooks/useRedirectOnUnauthorized";
 import { getErrorStatus } from "@/lib/errors";
@@ -23,12 +29,14 @@ function useProjectionQuery<T>(
   queryKey: readonly unknown[],
   queryFn: () => Promise<T>,
   scenarioId: string,
+  preservePrevious = false,
 ) {
   const query = useQuery({
     queryKey,
     queryFn,
     enabled: Boolean(scenarioId),
     retry: false,
+    placeholderData: preservePrevious ? keepPreviousData : undefined,
   });
   useRedirectOnUnauthorized(getErrorStatus(query.error));
   return query;
@@ -42,50 +50,56 @@ export function useScenarioOverview(scenarioId: string) {
   );
 }
 
-export function useWorkAreasAndTasks(scenarioId: string) {
+export function useWorkAreasAndTasks(scenarioId: string, params: TaskQuery = {}) {
   return useProjectionQuery(
-    ["scenario-projection", scenarioId, "work-areas-and-tasks"],
-    () => getWorkAreasAndTasks(scenarioId),
+    ["scenario-projection", scenarioId, "work-areas-and-tasks", params],
+    () => getWorkAreasAndTasks(scenarioId, params),
     scenarioId,
+    true,
   );
 }
 
-export function useWorkers(scenarioId: string) {
+export function useWorkers(scenarioId: string, params: WorkerQuery = {}) {
   return useProjectionQuery(
-    ["scenario-projection", scenarioId, "workers"],
-    () => getWorkers(scenarioId),
+    ["scenario-projection", scenarioId, "workers", params],
+    () => getWorkers(scenarioId, params),
     scenarioId,
+    true,
   );
 }
 
-export function useDemand(scenarioId: string) {
+export function useDemand(scenarioId: string, params: DemandQuery = {}) {
   return useProjectionQuery(
-    ["scenario-projection", scenarioId, "demand"],
-    () => getDemand(scenarioId),
+    ["scenario-projection", scenarioId, "demand", params],
+    () => getDemand(scenarioId, params),
     scenarioId,
+    true,
   );
 }
 
-export function useBaselineAssignments(scenarioId: string) {
+export function useBaselineAssignments(scenarioId: string, params: AssignmentQuery = {}) {
   return useProjectionQuery(
-    ["scenario-projection", scenarioId, "baseline-assignments"],
-    () => getBaselineAssignments(scenarioId),
+    ["scenario-projection", scenarioId, "baseline-assignments", params],
+    () => getBaselineAssignments(scenarioId, params),
     scenarioId,
+    true,
   );
 }
 
-export function useLocks(scenarioId: string) {
+export function useLocks(scenarioId: string, params: LockQuery = {}) {
   return useProjectionQuery(
-    ["scenario-projection", scenarioId, "locks"],
-    () => getLocks(scenarioId),
+    ["scenario-projection", scenarioId, "locks", params],
+    () => getLocks(scenarioId, params),
     scenarioId,
+    true,
   );
 }
 
-export function useConstraintsAndObjectives(scenarioId: string) {
+export function useConstraintsAndObjectives(scenarioId: string, params: ConstraintQuery = {}) {
   return useProjectionQuery(
-    ["scenario-projection", scenarioId, "constraints-and-objectives"],
-    () => getConstraintsAndObjectives(scenarioId),
+    ["scenario-projection", scenarioId, "constraints-and-objectives", params],
+    () => getConstraintsAndObjectives(scenarioId, params),
     scenarioId,
+    true,
   );
 }

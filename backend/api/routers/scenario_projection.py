@@ -1,7 +1,7 @@
 """Versioned read-only normalized scenario projection endpoints."""
 from __future__ import annotations
 
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, Literal, TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -47,7 +47,7 @@ from application.contracts.scenario_projection import (
     TaskV1,
     WorkerV1,
 )
-from application.ports.scenario_projection import ScenarioProjectionReader
+from application.ports.scenario_projection import GroupQueryV1, ScenarioProjectionReader
 
 _ResolutionV1 = (
     TaskResolutionV1
@@ -66,6 +66,12 @@ _PROBLEM_RESPONSES = {
     404: {"model": ProblemDetailsV1},
     422: {"model": ProblemDetailsV1},
 }
+
+
+def _present_filters(
+    *pairs: tuple[str, str | int | None],
+) -> tuple[tuple[str, str | int], ...]:
+    return tuple((name, value) for name, value in pairs if value is not None)
 
 
 def _overview_out(value: ScenarioOverviewV1) -> ScenarioOverviewOut:
@@ -202,10 +208,29 @@ def get_tasks(
     scenario_id: UUID,
     cursor: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    sort: Literal["task_id", "name", "function", "area_id", "area_name"]
+    | None = None,
+    order: Literal["asc", "desc"] = "asc",
+    task_id: str | None = None,
+    name_contains: str | None = None,
+    function: str | None = None,
+    area_id: str | None = None,
     connection: Connection = Depends(get_site_context),
     reader: ScenarioProjectionReader = Depends(get_projection_reader),
 ) -> TaskPageOut:
-    page = reader.get_tasks(connection, scenario_id, cursor, limit)
+    query = GroupQueryV1(
+        cursor,
+        limit,
+        sort,
+        order,
+        _present_filters(
+            ("task_id", task_id),
+            ("name_contains", name_contains),
+            ("function", function),
+            ("area_id", area_id),
+        ),
+    )
+    page = reader.get_tasks(connection, scenario_id, query)
     if page is None:
         raise HTTPException(status_code=404)
     return TaskPageOut(
@@ -229,10 +254,33 @@ def get_workers(
     scenario_id: UUID,
     cursor: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    sort: Literal[
+        "contact_id", "name", "employment_type", "grade", "contracted_hours"
+    ]
+    | None = None,
+    order: Literal["asc", "desc"] = "asc",
+    contact_id: str | None = None,
+    name_contains: str | None = None,
+    employment_type: str | None = None,
+    grade: str | None = None,
+    qualified_task_id: str | None = None,
     connection: Connection = Depends(get_site_context),
     reader: ScenarioProjectionReader = Depends(get_projection_reader),
 ) -> WorkerPageOut:
-    page = reader.get_workers(connection, scenario_id, cursor, limit)
+    query = GroupQueryV1(
+        cursor,
+        limit,
+        sort,
+        order,
+        _present_filters(
+            ("contact_id", contact_id),
+            ("name_contains", name_contains),
+            ("employment_type", employment_type),
+            ("grade", grade),
+            ("qualified_task_id", qualified_task_id),
+        ),
+    )
+    page = reader.get_workers(connection, scenario_id, query)
     if page is None:
         raise HTTPException(status_code=404)
     return WorkerPageOut(
@@ -256,10 +304,31 @@ def get_demand(
     scenario_id: UUID,
     cursor: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    sort: Literal["start_minute", "end_minute", "task_id", "family", "amount"]
+    | None = None,
+    order: Literal["asc", "desc"] = "asc",
+    family: Literal["outbound", "inbound", "indirect"] | None = None,
+    task_id: str | None = None,
+    area_id: str | None = None,
+    start_minute_gte: int | None = None,
+    end_minute_lte: int | None = None,
     connection: Connection = Depends(get_site_context),
     reader: ScenarioProjectionReader = Depends(get_projection_reader),
 ) -> DemandIntervalPageOut:
-    page = reader.get_demand(connection, scenario_id, cursor, limit)
+    query = GroupQueryV1(
+        cursor,
+        limit,
+        sort,
+        order,
+        _present_filters(
+            ("family", family),
+            ("task_id", task_id),
+            ("area_id", area_id),
+            ("start_minute_gte", start_minute_gte),
+            ("end_minute_lte", end_minute_lte),
+        ),
+    )
+    page = reader.get_demand(connection, scenario_id, query)
     if page is None:
         raise HTTPException(status_code=404)
     return DemandIntervalPageOut(
@@ -283,10 +352,26 @@ def get_baseline_assignments(
     scenario_id: UUID,
     cursor: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    sort: Literal["start_minute", "worker_id", "task_id"] | None = None,
+    order: Literal["asc", "desc"] = "asc",
+    worker_id: str | None = None,
+    task_id: str | None = None,
+    shift_id: str | None = None,
     connection: Connection = Depends(get_site_context),
     reader: ScenarioProjectionReader = Depends(get_projection_reader),
 ) -> AssignmentPageOut:
-    page = reader.get_baseline_assignments(connection, scenario_id, cursor, limit)
+    query = GroupQueryV1(
+        cursor,
+        limit,
+        sort,
+        order,
+        _present_filters(
+            ("worker_id", worker_id),
+            ("task_id", task_id),
+            ("shift_id", shift_id),
+        ),
+    )
+    page = reader.get_baseline_assignments(connection, scenario_id, query)
     if page is None:
         raise HTTPException(status_code=404)
     return AssignmentPageOut(
@@ -310,10 +395,28 @@ def get_locks(
     scenario_id: UUID,
     cursor: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    sort: Literal["target_type", "target_ref", "scope", "source"] | None = None,
+    order: Literal["asc", "desc"] = "asc",
+    target_type: str | None = None,
+    target_ref: str | None = None,
+    scope: str | None = None,
+    source: str | None = None,
     connection: Connection = Depends(get_site_context),
     reader: ScenarioProjectionReader = Depends(get_projection_reader),
 ) -> LockPageOut:
-    page = reader.get_locks(connection, scenario_id, cursor, limit)
+    query = GroupQueryV1(
+        cursor,
+        limit,
+        sort,
+        order,
+        _present_filters(
+            ("target_type", target_type),
+            ("target_ref", target_ref),
+            ("scope", scope),
+            ("source", source),
+        ),
+    )
+    page = reader.get_locks(connection, scenario_id, query)
     if page is None:
         raise HTTPException(status_code=404)
     return LockPageOut(
@@ -337,10 +440,24 @@ def get_constraints(
     scenario_id: UUID,
     cursor: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
+    sort: Literal["constraint_type", "value_type"] | None = None,
+    order: Literal["asc", "desc"] = "asc",
+    constraint_type: str | None = None,
+    value_type: str | None = None,
     connection: Connection = Depends(get_site_context),
     reader: ScenarioProjectionReader = Depends(get_projection_reader),
 ) -> ConstraintPageOut:
-    page = reader.get_constraints(connection, scenario_id, cursor, limit)
+    query = GroupQueryV1(
+        cursor,
+        limit,
+        sort,
+        order,
+        _present_filters(
+            ("constraint_type", constraint_type),
+            ("value_type", value_type),
+        ),
+    )
+    page = reader.get_constraints(connection, scenario_id, query)
     if page is None:
         raise HTTPException(status_code=404)
     return ConstraintPageOut(

@@ -76,7 +76,7 @@ development_status:
   1-5-resolve-exact-evidence-targets: done
   1-6-establish-shiftmind-design-tokens-and-shared-primitives: done
   1-7-open-the-read-only-scenario-data-workspace: done
-  1-8-control-scenario-data-tables: ready-for-dev
+  1-8-control-scenario-data-tables: review
   1-9-prove-viewer-parity-and-mutation-denial: ready-for-dev
   1-10-prove-scenario-data-accessibility-and-responsiveness: backlog
   1-11-confirm-gate-a-readiness: backlog

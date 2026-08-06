@@ -46,10 +46,43 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeEach(() => vi.clearAllMocks());
 
 describe("scenario projection hooks", () => {
-  it.each(cases)("loads %s directly for the selected scenario", async (_slug, hook, getter) => {
+  it.each(cases)("loads %s directly for the selected scenario", async (slug, hook, getter) => {
     vi.mocked(getter).mockResolvedValueOnce({} as never);
-    renderHook(() => hook("scenario-a"), { wrapper });
-    await waitFor(() => expect(getter).toHaveBeenCalledWith("scenario-a"));
+    if (slug === "overview") {
+      renderHook(() => hook("scenario-a"), { wrapper });
+      await waitFor(() => expect(getter).toHaveBeenCalledWith("scenario-a"));
+    } else {
+      const listHook = hook as unknown as (scenarioId: string, params: { cursor: number }) => unknown;
+      renderHook(() => listHook("scenario-a", { cursor: 5 }), { wrapper });
+      await waitFor(() => expect(getter).toHaveBeenCalledWith("scenario-a", { cursor: 5 }));
+    }
+  });
+
+  it("changes the demand query key when sort, filter, or cursor changes", async () => {
+    vi.mocked(api.getDemand).mockResolvedValue({} as never);
+    const queryClient = new QueryClient();
+    const localWrapper = ({ children }: { children: ReactNode }) => (
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      </MemoryRouter>
+    );
+    const { rerender } = renderHook(
+      ({ params }) => useDemand("scenario-a", params),
+      {
+        wrapper: localWrapper,
+        initialProps: { params: { cursor: 0, sort: "start_minute" as const, family: "outbound" as const } },
+      },
+    );
+    await waitFor(() => expect(api.getDemand).toHaveBeenCalledOnce());
+    rerender({ params: { cursor: 50, sort: "start_minute", family: "outbound" } });
+    await waitFor(() => expect(api.getDemand).toHaveBeenCalledTimes(2));
+
+    expect(queryClient.getQueryCache().getAll().map((query) => query.queryKey)).toEqual(
+      expect.arrayContaining([
+        ["scenario-projection", "scenario-a", "demand", { cursor: 0, sort: "start_minute", family: "outbound" }],
+        ["scenario-projection", "scenario-a", "demand", { cursor: 50, sort: "start_minute", family: "outbound" }],
+      ]),
+    );
   });
 
   it.each(cases)("disables %s when no scenario id exists", async (_slug, hook, getter) => {

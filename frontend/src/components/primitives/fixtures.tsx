@@ -7,6 +7,7 @@ import { EmptyState } from "./EmptyState";
 import { EvidenceHighlight } from "./EvidenceHighlight";
 import { EvidenceLink } from "./EvidenceLink";
 import { InlineAlert } from "./InlineAlert";
+import { IdentifierCopyButton } from "./IdentifierCopyButton";
 import { ReconnectBanner } from "./ReconnectBanner";
 import { StatusBadge } from "./StatusBadge";
 
@@ -18,7 +19,8 @@ export type PrimitiveFixture = Readonly<{
     | "EmptyState"
     | "ReconnectBanner"
     | "EvidenceLink"
-    | "EvidenceHighlight";
+    | "EvidenceHighlight"
+    | "IdentifierCopyButton";
   state: string;
   render: () => ReactNode;
 }>;
@@ -170,6 +172,21 @@ export const PRIMITIVE_FIXTURES: readonly PrimitiveFixture[] = [
     state: "record card",
     render: () => (
       <EvidenceHighlight>Employee EMP-102, fixture v7.</EvidenceHighlight>
+    ),
+  },
+  {
+    primitive: "IdentifierCopyButton",
+    state: "idle",
+    render: () => <IdentifierCopyButton identifierType="Task ID" value="T-104" />,
+  },
+  {
+    primitive: "IdentifierCopyButton",
+    state: "copied",
+    render: () => (
+      <div>
+        <IdentifierCopyButton identifierType="Task ID" value="T-104" />
+        <p>Copied Task ID</p>
+      </div>
     ),
   },
 ] as const;

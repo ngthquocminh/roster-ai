@@ -34,17 +34,17 @@ describe("scenario projection API", () => {
     ["baseline assignments", getBaselineAssignments, "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments"],
     ["locks", getLocks, "/api/v1/scenarios/{scenario_id}/projection/locks"],
     ["constraints", getConstraintsAndObjectives, "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives"],
-  ])("gets %s with optional paging params", async (_name, getter, path) => {
+  ])("gets %s with typed query params", async (_name, getter, path) => {
     mockGET.mockResolvedValueOnce(success);
-    await getter("scenario-a", 5, 20);
+    await getter("scenario-a", { cursor: 5, limit: 20, order: "desc" } as never);
     expect(mockGET).toHaveBeenCalledWith(path, {
-      params: { path: { scenario_id: "scenario-a" }, query: { cursor: 5, limit: 20 } },
+      params: { path: { scenario_id: "scenario-a" }, query: { cursor: 5, limit: 20, order: "desc" } },
     });
   });
 
-  it("omits undefined paging values and retains transport status on errors", async () => {
+  it("omits undefined query values and retains transport status on errors", async () => {
     mockGET.mockResolvedValueOnce({ data: undefined, error: { status: 500, code: "down" }, response: { status: 503 } });
-    await expect(getWorkers("scenario-a")).rejects.toMatchObject({ status: 503, code: "down" });
+    await expect(getWorkers("scenario-a", { cursor: undefined, name_contains: undefined })).rejects.toMatchObject({ status: 503, code: "down" });
     expect(mockGET).toHaveBeenCalledWith("/api/v1/scenarios/{scenario_id}/projection/workers", {
       params: { path: { scenario_id: "scenario-a" }, query: {} },
     });
@@ -64,7 +64,8 @@ describe("scenario projection API", () => {
       error: { code: "projection_unavailable", status: 200 },
       response: { status: 503 },
     });
-    await expect(getter("scenario-a")).rejects.toMatchObject({
+    const call = getter as unknown as (scenarioId: string, params?: object) => Promise<unknown>;
+    await expect(call("scenario-a", {})).rejects.toMatchObject({
       code: "projection_unavailable",
       status: 503,
     });

@@ -26,7 +26,7 @@ from adapters.postgres.scenario_projection import (
     _normalize_tasks,
     _normalize_workers,
 )
-from application.ports.scenario_projection import ScenarioProjectionReader
+from application.ports.scenario_projection import GroupQueryV1, ScenarioProjectionReader
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -153,7 +153,9 @@ def test_adapter_resolves_deep_demand_without_paging_or_retargeting() -> None:
     horizon_start, _ = _horizon(payload)
     demand = _normalize_demand(payload, horizon_start)
     target = demand[1_500]
-    page = reader.get_demand(connection, scenario_id, cursor=1_500, limit=50)
+    page = reader.get_demand(
+        connection, scenario_id, GroupQueryV1(cursor=1_500, limit=50)
+    )
     assert page is not None
     assert page.items[0] == target
 

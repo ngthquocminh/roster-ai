@@ -40,6 +40,7 @@ from api.deps import (
     get_site_context,
 )
 from api.main import app
+from application.ports.scenario_projection import GroupQueryV1
 from application.ports.session import ResolvedSession
 from scripts.gate_a_cutover import FixtureSpec, REPO_ROOT, run_cutover
 from services import run_service
@@ -501,7 +502,9 @@ def test_projection_api_is_complete_windowed_empty_group_safe_and_site_isolated(
         )
         connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
         full_page = reader.get_demand(
-            connection, site_a_scenarios[1], cursor=0, limit=2_000
+            connection,
+            site_a_scenarios[1],
+            GroupQueryV1(cursor=0, limit=2_000),
         )
     assert full_page is not None
     assert [item.record_id for item in full_page.items] == paged_ids

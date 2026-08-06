@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { PRIMITIVE_FIXTURES } from "./fixtures";
 
 describe("primitive visual-regression fixtures", () => {
-  it("enumerates every declared state for all seven primitives", () => {
+  it("enumerates every declared state for all eight primitives", () => {
     const statesByPrimitive = new Map<string, string[]>();
     for (const fixture of PRIMITIVE_FIXTURES) {
       statesByPrimitive.set(fixture.primitive, [
@@ -52,6 +52,7 @@ describe("primitive visual-regression fixtures", () => {
       "row",
       "record card",
     ]);
+    expect(statesByPrimitive.get("IdentifierCopyButton")).toEqual(["idle", "copied"]);
   });
 
   it("renders every fixture deterministically without providers", () => {
@@ -72,6 +73,7 @@ describe("primitive visual-regression fixtures", () => {
         "ReconnectBanner",
         "EvidenceLink",
         "EvidenceHighlight",
+        "IdentifierCopyButton",
       ]),
     );
   });

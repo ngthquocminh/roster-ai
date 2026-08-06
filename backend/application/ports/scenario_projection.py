@@ -25,6 +25,15 @@ from application.contracts.scenario_projection import (
 
 
 @dataclass(frozen=True)
+class GroupQueryV1:
+    cursor: int = 0
+    limit: int = 50
+    sort: str | None = None
+    order: str = "asc"
+    filters: tuple[tuple[str, str | int], ...] = ()
+
+
+@dataclass(frozen=True)
 class TaskPageV1:
     scenario_id: UUID
     scenario_version_id: UUID
@@ -96,27 +105,27 @@ class ScenarioProjectionReader(Protocol):
     ) -> ScenarioOverviewV1 | None: ...
 
     def get_tasks(
-        self, connection: Any, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Any, scenario_id: UUID, query: GroupQueryV1
     ) -> TaskPageV1 | None: ...
 
     def get_workers(
-        self, connection: Any, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Any, scenario_id: UUID, query: GroupQueryV1
     ) -> WorkerPageV1 | None: ...
 
     def get_demand(
-        self, connection: Any, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Any, scenario_id: UUID, query: GroupQueryV1
     ) -> DemandIntervalPageV1 | None: ...
 
     def get_baseline_assignments(
-        self, connection: Any, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Any, scenario_id: UUID, query: GroupQueryV1
     ) -> AssignmentPageV1 | None: ...
 
     def get_locks(
-        self, connection: Any, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Any, scenario_id: UUID, query: GroupQueryV1
     ) -> LockPageV1 | None: ...
 
     def get_constraints(
-        self, connection: Any, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Any, scenario_id: UUID, query: GroupQueryV1
     ) -> ConstraintPageV1 | None: ...
 
     def resolve_task(

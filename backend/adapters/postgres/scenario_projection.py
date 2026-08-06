@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Sequence, TypeVar
+from typing import Any, Callable, Mapping, Sequence, TypeVar
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -32,6 +32,7 @@ from application.ports.scenario_projection import (
     AssignmentPageV1,
     ConstraintPageV1,
     DemandIntervalPageV1,
+    GroupQueryV1,
     LockPageV1,
     TaskPageV1,
     WorkerPageV1,
@@ -43,6 +44,8 @@ from ingest.scenario_time import parse_dt, parse_time_of_day
 SITE_TIMEZONE = "Australia/Sydney"
 _SITE_ZONE = ZoneInfo(SITE_TIMEZONE)
 T = TypeVar("T")
+SortTable = Mapping[str, Callable[[Any], Any]]
+FilterTable = Mapping[str, Callable[[Any, str | int], bool]]
 
 # Keep this expression identical to scenario_catalogue.py's governed latest
 # version ordering so the catalogue and projection cannot resolve differently.
@@ -151,6 +154,27 @@ def _normalize_tasks(payload: dict[str, Any]) -> tuple[TaskV1, ...]:
     return tuple(normalized)
 
 
+def _nullable_sort(value: Any) -> tuple[int, Any]:
+    # Nulls sort last ascending and first descending.
+    return (1, "") if value is None else (0, value)
+
+
+TASK_SORTS: SortTable = {
+    "task_id": lambda item: item.task_id,
+    "name": lambda item: item.name,
+    "function": lambda item: item.function,
+    "area_id": lambda item: _nullable_sort(item.area_id),
+    "area_name": lambda item: item.area_name,
+}
+TASK_FILTERS: FilterTable = {
+    "task_id": lambda item, value: item.task_id == value,
+    "name_contains": lambda item, value: str(value).casefold()
+    in item.name.casefold(),
+    "function": lambda item, value: item.function == value,
+    "area_id": lambda item, value: item.area_id == value,
+}
+
+
 def _normalize_workers(
     payload: dict[str, Any], horizon_start: datetime
 ) -> tuple[WorkerV1, ...]:
@@ -214,6 +238,25 @@ def _normalize_workers(
             )
         )
     return tuple(normalized)
+
+
+WORKER_SORTS: SortTable = {
+    "contact_id": lambda item: item.contact_id,
+    "name": lambda item: item.name,
+    "employment_type": lambda item: item.employment_type,
+    "grade": lambda item: item.grade,
+    "contracted_hours": lambda item: item.contracted_hours,
+}
+WORKER_FILTERS: FilterTable = {
+    "contact_id": lambda item, value: item.contact_id == value,
+    "name_contains": lambda item, value: str(value).casefold()
+    in item.name.casefold(),
+    "employment_type": lambda item, value: item.employment_type == value,
+    "grade": lambda item, value: item.grade == value,
+    "qualified_task_id": lambda item, value: any(
+        qualification.task_id == value for qualification in item.qualifications
+    ),
+}
 
 
 def _normalize_demand(
@@ -301,6 +344,22 @@ def _normalize_demand(
     return tuple(normalized)
 
 
+DEMAND_SORTS: SortTable = {
+    "start_minute": lambda item: item.start_minute,
+    "end_minute": lambda item: item.end_minute,
+    "task_id": lambda item: item.task_id,
+    "family": lambda item: item.family,
+    "amount": lambda item: item.amount,
+}
+DEMAND_FILTERS: FilterTable = {
+    "family": lambda item, value: item.family == value,
+    "task_id": lambda item, value: item.task_id == value,
+    "area_id": lambda item, value: item.area_id == value,
+    "start_minute_gte": lambda item, value: item.start_minute >= value,
+    "end_minute_lte": lambda item, value: item.end_minute <= value,
+}
+
+
 def _normalize_constraints(
     payload: dict[str, Any],
 ) -> tuple[ConstraintV1, ...]:
@@ -319,6 +378,38 @@ def _normalize_constraints(
     )
 
 
+ASSIGNMENT_SORTS: SortTable = {
+    "start_minute": lambda item: item.start_minute,
+    "worker_id": lambda item: item.worker_id,
+    "task_id": lambda item: item.task_id,
+}
+ASSIGNMENT_FILTERS: FilterTable = {
+    "worker_id": lambda item, value: item.worker_id == value,
+    "task_id": lambda item, value: item.task_id == value,
+    "shift_id": lambda item, value: item.shift_id == value,
+}
+LOCK_SORTS: SortTable = {
+    "target_type": lambda item: item.target_type,
+    "target_ref": lambda item: item.target_ref,
+    "scope": lambda item: item.scope,
+    "source": lambda item: item.source,
+}
+LOCK_FILTERS: FilterTable = {
+    "target_type": lambda item, value: item.target_type == value,
+    "target_ref": lambda item, value: item.target_ref == value,
+    "scope": lambda item, value: item.scope == value,
+    "source": lambda item, value: item.source == value,
+}
+CONSTRAINT_SORTS: SortTable = {
+    "constraint_type": lambda item: item.constraint_type,
+    "value_type": lambda item: _nullable_sort(item.value_type),
+}
+CONSTRAINT_FILTERS: FilterTable = {
+    "constraint_type": lambda item, value: item.constraint_type == value,
+    "value_type": lambda item, value: item.value_type == value,
+}
+
+
 def _slice_window(
     items: Sequence[T], cursor: int, limit: int
 ) -> tuple[tuple[T, ...], int | None, int]:
@@ -326,6 +417,33 @@ def _slice_window(
     total = len(items)
     end = cursor + len(page)
     return page, (end if end < total else None), total
+
+
+def _apply_query(
+    items: Sequence[T],
+    query: GroupQueryV1,
+    sorts: SortTable,
+    filters: FilterTable,
+) -> tuple[tuple[T, ...], int | None, int, int]:
+    total_count = len(items)
+    filtered = tuple(
+        item
+        for item in items
+        if all(filters[name](item, value) for name, value in query.filters)
+    )
+    matching_count = len(filtered)
+    ordered: Sequence[T] = filtered
+    if query.sort is not None:
+        ordered = sorted(filtered, key=lambda item: item.record_id)
+        ordered = sorted(
+            ordered,
+            key=sorts[query.sort],
+            reverse=query.order == "desc",
+        )
+    page, next_cursor, _ = _slice_window(
+        ordered, query.cursor, query.limit
+    )
+    return page, next_cursor, total_count, matching_count
 
 
 def _resolve_items(
@@ -426,13 +544,13 @@ class PostgresScenarioProjectionReader:
         )
 
     def get_tasks(
-        self, connection: Connection, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Connection, scenario_id: UUID, query: GroupQueryV1
     ) -> TaskPageV1 | None:
         row = self._projection_row(connection, scenario_id)
         if row is None:
             return None
-        items, next_cursor, total = _slice_window(
-            _normalize_tasks(row.payload), cursor, limit
+        items, next_cursor, total, matching = _apply_query(
+            _normalize_tasks(row.payload), query, TASK_SORTS, TASK_FILTERS
         )
         return TaskPageV1(
             row.scenario_id,
@@ -441,18 +559,21 @@ class PostgresScenarioProjectionReader:
             items,
             next_cursor,
             total,
-            total,
+            matching,
         )
 
     def get_workers(
-        self, connection: Connection, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Connection, scenario_id: UUID, query: GroupQueryV1
     ) -> WorkerPageV1 | None:
         row = self._projection_row(connection, scenario_id)
         if row is None:
             return None
         horizon_start, _ = _horizon(row.payload)
-        items, next_cursor, total = _slice_window(
-            _normalize_workers(row.payload, horizon_start), cursor, limit
+        items, next_cursor, total, matching = _apply_query(
+            _normalize_workers(row.payload, horizon_start),
+            query,
+            WORKER_SORTS,
+            WORKER_FILTERS,
         )
         return WorkerPageV1(
             row.scenario_id,
@@ -461,18 +582,21 @@ class PostgresScenarioProjectionReader:
             items,
             next_cursor,
             total,
-            total,
+            matching,
         )
 
     def get_demand(
-        self, connection: Connection, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Connection, scenario_id: UUID, query: GroupQueryV1
     ) -> DemandIntervalPageV1 | None:
         row = self._projection_row(connection, scenario_id)
         if row is None:
             return None
         horizon_start, _ = _horizon(row.payload)
-        items, next_cursor, total = _slice_window(
-            _normalize_demand(row.payload, horizon_start), cursor, limit
+        items, next_cursor, total, matching = _apply_query(
+            _normalize_demand(row.payload, horizon_start),
+            query,
+            DEMAND_SORTS,
+            DEMAND_FILTERS,
         )
         return DemandIntervalPageV1(
             row.scenario_id,
@@ -481,49 +605,58 @@ class PostgresScenarioProjectionReader:
             items,
             next_cursor,
             total,
-            total,
+            matching,
         )
 
     def get_baseline_assignments(
-        self, connection: Connection, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Connection, scenario_id: UUID, query: GroupQueryV1
     ) -> AssignmentPageV1 | None:
         row = self._projection_row(connection, scenario_id)
         if row is None:
             return None
+        items, next_cursor, total, matching = _apply_query(
+            (), query, ASSIGNMENT_SORTS, ASSIGNMENT_FILTERS
+        )
         return AssignmentPageV1(
             row.scenario_id,
             row.scenario_version_id,
             row.site_id,
-            (),
-            None,
-            0,
-            0,
+            items,
+            next_cursor,
+            total,
+            matching,
         )
 
     def get_locks(
-        self, connection: Connection, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Connection, scenario_id: UUID, query: GroupQueryV1
     ) -> LockPageV1 | None:
         row = self._projection_row(connection, scenario_id)
         if row is None:
             return None
+        items, next_cursor, total, matching = _apply_query(
+            (), query, LOCK_SORTS, LOCK_FILTERS
+        )
         return LockPageV1(
             row.scenario_id,
             row.scenario_version_id,
             row.site_id,
-            (),
-            None,
-            0,
-            0,
+            items,
+            next_cursor,
+            total,
+            matching,
         )
 
     def get_constraints(
-        self, connection: Connection, scenario_id: UUID, cursor: int, limit: int
+        self, connection: Connection, scenario_id: UUID, query: GroupQueryV1
     ) -> ConstraintPageV1 | None:
         row = self._projection_row(connection, scenario_id)
         if row is None:
             return None
-        items, next_cursor, total = _slice_window(
-            _normalize_constraints(row.payload), cursor, limit
+        items, next_cursor, total, matching = _apply_query(
+            _normalize_constraints(row.payload),
+            query,
+            CONSTRAINT_SORTS,
+            CONSTRAINT_FILTERS,
         )
         return ConstraintPageV1(
             row.scenario_id,
@@ -532,7 +665,7 @@ class PostgresScenarioProjectionReader:
             items,
             next_cursor,
             total,
-            total,
+            matching,
         )
 
     def resolve_task(

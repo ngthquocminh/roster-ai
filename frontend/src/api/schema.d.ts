@@ -1848,6 +1848,12 @@ export interface operations {
             query?: {
                 cursor?: number;
                 limit?: number;
+                sort?: ("task_id" | "name" | "function" | "area_id" | "area_name") | null;
+                order?: "asc" | "desc";
+                task_id?: string | null;
+                name_contains?: string | null;
+                function?: string | null;
+                area_id?: string | null;
             };
             header?: never;
             path: {
@@ -1900,6 +1906,13 @@ export interface operations {
             query?: {
                 cursor?: number;
                 limit?: number;
+                sort?: ("contact_id" | "name" | "employment_type" | "grade" | "contracted_hours") | null;
+                order?: "asc" | "desc";
+                contact_id?: string | null;
+                name_contains?: string | null;
+                employment_type?: string | null;
+                grade?: string | null;
+                qualified_task_id?: string | null;
             };
             header?: never;
             path: {
@@ -1952,6 +1965,13 @@ export interface operations {
             query?: {
                 cursor?: number;
                 limit?: number;
+                sort?: ("start_minute" | "end_minute" | "task_id" | "family" | "amount") | null;
+                order?: "asc" | "desc";
+                family?: ("outbound" | "inbound" | "indirect") | null;
+                task_id?: string | null;
+                area_id?: string | null;
+                start_minute_gte?: number | null;
+                end_minute_lte?: number | null;
             };
             header?: never;
             path: {
@@ -2004,6 +2024,11 @@ export interface operations {
             query?: {
                 cursor?: number;
                 limit?: number;
+                sort?: ("start_minute" | "worker_id" | "task_id") | null;
+                order?: "asc" | "desc";
+                worker_id?: string | null;
+                task_id?: string | null;
+                shift_id?: string | null;
             };
             header?: never;
             path: {
@@ -2056,6 +2081,12 @@ export interface operations {
             query?: {
                 cursor?: number;
                 limit?: number;
+                sort?: ("target_type" | "target_ref" | "scope" | "source") | null;
+                order?: "asc" | "desc";
+                target_type?: string | null;
+                target_ref?: string | null;
+                scope?: string | null;
+                source?: string | null;
             };
             header?: never;
             path: {
@@ -2108,6 +2139,10 @@ export interface operations {
             query?: {
                 cursor?: number;
                 limit?: number;
+                sort?: ("constraint_type" | "value_type") | null;
+                order?: "asc" | "desc";
+                constraint_type?: string | null;
+                value_type?: string | null;
             };
             header?: never;
             path: {

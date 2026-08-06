@@ -45,7 +45,8 @@ export function panelTestContract({ Panel, caption, columnHeaders, data, emptyDa
       expect(container.querySelectorAll('th[scope="col"]')).toHaveLength(columnHeaders);
       expect(container.querySelector("input, select, [contenteditable='true']")).toBeNull();
       expect(container.querySelector("a, [role='button']")).toBeNull();
-      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+      const buttons = screen.queryAllByRole("button");
+      expect(buttons.every((button) => /^(Copy |Sort by |First$|Previous$|Next$|Last$)/.test(button.getAttribute("aria-label") ?? button.textContent ?? ""))).toBe(true);
     });
   });
 }

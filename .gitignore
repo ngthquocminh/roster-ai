@@ -56,8 +56,7 @@ dist/
 .claude/settings.local.json
 .claude/skills/
 
-# Codegen intermediate (frontend/src/api/schema.d.ts is the committed derivative — see 01-04-PLAN.md)
-frontend/openapi.json
+# Story 1.8 publishes the generated OpenAPI snapshot alongside schema.d.ts.
 .bmad-loop/runs/
 .bmad-loop/cache/
 .bmad-loop/policy.toml

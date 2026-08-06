@@ -30,6 +30,15 @@ from application.contracts.evidence_ref import (
     WorkerResolutionV1,
 )
 from adapters.postgres.scenario_projection import (
+    CONSTRAINT_FILTERS,
+    CONSTRAINT_SORTS,
+    DEMAND_FILTERS,
+    DEMAND_SORTS,
+    TASK_FILTERS,
+    TASK_SORTS,
+    WORKER_FILTERS,
+    WORKER_SORTS,
+    _apply_query,
     _horizon,
     _normalize_constraints,
     _normalize_demand,
@@ -46,6 +55,7 @@ from application.ports.scenario_projection import (
     AssignmentPageV1,
     ConstraintPageV1,
     DemandIntervalPageV1,
+    GroupQueryV1,
     LockPageV1,
     TaskPageV1,
     WorkerPageV1,
@@ -85,6 +95,19 @@ def test_projection_contracts_are_frozen_and_keep_transport_out() -> None:
     assert "fastapi" not in TaskV1.__module__
     assert "pydantic" not in TaskV1.__module__
     assert "sqlalchemy" not in TaskV1.__module__
+
+
+def test_group_query_contract_is_frozen_and_uses_source_order_defaults() -> None:
+    query = GroupQueryV1()
+
+    assert query.cursor == 0
+    assert query.limit == 50
+    assert query.sort is None
+    assert query.order == "asc"
+    assert query.filters == ()
+    with pytest.raises(FrozenInstanceError):
+        query.cursor = 50  # type: ignore[misc]
+    assert "fastapi" not in GroupQueryV1.__module__
 
 
 def test_projection_contracts_cover_every_normalized_group() -> None:
@@ -283,6 +306,137 @@ def test_offset_cursor_window_is_deterministic_and_bounded() -> None:
     assert last_total == total
 
 
+def test_apply_query_without_sort_preserves_source_order() -> None:
+    items = (
+        TaskV1("task-b", "task-b", "Beta", "Pick", "a", "A", None),
+        TaskV1("task-a", "task-a", "Alpha", "Pick", "a", "A", None),
+    )
+
+    page, next_cursor, total, matching = _apply_query(
+        items, GroupQueryV1(), TASK_SORTS, TASK_FILTERS
+    )
+
+    assert page == items
+    assert next_cursor is None
+    assert (total, matching) == (2, 2)
+
+
+def test_apply_query_descending_keeps_record_id_tie_break_ascending() -> None:
+    items = (
+        TaskV1("task-c", "task-c", "Gamma", "Pick", "a", "A", None),
+        TaskV1("task-b", "task-b", "Beta", "Pack", "a", "A", None),
+        TaskV1("task-a", "task-a", "Alpha", "Pick", "a", "A", None),
+    )
+
+    page, _, _, _ = _apply_query(
+        items,
+        GroupQueryV1(sort="function", order="desc"),
+        TASK_SORTS,
+        TASK_FILTERS,
+    )
+
+    assert [item.record_id for item in page] == ["task-a", "task-c", "task-b"]
+
+
+def test_apply_query_nullable_sort_places_nulls_last_asc_first_desc() -> None:
+    items = (
+        ConstraintV1("constraint:2", "hours", "2", None),
+        ConstraintV1("constraint:1", "hours", "1", "integer"),
+    )
+
+    ascending, _, _, _ = _apply_query(
+        items,
+        GroupQueryV1(sort="value_type"),
+        CONSTRAINT_SORTS,
+        CONSTRAINT_FILTERS,
+    )
+    descending, _, _, _ = _apply_query(
+        items,
+        GroupQueryV1(sort="value_type", order="desc"),
+        CONSTRAINT_SORTS,
+        CONSTRAINT_FILTERS,
+    )
+
+    assert [item.record_id for item in ascending] == ["constraint:1", "constraint:2"]
+    assert [item.record_id for item in descending] == ["constraint:2", "constraint:1"]
+
+
+def test_apply_query_supports_exact_contains_membership_and_integer_bounds() -> None:
+    tasks = (
+        TaskV1("t1", "t1", "Ambient Pick", "Pick", "a1", "Ambient", None),
+        TaskV1("t2", "t2", "Chiller Pack", "Pack", "a2", "Chiller", None),
+    )
+    task_page, _, task_total, task_matching = _apply_query(
+        tasks,
+        GroupQueryV1(filters=(("name_contains", "PICK"), ("area_id", "a1"))),
+        TASK_SORTS,
+        TASK_FILTERS,
+    )
+    assert [item.record_id for item in task_page] == ["t1"]
+    assert (task_total, task_matching) == (2, 1)
+
+    workers = (
+        WorkerV1("w1", "w1", "Alex", "Full Time", "3", "EA", 38.0, (QualificationRefV1("t1", 1.0),), ()),
+        WorkerV1("w2", "w2", "Blair", "Casual", "2", "EA", 20.0, (), ()),
+    )
+    worker_page, _, _, worker_matching = _apply_query(
+        workers,
+        GroupQueryV1(filters=(("qualified_task_id", "t1"),)),
+        WORKER_SORTS,
+        WORKER_FILTERS,
+    )
+    assert [item.record_id for item in worker_page] == ["w1"]
+    assert worker_matching == 1
+
+    demand = (
+        DemandIntervalV1("d1", "outbound", "t1", "a1", 10, 20, 1.0, "volume"),
+        DemandIntervalV1("d2", "inbound", "t1", None, 20, 30, 2.0, "volume"),
+        DemandIntervalV1("d3", "outbound", "t2", "a2", 30, 40, 3.0, "volume"),
+    )
+    demand_page, _, demand_total, demand_matching = _apply_query(
+        demand,
+        GroupQueryV1(filters=(("family", "outbound"), ("start_minute_gte", 10), ("end_minute_lte", 20))),
+        DEMAND_SORTS,
+        DEMAND_FILTERS,
+    )
+    assert [item.record_id for item in demand_page] == ["d1"]
+    assert (demand_total, demand_matching) == (3, 1)
+
+
+def test_apply_query_empty_match_keeps_total_and_filtered_pages_have_no_gaps() -> None:
+    items = tuple(
+        DemandIntervalV1(f"d{i:02}", "outbound", f"t{i % 3}", None, i % 4, i + 10, float(i), "volume")
+        for i in range(17)
+    )
+    empty, next_cursor, total, matching = _apply_query(
+        items,
+        GroupQueryV1(filters=(("task_id", "missing"),)),
+        DEMAND_SORTS,
+        DEMAND_FILTERS,
+    )
+    assert empty == ()
+    assert next_cursor is None
+    assert (total, matching) == (17, 0)
+
+    query = GroupQueryV1(limit=50, sort="start_minute", order="desc", filters=(("family", "outbound"),))
+    expected, _, _, _ = _apply_query(items, query, DEMAND_SORTS, DEMAND_FILTERS)
+    reconstructed: list[str] = []
+    cursor = 0
+    while True:
+        page, cursor_next, _, _ = _apply_query(
+            items,
+            GroupQueryV1(cursor=cursor, limit=5, sort=query.sort, order=query.order, filters=query.filters),
+            DEMAND_SORTS,
+            DEMAND_FILTERS,
+        )
+        reconstructed.extend(item.record_id for item in page)
+        if cursor_next is None:
+            break
+        cursor = cursor_next
+    assert reconstructed == [item.record_id for item in expected]
+    assert len(reconstructed) == len(set(reconstructed))
+
+
 class _ProjectionReader:
     def __init__(self) -> None:
         self.scenario_id = uuid4()
@@ -339,6 +493,7 @@ class _ProjectionReader:
         self.constraints = ConstraintPageV1(
             *meta, (self.constraint,), None, 1, 1
         )
+        self.queries: dict[str, GroupQueryV1] = {}
 
     def _known(self, scenario_id, value):
         return value if scenario_id == self.scenario_id else None
@@ -346,22 +501,28 @@ class _ProjectionReader:
     def get_overview(self, _connection, scenario_id):
         return self._known(scenario_id, self.overview)
 
-    def get_tasks(self, _connection, scenario_id, cursor, limit):
+    def get_tasks(self, _connection, scenario_id, query):
+        self.queries["work-areas-and-tasks"] = query
         return self._known(scenario_id, self.tasks)
 
-    def get_workers(self, _connection, scenario_id, cursor, limit):
+    def get_workers(self, _connection, scenario_id, query):
+        self.queries["workers"] = query
         return self._known(scenario_id, self.workers)
 
-    def get_demand(self, _connection, scenario_id, cursor, limit):
+    def get_demand(self, _connection, scenario_id, query):
+        self.queries["demand"] = query
         return self._known(scenario_id, self.demand)
 
-    def get_baseline_assignments(self, _connection, scenario_id, cursor, limit):
+    def get_baseline_assignments(self, _connection, scenario_id, query):
+        self.queries["baseline-assignments"] = query
         return self._known(scenario_id, self.assignments)
 
-    def get_locks(self, _connection, scenario_id, cursor, limit):
+    def get_locks(self, _connection, scenario_id, query):
+        self.queries["locks"] = query
         return self._known(scenario_id, self.locks)
 
-    def get_constraints(self, _connection, scenario_id, cursor, limit):
+    def get_constraints(self, _connection, scenario_id, query):
+        self.queries["constraints-and-objectives"] = query
         return self._known(scenario_id, self.constraints)
 
     def _resolve(self, scenario_id, scenario_version_id, record_id, item, kind):
@@ -485,6 +646,91 @@ def test_projection_api_publishes_overview_and_all_six_group_pages(
         assert body["scenario_id"] == str(reader.scenario_id)
         assert body["scenario_version_id"] == str(reader.scenario_version_id)
         assert body["site_id"] == str(reader.site_id)
+
+
+@pytest.mark.parametrize(
+    ("group", "params", "expected"),
+    (
+        (
+            "work-areas-and-tasks",
+            {"cursor": 5, "limit": 25, "sort": "name", "order": "desc", "task_id": "t1", "name_contains": "pick", "function": "Pick", "area_id": "a1"},
+            GroupQueryV1(5, 25, "name", "desc", (("task_id", "t1"), ("name_contains", "pick"), ("function", "Pick"), ("area_id", "a1"))),
+        ),
+        (
+            "workers",
+            {"sort": "contracted_hours", "contact_id": "w1", "name_contains": "alex", "employment_type": "Full Time", "grade": "3", "qualified_task_id": "t1"},
+            GroupQueryV1(sort="contracted_hours", filters=(("contact_id", "w1"), ("name_contains", "alex"), ("employment_type", "Full Time"), ("grade", "3"), ("qualified_task_id", "t1"))),
+        ),
+        (
+            "demand",
+            {"sort": "start_minute", "family": "outbound", "task_id": "t1", "area_id": "a1", "start_minute_gte": 0, "end_minute_lte": 60},
+            GroupQueryV1(sort="start_minute", filters=(("family", "outbound"), ("task_id", "t1"), ("area_id", "a1"), ("start_minute_gte", 0), ("end_minute_lte", 60))),
+        ),
+        (
+            "baseline-assignments",
+            {"sort": "worker_id", "worker_id": "w1", "task_id": "t1", "shift_id": "s1"},
+            GroupQueryV1(sort="worker_id", filters=(("worker_id", "w1"), ("task_id", "t1"), ("shift_id", "s1"))),
+        ),
+        (
+            "locks",
+            {"sort": "target_ref", "target_type": "assignment", "target_ref": "a1", "scope": "exact", "source": "planner"},
+            GroupQueryV1(sort="target_ref", filters=(("target_type", "assignment"), ("target_ref", "a1"), ("scope", "exact"), ("source", "planner"))),
+        ),
+        (
+            "constraints-and-objectives",
+            {"sort": "value_type", "constraint_type": "MaximumHours", "value_type": "number"},
+            GroupQueryV1(sort="value_type", filters=(("constraint_type", "MaximumHours"), ("value_type", "number"))),
+        ),
+    ),
+)
+def test_projection_group_queries_are_typed_and_forwarded(
+    projection_client, group: str, params: dict[str, str | int], expected: GroupQueryV1
+) -> None:
+    client, reader = projection_client
+
+    response = client.get(
+        f"/api/v1/scenarios/{reader.scenario_id}/projection/{group}",
+        params=params,
+    )
+
+    assert response.status_code == 200
+    assert reader.queries[group] == expected
+
+
+@pytest.mark.parametrize("query", ("sort=unknown", "order=sideways", "start_minute_gte=nope"))
+def test_projection_sort_filter_validation_uses_problem_details(
+    projection_client, query: str
+) -> None:
+    client, reader = projection_client
+    response = client.get(
+        f"/api/v1/scenarios/{reader.scenario_id}/projection/demand?{query}"
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_request"
+
+
+def test_projection_cursor_past_matching_count_returns_empty_page(
+    projection_client,
+) -> None:
+    client, reader = projection_client
+    reader.demand = DemandIntervalPageV1(
+        reader.scenario_id,
+        reader.scenario_version_id,
+        reader.site_id,
+        (),
+        None,
+        1,
+        1,
+    )
+
+    response = client.get(
+        f"/api/v1/scenarios/{reader.scenario_id}/projection/demand?cursor=50"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == []
+    assert response.json()["next_cursor"] is None
 
 
 @pytest.mark.parametrize(
