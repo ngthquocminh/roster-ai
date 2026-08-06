@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Table, TableCaption } from "@/components/ui/table";
-import { TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { ColumnDef } from "./columns";
 

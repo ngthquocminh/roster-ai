@@ -15,6 +15,12 @@ type Props = Readonly<{
   onRemove: (param: string) => void;
 }>;
 
+// Select options carry the exact enum value the backend expects (e.g. "outbound"); this only
+// affects what the planner reads, never the value applied to the URL/request.
+function displayValue(filter: FilterDef, value: string) {
+  return filter.kind === "select" ? value.replace(/\b\w/g, (letter) => letter.toUpperCase()) : value;
+}
+
 export function FilterBar({ activeFilters, filters, onApply, onClear, onRemove }: Props) {
   const [draft, setDraft] = useState<Record<string, string>>({ ...activeFilters });
   useEffect(() => setDraft({ ...activeFilters }), [activeFilters, filters]);
@@ -29,7 +35,7 @@ export function FilterBar({ activeFilters, filters, onApply, onClear, onRemove }
             {filter.kind === "select" ? (
               <Select value={draft[filter.param] ?? ""} onValueChange={(value) => setDraft((current) => ({ ...current, [filter.param]: value }))}>
                 <SelectTrigger aria-label={filter.label} className="min-h-11 min-w-44"><SelectValue placeholder={`Choose ${filter.label.toLowerCase()}`} /></SelectTrigger>
-                <SelectContent>{filter.options?.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
+                <SelectContent>{filter.options?.map((option) => <SelectItem key={option} value={option}>{displayValue(filter, option)}</SelectItem>)}</SelectContent>
               </Select>
             ) : (
               <Input className="min-h-11 min-w-44" type={filter.kind} value={draft[filter.param] ?? ""} onChange={(event) => setDraft((current) => ({ ...current, [filter.param]: event.target.value }))} />
@@ -43,7 +49,7 @@ export function FilterBar({ activeFilters, filters, onApply, onClear, onRemove }
         <Badge variant="secondary">{entries.length} active {entries.length === 1 ? "filter" : "filters"}</Badge>
         {entries.map(([filter, value]) => (
           <Button aria-label={`Remove ${filter.label} filter`} className="min-h-11" key={filter.param} onClick={() => onRemove(filter.param)} type="button" variant="ghost">
-            {filter.label}: {value}<X aria-hidden="true" />
+            {filter.label}: {displayValue(filter, value)}<X aria-hidden="true" />
           </Button>
         ))}
       </div>

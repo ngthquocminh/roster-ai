@@ -4,7 +4,7 @@ baseline_commit: e925c07965a363f7f0a6aae73b4bfddcd3842e4d
 
 # Story 1.8: Control Scenario Data Tables
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -187,9 +187,24 @@ so that I can locate exact records in large groups without losing orientation.
   - [x] **Frontend — Story 1.7 regression:** every `ScenarioDataView`/panel/`router` test Story 1.7 shipped must still pass. If one needs updating because a control was added to the surface, update the assertion deliberately and say so in completion notes — do not delete it.
   - [x] **Full gate before marking done:** `npm run typecheck`, `npm run lint`, `npm run build`, `npm test` (from `frontend/`); `uv run --frozen pytest` and `alembic check` (from `backend/` — `alembic check` must show zero diff; this story adds **no migration**, it changes no table). Report backend and frontend test counts before and after.
 
+### Review Findings
+
+Reviewed diff: `git diff a54804b..6c98be2` (generated `frontend/openapi.json` / `schema.d.ts` excluded from the reviewed diff by size, verified present in the actual commit). Layers: Blind Hunter, Edge Case Hunter, Acceptance Auditor (0 findings — no AC/spec violations).
+
+- [x] [Review][Patch] `FilterBar` draft input can be silently wiped by unrelated re-renders — `useGroupControls.ts` (activeFilters not memoized; new object identity every render) and `FilterBar.tsx:20` (effect keyed on that unstable reference)
+- [x] [Review][Patch] `PaginationControls` renders an inverted range ("Showing 101–100…") when a stale/out-of-range cursor yields `itemCount === 0` but `matchingCount > 0`, and mirrors the same broken string into the `aria-live` region — `frontend/src/features/scenario-data/PaginationControls.tsx:15-25`
+- [x] [Review][Patch] `useColumnVisibility.setColumnVisible` calls `sessionStorage.setItem` with no try/catch (unlike its own `readHidden`'s guarded read), so a disabled/unavailable storage silently breaks the column-visibility toggle — `frontend/src/features/scenario-data/useColumnVisibility.ts:40`
+- [x] [Review][Patch] `ScenarioDataTable.tsx` has two separate import statements from `@/components/ui/table` that should be one — `frontend/src/features/scenario-data/ScenarioDataTable.tsx:3-4`
+- [x] [Review][Patch] `FilterBar`'s `demand.family` `<Select>` renders raw lowercase enum values (`outbound`/`inbound`/`indirect`) with no display-casing, inconsistent with the Title Case used for every other label in the same bar — `frontend/src/features/scenario-data/FilterBar.tsx:32`
+- [x] [Review][Defer] All six panels bypass the type system with `(controls?.queryParams ?? {}) as WorkerQuery`-style casts, and correctness depends on Radix `TabsContent` unmounting inactive children (undocumented assumption, no runtime guard) — `frontend/src/features/scenario-data/groups/*.tsx` — deferred, pre-existing pattern across all six panels; not a functional bug today (verified lazy-mount + descriptor vocabularies line up), but worth a follow-up typed-controls refactor
+- [x] [Review][Defer] Demand group's backend `sort` enum includes `end_minute`, but `columns.ts` only maps the `window` column to `sortKey: "start_minute"` — `end_minute` is unreachable from the UI even via a hand-edited URL — `frontend/src/features/scenario-data/columns.ts:42` — deferred, not a spec violation (Task 6 only requires column sortKeys ⊆ backend sort table, not the reverse); candidate UX affordance for a later story
+- [x] [Review][Defer] An explicit empty-string filter query param (e.g. a hand-typed `?task_id=`) is treated as an exact match on `""` (zero results) rather than being ignored, because `_present_filters` only strips `None` — `backend/api/routers/scenario_projection.py:71-74` — deferred, only reachable via manual URL editing (the app's own `applyFilters` never sends empty strings), no spec requirement to special-case it
+- [x] [Review][Defer] `start_minute_gte`/`end_minute_lte` accept negative integers with no `ge=0` bound, unlike `cursor`/`limit`'s explicit `Query(...)` bounds — `backend/api/routers/scenario_projection.py:313-314` — deferred, well-defined (if unusual) semantics, spec only requires the *type* to 422, not a range floor
+
 ## Change Log
 
 - 2026-08-06: Implemented full-stack server filtering/sorting, generated contracts, URL-backed table controls, identifier copy, session column visibility, evidence-field reveal, and comprehensive regression coverage.
+- 2026-08-06: Code review (Blind Hunter, Edge Case Hunter, Acceptance Auditor — 0 AC/spec violations). 5 patch findings fixed (FilterBar draft-wipe on unrelated re-renders, PaginationControls inverted range on stale cursor, unguarded sessionStorage.setItem, duplicate table import, unstyled select option casing); 4 low-severity findings deferred to deferred-work.md. Full frontend suite (367 tests), typecheck, and lint re-verified green after the fixes.
 
 ## Dev Notes
 

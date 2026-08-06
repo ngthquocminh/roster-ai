@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useSearchParams } from "react-router";
 
 import { COLUMNS_BY_GROUP, type ScenarioDataListGroup } from "./columns";
@@ -15,12 +16,21 @@ export function useGroupControls(group: ScenarioDataListGroup) {
   const order: "asc" | "desc" = requestedOrder === "desc" ? "desc" : "asc";
   const requestedCursor = Number(searchParams.get("cursor") ?? 0);
   const cursor = Number.isInteger(requestedCursor) && requestedCursor >= 0 ? requestedCursor : 0;
-  const activeFilters = Object.fromEntries(filters.flatMap((filter) => {
-    const value = searchParams.get(filter.param);
-    if (value === null || value === "") return [];
-    if (filter.kind === "number" && !Number.isFinite(Number(value))) return [];
-    return [[filter.param, value]];
-  }));
+  // react-router memoizes `searchParams` on `location.search`, so it (and `filters`, a per-group
+  // module constant) are stable across unrelated re-renders — memoizing on them keeps this object's
+  // identity stable too, so FilterBar's draft-resync effect doesn't fire when nothing here changed.
+  const activeFilters = useMemo(
+    () =>
+      Object.fromEntries(
+        filters.flatMap((filter) => {
+          const value = searchParams.get(filter.param);
+          if (value === null || value === "") return [];
+          if (filter.kind === "number" && !Number.isFinite(Number(value))) return [];
+          return [[filter.param, value]];
+        }),
+      ),
+    [searchParams, filters],
+  );
 
   const update = (mutate: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(searchParams);

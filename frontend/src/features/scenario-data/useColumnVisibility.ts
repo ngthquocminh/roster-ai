@@ -37,7 +37,11 @@ export function useColumnVisibility(
     const next = new Set(hidden);
     if (visible) next.delete(key);
     else next.add(key);
-    sessionStorage.setItem(storageKey(group), JSON.stringify([...next].sort()));
+    try {
+      sessionStorage.setItem(storageKey(group), JSON.stringify([...next].sort()));
+    } catch {
+      // Storage unavailable (quota exceeded, disabled) — visibility still updates for this session.
+    }
     setHiddenByGroup((current) => ({ ...current, [group]: next }));
   };
 

@@ -13,9 +13,11 @@ type Props = Readonly<{
 }>;
 
 function countCopy({ cursor, hasFilters, itemCount, matchingCount, totalCount }: Omit<Props, "nextCursor" | "onPageChange">) {
-  if (matchingCount === 0) {
+  if (itemCount === 0) {
+    // A stale/out-of-range cursor (e.g. a bookmarked URL after the filtered set shrank) can leave
+    // matchingCount > 0 with nothing on this particular page — report 0 rather than an inverted range.
     return hasFilters
-      ? `Showing 0 of 0 matching (${totalCount.toLocaleString()} total)`
+      ? `Showing 0 of ${matchingCount.toLocaleString()} matching (${totalCount.toLocaleString()} total)`
       : `Showing 0 of ${totalCount.toLocaleString()}`;
   }
   const start = cursor + 1;
