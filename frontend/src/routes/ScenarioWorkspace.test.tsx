@@ -35,6 +35,7 @@ function renderWorkspace() {
       {
         path: "/scenarios/:scenarioId",
         Component: ScenarioWorkspace,
+        children: [{ index: true, element: <p>Chat route content</p> }],
       },
       { path: "/signin", element: <p>Sign in surface</p> },
       { path: "/", element: <p>Catalogue surface</p> },
@@ -56,7 +57,7 @@ beforeEach(() => {
   mockContext.mockReset();
 });
 
-it("renders persistent context and only the literal next-surface placeholder", () => {
+it("renders persistent context, workspace navigation, and child content", () => {
   mockContext.mockReturnValue({
     data: context,
     error: null,
@@ -68,13 +69,14 @@ it("renders persistent context and only the literal next-surface placeholder", (
   renderWorkspace();
 
   expect(screen.getByRole("heading", { name: "Fixture A" })).toBeInTheDocument();
-  expect(
-    screen.getByText("Scenario Data will be available in this workspace."),
-  ).toBeInTheDocument();
-  expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-  expect(screen.queryByText("Chat")).not.toBeInTheDocument();
-  expect(screen.queryByText("Runs")).not.toBeInTheDocument();
-  expect(screen.queryByText("Results")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(screen.getByRole("link", { name: "Scenario Data" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Runs" })).toBeInTheDocument();
+  expect(screen.getByText("Results", { selector: "[aria-disabled='true']" })).toBeInTheDocument();
+  expect(screen.getByText("Chat route content")).toBeInTheDocument();
 });
 
 it("offers no scenario-switching affordance beyond the catalogue return link", () => {
@@ -91,12 +93,7 @@ it("offers no scenario-switching affordance beyond the catalogue return link", (
   // Enumerate every link rather than probing for a combobox: a switcher built
   // the way this codebase builds navigation — as <Link>s — was invisible to
   // the previous assertion.
-  expect(
-    screen.getAllByRole("link").map((link) => [
-      link.textContent,
-      link.getAttribute("href"),
-    ]),
-  ).toEqual([["Change scenario", "/"]]);
+  expect(screen.getByRole("link", { name: "Change scenario" })).toHaveAttribute("href", "/");
   expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   expect(screen.queryAllByRole("button")).toHaveLength(0);

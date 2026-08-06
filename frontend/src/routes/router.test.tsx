@@ -13,11 +13,17 @@ vi.mock("@/hooks/useFixtureCatalogue", () => ({
 vi.mock("@/hooks/useScenarioContext", () => ({
   useScenarioContext: vi.fn(),
 }));
+vi.mock("@/hooks/useScenarioProjection", () => ({
+  useScenarioOverview: vi.fn(), useWorkAreasAndTasks: vi.fn(), useWorkers: vi.fn(),
+  useDemand: vi.fn(), useBaselineAssignments: vi.fn(), useLocks: vi.fn(),
+  useConstraintsAndObjectives: vi.fn(),
+}));
 
 import { routes } from "@/App";
 import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 import { useFixtureCatalogue } from "@/hooks/useFixtureCatalogue";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
+import * as projectionHooks from "@/hooks/useScenarioProjection";
 import { useSession, useSignOut } from "@/hooks/useSession";
 
 
@@ -70,6 +76,17 @@ beforeEach(() => {
     isPending: false,
     refetch: vi.fn(),
   });
+  const empty = { data: { items: [] }, error: null, isError: false, isPending: false, refetch: vi.fn() };
+  vi.mocked(projectionHooks.useScenarioOverview).mockReturnValue({
+    data: { scenario_name: "Fixture A", scenario_id: scenarioId, fixture_version: "v1", baseline_schedule_version: null, horizon_start: "2026-01-01T00:00:00Z", horizon_minutes: 1440, site_timezone: "UTC", projection_generated_at: "2026-01-01T01:00:00Z", work_area_count: 1, task_count: 2, worker_count: 3, demand_interval_count: 4, baseline_assignment_count: 0, lock_count: 0, constraint_count: 5 },
+    error: null, isError: false, isPending: false, refetch: vi.fn(),
+  } as never);
+  vi.mocked(projectionHooks.useWorkAreasAndTasks).mockReturnValue(empty as never);
+  vi.mocked(projectionHooks.useWorkers).mockReturnValue(empty as never);
+  vi.mocked(projectionHooks.useDemand).mockReturnValue(empty as never);
+  vi.mocked(projectionHooks.useBaselineAssignments).mockReturnValue(empty as never);
+  vi.mocked(projectionHooks.useLocks).mockReturnValue(empty as never);
+  vi.mocked(projectionHooks.useConstraintsAndObjectives).mockReturnValue(empty as never);
 });
 
 function renderAt(path: string) {
@@ -139,6 +156,21 @@ describe("governed route tree", () => {
     expect(mockContext).toHaveBeenCalledWith(scenarioId);
   });
 
+  it("mounts Scenario Data and the Runs/Results peer routes", () => {
+    let rendered = renderAt(`/scenarios/${scenarioId}/data`);
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Overview", { selector: "caption" })).toBeInTheDocument();
+    rendered.unmount();
+
+    rendered = renderAt(`/scenarios/${scenarioId}/runs`);
+    expect(screen.getByRole("heading", { name: "Runs" })).toBeInTheDocument();
+    rendered.unmount();
+
+    rendered = renderAt(`/scenarios/${scenarioId}/runs/run-1`);
+    expect(screen.getByRole("heading", { name: "Results" })).toBeInTheDocument();
+    rendered.unmount();
+  });
+
   it("keeps the persistent app bar on both governed routes", () => {
     for (const path of ["/", `/scenarios/${scenarioId}`]) {
       const { unmount } = renderAt(path);
@@ -150,13 +182,9 @@ describe("governed route tree", () => {
     }
   });
 
-  it("routes removed legacy children and unknown paths to RootErrorBoundary", () => {
+  it("routes unknown paths to RootErrorBoundary", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    for (const path of [
-      `/scenarios/${scenarioId}/runs`,
-      `/scenarios/${scenarioId}/runs/run-1`,
-      "/nope",
-    ]) {
+    for (const path of ["/nope"]) {
       const { unmount } = renderAt(path);
       expect(
         screen.getByRole("heading", { name: "Something went wrong." }),

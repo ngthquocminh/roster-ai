@@ -34,3 +34,7 @@ export function formatShiftWindow(startH: number, endH: number): string {
   }
   return `Day ${start.day}, ${start.hhmm} – Day ${end.day}, ${end.hhmm}`;
 }
+
+export function formatMinuteWindow(startMinute: number, endMinute: number): string {
+  return formatShiftWindow(startMinute / 60, endMinute / 60);
+}

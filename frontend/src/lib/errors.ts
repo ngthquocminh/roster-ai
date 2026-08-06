@@ -46,3 +46,11 @@ export function getErrorStatus(error: unknown): number | undefined {
   const status = (error as { status?: unknown }).status;
   return typeof status === "number" ? status : undefined;
 }
+
+/**
+ * Statuses where retrying re-issues a request that cannot succeed: the
+ * scenario doesn't exist (404), or the id itself is malformed (422, a
+ * truncated or hand-edited URL). Shared by every surface that reads a
+ * scenario or its projections, so they classify failures the same way.
+ */
+export const TERMINAL_STATUSES = new Set([404, 422]);

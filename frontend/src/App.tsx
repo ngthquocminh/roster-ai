@@ -4,6 +4,10 @@ import { AppBar } from "@/components/layout/AppBar";
 import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 import { FixtureCatalogue } from "@/routes/FixtureCatalogue";
 import { RequireSession } from "@/routes/RequireSession";
+import { ScenarioChat } from "@/routes/ScenarioChat";
+import { ScenarioData } from "@/routes/ScenarioData";
+import { ScenarioResults } from "@/routes/ScenarioResults";
+import { ScenarioRuns } from "@/routes/ScenarioRuns";
 import { ScenarioWorkspace } from "@/routes/ScenarioWorkspace";
 import { SignIn } from "@/routes/SignIn";
 
@@ -55,6 +59,12 @@ export const routes: RouteObject[] = [
           {
             path: "scenarios/:scenarioId",
             Component: ScenarioWorkspace,
+            children: [
+              { index: true, Component: ScenarioChat },
+              { path: "data", Component: ScenarioData },
+              { path: "runs", Component: ScenarioRuns },
+              { path: "runs/:runId", Component: ScenarioResults },
+            ],
           },
         ],
       },

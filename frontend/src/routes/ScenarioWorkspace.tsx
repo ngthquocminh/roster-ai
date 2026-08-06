@@ -1,19 +1,15 @@
 import { useEffect, useRef } from "react";
-import { Link, useParams } from "react-router";
+import { Link, Outlet, useParams } from "react-router";
 
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { Button } from "@/components/ui/button";
 import { ScenarioVersionContext } from "@/features/scenario-workspace/ScenarioVersionContext";
+import { WorkspaceTabs } from "@/features/scenario-workspace/WorkspaceTabs";
 import { useRedirectOnUnauthorized } from "@/hooks/useRedirectOnUnauthorized";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
-import { getErrorStatus, USER_ERROR_COPY } from "@/lib/errors";
+import { getErrorStatus, TERMINAL_STATUSES, USER_ERROR_COPY } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/formatTimestamp";
 
-
-// 404 is "no such scenario, or not this site" (non-disclosing by design).
-// 422 is a malformed, non-UUID id — a truncated or hand-edited URL. Both are
-// terminal: retrying either re-issues a request that cannot succeed.
-const TERMINAL_STATUSES = new Set([404, 422]);
 
 export function ScenarioWorkspace() {
   const { scenarioId = "" } = useParams();
@@ -122,7 +118,7 @@ export function ScenarioWorkspace() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="px-6 py-8">
       {query.isError ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">
           {/* EXPERIENCE.md:122 Scenario Data row — the approved stale label for
@@ -146,17 +142,8 @@ export function ScenarioWorkspace() {
         </div>
       ) : null}
       <ScenarioVersionContext context={query.data} />
-      <section
-        aria-labelledby="scenario-data-placeholder"
-        className="mt-6 rounded-lg border border-dashed p-6"
-      >
-        <h2 className="text-lg font-medium" id="scenario-data-placeholder">
-          Scenario Data
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Scenario Data will be available in this workspace.
-        </p>
-      </section>
+      <WorkspaceTabs scenarioId={scenarioId} />
+      <Outlet />
     </main>
   );
 }

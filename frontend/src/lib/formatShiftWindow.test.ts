@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatShiftWindow } from "./formatShiftWindow";
+import { formatMinuteWindow, formatShiftWindow } from "./formatShiftWindow";
 
 describe("formatShiftWindow", () => {
   it("formats a same-day shift as 'Day N, HH:MM–HH:MM' (1-indexed)", () => {
@@ -22,5 +22,15 @@ describe("formatShiftWindow", () => {
 
   it("renders hour 0 as 'Day 1' (1-indexed), never 'Day 0'", () => {
     expect(formatShiftWindow(0.0, 4.0)).toBe("Day 1, 00:00–04:00");
+  });
+});
+
+describe("formatMinuteWindow", () => {
+  it("uses the established day/time presentation for minute offsets", () => {
+    expect(formatMinuteWindow(510, 960)).toBe("Day 1, 08:30–16:00");
+  });
+
+  it("labels both days for a cross-midnight minute window", () => {
+    expect(formatMinuteWindow(1320, 1800)).toBe("Day 1, 22:00 – Day 2, 06:00");
   });
 });
