@@ -4,7 +4,7 @@ baseline_commit: e925c07965a363f7f0a6aae73b4bfddcd3842e4d
 
 # Story 1.6: Establish ShiftMind Design Tokens and Shared Primitives
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -27,13 +27,13 @@ so that every later story implements its visual contract once instead of retrofi
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Consolidate ShiftMind tokens into `frontend/src/index.css` (AC: #1)
-  - [ ] **Mechanism — follow the file's existing two-part pattern exactly:** raw values as CSS custom properties in `:root`, then mapped into the `@theme inline` block so Tailwind generates utilities. Do not invent a second mechanism, do not add a `tailwind.config.js` (Tailwind 4.3.2 via `@tailwindcss/vite` is config-file-free; `components.json` sets `"tailwind.config": ""`), and do not add a package.
-  - [ ] **Colors — write the `DESIGN.md` hex values verbatim.** The inherited palette is `oklch`; do **not** convert these to `oklch` (a hand-converted value silently drifts from the design contract and from the contrast test in Task 5). New `:root` vars: `--evidence-link: #4338CA`, `--evidence-surface: #EEF2FF`, `--evidence-border: #C7D2FE`, `--evidence-foreground: #1E1B4B`.
-  - [ ] **Changed inherited vars — exactly three, in `:root` only:** `--primary: #4F46E5`, `--primary-foreground: #FFFFFF`, `--ring: #4F46E5` (`DESIGN.md`'s `{colors.focus-ring}`). AC #1's "inherited … remain unchanged" list names neutral, destructive, card, popover, input, muted, border, chart, elevation, radius, and dark-theme — `primary`, `primary-foreground`, and the focus ring are **not** on it, and `DESIGN.md`'s "inherit unchanged" sentence omits them too. `DESIGN.md`: *"Primary indigo (`#4F46E5`) retains the implemented scenario-tab accent."*
-  - [ ] **Do not touch the `.dark` block.** AC #1 requires "optional dark-theme tokens remain unchanged" and UX-DR33 says dark mode is not an MVP requirement. `.dark` keeps its inverted near-white `--primary`; the four new evidence vars are declared once in `:root` and cascade into `.dark` unchanged, so `.dark` needs no edit. If you find yourself editing `.dark`, stop — you are outside AC #1.
-  - [ ] **Do not touch `--radius`** (`0.625rem`) or the seven derived `--radius-sm…4xl` entries. `DESIGN.md`: *"Inherit the current shadcn radius scale."* Add only the two ShiftMind-specific radii.
-  - [ ] `@theme inline` additions (Tailwind v4 namespaces — verified against current Tailwind CSS docs):
+- [x] Task 1: Consolidate ShiftMind tokens into `frontend/src/index.css` (AC: #1)
+  - [x] **Mechanism — follow the file's existing two-part pattern exactly:** raw values as CSS custom properties in `:root`, then mapped into the `@theme inline` block so Tailwind generates utilities. Do not invent a second mechanism, do not add a `tailwind.config.js` (Tailwind 4.3.2 via `@tailwindcss/vite` is config-file-free; `components.json` sets `"tailwind.config": ""`), and do not add a package.
+  - [x] **Colors — write the `DESIGN.md` hex values verbatim.** The inherited palette is `oklch`; do **not** convert these to `oklch` (a hand-converted value silently drifts from the design contract and from the contrast test in Task 5). New `:root` vars: `--evidence-link: #4338CA`, `--evidence-surface: #EEF2FF`, `--evidence-border: #C7D2FE`, `--evidence-foreground: #1E1B4B`.
+  - [x] **Changed inherited vars — exactly three, in `:root` only:** `--primary: #4F46E5`, `--primary-foreground: #FFFFFF`, `--ring: #4F46E5` (`DESIGN.md`'s `{colors.focus-ring}`). AC #1's "inherited … remain unchanged" list names neutral, destructive, card, popover, input, muted, border, chart, elevation, radius, and dark-theme — `primary`, `primary-foreground`, and the focus ring are **not** on it, and `DESIGN.md`'s "inherit unchanged" sentence omits them too. `DESIGN.md`: *"Primary indigo (`#4F46E5`) retains the implemented scenario-tab accent."*
+  - [x] **Do not touch the `.dark` block.** AC #1 requires "optional dark-theme tokens remain unchanged" and UX-DR33 says dark mode is not an MVP requirement. `.dark` keeps its inverted near-white `--primary`; the four new evidence vars are declared once in `:root` and cascade into `.dark` unchanged, so `.dark` needs no edit. If you find yourself editing `.dark`, stop — you are outside AC #1.
+  - [x] **Do not touch `--radius`** (`0.625rem`) or the seven derived `--radius-sm…4xl` entries. `DESIGN.md`: *"Inherit the current shadcn radius scale."* Add only the two ShiftMind-specific radii.
+  - [x] `@theme inline` additions (Tailwind v4 namespaces — verified against current Tailwind CSS docs):
     ```css
     --color-evidence-link: var(--evidence-link);
     --color-evidence-surface: var(--evidence-surface);
@@ -60,31 +60,31 @@ so that every later story implements its visual contract once instead of retrofi
     --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
     ```
     These yield `text-evidence-link`, `bg-evidence-surface`, `border-evidence-border`, `rounded-evidence`, `rounded-data-region`, `p-evidence-inset`, `px-data-cell-x`, `px-workspace-gutter`, `text-page-title`, `text-metric`, `text-identifier`.
-  - [ ] **`--font-mono`, not a new font utility.** `DESIGN.md`'s `{typography.identifier.fontFamily}` is delivered by redefining `--font-mono` so every existing `font-mono` class picks it up. **Three shipped assertions depend on the literal class name** (`ScenarioVersionContext.test.tsx:29,35,57` assert `toHaveClass("font-mono")`) — introducing an `identifier` font utility and renaming those call sites breaks them for no gain. Leave the `font-sans` body default alone; `DESIGN.md`: *"The system sans stack remains the default."*
-  - [ ] **Leave the `@import` lines and the `UI-SPEC` comment block at the top untouched.** That comment is a stale reference to a previous milestone's tooling, not a live contract; it correctly forbids reintroducing a web-font import, which still holds.
+  - [x] **`--font-mono`, not a new font utility.** `DESIGN.md`'s `{typography.identifier.fontFamily}` is delivered by redefining `--font-mono` so every existing `font-mono` class picks it up. **Three shipped assertions depend on the literal class name** (`ScenarioVersionContext.test.tsx:29,35,57` assert `toHaveClass("font-mono")`) — introducing an `identifier` font utility and renaming those call sites breaks them for no gain. Leave the `font-sans` body default alone; `DESIGN.md`: *"The system sans stack remains the default."*
+  - [x] **Leave the `@import` lines and the `UI-SPEC` comment block at the top untouched.** That comment is a stale reference to a previous milestone's tooling, not a live contract; it correctly forbids reintroducing a web-font import, which still holds.
 
-- [ ] Task 2: Replace the two live literal-hex usages with tokens (AC: #1)
-  - [ ] `frontend/src/components/layout/AppBar.tsx:50` — `text-[#4F46E5]` becomes `text-evidence-link`, not `text-primary`. `DESIGN.md`: *"ordinary inline links use `{colors.evidence-link}`"*; the primary/white pair is reserved for controls with verified contrast. "Consolidated" in AC #1 means the literal hex leaves the codebase.
-  - [ ] `frontend/src/features/fixture-catalogue/FixtureCatalogueView.tsx:71` — the row link's `text-primary` becomes `text-evidence-link` for the same reason. Copy, href, focus ring, and `min-h-11` are unchanged; only the color class changes.
-  - [ ] **Leave `frontend/src/components/results/DemandVsServedChart.tsx:59` alone.** It is inside the frozen legacy tree (AD-25) and unreachable from the shipped route table.
-  - [ ] **Leave `AppBar.tsx`'s `bg-[#F5F5F5]` alone.** It is not a `DESIGN.md` token; retokenizing it is not in either AC.
+- [x] Task 2: Replace the two live literal-hex usages with tokens (AC: #1)
+  - [x] `frontend/src/components/layout/AppBar.tsx:50` — `text-[#4F46E5]` becomes `text-evidence-link`, not `text-primary`. `DESIGN.md`: *"ordinary inline links use `{colors.evidence-link}`"*; the primary/white pair is reserved for controls with verified contrast. "Consolidated" in AC #1 means the literal hex leaves the codebase.
+  - [x] `frontend/src/features/fixture-catalogue/FixtureCatalogueView.tsx:71` — the row link's `text-primary` becomes `text-evidence-link` for the same reason. Copy, href, focus ring, and `min-h-11` are unchanged; only the color class changes.
+  - [x] **Leave `frontend/src/components/results/DemandVsServedChart.tsx:59` alone.** It is inside the frozen legacy tree (AD-25) and unreachable from the shipped route table.
+  - [x] **Leave `AppBar.tsx`'s `bg-[#F5F5F5]` alone.** It is not a `DESIGN.md` token; retokenizing it is not in either AC.
 
-- [ ] Task 3: Build the seven shared primitives (AC: #2)
-  - [ ] **Location: a new `frontend/src/components/primitives/` directory**, one file per primitive, `PascalCase.tsx`, named exports. Rationale: `components/ui/` is reserved for unmodified shadcn copy-ins (`components.json` points shadcn's CLI there — a ShiftMind component placed among them will be silently clobbered by a future `shadcn add`); `features/` is for feature surfaces per AR26; `components/{editor,runs,results,scenarios}/` is frozen legacy. `components/primitives/` sits beside the live `components/layout/`.
-  - [ ] **Every primitive is pure presentational.** No TanStack Query, no `useNavigate`, no `fetch`, no route knowledge, no import from `@/features/**` or `@/hooks/**`. AD-14 keeps remote cache in the hooks layer; these components take props only. This is what makes them fixture-renderable without a router or query client.
-  - [ ] **Compose the inherited shadcn components — do not restyle or fork them.** `DESIGN.md`'s "Inherited visual coverage" table assigns Status badge → shadcn Badge, Inline alert → shadcn Alert default/destructive, Skeleton → shadcn Skeleton, Empty state → system typography + shadcn Button/Link, Reconnect banner → shadcn Alert.
-  - [ ] `StatusBadge.tsx` — **`frontend/src/components/ui/badge.tsx` does not exist yet**; add the standard shadcn Badge copy-in first (a copy-in of the already-installed system, not a package — same precedent as Story 1.3 adding `skeleton.tsx`; AR27 is not triggered, `package.json`/`package-lock.json` must be untouched). `StatusBadge` requires a literal status **string** prop — it must be structurally impossible to render a badge whose meaning is carried only by variant/color (UX-DR32, NFR18, EXPERIENCE.md: *"Always includes literal status text and accessible name; color/icon are secondary"*). Icon is optional and never the sole carrier.
-  - [ ] `InlineAlert.tsx` — wraps shadcn `Alert`/`AlertTitle`/`AlertDescription`. Props: concise `title`, optional `description`, optional single recovery `action`, `variant: "default" | "destructive"`. EXPERIENCE.md: *"Persistent within the affected surface. Gives one concise cause and recovery action when safe. Does not erase valid saved content."* Any interactive action must carry `min-h-11` (44px, UX-DR29).
-  - [ ] `EmptyState.tsx` — one explanation, **at most one** recovery action (`DESIGN.md`; EXPERIENCE.md). Make the "at most one" a type-level constraint (a single optional `action` prop, not an array), so a later story cannot grow it into a CTA row.
-  - [ ] `ReconnectBanner.tsx` — three literal states: `disconnected` → `reconnecting` → `reconnected` (EXPERIENCE.md line 107). Non-modal, never covers saved content, and each state's meaning is in its text. **No consumer exists yet** — SSE arrives in Epic 2/3 — so this ships fixture-covered and unmounted. That is intended, not dead code: 3.12 renders it.
-  - [ ] `EvidenceLink.tsx` — **presentational only.** Renders a conventionally link-identifiable inline control (underlined, `text-evidence-link`, `rounded-evidence`, `focus-visible` ring from `--ring`) whose **accessible text names group, record, optional field/range, and version** — e.g. `Evidence: Demand DEM-204, 13:00–17:00, fixture v7` (EXPERIENCE.md line 154). Take the locator fields as props and compose the label here so every call site produces the same string. Colour alone is never the affordance (UX-DR34). **Do not build navigation:** no `EvidenceRefV1` URL/history-state serialization, no exact-target fetching, no origin-key capture, no `ReturnToClaim`. All of that is Story 2.8's acceptance boundary, over Story 1.5's already-shipped resolver endpoints. Accept an `onActivate`/`href` prop and stop.
-  - [ ] `EvidenceHighlight.tsx` — the quiet highlight: `bg-evidence-surface`, `text-evidence-foreground`, `border-evidence-border`, `rounded-evidence`, `p-evidence-inset`. **Zero animation, zero shadow, zero pulse** — `DESIGN.md`: *"No animation is required; reduced-motion and default behavior are visually identical"*; UX-DR32/UX-DR34 forbid pulsing/flashing. It must be usable as a wrapper on a row/cell/record card and accept `tabIndex={-1}` + a ref so Story 2.8 can focus it; it does not focus itself here.
-  - [ ] `Skeleton` — **already exists** at `frontend/src/components/ui/skeleton.tsx` with `motion-reduce:animate-none`. **Do not move, fork, or restyle it.** Story 1.3 Task 4: *"Story 1.6 will govern it, not replace it."* Governing it here means giving it fixtures (Task 4) and asserting the reduced-motion class stays; re-export it from the primitives barrel if you add one, nothing more.
-  - [ ] **Out of scope — do not build:** Workspace tabs, Scenario/version context deltas, Scenario Data grid, Return to claim, Filter bar, Column chooser, Identifier copy control, Evidence exception panel, Draft/Run-progress/Comparison/Approval/Terminal-outcome cards. AC #2 lists exactly seven primitives. `DESIGN.md`'s delta table also names Workspace tabs / Scenario-version context / Scenario Data grid / Return to claim — those belong to Stories 1.7, 1.8, and 2.8, which the epic requires to *"implement its component-specific visual contract in that story."*
+- [x] Task 3: Build the seven shared primitives (AC: #2)
+  - [x] **Location: a new `frontend/src/components/primitives/` directory**, one file per primitive, `PascalCase.tsx`, named exports. Rationale: `components/ui/` is reserved for unmodified shadcn copy-ins (`components.json` points shadcn's CLI there — a ShiftMind component placed among them will be silently clobbered by a future `shadcn add`); `features/` is for feature surfaces per AR26; `components/{editor,runs,results,scenarios}/` is frozen legacy. `components/primitives/` sits beside the live `components/layout/`.
+  - [x] **Every primitive is pure presentational.** No TanStack Query, no `useNavigate`, no `fetch`, no route knowledge, no import from `@/features/**` or `@/hooks/**`. AD-14 keeps remote cache in the hooks layer; these components take props only. This is what makes them fixture-renderable without a router or query client.
+  - [x] **Compose the inherited shadcn components — do not restyle or fork them.** `DESIGN.md`'s "Inherited visual coverage" table assigns Status badge → shadcn Badge, Inline alert → shadcn Alert default/destructive, Skeleton → shadcn Skeleton, Empty state → system typography + shadcn Button/Link, Reconnect banner → shadcn Alert.
+  - [x] `StatusBadge.tsx` — **`frontend/src/components/ui/badge.tsx` does not exist yet**; add the standard shadcn Badge copy-in first (a copy-in of the already-installed system, not a package — same precedent as Story 1.3 adding `skeleton.tsx`; AR27 is not triggered, `package.json`/`package-lock.json` must be untouched). `StatusBadge` requires a literal status **string** prop — it must be structurally impossible to render a badge whose meaning is carried only by variant/color (UX-DR32, NFR18, EXPERIENCE.md: *"Always includes literal status text and accessible name; color/icon are secondary"*). Icon is optional and never the sole carrier.
+  - [x] `InlineAlert.tsx` — wraps shadcn `Alert`/`AlertTitle`/`AlertDescription`. Props: concise `title`, optional `description`, optional single recovery `action`, `variant: "default" | "destructive"`. EXPERIENCE.md: *"Persistent within the affected surface. Gives one concise cause and recovery action when safe. Does not erase valid saved content."* Any interactive action must carry `min-h-11` (44px, UX-DR29).
+  - [x] `EmptyState.tsx` — one explanation, **at most one** recovery action (`DESIGN.md`; EXPERIENCE.md). Make the "at most one" a type-level constraint (a single optional `action` prop, not an array), so a later story cannot grow it into a CTA row.
+  - [x] `ReconnectBanner.tsx` — three literal states: `disconnected` → `reconnecting` → `reconnected` (EXPERIENCE.md line 107). Non-modal, never covers saved content, and each state's meaning is in its text. **No consumer exists yet** — SSE arrives in Epic 2/3 — so this ships fixture-covered and unmounted. That is intended, not dead code: 3.12 renders it.
+  - [x] `EvidenceLink.tsx` — **presentational only.** Renders a conventionally link-identifiable inline control (underlined, `text-evidence-link`, `rounded-evidence`, `focus-visible` ring from `--ring`) whose **accessible text names group, record, optional field/range, and version** — e.g. `Evidence: Demand DEM-204, 13:00–17:00, fixture v7` (EXPERIENCE.md line 154). Take the locator fields as props and compose the label here so every call site produces the same string. Colour alone is never the affordance (UX-DR34). **Do not build navigation:** no `EvidenceRefV1` URL/history-state serialization, no exact-target fetching, no origin-key capture, no `ReturnToClaim`. All of that is Story 2.8's acceptance boundary, over Story 1.5's already-shipped resolver endpoints. Accept an `onActivate`/`href` prop and stop.
+  - [x] `EvidenceHighlight.tsx` — the quiet highlight: `bg-evidence-surface`, `text-evidence-foreground`, `border-evidence-border`, `rounded-evidence`, `p-evidence-inset`. **Zero animation, zero shadow, zero pulse** — `DESIGN.md`: *"No animation is required; reduced-motion and default behavior are visually identical"*; UX-DR32/UX-DR34 forbid pulsing/flashing. It must be usable as a wrapper on a row/cell/record card and accept `tabIndex={-1}` + a ref so Story 2.8 can focus it; it does not focus itself here.
+  - [x] `Skeleton` — **already exists** at `frontend/src/components/ui/skeleton.tsx` with `motion-reduce:animate-none`. **Do not move, fork, or restyle it.** Story 1.3 Task 4: *"Story 1.6 will govern it, not replace it."* Governing it here means giving it fixtures (Task 4) and asserting the reduced-motion class stays; re-export it from the primitives barrel if you add one, nothing more.
+  - [x] **Out of scope — do not build:** Workspace tabs, Scenario/version context deltas, Scenario Data grid, Return to claim, Filter bar, Column chooser, Identifier copy control, Evidence exception panel, Draft/Run-progress/Comparison/Approval/Terminal-outcome cards. AC #2 lists exactly seven primitives. `DESIGN.md`'s delta table also names Workspace tabs / Scenario-version context / Scenario Data grid / Return to claim — those belong to Stories 1.7, 1.8, and 2.8, which the epic requires to *"implement its component-specific visual contract in that story."*
 
-- [ ] Task 4: State fixtures for visual regression (AC: #2)
-  - [ ] **Judgment call — flag this in completion notes.** AC #2 requires "visual-regression fixtures", and Stories 3.12 and 4.7 say those fixtures *"render"* states, implying a screenshot runner. **Playwright is not installed and is not in the architecture Stack table** (it appears only in `prd/addendum.md`; `ARCHITECTURE-SPINE.md`'s review-rubric asked for it to be ratified or superseded and the final spine did not add it). AR27 forbids adding an unlocked dependency before its implementation gate. **Therefore this story delivers the fixtures — the enumerable, deterministic state catalogue — and not a screenshot runner.** The runner lands with the story that owns a browser proof (1.10 / 3.12 / 4.7) and consumes this module unchanged. Do not `npm install` anything.
-  - [ ] `frontend/src/components/primitives/fixtures.tsx` — **one module, one exported array**, e.g.:
+- [x] Task 4: State fixtures for visual regression (AC: #2)
+  - [x] **Judgment call — flag this in completion notes.** AC #2 requires "visual-regression fixtures", and Stories 3.12 and 4.7 say those fixtures *"render"* states, implying a screenshot runner. **Playwright is not installed and is not in the architecture Stack table** (it appears only in `prd/addendum.md`; `ARCHITECTURE-SPINE.md`'s review-rubric asked for it to be ratified or superseded and the final spine did not add it). AR27 forbids adding an unlocked dependency before its implementation gate. **Therefore this story delivers the fixtures — the enumerable, deterministic state catalogue — and not a screenshot runner.** The runner lands with the story that owns a browser proof (1.10 / 3.12 / 4.7) and consumes this module unchanged. Do not `npm install` anything.
+  - [x] `frontend/src/components/primitives/fixtures.tsx` — **one module, one exported array**, e.g.:
     ```tsx
     export type PrimitiveFixture = {
       primitive: string;   // "StatusBadge" | "InlineAlert" | ...
@@ -94,28 +94,39 @@ so that every later story implements its visual contract once instead of retrofi
     export const PRIMITIVE_FIXTURES: readonly PrimitiveFixture[] = [ /* … */ ];
     ```
     Flat and enumerable so Task 5's tests and a later screenshot runner both iterate the same source. **All seven primitives must appear**, with every state each one declares — at minimum: StatusBadge across the literal AD-7 vocabularies it will carry (`queued`, `running`, `completed`, `infeasible`, `timed out`, `cancelled`, `failed`, `rejected`, `expired`, `stale`); InlineAlert default + destructive, with and without an action; Skeleton for a text line and a table region; EmptyState with and without an action; ReconnectBanner all three states; EvidenceLink with and without a field/range; EvidenceHighlight wrapping a row and a record card.
-  - [ ] **Put fixtures in their own module, not inside a component file.** `.oxlintrc.json` enables `react/only-export-components` (warn) — exporting a non-component const beside a component trips it, and the repo currently carries exactly four such warnings that a reviewer will read as pre-existing.
-  - [ ] Fixture render functions must be **deterministic**: no `Date.now()`, no `Math.random()`, no incrementing counters. A screenshot baseline taken in a later story is worthless otherwise.
+  - [x] **Put fixtures in their own module, not inside a component file.** `.oxlintrc.json` enables `react/only-export-components` (warn) — exporting a non-component const beside a component trips it, and the repo currently carries exactly four such warnings that a reviewer will read as pre-existing.
+  - [x] Fixture render functions must be **deterministic**: no `Date.now()`, no `Math.random()`, no incrementing counters. A screenshot baseline taken in a later story is worthless otherwise.
 
-- [ ] Task 5: Tests (AC: #1, #2)
-  - [ ] **Token contrast — the one check `DESIGN.md` explicitly demands** (*"controls whose shipped contrast is verified before use"*). Pure-TS test (no DOM): parse the four evidence hexes plus `#4F46E5`/`#FFFFFF` out of `index.css`, compute WCAG relative luminance and contrast ratio, and assert: `evidence-foreground` on `evidence-surface` ≥ 4.5, `evidence-link` on `#FFFFFF` ≥ 4.5, `primary-foreground` on `primary` ≥ 4.5. Expected values ≈ 14.3, 8.0, and 6.3 — assert the `≥ 4.5` floor, not the exact number. Read the values *from the stylesheet*, so editing a token without re-checking contrast fails the build.
-  - [ ] **Token presence** — assert `index.css` declares every token named in Task 1, and assert the **negative** half of AC #1 that a reviewer cannot eyeball: `--radius: 0.625rem` is unchanged, and the `.dark` block is byte-identical to its baseline (snapshot the block's text). This is the only cheap guard against a well-meaning "dark mode consistency" edit.
-  - [ ] **No color-only meaning (AC #2's operative clause)** — iterate `PRIMITIVE_FIXTURES`, render each, and assert that within one primitive every state's visible text content is **distinct**. A regression that distinguishes `completed` from `failed` by variant alone collapses two fixtures to the same string and fails. This is what makes the assertion real rather than a class-name check.
-  - [ ] **Every fixture renders** — iterate `PRIMITIVE_FIXTURES` and assert each `render()` mounts without throwing and without a router or `QueryClientProvider` in scope. That last part is the enforceable form of "pure presentational" and is what a later screenshot runner needs.
-  - [ ] **Fixture coverage** — assert `PRIMITIVE_FIXTURES` contains at least one entry for each of the seven primitive names, driven by a hard-coded list of the seven. Adding a primitive without fixtures then fails.
-  - [ ] **Reduced motion / no theatrics** — assert `EvidenceHighlight`'s rendered root carries no `animate-` class and no `shadow-` class, and that `Skeleton` still carries `motion-reduce:animate-none`.
-  - [ ] **Touch targets** — every interactive element inside a fixture (`button`, `a`) carries `min-h-11` (UX-DR29's 44px floor as this repo already expresses it). Note Story 1.3's review deferred the *width* axis as needing a UX call; hold the same line here, do not widen scope.
-  - [ ] **Regression** — the two Story 1.3 surfaces keep passing unchanged. `ScenarioVersionContext.test.tsx`'s three `toHaveClass("font-mono")` assertions and `FixtureCatalogueView.test.tsx`'s class assertions must survive Tasks 1–2 and 6 untouched. If one fails, you changed something Task 1/2/6 said not to.
-  - [ ] **Full gate before done:** `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` from `frontend/`. Backend is untouched — no `pytest`, no `alembic check`, no `npm run codegen` (no OpenAPI change). Report the frontend test count before and after.
+- [x] Task 5: Tests (AC: #1, #2)
+  - [x] **Token contrast — the one check `DESIGN.md` explicitly demands** (*"controls whose shipped contrast is verified before use"*). Pure-TS test (no DOM): parse the four evidence hexes plus `#4F46E5`/`#FFFFFF` out of `index.css`, compute WCAG relative luminance and contrast ratio, and assert: `evidence-foreground` on `evidence-surface` ≥ 4.5, `evidence-link` on `#FFFFFF` ≥ 4.5, `primary-foreground` on `primary` ≥ 4.5. Expected values ≈ 14.3, 8.0, and 6.3 — assert the `≥ 4.5` floor, not the exact number. Read the values *from the stylesheet*, so editing a token without re-checking contrast fails the build.
+  - [x] **Token presence** — assert `index.css` declares every token named in Task 1, and assert the **negative** half of AC #1 that a reviewer cannot eyeball: `--radius: 0.625rem` is unchanged, and the `.dark` block is byte-identical to its baseline (snapshot the block's text). This is the only cheap guard against a well-meaning "dark mode consistency" edit.
+  - [x] **No color-only meaning (AC #2's operative clause)** — iterate `PRIMITIVE_FIXTURES`, render each, and assert that within one primitive every state's visible text content is **distinct**. A regression that distinguishes `completed` from `failed` by variant alone collapses two fixtures to the same string and fails. This is what makes the assertion real rather than a class-name check.
+  - [x] **Every fixture renders** — iterate `PRIMITIVE_FIXTURES` and assert each `render()` mounts without throwing and without a router or `QueryClientProvider` in scope. That last part is the enforceable form of "pure presentational" and is what a later screenshot runner needs.
+  - [x] **Fixture coverage** — assert `PRIMITIVE_FIXTURES` contains at least one entry for each of the seven primitive names, driven by a hard-coded list of the seven. Adding a primitive without fixtures then fails.
+  - [x] **Reduced motion / no theatrics** — assert `EvidenceHighlight`'s rendered root carries no `animate-` class and no `shadow-` class, and that `Skeleton` still carries `motion-reduce:animate-none`.
+  - [x] **Touch targets** — every interactive element inside a fixture (`button`, `a`) carries `min-h-11` (UX-DR29's 44px floor as this repo already expresses it). Note Story 1.3's review deferred the *width* axis as needing a UX call; hold the same line here, do not widen scope.
+  - [x] **Regression** — the two Story 1.3 surfaces keep passing unchanged. `ScenarioVersionContext.test.tsx`'s three `toHaveClass("font-mono")` assertions and `FixtureCatalogueView.test.tsx`'s class assertions must survive Tasks 1–2 and 6 untouched. If one fails, you changed something Task 1/2/6 said not to.
+  - [x] **Full gate before done:** `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` from `frontend/`. Backend is untouched — no `pytest`, no `alembic check`, no `npm run codegen` (no OpenAPI change). Report the frontend test count before and after.
 
-- [ ] Task 6: Adopt three primitives in the two shipped surfaces (AC: #2)
-  - [ ] **Why this is in scope:** AC #2's "so that" is *"every later story implements its visual contract once instead of retrofitting consistency."* `FixtureCatalogueView` and `ScenarioWorkspace` each hand-roll an inline alert and an empty state today; leaving two treatments in the tree is precisely the drift Story 4.7 will audit.
-  - [ ] `FixtureCatalogueView.tsx`: `UnavailableCatalogue` → `InlineAlert` (variant `destructive`, title/description from `USER_ERROR_COPY.connection`, Retry as the action). `EmptyCatalogue` → `EmptyState`.
-  - [ ] `ScenarioWorkspace.tsx`: the `query.isError && !query.data` alert block → `InlineAlert` with its existing Retry button and "Return to catalogue" link preserved as-is.
-  - [ ] **Preserve every user-visible string byte-for-byte** — including `"Saved catalogue — refresh unavailable"`, `"No predefined scenarios are available."`, `"Stale — last verified at {timestamp}"`, and `USER_ERROR_COPY.connection`. These were settled by Story 1.3's review (see its two 2026-07-29 follow-ups on invented stale copy); re-deriving them here re-opens a closed UX decision.
-  - [ ] **Preserve the live-region structure exactly.** `FixtureCatalogueView`'s outer `aria-live="polite"` wrapper is never unmounted (a live region only announces mutations to an *existing* region), and the stale label puts only the message — not the Retry button — inside `role="status"`. Both are fixes from Story 1.3's review. Wrapping either in a new component that remounts them re-introduces a defect that has already been paid for once.
-  - [ ] **Do not touch the cached-stale banner markup itself, the skeleton, the `COLUMNS` descriptor, focus handling, or `useRedirectOnUnauthorized`.** Nothing else in these two files changes.
-  - [ ] **Do not** adopt `StatusBadge`, `EvidenceLink`, `EvidenceHighlight`, or `ReconnectBanner` anywhere — no surface exists yet that legitimately carries them.
+- [x] Task 6: Adopt three primitives in the two shipped surfaces (AC: #2)
+  - [x] **Why this is in scope:** AC #2's "so that" is *"every later story implements its visual contract once instead of retrofitting consistency."* `FixtureCatalogueView` and `ScenarioWorkspace` each hand-roll an inline alert and an empty state today; leaving two treatments in the tree is precisely the drift Story 4.7 will audit.
+  - [x] `FixtureCatalogueView.tsx`: `UnavailableCatalogue` → `InlineAlert` (variant `destructive`, title/description from `USER_ERROR_COPY.connection`, Retry as the action). `EmptyCatalogue` → `EmptyState`.
+  - [x] `ScenarioWorkspace.tsx`: the `query.isError && !query.data` alert block → `InlineAlert` with its existing Retry button and "Return to catalogue" link preserved as-is.
+  - [x] **Preserve every user-visible string byte-for-byte** — including `"Saved catalogue — refresh unavailable"`, `"No predefined scenarios are available."`, `"Stale — last verified at {timestamp}"`, and `USER_ERROR_COPY.connection`. These were settled by Story 1.3's review (see its two 2026-07-29 follow-ups on invented stale copy); re-deriving them here re-opens a closed UX decision.
+  - [x] **Preserve the live-region structure exactly.** `FixtureCatalogueView`'s outer `aria-live="polite"` wrapper is never unmounted (a live region only announces mutations to an *existing* region), and the stale label puts only the message — not the Retry button — inside `role="status"`. Both are fixes from Story 1.3's review. Wrapping either in a new component that remounts them re-introduces a defect that has already been paid for once.
+  - [x] **Do not touch the cached-stale banner markup itself, the skeleton, the `COLUMNS` descriptor, focus handling, or `useRedirectOnUnauthorized`.** Nothing else in these two files changes.
+  - [x] **Do not** adopt `StatusBadge`, `EvidenceLink`, `EvidenceHighlight`, or `ReconnectBanner` anywhere — no surface exists yet that legitimately carries them.
+
+### Review Findings
+
+- [x] [Review][Patch] Co-locate primitive tests per component [frontend/src/components/primitives/Primitives.test.tsx] — `Primitives.test.tsx` tested all six non-Skeleton primitives in one file, deviating from this story's own Project Structure Notes ("plus `fixtures.tsx` and co-located `*.test.tsx`") and CLAUDE.md's "Test files: co-located with implementation: `Component.test.tsx`" convention followed everywhere else in the codebase (`AppBar.test.tsx`, `FixtureCatalogueView.test.tsx`). **Fixed:** split into `StatusBadge.test.tsx`, `InlineAlert.test.tsx`, `EmptyState.test.tsx`, `ReconnectBanner.test.tsx`, `EvidenceLink.test.tsx`, `EvidenceHighlight.test.tsx`; original file removed. Full suite re-verified: 56 files / 277 tests passing.
+- [x] [Review][Defer] No contrast test for `EvidenceLink` on `EvidenceHighlight`'s surface [frontend/src/index.test.ts] — deferred, out of this story's AC-mandated contrast checks (only `evidence-link`-on-`#FFFFFF`, `evidence-foreground`-on-`evidence-surface`, and `primary-foreground`-on-`primary` are required); relevant once Story 2.8 actually composes `EvidenceLink` inside `EvidenceHighlight`.
+- [x] [Review][Defer] `EmptyState`'s `action` prop has no touch-target enforcement [frontend/src/components/primitives/EmptyState.tsx] — deferred, low impact today since every current call site (fixtures, `FixtureCatalogueView`) supplies `min-h-11` manually; nothing in the component itself guarantees a future caller does the same.
+- [x] [Review][Defer] `EvidenceLink` renders an inert focusable control if neither `href` nor `onActivate` is supplied [frontend/src/components/primitives/EvidenceLink.tsx:28-40] — deferred, unreachable today (no call site passes neither prop); becomes relevant when Story 2.8 wires real usage.
+- [x] [Review][Defer] `InlineAlert`'s title-only / action-without-description path is untested [frontend/src/components/primitives/InlineAlert.tsx:31-36] — deferred, every current fixture and call site supplies both `title` and `description`, so the conditional `AlertDescription` branch has no regression coverage.
+- [x] [Review][Defer] `FixtureCatalogueView.test.tsx`'s empty-state assertion reaches into `EmptyState`'s private DOM structure [frontend/src/features/fixture-catalogue/FixtureCatalogueView.test.tsx] — deferred, `explanation.parentElement` classes couple an unrelated consumer test to `EmptyState`'s internal wrapper rather than its public contract.
+- [x] [Review][Defer] `EvidenceLink`'s label has no truncation handling for long field values [frontend/src/components/primitives/EvidenceLink.tsx:22] — deferred, the generated locator string (`Evidence: {group} {record}, {fieldOrRange}, fixture {version}`) has no shorter-label option; Story 2.8's dense grid is where this becomes visible.
+- [x] [Review][Defer] `ReconnectBanner`'s `COPY[state]` lookup has no runtime guard [frontend/src/components/primitives/ReconnectBanner.tsx:20-21] — deferred, type-safe today with no runtime caller (SSE integration arrives Epic 2/3 per this story's own Dev Notes).
 
 ## Dev Notes
 
@@ -171,10 +182,60 @@ so that every later story implements its visual contract once instead of retrofi
 
 ### Agent Model Used
 
+Codex (GPT-5)
+
 ### Implementation Plan
+
+- Implement each numbered task in sequence using co-located Vitest/RTL tests as the red phase, the smallest production change as green, and a full frontend regression run before checking the task off.
+- Keep visual-regression fixtures deterministic and framework-neutral so later browser-proof stories can consume the same catalogue without changing primitive code.
 
 ### Debug Log References
 
+- 2026-08-06: Task 1 RED confirmed with two governed-token assertion failures; GREEN passed 3 focused tests and the 260-test frontend regression suite.
+- 2026-08-06: Task 2 RED confirmed both live links lacked `text-evidence-link`; GREEN passed 15 focused tests and the 262-test frontend regression suite.
+- 2026-08-06: Task 3 RED confirmed the primitive modules were absent; GREEN passed 8 focused primitive tests and the 270-test frontend regression suite.
+- 2026-08-06: Task 4 RED confirmed the fixture catalogue was absent; GREEN passed 2 focused fixture tests and the 272-test frontend regression suite.
+- 2026-08-06: Task 5 added quantitative stylesheet and fixture guards. Final task gate passed 51 files / 277 tests, typecheck, lint (four pre-existing warnings), and production build after replacing test-only ES2024/DOM-iterable assumptions with the repo's ES2023-compatible patterns.
+- 2026-08-06: Task 6 RED confirmed both surfaces still used local treatments; GREEN passed 20 focused surface tests and the 277-test frontend regression suite.
+
 ### Completion Notes List
 
+- Task 1: Added the exact ShiftMind color, radius, spacing, typography, and monospace tokens through the existing `:root` plus `@theme inline` mechanism; preserved the inherited radius and byte-identical dark block.
+- Task 2: Replaced only the two governed live link-color usages with `text-evidence-link`, preserving all other classes and frozen legacy code.
+- Task 3: Added the shadcn Badge copy-in plus prop-only StatusBadge, InlineAlert, EmptyState, ReconnectBanner, EvidenceLink, and EvidenceHighlight primitives; retained the governed shadcn Skeleton unchanged.
+- Task 4: Delivered one flat, deterministic 25-state fixture catalogue covering all seven primitives. Per the story's dependency judgment, no Playwright/screenshot dependency or runner was added; browser-proof stories can consume the array unchanged.
+- Task 5: Added CSS-source WCAG contrast checks, exact token/dark-theme guards, fixture coverage and literal-state checks, provider-free deterministic render checks, quiet/reduced-motion checks, and 44px interactive-target guards. Frontend coverage increased from 48 files / 257 tests to 51 files / 277 tests before Task 6.
+- Task 6: Adopted InlineAlert in the unavailable catalogue and retryable workspace failure, plus EmptyState in the empty catalogue, without changing settled copy, persistent live regions, cached-stale markup, or focus behavior.
+- Definition of Done: All six tasks and both acceptance criteria are satisfied. Final gate passed 51 test files / 277 tests, typecheck, lint with only four pre-existing warnings, and production build.
+
 ### File List
+
+- _bmad-output/implementation-artifacts/1-6-establish-shiftmind-design-tokens-and-shared-primitives.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- frontend/src/index.css
+- frontend/src/index.test.ts
+- frontend/src/components/layout/AppBar.tsx
+- frontend/src/components/layout/AppBar.test.tsx
+- frontend/src/features/fixture-catalogue/FixtureCatalogueView.tsx
+- frontend/src/features/fixture-catalogue/FixtureCatalogueView.test.tsx
+- frontend/src/components/ui/badge.tsx
+- frontend/src/components/primitives/StatusBadge.tsx
+- frontend/src/components/primitives/InlineAlert.tsx
+- frontend/src/components/primitives/EmptyState.tsx
+- frontend/src/components/primitives/ReconnectBanner.tsx
+- frontend/src/components/primitives/EvidenceLink.tsx
+- frontend/src/components/primitives/EvidenceHighlight.tsx
+- frontend/src/components/primitives/StatusBadge.test.tsx
+- frontend/src/components/primitives/InlineAlert.test.tsx
+- frontend/src/components/primitives/EmptyState.test.tsx
+- frontend/src/components/primitives/ReconnectBanner.test.tsx
+- frontend/src/components/primitives/EvidenceLink.test.tsx
+- frontend/src/components/primitives/EvidenceHighlight.test.tsx
+- frontend/src/components/primitives/fixtures.tsx
+- frontend/src/components/primitives/fixtures.test.tsx
+- frontend/src/routes/ScenarioWorkspace.tsx
+- frontend/src/routes/ScenarioWorkspace.test.tsx
+
+## Change Log
+
+- 2026-08-06: Established ShiftMind design tokens, seven shared primitives, deterministic visual-regression fixtures, quantitative accessibility tests, and primitive adoption in the existing catalogue/workspace surfaces; status moved to review.

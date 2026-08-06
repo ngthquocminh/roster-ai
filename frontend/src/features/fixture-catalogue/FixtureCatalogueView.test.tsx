@@ -64,9 +64,9 @@ describe("FixtureCatalogueView", () => {
   it("renders the bounded empty state without a creation action", () => {
     renderView({ data: [] });
 
-    expect(
-      screen.getByText("No predefined scenarios are available."),
-    ).toBeInTheDocument();
+    const explanation = screen.getByText("No predefined scenarios are available.");
+    expect(explanation).toBeInTheDocument();
+    expect(explanation.parentElement).toHaveClass("text-sm", "text-muted-foreground");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
@@ -77,6 +77,7 @@ describe("FixtureCatalogueView", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Couldn't load this content.",
     );
+    expect(screen.getByRole("alert")).toHaveClass("text-destructive");
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledOnce();
   });
@@ -113,6 +114,14 @@ describe("FixtureCatalogueView", () => {
       `/scenarios/${entry.scenario_id}`,
       `/scenarios/${earlierByName.scenario_id}`,
     ]);
+  });
+
+  it("uses the governed evidence-link color for scenario links", () => {
+    renderView({ data: [entry] });
+
+    expect(screen.getByRole("link", { name: "Fixture A" })).toHaveClass(
+      "text-evidence-link",
+    );
   });
 
   it("renders a semantic table with the specified columns", () => {

@@ -47,7 +47,7 @@ export function AppBar() {
         <NavLink
           to="/"
           end
-          className="text-sm font-medium text-[#4F46E5] hover:underline"
+          className="text-sm font-medium text-evidence-link hover:underline"
         >
           Home
         </NavLink>

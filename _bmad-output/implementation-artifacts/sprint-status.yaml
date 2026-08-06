@@ -69,7 +69,7 @@ development_status:
   1-3-choose-an-immutable-fixture: done
   1-4-serve-the-normalized-scenario-read-contract: done
   1-5-resolve-exact-evidence-targets: done
-  1-6-establish-shiftmind-design-tokens-and-shared-primitives: ready-for-dev
+  1-6-establish-shiftmind-design-tokens-and-shared-primitives: done
   1-7-open-the-read-only-scenario-data-workspace: ready-for-dev
   1-8-control-scenario-data-tables: ready-for-dev
   1-9-prove-viewer-parity-and-mutation-denial: ready-for-dev

@@ -204,6 +204,7 @@ it("renders safe retry behavior and a way back for non-terminal failures", () =>
   expect(screen.getByRole("alert")).toHaveTextContent(
     "Couldn't load this content.",
   );
+  expect(screen.getByRole("alert")).toHaveClass("text-destructive");
   expect(screen.queryByText("database internals")).not.toBeInTheDocument();
   // Without this the generic error state was a navigational dead end.
   expect(screen.getByRole("link", { name: "Return to catalogue" })).toHaveAttribute(

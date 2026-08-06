@@ -1,11 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link, useParams } from "react-router";
 
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
+import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { Button } from "@/components/ui/button";
 import { ScenarioVersionContext } from "@/features/scenario-workspace/ScenarioVersionContext";
 import { useRedirectOnUnauthorized } from "@/hooks/useRedirectOnUnauthorized";
@@ -91,11 +87,9 @@ export function ScenarioWorkspace() {
         >
           Scenario workspace
         </h1>
-        <Alert className="mt-5 border-destructive/40">
-          <AlertTitle>{USER_ERROR_COPY.connection.title}</AlertTitle>
-          <AlertDescription>
-            <p>{USER_ERROR_COPY.connection.description}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
+        <InlineAlert
+          action={
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 className="min-h-11"
                 onClick={() => {
@@ -113,8 +107,12 @@ export function ScenarioWorkspace() {
                 Return to catalogue
               </Link>
             </div>
-          </AlertDescription>
-        </Alert>
+          }
+          className="mt-5"
+          description={USER_ERROR_COPY.connection.description}
+          title={USER_ERROR_COPY.connection.title}
+          variant="destructive"
+        />
       </main>
     );
   }

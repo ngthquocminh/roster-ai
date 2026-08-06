@@ -1,11 +1,8 @@
 import { Link } from "react-router";
 
 import type { FixtureCatalogueEntry } from "@/api/scenarioCatalogue";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
+import { EmptyState } from "@/components/primitives/EmptyState";
+import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatTimestamp } from "@/lib/formatTimestamp";
@@ -68,7 +65,7 @@ function CatalogueTable({
             >
               <td className="px-3 py-2">
                 <Link
-                  className="inline-flex min-h-11 items-center break-words text-primary underline underline-offset-4 outline-none focus-visible:rounded-sm focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="inline-flex min-h-11 items-center break-words text-evidence-link underline underline-offset-4 outline-none focus-visible:rounded-sm focus-visible:ring-3 focus-visible:ring-ring/50"
                   to={`/scenarios/${entry.scenario_id}`}
                 >
                   {entry.scenario_name}
@@ -128,29 +125,26 @@ function LoadingCatalogue() {
 
 function UnavailableCatalogue({ onRetry }: { onRetry: () => void }) {
   return (
-    <Alert className="border-destructive/40">
-      <AlertTitle>{USER_ERROR_COPY.connection.title}</AlertTitle>
-      <AlertDescription>
-        <p>{USER_ERROR_COPY.connection.description}</p>
+    <InlineAlert
+      action={
         <Button
-          className="mt-3 min-h-11"
+          className="min-h-11"
           onClick={onRetry}
           type="button"
           variant="outline"
         >
           Retry
         </Button>
-      </AlertDescription>
-    </Alert>
+      }
+      description={USER_ERROR_COPY.connection.description}
+      title={USER_ERROR_COPY.connection.title}
+      variant="destructive"
+    />
   );
 }
 
 function EmptyCatalogue() {
-  return (
-    <p className="text-sm text-muted-foreground">
-      No predefined scenarios are available.
-    </p>
-  );
+  return <EmptyState explanation="No predefined scenarios are available." />;
 }
 
 function CatalogueBody({

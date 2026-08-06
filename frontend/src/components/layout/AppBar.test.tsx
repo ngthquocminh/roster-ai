@@ -25,6 +25,15 @@ function renderAppBar() {
 }
 
 describe("AppBar sign-out", () => {
+  it("uses the governed evidence-link color for Home", () => {
+    mockUseSignOut.mockReturnValue({ mutateAsync: vi.fn(), isPending: false });
+    renderAppBar();
+
+    expect(screen.getByRole("link", { name: "Home" })).toHaveClass(
+      "text-evidence-link",
+    );
+  });
+
   it("navigates to /signin on a plain successful sign-out", async () => {
     const mutateAsync = vi
       .fn()
