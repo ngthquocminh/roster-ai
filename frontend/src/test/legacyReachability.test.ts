@@ -25,6 +25,12 @@ const LEGACY_MODULES = [
   "hooks/useScenario.ts",
   "hooks/useScenarios.ts",
   "hooks/useTriggerRun.ts",
+  // Code review (story-1.9, 2026-08-06): these mutating API-client wrappers
+  // lost their only callers (the hooks above) in this same story but were
+  // left undeleted and unaudited by the original sweep.
+  "api/scenarios.ts",
+  "api/constraints.ts",
+  "api/runs.ts",
 ];
 const IMPORT_PATTERN = /(?:import|export)\s+(?:[^"']*?\s+from\s+)?["']([^"']+)["']/g;
 

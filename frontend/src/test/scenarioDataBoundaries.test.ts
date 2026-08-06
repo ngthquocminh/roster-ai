@@ -29,10 +29,19 @@ it("keeps Scenario Data independent from agent and mutation APIs", () => {
 });
 
 it("keeps Scenario Data free of mutation affordances", () => {
+  const MUTATING_VERBS = /\b(create|upload|import|edit|delete)\b/i;
   for (const file of scenarioDataFiles()) {
     const source = readFileSync(file, "utf8");
     expect(source, `${file} renders editable content`).not.toMatch(/contentEditable|draggable|type=["']file["']/i);
-    expect(source, `${file} names a mutating action`).not.toMatch(/aria-label=["'][^"']*\b(create|upload|import|edit|delete)\b/i);
+    // Code review (story-1.9, 2026-08-06): a button's accessible name falls
+    // back to its text content when no aria-label is set — check both, not
+    // just aria-label, or an unlabeled `<button>Delete</button>` slips past.
+    expect(source, `${file} names a mutating action via aria-label`).not.toMatch(
+      new RegExp(`aria-label=["'][^"']*${MUTATING_VERBS.source}`, "i"),
+    );
+    for (const match of source.matchAll(/<button\b[^>]*>([^<]*)<\/button>/gi)) {
+      expect(match[1], `${file} has a button named "${match[1].trim()}"`).not.toMatch(MUTATING_VERBS);
+    }
   }
 });
 

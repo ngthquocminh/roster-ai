@@ -43,6 +43,16 @@
 generated: 2026-07-24
 last_updated: 2026-08-06
 
+# NOTE (2026-08-06): Story 1-9 completed code review — 1 decision-needed
+# resolved (record_id kept as internal key only for work-areas-and-tasks and
+# workers groups, documented in Dev Notes), 2 patch findings fixed (deleted
+# orphaned legacy API-client wrappers scenarios.ts/constraints.ts/runs.ts;
+# hardened scenarioDataBoundaries.test.ts's button-name mutation check), 2
+# findings deferred (evidence git_commit off-by-one — pre-existing repo
+# convention; legacyReachability.test.ts's dynamic-import blind spot). Full
+# backend (349 passed) and frontend (47 files/200 tests, typecheck, lint)
+# regression green after patches. Status moved to done.
+
 # NOTE (2026-08-06): Story 1-7 completed code review with all 8 patch findings
 # fixed in place (401 redirect on projection queries, terminal vs. transient
 # error classification, ?group= param merging, accessibility/maintainability
@@ -77,7 +87,7 @@ development_status:
   1-6-establish-shiftmind-design-tokens-and-shared-primitives: done
   1-7-open-the-read-only-scenario-data-workspace: done
   1-8-control-scenario-data-tables: done
-  1-9-prove-viewer-parity-and-mutation-denial: review
+  1-9-prove-viewer-parity-and-mutation-denial: done
   1-10-prove-scenario-data-accessibility-and-responsiveness: backlog
   1-11-confirm-gate-a-readiness: backlog
   epic-1-retrospective: optional

@@ -38,7 +38,8 @@
     },
     "frontend_after_legacy_cleanup": {
       "command": "npm test",
-      "result": "50 files passed, 220 tests passed"
+      "result": "47 files passed, 200 tests passed",
+      "note": "Updated 2026-08-06 by code-review patch: frontend/src/api/scenarios.ts, constraints.ts, runs.ts (and their co-located tests) were confirmed unreachable and deleted, completing the Task 5 orphaned-legacy sweep the original commit left incomplete."
     }
   },
   "version_bindings": {
