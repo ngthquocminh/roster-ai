@@ -512,6 +512,91 @@ def test_projection_api_is_complete_windowed_empty_group_safe_and_site_isolated(
 
 
 @pytest.mark.postgres
+def test_gate_a_projection_api_matches_every_contract_record_for_both_fixtures(
+    postgres_engine,
+    tmp_path,
+) -> None:
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url,
+        engine=postgres_engine,
+    )
+    suffix = uuid4().hex
+    site_id = adapter.ensure_seed_site(
+        f"Parity Organization {suffix}", f"Parity Site {suffix}"
+    )
+    imported = []
+    for fixture_name in (
+        "sample_tiny_input",
+        "sample_tiny_input_more_tm",
+    ):
+        source_path = REPO_ROOT / "data" / f"{fixture_name}.json"
+        result = adapter.import_fixture(
+            site_id=site_id,
+            fixture_id=fixture_name,
+            version="v1",
+            payload=json.loads(source_path.read_text(encoding="utf-8")),
+            source_package="predefined-fixtures",
+            source_path=f"data/{source_path.name}",
+        )
+        imported.append((fixture_name, result))
+
+    version_ids = [result.scenario_version_id for _, result in imported]
+    with postgres_engine.connect() as connection:
+        rows = connection.execute(
+            select(
+                scenario_version.c.id,
+                scenario_version.c.scenario_id,
+            ).where(scenario_version.c.id.in_(version_ids))
+        ).all()
+    scenario_by_version = {row.id: row.scenario_id for row in rows}
+
+    headers = {"Cookie": f"{SESSION_COOKIE_NAME}=projection-parity"}
+    with _catalogue_client(
+        postgres_engine, site_id=site_id, tmp_path=tmp_path
+    ) as client:
+        for fixture_name, result in imported:
+            contract = json.loads(
+                (
+                    REPO_ROOT
+                    / "data"
+                    / "contract"
+                    / f"{fixture_name}.projection-v1.json"
+                ).read_text(encoding="utf-8")
+            )
+            scenario_id = scenario_by_version[result.scenario_version_id]
+            base = f"/api/v1/scenarios/{scenario_id}/projection"
+
+            overview_response = client.get(base, headers=headers)
+            assert overview_response.status_code == 200
+            overview = overview_response.json()
+            assert {
+                field: overview[field] for field in contract["overview"]
+            } == contract["overview"]
+
+            for group, expected_items in contract["groups"].items():
+                cursor = 0
+                actual_items: list[dict[str, object]] = []
+                while True:
+                    response = client.get(
+                        f"{base}/{group}",
+                        headers=headers,
+                        params={"cursor": cursor, "limit": 200},
+                    )
+                    assert response.status_code == 200
+                    page = response.json()
+                    actual_items.extend(page["items"])
+                    assert page["total_count"] == len(expected_items)
+                    assert page["matching_count"] == len(expected_items)
+                    next_cursor = page["next_cursor"]
+                    if next_cursor is None:
+                        break
+                    assert next_cursor == cursor + len(page["items"])
+                    cursor = next_cursor
+
+                assert actual_items == expected_items
+
+
+@pytest.mark.postgres
 def test_catalogue_api_is_ordered_complete_and_read_only(
     postgres_engine,
     catalogue_site_rows,

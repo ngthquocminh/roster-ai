@@ -1,0 +1,65 @@
+{
+  "story": "1.9",
+  "requirements": ["FR22", "FR24", "NFR29"],
+  "measurement_date": "2026-08-06",
+  "fixtures": [
+    {
+      "fixture_id": "sample_tiny_input",
+      "version": "v1",
+      "contract": "data/contract/sample_tiny_input.projection-v1.json"
+    },
+    {
+      "fixture_id": "sample_tiny_input_more_tm",
+      "version": "v1",
+      "contract": "data/contract/sample_tiny_input_more_tm.projection-v1.json"
+    }
+  ],
+  "contract_digests": {
+    "algorithm": "sha256",
+    "sample_tiny_input": "e12de5fea95938afb8dc66e70bd6207b766cd4ea521a9f7a43cd3ad2541dd692",
+    "sample_tiny_input_more_tm": "a70dd166258bc860d6dce34767285acb8a6ca88686851de36ecc36a060cc1736"
+  },
+  "results": {
+    "api_parity": "passed",
+    "frontend_parity": "passed",
+    "backend_mutation_audit": "passed",
+    "frontend_mutation_audit": "passed",
+    "legacy_route_mechanism": "proven (isolated settings)",
+    "legacy_route_live_flag_state": "not verified by this story — operational fact, owned by Story 1.11 / release runbook"
+  },
+  "test_evidence": {
+    "backend": {
+      "command": "python -m pytest",
+      "result": "348 passed, 6 deselected"
+    },
+    "frontend_before_legacy_cleanup": {
+      "command": "npm test",
+      "result": "78 files passed, 381 tests passed"
+    },
+    "frontend_after_legacy_cleanup": {
+      "command": "npm test",
+      "result": "50 files passed, 220 tests passed"
+    }
+  },
+  "version_bindings": {
+    "dataset": "two governed Gate A fixtures, v1; contract digests recorded above",
+    "evaluator": "pytest 9.1.1 and Vitest 4.1.10 parity/mutation tests",
+    "model": "not applicable — AgentRuntime is outside Story 1.9",
+    "prompt": "not applicable — no model invocation",
+    "tool": "FastAPI TestClient, PostgreSQL 18, React Testing Library with jsdom",
+    "policy": "Story 1.9 AC1/AC2 plus the 2026-08-06 decision separating mechanism proof from live cutover state",
+    "application": "local backend and frontend source tree",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable — no solver run",
+    "code": {
+      "git_commit": "e2b2038f2a8f8201cc0fd91d9b520d77c5e8e1ea",
+      "working_tree_dirty": true
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    }
+  },
+  "passed": true
+}

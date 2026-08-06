@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
+import pytest
 
 from adapters.postgres.fixture_history import FixtureImportResult
 from api.main import app
@@ -60,6 +61,26 @@ def test_api_refuses_mutating_requests_when_cutover_flag_exists(
     with TestClient(app) as client:
         assert client.get("/health").status_code == 200
         response = client.post("/scenarios", json={})
+
+    assert response.status_code == 503
+    assert response.json()["title"] == "Gate A maintenance window"
+
+
+@pytest.mark.parametrize("method", ("GET", "POST", "PUT", "PATCH", "DELETE"))
+@pytest.mark.parametrize("path", ("/scenarios", "/runs/audit-target", "/constraints"))
+def test_api_refuses_every_http_method_on_each_legacy_prefix(
+    method: str,
+    path: str,
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    flag_path = tmp_path / "gate-a-maintenance"
+    flag_path.write_text("maintenance", encoding="utf-8")
+    monkeypatch.setenv("ROSTERAI_MAINTENANCE_FLAG", str(flag_path))
+    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "legacy.db"))
+
+    with TestClient(app) as client:
+        response = client.request(method, path)
 
     assert response.status_code == 503
     assert response.json()["title"] == "Gate A maintenance window"
