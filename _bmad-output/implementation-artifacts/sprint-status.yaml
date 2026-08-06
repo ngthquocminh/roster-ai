@@ -41,7 +41,21 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-05
+last_updated: 2026-08-06
+
+# NOTE (2026-08-05): Story 1-9 was created out of normal epic order, per explicit
+# user request, while 1-6/1-7/1-8 are still ready-for-dev (not done). Story 1-9's
+# frontend parity/mutation-audit tasks are hard-blocked on 1-7 and 1-8 landing —
+# see the story file's "HARD BLOCKER" section. Its backend tasks have no such
+# dependency and can proceed independently.
+#
+# NOTE (2026-08-06): Story 1-8 is a FULL-STACK story despite reading as a
+# frontend table-controls story in epics.md. Server-side sort/filter does not
+# exist yet — Story 1-4 shipped cursor/limit only and deliberately deferred both
+# ("explicit sorting is Story 1.8's acceptance boundary"), and matching_count is
+# hardcoded to total_count in adapters/postgres/scenario_projection.py. Size it
+# accordingly: its backend half (Tasks 1-4) is independent of 1-7 and should be
+# built first; only its frontend half is blocked on 1-7.
 project: ShiftMind
 project_key: NOKEY
 tracking_system: file-system
@@ -55,10 +69,10 @@ development_status:
   1-3-choose-an-immutable-fixture: done
   1-4-serve-the-normalized-scenario-read-contract: done
   1-5-resolve-exact-evidence-targets: done
-  1-6-establish-shiftmind-design-tokens-and-shared-primitives: backlog
-  1-7-open-the-read-only-scenario-data-workspace: backlog
-  1-8-control-scenario-data-tables: backlog
-  1-9-prove-viewer-parity-and-mutation-denial: backlog
+  1-6-establish-shiftmind-design-tokens-and-shared-primitives: ready-for-dev
+  1-7-open-the-read-only-scenario-data-workspace: ready-for-dev
+  1-8-control-scenario-data-tables: ready-for-dev
+  1-9-prove-viewer-parity-and-mutation-denial: ready-for-dev
   1-10-prove-scenario-data-accessibility-and-responsiveness: backlog
   1-11-confirm-gate-a-readiness: backlog
   epic-1-retrospective: optional
