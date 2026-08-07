@@ -43,6 +43,27 @@
 generated: 2026-07-24
 last_updated: 2026-08-07
 
+# NOTE (2026-08-07): Story 1-11 created and moved to ready-for-dev. It is the
+# Epic 1 gate story and ships no product feature — it builds the machinery that
+# evaluates Gate A, runs it, and persists the decision. Being the first story to
+# view all ten prior stories at once, it absorbs four cross-story gaps that no
+# individual story owned: (a) the outstanding NVDA manual pass from 1-10 (the
+# caveat below), now scheduled as a real human-executed run via NVDA's Speech
+# Viewer; (b) the repo-wide `git_commit` binding defect (deferred-work.md:65) —
+# all four existing evidence files record the pre-commit parent hash with
+# `working_tree_dirty: true`, so the four files get re-measured on a clean tree
+# and rebound in place; (c) the missing `schema_version` binding that AC2
+# requires and that exists nowhere in the repo; (d) the six stories (1.1, 1.2,
+# 1.3, 1.6, 1.7, 1.8) that produced no evidence file, whose contributing checks
+# are read from JUnit XML instead. The four existing evidence files cover only 2
+# of AR28's 6 named invariants, so a rollup limited to them would not satisfy
+# AC2. Report generation is a script that refuses a dirty tree and exits
+# non-zero on any missing/unbound/skipped/failing check, backed by a repo-wide
+# `evidence/**` convention guard that protects Epics 2-5 as well. NOTE for
+# whoever runs it: `gate_a_passed: false` is a valid deliverable content — the
+# story is done when the machinery works and the verdict is honest; a false
+# verdict blocks Epic 2, not this story.
+
 # NOTE (2026-08-07): Story 1-10 completed code review — 1 decision-needed resolved
 # (second Gate-A fixture "sample_tiny_input_more_tm" was claimed as exercised by
 # the evidence file but never wired into the new a11y/e2e harness; wired it in via
@@ -125,7 +146,7 @@ development_status:
   1-8-control-scenario-data-tables: done
   1-9-prove-viewer-parity-and-mutation-denial: done
   1-10-prove-scenario-data-accessibility-and-responsiveness: done
-  1-11-confirm-gate-a-readiness: backlog
+  1-11-confirm-gate-a-readiness: ready-for-dev
   epic-1-retrospective: optional
 
   # Epic 2: Grounded Conversational Investigation
