@@ -10,6 +10,7 @@ export function usePhoneViewport() {
   const [isPhone, setIsPhone] = useState(matchesPhoneViewport);
 
   useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
     const query = window.matchMedia(PHONE_QUERY);
     const update = (event: MediaQueryListEvent) => setIsPhone(event.matches);
     setIsPhone(query.matches);

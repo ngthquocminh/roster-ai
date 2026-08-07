@@ -11,7 +11,9 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "cmd /c \"npm run build && npm run preview -- --host 127.0.0.1\"",
+    // Playwright spawns this via a shell already (cmd.exe on Windows, /bin/sh elsewhere) — an
+    // explicit "cmd /c" wrapper is not just redundant, it breaks the command on non-Windows hosts.
+    command: "npm run build && npm run preview -- --host 127.0.0.1",
     url: "http://localhost:4173",
     reuseExistingServer: false,
     timeout: 120_000,

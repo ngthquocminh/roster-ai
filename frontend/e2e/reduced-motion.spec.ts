@@ -1,6 +1,23 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { expect, test } from "@playwright/test";
 
 import { installApiStubs, SCENARIO_ID } from "./support/apiStubs";
+
+// e2e/ is a separate TS project (tsconfig.e2e.json) from src/ (tsconfig.app.json) under project
+// references, so it can't `import` across that boundary. Read the real component source instead
+// of hand-copying its class list, so this still breaks loudly — instead of silently drifting — the
+// moment EvidenceHighlight.tsx's classes change.
+function readEvidenceHighlightClass(): string {
+  const sourcePath = fileURLToPath(
+    new URL("../src/components/primitives/EvidenceHighlight.tsx", import.meta.url),
+  );
+  const source = readFileSync(sourcePath, "utf8");
+  const match = /EVIDENCE_HIGHLIGHT_CLASS\s*=\s*\n?\s*"([^"]+)"/.exec(source);
+  if (!match) throw new Error("Could not locate EVIDENCE_HIGHLIGHT_CLASS in EvidenceHighlight.tsx");
+  return match[1];
+}
 
 const demandUrl = `/scenarios/${SCENARIO_ID}/data?group=demand`;
 
@@ -56,13 +73,21 @@ test("retains the stale workspace status under reduced motion", async ({ page })
 });
 
 test("keeps evidence highlighting visually identical across motion preferences", async ({ page }) => {
+  // EvidenceHighlight (frontend/src/components/primitives/EvidenceHighlight.tsx) isn't wired into
+  // a live route yet — it currently only ships through the Story 1.6 primitives fixture registry.
+  // Layer A (jsdom) can't compute real animation/paint values (Task 1's color-contrast note applies
+  // equally here), so this still injects a node rather than navigating to a real usage. What makes
+  // it a proof of the *shipped* component, not a stand-in: the class list is read from the real
+  // component source (see readEvidenceHighlightClass above) instead of hand-copied, so this breaks
+  // loudly — instead of silently drifting — the moment the component's classes change.
+  const evidenceHighlightClass = readEvidenceHighlightClass();
   await page.goto("/");
   const styles = [];
   for (const reducedMotion of ["no-preference", "reduce"] as const) {
     await page.emulateMedia({ reducedMotion });
-    styles.push(await page.evaluate(() => {
+    styles.push(await page.evaluate((className) => {
       const node = document.createElement("div");
-      node.className = "rounded-evidence border border-evidence-border bg-evidence-surface p-evidence-inset text-evidence-foreground";
+      node.className = className;
       node.textContent = "Evidence target";
       document.body.append(node);
       const style = getComputedStyle(node);
@@ -76,7 +101,7 @@ test("keeps evidence highlighting visually identical across motion preferences",
       };
       node.remove();
       return snapshot;
-    }));
+    }, evidenceHighlightClass));
   }
   expect(styles[0]).toEqual(styles[1]);
   expect(styles[0].animationName).toBe("none");

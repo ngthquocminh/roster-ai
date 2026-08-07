@@ -67,6 +67,16 @@ describe("useColumnVisibility", () => {
     }
   });
 
+  it("falls back to the phone essential-column default when stored preference is hostile, instead of showing every column", () => {
+    setPhoneViewport(true);
+    sessionStorage.setItem("shiftmind.columns.demand", JSON.stringify(["unknown"]));
+    const columns = COLUMNS_BY_GROUP.demand;
+    const { result } = renderHook(() => useColumnVisibility("demand", columns));
+    for (const column of columns) {
+      expect(result.current.visibleKeys.has(column.key)).toBe(column.required || column.essential);
+    }
+  });
+
   it("lets an explicit stored preference override the phone default", () => {
     setPhoneViewport(true);
     sessionStorage.setItem("shiftmind.columns.demand", "[]");

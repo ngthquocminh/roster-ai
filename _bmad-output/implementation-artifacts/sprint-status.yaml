@@ -41,7 +41,31 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-06
+last_updated: 2026-08-07
+
+# NOTE (2026-08-07): Story 1-10 completed code review — 1 decision-needed resolved
+# (second Gate-A fixture "sample_tiny_input_more_tm" was claimed as exercised by
+# the evidence file but never wired into the new a11y/e2e harness; wired it in via
+# a new gate-a-fixture-coverage.spec.ts targeting the workers group, the only
+# group where the fixture differs), 9 patch findings fixed (phone-default
+# sessionStorage fallback bug, fabricated reduced-motion component proof, missed
+# post-hide axe scan, Layer A missing WCAG tag config, apiStubs.ts not honoring
+# filter params, dropped aria-sort="none" test coverage, usePhoneViewport guard +
+# missing live-resize test, mislabeled backend "cross-site" test, Windows-only
+# webServer command), 0 deferred, 7 dismissed as noise (verified false positives
+# or non-issues against live code — see story file Review Findings for detail).
+# Fixing the filter-stub bug surfaced a pre-existing dependency in
+# keyboard-journey.spec.ts (selected a 6-row filter value expecting a "Next" page
+# that no longer exists once filtering is real) — fixed alongside it. Full backend
+# (350 passed, 6 deselected), frontend (50 files/287 tests, typecheck, lint), and
+# e2e (23/23 on both chromium and msedge) regression green after patches.
+# CAVEAT: evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json
+# still records nvda_manual_pass as "not executed" (top-level passed: false) —
+# the manual NVDA screen-reader gate from Task 6 is honestly outstanding, per the
+# story's own "do not report as passed" instruction. Status moved to done on the
+# strength of the automated evidence and resolved review findings; the NVDA pass
+# is not gated by this workflow and should be tracked before Story 1-11 rolls
+# this evidence into the Gate A readiness report.
 
 # NOTE (2026-08-06): Story 1-10 created and moved to ready-for-dev. Unlike 1-9 it
 # is NOT test-only — it carries two real implementation gaps found against the
@@ -100,7 +124,7 @@ development_status:
   1-7-open-the-read-only-scenario-data-workspace: done
   1-8-control-scenario-data-tables: done
   1-9-prove-viewer-parity-and-mutation-denial: done
-  1-10-prove-scenario-data-accessibility-and-responsiveness: review
+  1-10-prove-scenario-data-accessibility-and-responsiveness: done
   1-11-confirm-gate-a-readiness: backlog
   epic-1-retrospective: optional
 

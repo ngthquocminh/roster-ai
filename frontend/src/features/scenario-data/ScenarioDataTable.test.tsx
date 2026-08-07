@@ -11,7 +11,9 @@ describe("ScenarioDataHeader", () => {
     const normalized = columns as readonly ColumnDef[];
     const sortable = normalized.find((column) => column.sortKey);
     expect(sortable).toBeDefined();
-    const { rerender } = render(<table><ScenarioDataHeader columns={normalized} onSort={onSort} order="asc" sort={sortable?.sortKey} /></table>);
+    const { rerender } = render(<table><ScenarioDataHeader columns={normalized} onSort={onSort} order="asc" /></table>);
+    expect(screen.getByRole("columnheader", { name: sortable?.header })).toHaveAttribute("aria-sort", "none");
+    rerender(<table><ScenarioDataHeader columns={normalized} onSort={onSort} order="asc" sort={sortable?.sortKey} /></table>);
     const active = screen.getByRole("columnheader", { name: sortable?.header });
     expect(active).toHaveAttribute("scope", "col");
     expect(active).toHaveAttribute("aria-sort", "ascending");

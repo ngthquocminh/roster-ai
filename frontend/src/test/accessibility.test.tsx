@@ -49,8 +49,17 @@ const context = {
 };
 const queryBase = { error: null, isError: false, isFetching: false, isPending: false, refetch: vi.fn() };
 
+// Mirrors the tag list frontend/e2e/support/accessibility.ts uses for Layer B — axe-core tag
+// matching has no hierarchy (wcag2aa does not imply wcag21aa/wcag22aa), so every axe run must
+// list all five explicitly. target-size is enabled for parity even though jsdom has no layout
+// engine to evaluate it against (Layer B is the only layer that can actually fire that rule).
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+
 async function expectClean(container: HTMLElement) {
-  const results = await axe(container, { rules: { "color-contrast": { enabled: false } } });
+  const results = await axe(container, {
+    runOnly: { type: "tag", values: WCAG_TAGS },
+    rules: { "color-contrast": { enabled: false }, "target-size": { enabled: true } },
+  });
   expect(results.violations).toEqual([]);
 }
 

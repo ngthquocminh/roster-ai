@@ -661,13 +661,15 @@ def test_projection_authorization_is_viewport_independent(projection_client) -> 
     assert {response.status_code for response in authorized} == {200}
     assert len({response.content for response in authorized}) == 1
 
+    # Note: this proves denial-without-a-session-cookie is viewport-independent, not cross-site
+    # rejection specifically — enforce_versioned_session_and_csrf only origin-checks unsafe methods
+    # (POST/PUT/PATCH/DELETE; see api/main.py:159,229), so an Origin header is inert for this GET.
     client.cookies.clear()
-    denied = [
-        client.get(path, headers={**headers, "Origin": "https://cross-site.invalid"})
-        for headers in viewport_headers
+    denied_without_session = [
+        client.get(path, headers=headers) for headers in viewport_headers
     ]
-    assert {response.status_code for response in denied} == {401}
-    assert {response.json()["code"] for response in denied} == {
+    assert {response.status_code for response in denied_without_session} == {401}
+    assert {response.json()["code"] for response in denied_without_session} == {
         "authentication_required"
     }
 

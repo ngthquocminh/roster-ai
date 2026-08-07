@@ -12,12 +12,15 @@ function readHidden(group: ScenarioDataListGroup, columns: readonly ColumnDef[])
     const stored = sessionStorage.getItem(storageKey(group));
     if (stored === null) return null;
     const parsed: unknown = JSON.parse(stored);
-    if (!Array.isArray(parsed) || !parsed.every((key) => typeof key === "string")) return new Set<string>();
+    // Malformed/stale entries (unknown column, now-required column, wrong shape) fall through to
+    // the phone-default via `??` below — never resolve to a truthy empty Set, which would silently
+    // show every column instead of the compact triage default.
+    if (!Array.isArray(parsed) || !parsed.every((key) => typeof key === "string")) return null;
     const known = new Map(columns.map((column) => [column.key, column]));
-    if (parsed.some((key) => !known.has(key) || known.get(key)?.required)) return new Set<string>();
+    if (parsed.some((key) => !known.has(key) || known.get(key)?.required)) return null;
     return new Set(parsed);
   } catch {
-    return new Set<string>();
+    return null;
   }
 }
 

@@ -61,13 +61,16 @@ test("completes the Gate A Scenario Data journey with keyboard only", async ({ c
   await tabTo(page, familyFilter, true);
   await expectKeyboardFocus(familyFilter);
   await page.keyboard.press("Space");
-  await page.keyboard.press("End");
+  // "Home" selects the first option ("outbound", 493 rows in the fixture) rather than "End"
+  // ("indirect", only 6 rows) — apiStubs.ts now honors the filter for real, and the journey below
+  // needs a genuine next page to exist after filtering, not just before it.
+  await page.keyboard.press("Home");
   await page.keyboard.press("Enter");
   const apply = page.getByRole("button", { name: "Apply" });
   await tabTo(page, apply);
   await expectKeyboardFocus(apply);
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/family=indirect/);
+  await expect(page).toHaveURL(/family=outbound/);
 
   const next = page.getByRole("button", { name: "Next" });
   await tabTo(page, next);
