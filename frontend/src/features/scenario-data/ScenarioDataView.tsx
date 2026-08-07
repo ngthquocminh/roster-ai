@@ -50,9 +50,13 @@ export function ScenarioDataView({ scenarioId }: Readonly<{ scenarioId: string }
         </div>
         {isListGroup ? (
           <div className="mt-4 space-y-3">
-            <div className="flex justify-end"><ColumnChooser columns={columns} onVisibilityChange={visibility.setColumnVisible} revealedField={visibility.revealedColumn?.key} visibleKeys={visibility.visibleKeys} /></div>
-            {visibility.revealedColumn ? <p className="text-sm text-muted-foreground">{visibility.revealedColumn.header} is shown because an evidence link targets it.</p> : null}
-            <FilterBar activeFilters={controls.activeFilters} filters={FILTERS_BY_GROUP[controlGroup]} onApply={controls.applyFilters} onClear={controls.clearFilters} onRemove={controls.removeFilter} />
+            <div className="flex flex-col gap-3 lg:flex-row-reverse lg:items-start lg:justify-between">
+              <div className="space-y-2 lg:text-right">
+                <div className="flex justify-start lg:justify-end"><ColumnChooser columns={columns} onVisibilityChange={visibility.setColumnVisible} revealedField={visibility.revealedColumn?.key} visibleKeys={visibility.visibleKeys} /></div>
+                {visibility.revealedColumn ? <p className="text-sm text-muted-foreground">{visibility.revealedColumn.header} is shown because an evidence link targets it.</p> : null}
+              </div>
+              <div className="min-w-0 flex-1"><FilterBar activeFilters={controls.activeFilters} filters={FILTERS_BY_GROUP[controlGroup]} onApply={controls.applyFilters} onClear={controls.clearFilters} onRemove={controls.removeFilter} /></div>
+            </div>
           </div>
         ) : null}
         {groups.map(([slug, _label, Panel]) => {

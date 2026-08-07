@@ -1,10 +1,26 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { COLUMNS_BY_GROUP } from "./columns";
 import { useColumnVisibility } from "./useColumnVisibility";
 
-beforeEach(() => sessionStorage.clear());
+function setPhoneViewport(matches: boolean) {
+  vi.mocked(window.matchMedia).mockReturnValue({
+    matches,
+    media: "(max-width: 767px)",
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  });
+}
+
+beforeEach(() => {
+  sessionStorage.clear();
+  setPhoneViewport(false);
+});
 
 describe("useColumnVisibility", () => {
   it("persists optional columns per group for the session", () => {
@@ -40,5 +56,29 @@ describe("useColumnVisibility", () => {
     expect(result.current.visibleKeys.has("grade")).toBe(false);
     rerender({ field: "unknown" });
     expect(result.current.revealedColumn).toBeUndefined();
+  });
+
+  it("uses the authored essential-column default on a phone", () => {
+    setPhoneViewport(true);
+    const columns = COLUMNS_BY_GROUP.demand;
+    const { result } = renderHook(() => useColumnVisibility("demand", columns));
+    for (const column of columns) {
+      expect(result.current.visibleKeys.has(column.key)).toBe(column.required || column.essential);
+    }
+  });
+
+  it("lets an explicit stored preference override the phone default", () => {
+    setPhoneViewport(true);
+    sessionStorage.setItem("shiftmind.columns.demand", "[]");
+    const { result } = renderHook(() => useColumnVisibility("demand", COLUMNS_BY_GROUP.demand));
+    expect(result.current.visibleKeys.size).toBe(COLUMNS_BY_GROUP.demand.length);
+  });
+
+  it("reveals a phone-hidden evidence target without persisting a new preference", () => {
+    setPhoneViewport(true);
+    const hiddenColumn = COLUMNS_BY_GROUP.demand.find((column) => !column.required && !column.essential)!;
+    const { result } = renderHook(() => useColumnVisibility("demand", COLUMNS_BY_GROUP.demand, hiddenColumn.key));
+    expect(result.current.visibleKeys.has(hiddenColumn.key)).toBe(true);
+    expect(sessionStorage.getItem("shiftmind.columns.demand")).toBeNull();
   });
 });

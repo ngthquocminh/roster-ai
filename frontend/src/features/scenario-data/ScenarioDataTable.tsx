@@ -15,7 +15,7 @@ export function ScenarioDataHeader({ columns, onSort, order, sort }: Readonly<{
       <TableRow>
         {columns.map((column) => column.sortKey ? (
           <TableHead aria-label={column.header} aria-sort={sort === column.sortKey ? (order === "asc" ? "ascending" : "descending") : "none"} key={column.key} scope="col">
-            <button aria-label={`Sort by ${column.header}`} className="min-h-11" onClick={() => onSort(column.sortKey!)} type="button">{column.header}</button>
+            <button aria-label={`Sort by ${column.header}`} className="min-h-11 min-w-11" onClick={() => onSort(column.sortKey!)} type="button">{column.header}</button>
           </TableHead>
         ) : <TableHead key={column.key} scope="col">{column.header}</TableHead>)}
       </TableRow>

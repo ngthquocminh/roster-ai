@@ -25,4 +25,9 @@ describe("PaginationControls", () => {
     expect(screen.getByText(copy, { selector: "p" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(copy);
   });
+
+  it("announces zero for an out-of-range stale cursor", () => {
+    render(<PaginationControls cursor={100} hasFilters itemCount={0} matchingCount={12} nextCursor={null} onPageChange={vi.fn()} totalCount={1203} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Showing 0 of 12 matching (1,203 total)");
+  });
 });

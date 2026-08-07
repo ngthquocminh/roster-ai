@@ -24,6 +24,11 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // The parity guard renders all 1,547 demand rows while axe sweeps run in
+    // other files. Bounding workers avoids CPU starvation without relaxing
+    // that guard's assertions or timeout.
+    maxWorkers: 4,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
     setupFiles: ['./src/test/setup.ts'],
     // `src/lib/env.ts` throws loudly at import time if VITE_API_BASE_URL is
     // unset (deliberately — see that file). Tests must not depend on a

@@ -648,6 +648,30 @@ def test_projection_api_publishes_overview_and_all_six_group_pages(
         assert body["site_id"] == str(reader.site_id)
 
 
+def test_projection_authorization_is_viewport_independent(projection_client) -> None:
+    client, reader = projection_client
+    path = f"/api/v1/scenarios/{reader.scenario_id}/projection/demand"
+    viewport_headers = (
+        {"User-Agent": "Desktop Chrome", "Sec-CH-UA-Mobile": "?0", "Viewport-Width": "1280"},
+        {"User-Agent": "Tablet Edge", "Sec-CH-UA-Mobile": "?0", "Viewport-Width": "900"},
+        {"User-Agent": "Phone Chrome", "Sec-CH-UA-Mobile": "?1", "Viewport-Width": "390"},
+    )
+
+    authorized = [client.get(path, headers=headers) for headers in viewport_headers]
+    assert {response.status_code for response in authorized} == {200}
+    assert len({response.content for response in authorized}) == 1
+
+    client.cookies.clear()
+    denied = [
+        client.get(path, headers={**headers, "Origin": "https://cross-site.invalid"})
+        for headers in viewport_headers
+    ]
+    assert {response.status_code for response in denied} == {401}
+    assert {response.json()["code"] for response in denied} == {
+        "authentication_required"
+    }
+
+
 @pytest.mark.parametrize(
     ("group", "params", "expected"),
     (

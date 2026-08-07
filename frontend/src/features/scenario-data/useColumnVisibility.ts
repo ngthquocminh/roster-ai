@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { ColumnDef, ScenarioDataListGroup } from "./columns";
+import { usePhoneViewport } from "./usePhoneViewport";
 
 function storageKey(group: ScenarioDataListGroup) {
   return `shiftmind.columns.${group}`;
@@ -8,7 +9,9 @@ function storageKey(group: ScenarioDataListGroup) {
 
 function readHidden(group: ScenarioDataListGroup, columns: readonly ColumnDef[]) {
   try {
-    const parsed: unknown = JSON.parse(sessionStorage.getItem(storageKey(group)) ?? "[]");
+    const stored = sessionStorage.getItem(storageKey(group));
+    if (stored === null) return null;
+    const parsed: unknown = JSON.parse(stored);
     if (!Array.isArray(parsed) || !parsed.every((key) => typeof key === "string")) return new Set<string>();
     const known = new Map(columns.map((column) => [column.key, column]));
     if (parsed.some((key) => !known.has(key) || known.get(key)?.required)) return new Set<string>();
@@ -23,8 +26,11 @@ export function useColumnVisibility(
   columns: readonly ColumnDef[],
   revealedField?: string,
 ) {
+  const isPhone = usePhoneViewport();
   const [hiddenByGroup, setHiddenByGroup] = useState<Record<string, Set<string>>>({});
-  const hidden = hiddenByGroup[group] ?? readHidden(group, columns);
+  const hidden = hiddenByGroup[group]
+    ?? readHidden(group, columns)
+    ?? new Set(columns.filter((column) => isPhone && !column.required && !column.essential).map((column) => column.key));
   const target = columns.find((column) => column.key === revealedField);
   const revealedColumn = target && hidden.has(target.key) ? target : undefined;
   const visibleKeys = new Set(

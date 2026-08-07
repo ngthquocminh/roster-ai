@@ -1,0 +1,96 @@
+{
+  "story": "1.10",
+  "requirements": ["NFR18", "NFR20", "UX-DR26", "UX-DR27", "UX-DR28", "UX-DR29", "UX-DR31"],
+  "measurement_date": "2026-08-06",
+  "fixtures": [
+    {
+      "fixture_id": "sample_tiny_input",
+      "version": "v1",
+      "contract": "data/contract/sample_tiny_input.projection-v1.json"
+    },
+    {
+      "fixture_id": "sample_tiny_input_more_tm",
+      "version": "v1",
+      "contract": "data/contract/sample_tiny_input_more_tm.projection-v1.json"
+    }
+  ],
+  "contract_digests": {
+    "algorithm": "sha256",
+    "sample_tiny_input": "e12de5fea95938afb8dc66e70bd6207b766cd4ea521a9f7a43cd3ad2541dd692",
+    "sample_tiny_input_more_tm": "a70dd166258bc860d6dce34767285acb8a6ca88686851de36ecc36a060cc1736"
+  },
+  "results": {
+    "axe_jsdom": "passed — catalogue/workspace states and all seven Scenario Data groups; color-contrast excluded because jsdom has no layout engine",
+    "axe_browser": "passed — full color-contrast and target-size scans in Chromium and Microsoft Edge at desktop, tablet, and phone",
+    "keyboard_journey": "passed — keyboard-only catalogue, workspace, group, sort, filter, pagination, copy, chooser, Escape, and focus-restoration journey in both browsers",
+    "reduced_motion": "passed — global animation/transition neutralization with status meaning and evidence styling preserved",
+    "zoom_200": "passed — 640x400 CSS viewport equivalent",
+    "text_spacing": "passed — WCAG 1.4.12 spacing with no page overflow or obstructed controls",
+    "no_page_horizontal_scroll": "passed — desktop, tablet, phone, 200 percent equivalent, and 320 CSS pixels",
+    "touch_targets_44px": "passed — all enabled Scenario Data actions and chooser items measured at least 44x44 CSS pixels",
+    "contained_table_scroll": "passed — overflow remains in the keyboard-focusable table region at constrained viewports",
+    "responsive_desktop": "passed — 1280x800",
+    "responsive_tablet": "passed — 900x1024",
+    "responsive_phone": "passed — 390x844 with overridable essential-column defaults",
+    "authorization_viewport_independent": "passed — authorized projection bytes and denial behavior are invariant across desktop/tablet/phone client headers",
+    "nvda_manual_pass": "not executed — NVDA is unavailable in the execution environment, 2026-08-06",
+    "browsers_tested": [
+      "Playwright Chromium 151.0.7922.34",
+      "Microsoft Edge 151.0.4129.59"
+    ],
+    "viewports_tested": [
+      "1280x800 desktop",
+      "900x1024 tablet",
+      "390x844 phone",
+      "640x400 200-percent-zoom equivalent",
+      "320x640 narrow-width containment"
+    ]
+  },
+  "test_evidence": {
+    "frontend_unit": {
+      "command": "npm test",
+      "result": "49 files passed, 283 tests passed",
+      "baseline": "47 files passed, 200 tests passed at f27bafd"
+    },
+    "frontend_browser": {
+      "command": "npm run test:e2e",
+      "result": "44 tests passed across Chromium and Microsoft Edge"
+    },
+    "backend": {
+      "command": "uv run --frozen pytest",
+      "result": "350 passed, 6 deselected",
+      "baseline": "349 passed, 6 deselected"
+    },
+    "manual_screen_reader": {
+      "checklist": "docs/ACCESSIBILITY-NVDA-CHECKLIST.md",
+      "result": "not executed — NVDA unavailable; Chrome and Edge rows retained as not executed"
+    }
+  },
+  "version_bindings": {
+    "dataset": "two governed Gate A fixtures, v1; contract SHA-256 digests recorded above",
+    "evaluator": "Vitest 4.1.10, jest-axe 11.0.0, Playwright 1.62.1, axe-core 4.13.0",
+    "model": "not applicable — no model invocation",
+    "prompt": "not applicable — no model invocation",
+    "tool": "React Testing Library with jsdom, Playwright Chromium 151.0.7922.34, Microsoft Edge 151.0.4129.59, @axe-core/playwright 4.12.1",
+    "axe_core_version": "4.13.0",
+    "playwright_version": "1.62.1",
+    "enabled_rule_delta": {
+      "target-size": "enabled"
+    },
+    "policy": "Story 1.10 AC1/AC2; WCAG 2.0 A/AA, WCAG 2.1 A/AA, WCAG 2.2 AA; manual NVDA evidence must not be inferred from automation",
+    "application": "local backend and frontend source tree",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable — no solver run",
+    "code": {
+      "baseline_commit": "f27bafdccce7e29ae377908154f74d3141c02f2b",
+      "git_commit": "29ac7a1d59ae69f19dd527bfe33586e5ef865052",
+      "working_tree_dirty": true
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    }
+  },
+  "passed": false
+}

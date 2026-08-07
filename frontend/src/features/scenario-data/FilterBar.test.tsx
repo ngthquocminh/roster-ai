@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { FILTERS_BY_GROUP } from "./filters";
@@ -24,5 +25,18 @@ describe("FilterBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(onRemove).toHaveBeenCalledWith("family");
     expect(onClear).toHaveBeenCalledOnce();
+  });
+
+  it("closes a select with Escape, restores trigger focus, and commits nothing", async () => {
+    const user = userEvent.setup();
+    const onApply = vi.fn();
+    render(<FilterBar activeFilters={{}} filters={FILTERS_BY_GROUP.demand} onApply={onApply} onClear={vi.fn()} onRemove={vi.fn()} />);
+    const trigger = screen.getByRole("combobox", { name: "Family" });
+    await user.click(trigger);
+    expect(await screen.findByRole("option", { name: "Outbound" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("option", { name: "Outbound" })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(onApply).not.toHaveBeenCalled();
   });
 });

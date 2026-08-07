@@ -19,4 +19,11 @@ describe("scenario data column descriptors", () => {
       expect(columns.filter((column) => column.required)).toHaveLength(2);
     }
   });
+
+  it("authors a compact essential set for every group", () => {
+    for (const columns of Object.values(COLUMNS_BY_GROUP)) {
+      expect(columns.every((column) => typeof column.essential === "boolean")).toBe(true);
+      expect(columns.some((column) => !column.required && !column.essential)).toBe(true);
+    }
+  });
 });

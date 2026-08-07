@@ -234,10 +234,11 @@ it("redirects to sign-in on 401 and clears the cached session", async () => {
 
 it("moves focus only once across the loading to loaded transition", async () => {
   const focused: string[] = [];
-  document.addEventListener("focusin", (event) => {
+  const recordFocus = (event: FocusEvent) => {
     const target = event.target as HTMLElement;
     focused.push(`${target.tagName}:${target.textContent ?? ""}`);
-  });
+  };
+  document.addEventListener("focusin", recordFocus);
 
   mockContext.mockReturnValue({
     data: undefined,
@@ -265,4 +266,6 @@ it("moves focus only once across the loading to loaded transition", async () => 
   // The transient loading heading must never take focus, or a screen reader
   // is interrupted mid-announcement when the real heading arrives.
   expect(focused.filter((entry) => entry.includes("Scenario workspace"))).toEqual([]);
+  expect(focused.filter((entry) => entry.includes("Fixture A"))).toHaveLength(1);
+  document.removeEventListener("focusin", recordFocus);
 });

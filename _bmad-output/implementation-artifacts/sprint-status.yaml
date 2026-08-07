@@ -100,7 +100,7 @@ development_status:
   1-7-open-the-read-only-scenario-data-workspace: done
   1-8-control-scenario-data-tables: done
   1-9-prove-viewer-parity-and-mutation-denial: done
-  1-10-prove-scenario-data-accessibility-and-responsiveness: ready-for-dev
+  1-10-prove-scenario-data-accessibility-and-responsiveness: review
   1-11-confirm-gate-a-readiness: backlog
   epic-1-retrospective: optional
 

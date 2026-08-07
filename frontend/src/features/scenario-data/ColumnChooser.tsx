@@ -19,7 +19,7 @@ export function ColumnChooser({ columns, onVisibilityChange, revealedField, visi
         {columns.map((column) => {
           const revealed = column.key === revealedField;
           return (
-            <DropdownMenuCheckboxItem checked={visibleKeys.has(column.key)} disabled={column.required || revealed} key={column.key} onCheckedChange={(checked) => onVisibilityChange(column.key, checked === true)} onSelect={(event) => event.preventDefault()}>
+            <DropdownMenuCheckboxItem checked={visibleKeys.has(column.key)} className="min-h-11" disabled={column.required || revealed} key={column.key} onCheckedChange={(checked) => onVisibilityChange(column.key, checked === true)} onSelect={(event) => event.preventDefault()}>
               <span className="grid gap-0.5"><span>{column.header}</span>{revealed ? <span className="text-xs text-muted-foreground">Shown for the linked evidence target.</span> : null}</span>
             </DropdownMenuCheckboxItem>
           );
