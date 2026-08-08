@@ -505,3 +505,34 @@ def test_build_report_accepts_pre_resolved_bindings():
     report = build_report(_synthetic_reports(), bindings=pre)
     assert report["version_bindings"] is pre
     assert report["version_bindings"]["evaluator"] == "pre-resolved"
+
+
+def test_boundness_comes_from_the_binding_block_not_a_live_resample():
+    """Earlier writes in the same pass must not mark later checks unbound.
+
+    The binding block records the tree state at resolution time. Re-sampling
+    `git status` while building the report would see the evidence files the
+    same regeneration pass has already written and wrongly report every
+    test-backed check as unbound.
+    """
+    from scripts.gate_a_readiness import build_report
+
+    clean = {
+        "dataset": "d", "evaluator": "e", "model": "m", "prompt": "p",
+        "tool": "t", "policy": "pol", "application": "a", "scenario": "s",
+        "solver": "sol", "image": {}, "schema_version": "x",
+        "code": {"git_commit": "abc123", "working_tree_dirty": False},
+    }
+    report = build_report(_synthetic_reports(), bindings=clean)
+    test_backed = [
+        e for e in report["contributing_checks"] if e["source_kind"] == "tests"
+    ]
+    assert test_backed
+    assert all(e["bound"] for e in test_backed)
+
+    dirty = {**clean, "code": {"git_commit": "abc123", "working_tree_dirty": True}}
+    report = build_report(_synthetic_reports(), bindings=dirty)
+    test_backed = [
+        e for e in report["contributing_checks"] if e["source_kind"] == "tests"
+    ]
+    assert not any(e["bound"] for e in test_backed)

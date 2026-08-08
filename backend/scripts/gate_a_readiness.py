@@ -160,7 +160,12 @@ def build_report(
         bindings = resolve_bindings(
             _DECLARED_BINDINGS, repo_root=repo_root, allow_dirty=allow_dirty
         )
-    tree_dirty, _ = working_tree_status(repo_root)
+    # Read the tree state out of the binding block rather than sampling it
+    # again here. The binding block records the tree as it was when the
+    # bindings were resolved, which is the authoritative moment — re-sampling
+    # would report the tree as dirty merely because earlier files in the same
+    # regeneration pass have already been written.
+    tree_dirty = bool(bindings.get("code", {}).get("working_tree_dirty"))
 
     declared_files = sorted(
         {path for check in GATE_A_CHECKS for path in check.test_files}
