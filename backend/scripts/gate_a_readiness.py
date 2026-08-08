@@ -142,14 +142,24 @@ def build_report(
     allow_dirty: bool = False,
     strict_missing: bool = False,
     measurement_date: str | None = None,
+    bindings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate every registry check and compose the readiness report."""
+    """Evaluate every registry check and compose the readiness report.
+
+    ``bindings`` accepts a binding block already resolved by the caller. It
+    exists for the one case where several evidence files are regenerated in a
+    single pass: `resolve_bindings()` refuses a dirty tree, so every binding
+    set must be resolved *before* the first file is written. Callers that
+    regenerate only this report should leave it unset and let the clean-tree
+    check run here.
+    """
     validate_registry()
     reports = list(runner_reports)
 
-    bindings = resolve_bindings(
-        _DECLARED_BINDINGS, repo_root=repo_root, allow_dirty=allow_dirty
-    )
+    if bindings is None:
+        bindings = resolve_bindings(
+            _DECLARED_BINDINGS, repo_root=repo_root, allow_dirty=allow_dirty
+        )
     tree_dirty, _ = working_tree_status(repo_root)
 
     declared_files = sorted(

@@ -478,3 +478,30 @@ def test_unbound_evidence_blocks_the_gate(tmp_path, monkeypatch):
             assert any(
                 b["check"] == entry["check"] for b in report["blocking"]
             ), f"{entry['check']} is unbound but does not block"
+
+
+def test_build_report_accepts_pre_resolved_bindings():
+    """Regenerating several evidence files in one pass needs this.
+
+    `resolve_bindings()` refuses a dirty tree, so writing the first evidence
+    file would make the second file's resolution fail. All binding sets must be
+    resolved while the tree is still clean.
+    """
+    from scripts.evidence_binding import resolve_bindings
+    from scripts.gate_a_readiness import build_report
+
+    pre = resolve_bindings(
+        {
+            "evaluator": "pre-resolved",
+            "model": "not applicable",
+            "prompt": "not applicable",
+            "tool": "pre-resolved",
+            "policy": "pre-resolved",
+            "application": "pre-resolved",
+            "solver": "not applicable",
+        },
+        allow_dirty=True,
+    )
+    report = build_report(_synthetic_reports(), bindings=pre)
+    assert report["version_bindings"] is pre
+    assert report["version_bindings"]["evaluator"] == "pre-resolved"
