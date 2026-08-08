@@ -16,6 +16,19 @@ export default defineConfig({
       },
     },
   },
+  // `preview` needs the same proxy as `server`, and for the same reason: the
+  // application session is a `__Host-`/SameSite cookie and the API sets
+  // `allow_credentials=False` (D-02), so a cross-origin preview -> :8000 call
+  // cannot carry it. Without this, `npm run preview` can only be driven with
+  // stubbed API routes (as Playwright does) and never against a real signed-in
+  // backend — which is exactly what the Story 1.11 manual NVDA pass requires.
+  preview: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

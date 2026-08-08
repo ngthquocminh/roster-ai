@@ -41,21 +41,21 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Shared evidence-binding module** (AC: #2)
-  - [ ] New `backend/scripts/evidence_binding.py`. Write it **generic**, not Gate-A-specific: `epics.md:1612-1623` already specifies `evidence/story-5.10/rollback-drill-report.json` and `evidence/epic-5/release-gate-report.json` as future consumers. Gate A specifics belong in Task 4's caller, not here.
-  - [ ] **`resolve_bindings()` must refuse to run against a dirty tree.** `git status --porcelain` non-empty (including untracked `??` entries) → raise with the offending paths listed. This is the mechanical fix for gap #2: a measurement taken on uncommitted changes cannot be reproduced from the commit it records, which is exactly what AC2 calls "unbound."
+- [x] **Task 1: Shared evidence-binding module** (AC: #2)
+  - [x] New `backend/scripts/evidence_binding.py`. Write it **generic**, not Gate-A-specific: `epics.md:1612-1623` already specifies `evidence/story-5.10/rollback-drill-report.json` and `evidence/epic-5/release-gate-report.json` as future consumers. Gate A specifics belong in Task 4's caller, not here.
+  - [x] **`resolve_bindings()` must refuse to run against a dirty tree.** `git status --porcelain` non-empty (including untracked `??` entries) → raise with the offending paths listed. This is the mechanical fix for gap #2: a measurement taken on uncommitted changes cannot be reproduced from the commit it records, which is exactly what AC2 calls "unbound."
     - Provide one explicit escape hatch (`allow_dirty=True` / `--allow-dirty`) that **writes its own use into the report** as `"binding_override": "--allow-dirty; tree was dirty at generation"`. An override nobody can see in the output is not an override, it is a hole.
-  - [ ] Derive, never hardcode:
+  - [x] Derive, never hardcode:
     - `code`: `git rev-parse HEAD` plus `working_tree_dirty` computed live. Do **not** copy the literal `"working_tree_dirty": true` pattern from the existing files — that string was never re-derived and is stale in all four.
     - `schema_version`: walk `down_revision` across `backend/migrations/versions/*.py` to find the head. **File-graph walk, not a live DB query or `alembic heads` subprocess** — report generation must not require PostgreSQL running. Current chain is `d128d081ab48` → `5e2a4c9d1f70`; assert exactly one head and fail loudly on a branched graph.
     - `dataset` / `scenario`: import `default_fixtures()` from `backend/scripts/gate_a_cutover.py:76`. It already pins `("sample_tiny_input", "v1")` and `("sample_tiny_input_more_tm", "v1")` as `FixtureSpec` frozen dataclasses. **Do not re-declare the fixture list** — a second copy is a second source of truth.
     - `contract_digests`: sha256 of each `data/contract/*.json`. Match the existing algorithm (raw file hash, as recorded in `evidence/story-1.9/…json:17-21`), not `adapters/postgres/fixture_history.py`'s RFC 8785 canonical rule — that rule hashes fixture *payloads* for DB identity, a different thing. Note the distinction in a comment so the next reader does not "fix" it.
-  - [ ] `image` binds honestly: `{"api": "local source tree", "web": "local source tree", "database": "postgres:18"}`. There is no ECR, no Dockerfile pipeline, no `.github/`. AD-17/AD-24's immutable-digest requirement is Epic 5 work (Stories 5.5–5.7). **Do not fabricate a digest** — the same posture 1.4/1.5/1.9/1.10 took.
-  - [ ] Emit all eleven NFR27 keys (`dataset`, `evaluator`, `model`, `prompt`, `tool`, `policy`, `application`, `scenario`, `solver`, `code`, `image`) plus `schema_version`. `model`/`prompt`/`solver` are `"not applicable — …"` at Gate A; keep the field, state the reason, never omit.
+  - [x] `image` binds honestly: `{"api": "local source tree", "web": "local source tree", "database": "postgres:18"}`. There is no ECR, no Dockerfile pipeline, no `.github/`. AD-17/AD-24's immutable-digest requirement is Epic 5 work (Stories 5.5–5.7). **Do not fabricate a digest** — the same posture 1.4/1.5/1.9/1.10 took.
+  - [x] Emit all eleven NFR27 keys (`dataset`, `evaluator`, `model`, `prompt`, `tool`, `policy`, `application`, `scenario`, `solver`, `code`, `image`) plus `schema_version`. `model`/`prompt`/`solver` are `"not applicable — …"` at Gate A; keep the field, state the reason, never omit.
 
-- [ ] **Task 2: Gate A check registry** (AC: #1, #2)
-  - [ ] Declarative registry (`backend/scripts/gate_a_checks.py` or a committed data file next to it) mapping each contributing check → owning story → AR28 invariant → proving artifact. Proving artifact is either an evidence-JSON path or a set of JUnit test identities.
-  - [ ] **AC2 says "each contributing Story 1.1–1.10 check" — all ten, not the four with evidence files.** AR28 names six invariants; the four evidence files cover only two of them. Minimum coverage:
+- [x] **Task 2: Gate A check registry** (AC: #1, #2)
+  - [x] Declarative registry (`backend/scripts/gate_a_checks.py` or a committed data file next to it) mapping each contributing check → owning story → AR28 invariant → proving artifact. Proving artifact is either an evidence-JSON path or a set of JUnit test identities.
+  - [x] **AC2 says "each contributing Story 1.1–1.10 check" — all ten, not the four with evidence files.** AR28 names six invariants; the four evidence files cover only two of them. Minimum coverage:
 
     | AR28 invariant | Story | Proving artifact |
     |---|---|---|
@@ -67,31 +67,31 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
     | Negative mutation tests | 1.9 | `test_gate_a_mutation_audit.py`, `scenarioDataBoundaries.test.ts`, `legacyReachability.test.ts` |
     | Accessibility / responsiveness (NFR29) | 1.10 | `evidence/story-1.10/…json`, `frontend/e2e/*.spec.ts`, `src/test/accessibility*.test.tsx` |
 
-  - [ ] Source each story's file list from its own story file's `### File List` section rather than guessing — they are accurate and already reviewed.
-  - [ ] Every registry entry carries the AR28 invariant it serves, so the report can show invariant-level coverage, not just a flat list. AC1 is stated in terms of invariants; a report that cannot answer "is site membership proven?" does not satisfy it.
+  - [x] Source each story's file list from its own story file's `### File List` section rather than guessing — they are accurate and already reviewed.
+  - [x] Every registry entry carries the AR28 invariant it serves, so the report can show invariant-level coverage, not just a flat list. AC1 is stated in terms of invariants; a report that cannot answer "is site membership proven?" does not satisfy it.
 
-- [ ] **Task 3: JUnit XML ingestion** (AC: #2)
-  - [ ] All three runners emit JUnit natively. **Add no new dependency** — verify before reaching for one:
+- [x] **Task 3: JUnit XML ingestion** (AC: #2)
+  - [x] All three runners emit JUnit natively. **Add no new dependency** — verify before reaching for one:
     - `uv run --frozen pytest --junitxml=<path>` (pytest built-in)
     - `npx vitest run --reporter=junit --outputFile=<path>` (verify the exact flag against Vitest 4.1.10; it may be `--outputFile.junit=`)
     - `npx playwright test --reporter=junit` with `PLAYWRIGHT_JUNIT_OUTPUT_NAME=<path>`. **Override on the CLI only** — `frontend/playwright.config.ts:8` pins `reporter: "list"` and that committed default must not change.
-  - [ ] Write the XML to `_bmad-output/test-artifacts/gate-a/`, never into `evidence/`. That directory exists, is empty, and is **not** gitignored — so decide explicitly whether the XML is committed and record the choice. Recommended: gitignore it (regenerable, noisy, and the report already carries the summarized result); the point is that it be a decision, not an accident.
-  - [ ] Normalize identities across runners: pytest emits `classname="tests.test_auth_api"` + `name="test_…"`; Vitest and Playwright emit file paths. The registry should declare `(file, test_name)` and the parser should match on both shapes.
-  - [ ] **Fail loudly when a registry-declared test id is absent from the XML.** This is the anti-rot mechanism — without it the registry silently decays the first time a test is renamed or deleted, and the report keeps claiming a check that no longer runs.
-  - [ ] **A skipped test is not a passed test.** Two live traps here:
+  - [x] Write the XML to `_bmad-output/test-artifacts/gate-a/`, never into `evidence/`. That directory exists, is empty, and is **not** gitignored — so decide explicitly whether the XML is committed and record the choice. Recommended: gitignore it (regenerable, noisy, and the report already carries the summarized result); the point is that it be a decision, not an accident.
+  - [x] Normalize identities across runners: pytest emits `classname="tests.test_auth_api"` + `name="test_…"`; Vitest and Playwright emit file paths. The registry should declare `(file, test_name)` and the parser should match on both shapes.
+  - [x] **Fail loudly when a registry-declared test id is absent from the XML.** This is the anti-rot mechanism — without it the registry silently decays the first time a test is renamed or deleted, and the report keeps claiming a check that no longer runs.
+  - [x] **A skipped test is not a passed test.** Two live traps here:
     - `backend/pyproject.toml:33` sets `addopts = -m "not live"`, so `live`-marked tests are deselected and absent from the XML.
     - `postgres`-marked tests **skip cleanly** when no PostgreSQL service is up (`backend/conftest.py` → `pytest.skip("PostgreSQL integration service is not available")`). A skip serializes as `<skipped/>` inside a `<testcase>` — it looks present. Treat `skipped` as **not proven** and let it block the gate. Stories 1.1, 1.2, 1.4, 1.5, 1.8 all depend on `postgres`-marked tests; running the gate without Docker Postgres up would otherwise silently produce a green report proving nothing.
 
-- [ ] **Task 4: Readiness report generator** (AC: #1, #2)
-  - [ ] `backend/scripts/gate_a_readiness.py` composes Tasks 1–3 and writes `evidence/story-1.11/gate-a-readiness-report.json`.
-  - [ ] **Exit non-zero** on any check that is missing, unbound, skipped, or failing. AC2's "blocks the gate" is an enforcement obligation, not prose — if the script can emit `gate_a_passed: false` and still exit 0, the gate does not exist.
-  - [ ] Report shape follows `evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json` (the established NFR27 shape — read it first) with these additions:
+- [x] **Task 4: Readiness report generator** (AC: #1, #2)
+  - [x] `backend/scripts/gate_a_readiness.py` composes Tasks 1–3 and writes `evidence/story-1.11/gate-a-readiness-report.json`.
+  - [x] **Exit non-zero** on any check that is missing, unbound, skipped, or failing. AC2's "blocks the gate" is an enforcement obligation, not prose — if the script can emit `gate_a_passed: false` and still exit 0, the gate does not exist.
+  - [x] Report shape follows `evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json` (the established NFR27 shape — read it first) with these additions:
     - `schema_version` inside `version_bindings`
     - `contributing_checks[]` — one entry per registry row: `story`, `check`, `ar28_invariant`, `result`, `source` (evidence path or test ids), `bound` (bool)
     - `ar28_invariants{}` — the six invariants, each rolled up from its contributing checks
     - `gate_a_passed` (bool) and `blocking[]` naming every check that prevented a pass
     - `accountable_owner: "Product/QA"` — AC2 names it explicitly
-  - [ ] Per NFR29, a failure must **name the exact gate**. A bare `false` with no `blocking[]` is not acceptable — same standard Story 1.10's Task 7 held itself to.
+  - [x] Per NFR29, a failure must **name the exact gate**. A bare `false` with no `blocking[]` is not acceptable — same standard Story 1.10's Task 7 held itself to.
 
 - [ ] **Task 5: Repo-wide evidence convention guard** (AC: #2)
   - [ ] `backend/tests/test_evidence_convention.py` walks **every** `evidence/**/*.json` — not just this story's — and asserts:
@@ -106,12 +106,12 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
   - [ ] Skip gracefully when git is unavailable, but **do not skip when the assertion merely fails**.
 
 - [ ] **Task 6: Execute the NVDA manual pass** (AC: #1)
-  - [ ] Install NVDA (free, https://www.nvaccess.org). `EXPERIENCE.md:196` names NVDA on Windows in the portfolio-minimum support matrix — Narrator or JAWS is a spec change, not a substitution.
-  - [ ] **Enable Speech Viewer** — NVDA menu (`Insert+N`) → Tools → Speech Viewer. Every utterance renders as readable text, which is what makes this observable and recordable rather than a claim. `%TEMP%\nvda.log` with `--log-level=DEBUG` is a secondary record.
+  - [x] Install NVDA (free, https://www.nvaccess.org). `EXPERIENCE.md:196` names NVDA on Windows in the portfolio-minimum support matrix — Narrator or JAWS is a spec change, not a substitution.
+  - [x] **Enable Speech Viewer** — NVDA menu (`Insert+N`) → Tools → Speech Viewer. Every utterance renders as readable text, which is what makes this observable and recordable rather than a claim. `%TEMP%\nvda.log` with `--log-level=DEBUG` is a secondary record.
   - [ ] Run `docs/ACCESSIBILITY-NVDA-CHECKLIST.md` against `npm run preview` in **both** Chrome and Edge. Fill in the observed-utterance column for every row: heading announcement on route change, table caption + column-header association, `aria-sort` change announcement, row-position announcement on page change, "Copied {identifier type}", the evidence-reveal explanation, and the disabled-Results explanation.
-  - [ ] **Hard rule: if speech output cannot be genuinely observed, record `not executed` with the reason and date.** Never infer a pass from axe results or from reading the source. This is the same posture Story 1.10 held (`1-10-…md:102`) and Story 1.9 held with `legacy_route_live_flag_state`. A fabricated observation here would corrupt the one check the entire automated suite cannot substitute for.
+  - [x] **Hard rule: if speech output cannot be genuinely observed, record `not executed` with the reason and date.** Never infer a pass from axe results or from reading the source. This is the same posture Story 1.10 held (`1-10-…md:102`) and Story 1.9 held with `legacy_route_live_flag_state`. A fabricated observation here would corrupt the one check the entire automated suite cannot substitute for.
   - [ ] **Expect real findings.** Automated tooling covers roughly a third of WCAG issues. `ScenarioWorkspace.tsx:22-30` already documents a prior bug where two focus calls interrupted a screen reader mid-announcement — exactly the class of defect only this pass detects. A finding here is an honest result, not a story failure; fix it if it is in Gate A scope (catalogue, workspace shell, Scenario Data) and record it.
-  - [ ] Do **not** extend to Chat/Runs/Results — route placeholders at Gate A, owned by Stories 4.6–4.9 (`1-10-…md:32`).
+  - [x] Do **not** extend to Chat/Runs/Results — route placeholders at Gate A, owned by Stories 4.6–4.9 (`1-10-…md:32`).
 
 - [ ] **Task 7: Re-measure and rebind the four existing evidence files** (AC: #2)
   - [ ] On a **clean tree**, re-run each story's measurements and regenerate `evidence/story-{1.4,1.5,1.9,1.10}/*.json` **in place** through the Task 1 module. This closes `deferred-work.md:65`.
@@ -133,14 +133,14 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
   - [ ] Follow the ordering the whole story exists to establish: **commit code → run the gate on the clean tree → generate → commit the report separately.**
   - [ ] Record the verdict as it comes out. If `blocking[]` is non-empty, say so in completion notes and in the sprint-status note.
 
-- [ ] **Task 9: Documentation** (AC: #1, #2)
-  - [ ] `docs/GATE-A-RUNBOOK.md` — flat, uppercase, matching the existing `docs/TESTING.md` / `docs/API.md` convention (`docs/` has no topic subdirectories). Consolidates:
+- [x] **Task 9: Documentation** (AC: #1, #2)
+  - [x] `docs/GATE-A-RUNBOOK.md` — flat, uppercase, matching the existing `docs/TESTING.md` / `docs/API.md` convention (`docs/` has no topic subdirectories). Consolidates:
     - the cutover procedure, currently reachable only through a code-review note (`1-1-…md:163`) and `backend/scripts/gate_a_cutover.py`'s module docstring
     - **how to check the legacy-route live flag state** — this closes Story 1.9's dangling `"owned by Story 1.11 / release runbook"` pointer (`evidence/story-1.9/…json:28`). The mechanism is proven; what 1.9 could not verify is the operational fact in a live environment. Document the check; record the current state honestly (no deployed environment exists)
     - how to regenerate the readiness report
-  - [ ] `docs/EVIDENCE-CONVENTION.md` — the commit-then-measure rule with its rationale, the two-kinds-of-test-run distinction (development iteration vs. the recorded measurement run), and what `resolve_bindings()` enforces. This is the artifact that stops Epic 2–5 repeating gap #2.
-  - [ ] One pointer line in `.claude/CLAUDE.md` (loaded every session) so a future-epic agent finds the convention without this story in context.
-  - [ ] `deferred-work.md` entry: ARIA-snapshot regression lock (`expect(locator).toMatchAriaSnapshot()`, available in the pinned Playwright 1.62.1) to make the accessibility tree a permanent regression guard rather than relying on a one-shot manual pass → **Story 4.9**, which owns the completed-journey WCAG proof.
+  - [x] `docs/EVIDENCE-CONVENTION.md` — the commit-then-measure rule with its rationale, the two-kinds-of-test-run distinction (development iteration vs. the recorded measurement run), and what `resolve_bindings()` enforces. This is the artifact that stops Epic 2–5 repeating gap #2.
+  - [x] One pointer line in `.claude/CLAUDE.md` (loaded every session) so a future-epic agent finds the convention without this story in context.
+  - [x] `deferred-work.md` entry: ARIA-snapshot regression lock (`expect(locator).toMatchAriaSnapshot()`, available in the pinned Playwright 1.62.1) to make the accessibility tree a permanent regression guard rather than relying on a one-shot manual pass → **Story 4.9**, which owns the completed-journey WCAG proof.
 
 - [ ] **Task 10: Full regression gate** (AC: #1)
   - [ ] Frontend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
@@ -262,11 +262,63 @@ All four also record `"working_tree_dirty": true` while the tree is now clean �
 
 ### Agent Model Used
 
+claude-opus-5 (Amelia, bmad-dev-story)
+
 ### Debug Log References
+
+- Code commit for the measurement run: `6ebc886 feat(1-11): build the Gate A readiness machinery`
+- Clean-tree postgres run: `uv run --frozen pytest -m postgres -s -q` → 27 passed, 415 deselected; both NFR35 stdout markers emitted (21 + 6 measurements, max 77.156 ms / 78.676 ms, threshold 2000 ms)
+- Runner JUnit shapes verified against real output before writing the parser:
+  - pytest `classname="tests.test_evidence_binding"` (dotted module)
+  - Vitest `classname="src/lib/errors.test.ts"` (path relative to `frontend/`) — the flag is plain `--outputFile=`, **not** `--outputFile.junit=`
+  - Playwright `classname="harness.spec.ts"` (path relative to `testDir`, i.e. `e2e/`), one case per browser project
+- Parser validated against all three real XML files; `test_evidence_binding.py` reported `skipped` for its own one skipped case, demonstrating the skipped-is-not-proven rule on live data.
 
 ### Completion Notes List
 
+**Tasks 1–5, 9 complete. Task 6 is with the user (NVDA). Tasks 7, 8, 10 run in one pass once Task 6 lands.**
+
+Two bugs the tests caught during development, both real:
+- `_git()` stripped the whole `git status --porcelain` stdout, eating the leading status space of an unstaged change and shifting every parsed path by one character. Fixed with a non-stripping `_git_raw()`.
+- The `NFR35_EVIDENCE_MEASUREMENTS` marker regex was anchored at line start, but `pytest -q` prefixes that line with its progress dot. Fixed to anchor at line end only.
+
+Findings recorded rather than worked around:
+- **The registry could not use the story File Lists verbatim.** Story 1.9's Task 5 legacy sweep deleted a large part of the surface Stories 1.3 and 1.9 list (`components/editor/*`, `components/results/*`, `components/runs/*`, `components/scenarios/*`, the `useRun*` hooks, `routes/Editor|ResultsView|RunHistory`, `api/scenarios|constraints|runs`). Those files are gone by design and are not registered. `test_every_registered_test_file_exists_on_disk` locks this against future drift.
+- **Accessibility is not one of AR28's six invariants.** AR28 names exactly: PostgreSQL/site membership, immutable fixtures, the normalized scenario read service, authenticated read-only Scenario Data, parity tests, negative mutation tests. Accessibility reaches the gate through AC1's *Given* clause and NFR29. The registry models it as an NFR29 gate that still blocks, so `ar28_invariants{}` holds exactly six and nothing is misattributed. Each `contributing_checks[]` entry carries `invariant` + `authority`, and AC2's named `ar28_invariant` field is populated for AR28-backed checks and `null` for the NFR29 one.
+- **The repo-wide guard independently rediscovered all four documented gaps** before any file was touched: 1.4/1.5 have no `version_bindings` block at all (Schema A used `code_versions`), no file carries `schema_version`, 1.9/1.10 record a dirty tree with no override, and 1.10's `29ac7a1d` is a docs-only commit that touches no code file.
+
+Two deliberate deviations from "Frontend: none expected", both flagged for review:
+- **`frontend/vite.config.ts` gains a `preview` proxy** mirroring the existing `server` one. Without it the story's own instruction (run the checklist against `npm run preview`) is not executable: the session is a `__Host-`/SameSite cookie and the API sets `allow_credentials=False` (D-02), so a cross-origin preview→:8000 call cannot carry it. No app behaviour changes.
+- **`frontend/e2e/manual-nvda.spec.ts`** is a new env-gated harness. A plain preview session cannot be signed in by hand — the OIDC issuer is a non-routable fake (`http://shiftmind.test/oidc`) and sessions live in the API process, not in PostgreSQL. The harness serves the production build with the same deterministic API stubs Story 1.10's automated layer used. It registers no test unless `NVDA_MANUAL` is set, so `npm run test:e2e` still collects exactly 46 tests in 7 files (23 × chromium + msedge) — not even a skip is added, since a skip is "not proven" to the gate.
+
+Environment note: the local PostgreSQL was seeded with both governed fixtures and a planner identity **through the adapter directly**, deliberately *not* by running `gate_a_cutover.py`. Story 1.9's Dev Notes forbid running the real cutover against a development checkout — it writes the persistent maintenance flag and would break the 61 tests that need the legacy routes reachable. No maintenance flag was written; `postgres`-marked tests use throwaway databases, so the seeding is inert for the suite.
+
 ### File List
+
+**Added**
+- `backend/scripts/evidence_binding.py`
+- `backend/scripts/gate_a_checks.py`
+- `backend/scripts/junit_ingest.py`
+- `backend/scripts/gate_a_readiness.py`
+- `backend/tests/test_evidence_binding.py`
+- `backend/tests/test_gate_a_readiness.py`
+- `backend/tests/test_evidence_convention.py`
+- `frontend/e2e/manual-nvda.spec.ts`
+- `docs/EVIDENCE-CONVENTION.md`
+- `docs/GATE-A-RUNBOOK.md`
+
+**Modified**
+- `frontend/vite.config.ts`
+- `.gitignore`
+- `.claude/CLAUDE.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/implementation-artifacts/1-11-confirm-gate-a-readiness.md`
+
+**Pending (Tasks 6–8)**
+- `docs/ACCESSIBILITY-NVDA-CHECKLIST.md` (Task 6 results)
+- `evidence/story-{1.4,1.5,1.9,1.10}/*.json` (regenerated in place)
+- `evidence/story-1.11/gate-a-readiness-report.json` (new)
 
 ## Change Log
 

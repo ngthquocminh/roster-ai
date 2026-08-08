@@ -146,7 +146,7 @@ development_status:
   1-8-control-scenario-data-tables: done
   1-9-prove-viewer-parity-and-mutation-denial: done
   1-10-prove-scenario-data-accessibility-and-responsiveness: done
-  1-11-confirm-gate-a-readiness: ready-for-dev
+  1-11-confirm-gate-a-readiness: in-progress
   epic-1-retrospective: optional
 
   # Epic 2: Grounded Conversational Investigation

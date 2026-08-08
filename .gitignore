@@ -83,3 +83,8 @@ _bmad/config.user.toml
 
 # Generated GSD research cache
 .planning/research/.cache/
+
+# JUnit XML consumed by the Gate A readiness report. Regenerable from the test
+# suites, noisy in diffs, and the report itself carries the summarized result —
+# so it is deliberately NOT committed. It must never be written into evidence/.
+_bmad-output/test-artifacts/

@@ -23,6 +23,16 @@ without ever touching curl or raw JSON.
 re-solved schedule that honors it (as a soft constraint) plus a readable
 explanation of what changed — without touching solver code or JSON.
 
+### Evidence files — read before writing one
+
+Any story producing an `evidence/**/*.json` file MUST follow
+`docs/EVIDENCE-CONVENTION.md`: **commit the code, then measure, then generate
+through `backend/scripts/evidence_binding.py`, then commit the evidence
+separately.** Never hand-type an evidence file — that is what produced an
+unreproducible `git_commit` in all four Epic 1 evidence files. Gate A
+operations (cutover, legacy-route flag, NVDA pass, readiness report) are in
+`docs/GATE-A-RUNBOOK.md`.
+
 ### Constraints
 
 - **Tech stack**: Python backend, OR-Tools CP-SAT solver, FastAPI, SQLite (WAL),
