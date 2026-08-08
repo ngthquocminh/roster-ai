@@ -27,7 +27,7 @@
     "window": "exact demand targets at normalized indexes 0 and 1546; deepest target is outside the default limit=50 window"
   },
   "code_versions": {
-    "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+    "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
     "working_tree_dirty": false,
     "api_image": "local source tree",
     "database_image": "postgres:18"
@@ -38,45 +38,45 @@
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0",
       "normalized_index": 0,
       "position": "shallow",
-      "duration_ms": 89.734
+      "duration_ms": 45.987
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5",
       "normalized_index": 1546,
       "position": "deepest",
-      "duration_ms": 52.37
+      "duration_ms": 43.385
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0",
       "normalized_index": 0,
       "position": "shallow",
-      "duration_ms": 54.538
+      "duration_ms": 63.265
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5",
       "normalized_index": 1546,
       "position": "deepest",
-      "duration_ms": 62.401
+      "duration_ms": 50.969
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0",
       "normalized_index": 0,
       "position": "shallow",
-      "duration_ms": 70.104
+      "duration_ms": 50.724
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5",
       "normalized_index": 1546,
       "position": "deepest",
-      "duration_ms": 55.18
+      "duration_ms": 43.241
     }
   ],
-  "maximum_duration_ms": 89.734,
+  "maximum_duration_ms": 63.265,
   "passed": true,
   "version_bindings": {
     "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
@@ -89,7 +89,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
       "working_tree_dirty": false
     },
     "image": {

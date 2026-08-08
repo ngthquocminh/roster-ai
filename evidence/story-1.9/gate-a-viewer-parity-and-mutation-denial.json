@@ -59,7 +59,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
       "working_tree_dirty": false
     },
     "image": {

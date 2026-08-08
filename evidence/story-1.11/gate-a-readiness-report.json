@@ -894,7 +894,49 @@
       "source_kind": "evidence",
       "source": "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
       "bound": true,
-      "detail": "recorded `passed: false`; manual gate: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
+      "detail": "recorded `passed: false`; manual gate manual_screen_reader: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
+    },
+    {
+      "story": "1.11",
+      "check": "evidence_convention_and_gate_machinery",
+      "description": "The repo-wide evidence convention sweep, the binding resolver, and the readiness generator itself. Registered so a broken convention blocks the gate instead of being invisible to it.",
+      "invariant": "measurement_integrity",
+      "authority": "AC2",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_evidence_binding.py",
+          "backend/tests/test_evidence_convention.py",
+          "backend/tests/test_gate_a_readiness.py"
+        ],
+        "cases": {
+          "backend/tests/test_evidence_binding.py": {
+            "status": "passed",
+            "total": 27,
+            "passed": 27,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_evidence_convention.py": {
+            "status": "passed",
+            "total": 36,
+            "passed": 36,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_gate_a_readiness.py": {
+            "status": "passed",
+            "total": 39,
+            "passed": 39,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
     }
   ],
   "ar28_invariants": {
@@ -971,18 +1013,34 @@
       ]
     }
   },
+  "ac2_gates": {
+    "measurement_integrity": {
+      "title": "Measurement integrity (evidence convention and gate machinery)",
+      "result": "passed",
+      "contributing_checks": [
+        "evidence_convention_and_gate_machinery"
+      ],
+      "blocking": []
+    }
+  },
   "test_evidence": {
     "pytest": {
-      "junit_xml": "D:\\MyData\\Projects\\rosterai\\_bmad-output\\test-artifacts\\gate-a\\pytest.xml",
-      "cases": 438
+      "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
+      "cases": 452,
+      "run_started": "2026-08-08T22:42:03.609014+07:00",
+      "sha256": "2989422abc59a80501cac705c01cb197394876ff2715ab8bdf339f1307ec2344"
     },
     "vitest": {
-      "junit_xml": "D:\\MyData\\Projects\\rosterai\\_bmad-output\\test-artifacts\\gate-a\\vitest.xml",
-      "cases": 287
+      "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
+      "cases": 287,
+      "run_started": "2026-08-08T15:43:47.559Z",
+      "sha256": "78494b2a7fc7d0d0fddefc71d7cc18888f5782a26868a9f8ced91b0e23ee2e92"
     },
     "playwright": {
-      "junit_xml": "D:\\MyData\\Projects\\rosterai\\_bmad-output\\test-artifacts\\gate-a\\playwright.xml",
-      "cases": 46
+      "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
+      "cases": 46,
+      "run_started": "2026-08-08T15:43:57.366Z",
+      "sha256": "48f78cefb5c213d6ea3d4d15f1e9161d5b929078253f4d25918b507c5ecd83a9"
     }
   },
   "version_bindings": {
@@ -996,7 +1054,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
       "working_tree_dirty": false
     },
     "image": {
@@ -1014,7 +1072,7 @@
       "authority": "NFR29",
       "result": "failed",
       "bound": true,
-      "reason": "recorded `passed: false`; manual gate: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
+      "reason": "recorded `passed: false`; manual gate manual_screen_reader: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
     }
   ],
   "gate_a_passed": false,

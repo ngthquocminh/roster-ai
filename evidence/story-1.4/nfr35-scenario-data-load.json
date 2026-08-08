@@ -27,7 +27,7 @@
     "window": "cursor=0, default limit=50 for grouped endpoints"
   },
   "code_versions": {
-    "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+    "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
     "working_tree_dirty": false,
     "api_image": "local source tree",
     "database_image": "postgres:18"
@@ -36,110 +36,110 @@
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection",
-      "duration_ms": 49.923
+      "duration_ms": 47.647
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks",
-      "duration_ms": 29.422
+      "duration_ms": 17.677
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers",
-      "duration_ms": 21.994
+      "duration_ms": 24.217
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand",
-      "duration_ms": 55.198
+      "duration_ms": 52.291
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments",
-      "duration_ms": 28.256
+      "duration_ms": 25.337
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks",
-      "duration_ms": 19.685
+      "duration_ms": 21.067
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives",
-      "duration_ms": 26.403
+      "duration_ms": 27.958
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection",
-      "duration_ms": 76.914
+      "duration_ms": 43.087
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks",
-      "duration_ms": 24.431
+      "duration_ms": 15.403
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers",
-      "duration_ms": 29.202
+      "duration_ms": 17.699
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand",
-      "duration_ms": 69.462
+      "duration_ms": 45.076
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments",
-      "duration_ms": 29.489
+      "duration_ms": 15.101
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks",
-      "duration_ms": 24.28
+      "duration_ms": 14.679
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives",
-      "duration_ms": 19.435
+      "duration_ms": 12.229
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection",
-      "duration_ms": 61.111
+      "duration_ms": 44.506
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks",
-      "duration_ms": 13.907
+      "duration_ms": 20.442
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers",
-      "duration_ms": 20.467
+      "duration_ms": 19.446
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand",
-      "duration_ms": 49.285
+      "duration_ms": 46.123
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments",
-      "duration_ms": 15.241
+      "duration_ms": 20.0
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks",
-      "duration_ms": 17.219
+      "duration_ms": 15.152
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives",
-      "duration_ms": 21.662
+      "duration_ms": 14.019
     }
   ],
-  "maximum_duration_ms": 76.914,
+  "maximum_duration_ms": 52.291,
   "passed": true,
   "version_bindings": {
     "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
@@ -152,7 +152,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
       "working_tree_dirty": false
     },
     "image": {
