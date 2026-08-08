@@ -43,6 +43,23 @@
 generated: 2026-07-24
 last_updated: 2026-08-08
 
+# NOTE (2026-08-08, code review): Story 1-11 reviewed and moved to done. All
+# 18 patch findings applied across commits 12a30aa, ef0b1c7, 523e86e; all five
+# evidence files re-measured and rebound on a clean tree in 7488fc8. The
+# VERDICT BELOW IS UNCHANGED — nothing was tuned. Headline fixes: every
+# evidence-audit rule is now monotone (the shipped `schema_version == head`
+# rule would have turned all five evidence files red on the next Alembic
+# migration, with hand-editing as the cheapest remedy); the JUnit XML is bound
+# by sha256 + run timestamp instead of trusted; and story 1.11's own tests are
+# registered as a Gate A check under a new AC2 `measurement_integrity`
+# invariant — the originally shipped report was computed from a pytest run with
+# 13 `test_evidence_convention.py` cases failing and reported everything green.
+# Re-measured: backend 452 passed / 0 skipped / 6 deselected, postgres 27,
+# frontend 50 files / 287 tests, e2e 46, alembic zero diff. Five findings
+# deferred to deferred-work.md (evidence has no expiry rule; the circular
+# mutation-audit test; registry bucket relevance; the fixture-version literal;
+# the git-less skip). See the story's Review Findings section.
+#
 # NOTE (2026-08-08): Story 1-11 implemented and moved to review. VERDICT:
 # `gate_a_passed: false` in evidence/story-1.11/gate-a-readiness-report.json.
 # All SIX AR28 invariants PASS (postgresql_site_membership, immutable_fixtures,
@@ -175,7 +192,7 @@ development_status:
   1-8-control-scenario-data-tables: done
   1-9-prove-viewer-parity-and-mutation-denial: done
   1-10-prove-scenario-data-accessibility-and-responsiveness: done
-  1-11-confirm-gate-a-readiness: review
+  1-11-confirm-gate-a-readiness: done
   epic-1-retrospective: optional
 
   # Epic 2: Grounded Conversational Investigation
