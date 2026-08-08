@@ -4,7 +4,7 @@ baseline_commit: a42e8b772861f3d7c0b7853f37843306a459c382
 
 # Story 1.11: Confirm Gate A Readiness
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -93,8 +93,8 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
     - `accountable_owner: "Product/QA"` — AC2 names it explicitly
   - [x] Per NFR29, a failure must **name the exact gate**. A bare `false` with no `blocking[]` is not acceptable — same standard Story 1.10's Task 7 held itself to.
 
-- [ ] **Task 5: Repo-wide evidence convention guard** (AC: #2)
-  - [ ] `backend/tests/test_evidence_convention.py` walks **every** `evidence/**/*.json` — not just this story's — and asserts:
+- [x] **Task 5: Repo-wide evidence convention guard** (AC: #2)
+  - [x] `backend/tests/test_evidence_convention.py` walks **every** `evidence/**/*.json` — not just this story's — and asserts:
     - all eleven NFR27 bindings present
     - `schema_version` present and equal to the current Alembic head
     - `working_tree_dirty` is `false` (or `binding_override` explains why not)
@@ -102,8 +102,8 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
     - the recorded commit **touches at least one code file** (`git show --name-only`). This is what catches story 1.10's case, where `29ac7a1d` is `docs(1-10): create story context` — a docs-only commit that proves nothing about accessibility code
     - every referenced path (`contract`, `checklist`, …) exists on disk
     - `contract_digests` match the real sha256 of the named files
-  - [ ] Two deliberate choices: it walks the tree rather than naming files (a new evidence file in Epic 2 is covered automatically), and it is a **repo-wide** guard rather than the missing story-1.10 patch. Stories 1.4/1.5 are guarded by `test_scenario_projection.py:64-75` and 1.9 by `test_gate_a_mutation_audit.py:16-21`; 1.10 has none. Leave those three story-specific guards alone — they assert semantic content this sweep deliberately does not.
-  - [ ] Skip gracefully when git is unavailable, but **do not skip when the assertion merely fails**.
+  - [x] Two deliberate choices: it walks the tree rather than naming files (a new evidence file in Epic 2 is covered automatically), and it is a **repo-wide** guard rather than the missing story-1.10 patch. Stories 1.4/1.5 are guarded by `test_scenario_projection.py:64-75` and 1.9 by `test_gate_a_mutation_audit.py:16-21`; 1.10 has none. Leave those three story-specific guards alone — they assert semantic content this sweep deliberately does not.
+  - [x] Skip gracefully when git is unavailable, but **do not skip when the assertion merely fails**.
 
 - [ ] **Task 6: Execute the NVDA manual pass** (AC: #1)
   - [x] Install NVDA (free, https://www.nvaccess.org). `EXPERIENCE.md:196` names NVDA on Windows in the portfolio-minimum support matrix — Narrator or JAWS is a spec change, not a substitution.
@@ -113,10 +113,10 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
   - [ ] **Expect real findings.** Automated tooling covers roughly a third of WCAG issues. `ScenarioWorkspace.tsx:22-30` already documents a prior bug where two focus calls interrupted a screen reader mid-announcement — exactly the class of defect only this pass detects. A finding here is an honest result, not a story failure; fix it if it is in Gate A scope (catalogue, workspace shell, Scenario Data) and record it.
   - [x] Do **not** extend to Chat/Runs/Results — route placeholders at Gate A, owned by Stories 4.6–4.9 (`1-10-…md:32`).
 
-- [ ] **Task 7: Re-measure and rebind the four existing evidence files** (AC: #2)
-  - [ ] On a **clean tree**, re-run each story's measurements and regenerate `evidence/story-{1.4,1.5,1.9,1.10}/*.json` **in place** through the Task 1 module. This closes `deferred-work.md:65`.
-  - [ ] Nearly free: this story must run the full gate anyway for Task 8. Same run, five outputs instead of one.
-  - [ ] What to re-run:
+- [x] **Task 7: Re-measure and rebind the four existing evidence files** (AC: #2)
+  - [x] On a **clean tree**, re-run each story's measurements and regenerate `evidence/story-{1.4,1.5,1.9,1.10}/*.json` **in place** through the Task 1 module. This closes `deferred-work.md:65`.
+  - [x] Nearly free: this story must run the full gate anyway for Task 8. Same run, five outputs instead of one.
+  - [x] What to re-run:
 
     | File | Command | Notes |
     |---|---|---|
@@ -125,13 +125,13 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
     | `story-1.9` | `uv run --frozen pytest` + `npm test` | |
     | `story-1.10` | `npm test`, `npm run test:e2e`, + Task 6's NVDA result | |
 
-  - [ ] **Preserve every existing semantic field.** Only bindings change — plus `nvda_manual_pass` and `passed` in story-1.10 once Task 6 lands. Specifically: `test_scenario_projection.py:881-920` asserts 1.4/1.5's `fixture.name`, `protocol` fields, measurement counts, and `passed is True`; `test_gate_a_mutation_audit.py` asserts all six of 1.9's `results` strings verbatim, including `legacy_route_live_flag_state`. Both must still pass afterward.
-  - [ ] Requires Docker PostgreSQL 18 up (`docker-compose.yml`). Story 1.10 recorded `postgres` markers passing 27/27, so the service is known-good.
-  - [ ] **Do not** simply edit `git_commit` to the real commit hash without re-measuring. The measurement was not taken on that tree; changing the number without redoing the work converts a visibly-useless binding into an invisibly-false one.
+  - [x] **Preserve every existing semantic field.** Only bindings change — plus `nvda_manual_pass` and `passed` in story-1.10 once Task 6 lands. Specifically: `test_scenario_projection.py:881-920` asserts 1.4/1.5's `fixture.name`, `protocol` fields, measurement counts, and `passed is True`; `test_gate_a_mutation_audit.py` asserts all six of 1.9's `results` strings verbatim, including `legacy_route_live_flag_state`. Both must still pass afterward.
+  - [x] Requires Docker PostgreSQL 18 up (`docker-compose.yml`). Story 1.10 recorded `postgres` markers passing 27/27, so the service is known-good.
+  - [x] **Do not** simply edit `git_commit` to the real commit hash without re-measuring. The measurement was not taken on that tree; changing the number without redoing the work converts a visibly-useless binding into an invisibly-false one.
 
-- [ ] **Task 8: Generate the Gate A readiness report** (AC: #1, #2)
-  - [ ] Follow the ordering the whole story exists to establish: **commit code → run the gate on the clean tree → generate → commit the report separately.**
-  - [ ] Record the verdict as it comes out. If `blocking[]` is non-empty, say so in completion notes and in the sprint-status note.
+- [x] **Task 8: Generate the Gate A readiness report** (AC: #1, #2)
+  - [x] Follow the ordering the whole story exists to establish: **commit code → run the gate on the clean tree → generate → commit the report separately.**
+  - [x] Record the verdict as it comes out. If `blocking[]` is non-empty, say so in completion notes and in the sprint-status note.
 
 - [x] **Task 9: Documentation** (AC: #1, #2)
   - [x] `docs/GATE-A-RUNBOOK.md` — flat, uppercase, matching the existing `docs/TESTING.md` / `docs/API.md` convention (`docs/` has no topic subdirectories). Consolidates:
@@ -142,11 +142,11 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
   - [x] One pointer line in `.claude/CLAUDE.md` (loaded every session) so a future-epic agent finds the convention without this story in context.
   - [x] `deferred-work.md` entry: ARIA-snapshot regression lock (`expect(locator).toMatchAriaSnapshot()`, available in the pinned Playwright 1.62.1) to make the accessibility tree a permanent regression guard rather than relying on a one-shot manual pass → **Story 4.9**, which owns the completed-journey WCAG proof.
 
-- [ ] **Task 10: Full regression gate** (AC: #1)
-  - [ ] Frontend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
-  - [ ] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres`; `alembic check` must show zero diff (this story adds no migration).
-  - [ ] **Re-run Story 1.9's Gate A guards explicitly and report them by name:** `ScenarioDataParity.test.tsx`, `scenarioDataBoundaries.test.ts`, `legacyReachability.test.ts`. AC1's "later work may not weaken any passed invariant" applies to this story too.
-  - [ ] Baselines at `a42e8b7`, from `sprint-status.yaml:60-61`: **backend 350 passed, 6 deselected; frontend 50 files / 287 tests; e2e 23/23 on each of chromium and msedge.** Re-derive them at the start rather than trusting these numbers — the 1.10 story file records pre-review-patch counts (49/283, 44 e2e) and they diverge.
+- [x] **Task 10: Full regression gate** (AC: #1)
+  - [x] Frontend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
+  - [x] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres`; `alembic check` must show zero diff (this story adds no migration).
+  - [x] **Re-run Story 1.9's Gate A guards explicitly and report them by name:** `ScenarioDataParity.test.tsx`, `scenarioDataBoundaries.test.ts`, `legacyReachability.test.ts`. AC1's "later work may not weaken any passed invariant" applies to this story too.
+  - [x] Baselines at `a42e8b7`, from `sprint-status.yaml:60-61`: **backend 350 passed, 6 deselected; frontend 50 files / 287 tests; e2e 23/23 on each of chromium and msedge.** Re-derive them at the start rather than trusting these numbers — the 1.10 story file records pre-review-patch counts (49/283, 44 e2e) and they diverge.
 
 ## Dev Notes
 
@@ -276,7 +276,46 @@ claude-opus-5 (Amelia, bmad-dev-story)
 
 ### Completion Notes List
 
-**Tasks 1–5, 9 complete. Task 6 is with the user (NVDA). Tasks 7, 8, 10 run in one pass once Task 6 lands.**
+## VERDICT: `gate_a_passed: false`
+
+All **six AR28 invariants pass.** The gate is blocked by exactly one check, and that check is *bound* — the block is a real failed result, not an unbound-binding artifact:
+
+| | |
+|---|---|
+| Blocking check | `accessibility_evidence` (story 1.10) |
+| Gate | `accessibility_and_responsiveness` — **NFR29**, not one of AR28's six |
+| Reason | `evidence/story-1.10/…json` records `passed: false`, because the manual NVDA screen-reader pass did not run |
+
+**This blocks Epic 2, not this story.** Per the story's own "Verdict is not completion" section, `false` is valid deliverable content. Nothing was tuned, relaxed or softened to reach `true`.
+
+To clear it: run `docs/GATE-A-RUNBOOK.md` § 3, fill in the checklist, regenerate. No code change is required.
+
+### Task status
+
+**Tasks 1–5 and 7–10 complete. Task 6 (NVDA) was cancelled by the user on 2026-08-08** after NVDA was installed and Speech Viewer was active. Its two substantive subtasks are left unchecked because the pass genuinely did not run; the task's own documented fallback — *"if speech output cannot be genuinely observed, record `not executed` with the reason and date"* — was followed instead. One genuine partial observation (the fixture catalogue table, which announced its caption, all four column headers, per-cell header association, and the scenario name as a link) is preserved in the checklist and explicitly marked as satisfying no checklist row.
+
+### Final measurements (all at `b11fe9d`, clean tree)
+
+| Gate | Result |
+|---|---|
+| Backend `pytest` | **443 passed, 2 skipped, 6 deselected** (baseline 350/6) |
+| Backend `pytest -m postgres` | **27 passed** |
+| `alembic check` | **No new upgrade operations detected** (zero diff) |
+| Frontend `npm test` | **50 files, 287 tests passed** (baseline 50/287 — unchanged) |
+| `npm run test:e2e` | **46 passed** (23 × chromium + msedge; baseline 23/23) |
+| `typecheck` / `lint` / `build` | clean (3 pre-existing fast-refresh lint warnings, exit 0) |
+| Story 1.9 Gate A guards, by name | `ScenarioDataParity.test.tsx`, `scenarioDataBoundaries.test.ts`, `legacyReachability.test.ts` — **3 files, 19 tests passed** |
+
+The backend total moves with the number of evidence files: the repo-wide sweep is parametrized per `evidence/**/*.json`, and this story adds a fifth. That is noted inside the evidence itself rather than left as an unexplained jump.
+
+### Two further bugs the tests caught
+
+- **`build_report` re-sampled `git status` while composing the report.** In a pass that regenerates several evidence files, the earlier writes make the tree dirty, so every test-backed check would have been marked unbound and blocked the gate for a reason unrelated to the checks. Boundness now reads the tree state from the binding block, which records it at resolution time. Fixed in `b11fe9d` with a regression test.
+- **Playwright exited `0` while writing a 113-byte empty JUnit XML** when port 4173 was already in use. The ingestion layer treats a registry-declared test absent from the XML as a hard failure, so this blocked the gate instead of passing silently — the anti-rot rule demonstrated on real output rather than only in a unit test.
+
+### Ordering note
+
+`resolve_bindings()` refuses a dirty tree, so all five binding sets are resolved **before** the first file is written; `build_report()` gained a `bindings` parameter for that. The commits were also restructured so the measured commit carries code: three unpushed commits were folded into one, because a docs-only HEAD is precisely the shape the guard rejects (it is what caught story 1.10's `29ac7a1d`). The guard was not weakened to accommodate the mistake.
 
 Two bugs the tests caught during development, both real:
 - `_git()` stripped the whole `git status --porcelain` stdout, eating the leading status space of an unstaged change and shifting every parsed path by one character. Fixed with a non-stripping `_git_raw()`.
@@ -315,11 +354,19 @@ Environment note: the local PostgreSQL was seeded with both governed fixtures an
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `_bmad-output/implementation-artifacts/1-11-confirm-gate-a-readiness.md`
 
-**Pending (Tasks 6–8)**
-- `docs/ACCESSIBILITY-NVDA-CHECKLIST.md` (Task 6 results)
-- `evidence/story-{1.4,1.5,1.9,1.10}/*.json` (regenerated in place)
-- `evidence/story-1.11/gate-a-readiness-report.json` (new)
+**Regenerated in place (Task 7)**
+- `evidence/story-1.4/nfr35-scenario-data-load.json`
+- `evidence/story-1.5/nfr35-evidence-target-resolution.json`
+- `evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json`
+- `evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json`
+
+**Added (Task 8)**
+- `evidence/story-1.11/gate-a-readiness-report.json`
+
+**Modified (Task 6 outcome)**
+- `docs/ACCESSIBILITY-NVDA-CHECKLIST.md`
 
 ## Change Log
 
 - 2026-08-07: Story created — Epic 1 gate story scoped to building the readiness-evaluation machinery and recording the Gate A decision. Four cross-story gaps folded in: the outstanding NVDA manual pass, the repo-wide `git_commit` binding defect, the missing `schema_version` binding, and the six stories whose contributing checks live in test suites rather than evidence files.
+- 2026-08-08: Gate A readiness machinery implemented and the decision recorded. `evidence_binding.py` (dirty-tree refusal, live-derived NFR27 bindings + `schema_version`), `gate_a_checks.py` (19 checks across all ten Gate A stories, AR28's six invariants with accessibility tracked separately under NFR29), `junit_ingest.py` (three-runner ingestion; declared-but-absent test fails loudly, skipped is never passed), `gate_a_readiness.py` (exits non-zero on any missing/unbound/skipped/failing check), and a repo-wide `evidence/**/*.json` convention guard. All four pre-existing evidence files re-measured on a clean tree and rebound to `b11fe9d`, closing `deferred-work.md`'s `git_commit` off-by-one. **Verdict: `gate_a_passed: false`** — all six AR28 invariants pass; the single blocking check is the NFR29 accessibility gate, because the manual NVDA pass was cancelled by the user and a pass there cannot be inferred from axe output. Blocks Epic 2, not this story.
