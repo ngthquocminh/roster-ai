@@ -33,7 +33,26 @@ import { test } from "@playwright/test";
 import { installApiStubs } from "./support/apiStubs";
 
 if (process.env.NVDA_MANUAL) {
-  test("park the Gate A surface for a manual NVDA pass", async ({ page }) => {
+  test("park the Gate A surface for a manual NVDA pass", async ({ page }, testInfo) => {
+    // `page.pause()` blocks until a human clicks Resume in the Playwright
+    // Inspector, and `setTimeout(0)` removes the only thing that would ever
+    // end the run. In a headless or CI context there is no Inspector to click,
+    // so the pair would hang forever rather than fail. Refuse up front: this
+    // harness is only meaningful with a real browser window and a human at it.
+    if (process.env.CI) {
+      throw new Error(
+        "NVDA_MANUAL is set in a CI environment. This harness parks a browser " +
+          "for a human driving NVDA and never terminates on its own; it must " +
+          "not run unattended.",
+      );
+    }
+    // `--headed` sets this to false; it is true or undefined otherwise.
+    if (testInfo.project.use.headless !== false) {
+      throw new Error(
+        "The manual NVDA harness needs a real browser window. Re-run with " +
+          "--headed (see docs/GATE-A-RUNBOOK.md § 3).",
+      );
+    }
     // A manual pass takes as long as it takes.
     test.setTimeout(0);
     await installApiStubs(page);

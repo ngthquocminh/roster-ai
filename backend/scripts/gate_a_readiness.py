@@ -37,9 +37,13 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from scripts.evidence_binding import (  # noqa: E402
+    NFR27_BINDING_KEYS,
     REPO_ROOT,
+    audit_evidence_drift,
     audit_evidence_file,
+    commit_date,
     contract_digests,
+    file_digest,
     resolve_bindings,
     working_tree_status,
 )
@@ -53,6 +57,7 @@ from scripts.gate_a_checks import (  # noqa: E402
 from scripts.junit_ingest import (  # noqa: E402
     RunnerReport,
     file_outcomes,
+    missing_pytest_cases,
     parse_junit,
 )
 
@@ -107,7 +112,16 @@ def _evidence_result(
         return "missing", False, f"evidence file not found: {check.evidence_path}"
 
     violations = audit_evidence_file(path, repo_root=repo_root)
-    document = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:  # noqa: BLE001
+        # `audit_evidence_file` already reports this cleanly; re-reading it here
+        # with a bare `json.loads` used to kill the run instead, so the gate
+        # produced a stack trace and no artifact rather than a verdict.
+        return "missing", False, f"unreadable evidence file: {exc}"
+    if not isinstance(document, dict):
+        return "missing", False, "evidence file is not a JSON object"
+
     passed = document.get("passed")
 
     if passed is True:
@@ -120,19 +134,150 @@ def _evidence_result(
         result = "missing"
         detail = "evidence file records no `passed` verdict"
 
-    # Story 1.10 records its own outstanding gate explicitly; surface it.
-    manual = (
-        document.get("test_evidence", {})
-        .get("manual_screen_reader", {})
-        .get("result")
-    )
-    if isinstance(manual, str) and manual.lower().startswith("not executed"):
-        detail = "; ".join(filter(None, [detail, f"manual gate: {manual}"]))
+    # A manual gate is a check no automated suite can substitute for, so it is
+    # held to the same standard as everything else: it must affirmatively
+    # record a pass. Anything else — "not executed", "cancelled", "pending",
+    # a reworded phrase nobody anticipated — is not proven and blocks on its
+    # own account. Surfacing it only in `detail` (as this did originally) meant
+    # flipping the file's own `passed` to true would have made an un-executed
+    # screen-reader pass vanish from the verdict entirely.
+    for label, manual in _manual_gates(document):
+        if not manual.strip().lower().startswith("pass"):
+            detail = "; ".join(filter(None, [detail, f"manual gate {label}: {manual}"]))
+            if result == "passed":
+                result = "failed"
 
     bound = not violations
     if violations:
         detail = "; ".join(filter(None, [detail, "unbound: " + "; ".join(violations)]))
+
+    drift = audit_evidence_drift(path, repo_root=repo_root)
+    if drift:
+        # Observations, not violations: the world moved on since the
+        # measurement. Recorded so it is visible, never allowed to block.
+        detail = "; ".join(filter(None, [detail, "drift: " + "; ".join(drift)]))
     return result, bound, detail
+
+
+def _xml_provenance(
+    report: RunnerReport, bindings: dict[str, Any], repo_root: Path
+) -> dict[str, Any]:
+    """Describe the JUnit XML a runner's results came from.
+
+    Three things beyond the case count, all of which the original report
+    lacked:
+
+    * a **repo-relative path**, not the absolute machine-local one that made
+      the recorded source unreachable from any other checkout;
+    * a **sha256**, so the artifact the verdict was computed from is pinned
+      even though `_bmad-output/test-artifacts/` is deliberately gitignored;
+    * the run's own **timestamp**, checked against the commit date of
+      `code.git_commit`.
+
+    The digest is deliberately the binding here rather than an existence check.
+    Adding `junit_xml` to `_PATH_HINT_KEYS` would demand the file be present at
+    audit time, which — for a gitignored artifact — would permanently unbind
+    this report on every machine except the one that generated it.
+    """
+    try:
+        relative = Path(report.xml_path).resolve().relative_to(repo_root).as_posix()
+    except ValueError:
+        relative = Path(report.xml_path).as_posix()
+
+    entry: dict[str, Any] = {
+        "junit_xml": relative,
+        "cases": len(report.cases),
+        "run_started": report.timestamp,
+    }
+    try:
+        entry["sha256"] = file_digest(Path(report.xml_path))
+    except OSError:
+        entry["sha256"] = "unavailable — XML could not be read for digesting"
+
+    commit = (bindings.get("code") or {}).get("git_commit")
+    if commit and report.timestamp:
+        try:
+            committed = commit_date(str(commit), repo_root)
+        except Exception:  # noqa: BLE001
+            committed = ""
+        if committed and not _postdates(report.timestamp, committed):
+            entry["stale"] = (
+                f"run started {report.timestamp}, which predates the commit it "
+                f"is bound to ({commit} at {committed}) — these results did not "
+                "come from the tree this report names"
+            )
+    return entry
+
+
+def _postdates(run_stamp: str, commit_stamp: str) -> bool:
+    """True when the test run started at or after the commit was made.
+
+    Both are ISO 8601 but not in the same shape: pytest writes a local offset,
+    Vitest and Playwright write `Z`. Compared as instants, never as text.
+    """
+    from datetime import datetime, timezone
+
+    def _parse(value: str) -> Any:
+        text = value.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    run = _parse(run_stamp)
+    made = _parse(commit_stamp)
+    if run is None or made is None:
+        return True
+    return run >= made
+
+
+def _validate_supplied_bindings(bindings: Any) -> None:
+    """Reject a pre-resolved binding block that does not meet NFR27."""
+    if not isinstance(bindings, dict):
+        raise ValueError(
+            f"bindings must be a mapping, got {type(bindings).__name__}"
+        )
+    missing = [key for key in NFR27_BINDING_KEYS if key not in bindings]
+    if missing:
+        raise ValueError(
+            "Pre-resolved bindings are missing NFR27 key(s): "
+            f"{', '.join(missing)}. Resolve them through "
+            "`evidence_binding.resolve_bindings()` rather than composing the "
+            "block by hand."
+        )
+    if "schema_version" not in bindings:
+        raise ValueError("Pre-resolved bindings are missing `schema_version`.")
+    code = bindings.get("code")
+    if not isinstance(code, dict) or not code.get("git_commit"):
+        raise ValueError(
+            "Pre-resolved bindings must carry `code.git_commit`; without it "
+            "nothing ties the recorded results to a tree."
+        )
+
+
+def _manual_gates(document: dict[str, Any]) -> list[tuple[str, str]]:
+    """Every manual-gate result recorded under `test_evidence`.
+
+    Defensive about shape: `test_evidence` and its members are author-written
+    and an evidence file listing several manual passes as a list is a perfectly
+    plausible future shape, which the original chained `.get(...)` would have
+    crashed on.
+    """
+    evidence = document.get("test_evidence")
+    if not isinstance(evidence, dict):
+        return []
+    found: list[tuple[str, str]] = []
+    for label, entry in evidence.items():
+        if not isinstance(entry, dict):
+            continue
+        for key, value in entry.items():
+            if "manual" in label or "manual" in key or "screen_reader" in label:
+                if isinstance(value, str) and key in ("result", "outcome", "status"):
+                    found.append((label, value))
+    return found
 
 
 def build_report(
@@ -160,6 +305,13 @@ def build_report(
         bindings = resolve_bindings(
             _DECLARED_BINDINGS, repo_root=repo_root, allow_dirty=allow_dirty
         )
+    else:
+        # A caller-supplied block bypasses `resolve_bindings()`, and with it the
+        # dirty-tree refusal that is this module's whole safety mechanism. The
+        # original guard was `if bindings is None`, so `bindings={}` sailed
+        # through and produced `version_bindings: {}` with every check marked
+        # bound. Validate what the caller hands over instead of trusting it.
+        _validate_supplied_bindings(bindings)
     # Read the tree state out of the binding block rather than sampling it
     # again here. The binding block records the tree as it was when the
     # bindings were resolved, which is the authoritative moment — re-sampling
@@ -171,6 +323,10 @@ def build_report(
         {path for check in GATE_A_CHECKS for path in check.test_files}
     )
     outcomes = file_outcomes(reports, declared_files, strict=strict_missing)
+    report_provenance = {
+        report_.runner: _xml_provenance(report_, bindings, repo_root)
+        for report_ in reports
+    }
 
     contributing: list[dict[str, Any]] = []
     blocking: list[dict[str, Any]] = []
@@ -278,11 +434,17 @@ def build_report(
             else:
                 status = "passed"
             title = next(inv.title for inv in ALL_INVARIANTS if inv.key == key)
+            # A check that is both failing and unbound appears in both lists;
+            # de-duplicate so it is named once.
+            blocked_names: list[str] = []
+            for entry_ in failing + unbound:
+                if entry_["check"] not in blocked_names:
+                    blocked_names.append(entry_["check"])
             rolled[key] = {
                 "title": title,
                 "result": status,
                 "contributing_checks": [e["check"] for e in entries],
-                "blocking": [e["check"] for e in failing + unbound],
+                "blocking": blocked_names,
             }
         return rolled
 
@@ -290,6 +452,70 @@ def build_report(
     nfr29_rollup = _rollup(
         [inv.key for inv in ALL_INVARIANTS if inv.authority == "NFR29"]
     )
+    ac2_rollup = _rollup(
+        [inv.key for inv in ALL_INVARIANTS if inv.authority == "AC2"]
+    )
+
+    # Run-level gates. These are properties of the measurement itself rather
+    # than of any one registry check, so they are appended after the per-check
+    # loop — but they block exactly the same way.
+    for path, absent in sorted(
+        missing_pytest_cases(reports, declared_files, repo_root=repo_root).items()
+    ):
+        blocking.append(
+            {
+                "check": "pytest_case_coverage",
+                "story": "1.11",
+                "invariant": "measurement_integrity",
+                "authority": "AC2",
+                "result": "missing",
+                "bound": False,
+                "reason": (
+                    f"{path}: {len(absent)} test function(s) defined in source "
+                    f"produced no case in the JUnit XML ({', '.join(absent[:3])}"
+                    f"{', …' if len(absent) > 3 else ''}). A deselected test "
+                    "leaves no trace in the XML, so this cannot be read as a pass."
+                ),
+            }
+        )
+
+    for report_ in reports:
+        stale = report_provenance.get(report_.runner, {}).get("stale")
+        if stale:
+            blocking.append(
+                {
+                    "check": f"{report_.runner}_xml_provenance",
+                    "story": "1.11",
+                    "invariant": "measurement_integrity",
+                    "authority": "AC2",
+                    "result": "missing",
+                    "bound": False,
+                    "reason": stale,
+                }
+            )
+
+    for check in GATE_A_CHECKS:
+        if not check.required_projects:
+            continue
+        for path in check.test_files:
+            covered = set(outcomes[path].projects)
+            absent_projects = [p for p in check.required_projects if p not in covered]
+            if absent_projects:
+                blocking.append(
+                    {
+                        "check": check.check,
+                        "story": check.story,
+                        "invariant": check.invariant,
+                        "authority": authority_by_key[check.invariant],
+                        "result": "missing",
+                        "bound": False,
+                        "reason": (
+                            f"{path} ran under {sorted(covered) or 'no'} project(s); "
+                            f"this check claims proof on "
+                            f"{', '.join(check.required_projects)}"
+                        ),
+                    }
+                )
 
     gate_a_passed = not blocking
 
@@ -303,13 +529,8 @@ def build_report(
         "contributing_checks": contributing,
         "ar28_invariants": ar28_rollup,
         "nfr29_gates": nfr29_rollup,
-        "test_evidence": {
-            report_.runner: {
-                "junit_xml": str(report_.xml_path),
-                "cases": len(report_.cases),
-            }
-            for report_ in reports
-        },
+        "ac2_gates": ac2_rollup,
+        "test_evidence": report_provenance,
         "version_bindings": bindings,
         "blocking": blocking,
         "gate_a_passed": gate_a_passed,
@@ -352,15 +573,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
+    # Written via a temp file and renamed. A crash or full disk mid-write would
+    # otherwise leave a truncated evidence file, and the repo-wide convention
+    # sweep parses every `evidence/**/*.json` — so a half-written report breaks
+    # the suite at collection rather than failing an assertion.
+    staging = args.output.with_suffix(args.output.suffix + ".tmp")
+    staging.write_text(
         json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    staging.replace(args.output)
 
     print(f"Wrote {args.output}")
     for key, rolled in report["ar28_invariants"].items():
         print(f"  [AR28] {key}: {rolled['result']}")
     for key, rolled in report["nfr29_gates"].items():
         print(f"  [NFR29] {key}: {rolled['result']}")
+    for key, rolled in report["ac2_gates"].items():
+        print(f"  [AC2]  {key}: {rolled['result']}")
 
     if report["gate_a_passed"]:
         print("\ngate_a_passed: true")

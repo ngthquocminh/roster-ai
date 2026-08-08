@@ -148,6 +148,54 @@ Do not tune the registry, relax a check, or soften a recorded result to reach `t
   - [x] **Re-run Story 1.9's Gate A guards explicitly and report them by name:** `ScenarioDataParity.test.tsx`, `scenarioDataBoundaries.test.ts`, `legacyReachability.test.ts`. AC1's "later work may not weaken any passed invariant" applies to this story too.
   - [x] Baselines at `a42e8b7`, from `sprint-status.yaml:60-61`: **backend 350 passed, 6 deselected; frontend 50 files / 287 tests; e2e 23/23 on each of chromium and msedge.** Re-derive them at the start rather than trusting these numbers — the 1.10 story file records pre-review-patch counts (49/283, 44 e2e) and they diverge.
 
+### Review Findings
+
+Adversarial code review, 2026-08-08 (Blind Hunter + Edge Case Hunter + Acceptance Auditor).
+Baseline `a42e8b7`..`8828176`. Registry coverage, the six AR28 rollups, the `gate_a_passed: false`
+verdict, and Task 6's honesty were each independently audited and confirmed accurate — see the
+"confirmed clean" note at the end of this section.
+
+**Decisions resolved (2026-08-08, with Minh)**
+
+1. **JUnit XML binding** → *patch*. Record a sha256 of each XML plus the runner's own `testsuite` timestamp in the report, and assert that timestamp postdates `code.git_commit`'s commit date. Deliberately **not** added to `_PATH_HINT_KEYS`: `_bmad-output/test-artifacts/` is gitignored by a deliberate Task 3 decision, so an existence check would permanently unbind the report on every machine but the author's. The digest is the binding.
+   *Correction to the original finding:* the shipped XML is **not** stale. `pytest.xml` ran at `12:30:48+07:00`, 32 s after `b11fe9d` (`12:30:16+07:00`); Vitest and Playwright likewise. Its 13 failures are genuine failures *at that commit*, because the four evidence files are only regenerated in the next commit (`92b83c5`). What that exposes is a **bootstrap**: the evidence-convention guard is necessarily red at the code commit the report binds to, and green only after the evidence commit — and because this story's own test files are not registered as checks, the report cannot see it either way.
+2. **Evidence has no expiry** → *defer*. Reason: to be decided together with the audit-rule redesign in item 3. See `deferred-work.md`.
+3. **Audit rules are not monotone** → *patch, scope expanded*. Root cause identified as a spec defect, not a workflow violation: the story itself specified `schema_version present and equal to the current Alembic head` (Task 5, line 99), and the code implements exactly that. Applying the monotonicity test to the whole rule set shows **three of four** rules break with time — `schema_version == head`, `referenced path exists`, and `contract_digests match the real sha256` — while `git_commit is an ancestor of HEAD` (line 100, the adjacent bullet) is correctly monotone. Fix: split generation-time from read-time rules. `resolve_bindings()` keeps the strict form; `audit_evidence_file()` gets the monotone form. Add the principle to `docs/EVIDENCE-CONVENTION.md` and a `test_evidence_survives_a_future_migration` lifecycle test. **Regenerate `evidence/story-1.11/gate-a-readiness-report.json` afterwards** to keep provenance unbroken (expected: content unchanged, only `git_commit` and `measurement_date` move).
+4. **`vite.config.ts` preview proxy** → *patch (keep, fix the comment)*. Investigation reversed the initial recommendation. The comment's technical claims are all correct (`auth_security.py:9` `__Host-shiftmind_session`, `auth.py:182` `samesite="lax"`, `main.py:247` `allow_credentials=False`), and `npm run preview` against a real backend is a **documented v0.4 workflow** (`.planning/…/01-RESEARCH.md:660`, `backend/.env.example:16`, `README.md:147`, `docs/DEVELOPMENT.md:68`, `docs/GETTING-STARTED.md:121`) that is silently broken without the proxy — CORS admits the request but the `__Host-` cookie cannot ride cross-origin. Only the attribution is wrong: the NVDA pass uses `installApiStubs`, not the proxy. Remove that clause; keep the proxy.
+
+**Patch**
+
+- [ ] [Review][Patch] Bind the JUnit XML: record sha256 + `testsuite` timestamp per runner, assert the timestamp postdates `code.git_commit` (decision 1) [backend/scripts/gate_a_readiness.py:296-315]
+- [ ] [Review][Patch] Split generation-time from read-time binding rules; make all three non-monotone audit rules monotone, document the principle, add a lifecycle test (decision 3) [backend/scripts/evidence_binding.py:398-450]
+- [ ] [Review][Patch] Correct the `preview.proxy` comment — drop the NVDA-pass attribution, state the real reason (decision 4) [frontend/vite.config.ts:19-31]
+
+- [ ] [Review][Patch] Story 1.11's own three test files are not registered as Gate A checks, so `test_evidence_convention.py` failing cannot block the gate — this is why the 13 failures above were invisible [backend/scripts/gate_a_checks.py]
+- [ ] [Review][Patch] No committed script regenerates the four rebound evidence files, violating the convention this story wrote — `gate_a_readiness.py:60` writes only story-1.11, and the `NFR35_MEASUREMENTS=` stdout parser described in the completion notes exists nowhere in the repo [backend/scripts/]
+- [ ] [Review][Patch] `build_report(bindings=...)` accepts a caller-supplied binding block with no validation; the guard is `if bindings is None`, so `bindings={}` yields `version_bindings: {}`, every check `bound: true`, and a green report [backend/scripts/gate_a_readiness.py:159]
+- [ ] [Review][Patch] Partial pytest deselection is invisible: `-m` selectors remove testcases entirely (unlike skips), so a file whose postgres-marked cases are deselected still rolls up `passed`. Only a 100%-deselected file trips `MissingTestError` [backend/scripts/junit_ingest.py:211-243]
+- [ ] [Review][Patch] A merge commit makes `git show --name-only --pretty=format:` return nothing, so the "touches no code file" guard fires falsely — verified against `0e3026d`; this repo's `main` carries merge commits [backend/scripts/evidence_binding.py:426-433]
+- [ ] [Review][Patch] The manual-gate check is cosmetic — an un-executed NVDA pass only appends to `detail` and never reaches `blocking[]`; flipping story-1.10's `passed` to true would make it vanish from the verdict [backend/scripts/gate_a_readiness.py:123-130]
+- [ ] [Review][Patch] Playwright per-browser-project coverage is never verified — `file_outcomes` merges all cases for a path with no project field, so a chromium-only run satisfies a check that claims Chromium+Edge proof [backend/scripts/junit_ingest.py:196-200]
+- [ ] [Review][Patch] `_evidence_result` crashes instead of blocking on malformed evidence JSON — `audit_evidence_file` returns a clean "unreadable" violation, then the next line does an unguarded `json.loads` on the same file [backend/scripts/gate_a_readiness.py:110]
+- [ ] [Review][Patch] The registry declares file-level identity only, not `(file, test_name)` as Task 3 specifies — renaming or deleting a single test inside a registered file goes undetected [backend/scripts/gate_a_checks.py:85-98]
+- [ ] [Review][Patch] `test_alembic_head_resolution_needs_no_database` is a source-text grep its own import graph defeats — `resolve_bindings()` → `default_fixtures()` → `fixture_history.py` imports sqlalchemy, so `'sqlalchemy' in sys.modules` is True after the call [backend/tests/test_evidence_binding.py]
+- [ ] [Review][Patch] Three Dev Agent Record claims are contradicted by the committed artifacts: `6ebc886` is not in history (folded into `679e9ef`); NFR35 maxima "77.156 / 78.676" vs the committed 76.914 / 89.734; the skipped case is attributed to `test_evidence_binding.py` but both skips are in `test_evidence_convention.py` [1-11-confirm-gate-a-readiness.md:269-275]
+- [ ] [Review][Patch] `_normalize_pytest` lacks the already-rooted guard `_normalize_path_style` has, so running pytest from the repo root yields `backend/backend/tests/...` and breaks every declared file [backend/scripts/junit_ingest.py:94-104]
+- [ ] [Review][Patch] Robustness bundle: `.lstrip("./")` is a charset strip that mangles dot-directories [junit_ingest.py:108]; nested `<testsuite>` double-counts cases [junit_ingest.py:156]; `contract_digests` keys collide via `path.name.split(".")[0]` [evidence_binding.py:251]; `float()` story sort makes `1.1`/`1.10` unstable [gate_a_checks.py:385]; `blocking[]` can list a check twice [gate_a_readiness.py:285]; a non-object evidence JSON raises `AttributeError` [evidence_binding.py:381]; the report is written non-atomically [gate_a_readiness.py:354]; the inline digest audit is one-way where the pytest sweep is strict [evidence_binding.py:441]; `junit_xml` records absolute machine-local paths into a gitignored dir [gate_a_readiness.py:308]
+- [ ] [Review][Patch] `manual-nvda.spec.ts` combines `test.setTimeout(0)` with `page.pause()` and has no CI/headed guard — a stray `NVDA_MANUAL` in a headless environment hangs forever [frontend/e2e/manual-nvda.spec.ts:35-44]
+- [ ] [Review][Patch] Story 1.10's evidence lost `version_bindings.code.baseline_commit` while its prose still cites "at f27bafd" — the baseline anchor now survives only as a 7-char abbreviation inside a free-text string [evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json]
+
+**Deferred**
+
+- [x] [Review][Defer] An evidence file passes the audit forever — the commit check is ancestor-only, with no recency or relevance rule. Verified by execution: setting `git_commit` to `203db1bf` ("Phase 2: FastAPI backend skeleton", 2026-06-26) and `measurement_date` to `1999-01-01` returns zero violations [backend/scripts/evidence_binding.py:415-433] — deferred, to be decided together with the audit-rule redesign. **Note:** resolving decision 3 removes the implicit expiry that `schema_version == head` was providing, so this risk becomes live rather than theoretical
+- [x] [Review][Defer] `test_gate_a_mutation_audit.py`'s third test is circular — it asserts that `evidence/story-1.9/…json` contains "passed", which is the same field the gate's own `viewer_parity_evidence` check reads; its second test is a substring grep over two hardcoded adapter files [backend/tests/test_gate_a_mutation_audit.py] — deferred, pre-existing (Story 1.9)
+- [x] [Review][Defer] `authenticated_readonly_scenario_data` is filled largely with design-token and table-widget tests while the actual 401/403 assertions sit under `normalized_scenario_reads`; `validate_registry()` requires ≥1 check per invariant but never topical relevance [backend/scripts/gate_a_checks.py:220-280] — deferred, pre-existing (the spec's own coverage table dictated this mapping)
+- [x] [Review][Defer] `dataset`/`scenario` are "derived" from `default_fixtures()`, which is itself a hardcoded tuple with literal `"v1"` strings and no fixture checksum — editing a fixture's bytes leaves the binding byte-identical [backend/scripts/gate_a_cutover.py:76-89] — deferred, pre-existing; the spec mandated importing rather than re-declaring it
+- [x] [Review][Defer] Running the gate twice in a row fails — `main()` writes into `evidence/`, so the next `resolve_bindings()` raises `DirtyTreeError`, and the documented `--allow-dirty` escape marks every test-backed check unbound [backend/scripts/gate_a_readiness.py] — deferred, workflow ergonomics
+- [x] [Review][Defer] `requires_git` silently disables the two strongest convention tests in a git-less environment — the same "skip looks like pass" pattern `junit_ingest` was careful to close [backend/tests/test_evidence_convention.py:31-42] — deferred, no git-less CI exists
+
+**Confirmed clean** (audited, no finding): AC1's six-invariant rollup structure; AC2's eleven NFR27 bindings + `schema_version` + `accountable_owner` and the non-zero exit enforcement; registry coverage against every story's File List (zero missing, zero non-existent); the "File Lists could not be used verbatim" claim; Task 6's honesty (no artifact anywhere claims an NVDA pass); all nine anti-patterns; Task 8's commit ordering; Task 9's docs; and the `gate_a_passed: false` verdict itself, which is accurate and untuned.
+
 ## Dev Notes
 
 ### The rule this story establishes
@@ -266,13 +314,16 @@ claude-opus-5 (Amelia, bmad-dev-story)
 
 ### Debug Log References
 
-- Code commit for the measurement run: `6ebc886 feat(1-11): build the Gate A readiness machinery`
-- Clean-tree postgres run: `uv run --frozen pytest -m postgres -s -q` → 27 passed, 415 deselected; both NFR35 stdout markers emitted (21 + 6 measurements, max 77.156 ms / 78.676 ms, threshold 2000 ms)
+- Code commit for the measurement run: `679e9ef feat(1-11): build the Gate A readiness machinery`
+  - *Corrected 2026-08-08 during code review.* This originally read `6ebc886`. That object exists in the object database but is **not an ancestor of HEAD** — it is the dangling pre-fold commit left behind when three commits were squashed (see the Ordering note below), and the Debug Log was never updated to follow. A hash that this story's own guard would reject as unreachable is exactly the kind of stale literal the story exists to eliminate.
+- Clean-tree postgres run: `uv run --frozen pytest -m postgres -s -q` → 27 passed, 415 deselected; both NFR35 stdout markers emitted (21 + 6 measurements, max **76.914 ms / 89.734 ms**, threshold 2000 ms)
+  - *Corrected 2026-08-08 during code review.* This originally read `77.156 ms / 78.676 ms`, which matches neither committed evidence file — `evidence/story-1.4` records `maximum_duration_ms: 76.914` and `evidence/story-1.5` records `89.734`. The quoted figures came from a development run, not from the run that produced the committed evidence.
 - Runner JUnit shapes verified against real output before writing the parser:
   - pytest `classname="tests.test_evidence_binding"` (dotted module)
   - Vitest `classname="src/lib/errors.test.ts"` (path relative to `frontend/`) — the flag is plain `--outputFile=`, **not** `--outputFile.junit=`
   - Playwright `classname="harness.spec.ts"` (path relative to `testDir`, i.e. `e2e/`), one case per browser project
-- Parser validated against all three real XML files; `test_evidence_binding.py` reported `skipped` for its own one skipped case, demonstrating the skipped-is-not-proven rule on live data.
+- Parser validated against all three real XML files; the skipped-is-not-proven rule was demonstrated on live data by the two `<skipped/>` cases in **`test_evidence_convention.py`** (`test_recorded_contract_digests_match_the_real_files` for stories 1.4 and 1.5, neither of which records contract digests).
+  - *Corrected 2026-08-08 during code review.* This originally attributed the skip to `test_evidence_binding.py`, which had 22 cases and no skips in the recorded XML.
 
 ### Completion Notes List
 

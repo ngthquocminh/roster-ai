@@ -109,7 +109,27 @@ def test_every_invariant_has_at_least_one_contributing_check():
 def test_all_ten_gate_a_stories_contribute_a_check():
     """AC2 says 'each contributing Story 1.1-1.10 check' — all ten, not four."""
     expected = {f"1.{n}" for n in range(1, 11)}
-    assert set(contributing_stories()) == expected
+    assert expected <= set(contributing_stories())
+
+
+def test_the_gate_machinery_holds_itself_to_the_gate():
+    """Story 1.11's own tests are registered, so a broken convention blocks.
+
+    Without this the report is blind to the health of the thing computing it:
+    the originally shipped report was generated from a pytest run with thirteen
+    `test_evidence_convention.py` cases failing, and reported every invariant
+    green because those tests contributed to no check.
+    """
+    own = [c for c in GATE_A_CHECKS if c.story == "1.11"]
+    assert own, "story 1.11 registers no check for its own machinery"
+    registered = {path for c in own for path in c.test_files}
+    assert "backend/tests/test_evidence_convention.py" in registered
+
+
+def test_story_sort_orders_ten_after_one():
+    """`float("1.10") == float("1.1")`, which made the two tie unstably."""
+    order = list(contributing_stories())
+    assert order.index("1.1") < order.index("1.2") < order.index("1.10")
 
 
 def test_registry_covers_more_than_the_four_evidence_files():

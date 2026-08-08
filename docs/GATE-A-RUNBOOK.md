@@ -266,6 +266,42 @@ The JUnit XML is written to `_bmad-output/test-artifacts/gate-a/` and is
 gitignored: it is regenerable, noisy, and the report already carries the
 summarised result. It must never be written into `evidence/`.
 
+Because it is gitignored, the report pins it by **sha256** rather than by
+existence — an existence check on an uncommitted artifact would unbind the
+report on every machine but the one that generated it. The report also records
+each run's own start timestamp and blocks if it predates the commit being bound,
+so a stale XML left lying in the directory cannot be read as a fresh result.
+
+## 5. Regenerating the Story 1.4/1.5/1.9/1.10 evidence
+
+Separate script, same ordering rule. Use it whenever those files need rebinding
+— after the NVDA pass lands, for instance, which changes Story 1.10's recorded
+result.
+
+```bash
+# 0. Commit the code. The tree must be clean.
+git status --porcelain      # must be empty
+
+# 1. Capture a postgres run; 1.4 and 1.5 read their NFR35 measurements from it.
+cd backend
+uv run --frozen pytest -m postgres -s -q | tee ../_bmad-output/test-artifacts/gate-a/postgres.log
+
+# 2. Rebind all four, in one pass.
+uv run --frozen python scripts/regenerate_evidence.py \
+  --measurements ../_bmad-output/test-artifacts/gate-a/postgres.log
+
+# 3. Commit the evidence on its own.
+```
+
+Omitting `--measurements` rewrites the bindings only and leaves every recorded
+measurement untouched, which is what you want when nothing was re-measured.
+
+The script resolves all four binding sets **before** writing any file: writing
+the first one dirties the tree, and `resolve_bindings()` refuses a dirty tree.
+It exits non-zero if any file comes out unbound, and it preserves every semantic
+field — the story-specific guards (`test_scenario_projection.py`,
+`test_gate_a_mutation_audit.py`) assert those and must stay green.
+
 ### Reading the exit code
 
 The script exits **non-zero** on any check that is missing, unbound, skipped or

@@ -122,6 +122,11 @@ def _git_raw(repo_root: Path, *args: str) -> str:
     return result.stdout
 
 
+def commit_date(commit: str, repo_root: Path = REPO_ROOT) -> str:
+    """Committer date of ``commit`` as a strict-ISO 8601 string."""
+    return _git(repo_root, "show", "-s", "--format=%cI", commit)
+
+
 def working_tree_status(repo_root: Path = REPO_ROOT) -> tuple[bool, tuple[str, ...]]:
     """Return ``(dirty, offending_paths)`` for ``repo_root``.
 
@@ -191,13 +196,8 @@ def _literal(raw: str) -> Any:
         return None
 
 
-def resolve_alembic_head(versions_dir: Path) -> str:
-    """Walk ``down_revision`` across the migration files to the single head.
-
-    A file-graph walk on purpose: report generation must stay runnable with no
-    PostgreSQL service up, so this never queries a live schema and never shells
-    out to the migration tool.
-    """
+def _revision_graph(versions_dir: Path) -> dict[str, Any]:
+    """Map every migration revision to its ``down_revision``."""
     revisions: dict[str, Any] = {}
     for path in sorted(versions_dir.glob("*.py")):
         source = path.read_text(encoding="utf-8")
@@ -208,7 +208,54 @@ def resolve_alembic_head(versions_dir: Path) -> str:
         if not isinstance(revision, str):
             continue
         down_match = _DOWN_REVISION_RE.search(source)
+        if revision in revisions:
+            raise MigrationGraphError(
+                f"Duplicate migration revision {revision!r} under {versions_dir}. "
+                "Two files declaring the same revision silently drop one edge "
+                "of the graph, so the head cannot be trusted."
+            )
         revisions[revision] = _literal(down_match.group(1)) if down_match else None
+    return revisions
+
+
+def resolve_alembic_chain(versions_dir: Path) -> tuple[str, ...]:
+    """Return the revision chain from the single head back to the root.
+
+    Head first. This is the set an already-written evidence file's
+    ``schema_version`` is checked against: a revision that was the head when a
+    measurement was taken stays on the chain forever as history moves forward,
+    so the check ages correctly. See ``audit_evidence_file``.
+    """
+    revisions = _revision_graph(versions_dir)
+    head = resolve_alembic_head(versions_dir)
+    chain: list[str] = []
+    seen: set[str] = set()
+    current: Any = head
+    while isinstance(current, str):
+        if current in seen:
+            raise MigrationGraphError(
+                f"Cycle in the migration graph at {current!r} under "
+                f"{versions_dir}; the chain to the head is not well defined."
+            )
+        seen.add(current)
+        chain.append(current)
+        if current not in revisions:
+            raise MigrationGraphError(
+                f"Migration {current!r} is referenced as a down_revision under "
+                f"{versions_dir} but no file declares it. The graph is broken."
+            )
+        current = revisions[current]
+    return tuple(chain)
+
+
+def resolve_alembic_head(versions_dir: Path) -> str:
+    """Walk ``down_revision`` across the migration files to the single head.
+
+    A file-graph walk on purpose: report generation must stay runnable with no
+    PostgreSQL service up, so this never queries a live schema and never shells
+    out to the migration tool.
+    """
+    revisions = _revision_graph(versions_dir)
 
     if not revisions:
         raise MigrationGraphError(
@@ -238,6 +285,11 @@ def resolve_alembic_head(versions_dir: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
+def file_digest(path: Path) -> str:
+    """sha256 of one file's raw bytes."""
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
 def contract_digests(contract_dir: Path) -> dict[str, str]:
     """sha256 of each contract fixture, keyed by fixture id.
 
@@ -251,6 +303,16 @@ def contract_digests(contract_dir: Path) -> dict[str, str]:
     digests: dict[str, str] = {"algorithm": "sha256"}
     for path in sorted(contract_dir.glob("*.json")):
         fixture_id = path.name.split(".")[0]
+        # `foo.projection-v1.json` and `foo.projection-v2.json` both reduce to
+        # `foo`, and a file literally named `algorithm.json` would overwrite the
+        # algorithm marker. Either way the block would claim to pin more
+        # artifacts than it records, so refuse rather than silently drop one.
+        if fixture_id in digests:
+            raise ValueError(
+                f"Contract digest key collision on {fixture_id!r} at {path.name}. "
+                "Two artifacts reduce to one key, so the recorded block would "
+                "pin only the last of them."
+            )
         digests[fixture_id] = hashlib.sha256(path.read_bytes()).hexdigest()
     return digests
 
@@ -365,23 +427,63 @@ def _is_code_path(path: str) -> bool:
         return False
     return not normalized.endswith(_NON_CODE_SUFFIXES)
 
+ 
+def _commit_touches(repo_root: Path, commit: str) -> list[str]:
+    """Paths a commit changed, merge commits included.
+
+    `git show --name-only` prints *nothing* for a merge commit, because a merge
+    has no single diff. Left unqualified that reads as "touches no code file"
+    and falsely unbinds any evidence generated at a merge HEAD — and this
+    repository's `main` carries merge commits. `--first-parent -m` picks the
+    diff against the first parent, which is the mainline change, and behaves
+    identically on ordinary commits.
+    """
+    return _git(
+        repo_root,
+        "show",
+        "--name-only",
+        "--pretty=format:",
+        "--first-parent",
+        "-m",
+        commit,
+    ).splitlines()
+
 
 def audit_evidence_file(
     evidence_path: Path,
     *,
     repo_root: Path = REPO_ROOT,
 ) -> tuple[str, ...]:
-    """Return every convention violation in one evidence JSON file.
+    """Return every *permanent* convention violation in one evidence file.
 
-    An empty tuple means the file is fully bound: its bindings are complete,
-    its `schema_version` matches the current migration head, and its
-    `git_commit` names a real ancestor commit that actually touched code.
+    Read-time rules only, and every one of them is monotone: once an evidence
+    file satisfies this function it satisfies it forever, unless the file
+    itself is edited. That is the whole contract. A rule that can flip from
+    pass to fail because the *world* moved on does not belong here — it belongs
+    in :func:`audit_evidence_drift`, which reports observations rather than
+    verdicts.
+
+    The distinction matters because these two questions are different:
+
+    * "was this evidence generated correctly?"  -> evaluated when it is written
+    * "is this evidence still valid now?"       -> evaluated every time it is read
+
+    Story 1.11 originally used one rule for both, which meant a single new
+    Alembic revision retroactively unbound every evidence file in the
+    repository — and the cheapest way out of that would have been to hand-edit
+    the very field the module exists to stop anyone hand-editing.
     """
     violations: list[str] = []
     try:
         document = json.loads(evidence_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:  # noqa: BLE001
         return (f"unreadable evidence file: {exc}",)
+
+    if not isinstance(document, dict):
+        return (
+            "evidence file is not a JSON object; an evidence report is a "
+            f"mapping, got {type(document).__name__}",
+        )
 
     bindings = document.get("version_bindings")
     if not isinstance(bindings, dict):
@@ -394,15 +496,19 @@ def audit_evidence_file(
         if key not in bindings:
             violations.append(f"missing NFR27 binding: {key}")
 
-    # schema_version
-    head = resolve_alembic_head(repo_root / "backend" / "migrations" / "versions")
+    # schema_version. Monotone form: the recorded revision must lie on the
+    # chain of migrations leading to the current head. A revision that was the
+    # head when the measurement ran stays on that chain as history moves
+    # forward, so old evidence keeps passing; a fabricated or branched revision
+    # never joins it, so the check still bites.
+    chain = resolve_alembic_chain(repo_root / "backend" / "migrations" / "versions")
     recorded_schema = bindings.get("schema_version")
     if recorded_schema is None:
         violations.append("missing `schema_version` binding")
-    elif recorded_schema != head:
+    elif recorded_schema not in chain:
         violations.append(
-            f"schema_version {recorded_schema!r} is not the current "
-            f"migration head {head!r}"
+            f"schema_version {recorded_schema!r} is not on the migration chain "
+            f"leading to the current head {chain[0]!r}"
         )
 
     # code binding
@@ -422,34 +528,55 @@ def audit_evidence_file(
             violations.append(f"git_commit {commit} is not a real commit object")
         elif not _git_ok(repo_root, "merge-base", "--is-ancestor", commit, "HEAD"):
             violations.append(f"git_commit {commit} is not an ancestor of HEAD")
-        else:
-            touched = _git(
-                repo_root, "show", "--name-only", "--pretty=format:", commit
-            ).splitlines()
-            if not any(_is_code_path(line) for line in touched):
-                violations.append(
-                    f"git_commit {commit} touches no code file — it cannot "
-                    "prove anything about the behaviour measured"
-                )
-
-    # referenced paths
-    for reference in _referenced_paths(document):
-        if not (repo_root / reference).exists():
-            violations.append(f"referenced path does not exist: {reference}")
-
-    # contract digests
-    recorded_digests = document.get("contract_digests")
-    if isinstance(recorded_digests, dict):
-        actual = contract_digests(repo_root / "data" / "contract")
-        for key, value in recorded_digests.items():
-            if key not in actual:
-                violations.append(f"contract_digests names unknown artifact: {key}")
-            elif actual[key] != value:
-                violations.append(
-                    f"contract_digests[{key}] does not match the real sha256"
-                )
+        elif not any(_is_code_path(line) for line in _commit_touches(repo_root, commit)):
+            violations.append(
+                f"git_commit {commit} touches no code file — it cannot "
+                "prove anything about the behaviour measured"
+            )
 
     return tuple(violations)
+
+
+def audit_evidence_drift(
+    evidence_path: Path,
+    *,
+    repo_root: Path = REPO_ROOT,
+) -> tuple[str, ...]:
+    """Report where the repository has moved on from what an evidence file recorded.
+
+    These observations are deliberately *not* violations. A renamed contract
+    fixture or an edited artifact means the world changed since the
+    measurement — useful to surface, but it says nothing about whether the
+    evidence was honestly produced, and treating it as a binding failure would
+    block the gate for a reason unrelated to the gate.
+    """
+    drift: list[str] = []
+    try:
+        document = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):  # noqa: BLE001
+        return ()
+    if not isinstance(document, dict):
+        return ()
+
+    for reference in _referenced_paths(document):
+        if not (repo_root / reference).exists():
+            drift.append(f"referenced path no longer exists: {reference}")
+
+    recorded_digests = document.get("contract_digests")
+    if isinstance(recorded_digests, dict):
+        try:
+            actual = contract_digests(repo_root / "data" / "contract")
+        except (OSError, ValueError):  # noqa: BLE001
+            return tuple(drift)
+        for key, value in recorded_digests.items():
+            if key not in actual:
+                drift.append(f"contract artifact no longer present: {key}")
+            elif actual[key] != value:
+                drift.append(
+                    f"contract artifact {key} has changed since it was measured"
+                )
+
+    return tuple(drift)
 
 
 _PATH_HINT_KEYS = ("contract", "checklist", "path", "source_path")
@@ -472,13 +599,17 @@ def _referenced_paths(node: Any, _seen: set[str] | None = None) -> tuple[str, ..
 
 __all__ = [
     "DECLARED_BINDING_KEYS",
+    "audit_evidence_drift",
     "audit_evidence_file",
     "DERIVED_BINDING_KEYS",
     "NFR27_BINDING_KEYS",
     "DirtyTreeError",
     "MigrationGraphError",
     "REPO_ROOT",
+    "commit_date",
     "contract_digests",
+    "file_digest",
+    "resolve_alembic_chain",
     "resolve_alembic_head",
     "resolve_bindings",
     "resolve_code_binding",

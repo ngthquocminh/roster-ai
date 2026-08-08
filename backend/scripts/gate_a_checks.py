@@ -29,7 +29,7 @@ from typing import Literal
 
 
 Runner = Literal["pytest", "vitest", "playwright"]
-Authority = Literal["AR28", "NFR29"]
+Authority = Literal["AR28", "NFR29", "AC2"]
 
 
 @dataclass(frozen=True)
@@ -79,7 +79,22 @@ NFR29_GATES: tuple[Invariant, ...] = (
     ),
 )
 
-ALL_INVARIANTS: tuple[Invariant, ...] = AR28_INVARIANTS + NFR29_GATES
+#: Neither AR28's nor NFR29's, but AC2's: "any missing or unbound contributing
+#: result blocks the gate". The machinery that decides *that* has to be held to
+#: its own standard, or the gate's verdict rests on unverified plumbing. The
+#: originally shipped report is the argument for this: it was computed from a
+#: pytest run in which thirteen `test_evidence_convention.py` cases were
+#: failing, and because those tests were not registered, the report could not
+#: see them and reported every invariant green.
+AC2_GATES: tuple[Invariant, ...] = (
+    Invariant(
+        "measurement_integrity",
+        "Measurement integrity (evidence convention and gate machinery)",
+        "AC2",
+    ),
+)
+
+ALL_INVARIANTS: tuple[Invariant, ...] = AR28_INVARIANTS + NFR29_GATES + AC2_GATES
 
 
 @dataclass(frozen=True)
@@ -95,6 +110,11 @@ class GateACheck:
     runner: Runner | None = None
     #: Repo-relative evidence JSON whose `passed` flag proves this check.
     evidence_path: str | None = None
+    #: Browser projects this check claims proof on. Playwright records the
+    #: project in the JUnit `hostname`, so a check asserting Chromium+Edge
+    #: coverage is verified rather than assumed — a chromium-only run used to
+    #: satisfy it silently.
+    required_projects: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.test_files and not self.evidence_path:
@@ -104,6 +124,21 @@ class GateACheck:
         if self.test_files and self.runner is None:
             raise ValueError(
                 f"check {self.check!r} declares test files but no runner"
+            )
+        if self.test_files and self.evidence_path:
+            # The report reads the evidence branch first and never looks at the
+            # test results, while the declared files still have to be present
+            # in the XML — a check whose tests must run but whose outcome is
+            # discarded. Refuse the combination rather than half-honour it.
+            raise ValueError(
+                f"check {self.check!r} declares both an evidence_path and "
+                "test_files; the evidence branch would silently discard the "
+                "test results. Split it into two checks."
+            )
+        if self.required_projects and self.runner != "playwright":
+            raise ValueError(
+                f"check {self.check!r} declares required_projects but its "
+                "runner is not playwright; only Playwright records a project."
             )
 
 
@@ -358,6 +393,8 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
             "frontend/e2e/reduced-motion.spec.ts",
             "frontend/e2e/responsive.spec.ts",
         ),
+        # The description says "on Chromium and Edge"; make the report prove it.
+        required_projects=("chromium", "msedge"),
     ),
     GateACheck(
         check="accessibility_evidence",
@@ -369,6 +406,23 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         ),
         evidence_path=(
             "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json"
+        ),
+    ),
+    # ---------------------------------------------------------------- 1.11
+    GateACheck(
+        check="evidence_convention_and_gate_machinery",
+        story="1.11",
+        invariant="measurement_integrity",
+        description=(
+            "The repo-wide evidence convention sweep, the binding resolver, "
+            "and the readiness generator itself. Registered so a broken "
+            "convention blocks the gate instead of being invisible to it."
+        ),
+        runner="pytest",
+        test_files=(
+            "backend/tests/test_evidence_binding.py",
+            "backend/tests/test_evidence_convention.py",
+            "backend/tests/test_gate_a_readiness.py",
         ),
     ),
 )
@@ -383,7 +437,17 @@ def checks_for(invariant_key: str) -> tuple[GateACheck, ...]:
 
 
 def contributing_stories() -> tuple[str, ...]:
-    return tuple(sorted({c.story for c in GATE_A_CHECKS}, key=lambda s: float(s)))
+    # Sorted by (major, minor) as integers. `float("1.10") == float("1.1")`, so
+    # a float key made stories 1.1 and 1.10 tie and fall back to set-iteration
+    # order, and any non-numeric story key raised.
+    def _key(story: str) -> tuple[int, ...]:
+        parts: list[int] = []
+        for segment in story.split("."):
+            digits = "".join(ch for ch in segment if ch.isdigit())
+            parts.append(int(digits) if digits else 0)
+        return tuple(parts)
+
+    return tuple(sorted({c.story for c in GATE_A_CHECKS}, key=_key))
 
 
 def validate_registry() -> None:

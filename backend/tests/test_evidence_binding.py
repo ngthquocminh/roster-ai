@@ -20,6 +20,7 @@ from scripts.evidence_binding import (
     DirtyTreeError,
     MigrationGraphError,
     contract_digests,
+    resolve_alembic_chain,
     resolve_alembic_head,
     resolve_bindings,
     working_tree_status,
@@ -231,13 +232,50 @@ def test_schema_version_walks_the_migration_graph_to_the_single_head():
     assert head == "5e2a4c9d1f70"
 
 
-def test_alembic_head_resolution_needs_no_database():
-    """Report generation must not require PostgreSQL running (file-graph walk)."""
-    source = (REPO_ROOT / "backend" / "scripts" / "evidence_binding.py").read_text(
-        encoding="utf-8"
+def test_alembic_head_resolution_needs_no_database(tmp_path, monkeypatch):
+    """Report generation must not require PostgreSQL running (file-graph walk).
+
+    Asserted behaviourally rather than by grepping the source. The original
+    version checked that the strings `create_engine`/`psycopg`/`sqlalchemy` did
+    not appear in `evidence_binding.py` — but the module's own import graph
+    reaches them anyway (`resolve_bindings` -> `gate_a_cutover.default_fixtures`
+    -> `adapters.postgres.fixture_history`, which imports sqlalchemy at module
+    level). So the grep passed while proving nothing, and would have kept
+    passing if someone had added a real `create_engine(...).connect()` one
+    module away.
+
+    What actually matters is that resolving a head performs no connection, so
+    that is what is asserted: any attempt to open a DBAPI connection fails the
+    test.
+    """
+    import sqlalchemy
+
+    def _explode(*args, **kwargs):  # pragma: no cover - only runs on failure
+        raise AssertionError(
+            "resolve_alembic_head opened a database connection; it must be a "
+            "file-graph walk so the report can be generated with no service up"
+        )
+
+    monkeypatch.setattr(sqlalchemy, "create_engine", _explode)
+
+    versions = tmp_path / "versions"
+    versions.mkdir()
+    (versions / "a.py").write_text(
+        'revision: str = "aaa"\ndown_revision = None\n', encoding="utf-8"
     )
-    for forbidden in ("alembic heads", "create_engine", "psycopg", "sqlalchemy"):
-        assert forbidden not in source, f"{forbidden} would need a live database"
+    (versions / "b.py").write_text(
+        'revision: str = "bbb"\ndown_revision: str = "aaa"\n', encoding="utf-8"
+    )
+
+    assert resolve_alembic_head(versions) == "bbb"
+    assert resolve_alembic_chain(versions) == ("bbb", "aaa")
+
+    # And no `alembic` subprocess either — the other way to need a live tool.
+    def _no_subprocess(*args, **kwargs):  # pragma: no cover - only on failure
+        raise AssertionError("resolve_alembic_head shelled out to a subprocess")
+
+    monkeypatch.setattr(subprocess, "run", _no_subprocess)
+    assert resolve_alembic_head(versions) == "bbb"
 
 
 def test_alembic_head_fails_loudly_on_a_branched_graph(tmp_path):
@@ -320,3 +358,54 @@ def test_bindings_on_a_clean_tree_name_a_reproducible_commit():
         cwd=REPO_ROOT,
         check=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# the regeneration script
+# ---------------------------------------------------------------------------
+
+
+def test_declared_bindings_round_trip_out_of_an_existing_file():
+    """The regenerator recovers prose bindings instead of re-declaring them.
+
+    A second hand-written copy of each story's `evaluator`/`policy`/... prose
+    would be a second source of truth, which is the defect `default_fixtures()`
+    is imported to avoid.
+    """
+    from scripts.regenerate_evidence import declared_from
+
+    source = REPO_ROOT / "evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json"
+    document = json.loads(source.read_text(encoding="utf-8"))
+    declared = declared_from(document)
+
+    # Everything the caller must supply is recovered ...
+    for key in DECLARED_BINDING_KEYS:
+        assert key in declared, f"{key} was not recovered from the existing file"
+    # ... and nothing the resolver derives is handed back to it, which it rejects.
+    for key in ("dataset", "scenario", "code", "image", "schema_version"):
+        assert key not in declared
+    # Round-trips: the recovered block is accepted as-is.
+    resolve_bindings(declared, repo_root=REPO_ROOT, allow_dirty=True)
+
+
+def test_nfr35_marker_is_parsed_from_a_progress_dotted_line():
+    """`pytest -q` prefixes the marker line with its progress dots.
+
+    A regex anchored at line start never matches a real captured run; this is a
+    bug the original Task 7 work hit and fixed in a script that was then not
+    committed, so the fix is locked down here.
+    """
+    from scripts.regenerate_evidence import parse_measurements
+
+    log = (
+        "........s..NFR35_MEASUREMENTS="
+        '[{"run": 1, "endpoint": "/x", "duration_ms": 12.5}]\n'
+        "more output\n"
+    )
+    parsed = parse_measurements(log, "evidence/story-1.4/nfr35-scenario-data-load.json")
+    assert parsed == [{"run": 1, "endpoint": "/x", "duration_ms": 12.5}]
+
+    # The 1.5 marker is a distinct string and must not be matched by 1.4's.
+    assert parse_measurements(
+        log, "evidence/story-1.5/nfr35-evidence-target-resolution.json"
+    ) is None

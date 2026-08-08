@@ -123,16 +123,64 @@ bytes of a committed artifact. Do not "fix" one to match the other.
 automatically. For each file it asserts:
 
 * all eleven NFR27 bindings are present
-* `schema_version` is present and equals the current migration head
+* `schema_version` is present and lies **on the migration chain leading to the
+  current head** — not necessarily equal to it, see below
 * `working_tree_dirty` is `false`, or `binding_override` explains why not
 * `git_commit` is a real object **and** an ancestor of `HEAD`
 * the recorded commit **touches at least one code file** — a docs-only commit
   proves nothing about the behaviour the file claims to have measured
-* every referenced path (`contract`, `checklist`, …) exists on disk
-* `contract_digests` match the real sha256 of the named files
 
 It skips gracefully when git is unavailable. It does **not** skip when an
 assertion merely fails.
+
+Two further things are checked and **reported as drift rather than as
+violations**: whether every referenced path still exists, and whether
+`contract_digests` still match the files on disk. Both answer "has the
+repository moved on since the measurement?", which is worth knowing and is not
+the same question as "was this evidence honestly produced?".
+
+## Every rule over a committed artifact must be monotone
+
+This is the principle the rest of the guard is built on, and it is here because
+Story 1.11 got it wrong the first time.
+
+> **Once an evidence file satisfies the audit, it must satisfy it forever —
+> unless the file itself is edited.**
+
+A rule that can flip from pass to fail because the *world* changed is not a
+rule about the artifact. It is a time bomb. The distinction to hold on to:
+
+| Question | Evaluated | Lives in |
+|---|---|---|
+| Was this evidence generated correctly? | when it is **written** | `resolve_bindings()` |
+| Is this evidence still valid now? | every time it is **read** | `audit_evidence_file()` |
+
+Story 1.11 originally specified — and correctly implemented — *"`schema_version`
+present and equal to the current Alembic head"*. One rule doing both jobs. The
+consequence was that adding a single Alembic revision would have turned every
+evidence file in the repository red at once, dropped four Gate A checks to
+`unbound`, and blocked the gate for a reason with nothing to do with the gate.
+The two ways out would have been re-running every historical measurement, or
+hand-editing `schema_version` — which is precisely the hand-typing this whole
+document exists to prevent. A convention whose predictable failure mode is
+"someone edits the evidence" is worse than no convention.
+
+The tell is easy to spot once you know to look. In the same task list, one
+bullet down, `git_commit` was specified as *"a real object **and an ancestor
+of** `HEAD`"* — ancestry never breaks as history moves forward. The right shape
+was already in the author's hands; what was missing was a pass applying it to
+every rule.
+
+**When writing a new rule, ask:** *"when the thing I am comparing against moves,
+does an artifact that was correct become incorrect?"* If yes, the rule belongs
+in drift reporting, or needs a monotone form (`is on the chain to`, `is an
+ancestor of`, `was recorded as`) instead of an equality.
+
+`backend/tests/test_evidence_convention.py::test_evidence_survives_a_future_migration`
+locks this down: it builds a synthetic successor revision and asserts every
+existing evidence file still binds. It is a test about the *rule's* lifecycle,
+not about the data — which is the level both of this story's binding defects
+slipped through.
 
 This sweep is a *convention* guard. It deliberately does not assert semantic
 content; the story-specific guards
