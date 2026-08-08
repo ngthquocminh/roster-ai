@@ -1,7 +1,15 @@
 {
   "story": "1.10",
-  "requirements": ["NFR18", "NFR20", "UX-DR26", "UX-DR27", "UX-DR28", "UX-DR29", "UX-DR31"],
-  "measurement_date": "2026-08-06",
+  "requirements": [
+    "NFR18",
+    "NFR20",
+    "UX-DR26",
+    "UX-DR27",
+    "UX-DR28",
+    "UX-DR29",
+    "UX-DR31"
+  ],
+  "measurement_date": "2026-08-08",
   "fixtures": [
     {
       "fixture_id": "sample_tiny_input",
@@ -33,7 +41,7 @@
     "responsive_tablet": "passed — 900x1024",
     "responsive_phone": "passed — 390x844 with overridable essential-column defaults",
     "authorization_viewport_independent": "passed — authorized projection bytes and denial behavior are invariant across desktop/tablet/phone client headers",
-    "nvda_manual_pass": "not executed — NVDA is unavailable in the execution environment, 2026-08-06",
+    "nvda_manual_pass": "not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08",
     "browsers_tested": [
       "Playwright Chromium 151.0.7922.34",
       "Microsoft Edge 151.0.4129.59"
@@ -49,47 +57,49 @@
   "test_evidence": {
     "frontend_unit": {
       "command": "npm test",
-      "result": "49 files passed, 283 tests passed",
+      "result": "50 files passed, 287 tests passed",
       "baseline": "47 files passed, 200 tests passed at f27bafd"
     },
     "frontend_browser": {
       "command": "npm run test:e2e",
-      "result": "44 tests passed across Chromium and Microsoft Edge"
+      "result": "46 tests passed across Chromium and Microsoft Edge"
     },
     "backend": {
       "command": "uv run --frozen pytest",
-      "result": "350 passed, 6 deselected",
-      "baseline": "349 passed, 6 deselected"
+      "result": "443 passed, 2 skipped, 6 deselected",
+      "baseline": "349 passed, 6 deselected",
+      "note": "Counted with the repository in its post-regeneration state. The backend suite includes a repo-wide evidence sweep whose parametrization grows with the number of evidence/**/*.json files, so this total moves when an evidence file is added."
     },
     "manual_screen_reader": {
       "checklist": "docs/ACCESSIBILITY-NVDA-CHECKLIST.md",
-      "result": "not executed — NVDA unavailable; Chrome and Edge rows retained as not executed"
+      "result": "not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08",
+      "partial_observation": "One genuine Speech Viewer capture of the fixture catalogue table was taken before cancellation and is recorded in the checklist. It satisfies no checklist row: the catalogue table is not one of the six Scenario Data tabular groups."
     }
   },
   "version_bindings": {
-    "dataset": "two governed Gate A fixtures, v1; contract SHA-256 digests recorded above",
+    "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
     "evaluator": "Vitest 4.1.10, jest-axe 11.0.0, Playwright 1.62.1, axe-core 4.13.0",
     "model": "not applicable — no model invocation",
     "prompt": "not applicable — no model invocation",
     "tool": "React Testing Library with jsdom, Playwright Chromium 151.0.7922.34, Microsoft Edge 151.0.4129.59, @axe-core/playwright 4.12.1",
-    "axe_core_version": "4.13.0",
-    "playwright_version": "1.62.1",
-    "enabled_rule_delta": {
-      "target-size": "enabled"
-    },
     "policy": "Story 1.10 AC1/AC2; WCAG 2.0 A/AA, WCAG 2.1 A/AA, WCAG 2.2 AA; manual NVDA evidence must not be inferred from automation",
     "application": "local backend and frontend source tree",
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "baseline_commit": "f27bafdccce7e29ae377908154f74d3141c02f2b",
-      "git_commit": "29ac7a1d59ae69f19dd527bfe33586e5ef865052",
-      "working_tree_dirty": true
+      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "working_tree_dirty": false
     },
     "image": {
       "api": "local source tree",
       "web": "local source tree",
       "database": "postgres:18"
+    },
+    "schema_version": "5e2a4c9d1f70",
+    "axe_core_version": "4.13.0",
+    "playwright_version": "1.62.1",
+    "enabled_rule_delta": {
+      "target-size": "enabled"
     }
   },
   "passed": false

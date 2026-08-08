@@ -1,7 +1,11 @@
 {
   "story": "1.9",
-  "requirements": ["FR22", "FR24", "NFR29"],
-  "measurement_date": "2026-08-06",
+  "requirements": [
+    "FR22",
+    "FR24",
+    "NFR29"
+  ],
+  "measurement_date": "2026-08-08",
   "fixtures": [
     {
       "fixture_id": "sample_tiny_input",
@@ -29,8 +33,9 @@
   },
   "test_evidence": {
     "backend": {
-      "command": "python -m pytest",
-      "result": "348 passed, 6 deselected"
+      "command": "uv run --frozen pytest",
+      "result": "443 passed, 2 skipped, 6 deselected",
+      "note": "Counted with the repository in its post-regeneration state. The backend suite includes a repo-wide evidence sweep whose parametrization grows with the number of evidence/**/*.json files, so this total moves when an evidence file is added."
     },
     "frontend_before_legacy_cleanup": {
       "command": "npm test",
@@ -38,12 +43,13 @@
     },
     "frontend_after_legacy_cleanup": {
       "command": "npm test",
-      "result": "47 files passed, 200 tests passed",
-      "note": "Updated 2026-08-06 by code-review patch: frontend/src/api/scenarios.ts, constraints.ts, runs.ts (and their co-located tests) were confirmed unreachable and deleted, completing the Task 5 orphaned-legacy sweep the original commit left incomplete."
+      "result": "50 files passed, 287 tests passed",
+      "note": "Updated 2026-08-06 by code-review patch: frontend/src/api/scenarios.ts, constraints.ts, runs.ts (and their co-located tests) were confirmed unreachable and deleted, completing the Task 5 orphaned-legacy sweep the original commit left incomplete.",
+      "remeasured": "Re-run on a clean tree by Story 1.11 Task 7 on 2026-08-08, so the recorded commit names the tree that was measured."
     }
   },
   "version_bindings": {
-    "dataset": "two governed Gate A fixtures, v1; contract digests recorded above",
+    "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
     "evaluator": "pytest 9.1.1 and Vitest 4.1.10 parity/mutation tests",
     "model": "not applicable — AgentRuntime is outside Story 1.9",
     "prompt": "not applicable — no model invocation",
@@ -53,14 +59,15 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "git_commit": "e2b2038f2a8f8201cc0fd91d9b520d77c5e8e1ea",
-      "working_tree_dirty": true
+      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "working_tree_dirty": false
     },
     "image": {
       "api": "local source tree",
       "web": "local source tree",
       "database": "postgres:18"
-    }
+    },
+    "schema_version": "5e2a4c9d1f70"
   },
   "passed": true
 }

@@ -1,0 +1,1022 @@
+{
+  "story": "1.11",
+  "requirements": [
+    "AR28",
+    "NFR27",
+    "NFR29"
+  ],
+  "measurement_date": "2026-08-08",
+  "accountable_owner": "Product/QA",
+  "fixtures": [
+    {
+      "fixture_id": "sample_tiny_input",
+      "version": "v1",
+      "contract": "data/contract/sample_tiny_input.projection-v1.json"
+    },
+    {
+      "fixture_id": "sample_tiny_input_more_tm",
+      "version": "v1",
+      "contract": "data/contract/sample_tiny_input_more_tm.projection-v1.json"
+    }
+  ],
+  "contract_digests": {
+    "algorithm": "sha256",
+    "sample_tiny_input": "e12de5fea95938afb8dc66e70bd6207b766cd4ea521a9f7a43cd3ad2541dd692",
+    "sample_tiny_input_more_tm": "a70dd166258bc860d6dce34767285acb8a6ca88686851de36ecc36a060cc1736"
+  },
+  "contributing_checks": [
+    {
+      "story": "1.1",
+      "check": "immutable_fixture_history",
+      "description": "Checksummed fixture import, append-only versioned history, and the one-way Gate A cutover.",
+      "invariant": "immutable_fixtures",
+      "authority": "AR28",
+      "ar28_invariant": "immutable_fixtures",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_fixture_history_import.py",
+          "backend/tests/test_gate_a_cutover.py",
+          "backend/tests/test_postgres_schema.py",
+          "backend/tests/test_postgres_toolchain.py"
+        ],
+        "cases": {
+          "backend/tests/test_fixture_history_import.py": {
+            "status": "passed",
+            "total": 33,
+            "passed": 33,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_gate_a_cutover.py": {
+            "status": "passed",
+            "total": 19,
+            "passed": 19,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_postgres_schema.py": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_postgres_toolchain.py": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.2",
+      "check": "site_membership_and_authentication",
+      "description": "Seeded site identity, role boundaries, and site-scoped session resolution on PostgreSQL.",
+      "invariant": "postgresql_site_membership",
+      "authority": "AR28",
+      "ar28_invariant": "postgresql_site_membership",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_auth_api.py",
+          "backend/tests/test_identity_schema.py",
+          "backend/tests/test_identity_provider.py",
+          "backend/tests/test_identity_role_boundaries.py",
+          "backend/tests/test_seed_planner.py",
+          "backend/tests/test_postgres_integration.py"
+        ],
+        "cases": {
+          "backend/tests/test_auth_api.py": {
+            "status": "passed",
+            "total": 20,
+            "passed": 20,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_identity_schema.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_identity_provider.py": {
+            "status": "passed",
+            "total": 13,
+            "passed": 13,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_identity_role_boundaries.py": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_seed_planner.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_postgres_integration.py": {
+            "status": "passed",
+            "total": 15,
+            "passed": 15,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.2",
+      "check": "session_client_boundary",
+      "description": "Browser session handling and the authenticated API client.",
+      "invariant": "postgresql_site_membership",
+      "authority": "AR28",
+      "ar28_invariant": "postgresql_site_membership",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/api/client.test.ts",
+          "frontend/src/hooks/useSession.test.tsx",
+          "frontend/src/components/layout/AppBar.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/api/client.test.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/hooks/useSession.test.tsx": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/layout/AppBar.test.tsx": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.3",
+      "check": "immutable_fixture_selection_api",
+      "description": "Site-scoped fixture catalogue read API.",
+      "invariant": "authenticated_readonly_scenario_data",
+      "authority": "AR28",
+      "ar28_invariant": "authenticated_readonly_scenario_data",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_scenario_catalogue_adapter.py",
+          "backend/tests/test_scenario_catalogue_api.py"
+        ],
+        "cases": {
+          "backend/tests/test_scenario_catalogue_adapter.py": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_scenario_catalogue_api.py": {
+            "status": "passed",
+            "total": 9,
+            "passed": 9,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.3",
+      "check": "immutable_fixture_selection_ui",
+      "description": "Fixture catalogue route, version pinning, and routing.",
+      "invariant": "authenticated_readonly_scenario_data",
+      "authority": "AR28",
+      "ar28_invariant": "authenticated_readonly_scenario_data",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/api/scenarioCatalogue.test.ts",
+          "frontend/src/features/fixture-catalogue/FixtureCatalogueView.test.tsx",
+          "frontend/src/features/scenario-workspace/ScenarioVersionContext.test.tsx",
+          "frontend/src/hooks/useFixtureCatalogue.test.tsx",
+          "frontend/src/routes/FixtureCatalogue.test.tsx",
+          "frontend/src/routes/router.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/api/scenarioCatalogue.test.ts": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/fixture-catalogue/FixtureCatalogueView.test.tsx": {
+            "status": "passed",
+            "total": 11,
+            "passed": 11,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-workspace/ScenarioVersionContext.test.tsx": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/hooks/useFixtureCatalogue.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/routes/FixtureCatalogue.test.tsx": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/routes/router.test.tsx": {
+            "status": "passed",
+            "total": 8,
+            "passed": 8,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.4",
+      "check": "normalized_projection_contract",
+      "description": "Normalized scenario projection read contract and paging.",
+      "invariant": "normalized_scenario_reads",
+      "authority": "AR28",
+      "ar28_invariant": "normalized_scenario_reads",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_scenario_projection.py"
+        ],
+        "cases": {
+          "backend/tests/test_scenario_projection.py": {
+            "status": "passed",
+            "total": 44,
+            "passed": 44,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.4",
+      "check": "normalized_projection_nfr35_latency",
+      "description": "NFR35 initial-window latency under the 2s threshold.",
+      "invariant": "normalized_scenario_reads",
+      "authority": "AR28",
+      "ar28_invariant": "normalized_scenario_reads",
+      "result": "passed",
+      "source_kind": "evidence",
+      "source": "evidence/story-1.4/nfr35-scenario-data-load.json",
+      "bound": true
+    },
+    {
+      "story": "1.5",
+      "check": "exact_evidence_target_resolution",
+      "description": "Exact evidence-reference resolution and de-duplication.",
+      "invariant": "normalized_scenario_reads",
+      "authority": "AR28",
+      "ar28_invariant": "normalized_scenario_reads",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_evidence_ref.py",
+          "backend/tests/test_resolve_dedup.py"
+        ],
+        "cases": {
+          "backend/tests/test_evidence_ref.py": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_resolve_dedup.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.5",
+      "check": "evidence_target_nfr35_latency",
+      "description": "NFR35 evidence-target resolution under the 2s threshold.",
+      "invariant": "normalized_scenario_reads",
+      "authority": "AR28",
+      "ar28_invariant": "normalized_scenario_reads",
+      "result": "passed",
+      "source_kind": "evidence",
+      "source": "evidence/story-1.5/nfr35-evidence-target-resolution.json",
+      "bound": true
+    },
+    {
+      "story": "1.6",
+      "check": "design_tokens_and_primitives",
+      "description": "ShiftMind design tokens and the shared accessible primitives the read-only workspace is built from.",
+      "invariant": "authenticated_readonly_scenario_data",
+      "authority": "AR28",
+      "ar28_invariant": "authenticated_readonly_scenario_data",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/index.test.ts",
+          "frontend/src/components/primitives/EmptyState.test.tsx",
+          "frontend/src/components/primitives/EvidenceHighlight.test.tsx",
+          "frontend/src/components/primitives/EvidenceLink.test.tsx",
+          "frontend/src/components/primitives/InlineAlert.test.tsx",
+          "frontend/src/components/primitives/ReconnectBanner.test.tsx",
+          "frontend/src/components/primitives/StatusBadge.test.tsx",
+          "frontend/src/components/primitives/fixtures.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/index.test.ts": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/primitives/EmptyState.test.tsx": {
+            "status": "passed",
+            "total": 1,
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/primitives/EvidenceHighlight.test.tsx": {
+            "status": "passed",
+            "total": 1,
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/primitives/EvidenceLink.test.tsx": {
+            "status": "passed",
+            "total": 1,
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/primitives/InlineAlert.test.tsx": {
+            "status": "passed",
+            "total": 1,
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/primitives/ReconnectBanner.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/primitives/StatusBadge.test.tsx": {
+            "status": "passed",
+            "total": 1,
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/components/primitives/fixtures.test.tsx": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.7",
+      "check": "read_only_scenario_data_workspace",
+      "description": "Scenario Data workspace shell and the seven data groups.",
+      "invariant": "authenticated_readonly_scenario_data",
+      "authority": "AR28",
+      "ar28_invariant": "authenticated_readonly_scenario_data",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/api/scenarioProjection.test.ts",
+          "frontend/src/features/scenario-data/ScenarioDataView.test.tsx",
+          "frontend/src/features/scenario-data/groups/BaselineAssignmentsPanel.test.tsx",
+          "frontend/src/features/scenario-data/groups/ConstraintsPanel.test.tsx",
+          "frontend/src/features/scenario-data/groups/DemandPanel.test.tsx",
+          "frontend/src/features/scenario-data/groups/LocksPanel.test.tsx",
+          "frontend/src/features/scenario-data/groups/OverviewPanel.test.tsx",
+          "frontend/src/features/scenario-data/groups/WorkAreasAndTasksPanel.test.tsx",
+          "frontend/src/features/scenario-data/groups/WorkersPanel.test.tsx",
+          "frontend/src/features/scenario-workspace/WorkspaceTabs.test.tsx",
+          "frontend/src/hooks/useScenarioProjection.test.tsx",
+          "frontend/src/lib/formatShiftWindow.test.ts",
+          "frontend/src/routes/ScenarioWorkspace.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/api/scenarioProjection.test.ts": {
+            "status": "passed",
+            "total": 15,
+            "passed": 15,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/ScenarioDataView.test.tsx": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/groups/BaselineAssignmentsPanel.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/groups/ConstraintsPanel.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/groups/DemandPanel.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/groups/LocksPanel.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/groups/OverviewPanel.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/groups/WorkAreasAndTasksPanel.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/groups/WorkersPanel.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-workspace/WorkspaceTabs.test.tsx": {
+            "status": "passed",
+            "total": 1,
+            "passed": 1,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/hooks/useScenarioProjection.test.tsx": {
+            "status": "passed",
+            "total": 22,
+            "passed": 22,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/lib/formatShiftWindow.test.ts": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/routes/ScenarioWorkspace.test.tsx": {
+            "status": "passed",
+            "total": 9,
+            "passed": 9,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.8",
+      "check": "scenario_data_table_controls",
+      "description": "Server-side sort/filter/paging and the table control surface.",
+      "invariant": "authenticated_readonly_scenario_data",
+      "authority": "AR28",
+      "ar28_invariant": "authenticated_readonly_scenario_data",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/components/primitives/IdentifierCopyButton.test.tsx",
+          "frontend/src/features/scenario-data/ColumnChooser.test.tsx",
+          "frontend/src/features/scenario-data/FilterBar.test.tsx",
+          "frontend/src/features/scenario-data/PaginationControls.test.tsx",
+          "frontend/src/features/scenario-data/ScenarioDataTable.test.tsx",
+          "frontend/src/features/scenario-data/columns.test.ts",
+          "frontend/src/features/scenario-data/filters.test.ts",
+          "frontend/src/features/scenario-data/useColumnVisibility.test.tsx",
+          "frontend/src/features/scenario-data/useGroupControls.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/components/primitives/IdentifierCopyButton.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/ColumnChooser.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/FilterBar.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/PaginationControls.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/ScenarioDataTable.test.tsx": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/columns.test.ts": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/filters.test.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/useColumnVisibility.test.tsx": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/useGroupControls.test.tsx": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.9",
+      "check": "viewer_parity",
+      "description": "API and frontend parity against the pinned contract fixtures.",
+      "invariant": "parity_tests",
+      "authority": "AR28",
+      "ar28_invariant": "parity_tests",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/features/scenario-data/ScenarioDataParity.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/features/scenario-data/ScenarioDataParity.test.tsx": {
+            "status": "passed",
+            "total": 14,
+            "passed": 14,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.9",
+      "check": "viewer_parity_evidence",
+      "description": "Recorded parity and mutation-denial evidence.",
+      "invariant": "parity_tests",
+      "authority": "AR28",
+      "ar28_invariant": "parity_tests",
+      "result": "passed",
+      "source_kind": "evidence",
+      "source": "evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json",
+      "bound": true
+    },
+    {
+      "story": "1.9",
+      "check": "backend_mutation_denial",
+      "description": "Server refuses every write path at Gate A.",
+      "invariant": "negative_mutation_tests",
+      "authority": "AR28",
+      "ar28_invariant": "negative_mutation_tests",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_gate_a_mutation_audit.py",
+          "backend/tests/test_export_contract_fixture.py"
+        ],
+        "cases": {
+          "backend/tests/test_gate_a_mutation_audit.py": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_export_contract_fixture.py": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.9",
+      "check": "frontend_mutation_denial",
+      "description": "No mutating affordance or reachable legacy route in the client.",
+      "invariant": "negative_mutation_tests",
+      "authority": "AR28",
+      "ar28_invariant": "negative_mutation_tests",
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/test/scenarioDataBoundaries.test.ts",
+          "frontend/src/test/legacyReachability.test.ts"
+        ],
+        "cases": {
+          "frontend/src/test/scenarioDataBoundaries.test.ts": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/test/legacyReachability.test.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.10",
+      "check": "accessibility_component_layer",
+      "description": "jsdom/axe accessibility contract over the Gate A surface.",
+      "invariant": "accessibility_and_responsiveness",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/test/accessibility.test.tsx",
+          "frontend/src/test/accessibility-contract.test.tsx",
+          "frontend/src/features/scenario-data/usePhoneViewport.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/test/accessibility.test.tsx": {
+            "status": "passed",
+            "total": 64,
+            "passed": 64,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/test/accessibility-contract.test.tsx": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/usePhoneViewport.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.10",
+      "check": "accessibility_browser_layer",
+      "description": "Real-browser zoom, reflow, text spacing, touch targets, keyboard journey, and reduced motion on Chromium and Edge.",
+      "invariant": "accessibility_and_responsiveness",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "playwright",
+        "test_files": [
+          "frontend/e2e/accessibility.spec.ts",
+          "frontend/e2e/gate-a-fixture-coverage.spec.ts",
+          "frontend/e2e/harness.spec.ts",
+          "frontend/e2e/keyboard-journey.spec.ts",
+          "frontend/e2e/layout-accessibility.spec.ts",
+          "frontend/e2e/reduced-motion.spec.ts",
+          "frontend/e2e/responsive.spec.ts"
+        ],
+        "cases": {
+          "frontend/e2e/accessibility.spec.ts": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/gate-a-fixture-coverage.spec.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/harness.spec.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/keyboard-journey.spec.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/layout-accessibility.spec.ts": {
+            "status": "passed",
+            "total": 20,
+            "passed": 20,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/reduced-motion.spec.ts": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/responsive.spec.ts": {
+            "status": "passed",
+            "total": 8,
+            "passed": 8,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "1.10",
+      "check": "accessibility_evidence",
+      "description": "Recorded accessibility evidence, including the manual NVDA screen-reader pass.",
+      "invariant": "accessibility_and_responsiveness",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "failed",
+      "source_kind": "evidence",
+      "source": "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
+      "bound": true,
+      "detail": "recorded `passed: false`; manual gate: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
+    }
+  ],
+  "ar28_invariants": {
+    "postgresql_site_membership": {
+      "title": "PostgreSQL / site membership",
+      "result": "passed",
+      "contributing_checks": [
+        "site_membership_and_authentication",
+        "session_client_boundary"
+      ],
+      "blocking": []
+    },
+    "immutable_fixtures": {
+      "title": "Immutable fixtures",
+      "result": "passed",
+      "contributing_checks": [
+        "immutable_fixture_history"
+      ],
+      "blocking": []
+    },
+    "normalized_scenario_reads": {
+      "title": "Normalized scenario read service",
+      "result": "passed",
+      "contributing_checks": [
+        "normalized_projection_contract",
+        "normalized_projection_nfr35_latency",
+        "exact_evidence_target_resolution",
+        "evidence_target_nfr35_latency"
+      ],
+      "blocking": []
+    },
+    "authenticated_readonly_scenario_data": {
+      "title": "Authenticated read-only Scenario Data",
+      "result": "passed",
+      "contributing_checks": [
+        "immutable_fixture_selection_api",
+        "immutable_fixture_selection_ui",
+        "design_tokens_and_primitives",
+        "read_only_scenario_data_workspace",
+        "scenario_data_table_controls"
+      ],
+      "blocking": []
+    },
+    "parity_tests": {
+      "title": "Parity tests",
+      "result": "passed",
+      "contributing_checks": [
+        "viewer_parity",
+        "viewer_parity_evidence"
+      ],
+      "blocking": []
+    },
+    "negative_mutation_tests": {
+      "title": "Negative mutation tests",
+      "result": "passed",
+      "contributing_checks": [
+        "backend_mutation_denial",
+        "frontend_mutation_denial"
+      ],
+      "blocking": []
+    }
+  },
+  "nfr29_gates": {
+    "accessibility_and_responsiveness": {
+      "title": "Accessibility / responsiveness",
+      "result": "failed",
+      "contributing_checks": [
+        "accessibility_component_layer",
+        "accessibility_browser_layer",
+        "accessibility_evidence"
+      ],
+      "blocking": [
+        "accessibility_evidence"
+      ]
+    }
+  },
+  "test_evidence": {
+    "pytest": {
+      "junit_xml": "D:\\MyData\\Projects\\rosterai\\_bmad-output\\test-artifacts\\gate-a\\pytest.xml",
+      "cases": 438
+    },
+    "vitest": {
+      "junit_xml": "D:\\MyData\\Projects\\rosterai\\_bmad-output\\test-artifacts\\gate-a\\vitest.xml",
+      "cases": 287
+    },
+    "playwright": {
+      "junit_xml": "D:\\MyData\\Projects\\rosterai\\_bmad-output\\test-artifacts\\gate-a\\playwright.xml",
+      "cases": 46
+    }
+  },
+  "version_bindings": {
+    "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
+    "evaluator": "pytest (backend), Vitest 4.1.10 (frontend unit), Playwright 1.62.1 (browser) — results read from JUnit XML",
+    "model": "not applicable — AgentRuntime is Epic 2, outside Gate A",
+    "prompt": "not applicable — no model invocation at Gate A",
+    "tool": "FastAPI TestClient, PostgreSQL 18, React Testing Library with jsdom, Playwright Chromium and Microsoft Edge, axe-core",
+    "policy": "AR28 Gate A invariants; NFR27 version bindings; NFR29 accessibility and parity regressions block release regardless of aggregate helpfulness",
+    "application": "local backend and frontend source tree",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable — no solver run at Gate A",
+    "code": {
+      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "working_tree_dirty": false
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    },
+    "schema_version": "5e2a4c9d1f70"
+  },
+  "blocking": [
+    {
+      "check": "accessibility_evidence",
+      "story": "1.10",
+      "invariant": "accessibility_and_responsiveness",
+      "authority": "NFR29",
+      "result": "failed",
+      "bound": true,
+      "reason": "recorded `passed: false`; manual gate: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
+    }
+  ],
+  "gate_a_passed": false,
+  "passed": false
+}

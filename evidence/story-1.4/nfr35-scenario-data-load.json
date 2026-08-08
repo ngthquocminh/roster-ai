@@ -1,7 +1,7 @@
 {
   "story": "1.4",
   "requirement": "NFR35",
-  "measurement_date": "2026-08-04",
+  "measurement_date": "2026-08-08",
   "fixture": {
     "name": "sample_tiny_input_more_tm.json",
     "version": "v1",
@@ -27,34 +27,139 @@
     "window": "cursor=0, default limit=50 for grouped endpoints"
   },
   "code_versions": {
-    "git_commit": "80ef64eb81a5ef8c121f1bf52a9354ac9c22970f",
-    "working_tree_dirty": true,
+    "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+    "working_tree_dirty": false,
     "api_image": "local source tree",
     "database_image": "postgres:18"
   },
   "measurements": [
-    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection", "duration_ms": 43.954},
-    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks", "duration_ms": 16.734},
-    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers", "duration_ms": 22.993},
-    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand", "duration_ms": 74.224},
-    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments", "duration_ms": 16.167},
-    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks", "duration_ms": 13.991},
-    {"run": 1, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives", "duration_ms": 13.199},
-    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection", "duration_ms": 44.185},
-    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks", "duration_ms": 16.346},
-    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers", "duration_ms": 18.814},
-    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand", "duration_ms": 44.216},
-    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments", "duration_ms": 17.234},
-    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks", "duration_ms": 14.709},
-    {"run": 2, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives", "duration_ms": 17.182},
-    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection", "duration_ms": 45.374},
-    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks", "duration_ms": 17.923},
-    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers", "duration_ms": 21.205},
-    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand", "duration_ms": 43.981},
-    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments", "duration_ms": 15.620},
-    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks", "duration_ms": 19.302},
-    {"run": 3, "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives", "duration_ms": 17.441}
+    {
+      "run": 1,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection",
+      "duration_ms": 49.923
+    },
+    {
+      "run": 1,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks",
+      "duration_ms": 29.422
+    },
+    {
+      "run": 1,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers",
+      "duration_ms": 21.994
+    },
+    {
+      "run": 1,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand",
+      "duration_ms": 55.198
+    },
+    {
+      "run": 1,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments",
+      "duration_ms": 28.256
+    },
+    {
+      "run": 1,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks",
+      "duration_ms": 19.685
+    },
+    {
+      "run": 1,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives",
+      "duration_ms": 26.403
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection",
+      "duration_ms": 76.914
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks",
+      "duration_ms": 24.431
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers",
+      "duration_ms": 29.202
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand",
+      "duration_ms": 69.462
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments",
+      "duration_ms": 29.489
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks",
+      "duration_ms": 24.28
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives",
+      "duration_ms": 19.435
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection",
+      "duration_ms": 61.111
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks",
+      "duration_ms": 13.907
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/workers",
+      "duration_ms": 20.467
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand",
+      "duration_ms": 49.285
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments",
+      "duration_ms": 15.241
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/locks",
+      "duration_ms": 17.219
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives",
+      "duration_ms": 21.662
+    }
   ],
-  "maximum_duration_ms": 74.224,
-  "passed": true
+  "maximum_duration_ms": 76.914,
+  "passed": true,
+  "version_bindings": {
+    "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
+    "evaluator": "pytest, @pytest.mark.postgres NFR35 latency tests",
+    "model": "not applicable — no model invocation",
+    "prompt": "not applicable — no model invocation",
+    "tool": "FastAPI TestClient, PostgreSQL 18 in Docker Desktop",
+    "policy": "NFR35: initial Scenario Data windows complete within 2000 ms",
+    "application": "local backend source tree",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable — no solver run",
+    "code": {
+      "git_commit": "b11fe9d3b2c30db159fdb95f9a357b26227811a5",
+      "working_tree_dirty": false
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    },
+    "schema_version": "5e2a4c9d1f70"
+  }
 }
