@@ -551,6 +551,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="resolve bindings against a dirty tree; recorded in the report",
     )
     parser.add_argument(
+        "--code-from",
+        type=Path,
+        default=None,
+        help=(
+            "reuse the `version_bindings.code` block of an evidence file "
+            "regenerated earlier in this same clean-tree pass. Needed because "
+            "writing those files dirties the tree; the block still names the "
+            "commit that was measured. Refused if that block is itself dirty."
+        ),
+    )
+    parser.add_argument(
         "--allow-missing",
         action="store_true",
         help=(
@@ -566,10 +577,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         parse_junit(args.playwright_xml, runner="playwright"),
     ]
 
+    bindings = None
+    if args.code_from:
+        donor = json.loads(args.code_from.read_text(encoding="utf-8"))
+        donor_code = (donor.get("version_bindings") or {}).get("code")
+        bindings = resolve_bindings(
+            _DECLARED_BINDINGS,
+            repo_root=REPO_ROOT,
+            code_binding=donor_code,
+        )
+
     report = build_report(
         reports,
         allow_dirty=args.allow_dirty,
         strict_missing=not args.allow_missing,
+        bindings=bindings,
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

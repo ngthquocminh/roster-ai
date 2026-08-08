@@ -409,3 +409,28 @@ def test_nfr35_marker_is_parsed_from_a_progress_dotted_line():
     assert parse_measurements(
         log, "evidence/story-1.5/nfr35-evidence-target-resolution.json"
     ) is None
+
+
+def test_code_binding_can_be_reused_across_a_multi_file_pass():
+    """The second file in a pass reuses the first's clean-tree code block.
+
+    Writing the first evidence file dirties the tree, so re-resolving for the
+    second would either refuse or record a spurious dirty flag — while the
+    commit that was measured has not changed.
+    """
+    donor = {"git_commit": "a" * 40, "working_tree_dirty": False}
+    bindings = resolve_bindings(_DECLARED, repo_root=REPO_ROOT, code_binding=donor)
+    assert bindings["code"]["git_commit"] == "a" * 40
+    assert "binding_override" not in bindings
+
+
+def test_a_dirty_code_binding_cannot_be_laundered_by_reuse():
+    """Reusing a dirty block would hide the dirt behind an extra indirection."""
+    donor = {"git_commit": "a" * 40, "working_tree_dirty": True}
+    with pytest.raises(DirtyTreeError):
+        resolve_bindings(_DECLARED, repo_root=REPO_ROOT, code_binding=donor)
+
+
+def test_code_binding_without_a_commit_is_refused():
+    with pytest.raises(ValueError, match="git_commit"):
+        resolve_bindings(_DECLARED, repo_root=REPO_ROOT, code_binding={})

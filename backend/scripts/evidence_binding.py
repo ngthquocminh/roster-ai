@@ -339,6 +339,7 @@ def resolve_bindings(
     migrations_dir: Path | None = None,
     contract_dir: Path | None = None,
     code_extra: Mapping[str, Any] | None = None,
+    code_binding: Mapping[str, Any] | None = None,
     allow_dirty: bool = False,
 ) -> dict[str, Any]:
     """Build a complete NFR27 ``version_bindings`` block.
@@ -363,7 +364,25 @@ def resolve_bindings(
             "defect this module exists to prevent."
         )
 
-    code, used_override = resolve_code_binding(repo_root, allow_dirty=allow_dirty)
+    if code_binding is not None:
+        # Reuse a `code` block resolved earlier in the same pass, on the clean
+        # tree, before any file was written. This is the multi-file case: the
+        # first write dirties the tree, so re-resolving for the second file
+        # would either refuse or record a spurious dirty flag. The block still
+        # names the commit that was measured, which is the whole contract.
+        if not isinstance(code_binding, Mapping) or not code_binding.get("git_commit"):
+            raise ValueError(
+                "code_binding must carry `git_commit`; without it nothing ties "
+                "the recorded results to a tree."
+            )
+        if code_binding.get("working_tree_dirty") and not allow_dirty:
+            raise DirtyTreeError(
+                "The supplied code_binding was itself resolved on a dirty tree. "
+                "Reusing it would launder that, so it is refused."
+            )
+        code, used_override = dict(code_binding), False
+    else:
+        code, used_override = resolve_code_binding(repo_root, allow_dirty=allow_dirty)
     if code_extra:
         clashes = [key for key in code_extra if key in code]
         if clashes:
