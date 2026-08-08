@@ -41,7 +41,36 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-07
+last_updated: 2026-08-08
+
+# NOTE (2026-08-08): Story 1-11 implemented and moved to review. VERDICT:
+# `gate_a_passed: false` in evidence/story-1.11/gate-a-readiness-report.json.
+# All SIX AR28 invariants PASS (postgresql_site_membership, immutable_fixtures,
+# normalized_scenario_reads, authenticated_readonly_scenario_data, parity_tests,
+# negative_mutation_tests). The gate is blocked by exactly ONE check —
+# `accessibility_evidence`, under the NFR29 accessibility gate — because the
+# manual NVDA screen-reader pass was started (NVDA installed, Speech Viewer
+# active) and then CANCELLED BY THE USER on 2026-08-08. Per the story's own
+# hard rule the result is recorded as `not executed` with reason and date
+# rather than inferred from axe output, so story-1.10 evidence keeps
+# `passed: false`. That blocking check is BOUND — it is a real failed result,
+# not an unbound-binding artifact. **This blocks Epic 2, not Story 1-11**:
+# the story is done when the machinery works and the verdict is honest, which
+# it is. Nothing was tuned or relaxed to reach `true`. TO CLEAR IT: run
+# docs/GATE-A-RUNBOOK.md section 3 (NVDA + Speech Viewer, both Chrome and Edge,
+# via the env-gated e2e/manual-nvda.spec.ts harness), fill in
+# docs/ACCESSIBILITY-NVDA-CHECKLIST.md, then regenerate. NO CODE CHANGE IS
+# REQUIRED. Also closed here: deferred-work.md's repo-wide `git_commit`
+# off-by-one — all four prior evidence files were re-measured on a clean tree
+# and rebound to b11fe9d, and every evidence file now carries `schema_version`
+# for the first time. New regression baselines at 92b83c5: backend 443 passed /
+# 2 skipped / 6 deselected (the total tracks the number of evidence files,
+# since the new repo-wide sweep is parametrized per evidence/**/*.json);
+# postgres 27 passed; alembic check zero diff; frontend 50 files / 287 tests;
+# e2e 46 passed (23 x chromium + msedge). Two deliberate frontend deviations
+# flagged for review: a `preview` proxy in vite.config.ts, and the new
+# env-gated e2e/manual-nvda.spec.ts (registers no test unless NVDA_MANUAL is
+# set, so e2e collection is unchanged at 46).
 
 # NOTE (2026-08-07): Story 1-11 created and moved to ready-for-dev. It is the
 # Epic 1 gate story and ships no product feature — it builds the machinery that
@@ -146,7 +175,7 @@ development_status:
   1-8-control-scenario-data-tables: done
   1-9-prove-viewer-parity-and-mutation-denial: done
   1-10-prove-scenario-data-accessibility-and-responsiveness: done
-  1-11-confirm-gate-a-readiness: in-progress
+  1-11-confirm-gate-a-readiness: review
   epic-1-retrospective: optional
 
   # Epic 2: Grounded Conversational Investigation
