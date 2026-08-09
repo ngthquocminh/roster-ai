@@ -43,6 +43,56 @@
 generated: 2026-07-24
 last_updated: 2026-08-09
 
+# NOTE (2026-08-09): Story 2-1 created and moved to ready-for-dev; epic-2 moved
+# to in-progress. It is the Epic 2 enabler and ships no planner-visible feature:
+# a spike that justifies the dependency, an owned `AgentRuntime` port, an adapter
+# in the new `backend/agent/` package, and executable boundary proofs. Gate A is
+# clear (`gate_a_passed: true` at ae19f58), so AR28's "before AgentRuntime or
+# agent tools" ordering constraint is satisfied.
+#
+# TWO DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) THE PINNED SEED MOVES 2.14.1 -> 2.27.0. AR19 and the Stack table name
+#     PydanticAI 2.14.1, but AD-19's own closing clause permits replacement
+#     ("a different V2 release may replace the seed only with the same
+#     evidence"). 2.14.1 shipped 2026-07-21, one day before the spine was
+#     written; 2.27.0 is current. All seven AC1 capabilities were confirmed
+#     present at BOTH tags before choosing. Verified compatibility at 7f268e0:
+#     pydantic-ai-slim 2.27.0 needs python>=3.10 (venv is 3.10.9),
+#     pydantic>=2.12 (locked 2.13.4), openai>=2.45.0 (locked EXACTLY 2.45.0),
+#     google-genai>=1.70.0 (locked 2.10.0), httpx>=0.27 (0.28.1),
+#     anyio>=4.7.0 (4.14.1) — no resolver conflict, but the openai floor is
+#     exact, so Task 4 blocks on any lock movement in those five packages.
+#     `opentelemetry-api` and (on 3.10) `exceptiongroup` are new transitive
+#     deps. Task 4 also updates the spine's Stack row; that is the ONLY spec
+#     edit this story is authorized to make.
+# (2) A FAILED SPIKE HALTS THE STORY. AC1 says the dependency enters manifests
+#     only after the spike passes but never said what failure means. Now
+#     specified: record which capability failed with a reproduction, leave
+#     pyproject/uv.lock untouched, escalate. NO hand-rolled agent loop and NO
+#     silent version-shopping. A negative spike is a valid deliverable — the
+#     same posture 1.11 held with `gate_a_passed: false`.
+#
+# Sized per epics.md's own high-breadth warning: ten tasks, ONE acceptance
+# boundary each. The load-bearing one is Task 3 capability 4 — the owned-message
+# round-trip must go through a ShiftMind shape, NOT `to_jsonable_python(
+# result.all_messages())`. That serialization is what the framework docs teach
+# and it is exactly what AD-19 prohibits ("messages ... never become domain,
+# persistence, browser, or audit contracts"); Task 9's contract-field guard is
+# the mechanical defence. Explicitly OUT of scope and left to their owners: the
+# capability registry (2.5), `CapabilityManifestV1` (2.6), the eval harness and
+# `backend/evals/` (2.2), conversation persistence (2.3), SSE (2.4), any
+# frontend change. `backend/llm/**` and `backend/services/**` must show a
+# ZERO-LINE diff — AC2 requires those seams preserved until deliberately
+# migrated.
+#
+# RECORDED VARIANCE: architecture boundary tests go in
+# `backend/tests/architecture/`, not the spine's root-level `tests/architecture/`.
+# pytest runs from `backend/` with `testpaths = ["tests"]` and `conftest.py`
+# supplies the sys.path; a root-level suite would need its own conftest, a
+# testpaths change, and a second rootdir convention. AC3's own list does not
+# name `tests/architecture` — it names the nine backend and three frontend
+# package boundaries — so this satisfies AC3 while keeping one rootdir.
+
 # NOTE (2026-08-09, correct-course): Epics 2-5 scope audit. Trimmed frontend-QA
 # and SRE ceremony that did not serve the portfolio goal, and SPLIT the old
 # Epic 5 into Epic 5 (local, portfolio milestone = Gate B) and Epic 6 (hosted =
@@ -267,8 +317,8 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Grounded Conversational Investigation
-  epic-2: backlog
-  2-1-establish-the-owned-agent-runtime-boundary: backlog
+  epic-2: in-progress
+  2-1-establish-the-owned-agent-runtime-boundary: ready-for-dev
   2-2-establish-the-deterministic-evaluation-harness: backlog
   2-3-create-and-revisit-durable-conversations: backlog
   2-4-replay-conversation-events-live: backlog
