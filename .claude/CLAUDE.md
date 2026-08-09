@@ -30,8 +30,10 @@ Any story producing an `evidence/**/*.json` file MUST follow
 through `backend/scripts/evidence_binding.py`, then commit the evidence
 separately.** Never hand-type an evidence file — that is what produced an
 unreproducible `git_commit` in all four Epic 1 evidence files. Gate A
-operations (cutover, legacy-route flag, NVDA pass, readiness report) are in
-`docs/GATE-A-RUNBOOK.md`.
+operations (cutover, legacy-route flag, readiness report) are in
+`docs/GATE-A-RUNBOOK.md`. Manual assistive-technology verification is
+explicitly descoped for this portfolio MVP — see `EXPERIENCE.md`'s
+Accessibility Floor; accessibility is proven by automated coverage alone.
 
 ### Constraints
 

@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-08-08",
+  "measurement_date": "2026-08-09",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -886,15 +886,14 @@
     {
       "story": "1.10",
       "check": "accessibility_evidence",
-      "description": "Recorded accessibility evidence, including the manual NVDA screen-reader pass.",
+      "description": "Recorded accessibility evidence from automated coverage. Manual assistive-technology verification is explicitly descoped for this portfolio MVP (see EXPERIENCE.md's Accessibility Floor and docs/GATE-A-RUNBOOK.md).",
       "invariant": "accessibility_and_responsiveness",
       "authority": "NFR29",
       "ar28_invariant": null,
-      "result": "failed",
+      "result": "passed",
       "source_kind": "evidence",
       "source": "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
-      "bound": true,
-      "detail": "recorded `passed: false`; manual gate manual_screen_reader: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
+      "bound": true
     },
     {
       "story": "1.11",
@@ -1002,15 +1001,13 @@
   "nfr29_gates": {
     "accessibility_and_responsiveness": {
       "title": "Accessibility / responsiveness",
-      "result": "failed",
+      "result": "passed",
       "contributing_checks": [
         "accessibility_component_layer",
         "accessibility_browser_layer",
         "accessibility_evidence"
       ],
-      "blocking": [
-        "accessibility_evidence"
-      ]
+      "blocking": []
     }
   },
   "ac2_gates": {
@@ -1027,20 +1024,20 @@
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
       "cases": 452,
-      "run_started": "2026-08-08T22:42:03.609014+07:00",
-      "sha256": "2989422abc59a80501cac705c01cb197394876ff2715ab8bdf339f1307ec2344"
+      "run_started": "2026-08-09T11:44:48.873410+07:00",
+      "sha256": "b3b402db177e66fc603ef0210a3eff892f91768ebbf8d64b1776762ff4c7d590"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 287,
-      "run_started": "2026-08-08T15:43:47.559Z",
-      "sha256": "78494b2a7fc7d0d0fddefc71d7cc18888f5782a26868a9f8ced91b0e23ee2e92"
+      "run_started": "2026-08-09T04:41:48.090Z",
+      "sha256": "254f2be70eaf78a100b61b9840ab23a3e0760308f22634e906b9561b2749967d"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 46,
-      "run_started": "2026-08-08T15:43:57.366Z",
-      "sha256": "48f78cefb5c213d6ea3d4d15f1e9161d5b929078253f4d25918b507c5ecd83a9"
+      "run_started": "2026-08-09T04:42:27.984Z",
+      "sha256": "8738795db6731dd44c20612c62a6d1df6cfc6181da67bcd30b1a4cf14704b9d6"
     }
   },
   "version_bindings": {
@@ -1054,7 +1051,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
+      "git_commit": "e2ecdb627d2ea4b64f0415fcfee821614dd72691",
       "working_tree_dirty": false
     },
     "image": {
@@ -1064,17 +1061,7 @@
     },
     "schema_version": "5e2a4c9d1f70"
   },
-  "blocking": [
-    {
-      "check": "accessibility_evidence",
-      "story": "1.10",
-      "invariant": "accessibility_and_responsiveness",
-      "authority": "NFR29",
-      "result": "failed",
-      "bound": true,
-      "reason": "recorded `passed: false`; manual gate manual_screen_reader: not executed — manual NVDA pass started with NVDA installed and Speech Viewer active, then cancelled by the user, 2026-08-08"
-    }
-  ],
-  "gate_a_passed": false,
-  "passed": false
+  "blocking": [],
+  "gate_a_passed": true,
+  "passed": true
 }

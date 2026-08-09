@@ -5,7 +5,7 @@
     "FR24",
     "NFR29"
   ],
-  "measurement_date": "2026-08-08",
+  "measurement_date": "2026-08-09",
   "fixtures": [
     {
       "fixture_id": "sample_tiny_input",
@@ -59,7 +59,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "git_commit": "523e86e7bd17903e890093dd8e7fc617479be7fd",
+      "git_commit": "e2ecdb627d2ea4b64f0415fcfee821614dd72691",
       "working_tree_dirty": false
     },
     "image": {
