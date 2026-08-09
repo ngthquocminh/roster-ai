@@ -16,8 +16,7 @@ inputDocuments:
 ## Overview
 
 This document provides the complete epic and story breakdown for ShiftMind, decomposing the requirements from the canonical spec, PRD, UX design, and architecture into implementable stories.
-
-## Requirements Inventory
+. K.
 
 > Canonical requirement register: `requirements-inventory.md` (NFR numbering below is canonical and frozen there; FR normative text lives in the PRD). NFR35's thresholds and measurement protocol are final as of 2026-07-23 and defined normatively in the canonical register.
 
@@ -172,7 +171,7 @@ NFR35: Before implementation acceptance, the final internal portfolio thresholds
 - AR25: Perform the Gate A one-way brownfield cutover in a maintenance window: disable legacy writes, drain/cancel the in-process worker, snapshot SQLite, import checksummed fixtures to PostgreSQL, deploy/test V1 API and regenerated client, switch the no-cache SPA index, and keep old SQLite scenarios/runs offline rather than fabricating governed history.
 - AR26: Converge new work on the architecture structural seed under `backend/api`, `backend/worker`, `backend/application`, `backend/domain`, `backend/agent`, `backend/engine`, `backend/adapters`, `backend/migrations`, `backend/evals`, `frontend/src/api`, `frontend/src/features`, `frontend/src/routes`, `infra/terraform`, and `tests/architecture` without an all-at-once rename.
 - AR27: Use the architecture's pinned/planned stack seeds and repository constraints; add and lock each planned dependency only at its implementation gate, and require immutable deployed image digests.
-- AR28: Gate A must complete PostgreSQL/site membership, immutable fixtures, the normalized scenario read service, authenticated read-only Scenario Data, parity tests, and negative mutation tests before AgentRuntime or agent tools; Gate B adds durable recovery, evaluation/observability, and AWS proof without weakening invariants.
+- AR28: Gate A must complete PostgreSQL/site membership, immutable fixtures, the normalized scenario read service, authenticated read-only Scenario Data, parity tests, and negative mutation tests before AgentRuntime or agent tools; Gate B adds durable recovery, evaluation, and observability in a reproducible local environment; Gate C adds the hosted AWS proof. No later gate may weaken an earlier gate's invariants.
 
 ### UX Design Requirements
 
@@ -246,6 +245,24 @@ UX-DR34: Make Evidence links conventionally link-identifiable and use the exact 
 
 UX-DR35: Keep Send, Run optimization, and Approve as baseline visually discontinuous and consequence-appropriate so no single “AI action” treatment spans authority levels.
 
+### Deferred Requirements
+
+The 2026-08-09 Epics 2–5 scope audit cut the stories that owned the
+requirements below. They are **deferred, not withdrawn**: the canonical
+register in `requirements-inventory.md` is unchanged and their normative text
+still stands. They simply have no owning story at Gate B or Gate C, and no gate
+may claim them as satisfied. Each carries a revisit trigger, mirrored in the
+architecture spine's Deferred table.
+
+| Requirement | Clause deferred | Why | Revisit trigger |
+|---|---|---|---|
+| NFR25 | All of it — per-signal severity, destination, deduplication key, and tested runbook | A single-operator portfolio has no on-call rotation or paging destination. Story 5.1's instrumentation covers diagnosis, which is the actual need. | First external pilot, or any operation the author does not personally observe |
+| NFR24 | "a demonstrated restore drill" | Story 6.5 configures automated backups and documents recovery limitations. A rehearsed restore proves recoverability the portfolio does not yet need to claim. | First external user, or any non-reproducible data |
+| AR24 / AD-24 | N/N-1 read/write compatibility, resumable backfills, `/api/meta` client gating, contraction gates | One API task and one worker task are replaced, not rolled; there is no concurrent prior version to stay compatible with and no user to strand. Story 6.5 implements only the schema-compatible image-rollback clause. | A second concurrent API/worker task, or the first external user |
+
+Story 2.6's `AR24` reference is unaffected — it cites the historical-record
+version-retention clause, which Epic 2 still implements.
+
 ### FR Coverage Map
 
 FR1: Epic 1 - Seeded planner authentication
@@ -307,15 +324,23 @@ The planner can approve only the exact current feasible candidate as the interna
 
 **Implementation notes:** Adds the consequential authority boundary after candidate creation is stable. Story 4.1 independently owns the approval-required `AgentRun` transition, presentation, and replay; no Epic 3 story depends on that behavior for acceptance. The epic also includes exact approval binding, separate approval interaction, atomic promotion, authoritative audit, immutable provenance, stale/expiry/replay handling, prior-version inspection, and evidence-linked before/after outcomes. It does not require future extensibility or AWS work to function.
 
-### Epic 5: Reliable Hosted Planner Workspace
+### Epic 5: Demonstrable Local Planner Workspace
 
-The planner can sign in to the hosted ShiftMind workspace and trust it: it is reproducibly deployed, diagnosable by the portfolio operator without privacy leaks, and provably recovers accepted work through backup, restore, and tested rollback.
+The complete planner journey runs reproducibly on any developer machine from one command, with agent runs instrumented for latency, budget, and cost, no sensitive content leaving the application boundary, and a published walkthrough.
 
-**FRs covered:** none new (hardens FR1–FR24 outcomes in the hosted environment; FR23 remains proven by the governed-capability conformance suite)
+**FRs covered:** none new (makes the FR1–FR24 outcomes reproducible and legible outside the author's machine)
 
-**Implementation notes:** Delivers the hosted Gate B trust proof as observable planner/operator outcomes: privacy-safe observability first (so later deployment proofs can search by run identifier), then AWS Terraform provisioning, Cognito/ECS/RDS/S3 boundaries, health-gated immutable deployment, backups and restore drill, mixed-version compatibility, tested rollback, and the hosted invariant suite. The hosted suite explicitly re-proves FR24 viewer/agent projection parity, exact identifier/version preservation, and mutation denial through the deployed CloudFront/ALB/API topology. It hardens the already complete planner workflow rather than introducing a new dependency for earlier epics.
+**Implementation notes:** This is the portfolio milestone and completes Gate B. It delivers run instrumentation (tokens, cost, latency, budget outcomes, run-ID correlation), content and secret minimization with adversarial fixtures, a one-command reproducible environment whose locally built image digest satisfies every evaluation report's image binding, and the walkthrough that makes the system judgeable by a reader. NFR10's telemetry independence is already proven by Story 3.9; NFR35's thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and measured on CI per AD-26.
 
-> **No Epic 6.** Release evaluation, capability-module conformance, and visual-regression auditing are not a separate late epic. Each is a definition of done attached to the epic it protects: the evaluation harness and FR23 conformance live in Epic 2 (Stories 2.2 and 2.6, beside the registry they validate), per-slice evaluation suites live in each epic's own proof stories, Stories 4.6–4.9 independently prove the completed workflow's accessibility and visual contracts, and the aggregate release-blocking thresholds are held in the Release Gate section at the end of this document rather than in a story.
+### Epic 6: Reliable Hosted Planner Workspace
+
+The planner can sign in to the hosted ShiftMind workspace and trust it: reproducibly deployed from reviewed infrastructure code, diagnosable without privacy leaks, with its invariants holding through the real edge, load-balancer, and database topology.
+
+**FRs covered:** none new (hardens FR1–FR24 outcomes in the hosted environment)
+
+**Implementation notes:** Sequenced after the Epic 5 portfolio milestone and completes Gate C. Delivers AWS Terraform provisioning, Cognito/ECS/RDS/object-storage boundaries, health-gated immutable deployment including the SSE-through-CloudFront/ALB proof, a smoke-level hosted re-proof of the security/parity/mutation-denial invariants, backups, and a documented rollback path. It hardens an already complete and demonstrable planner workflow; nothing in Epics 1–5 depends on it.
+
+> **No release-evaluation epic.** Release evaluation and capability-module conformance are not a separate late epic. Each is a definition of done attached to the epic it protects: the evaluation harness and FR23 conformance live in Epic 2 (Stories 2.2 and 2.6, beside the registry they validate), per-slice evaluation suites live in each epic's own proof stories, Story 4.6 proves the completed workflow's state semantics and accessibility, and the aggregate release-blocking thresholds are held in the Release Gate section at the end of this document rather than in a story. Epic 6 is a deployment epic, not a release-evaluation epic, and this principle is unchanged by its addition.
 
 ## Epic 1: Inspectable Single-Site Scenario Workspace
 
@@ -475,7 +500,7 @@ Unblocks: Story 1.7 and every subsequent UI story.
 
 **Given** the shared Status badge, Inline alert, Skeleton, Empty state, Reconnect banner, Evidence link, and quiet highlight primitives
 **When** they are implemented as reusable components
-**Then** each has visual-regression fixtures covering its states without color-only meaning
+**Then** each has a deterministic state fixture covering its states without color-only meaning
 **And** each subsequent UI story implements its component-specific visual contract in that story rather than deferring it. (UX-DR23, UX-DR32, UX-DR34)
 
 ### Story 1.7: Open the Read-Only Scenario Data Workspace
@@ -616,7 +641,7 @@ As a product engineer,
 I want one versioned evaluation harness available from the first agent slice,
 So that every epic proves its own behavior deterministically instead of deferring correctness evidence to a late release milestone.
 
-Unblocks: the evaluation acceptance criteria in Stories 2.9, 3.10–3.12, 4.5–4.9, and 5.11–5.13.
+Unblocks: the evaluation acceptance criteria in Stories 2.9, 3.10–3.12, 4.5–4.6, and 6.4.
 
 **Acceptance Criteria:**
 
@@ -773,24 +798,19 @@ So that verification does not make me lose my place or conversation context.
 **Acceptance Criteria:**
 
 **Given** an Evidence link in Chat
-**When** the planner activates it
-**Then** app-owned navigation records conversation, message, claim, scroll, and focused-control origin; opens the cited Scenario Data or Results version/group; loads the exact target window; and focuses one highlighted row/cell/record
-**And** ordinary user filters are preserved separately for restoration. (UX-DR18, UX-DR34)
-
-**Given** a resolved evidence target
-**When** the planner activates Return to claim or browser Back
-**Then** Chat restores the exact message, scroll position, and focused Evidence link
-**And** it does not resend, regenerate, or silently switch the scenario. (UX-DR2, UX-DR19)
+**When** the planner activates it and then activates Return to claim or browser Back
+**Then** app-owned navigation records the originating conversation, message, and claim; opens the cited Scenario Data or Results version/group; loads the exact target window; focuses one highlighted row/cell/record; and on return restores the originating message and focused Evidence link
+**And** returning does not resend, regenerate, or silently switch the scenario. (UX-DR2, UX-DR18, UX-DR19, UX-DR34)
 
 **Given** a version mismatch, missing locator, unauthorized target, or stale cached record
 **When** evidence navigation resolves the exception
 **Then** it uses the distinct required safe panel and recovery actions, never substitutes current/similar data, and never reveals an unauthorized record's existence or value
 **And** historical claims with lost evidence remain visible but marked “Evidence unavailable.” (UX-DR20)
 
-**Given** keyboard, screen-reader, reduced-motion, and zoom use
-**When** the planner jumps and returns
-**Then** target and origin focus, assistive announcements, visible focus, link identification, and non-animated highlighting meet the accessibility contract
-**And** the full locator is not entrusted to model-generated URLs. (UX-DR26, UX-DR27, UX-DR29, UX-DR34)
+**Given** an evidence jump and return
+**When** focus behavior is tested
+**Then** focus moves to the exact evidence target on jump and returns to the invoking Evidence link on return, proven by the automated accessibility suite established in Epic 1
+**And** the full locator is owned by the application and never entrusted to a model-generated URL. (UX-DR27, UX-DR34, AR15)
 
 ### Story 2.9: Clarify, Refuse, and Fail Safely
 
@@ -998,20 +1018,15 @@ So that I can leave Chat, monitor accepted work, cancel when valid, and reopen o
 **Then** a stable newest-first table shows run ID, exact literal status, accepted/updated time, scenario/proposal/baseline versions, and safe actions
 **And** row navigation, Cancel, Retry, and identifier-copy controls are separately labelled and keyboard-operable. (FR13, FR16, UX-DR17, UX-DR21)
 
-**Given** no runs, loading, list failure, reconnect, delayed events, or model outage
+**Given** no runs, loading, list failure, or model outage
 **When** Runs renders
-**Then** it uses the required skeleton, empty, alert, reconnect, and polling/manual-refresh states without hiding saved data
+**Then** it uses the shared loading, empty, and alert states from the Story 1.6 primitives without hiding saved data
 **And** manual deterministic Run optimization remains available when permitted. (FR8, UX-DR23, UX-DR25)
 
 **Given** a run reaches a literal terminal state
 **When** its progress card or row renders
 **Then** completed, infeasible, timed-out, cancelled, and failed are textually and structurally distinct with only valid next actions
 **And** no percentage, ETA, feasibility, or promotion control is invented. (NFR13, UX-DR10, UX-DR13)
-
-**Given** tablet or phone read-only triage
-**When** runs are inspected
-**Then** tables remain contained and evidence/status is available, while phone run/cancel actions direct the planner to desktop
-**And** the API still enforces permission independently of viewport. (UX-DR28)
 
 ### Story 3.8: Compare Candidate and Baseline Results
 
@@ -1103,20 +1118,20 @@ So that accepted work is never lost, duplicated, or silently rebased by a failur
 ### Story 3.12: Prove the Repair Browser Journey
 
 As the product team,
-we want the repair journey proven accessible and correct in the browser before release,
-So that the planner can complete draft, run, and comparison work with keyboard and assistive technology through reconnects.
+we want the repair journey proven correct end to end in the browser before release,
+So that the planner can complete draft, run, and comparison work through a reconnect without losing evidence targeting.
 
 **Acceptance Criteria:**
 
 **Given** the browser repair journey through Chat, Runs, and Results
-**When** keyboard, reconnect, responsive, and evidence tests execute
-**Then** draft/run/result states, focus, announcements, and exact evidence links satisfy the UX contract
-**And** a regression in accessibility or evidence targeting blocks release. (NFR18, NFR20, NFR29)
+**When** one end-to-end test executes draft, Run optimization, mid-run reconnect, terminal outcome, and comparison
+**Then** the same run ID and prior content survive the reconnect, each literal state renders its required text, and every evidence link resolves to its exact target
+**And** a regression in evidence targeting or journey completion blocks release. (NFR29, UX-DR10, UX-DR13)
 
-**Given** the Story 1.6 shared primitives as used by every Epic 3 surface
-**When** visual-regression fixtures render draft, run-progress, terminal-outcome, and comparison states
-**Then** each state is textually and structurally distinct without color-only meaning
-**And** no confidence gauge, invented percentage, ETA, or merged action treatment appears. (UX-DR10, UX-DR13, UX-DR32)
+**Given** the same journey
+**When** the automated accessibility suite established in Epic 1 runs against its surfaces
+**Then** keyboard operability, focus management, and semantic status text pass without manual assistive-technology verification
+**And** an accessibility regression blocks release. (NFR18, NFR20, NFR29)
 
 ## Epic 4: Exact Baseline Decision and Decision Record
 
@@ -1179,6 +1194,11 @@ So that I cannot confuse running optimization with replacing the operational bas
 **Then** the binding becomes terminal rejected, the agent run cancels/ends according to its closed graph, and the baseline remains unchanged
 **And** replay returns the same semantic rejection. (AR7, AR10)
 
+**Given** the approve, reject, and stale-approval flows
+**When** they render alongside Send and Run optimization
+**Then** Approve as baseline remains distinct from Run optimization in language, control, consequence, and visual treatment; stale actions are disabled; dialogs restore focus; and the accessible approval name states which candidate replaces which baseline
+**And** these are proven by the automated accessibility suite established in Epic 1, without manual assistive-technology verification. (NFR18, NFR19, UX-DR12, UX-DR27, UX-DR35)
+
 ### Story 4.3: Promote the Baseline Atomically with Audit
 
 As a planner,
@@ -1222,7 +1242,7 @@ So that I can reconstruct what happened without access to hidden model reasoning
 
 **Given** the Results view
 **When** the Provenance timeline renders
-**Then** literal outcomes, stable IDs, evidence links, before/after versions, and collapsible safe details are keyboard and screen-reader accessible
+**Then** literal outcomes, stable IDs, evidence links, before/after versions, and collapsible safe details render with the semantics the Epic 1 automated accessibility suite asserts
 **And** hidden chain-of-thought, raw prompts/completions, sensitive tool payloads, and credentials never appear. (UX-DR22, AR15)
 
 **Given** a saved historical result during model or telemetry outage
@@ -1253,169 +1273,130 @@ So that stale state, retries, or observability failure can never produce an unre
 **Then** the entire transaction rolls back and the binding remains pending
 **And** retry can complete exactly once after the fault clears. (NFR9)
 
-**Given** S3 evidence failure before snapshot metadata commits or database failure after an object write
+**Given** object-storage evidence failure before snapshot metadata commits, or database failure after an object write
 **When** promotion evidence is prepared
-**Then** S3 failure causes no mutation, while database failure leaves only a non-authoritative unreferenced object retained until teardown
-**And** no audit or provenance link points to unverified evidence. (AR12, AR23)
+**Then** storage failure causes no mutation, while database failure leaves only a non-authoritative unreferenced object retained until teardown
+**And** no audit or provenance link points to unverified evidence, proven against the local create-only evidence adapter without requiring hosted infrastructure. (AR12, AR23)
 
 **Given** telemetry export disabled and CloudWatch degraded independently
 **When** approval, rejection, or stale attempts execute
 **Then** product behavior and authoritative audit remain correct and inspectable
 **And** audit continuity or idempotency regression blocks release. (FR21, NFR10, NFR29)
 
-### Story 4.6: Prove Approval-Journey Accessibility
-
-As a planner using keyboard or assistive technology,
-I want approval, rejection, stale recovery, and evidence return to preserve clear focus and consequence,
-So that I can make an exact baseline decision without confusing it with optimization.
-
-**Acceptance Criteria:**
-
-**Given** the complete approve, reject, and stale-approval browser flows
-**When** keyboard, focus, announcement, and evidence-navigation tests execute
-**Then** Run optimization and approval remain visually and semantically distinct, stale actions are disabled, dialogs restore focus, and Return to claim/provenance context is preserved
-**And** any accessibility regression blocks release. (NFR18, NFR19, UX-DR12, UX-DR27, UX-DR35)
-
-**Given** the approval-journey suite
-**When** its result is persisted
-**Then** `evidence/story-4.6/approval-journey-accessibility.json` and the keyboard/focus/announcement trace identify the tested artifact versions
-**And** approve, reject, stale, and Return-to-claim flows must all pass this story independently. (NFR27, NFR29)
-
-### Story 4.7: Prove Cross-Workflow Visual Consistency
-
-As a planner moving across the completed workflow,
-I want shared navigation, evidence, and data surfaces to remain visually consistent,
-So that I can keep orientation across Chat, Scenario Data, Runs, Results, and provenance.
-
-**Acceptance Criteria:**
-
-**Given** Workspace tabs, scenario/version context, Evidence link/highlight, Scenario Data grid, and Return to claim across Epics 1–4
-**When** visual-regression fixtures render them
-**Then** active/navigation, exact-target, link, focus, sticky-surface, overflow, and hierarchy treatments match the design contract
-**And** no page-level horizontal scroll, overlapping sticky text, or unreadable long identifier occurs. (UX-DR31, UX-DR34)
-
-**Given** the cross-workflow visual suite
-**When** its result is persisted
-**Then** `evidence/story-4.7/cross-workflow-visual-report/` binds every named surface and tested artifact version
-**And** every overflow and long-identifier case passes its visual baseline independently of other Epic 4 proof stories. (NFR27, NFR29)
-
-### Story 4.8: Prove Literal-State Semantics
+### Story 4.6: Prove Workflow State Semantics and Automated Accessibility
 
 As a planner,
-I want every workflow state to communicate its literal meaning without relying on color or AI styling,
-So that I can distinguish drafts, progress, outcomes, and decisions correctly.
+I want every workflow state to communicate its literal meaning and remain operable without manual assistive-technology verification,
+So that I can distinguish drafts, progress, outcomes, and decisions correctly across the completed journey.
+
+Consolidates the former Stories 4.6–4.9. Proof method is automated only, consistent with `EXPERIENCE.md`'s Accessibility Floor: the state matrix is asserted against the Story 1.6 fixture catalogue and the completed surfaces, and conformance is asserted by the Epic 1 axe/semantic/browser suites. No screenshot baseline and no manual assistive-technology pass is required or accepted as proof.
 
 **Acceptance Criteria:**
 
-**Given** messages, drafts, runs, comparisons, approvals, terminal outcomes, alerts, skeletons, empty states, and provenance
+**Given** messages, drafts, runs, comparisons, approvals, terminal outcomes, alerts, skeletons, empty states, and provenance across Epics 1–4
 **When** every literal state renders
-**Then** text, icon, structure, and inherited components communicate meaning without color-only status
-**And** no confidence gauge, AI glow, gradient, animated avatar, pulse, celebration, or merged action treatment appears. (UX-DR32, UX-DR35)
+**Then** text, structure, and inherited components communicate meaning without color-only status, and each state is textually and structurally distinct
+**And** no confidence gauge, AI glow, gradient, animated avatar, pulse, celebration, invented percentage, ETA, or merged action treatment appears. (UX-DR10, UX-DR13, UX-DR32, UX-DR35)
 
-**Given** the literal-state suite
+**Given** the complete desktop journey
+**When** automated accessibility checks run at 100% and 200% zoom, with increased text spacing and reduced motion
+**Then** WCAG 2.2 AA and the documented focus, overflow, touch-target, table, and state rules pass, with no page-level horizontal scroll, overlapping sticky text, or unreadable long identifier
+**And** any accessibility regression blocks release. (NFR18, NFR20, NFR29, UX-DR31, UX-DR34)
+
+**Given** the consolidated state-semantics and accessibility suite
 **When** its result is persisted
-**Then** `evidence/story-4.8/literal-state-matrix.json` names every tested state and artifact version
-**And** each state must pass text/icon/structure checks for this story to complete. (NFR27, NFR29)
+**Then** `evidence/story-4.6/state-semantics-and-accessibility.json` names every tested state and binds the tested artifact versions
+**And** the state matrix and the accessibility pass must each succeed for this story to complete. (NFR27, NFR29)
 
-### Story 4.9: Prove Responsive WCAG Conformance
+## Epic 5: Demonstrable Local Planner Workspace
 
-As a planner using the declared browser and assistive-technology matrix,
-I want the completed journey to remain perceivable and operable across supported layouts and preferences,
-So that responsive behavior never hides authority, evidence, or state.
+The complete planner journey runs reproducibly on any developer machine from one command, with agent runs instrumented for latency, budget, and cost, no sensitive content leaving the application boundary, and a published walkthrough that lets a reader understand and run the system without prior context.
 
-**Acceptance Criteria:**
+**This epic is the portfolio milestone.** It is the point at which ShiftMind is a complete, demonstrable, independently verifiable artifact. Hosted deployment is Epic 6 and is deliberately sequenced after it.
 
-**Given** the complete desktop journey and read-only responsive views
-**When** automated and manual accessibility checks run at supported sizes, 100% and 200% zoom, increased text spacing, contrast, and reduced motion
-**Then** WCAG 2.2 AA and all documented focus, overflow, touch-target, table, and state rules pass across the declared support matrix
-**And** any visual or accessibility regression blocks release. (NFR18, NFR20, NFR29)
+**Coverage note.** NFR10's telemetry-independence outcome is proven by Story 3.9's third acceptance criterion and is not restated here. NFR35's four thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and are measured on the CI reference environment per AD-26, never on a hosted topology — they do not depend on this epic or Epic 6.
 
-**Given** the responsive conformance suite
-**When** its result is persisted
-**Then** `evidence/story-4.9/responsive-wcag-report.json` binds the support matrix and tested artifact versions
-**And** focus, overflow, touch targets, zoom, spacing, contrast, and reduced-motion checks all pass this story independently. (NFR27)
-
-### Epic 4 Completion Gate
-
-Epic 4 is complete only when Stories 4.6–4.9 each have their own passing evidence artifact and owner. A passing accessibility, visual, state-semantics, or responsive slice cannot mask an incomplete or failed sibling story.
-
-## Epic 5: Reliable Hosted Planner Workspace
-
-The planner can sign in to the hosted ShiftMind workspace and trust it: it is reproducibly deployed, diagnosable by the portfolio operator without privacy leaks, and provably recovers accepted work through backup, restore, and tested rollback.
-
-### Story 5.1: Operate with Structured Logs, Metrics, and Correlation
+### Story 5.1: Instrument Agent Runs for Latency, Budget, and Cost
 
 As a portfolio operator,
 I want product and workflow activity correlated across structured logs and metrics,
-So that I can diagnose one run and understand latency, budgets, and cost without high-cardinality metric labels.
+So that I can diagnose one run and understand where its latency, budget, and cost went.
 
 **Acceptance Criteria:**
 
 **Given** API, worker, AgentRuntime, database, and solver execution
 **When** operational telemetry is emitted
-**Then** structured JSON logs and metrics record acknowledgement/first-event/end-to-end/model/tool/solver timings, queue and approval age, tokens, estimated cost, budget outcomes, and stable correlation IDs
-**And** high-cardinality actor/site/run/resource identifiers are absent from metric labels. (NFR15, NFR22)
+**Then** structured JSON logs and metrics record acknowledgement/first-event/end-to-end/model/tool/solver timings, queue and approval age, tokens, estimated cost, and budget outcomes
+**And** every value is attributable to one agent run. (NFR15)
 
-**Given** the log and metric contract suite
-**When** its result is persisted
-**Then** `evidence/story-5.1/log-metric-contract.json` binds the tested application and image versions and proves every required field and metric-label restriction
-**And** this story can pass or fail independently of trace export, alerts, and runbooks. (NFR27)
+**Given** a completed agent run
+**When** the operator searches product state, authoritative audit, and structured logs by its stable run or correlation identifier
+**Then** the same lineage is discoverable across all three without exposing sensitive content
+**And** authoritative audit remains the business record of truth. (NFR22)
 
-### Story 5.2: Prevent Telemetry Content and Secret Leaks
+### Story 5.2: Prevent Content and Secret Leaks
 
 As a security reviewer,
-I want logs and exported traces limited to explicitly safe metadata,
+I want logs and any exported traces limited to explicitly safe metadata,
 So that diagnosis cannot leak credentials, workforce data, prompts, schedules, tool payloads, or approval evidence.
 
 **Acceptance Criteria:**
 
-**Given** OpenTelemetry/Logfire instrumentation and structured application logging
+**Given** structured application logging and any configured trace export
 **When** logs and traces emit
 **Then** content and binary capture are disabled by default, only allow-listed sanitized attributes may leave the application, and credentials, workforce data, prompts/completions, schedule payloads, tool arguments/results, and approval evidence are scrubbed
-**And** external providers receive only the minimum explicitly configured content. (NFR3, NFR4, NFR30)
+**And** external model and telemetry providers receive only the minimum explicitly configured content. (NFR3, NFR4, NFR30)
 
 **Given** secret, prompt-injection, and adversarial telemetry fixtures
 **When** the minimization suite executes
 **Then** any prohibited content in a log or exported trace fails the story
-**And** `evidence/story-5.2/telemetry-minimization-report.json` records the tested channels, fixtures, and artifact versions. (NFR5, NFR27, NFR29)
+**And** `evidence/story-5.2/content-minimization-report.json` records the tested channels, fixtures, and artifact versions. (NFR5, NFR27, NFR29)
 
-### Story 5.3: Preserve Operation Across Telemetry Failure and Document Retention
+### Story 5.3: Run ShiftMind Reproducibly from One Command [Technical Enabler]
 
-As a portfolio operator,
-I want workflows and authoritative evidence independent of the external telemetry provider,
-So that quota, retention, or export failure cannot corrupt or block planner work.
+As a reviewer of this portfolio,
+I want to start the whole system from a clean clone with one command,
+So that I can exercise the planner journey myself without reconstructing an environment.
 
-**Acceptance Criteria:**
-
-**Given** Logfire quota, retention, outage, or export failure
-**When** product workflows continue
-**Then** correctness, scheduling, authoritative audit, and CloudWatch-compatible JSON diagnosis remain available
-**And** telemetry cannot authorize, deny, or block product work. (NFR10, AR12)
-
-**Given** current portfolio storage and telemetry configuration
-**When** retention and quota policy is documented
-**Then** conversation, audit, snapshot, log, backup, and hosted-telemetry settings and limitations are explicit without implying customer deletion, residency, compliance, or regulatory WORM
-**And** `evidence/story-5.3/telemetry-failure-and-policy-report.md` binds the outage tests and current policy versions. (NFR34)
-
-### Story 5.4: Alert Operators with Tested Runbooks
-
-As a portfolio operator,
-I want each required failure signal to reach a defined destination with a tested runbook,
-So that release-blocking conditions lead to a consistent operational response.
+Unblocks: Story 5.4's walkthrough, and the release-gate report's image binding.
 
 **Acceptance Criteria:**
 
-**Given** cost, queue age, lease expiry, budget, tool/guardrail denial, approval age/outcome, solver failure/duration, evaluation regression, audit-write failure, model failure, and telemetry-export health conditions
-**When** local or CI alert fixtures run
-**Then** every signal class emits the minimum contract of severity, destination, deduplication key, and linked runbook entry
-**And** every release-blocking signal class has a test asserting that contract. (NFR25)
+**Given** a clean clone and a documented prerequisite set
+**When** the reviewer runs the single documented start command
+**Then** application, worker, database, and seeded immutable fixtures come up together, the seeded planner can sign in, and the primary journey is completable end to end against deterministic model doubles with no provider credential required
+**And** a live-provider run is available through explicit configuration but is never required to demonstrate the system. (NFR21, NFR26)
 
-**Given** the alert and runbook suite
-**When** its result is persisted
-**Then** `evidence/story-5.4/alert-runbook-contract.json` names every signal, runbook, destination, and tested artifact version
-**And** one missing or untested signal fails this story independently of logging and telemetry-provider health. (NFR27, NFR29)
+**Given** the local build
+**When** application images are produced
+**Then** tested constraints and lockfiles pin each used dependency version and the built image exposes a recorded content-addressed digest
+**And** that digest satisfies the image binding every evaluation report requires, so no release evidence depends on hosted infrastructure. (NFR27, AR27)
 
-### Story 5.5: Provision AWS Edge, Identity, and Network Boundaries [Technical Enabler]
+### Story 5.4: Publish the Portfolio Walkthrough
+
+As a reviewer of this portfolio,
+I want one document that explains what ShiftMind proves and how to verify it,
+So that I can judge the system's engineering without reading the whole repository.
+
+**Acceptance Criteria:**
+
+**Given** the completed local system
+**When** the walkthrough is published
+**Then** it states the product thesis and the three-way authority partition, walks the Wednesday-coverage journey with real output, shows the architecture boundary that keeps domain and application free of framework and provider types, and links to the evaluation reports, the release-gate report, and the Gate A/Gate B evidence artifacts
+**And** every claim it makes about behavior is reproducible by the Story 5.3 command. (AR1, AR2)
+
+**Given** the portfolio's current scope and configuration
+**When** limitations are documented
+**Then** single-planner scope, fixture-only source data, conversation/audit/snapshot/log retention settings, absence of hosted deployment at this milestone, and non-customer status are explicit
+**And** no enterprise latency, availability, recovery, concurrency, or cost promise is made. (NFR17, NFR34)
+
+## Epic 6: Reliable Hosted Planner Workspace
+
+The planner can sign in to the hosted ShiftMind workspace and trust it: it is reproducibly deployed from reviewed infrastructure code, diagnosable without privacy leaks, and its invariants hold through the real edge, load-balancer, and database topology.
+
+**Sequenced after the Epic 5 portfolio milestone.** Nothing in Epics 1–5 depends on this epic; it adds the hosted trust proof to an already complete and demonstrable system. Gate C is this epic's boundary, distinct from Gate B, which Epic 5 completes.
+
+### Story 6.1: Provision AWS Edge, Identity, and Network Boundaries [Technical Enabler]
 
 As a portfolio operator,
 I want reviewed infrastructure code for the hosted edge, identity, and network,
@@ -1433,7 +1414,7 @@ So that browser access reaches only the intended private application boundary.
 **Then** public hops and CloudFront-to-ALB use HTTPS/TLS 1.2+, RDS requires TLS, and S3/RDS/logs/secrets use encryption at rest with Block Public Access
 **And** API ingress is only through ALB/CloudFront while the worker has no inbound listener. (AR17)
 
-### Story 5.6: Provision AWS Data and Least-Privilege Runtime [Technical Enabler]
+### Story 6.2: Provision AWS Data and Least-Privilege Runtime [Technical Enabler]
 
 As a portfolio operator,
 I want reviewed infrastructure for persistent data and runtime identities,
@@ -1451,12 +1432,12 @@ So that schedules, evidence, secrets, images, logs, and cost controls remain pri
 **Then** long-lived deploy keys are absent, GitHub Actions uses OIDC, runtime roles own no tables and cannot bypass RLS, and API/worker task roles receive only their required AWS actions
 **And** S3 application roles cannot delete or overwrite evidence objects. (AR23)
 
-**Given** the architecture's planned dependencies and toolchain versions
-**When** infrastructure/application manifests are finalized for this gate
-**Then** tested constraints and lockfiles pin each used version and immutable image digests own deployed patch movement
+**Given** the architecture's planned infrastructure dependencies
+**When** infrastructure manifests are finalized for this gate
+**Then** immutable image digests own deployed patch movement, building on the dependency pinning Story 5.3 established locally
 **And** unused planned dependencies are not added prematurely. (AR27)
 
-### Story 5.7: Deploy Immutable API, Worker, and Web Releases [Technical Enabler]
+### Story 6.3: Deploy Immutable API, Worker, and Web Releases [Technical Enabler]
 
 As a portfolio operator,
 I want health-gated delivery of one immutable release across web, API, and worker,
@@ -1476,151 +1457,74 @@ So that the hosted planner workflow is reproducible and diagnosable.
 **Then** auth/API/SSE caching is disabled as required; cookies, query strings, Origin, CSRF, `Last-Event-ID`, and methods forward correctly; heartbeat arrives before proxy timeouts; reconnect replays only unseen events
 **And** the test assumes no undocumented buffering toggle. (AR21)
 
-**Given** a deployed agent run
-**When** the operator searches product state, audit, JSON logs, and available traces by stable run/correlation identifiers
-**Then** the same lineage is discoverable without exposing sensitive content
-**And** authoritative audit remains the business record of truth. (NFR22)
-
 **Given** the low-cost portfolio topology
 **When** environment limitations are documented
 **Then** one API task, one worker task, small RDS capacity, networking/availability limitations, and non-customer status are explicit
 **And** no enterprise latency, availability, recovery, concurrency, or cost promise is made. (NFR17)
 
-### Story 5.8: Demonstrate Backup and Restore
+### Story 6.4: Prove Hosted Invariants, Parity, and Mutation Denial
 
-As a portfolio operator,
-I want automated backups and a rehearsed restore procedure,
-So that portfolio evidence includes recoverability rather than only healthy-path deployment.
+As the product team,
+we want the security, authority, and parity invariants re-exercised through the real hosted topology,
+So that CloudFront, ALB, ECS, RDS, and object storage cannot widen agent authority or introduce fact drift.
+
+Acceptance boundary: a smoke-level re-proof through the deployed topology only. The invariants themselves are proven exhaustively against the application by Stories 2.9, 3.11, and 4.5; this story proves the deployment boundary did not weaken them.
 
 **Acceptance Criteria:**
 
-**Given** the AWS portfolio RDS database and evidence lifecycle
+**Given** the deployed topology
+**When** the hosted smoke suite executes unauthenticated access, cross-site denial, stale approval, prompt injection, and authoritative-audit continuity checks
+**Then** every invariant produces its expected deterministic outcome without a duplicate effect or unauthorized disclosure
+**And** any failure blocks hosted release. (NFR29, AR15)
+
+**Given** one immutable hosted fixture version exposed through the deployed Scenario Data route and API, and the corresponding agent inspection capability
+**When** the hosted parity suite compares both normalized projections, and conventional POST, PUT, PATCH, and DELETE probes test source-data modification paths
+**Then** values, stable identifiers, ordering, evidence targets, and versions match exactly through the CloudFront/ALB/API/generated-client boundary, and no supported mutation endpoint or browser mutation control exists
+**And** any mismatch or discovered mutation path blocks hosted release. (FR22, FR24, NFR29, AR4)
+
+**Given** the hosted suite completes
+**When** its result is persisted
+**Then** `evidence/story-6.4/hosted-invariant-report.json` binds topology, fixture, application, code, and image versions
+**And** the invariant, parity, and mutation-denial slices must each pass. (NFR27)
+
+### Story 6.5: Provide Backups and a Tested Rollback Path
+
+As a portfolio operator,
+I want automated backups and a documented way back to the previous release,
+So that a hosted failure or unhealthy image cannot destroy durable work.
+
+**Acceptance Criteria:**
+
+**Given** the hosted database and evidence lifecycle
 **When** infrastructure is provisioned
-**Then** automated RDS backups retain seven days, teardown requires a final snapshot, S3 evidence is versioned/create-only, CloudWatch application logs retain thirty days, and Logfire retention is documented as non-authoritative
+**Then** automated database backups retain seven days, teardown requires a final snapshot, object-storage evidence is versioned and create-only, and application log retention is explicit
 **And** the product makes no regulatory-WORM or customer-deletion claim. (NFR24, NFR34, AR17)
 
-**Given** a documented restore drill
-**When** a selected backup is restored into an isolated recovery target
-**Then** workflow writes are paused, schema/application compatibility is verified, evidence checksums and baseline/run/audit references are reconciled, and the recovered primary journey is demonstrated
-**And** restore is explicitly described as disaster recovery, not no-loss deployment rollback. (NFR24, AR24)
-
-**Given** a failed restore or evidence mismatch
-**When** validation runs
-**Then** the recovery target is not promoted, the exact discrepancy and recovery limitation are recorded, and original authority remains unchanged
-**And** restore-gate failure blocks release. (NFR29)
-
-### Story 5.9: Roll Out Compatible Mixed Versions
-
-As a portfolio operator,
-I want a tested compatible rollout path,
-So that a release cannot strand the browser and worker on incompatible contracts.
-
-**Acceptance Criteria:**
-
-**Given** a schema/application release
-**When** expand-migrate-contract deployment runs
-**Then** additive schema lands first, N and N-1 API/worker/client versions remain read/write compatible during replacement, durable jobs carry required contract/capability versions, and incompatible capabilities remain disabled until all tasks are current
-**And** resumable backfills finish before new fields become required. (AR24)
-
-**Given** current and prior clients during rollout
-**When** `/api/meta` and the web release are served
-**Then** supported client versions are explicit, `index.html` is no-cache, prior content-hashed assets remain available, and incompatible clients receive a stable safe upgrade response
-**And** persisted work remains readable by the release-tested N/N-1 pair. (AR24)
-
-### Story 5.10: Prove Rollback
-
-As the product team,
-we want a tested rollback path before release,
-So that an unhealthy release cannot corrupt durable work.
-
-**Acceptance Criteria:**
-
-**Given** an unhealthy image before destructive contraction
-**When** health alarms trigger rollback
-**Then** prior schema-compatible API/worker images are restored through the tested procedure while current durable jobs/state remain valid
-**And** after contraction the documented remediation is roll-forward rather than unsafe image rollback. (NFR23, AR24)
-
-**Given** the rollback drill completes
-**When** the result is recorded
-**Then** `evidence/story-5.10/rollback-drill-report.json` is persisted with the drill timestamp, pre- and post-rollback image digests, schema version, durable-job reconciliation result, and the contraction/roll-forward boundary applied
-**And** the accountable owner is Operations/QA, and an unrecorded or version-unbound drill does not satisfy this story. (NFR23, NFR27, AR24)
-
-### Story 5.11: Prove Hosted Security and Authority
-
-As the product team,
-we want security, policy, and audit guarantees exercised through the real hosted topology,
-So that CloudFront, ALB, ECS, RDS, S3, and external telemetry cannot widen agent or planner authority.
-
-**Acceptance Criteria:**
-
-**Given** the hosted security and authority proof suite
-**When** cross-site denial, mutation retry, stale approval, unsupported claim, prompt injection, authoritative-audit continuity, and Logfire-outage tests execute
-**Then** every invariant produces the expected deterministic evidence and alert without a duplicate effect or unauthorized disclosure
-**And** any failed security, policy, correctness, audit, or telemetry-independence proof blocks portfolio release. (NFR10, NFR25, NFR29)
-
-**Given** the hosted security suite completes
-**When** its result is persisted
-**Then** `evidence/story-5.11/hosted-security-authority-report.json` binds topology, dataset, policy, application, code, and image versions
-**And** every named proof must pass this story independently of Scenario Data parity and recovery evidence. (NFR27)
-
-### Story 5.12: Prove Hosted Scenario Data Parity and Immutability
-
-As a planner,
-I want hosted Scenario Data to match the exact facts available to the agent and remain immutable,
-So that deployment boundaries cannot introduce fact drift or a scenario mutation path.
-
-**Acceptance Criteria:**
-
-**Given** one immutable hosted fixture version exposed through the deployed Scenario Data browser route and API, and the corresponding allow-listed agent inspection capability
-**When** the hosted parity suite compares both normalized projections
-**Then** values, stable identifiers, deterministic ordering, evidence targets, fixture version, and baseline version match exactly through CloudFront, ALB, API, and generated-client boundaries
-**And** any mismatch blocks portfolio release. (FR24, NFR29, AR4)
-
-**Given** the deployed browser and API topology
-**When** browser inspection and conventional POST, PUT, PATCH, and DELETE probes test upload, create, edit, delete, import, and source-data modification paths
-**Then** the browser exposes no mutation control, no supported mutation endpoint exists, and fixture source data remains unchanged
-**And** any discovered path or state change blocks portfolio release. (FR22, FR24, NFR29)
-
-**Given** the hosted parity and mutation-denial suite completes
-**When** its result is persisted
-**Then** `evidence/story-5.12/hosted-scenario-parity-mutation-denial.json` binds fixture, projection, application, generated-client, code, and image versions
-**And** parity and denial must both pass this story independently. (NFR27)
-
-### Story 5.13: Prove Hosted Recovery and Continuity
-
-As a portfolio operator,
-I want accepted work, stored evidence, and deployable service recovered through hosted failures,
-So that the portfolio demonstrates continuity across worker interruption, disaster recovery, and unhealthy releases.
-
-**Acceptance Criteria:**
-
-**Given** the hosted recovery proof suite
-**When** worker kill/lease recovery, browser replay, backup/restore, evidence reconciliation, and unhealthy-image rollback tests execute
-**Then** accepted work remains discoverable, semantic effects occur once, restored evidence and references reconcile, and prior schema-compatible images recover service when rollback is valid
-**And** any failed recovery, restore, evidence, or rollback proof blocks portfolio release. (NFR6, NFR7, NFR23, NFR24, NFR29)
-
-**Given** each hosted recovery condition
-**When** its operational alert is inspected
-**Then** the alert follows Story 5.4's severity, destination, deduplication, and linked-runbook contract
-**And** the recovery evidence records whether the response followed the runbook. (NFR25)
-
-**Given** the hosted recovery suite completes
-**When** its result is persisted
-**Then** `evidence/story-5.13/hosted-recovery-restore-rollback-report.json` binds backup, topology, database, application, code, and image versions
-**And** worker recovery, backup/restore, and rollback must each pass this story independently. (NFR27)
+**Given** an unhealthy release
+**When** the documented rollback procedure runs
+**Then** the prior schema-compatible API/worker image digest is redeployed and current durable jobs and state remain valid
+**And** the procedure, its schema-compatibility precondition, and its limitations are recorded in the deployment runbook. (NFR23)
 
 ## Release Gate (Definition of Done)
 
-Release evaluation is not an epic or story. Each epic proves its own slice through its own proof stories on the Story 2.2 harness, and this checklist holds only the aggregate thresholds that no single story can measure. After Stories 5.11–5.13 pass independently, the Evaluation/QA owner evaluates this checklist as Epic 5's final definition of done and persists `evidence/epic-5/release-gate-report.json`.
+Release evaluation is not an epic or story. Each epic proves its own slice through its own proof stories on the Story 2.2 harness, and this checklist holds only the aggregate thresholds that no single story can measure.
 
-| Gate | Threshold | Evidence owner |
-|---|---|---|
-| Deterministic-first CI | No live-provider result satisfies any gate on its own; live suites are named, gated, budgeted, non-authoritative. | Story 2.2 |
-| Report version binding | Every evaluation report binds dataset, evaluator, model, prompt, tool, policy, application, scenario, solver, code, and image versions. | Story 2.2 |
-| Golden dataset size | At least 50 versioned cases, at least four per allowed capability, and at least ten consequential/prohibited cases; case count may later change only from reviewed failure diversity. | Stories 2.9, 3.10–3.12, 4.5–4.9, and 5.11–5.13 contribute; Epic 5 Release Gate measures |
-| Tool routing | At least 90% overall and 100% for consequential/prohibited cases. | Epic 5 Release Gate |
-| NFR35 internal thresholds | All four timing thresholds met under the canonical protocol. | Stories 1.4, 1.5, 2.4, 3.5 |
-| Blocking regressions | Any regression in authorization, approval, isolation, hard constraints, grounding, idempotency, authoritative audit, viewer parity, recovery, accessibility, backup/restore, or rollback blocks release regardless of aggregate helpfulness, and the failure names the exact gate and artifact versions. | Every proof story; Epic 5 Release Gate confirms |
+**Gate B — the portfolio milestone.** After Epic 5's stories pass, the Evaluation/QA owner evaluates the Gate B rows below as Epic 5's final definition of done and persists `evidence/epic-5/release-gate-report.json`. Every Gate B threshold is measurable locally on the CI reference environment; none requires hosted infrastructure.
+
+**Gate C — hosted.** After Epic 6's stories pass, the same owner evaluates the Gate C rows and persists `evidence/epic-6/hosted-gate-report.json`.
+
+| Gate | Milestone | Threshold | Evidence owner |
+|---|---|---|---|
+| Deterministic-first CI | B | No live-provider result satisfies any gate on its own; live suites are named, gated, budgeted, non-authoritative. | Story 2.2 |
+| Report version binding | B | Every evaluation report binds dataset, evaluator, model, prompt, tool, policy, application, scenario, solver, code, and image versions; the image binding is satisfied by Story 5.3's locally built digest. | Stories 2.2, 5.3 |
+| Golden dataset size | B | At least 50 versioned cases, at least four per allowed capability, and at least ten consequential/prohibited cases; case count may later change only from reviewed failure diversity. | Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute; Gate B measures |
+| Tool routing | B | At least 90% overall and 100% for consequential/prohibited cases. | Gate B |
+| NFR35 internal thresholds | B | All four timing thresholds met under the canonical protocol on the CI reference environment (AD-26). | Stories 1.4, 1.5, 2.4, 3.5 |
+| Blocking regressions | B | Any regression in authorization, approval, isolation, hard constraints, grounding, idempotency, authoritative audit, viewer parity, recovery, or accessibility blocks release regardless of aggregate helpfulness, and the failure names the exact gate and artifact versions. | Every proof story; Gate B confirms |
+| Hosted invariants and parity | C | Hosted smoke invariants, viewer/agent parity, and mutation denial pass through the deployed topology. | Story 6.4 |
+| Backup and rollback | C | Automated backups are configured and the rollback procedure is documented and exercised. | Story 6.5 |
+
+> **Dataset-threshold caveat.** The 50-case floor was set when thirteen Epic 5 stories were expected to contribute cases. The hosted stories now in Epic 6 contribute infrastructure assertions rather than agent-behavior cases, so the floor must be re-verified against the actual contribution of Stories 2.9, 3.10–3.12, and 4.5–4.6 when Epic 2's harness lands. If it does not hold, lower the threshold with a recorded rationale — never pad the dataset to reach it.
 
 ## Story Map
 
@@ -1629,9 +1533,10 @@ Release evaluation is not an epic or story. Each epic proves its own slice throu
 | 1 - Inspectable Single-Site Scenario Workspace | 1.1 Fixture history [TE] - 1.2 Sign in - 1.3 Fixture catalogue - 1.4 Scenario read contract [TE] - 1.5 Exact evidence targets [TE] - 1.6 Design tokens/primitives [TE] - 1.7 Scenario Data workspace - 1.8 Table controls - 1.9 Parity and mutation denial - 1.10 Accessibility/responsiveness - 1.11 Gate A readiness [TE] |
 | 2 - Grounded Conversational Investigation | 2.1 AgentRuntime boundary [TE] - 2.2 Evaluation harness [TE] - 2.3 Durable conversations - 2.4 Live event replay - 2.5 Governed inspect capability - 2.6 Governed capability module [TE] - 2.7 Evidence grounding - 2.8 Evidence jump/return - 2.9 Clarify/refuse/fail safely |
 | 3 - Governed and Recoverable Schedule Repair | 3.1 Reversible draft - 3.2 Deterministic candidate [TE] - 3.3 Job leasing/fencing [TE] - 3.4 Cancellation command [TE] - 3.5 Literal run state/replay [TE] - 3.6 Explicit bounded optimization - 3.7 Monitor/cancel/reopen runs - 3.8 Candidate/baseline comparison - 3.9 Model-outage continuity - 3.10 Repair correctness - 3.11 Recovery and idempotency - 3.12 Repair browser journey |
-| 4 - Exact Baseline Decision and Decision Record | 4.1 Request approval - 4.2 Review and decide - 4.3 Atomic promotion with audit - 4.4 Decision provenance - 4.5 Approval and audit invariants - 4.6 Approval accessibility - 4.7 Cross-workflow visuals - 4.8 Literal-state semantics - 4.9 Responsive WCAG |
-| 5 - Reliable Hosted Planner Workspace | 5.1 Logs/metrics/correlation - 5.2 Telemetry minimization - 5.3 Telemetry independence/retention - 5.4 Alerts/runbooks - 5.5 AWS edge/identity/network [TE] - 5.6 AWS data/runtime [TE] - 5.7 Immutable deploys [TE] - 5.8 Backup/restore - 5.9 Mixed-version rollout - 5.10 Rollback - 5.11 Hosted security/authority - 5.12 Hosted Scenario Data parity/immutability - 5.13 Hosted recovery/continuity |
+| 4 - Exact Baseline Decision and Decision Record | 4.1 Request approval - 4.2 Review and decide - 4.3 Atomic promotion with audit - 4.4 Decision provenance - 4.5 Approval and audit invariants - 4.6 State semantics and automated accessibility |
+| 5 - Demonstrable Local Planner Workspace | 5.1 Run instrumentation - 5.2 Content/secret leak prevention - 5.3 One-command reproducible run [TE] - 5.4 Portfolio walkthrough |
+| 6 - Reliable Hosted Planner Workspace | 6.1 AWS edge/identity/network [TE] - 6.2 AWS data/runtime [TE] - 6.3 Immutable deploys [TE] - 6.4 Hosted invariants/parity/mutation denial - 6.5 Backups and rollback |
 
-54 stories across 5 epics. Blocking dependencies are backward-only: 1 -> 2 -> 3 -> 4 -> 5.
+47 stories across 6 epics. Blocking dependencies are backward-only: 1 -> 2 -> 3 -> 4 -> 5 -> 6. Epic 5 is the portfolio milestone (Gate B) and is complete without Epic 6; Epic 6 adds the hosted proof (Gate C).
 
 No story depends on a later story to complete its own acceptance boundary. Where a service contract necessarily precedes the surface that consumes it, the story is labelled `[TE]`, carries a platform persona, and states its non-planner-visible outcome explicitly: Stories 1.4/1.5 precede the Story 1.7 workspace and Story 2.8 evidence navigation; Stories 3.2–3.5 precede the Story 3.6 run control and the Story 3.7 Runs workspace. Story 2.5 is complete for FR5 and the scheduling inspect capability alone, and Story 2.6 wholly owns FR23. Story 3.1 delivers a complete draft without a Run optimization placeholder; Story 3.6 introduces the run control and command together; Story 3.7 makes the Story 3.4 cancellation command reachable. Story 3.5 independently owns optimization progress/recovery behavior; Story 4.1 independently owns approval-required behavior.

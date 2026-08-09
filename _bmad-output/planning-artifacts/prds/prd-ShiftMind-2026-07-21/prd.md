@@ -40,7 +40,7 @@ ShiftMind is a planner decision layer. It is not payroll, time and attendance, e
 2. Demonstrate bounded multi-step agent behavior with typed tools, durable state, deterministic guardrails, and graceful failure.
 3. Make every numerical explanation and consequential decision evidence-linked and auditable.
 4. Prove that solver work can resume after disconnect or worker interruption without duplicate effects.
-5. Deploy the product reproducibly to AWS with visible evaluation, monitoring, logging, backup/restore, and rollback evidence.
+5. Make the product reproducible and verifiable by a third party: runnable from a clean clone with one command, with visible evaluation, monitoring, and logging evidence. Deploy it reproducibly to AWS with backup and rollback evidence as a subsequent, separately sequenced milestone.
 6. Preserve site and membership boundaries that can later support a real SaaS without implementing SaaS administration now.
 
 ### 2.2 Explicit non-goals
@@ -211,11 +211,12 @@ The implementation may combine read operations internally, but it may not add ge
 
 ### 4.10 Delivery cutline
 
-The portfolio is built through two required gates, not as one undifferentiated backlog:
+The portfolio is built through three sequenced gates, not as one undifferentiated backlog:
 
 - **Gate A — Inspectable agent thesis:** FR-1 through FR-11, FR-15, and FR-17 through FR-24 prove one secure, grounded inspect–investigate–draft–optimize–compare–approve journey using a deterministic local test environment. Gate A begins with a pre-orchestration foundation: authentication and site scope, the predefined fixture catalogue, the normalized scenario read contract, and the read-only Scenario Data viewer. The viewer and its read-only/parity tests shall be complete before implementation of the agent runtime or tool orchestration begins. This is the earliest credible interview demonstration.
-- **Gate B — Production-shaped proof:** FR-12 through FR-14, FR-16, the quality/evaluation requirements, AWS deployment, backup/restore, observability independence, and rollback complete the declared portfolio MVP.
-- **Beyond the cutline:** every non-goal in §2.2 and future capability in §11 remains post-MVP. If schedule pressure threatens Gate A or Gate B, reduce polish or defer future work; do not weaken an agent invariant or silently add SaaS breadth.
+- **Gate B — Production-shaped proof, reproducible locally:** FR-12 through FR-14, FR-16, the quality/evaluation requirements, run instrumentation, content minimization, and observability independence, all runnable and verifiable from a clean clone. **Gate B completes the declared portfolio MVP and is the milestone at which the product is presentable.**
+- **Gate C — Hosted proof:** AWS deployment, hosted invariant and parity re-proof, backups, and rollback. Sequenced after Gate B and not required for the portfolio MVP to be complete or demonstrable.
+- **Beyond the cutline:** every non-goal in §2.2 and future capability in §11 remains post-MVP. If schedule pressure threatens Gate A or Gate B, reduce polish or defer future work; do not weaken an agent invariant or silently add SaaS breadth. Gate C may be deferred in full without weakening Gate A or Gate B.
 
 ## 5. Agent Guardrails and Autonomy Contract
 
@@ -310,7 +311,9 @@ Every evaluation report binds the dataset, evaluator, model, prompt, tool, polic
 
 ### 8.1 MVP acceptance statement
 
-The MVP is complete when one authenticated planner can inspect the selected fixture's normalized Scenario Data, investigate and safely repair its schedule through chat, and verify that agent explanations use the same versioned facts; solver work survives interruption; operational-baseline promotion requires valid approval; every action is attributable and evidence-linked; deterministic and agent evaluations pass; sanitized hosted observability is available without becoming a dependency; and the system deploys reproducibly to AWS with tested backup/restore and rollback.
+The MVP is complete at Gate B, when one authenticated planner can inspect the selected fixture's normalized Scenario Data, investigate and safely repair its schedule through chat, and verify that agent explanations use the same versioned facts; solver work survives interruption; operational-baseline promotion requires valid approval; every action is attributable and evidence-linked; deterministic and agent evaluations pass; sanitized observability is available without becoming a dependency; and a third party can reproduce all of the above from a clean clone with one documented command.
+
+Gate C — reproducible AWS deployment with tested backups and rollback — extends the MVP into a hosted environment. It is sequenced after the acceptance statement above and its absence does not make the MVP incomplete.
 
 ### 8.2 Product and demonstration metrics
 

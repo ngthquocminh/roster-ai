@@ -43,6 +43,58 @@
 generated: 2026-07-24
 last_updated: 2026-08-09
 
+# NOTE (2026-08-09, correct-course): Epics 2-5 scope audit. Trimmed frontend-QA
+# and SRE ceremony that did not serve the portfolio goal, and SPLIT the old
+# Epic 5 into Epic 5 (local, portfolio milestone = Gate B) and Epic 6 (hosted =
+# Gate C) so a demonstrable artifact exists before any AWS work. 54 -> 47
+# stories; 43 remaining -> 32 to the portfolio milestone. Full rationale and
+# before/after in planning-artifacts/sprint-change-proposal-2026-08-09-epics-2-5.md.
+#
+# TWO ROOT CAUSES (both method mandates no requirement asked for):
+# (1) "visual-regression fixtures" traces to implementation-readiness-report
+#     -2026-07-22:352 and sprint-change-proposal-2026-07-23-round-3, NOT to any
+#     PRD NFR, UX-DR, or architecture AD. No screenshot tooling was ever
+#     installed (zero toHaveScreenshot/Percy/Chromatic in the repo); Story 1.6's
+#     dev log explicitly refused to add a runner under AR27 and shipped a
+#     deterministic state catalogue instead. Story 4.7 (wholly) and 3.12-AC2
+#     were the unpaid bill. CUT; the substantive rules (UX-DR31/32/34) are
+#     asserted in the consolidated Story 4.6 against that same catalogue.
+# (2) Story 4.9-AC1 still read "automated AND MANUAL accessibility checks" —
+#     residue of the manual-a11y descope below, contradicting the amended
+#     EXPERIENCE.md:196. The 2026-08-09 NVDA change fixed the root spec line but
+#     did not sweep epics.md. Struck. Every other keyboard/screen-reader AC in
+#     Epics 2-5 was checked individually and is outcome-level, already satisfied
+#     by the Epic 1 automated suites — wording softened, no work added.
+#
+# CUT OUTRIGHT: Story 4.7 (cross-workflow visual regression); old 5.4 (12 alert
+# classes + runbook contracts); old 5.9 (expand-migrate-contract, N/N-1); old
+# 5.13 (hosted recovery, dependencies cut). AD-24 marked DEFERRED in the
+# architecture spine with a revisit trigger rather than silently orphaned;
+# alerting and the restore drill added to the spine's Deferred table.
+# MERGED: 4.6+4.7+4.8+4.9 -> one Story 4.6 (automated proof only); old
+# 5.11+5.12 -> Story 6.4; old 5.3 folded into 5.4/3.9; old 5.8-AC1 + 5.10 -> 6.5.
+# SIMPLIFIED: 2.8 (dropped filter-restoration and the zoom/reduced-motion
+# matrix, KEPT the model-generated-URL and non-disclosure invariants); 3.7
+# (cut AC4 phone/tablet triage); 3.12 (cut AC2, refocused on reconnect +
+# evidence targeting); 4.5-AC3 restated off S3 onto the local evidence adapter,
+# removing an accidental Epic 4 -> Epic 5 dependency.
+# NEW: 5.3 one-command reproducible run (its local image digest now satisfies
+# NFR27's image binding, so no release evidence depends on AWS) and 5.4
+# portfolio walkthrough — a real gap: 54 stories produced no artifact a reader
+# could evaluate in five minutes.
+# RELEASE GATE: re-anchored from "after old 5.11-5.13" (i.e. after AWS) to
+# Gate B/Gate C rows. All six original thresholds are locally measurable; only
+# backup/restore and rollback moved to Gate C. Kept as a checklist section, NOT
+# promoted to a story — that would have re-litigated the round-2/round-3
+# decision that release evaluation is a DoD, not an epic. Recorded caveat: the
+# 50-case golden-dataset floor assumed 13 Epic 5 contributors and must be
+# re-verified when Epic 2's harness lands; lower it with rationale if it does
+# not hold rather than padding the dataset.
+# NOT WEAKENED: every agent invariant (grounding, safe tool-use, approval
+# fail-closed, idempotency, recovery, injection refusal, authority partition)
+# and all four NFR35 thresholds are untouched. AD-26 already scoped NFR35 to CI,
+# never the hosted topology, so the split costs no performance coverage.
+
 # NOTE (2026-08-09, correct-course): Manual NVDA/screen-reader verification
 # descoped from Gate A via bmad-correct-course — a deliberate, recorded
 # product decision, not a silent weakening. Rationale: ShiftMind is an AI
@@ -250,25 +302,22 @@ development_status:
   4-3-promote-the-baseline-atomically-with-audit: backlog
   4-4-inspect-complete-decision-provenance: backlog
   4-5-prove-approval-and-audit-invariants: backlog
-  4-6-prove-approval-journey-accessibility: backlog
-  4-7-prove-cross-workflow-visual-consistency: backlog
-  4-8-prove-literal-state-semantics: backlog
-  4-9-prove-responsive-wcag-conformance: backlog
+  4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
   epic-4-retrospective: optional
 
-  # Epic 5: Reliable Hosted Planner Workspace
+  # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)
   epic-5: backlog
-  5-1-operate-with-structured-logs-metrics-and-correlation: backlog
-  5-2-prevent-telemetry-content-and-secret-leaks: backlog
-  5-3-preserve-operation-across-telemetry-failure-and-document-retention: backlog
-  5-4-alert-operators-with-tested-runbooks: backlog
-  5-5-provision-aws-edge-identity-and-network-boundaries: backlog
-  5-6-provision-aws-data-and-least-privilege-runtime: backlog
-  5-7-deploy-immutable-api-worker-and-web-releases: backlog
-  5-8-demonstrate-backup-and-restore: backlog
-  5-9-roll-out-compatible-mixed-versions: backlog
-  5-10-prove-rollback: backlog
-  5-11-prove-hosted-security-and-authority: backlog
-  5-12-prove-hosted-scenario-data-parity-and-immutability: backlog
-  5-13-prove-hosted-recovery-and-continuity: backlog
+  5-1-instrument-agent-runs-for-latency-budget-and-cost: backlog
+  5-2-prevent-content-and-secret-leaks: backlog
+  5-3-run-shiftmind-reproducibly-from-one-command: backlog
+  5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
+
+  # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
+  epic-6: backlog
+  6-1-provision-aws-edge-identity-and-network-boundaries: backlog
+  6-2-provision-aws-data-and-least-privilege-runtime: backlog
+  6-3-deploy-immutable-api-worker-and-web-releases: backlog
+  6-4-prove-hosted-invariants-parity-and-mutation-denial: backlog
+  6-5-provide-backups-and-a-tested-rollback-path: backlog
+  epic-6-retrospective: optional
