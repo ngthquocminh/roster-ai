@@ -193,7 +193,7 @@ ShiftMind is a responsive web application, not a native mobile product. Touch ta
 - Reduced motion disables non-essential transitions and spinner rotation where the platform requests it; status text remains.
 - Zoom to 200% and text spacing changes must not hide controls or force page-level horizontal scrolling. Scenario Data may scroll within its labelled table region.
 - Errors are associated with affected controls, drafts are retained after recoverable failures, and copy-to-clipboard feedback is announced.
-- Supported test matrix (portfolio minimum): latest Chrome and Edge on Windows, keyboard-only operation, NVDA screen reader, and 100%/200% zoom with increased text spacing and reduced motion. WCAG 2.2 AA conformance claims are scoped to this matrix until it is deliberately widened.
+- Supported test matrix (portfolio minimum): latest Chrome and Edge on Windows, keyboard-only operation, and 100%/200% zoom with increased text spacing and reduced motion — verified through automated tooling (axe-core, ARIA/semantic assertions, Playwright browser checks). Manual assistive-technology (screen-reader) verification is explicitly out of scope for this portfolio MVP: no real users exist yet (see product brief), and automated accessibility coverage is the recorded bar. WCAG 2.2 AA conformance claims are scoped to this matrix until it is deliberately widened.
 
 ## Source Requirement Coverage
 

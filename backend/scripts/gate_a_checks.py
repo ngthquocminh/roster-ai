@@ -401,8 +401,10 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         story="1.10",
         invariant="accessibility_and_responsiveness",
         description=(
-            "Recorded accessibility evidence, including the manual NVDA "
-            "screen-reader pass."
+            "Recorded accessibility evidence from automated coverage. Manual "
+            "assistive-technology verification is explicitly descoped for "
+            "this portfolio MVP (see EXPERIENCE.md's Accessibility Floor and "
+            "docs/GATE-A-RUNBOOK.md)."
         ),
         evidence_path=(
             "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json"

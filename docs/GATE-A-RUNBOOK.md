@@ -1,8 +1,7 @@
 # Gate A Runbook
 
 Operational procedures for the Gate A foundation: the one-way brownfield
-cutover, the legacy-route live flag, the manual screen-reader pass, and
-regenerating the readiness report.
+cutover, the legacy-route live flag, and regenerating the readiness report.
 
 Gate A is the AR28 boundary. Epic 2 (AgentRuntime and agent tools) may not
 begin until `evidence/story-1.11/gate-a-readiness-report.json` records
@@ -10,6 +9,13 @@ begin until `evidence/story-1.11/gate-a-readiness-report.json` records
 
 See also [`EVIDENCE-CONVENTION.md`](EVIDENCE-CONVENTION.md) for how every
 evidence file must be produced.
+
+**Manual assistive-technology (screen-reader) verification is out of scope**
+for this portfolio MVP — a deliberate, recorded descope decision (no real
+users exist yet; see the product brief and `EXPERIENCE.md`'s Accessibility
+Floor). Accessibility is proven by the automated `accessibility_component_layer`
+and `accessibility_browser_layer` checks below; there is no manual pass in
+this runbook.
 
 ---
 
@@ -135,94 +141,7 @@ pass. This is an honest "not yet applicable", not a pass.
 
 ---
 
-## 3. The manual NVDA screen-reader pass
-
-Automated tooling covers roughly a third of WCAG issues. The manual pass is the
-one check the automated suite cannot substitute for.
-
-> **Never infer this pass from axe output or from reading the source.** If
-> speech output cannot be genuinely observed, record `not executed` with the
-> reason and the date.
-
-### Setup
-
-1. Install [NVDA](https://www.nvaccess.org) (free). The support matrix names
-   NVDA on Windows; Narrator or JAWS is a spec change, not a substitution.
-2. Start NVDA, then open **Speech Viewer**: `Insert+N` → Tools → Speech Viewer.
-   Every utterance renders as readable text, which is what makes the result
-   observable and recordable rather than a claim.
-3. Optionally start NVDA with `--log-level=DEBUG` for a secondary record at
-   `%TEMP%\nvda.log`.
-
-### Opening the Gate A surface
-
-A plain `npm run preview` cannot be signed in by hand: the OIDC issuer is a
-non-routable fake (`http://shiftmind.test/oidc`) and sessions live in the API
-process rather than in PostgreSQL. Use the manual harness, which serves the
-production build and supplies the same deterministic API stubs the automated
-accessibility layer uses:
-
-**Run this from a native Windows shell — PowerShell, cmd, or Git Bash for
-Windows. Not WSL.** NVDA is a Windows application and can only read a Windows
-browser process; a browser launched from WSL is a Linux process that NVDA
-cannot see at all.
-
-PowerShell (the env assignment persists for the session, so set it once and run
-both browsers):
-
-```powershell
-cd frontend
-$env:NVDA_MANUAL = "1"
-
-npx playwright test e2e/manual-nvda.spec.ts --project=chromium --headed
-npx playwright test e2e/manual-nvda.spec.ts --project=msedge --headed
-```
-
-Git Bash:
-
-```bash
-cd frontend
-
-NVDA_MANUAL=1 npx playwright test e2e/manual-nvda.spec.ts \
-  --project=chromium --headed
-NVDA_MANUAL=1 npx playwright test e2e/manual-nvda.spec.ts \
-  --project=msedge --headed
-```
-
-cmd: `set NVDA_MANUAL=1 && npx playwright test e2e/manual-nvda.spec.ts --project=chromium --headed`
-
-It builds, serves at `http://localhost:4173`, opens a real browser window and
-parks. Drive it by keyboard; press **Resume** in the Playwright Inspector to
-close. Without `NVDA_MANUAL` the file registers no test at all, so it never
-appears in `npm run test:e2e` — not even as a skip.
-
-### Recording the result
-
-Fill in the observed-utterance column for **every** row of
-[`ACCESSIBILITY-NVDA-CHECKLIST.md`](ACCESSIBILITY-NVDA-CHECKLIST.md), in both
-Chrome and Edge:
-
-| Row | What to do |
-|---|---|
-| Heading announcement on route change | Open a catalogue scenario, then activate Scenario Data |
-| Table caption + column-header association | Enter each tabular group; navigate caption → data cells |
-| Sort-state change | Focus a sortable header, activate twice |
-| Row position after page change | Activate Next on a multi-page group |
-| Identifier copy | Activate a Copy control |
-| Evidence-reveal explanation | Follow an evidence link targeting a hidden field |
-| Disabled Results explanation | Tab through the workspace tabs to Results |
-
-Scope is Gate A only: the fixture catalogue, the workspace shell and Scenario
-Data. Chat, Runs and Results are route placeholders owned by Stories 4.6–4.9.
-
-**Expect real findings.** `ScenarioWorkspace.tsx:22-30` documents a prior bug
-where two focus calls interrupted a screen reader mid-announcement — exactly
-the class of defect only this pass detects. A finding is an honest result, not
-a failure; fix it if it is in Gate A scope and record it.
-
----
-
-## 4. Regenerating the readiness report
+## 3. Regenerating the readiness report
 
 The ordering is the whole point — see
 [`EVIDENCE-CONVENTION.md`](EVIDENCE-CONVENTION.md).
@@ -272,11 +191,11 @@ report on every machine but the one that generated it. The report also records
 each run's own start timestamp and blocks if it predates the commit being bound,
 so a stale XML left lying in the directory cannot be read as a fresh result.
 
-## 5. Regenerating the Story 1.4/1.5/1.9/1.10 evidence
+## 4. Regenerating the Story 1.4/1.5/1.9/1.10 evidence
 
-Separate script, same ordering rule. Use it whenever those files need rebinding
-— after the NVDA pass lands, for instance, which changes Story 1.10's recorded
-result.
+Separate script, same ordering rule. Use it whenever those files need
+rebinding — after a re-measurement changes one of their recorded results, for
+instance.
 
 ```bash
 # 0. Commit the code. The tree must be clean.

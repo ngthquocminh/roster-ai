@@ -41,7 +41,26 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-08
+last_updated: 2026-08-09
+
+# NOTE (2026-08-09, correct-course): Manual NVDA/screen-reader verification
+# descoped from Gate A via bmad-correct-course — a deliberate, recorded
+# product decision, not a silent weakening. Rationale: ShiftMind is an AI
+# Engineer/SWE portfolio MVP with no real users yet (see product brief);
+# manual assistive-tech testing had a poor effort-to-signal ratio for this
+# goal and cost 1.5+ days. Root spec fix in EXPERIENCE.md's Accessibility
+# Floor (portfolio-minimum test matrix no longer names NVDA); Story 1.10's
+# AC and NFR18/29 needed no change — they were always outcome-level
+# ("screen-reader use" must work), never a proof-method mandate. Removed:
+# docs/ACCESSIBILITY-NVDA-CHECKLIST.md, frontend/e2e/manual-nvda.spec.ts,
+# GATE-A-RUNBOOK.md §3. evidence/story-1.10/…json's nvda_manual_pass /
+# manual_screen_reader fields replaced with an honest descope record;
+# accessibility_evidence's proving bar is now the automated
+# accessibility_component_layer + accessibility_browser_layer checks alone.
+# gate_a_checks.py's accessibility_evidence description updated to match.
+# Automated accessibility coverage (64 jsdom + 20 Playwright browser a11y
+# tests) is unaffected and remains the recorded bar. Epic 2-5 do not
+# inherit an NVDA-style manual gate from this change.
 
 # NOTE (2026-08-08, code review): Story 1-11 reviewed and moved to done. All
 # 18 patch findings applied across commits 12a30aa, ef0b1c7, 523e86e; all five

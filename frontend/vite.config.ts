@@ -28,11 +28,6 @@ export default defineConfig({
   // cookie never rides along — so every authenticated surface, which since
   // Epic 1 is all of Scenario Data, silently returns nothing. The proxy makes
   // the documented workflow actually work.
-  //
-  // It is NOT what the Story 1.11 manual NVDA pass uses: that runs through
-  // frontend/e2e/manual-nvda.spec.ts with `installApiStubs`, because the OIDC
-  // issuer is a non-routable fake and no browser can be signed in by hand
-  // regardless of proxying. See docs/GATE-A-RUNBOOK.md § 3.
   preview: {
     proxy: {
       '/api': {
