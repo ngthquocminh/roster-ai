@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-10
+last_updated: 2026-08-11
 
 # NOTE (2026-08-10): Story 2-3 created and moved to ready-for-dev. It is the FIRST
 # planner-visible Epic 2 feature and the FIRST story in the repo that writes to
@@ -432,7 +432,7 @@ development_status:
   epic-2: in-progress
   2-1-establish-the-owned-agent-runtime-boundary: done
   2-2-establish-the-deterministic-evaluation-harness: done
-  2-3-create-and-revisit-durable-conversations: review
+  2-3-create-and-revisit-durable-conversations: done
   2-4-replay-conversation-events-live: backlog
   2-5-inspect-scenario-facts-through-a-governed-capability: backlog
   2-6-add-and-remove-a-governed-capability-module: backlog

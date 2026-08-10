@@ -4,7 +4,7 @@ baseline_commit: 8c21de0bfc680920359f91740d13d3eb36776ff0
 
 # Story 2.3: Create and Revisit Durable Conversations
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -380,6 +380,15 @@ GPT-5 Codex
 - The tracked `scenario_catalogue` SQLAlchemy leak remains open by design. No agent execution, SSE, idempotency keys, app-wide correlation middleware, or reserved activity payload shapes were added; forbidden seams retain a zero-line diff.
 - Gate A was generated from clean-tree JUnit measurements and remains `gate_a_passed: true`; evidence commit: `742370d`.
 
+**Code review follow-up (2026-08-11).** All 27 patch findings applied in `ab78996`; Gate A rebound on a clean tree in `02b468e`, still `gate_a_passed: true`. Final measurement: backend **545 passed / 7 deselected**; frontend **54 files / 307 tests**; Playwright **46 passed**; `alembic check` zero diff after a full downgrade → upgrade round trip.
+
+- The version pin was the substantive defect. `create()` resolved the version itself by `imported_at DESC` while `get_scenario_context` resolves by version ordinal — two different rules, so the pinned version could disagree with the one the planner was shown *without any new import*. The client now sends `scenario_version_id` and the server validates it; `ScenarioContextOut` gained the field so it can. This touches a Gate A read model, which is why Gate A was re-measured rather than assumed.
+- `PersistedEventV1` was dead code — the write path inserted an untyped dict, the read path rehydrated one. Both sides now go through the envelope, which also gave the timeline its `sequence` without widening `ActivityItemV1` with a field AD-21 assigns to the event.
+- The `after_message` seam is gone from the port, use case and adapter. Atomicity is now proven by monkeypatching a private helper and letting `engine.begin()` roll back exactly as `get_site_context` does, with all four tables asserted; a separate test drives `uq_persisted_event_stream_sequence` directly, since the advisory-locked path could never reach it.
+- Migration `a4f92d7c8e31` was **edited in place**, not superseded, because the story is unmerged. Any checkout holding the previous revision must `alembic downgrade 5e2a4c9d1f70 && alembic upgrade head`.
+- One review finding was deferred: UX-DR35's Send/Run/Approve visual discontinuity, which cannot be expressed while Chat ships no Run or Approve control. Recorded in `deferred-work.md` and owned by the first story to ship one.
+- The `scenario_catalogue` SQLAlchemy leak remains open by design and is now allow-listed as a greppable data entry rather than docstring prose, with a guard test that fails if the leak is fixed without closing the ledger item.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/2-3-create-and-revisit-durable-conversations.md`
@@ -402,5 +411,6 @@ GPT-5 Codex
 
 | Date | Change |
 |---|---|
+| 2026-08-11 | Code review run (three layers). 27 patch findings applied in `ab78996`, Gate A rebound in `02b468e`, one finding deferred. Story moved to done. |
 | 2026-08-10 | Implemented durable conversations end to end and moved the story to review; all regression, migration, and Gate A gates are green. |
 | 2026-08-10 | Story created. Four creation-time decisions recorded: conversation routes mount at `/api/v1/conversations` rather than under the GET-only `/api/v1/scenarios` Gate A surface; this story accepts and persists a turn but does not execute the agent; `ActivityItemV1`/`PersistedEventV1` contracts and their write/read sides are owned here while Story 2.4 owns the SSE transport; and no idempotency key is built, because AD-8 does not bind FR-4. |
