@@ -43,6 +43,52 @@
 generated: 2026-07-24
 last_updated: 2026-08-10
 
+# NOTE (2026-08-10): Story 2-2 created and moved to ready-for-dev. Second Epic 2
+# enabler, ships no planner-visible feature: it builds the MACHINERY every later
+# evaluation-bearing story (2.9, 3.10-3.12, 4.5-4.6, 6.4) runs its own cases
+# through — case schema, data-driven deterministic-double runner over the real
+# Story 2.1 `AgentRuntime` seam, ONE evaluator (tool routing) plus the Protocol
+# extension point, an NFR27-bound report generator, and a handful of
+# demonstration cases. It fills AR26's `backend/evals/` structural-seed slot,
+# which Story 2.1 deliberately left unscaffolded for this story to own.
+#
+# ONE REAL DESIGN GAP IS FLAGGED IN THE STORY RATHER THAN LEFT TO BE DISCOVERED:
+# `evidence_binding.resolve_bindings()` derives BOTH the NFR27 `dataset` and
+# `scenario` bindings from the same Gate A `default_fixtures()` list, so all five
+# existing evidence files carry near-identical strings for two bindings NFR27
+# lists separately. That was correct for Gate A (the thing measured and the
+# scenario fixture were the same set) and is NOT correct for an eval report,
+# where `dataset` must describe this story's own golden case set and `scenario`
+# must describe which Gate A fixture a case actually touched — which for the
+# demonstration-tool cases is NONE. Task 5 requires the dev to resolve it and
+# record the rationale, with backward compatibility for every existing Gate A
+# call site as a hard constraint. `resolve_bindings(fixtures=...)` already
+# accepts an override, but passing a synthetic entry there naively still aliases
+# the two, so the override alone does not close the gap.
+#
+# TWO SCOPE FENCES, because this story sits next to a threshold it must not
+# chase: (1) NFR28's 50-case / >=4-per-capability / >=10-consequential floor is
+# an AGGREGATE measured at Gate B from every proof story's real contribution —
+# epics.md's own dataset-threshold caveat says re-verify it, never pad. Task 6
+# and 7 forbid padding the demonstration cases toward it, and re-verification is
+# named as future work for Story 2.9 / the Gate B report. (2) Only ONE evaluator
+# ships (tool routing). The grounding evaluator (NFR12) is Story 2.7's and the
+# refusal/injection evaluator is Story 2.9's; this story ships the `Evaluator`
+# Protocol they plug into, nothing more.
+#
+# Seed cases exercise `shiftmind_demonstration` — the only tool Epic 2 has
+# today — tagged `capability="demonstration"`, deliberately not a real capability
+# name. No fabricated `scheduling_inspect` cases before Story 2.5 builds it.
+# VERIFIED AT CREATION: no AD-5 risk-class literal exists anywhere under
+# `backend/` yet, so this story defines the five-value vocabulary as a DATASET
+# TAG that grants nothing; Story 2.5's registry may later lift it or define its
+# own authoritative type. Live coverage REUSES the existing `live` marker and
+# `test_gemini_provider.py`'s `_HAS_KEY` skipif shape — no second gating
+# mechanism — and AC1's "never authoritative on its own" is required to be true
+# of the data shape (a `run_source` discriminant), not just of a CI exclusion.
+# `backend/agent/**` and the Story 2.1 port/contracts must show a ZERO-LINE diff:
+# this story is a consumer of that seam, not a modifier.
+
 # NOTE (2026-08-09): Story 2-1 created and moved to ready-for-dev; epic-2 moved
 # to in-progress. It is the Epic 2 enabler and ships no planner-visible feature:
 # a spike that justifies the dependency, an owned `AgentRuntime` port, an adapter
@@ -319,7 +365,7 @@ development_status:
   # Epic 2: Grounded Conversational Investigation
   epic-2: in-progress
   2-1-establish-the-owned-agent-runtime-boundary: done
-  2-2-establish-the-deterministic-evaluation-harness: backlog
+  2-2-establish-the-deterministic-evaluation-harness: in-progress
   2-3-create-and-revisit-durable-conversations: backlog
   2-4-replay-conversation-events-live: backlog
   2-5-inspect-scenario-facts-through-a-governed-capability: backlog

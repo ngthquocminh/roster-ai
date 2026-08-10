@@ -1,3 +1,22 @@
+## BMAD workflows are an authorized entry point
+
+The BMAD story workflows — `/bmad-create-story`, `/bmad-dev-story`,
+`/bmad-code-review`, and the `bmad-*` skills they invoke — are authorized to
+create, edit, and delete repository files directly. This is a standing bypass of
+the **GSD Workflow Enforcement** section below, not a per-invocation one, and it
+satisfies that section's own "unless the user explicitly asks to bypass it"
+clause.
+
+Rationale: these workflows carry their own planning and execution artifacts —
+story files under `_bmad-output/implementation-artifacts/`, status tracking in
+`sprint-status.yaml`, and a Dev Agent Record plus File List inside each story —
+so the state-tracking concern GSD enforcement exists to protect is already met by
+a parallel mechanism. Routing them through `/gsd-quick` would produce duplicate,
+competing records of the same work.
+
+This bypass does **not** extend to ad-hoc direct edits outside a BMAD or GSD
+workflow; those still start through a GSD command.
+
 <!-- GSD:project-start source:PROJECT.md -->
 
 ## Project
