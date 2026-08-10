@@ -1,7 +1,12 @@
 """Executable architecture boundaries for the agent runtime seam (AC3).
 
-AD-1: domain and application code must not import FastAPI, PydanticAI,
-SQLAlchemy, Cognito, S3, Logfire, or concrete model providers.
+This module makes mechanical the slice of AD-1 that is this story's to enforce:
+domain and application code must not import the agent-runtime framework
+(PydanticAI, pydantic_graph) or its telemetry SDK (Logfire). AD-1's broader
+prohibition on FastAPI, SQLAlchemy, Cognito, S3, and concrete model providers
+is a pre-existing repo-wide invariant this story does not add a guard for —
+`FORBIDDEN_ROOT_MODULES` below intentionally covers only the agent-runtime
+seam's own dependencies.
 AD-19: framework messages, deferred calls, tool objects, checkpoints, and event
 types never become domain, persistence, browser, or audit contracts.
 

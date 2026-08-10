@@ -267,7 +267,11 @@ def _to_deferred_results(request: AgentTurnRequestV1) -> DeferredToolResults | N
         approvals[decision.tool_call_id] = (
             True
             if decision.approved
-            else ToolDenied(decision.denial_reason or "denied by the application")
+            else ToolDenied(
+                decision.denial_reason
+                if decision.denial_reason is not None
+                else "denied by the application"
+            )
         )
     return DeferredToolResults(approvals=approvals)
 
