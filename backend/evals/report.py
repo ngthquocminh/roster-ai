@@ -115,7 +115,13 @@ def build_evaluation_report(
             "Demonstrates the Story 2.2 evaluation machinery; it does not claim "
             "or pad toward NFR28's 50-case Gate B aggregate floor."
         ),
-        "release_gate_eligible": bool(authoritative) and passed == len(authoritative),
+        # This report type proves the harness machinery only. Gate B evaluates
+        # the later stories' aggregate dataset; two passing seed cases must not
+        # be promoted into a release claim.
+        "release_gate_eligible": False,
+        "release_gate_status": (
+            "demonstration only — NFR28 aggregate thresholds are not evaluated"
+        ),
         "metrics": {
             "authoritative_case_count": len(authoritative),
             "passed": passed,

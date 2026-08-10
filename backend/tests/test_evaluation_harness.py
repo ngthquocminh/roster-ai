@@ -293,7 +293,7 @@ def test_complete_report_is_accepted_by_repo_wide_evidence_audit(
             False,
         ),
     )
-    write_evaluation_report(
+    report = write_evaluation_report(
         output,
         evaluations=[evaluation],
         declared_bindings=_declared_bindings(),
@@ -302,4 +302,6 @@ def test_complete_report_is_accepted_by_repo_wide_evidence_audit(
     )
 
     assert output.exists()
+    assert report["release_gate_eligible"] is False
+    assert "50-case" in report["purpose"]
     assert audit_evidence_file(output, repo_root=repo_root) == ()
