@@ -13,10 +13,12 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Connection, Engine, create_engine as create_postgres_engine, text
 
 from adapters.postgres.identity import PostgresIdentitySessionStore
+from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
 from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from application.ports.identity import OidcProvider, create_provider as create_oidc_provider
+from application.ports.conversation import ConversationRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.session import IdentitySessionStore, ResolvedSession
@@ -74,6 +76,13 @@ _projection_reader: ScenarioProjectionReader = PostgresScenarioProjectionReader(
 def get_projection_reader() -> ScenarioProjectionReader:
     """Depends-overridable normalized scenario projection read port."""
     return _projection_reader
+
+
+_conversation_repository: ConversationRepository = PostgresConversationRepository()
+
+
+def get_conversation_repository() -> ConversationRepository:
+    return _conversation_repository
 
 
 @lru_cache(maxsize=8)

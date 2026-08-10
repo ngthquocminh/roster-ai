@@ -1,0 +1,2 @@
+import type { Conversation } from "@/api/conversations";
+export function ConversationList({ conversations, selectedId, onSelect }: { conversations: Conversation[]; selectedId: string; onSelect: (id: string) => void }) { return <nav aria-label="Conversations"><ul>{conversations.map((c, i) => <li key={c.id}><button type="button" aria-current={selectedId === c.id ? "page" : undefined} onClick={() => onSelect(c.id)}>Conversation {i + 1}</button></li>)}</ul></nav>; }

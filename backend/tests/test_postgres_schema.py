@@ -1,4 +1,4 @@
-"""Schema-level contracts for Story 1.1's bounded PostgreSQL aggregate slice."""
+"""Schema-level contracts for the governed PostgreSQL aggregate slices."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,6 +21,10 @@ EXPECTED_TABLES = {
     "membership",
     "auth.session_index",
     "auth.login_handshake",
+    "conversation",
+    "message",
+    "agent_run",
+    "persisted_event",
 }
 SITE_OWNED_TABLES = {
     "scenario",
@@ -28,6 +32,10 @@ SITE_OWNED_TABLES = {
     "fixture_lineage",
     "evidence_reference",
     "membership",
+    "conversation",
+    "message",
+    "agent_run",
+    "persisted_event",
 }
 
 

@@ -27,6 +27,7 @@ from api.problems import problem_response
 from api.routers import (
     auth,
     constraints,
+    conversations,
     fixtures,
     health,
     runs,
@@ -262,3 +263,4 @@ app.include_router(constraints.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(scenario_catalogue.router, prefix="/api/v1")
 app.include_router(scenario_projection.router, prefix="/api/v1")
+app.include_router(conversations.router, prefix="/api/v1")

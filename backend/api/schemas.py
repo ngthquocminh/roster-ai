@@ -88,6 +88,49 @@ class ProblemDetailsV1(BaseModel):
     code: str
 
 
+class ConversationCreateIn(BaseModel):
+    scenario_id: UUID
+
+
+class MessageCreateIn(BaseModel):
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class ConversationOut(BaseModel):
+    id: UUID
+    scenario_id: UUID
+    scenario_version_id: UUID
+    resource_version: int
+
+
+class ActivityItemOut(BaseModel):
+    schema_version: str
+    activity_id: UUID
+    activity_type: Literal["planner_message", "agent_response", "clarification", "draft", "run_progress", "comparison", "approval_request", "terminal_outcome"]
+    conversation_id: UUID
+    conversation_resource_version: int
+    scenario_id: UUID
+    scenario_version_id: UUID
+    occurred_at: datetime
+    message_id: UUID
+    text: str
+
+
+class AcceptedTurnOut(BaseModel):
+    activity: ActivityItemOut
+    resource_version: int
+    agent_run_status: str
+    sequence: str
+
+
+class TimelineOut(BaseModel):
+    conversation_id: UUID
+    resource_version: int
+    latest_agent_run_status: str | None
+    items: list[ActivityItemOut]
+    limit: int
+
+
 class AuthSessionOut(BaseModel):
     app_user_id: UUID
     site_id: UUID
