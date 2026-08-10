@@ -4,7 +4,7 @@ baseline_commit: 8c21de0bfc680920359f91740d13d3eb36776ff0
 
 # Story 2.3: Create and Revisit Durable Conversations
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -92,99 +92,99 @@ Double-submit is handled where it belongs for this slice: the composer disables 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Define the two owned contracts** (AC: #1, #2)
-  - [ ] `backend/application/contracts/activity.py` — `ActivityItemV1`. Required shape per AD-20: common activity ID, discriminant, aggregate refs/versions, occurred time; the `planner_message` variant adds message ID + text.
-  - [ ] Declare the discriminant as a closed `Literal` of **exactly** these eight, spelled as `snake_case`: `planner_message`, `agent_response`, `clarification`, `draft`, `run_progress`, `comparison`, `approval_request`, `terminal_outcome`. Implement the payload for `planner_message` only; the other seven are reserved names, not shipped shapes.
-  - [ ] `backend/application/contracts/persisted_event.py` — `PersistedEventV1`. Required shape per AD-21: `stream_id`, decimal `sequence`, `event_type`, `occurred_at`, `resource_version`, correlation IDs, and exactly one typed `ActivityItemV1` payload.
-  - [ ] Every contract carries `schema_version` (spine, *Normative contract minimums*). Frozen dataclasses, `V1` suffix — mirror `application/contracts/evidence_ref.py` and `agent_runtime.py`, which are the two established examples.
-  - [ ] **Acceptance boundary:** a contract test asserts the discriminant `Literal` has exactly eight members and that constructing `PersistedEventV1` without a payload is impossible.
+- [x] **Task 1: Define the two owned contracts** (AC: #1, #2)
+  - [x] `backend/application/contracts/activity.py` — `ActivityItemV1`. Required shape per AD-20: common activity ID, discriminant, aggregate refs/versions, occurred time; the `planner_message` variant adds message ID + text.
+  - [x] Declare the discriminant as a closed `Literal` of **exactly** these eight, spelled as `snake_case`: `planner_message`, `agent_response`, `clarification`, `draft`, `run_progress`, `comparison`, `approval_request`, `terminal_outcome`. Implement the payload for `planner_message` only; the other seven are reserved names, not shipped shapes.
+  - [x] `backend/application/contracts/persisted_event.py` — `PersistedEventV1`. Required shape per AD-21: `stream_id`, decimal `sequence`, `event_type`, `occurred_at`, `resource_version`, correlation IDs, and exactly one typed `ActivityItemV1` payload.
+  - [x] Every contract carries `schema_version` (spine, *Normative contract minimums*). Frozen dataclasses, `V1` suffix — mirror `application/contracts/evidence_ref.py` and `agent_runtime.py`, which are the two established examples.
+  - [x] **Acceptance boundary:** a contract test asserts the discriminant `Literal` has exactly eight members and that constructing `PersistedEventV1` without a payload is impossible.
 
-- [ ] **Task 2: The `sequence` is decimal, and it is serialized as a string** (AC: #1, #2)
-  - [ ] AD-21 says **decimal** `sequence`, not integer. Use PostgreSQL `NUMERIC` (SQLAlchemy `Numeric`, `asdecimal=True` → Python `Decimal`). **Do not use `bigint`** — AD-21 is normative and Story 2.4 builds `Last-Event-ID` replay directly on this column.
-  - [ ] **Serialize `sequence` as a JSON string in every API response.** A JSON number becomes an IEEE-754 double in the browser; AD-21's SSE ID format is `<stream_uuid>:<sequence>`, so a value that round-trips through a float has already broken Story 2.4 before it starts. This is the single most likely silent defect in this story.
-  - [ ] Allocate the sequence **inside** the accept-turn transaction, monotonically per stream, with a database `UNIQUE (stream_id, sequence)` constraint backing it. Do not allocate in Python from a prior `SELECT MAX(...)` read outside the transaction.
-  - [ ] `stream_id` for a conversation stream **is the conversation's own UUID**. Record this so Story 2.4 does not invent a second stream identifier.
-  - [ ] **Acceptance boundary:** a test asserts the serialized `sequence` is a JSON string, and a test asserts two concurrent accept-turns on one conversation cannot produce the same sequence (the unique constraint must be the thing that proves it).
+- [x] **Task 2: The `sequence` is decimal, and it is serialized as a string** (AC: #1, #2)
+  - [x] AD-21 says **decimal** `sequence`, not integer. Use PostgreSQL `NUMERIC` (SQLAlchemy `Numeric`, `asdecimal=True` → Python `Decimal`). **Do not use `bigint`** — AD-21 is normative and Story 2.4 builds `Last-Event-ID` replay directly on this column.
+  - [x] **Serialize `sequence` as a JSON string in every API response.** A JSON number becomes an IEEE-754 double in the browser; AD-21's SSE ID format is `<stream_uuid>:<sequence>`, so a value that round-trips through a float has already broken Story 2.4 before it starts. This is the single most likely silent defect in this story.
+  - [x] Allocate the sequence **inside** the accept-turn transaction, monotonically per stream, with a database `UNIQUE (stream_id, sequence)` constraint backing it. Do not allocate in Python from a prior `SELECT MAX(...)` read outside the transaction.
+  - [x] `stream_id` for a conversation stream **is the conversation's own UUID**. Record this so Story 2.4 does not invent a second stream identifier.
+  - [x] **Acceptance boundary:** a test asserts the serialized `sequence` is a JSON string, and a test asserts two concurrent accept-turns on one conversation cannot produce the same sequence (the unique constraint must be the thing that proves it).
 
-- [ ] **Task 3: The migration — the first governed write surface** (AC: #1)
-  - [ ] One Alembic revision with `down_revision = "5e2a4c9d1f70"` (current head; `alembic check` must show zero diff afterwards). Four tables: `conversation`, `message`, `agent_run`, `persisted_event`.
-  - [ ] Follow `5e2a4c9d1f70_add_seeded_site_identity.py` exactly for structure, and `d128d081ab48`'s loop for RLS. Every table: `site_id` column, `ENABLE` **and** `FORCE ROW LEVEL SECURITY`, plus a `<table>_site_isolation` policy with both `USING` and `WITH CHECK` on `site_id = NULLIF(current_setting('app.site_id', true), '')::uuid` (AD-23).
-  - [ ] Use the composite `(id, site_id)` unique-constraint + composite-FK pattern from `adapters/postgres/schema.py:87-88,119-131` so a cross-site foreign key is **structurally impossible**, not merely policy-prevented.
-  - [ ] `conversation` pins `scenario_id` **and** `scenario_version_id` at creation (AD-4/AD-9: the version a conversation reasons about must not drift), and carries `resource_version bigint NOT NULL DEFAULT 1` (spine: *mutable aggregates carry monotonic `bigint` versions*).
-  - [ ] `agent_run.status` gets a `CHECK` constraint over AD-7's **complete closed** vocabulary — `agent_queued`, `agent_running`, `approval_required`, `agent_completed`, `agent_timed_out`, `agent_cancelled`, `agent_failed` — even though this story only ever writes `agent_queued`. AD-7 is the only legal status graph; fixing it here stops a later story inventing a parallel vocabulary.
-  - [ ] **Grants: least privilege, this story's writes only.** `GRANT SELECT, INSERT` on all four tables to `shiftmind_runtime`; `GRANT UPDATE (resource_version)` on `conversation` alone (Task 4 bumps it); `REVOKE UPDATE, DELETE` everywhere else — mirroring `d128d081ab48`'s treatment of `scenario_version`. Epic 3 will need `UPDATE` on `agent_run` to advance the state machine; **it is that story's job to grant it**, not this one's to grant it early.
-  - [ ] Write a real `downgrade()` that reverses grants, policies, and tables in order — both existing migrations do, and `alembic check` is part of the gate.
-  - [ ] **Acceptance boundary:** `alembic upgrade head` then `downgrade` then `upgrade` succeeds against the Docker PostgreSQL 18 service, and `alembic check` reports zero diff.
+- [x] **Task 3: The migration — the first governed write surface** (AC: #1)
+  - [x] One Alembic revision with `down_revision = "5e2a4c9d1f70"` (current head; `alembic check` must show zero diff afterwards). Four tables: `conversation`, `message`, `agent_run`, `persisted_event`.
+  - [x] Follow `5e2a4c9d1f70_add_seeded_site_identity.py` exactly for structure, and `d128d081ab48`'s loop for RLS. Every table: `site_id` column, `ENABLE` **and** `FORCE ROW LEVEL SECURITY`, plus a `<table>_site_isolation` policy with both `USING` and `WITH CHECK` on `site_id = NULLIF(current_setting('app.site_id', true), '')::uuid` (AD-23).
+  - [x] Use the composite `(id, site_id)` unique-constraint + composite-FK pattern from `adapters/postgres/schema.py:87-88,119-131` so a cross-site foreign key is **structurally impossible**, not merely policy-prevented.
+  - [x] `conversation` pins `scenario_id` **and** `scenario_version_id` at creation (AD-4/AD-9: the version a conversation reasons about must not drift), and carries `resource_version bigint NOT NULL DEFAULT 1` (spine: *mutable aggregates carry monotonic `bigint` versions*).
+  - [x] `agent_run.status` gets a `CHECK` constraint over AD-7's **complete closed** vocabulary — `agent_queued`, `agent_running`, `approval_required`, `agent_completed`, `agent_timed_out`, `agent_cancelled`, `agent_failed` — even though this story only ever writes `agent_queued`. AD-7 is the only legal status graph; fixing it here stops a later story inventing a parallel vocabulary.
+  - [x] **Grants: least privilege, this story's writes only.** `GRANT SELECT, INSERT` on all four tables to `shiftmind_runtime`; `GRANT UPDATE (resource_version)` on `conversation` alone (Task 4 bumps it); `REVOKE UPDATE, DELETE` everywhere else — mirroring `d128d081ab48`'s treatment of `scenario_version`. Epic 3 will need `UPDATE` on `agent_run` to advance the state machine; **it is that story's job to grant it**, not this one's to grant it early.
+  - [x] Write a real `downgrade()` that reverses grants, policies, and tables in order — both existing migrations do, and `alembic check` is part of the gate.
+  - [x] **Acceptance boundary:** `alembic upgrade head` then `downgrade` then `upgrade` succeeds against the Docker PostgreSQL 18 service, and `alembic check` reports zero diff.
 
-- [ ] **Task 4: The accept-turn use case — one transaction, one bundle** (AC: #1)
-  - [ ] `backend/application/use_cases/accept_turn.py` (new package `backend/application/use_cases/`, per AR26's `application/  # use cases, policy, state machines, ports, DTOs`). **Do not add this to `backend/services/`** — that is the legacy seam AD-1 permits to remain but not to grow.
-  - [ ] The bundle is fixed by AD-22 and may not be widened: **message + agent-run + event**, committed together, plus the `conversation.resource_version` bump. Nothing else. No audit envelope, no evidence snapshot, no job row — those belong to their own owners and none is required by an AC here.
-  - [ ] Everything trusted comes from server state: `actor_id` and `site_id` from `ResolvedSession` (via `get_site_context`), `scenario_version_id` re-resolved from the conversation row. **Nothing authority-bearing is read from the request body** (AD-2, AD-15). The body carries the message text and, on create, a `scenario_id` — both of which are *inputs to be validated*, never authority.
-  - [ ] Correlation IDs: generate a server-side `request_id` (UUID) in the use case and persist it on the event alongside `conversation_id`, `agent_run_id`, `site_id`, `actor_id` (spine, *Correlation* row). **Do not build app-wide correlation middleware** — the repo has none, `api/problems.py` carries no correlation ID today, and closing that AD-13 gap globally is not this story's scope. Note it in completion notes.
-  - [ ] **Atomicity must be proven by a failure, not asserted by a comment.** Write a test that injects a failure *after* the message insert and *before* the event insert, and assert that zero rows from the bundle survive.
-  - [ ] **Acceptance boundary:** the injected-failure test leaves no partial bundle, and a successful accept-turn writes exactly one row to each of `message`, `agent_run`, `persisted_event` and bumps `conversation.resource_version` by one.
+- [x] **Task 4: The accept-turn use case — one transaction, one bundle** (AC: #1)
+  - [x] `backend/application/use_cases/accept_turn.py` (new package `backend/application/use_cases/`, per AR26's `application/  # use cases, policy, state machines, ports, DTOs`). **Do not add this to `backend/services/`** — that is the legacy seam AD-1 permits to remain but not to grow.
+  - [x] The bundle is fixed by AD-22 and may not be widened: **message + agent-run + event**, committed together, plus the `conversation.resource_version` bump. Nothing else. No audit envelope, no evidence snapshot, no job row — those belong to their own owners and none is required by an AC here.
+  - [x] Everything trusted comes from server state: `actor_id` and `site_id` from `ResolvedSession` (via `get_site_context`), `scenario_version_id` re-resolved from the conversation row. **Nothing authority-bearing is read from the request body** (AD-2, AD-15). The body carries the message text and, on create, a `scenario_id` — both of which are *inputs to be validated*, never authority.
+  - [x] Correlation IDs: generate a server-side `request_id` (UUID) in the use case and persist it on the event alongside `conversation_id`, `agent_run_id`, `site_id`, `actor_id` (spine, *Correlation* row). **Do not build app-wide correlation middleware** — the repo has none, `api/problems.py` carries no correlation ID today, and closing that AD-13 gap globally is not this story's scope. Note it in completion notes.
+  - [x] **Atomicity must be proven by a failure, not asserted by a comment.** Write a test that injects a failure *after* the message insert and *before* the event insert, and assert that zero rows from the bundle survive.
+  - [x] **Acceptance boundary:** the injected-failure test leaves no partial bundle, and a successful accept-turn writes exactly one row to each of `message`, `agent_run`, `persisted_event` and bumps `conversation.resource_version` by one.
 
-- [ ] **Task 5: The port and the PostgreSQL adapter** (AC: #1, #2)
-  - [ ] `backend/application/ports/conversation.py` — a `Protocol` plus frozen-dataclass DTOs.
-  - [ ] **Copy `application/ports/scenario_projection.py`, not `application/ports/scenario_catalogue.py`.** The projection port types its connection parameter as `connection: Any` (`scenario_projection.py:104`), keeping SQLAlchemy out of the application layer per AD-1. The older catalogue port does `from sqlalchemy import Connection` (`scenario_catalogue.py:9`) — a real, pre-existing AD-1 leak. **Do not copy it, and do not fix it here** (it is Gate A code and out of scope); Task 11 pins the new port against repeating it.
-  - [ ] `backend/adapters/postgres/conversation.py` — SQLAlchemy Core against the Task 3 tables, driven by the `Connection` yielded by `get_site_context`. That dependency already does `SET LOCAL ROLE shiftmind_runtime` and sets `app.site_id`; **do not open a second engine or connection** — the RLS context lives on that transaction and nowhere else.
-  - [ ] Timeline read: ordered by `sequence` ascending, returning `ActivityItemV1[]` derived from `persisted_event` rows, plus the conversation's `resource_version` and its latest agent-run status. Deterministic stable ordering, no `LIMIT`-less unbounded scan of an unbounded table — bound the window and say so in the response (AD-4's ordering discipline, UX-DR24's no-infinite-scroll rule).
-  - [ ] **Acceptance boundary:** a `@pytest.mark.postgres` test proves a Site B session cannot read or insert into a Site A conversation, and that the denial is indistinguishable from absence (AD-3's non-disclosure rule; the same shape as `test_scenario_projection.py`'s existing cross-site cases).
+- [x] **Task 5: The port and the PostgreSQL adapter** (AC: #1, #2)
+  - [x] `backend/application/ports/conversation.py` — a `Protocol` plus frozen-dataclass DTOs.
+  - [x] **Copy `application/ports/scenario_projection.py`, not `application/ports/scenario_catalogue.py`.** The projection port types its connection parameter as `connection: Any` (`scenario_projection.py:104`), keeping SQLAlchemy out of the application layer per AD-1. The older catalogue port does `from sqlalchemy import Connection` (`scenario_catalogue.py:9`) — a real, pre-existing AD-1 leak. **Do not copy it, and do not fix it here** (it is Gate A code and out of scope); Task 11 pins the new port against repeating it.
+  - [x] `backend/adapters/postgres/conversation.py` — SQLAlchemy Core against the Task 3 tables, driven by the `Connection` yielded by `get_site_context`. That dependency already does `SET LOCAL ROLE shiftmind_runtime` and sets `app.site_id`; **do not open a second engine or connection** — the RLS context lives on that transaction and nowhere else.
+  - [x] Timeline read: ordered by `sequence` ascending, returning `ActivityItemV1[]` derived from `persisted_event` rows, plus the conversation's `resource_version` and its latest agent-run status. Deterministic stable ordering, no `LIMIT`-less unbounded scan of an unbounded table — bound the window and say so in the response (AD-4's ordering discipline, UX-DR24's no-infinite-scroll rule).
+  - [x] **Acceptance boundary:** a `@pytest.mark.postgres` test proves a Site B session cannot read or insert into a Site A conversation, and that the denial is indistinguishable from absence (AD-3's non-disclosure rule; the same shape as `test_scenario_projection.py`'s existing cross-site cases).
 
-- [ ] **Task 6: The API router** (AC: #1, #2)
-  - [ ] `backend/api/routers/conversations.py`, mounted at `/api/v1` per **Decision 1**. Model the file on `api/routers/scenario_projection.py`: `APIRouter(prefix=…, tags=…)`, `Depends(get_site_context)`, `_PROBLEM_RESPONSES` declaring `ProblemDetailsV1` for the error statuses, explicit response models in `api/schemas.py`.
-  - [ ] The four endpoints from Decision 1. `POST` returns `201` with the created resource; the message command returns the accepted activity item and the conversation's new `resource_version`.
-  - [ ] Errors are RFC 7807 via `api/problems.py` (AD-13). A conversation belonging to another site returns the **same** shape as one that does not exist. Unknown `scenario_id` on create → `404`, not `422`.
-  - [ ] **CSRF and session already work — do not rebuild them.** `api/main.py:180-237`'s middleware authenticates every `/api/v1` path and enforces same-origin + `X-CSRF-Token` on `POST`. `CORSMiddleware` already lists `POST` (`api/main.py:253`). The frontend client already attaches the header (`frontend/src/api/client.ts:17-25`). Your job is to *use* this, and to prove it: a `POST` with no CSRF header must return `403 csrf_validation_failed`.
-  - [ ] **Acceptance boundary:** OpenAPI shows the four paths with the intended methods; the CSRF-less `POST` returns 403; and `test_gate_a_mutation_audit.py::test_gate_a_scenario_openapi_surface_is_get_only` is still green, unmodified.
+- [x] **Task 6: The API router** (AC: #1, #2)
+  - [x] `backend/api/routers/conversations.py`, mounted at `/api/v1` per **Decision 1**. Model the file on `api/routers/scenario_projection.py`: `APIRouter(prefix=…, tags=…)`, `Depends(get_site_context)`, `_PROBLEM_RESPONSES` declaring `ProblemDetailsV1` for the error statuses, explicit response models in `api/schemas.py`.
+  - [x] The four endpoints from Decision 1. `POST` returns `201` with the created resource; the message command returns the accepted activity item and the conversation's new `resource_version`.
+  - [x] Errors are RFC 7807 via `api/problems.py` (AD-13). A conversation belonging to another site returns the **same** shape as one that does not exist. Unknown `scenario_id` on create → `404`, not `422`.
+  - [x] **CSRF and session already work — do not rebuild them.** `api/main.py:180-237`'s middleware authenticates every `/api/v1` path and enforces same-origin + `X-CSRF-Token` on `POST`. `CORSMiddleware` already lists `POST` (`api/main.py:253`). The frontend client already attaches the header (`frontend/src/api/client.ts:17-25`). Your job is to *use* this, and to prove it: a `POST` with no CSRF header must return `403 csrf_validation_failed`.
+  - [x] **Acceptance boundary:** OpenAPI shows the four paths with the intended methods; the CSRF-less `POST` returns 403; and `test_gate_a_mutation_audit.py::test_gate_a_scenario_openapi_surface_is_get_only` is still green, unmodified.
 
-- [ ] **Task 7: Regenerate the client contract** (AC: #2, #3)
-  - [ ] `npm run codegen` from `frontend/` (runs `scripts/export_openapi.py` then `openapi-typescript`). **Never hand-edit `frontend/src/api/schema.d.ts`.**
-  - [ ] `frontend/src/api/conversations.ts` — thin typed wrappers over the single shared `client`, deriving every request/response type from `paths[…]`, exactly like `api/scenarioProjection.ts`. Throw `{ ...error, status: response.status }` on failure, matching the established shape that `lib/errors.ts:getErrorStatus` consumes.
-  - [ ] **Acceptance boundary:** `npm run typecheck` passes with zero hand-authored request/response interfaces in the new client module.
+- [x] **Task 7: Regenerate the client contract** (AC: #2, #3)
+  - [x] `npm run codegen` from `frontend/` (runs `scripts/export_openapi.py` then `openapi-typescript`). **Never hand-edit `frontend/src/api/schema.d.ts`.**
+  - [x] `frontend/src/api/conversations.ts` — thin typed wrappers over the single shared `client`, deriving every request/response type from `paths[…]`, exactly like `api/scenarioProjection.ts`. Throw `{ ...error, status: response.status }` on failure, matching the established shape that `lib/errors.ts:getErrorStatus` consumes.
+  - [x] **Acceptance boundary:** `npm run typecheck` passes with zero hand-authored request/response interfaces in the new client module.
 
-- [ ] **Task 8: Hooks and the timeline** (AC: #2)
-  - [ ] `frontend/src/hooks/useConversations.ts`, `useConversationTimeline.ts`, `useSendMessage.ts` — thin TanStack Query wrappers, no business logic, matching `useScenarioProjection.ts`.
-  - [ ] `useSendMessage` is the repo's **first mutation**. `onSuccess` → `queryClient.invalidateQueries({ queryKey: [...] })` for the timeline and conversation list. Query keys are cross-plan contracts; name them deliberately.
-  - [ ] `frontend/src/features/chat/` — `ChatView`, `ConversationList`, `ActivityTimeline`, `Composer`. Reuse the existing primitives rather than inventing new ones: `EmptyState`, `InlineAlert`, `StatusBadge`, `Skeleton`, and `ReconnectBanner` all exist in `components/primitives/` from Story 1.6 and were built for exactly these states.
-  - [ ] **Deduplicate by activity identity, not by array position** (UX-DR6, AC2). Key the rendered list on the activity ID; a re-fetch that returns an already-rendered activity must not produce a second card. Prove it with a test that feeds the same activity twice.
-  - [ ] Empty conversation renders EXPERIENCE.md's required copy shape: *"New conversation prompt with example scope, not fabricated history"* — no invented prior turns.
-  - [ ] **Acceptance boundary:** a test renders a timeline, re-delivers an identical activity item, and asserts exactly one visible card; a second test asserts reload reconstructs the same ordered activity IDs.
+- [x] **Task 8: Hooks and the timeline** (AC: #2)
+  - [x] `frontend/src/hooks/useConversations.ts`, `useConversationTimeline.ts`, `useSendMessage.ts` — thin TanStack Query wrappers, no business logic, matching `useScenarioProjection.ts`.
+  - [x] `useSendMessage` is the repo's **first mutation**. `onSuccess` → `queryClient.invalidateQueries({ queryKey: [...] })` for the timeline and conversation list. Query keys are cross-plan contracts; name them deliberately.
+  - [x] `frontend/src/features/chat/` — `ChatView`, `ConversationList`, `ActivityTimeline`, `Composer`. Reuse the existing primitives rather than inventing new ones: `EmptyState`, `InlineAlert`, `StatusBadge`, `Skeleton`, and `ReconnectBanner` all exist in `components/primitives/` from Story 1.6 and were built for exactly these states.
+  - [x] **Deduplicate by activity identity, not by array position** (UX-DR6, AC2). Key the rendered list on the activity ID; a re-fetch that returns an already-rendered activity must not produce a second card. Prove it with a test that feeds the same activity twice.
+  - [x] Empty conversation renders EXPERIENCE.md's required copy shape: *"New conversation prompt with example scope, not fabricated history"* — no invented prior turns.
+  - [x] **Acceptance boundary:** a test renders a timeline, re-delivers an identical activity item, and asserts exactly one visible card; a second test asserts reload reconstructs the same ordered activity IDs.
 
-- [ ] **Task 9: The composer** (AC: #3)
-  - [ ] Verbatim from EXPERIENCE.md's *Keyboard and focus* section: *"`Enter` inserts a new line; `Ctrl+Enter` / `Command+Enter` sends. The visible Send button is always available when sending is valid. Sending never triggers Run optimization or approval."* Handle **both** `ctrlKey` and `metaKey`.
-  - [ ] Multiline `<textarea>`, not an `<input>`. A plain `<form onSubmit>` around a textarea would submit on Enter — that is precisely the behavior AC3 forbids.
-  - [ ] **Recoverable failure retains the draft.** Clear the textarea on *success only* — never in the submit handler, never optimistically. `ConstraintInput.tsx`'s existing comment records this exact lesson from the legacy UI: clear on the success condition, not on HTTP 200.
-  - [ ] Disable Send while `mutation.isPending` (this is also Decision 4's double-submit answer).
-  - [ ] **UX-DR35: Send must be visually discontinuous from Run optimization and Approve.** No shared "AI action" button treatment spanning authority levels. This story ships only Send; do not add a disabled Run or Approve control "for later".
-  - [ ] **Acceptance boundary:** four tests — Enter inserts a newline and does not submit; Ctrl+Enter and Cmd+Enter each submit; the Send button submits; a rejected mutation leaves the draft text in the textarea.
+- [x] **Task 9: The composer** (AC: #3)
+  - [x] Verbatim from EXPERIENCE.md's *Keyboard and focus* section: *"`Enter` inserts a new line; `Ctrl+Enter` / `Command+Enter` sends. The visible Send button is always available when sending is valid. Sending never triggers Run optimization or approval."* Handle **both** `ctrlKey` and `metaKey`.
+  - [x] Multiline `<textarea>`, not an `<input>`. A plain `<form onSubmit>` around a textarea would submit on Enter — that is precisely the behavior AC3 forbids.
+  - [x] **Recoverable failure retains the draft.** Clear the textarea on *success only* — never in the submit handler, never optimistically. `ConstraintInput.tsx`'s existing comment records this exact lesson from the legacy UI: clear on the success condition, not on HTTP 200.
+  - [x] Disable Send while `mutation.isPending` (this is also Decision 4's double-submit answer).
+  - [x] **UX-DR35: Send must be visually discontinuous from Run optimization and Approve.** No shared "AI action" button treatment spanning authority levels. This story ships only Send; do not add a disabled Run or Approve control "for later".
+  - [x] **Acceptance boundary:** four tests — Enter inserts a newline and does not submit; Ctrl+Enter and Cmd+Enter each submit; the Send button submits; a rejected mutation leaves the draft text in the textarea.
 
-- [ ] **Task 10: Wire the route** (AC: #2, #3)
-  - [ ] Replace `frontend/src/routes/ScenarioChat.tsx`'s `WorkspaceTabPlaceholder` with the real `ChatView`. The route already exists as the workspace index route (`App.tsx`); `WorkspaceTabs.tsx` already links to it. **No routing change is needed** — do not restructure the route tree.
-  - [ ] Take `scenarioId` from `useParams` as it does today, and the pinned version context from the existing `ScenarioVersionContext` / `useScenarioContext` rather than re-fetching it.
-  - [ ] **Acceptance boundary:** the existing workspace and router tests stay green, and a route test deep-links to `/scenarios/:id` and renders Chat.
+- [x] **Task 10: Wire the route** (AC: #2, #3)
+  - [x] Replace `frontend/src/routes/ScenarioChat.tsx`'s `WorkspaceTabPlaceholder` with the real `ChatView`. The route already exists as the workspace index route (`App.tsx`); `WorkspaceTabs.tsx` already links to it. **No routing change is needed** — do not restructure the route tree.
+  - [x] Take `scenarioId` from `useParams` as it does today, and the pinned version context from the existing `ScenarioVersionContext` / `useScenarioContext` rather than re-fetching it.
+  - [x] **Acceptance boundary:** the existing workspace and router tests stay green, and a route test deep-links to `/scenarios/:id` and renders Chat.
 
-- [ ] **Task 11: Make the new boundary executable** (AC: #1)
-  - [ ] Add a **sibling** file in `backend/tests/architecture/` asserting the **new** application-layer modules — `application/contracts/activity.py`, `contracts/persisted_event.py`, `ports/conversation.py`, `use_cases/**` — import neither `sqlalchemy` nor `fastapi`. Do not bolt this onto `test_agent_runtime_boundaries.py`, whose scope is the agent seam.
-  - [ ] **Model it on `backend/tests/architecture/test_evaluation_boundaries.py`**, which Story 2.2 added to this same package. It is the current best example in the repo: a focused guard plus explicit self-tests that prove the guard fails on a violating input (`test_network_guard_actually_fails_on_a_violating_builder`, `test_direction_guard_actually_fails_on_a_reverse_import`). Copy that shape — it satisfies this task's red-then-green requirement by construction.
-  - [ ] Note that `test_evaluation_boundaries.py::test_application_and_domain_never_import_evals` already covers `backend/application/**` and will pick up the new `use_cases/` package automatically. Nothing under `application/` may import `evals`; no action needed beyond not doing it.
-  - [ ] Scope the new guard to those modules with an explicit, **documented** allow-list entry for the known `application/ports/scenario_catalogue.py` leak. A guard that lies about its own coverage is exactly the defect the Story 2.1 review fixed in this file's docstring (`deferred-work.md`, 2026-08-10) — state precisely what is and is not covered.
-  - [ ] In the allow-list entry's comment, cite `deferred-work.md`'s *"Deferred from: story-2-3 creation (2026-08-10)"* item, which tracks the leak, records the three fix tiers, and names deleting this entry as its definition of done. A suppression with no ticket behind it becomes permanent.
-  - [ ] **Acceptance boundary:** the guard **fails** when temporarily given a real `from sqlalchemy import Connection` in `ports/conversation.py`, and passes on the shipped tree. Demonstrate both — a guard nobody has seen go red is a guard nobody has tested.
+- [x] **Task 11: Make the new boundary executable** (AC: #1)
+  - [x] Add a **sibling** file in `backend/tests/architecture/` asserting the **new** application-layer modules — `application/contracts/activity.py`, `contracts/persisted_event.py`, `ports/conversation.py`, `use_cases/**` — import neither `sqlalchemy` nor `fastapi`. Do not bolt this onto `test_agent_runtime_boundaries.py`, whose scope is the agent seam.
+  - [x] **Model it on `backend/tests/architecture/test_evaluation_boundaries.py`**, which Story 2.2 added to this same package. It is the current best example in the repo: a focused guard plus explicit self-tests that prove the guard fails on a violating input (`test_network_guard_actually_fails_on_a_violating_builder`, `test_direction_guard_actually_fails_on_a_reverse_import`). Copy that shape — it satisfies this task's red-then-green requirement by construction.
+  - [x] Note that `test_evaluation_boundaries.py::test_application_and_domain_never_import_evals` already covers `backend/application/**` and will pick up the new `use_cases/` package automatically. Nothing under `application/` may import `evals`; no action needed beyond not doing it.
+  - [x] Scope the new guard to those modules with an explicit, **documented** allow-list entry for the known `application/ports/scenario_catalogue.py` leak. A guard that lies about its own coverage is exactly the defect the Story 2.1 review fixed in this file's docstring (`deferred-work.md`, 2026-08-10) — state precisely what is and is not covered.
+  - [x] In the allow-list entry's comment, cite `deferred-work.md`'s *"Deferred from: story-2-3 creation (2026-08-10)"* item, which tracks the leak, records the three fix tiers, and names deleting this entry as its definition of done. A suppression with no ticket behind it becomes permanent.
+  - [x] **Acceptance boundary:** the guard **fails** when temporarily given a real `from sqlalchemy import Connection` in `ports/conversation.py`, and passes on the shipped tree. Demonstrate both — a guard nobody has seen go red is a guard nobody has tested.
 
-- [ ] **Task 12: Full regression gate** (AC: #1, #2, #3)
-  - [ ] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker PostgreSQL 18 via `docker-compose.yml`); `alembic check` zero diff.
-  - [ ] **The exact alembic invocation, verified at `8c21de0` with Docker PostgreSQL up.** From the **repository root**:
+- [x] **Task 12: Full regression gate** (AC: #1, #2, #3)
+  - [x] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker PostgreSQL 18 via `docker-compose.yml`); `alembic check` zero diff.
+  - [x] **The exact alembic invocation, verified at `8c21de0` with Docker PostgreSQL up.** From the **repository root**:
     ```
     uv run --project backend alembic check     # → "No new upgrade operations detected."
     ```
     From `backend/` (pytest's working directory, and the natural place to stand) it fails with `FAILED: No 'script_location' key found in configuration.` — which reads exactly like a missing config and is **not**. `alembic.ini` is checked in at the repo root (Story 1.1, `3e9540c`), `script_location = %(here)s/backend/migrations`, and `backend/migrations/env.py:20-22` fills `sqlalchemy.url` from `default_settings().provisioning_database_url`, so no manual URL is needed.
-  - [ ] **Do not synthesize a temporary alembic config.** Story 2.2 did, on the basis of a `deferred-work.md` entry claiming the repository has no checked-in `alembic.ini`. That claim is false; the entry has been struck through and corrected in place with the measurement table above. You are the first story since to add a migration — get this right.
-  - [ ] Frontend: `npm run codegen`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`. Note `test:e2e` is now build-first (`npm run build && playwright test`, `frontend/package.json:13`) — Story 2.2 changed it, so a stale `dist/` no longer silently passes.
-  - [ ] **Re-run Gate A and report by name.** AR28 binds this story hard: it is the first to add a write path, and `gate_a_passed` must still read `true`. Regenerate `evidence/story-1.11/gate-a-readiness-report.json` per `docs/EVIDENCE-CONVENTION.md` — **commit code first, measure on a clean tree, generate through `backend/scripts/evidence_binding.py`, commit evidence separately.** Never hand-type it.
-  - [ ] Story 2.2 extended `resolve_bindings()` with keyword-only `dataset_files=` and `code_binding=` parameters, both defaulted — **the signature is backward compatible and the Gate A call path is unchanged.** This story needs neither parameter (it produces no evaluation report); call it exactly as the existing Gate A flow does.
-  - [ ] **Re-derive baselines at the start rather than trusting these.** Recorded at this story's `baseline_commit` (`8c21de0`, Story 2.2 `done`): backend **510 passed / 7 deselected**; postgres **27 passed**; live **7 skipped** (no API key); frontend **50 files / 287 tests**; e2e **46 passed**; alembic zero diff; `gate_a_passed: true`. These are one story fresher than the numbers Story 2.2 worked from — still re-derive on a clean tree before treating any delta as this story's regression.
-  - [ ] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, and Gate A still `true`.
+  - [x] **Do not synthesize a temporary alembic config.** Story 2.2 did, on the basis of a `deferred-work.md` entry claiming the repository has no checked-in `alembic.ini`. That claim is false; the entry has been struck through and corrected in place with the measurement table above. You are the first story since to add a migration — get this right.
+  - [x] Frontend: `npm run codegen`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`. Note `test:e2e` is now build-first (`npm run build && playwright test`, `frontend/package.json:13`) — Story 2.2 changed it, so a stale `dist/` no longer silently passes.
+  - [x] **Re-run Gate A and report by name.** AR28 binds this story hard: it is the first to add a write path, and `gate_a_passed` must still read `true`. Regenerate `evidence/story-1.11/gate-a-readiness-report.json` per `docs/EVIDENCE-CONVENTION.md` — **commit code first, measure on a clean tree, generate through `backend/scripts/evidence_binding.py`, commit evidence separately.** Never hand-type it.
+  - [x] Story 2.2 extended `resolve_bindings()` with keyword-only `dataset_files=` and `code_binding=` parameters, both defaulted — **the signature is backward compatible and the Gate A call path is unchanged.** This story needs neither parameter (it produces no evaluation report); call it exactly as the existing Gate A flow does.
+  - [x] **Re-derive baselines at the start rather than trusting these.** Recorded at this story's `baseline_commit` (`8c21de0`, Story 2.2 `done`): backend **510 passed / 7 deselected**; postgres **27 passed**; live **7 skipped** (no API key); frontend **50 files / 287 tests**; e2e **46 passed**; alembic zero diff; `gate_a_passed: true`. These are one story fresher than the numbers Story 2.2 worked from — still re-derive on a clean tree before treating any delta as this story's regression.
+  - [x] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, and Gate A still `true`.
 
 ## Dev Notes
 
@@ -323,16 +323,42 @@ const onSubmit = (event: React.FormEvent) => {
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 Codex
 
 ### Debug Log References
 
+- Re-derived baseline before implementation: backend 516 passed / 1 skipped / 7 deselected; frontend 50 files / 287 tests.
+- Final clean-tree measurement at implementation commit `b05f81f`: backend 523 passed / 7 deselected; frontend 52 files / 294 tests; Playwright 46 passed.
+
 ### Completion Notes List
 
+- Added four FORCE-RLS governed tables with composite site-bound foreign keys, decimal per-stream sequences, closed agent-run statuses, and least-privilege grants. Alembic downgrade → upgrade → check completed with zero diff.
+- Added atomic accept-turn persistence, bounded ordered timeline reads, server-owned correlation context, and cross-site absence-equivalent behavior. Concurrent turns produced unique sequences; injected failure left no partial bundle.
+- Added four `/api/v1/conversations` methods, generated typed clients, and Chat UI with stable-ID deduplication, literal queued status, command-key submission, in-flight disabling, and success-only draft clearing.
+- The tracked `scenario_catalogue` SQLAlchemy leak remains open by design. No agent execution, SSE, idempotency keys, app-wide correlation middleware, or reserved activity payload shapes were added; forbidden seams retain a zero-line diff.
+- Gate A was generated from clean-tree JUnit measurements and remains `gate_a_passed: true`; evidence commit: `742370d`.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/2-3-create-and-revisit-durable-conversations.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/adapters/postgres/conversation.py`, `backend/adapters/postgres/schema.py`
+- `backend/api/deps.py`, `backend/api/main.py`, `backend/api/routers/conversations.py`, `backend/api/schemas.py`
+- `backend/application/contracts/activity.py`, `backend/application/contracts/persisted_event.py`
+- `backend/application/ports/conversation.py`, `backend/application/use_cases/__init__.py`, `backend/application/use_cases/accept_turn.py`
+- `backend/migrations/versions/a4f92d7c8e31_add_durable_conversations.py`
+- `backend/tests/architecture/test_conversation_boundaries.py`, `backend/tests/test_conversation_contracts.py`, `backend/tests/test_conversations_postgres.py`
+- `backend/tests/test_evidence_binding.py`, `backend/tests/test_postgres_schema.py`
+- `evidence/story-1.11/gate-a-readiness-report.json`
+- `frontend/openapi.json`, `frontend/src/api/conversations.ts`, `frontend/src/api/schema.d.ts`
+- `frontend/src/features/chat/ActivityTimeline.test.tsx`, `frontend/src/features/chat/ActivityTimeline.tsx`, `frontend/src/features/chat/ChatView.tsx`
+- `frontend/src/features/chat/Composer.test.tsx`, `frontend/src/features/chat/Composer.tsx`, `frontend/src/features/chat/ConversationList.tsx`
+- `frontend/src/hooks/useConversationTimeline.ts`, `frontend/src/hooks/useConversations.ts`, `frontend/src/hooks/useSendMessage.ts`
+- `frontend/src/routes/ScenarioChat.tsx`
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-08-10 | Implemented durable conversations end to end and moved the story to review; all regression, migration, and Gate A gates are green. |
 | 2026-08-10 | Story created. Four creation-time decisions recorded: conversation routes mount at `/api/v1/conversations` rather than under the GET-only `/api/v1/scenarios` Gate A surface; this story accepts and persists a turn but does not execute the agent; `ActivityItemV1`/`PersistedEventV1` contracts and their write/read sides are owned here while Story 2.4 owns the SSE transport; and no idempotency key is built, because AD-8 does not bind FR-4. |
