@@ -11,11 +11,13 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    // Playwright spawns this via a shell already (cmd.exe on Windows, /bin/sh elsewhere) — an
-    // explicit "cmd /c" wrapper is not just redundant, it breaks the command on non-Windows hosts.
-    command: "npm run build && npm run preview -- --host 127.0.0.1",
-    url: "http://localhost:4173",
+    // Start Vite directly so Playwright can terminate the server process without leaving an
+    // npm/cmd.exe/Vite chain behind on Windows. The test:e2e script builds before this server is
+    // started, and the IPv4 URL avoids localhost's IPv6 probe delay when Vite binds IPv4.
+    command: "node node_modules/vite/bin/vite.js preview --host 127.0.0.1",
+    url: "http://127.0.0.1:4173",
     reuseExistingServer: false,
+    gracefulShutdown: { signal: "SIGINT", timeout: 5_000 },
     timeout: 120_000,
   },
   projects: [
