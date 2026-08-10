@@ -365,7 +365,7 @@ development_status:
   # Epic 2: Grounded Conversational Investigation
   epic-2: in-progress
   2-1-establish-the-owned-agent-runtime-boundary: done
-  2-2-establish-the-deterministic-evaluation-harness: in-progress
+  2-2-establish-the-deterministic-evaluation-harness: review
   2-3-create-and-revisit-durable-conversations: backlog
   2-4-replay-conversation-events-live: backlog
   2-5-inspect-scenario-facts-through-a-governed-capability: backlog

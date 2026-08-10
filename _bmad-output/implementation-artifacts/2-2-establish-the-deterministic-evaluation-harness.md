@@ -4,7 +4,7 @@ baseline_commit: 0091dcf364c557eea00c49da39423c1822ce3e49
 
 # Story 2.2: Establish the Deterministic Evaluation Harness
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -81,12 +81,12 @@ So that every epic proves its own behavior deterministically instead of deferrin
   - [x] Extend `backend/tests/architecture/test_agent_runtime_boundaries.py` (or add a sibling file in the same directory — your call, document which) asserting `backend/evals/**` contains no live network call by construction: `models.ALLOW_MODEL_REQUESTS = False` appears at module scope in every module under `backend/evals/` that constructs a PydanticAI model, and no module under `backend/domain/**` or `backend/application/**` imports `evals` (dependency direction: `evals` may import `agent`/`application`/`domain`; the reverse must fail).
   - [x] **Acceptance boundary:** the guard fails when temporarily given a violating case, and passes on the shipped tree — demonstrate both, per Story 2.1's established convention for this suite.
 
-- [ ] **Task 10: Full regression gate** (AC: #1, #2, #3)
-  - [ ] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker PostgreSQL 18 via `docker-compose.yml`); `uv run --frozen pytest -m live` (confirm it skips cleanly with no key present, and does not run by default); `alembic check` shows zero diff — this story adds no migration.
-  - [ ] Frontend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`. This story changes no frontend file; the suites must stay green regardless.
-  - [ ] **Re-run Gate A explicitly and report by name.** AR28's "no later gate may weaken an earlier gate's invariants" still binds every Epic 2 story: regenerate `evidence/story-1.11/gate-a-readiness-report.json` and confirm it still reads `gate_a_passed: true`.
-  - [ ] **Re-derive the baselines at the start rather than trusting these.** Story 2.1's own final change-log entry recorded 485/486 backend tests green (1 self-skip from a dirty-tree self-check, matching Story 1.11's documented pattern) at its `done` commit; re-derive the exact current numbers on a clean tree before treating any delta as this story's own regression.
-  - [ ] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, `pytest -m live` confirmed skippable without a key, and Gate A still `true`.
+- [x] **Task 10: Full regression gate** (AC: #1, #2, #3)
+  - [x] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker PostgreSQL 18 via `docker-compose.yml`); `uv run --frozen pytest -m live` (confirm it skips cleanly with no key present, and does not run by default); `alembic check` shows zero diff — this story adds no migration.
+  - [x] Frontend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`. This story changes no frontend file; the suites must stay green regardless.
+  - [x] **Re-run Gate A explicitly and report by name.** AR28's "no later gate may weaken an earlier gate's invariants" still binds every Epic 2 story: regenerate `evidence/story-1.11/gate-a-readiness-report.json` and confirm it still reads `gate_a_passed: true`.
+  - [x] **Re-derive the baselines at the start rather than trusting these.** Story 2.1's own final change-log entry recorded 485/486 backend tests green (1 self-skip from a dirty-tree self-check, matching Story 1.11's documented pattern) at its `done` commit; re-derive the exact current numbers on a clean tree before treating any delta as this story's own regression.
+  - [x] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, `pytest -m live` confirmed skippable without a key, and Gate A still `true`.
 
 ## Dev Notes
 
@@ -264,6 +264,17 @@ different identities for Story 2.2.
   remains untouched. It enforces module-scope model-request disablement and
   one-way `evals` dependencies; synthetic missing-disable and reverse-import
   cases prove red, while the shipped architecture suite passes 18/18.
+- Task 10: verified the Windows Playwright diagnosis and fixed the E2E web server
+  launcher to start Vite directly on IPv4, with SIGINT graceful shutdown and a
+  build-first `test:e2e` script. Backend: 510 passed / 7 deselected; PostgreSQL:
+  27 passed; live: 7 skipped; frontend: 50 files / 287 tests; E2E: 46 passed;
+  typecheck, lint, build, Alembic check, and evidence convention (42 tests) all
+  passed. Fresh two-project JUnit measurements were incorporated into the Gate A
+  XML, and `evidence/story-1.11/gate-a-readiness-report.json` was regenerated
+  with `gate_a_passed: true`.
+- The required Alembic check used a temporary runtime config because this
+  repository has no checked-in `alembic.ini`; it reported `No new upgrade
+  operations detected` and the temporary file was removed.
 
 ### File List
 
@@ -279,6 +290,9 @@ different identities for Story 2.2.
 - `backend/tests/architecture/test_evaluation_boundaries.py` (new)
 - `evidence/story-2.2/evaluation-harness-demonstration.json` (new, generated)
 - `backend/tests/test_evaluation_harness.py` (new)
+- `frontend/package.json` (modified, Windows-safe E2E build launcher)
+- `frontend/playwright.config.ts` (modified, direct Vite preview and IPv4 shutdown)
+- `evidence/story-1.11/gate-a-readiness-report.json` (regenerated, `gate_a_passed: true`)
 - `_bmad-output/implementation-artifacts/2-2-establish-the-deterministic-evaluation-harness.md` (modified)
 
 ## Change Log
@@ -286,3 +300,4 @@ different identities for Story 2.2.
 | Date | Change |
 |---|---|
 | 2026-08-10 | Story created. |
+| 2026-08-10 | Completed Task 10 regression gate; fixed Windows Playwright teardown, regenerated JUnit/Gate A evidence, and moved story to review. |
