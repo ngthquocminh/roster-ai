@@ -442,6 +442,25 @@ def resolve_bindings(
     return bindings
 
 
+def _dataset_file_digest(source: Path) -> str:
+    """sha256 of a golden case file with line endings normalized to LF.
+
+    Deliberately NOT :func:`file_digest`. That hashes raw working-tree bytes,
+    and under `core.autocrlf` the working tree holds CRLF on Windows while the
+    committed blob holds LF — so a raw-byte digest moves on checkout and pins
+    the platform rather than the dataset. Two engineers on different systems
+    must derive the same binding from the same committed cases.
+
+    Scoped to the evaluation dataset on purpose: `file_digest()`'s other call
+    sites hash generated artifacts (JUnit XML) and Gate A contract fixtures,
+    where raw bytes are the right identity and where changing the rule would
+    retroactively unbind Story 1.4/1.5/1.9/1.10/1.11 evidence.
+    """
+    text = Path(source).read_text(encoding="utf-8")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def _evaluation_dataset_binding(
     dataset_files: Iterable[Path], repo_root: Path
 ) -> dict[str, Any]:
@@ -486,7 +505,7 @@ def _evaluation_dataset_binding(
         files[key] = {
             "case_id": case_id,
             "case_version": document["case_version"],
-            "sha256": file_digest(source),
+            "sha256": _dataset_file_digest(source),
         }
 
     return {

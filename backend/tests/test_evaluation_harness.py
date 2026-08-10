@@ -336,6 +336,42 @@ def test_eval_dataset_binding_is_independent_from_scenario(tmp_path) -> None:
     assert bindings["dataset"] != bindings["scenario"]
 
 
+def _dataset_binding(dataset: Path, tmp_path: Path) -> dict:
+    versions = tmp_path / "versions"
+    if not versions.exists():
+        versions.mkdir()
+        (versions / "root.py").write_text(
+            'revision: str = "root0001"\ndown_revision = None\n', encoding="utf-8"
+        )
+    return resolve_bindings(
+        _declared_bindings(),
+        dataset_files=[dataset],
+        fixtures=[],
+        migrations_dir=versions,
+        code_binding={"git_commit": "unit-test", "working_tree_dirty": False},
+    )["dataset"]
+
+
+def test_dataset_digest_is_independent_of_line_endings(tmp_path) -> None:
+    """`core.autocrlf` must not be able to move a dataset binding.
+
+    The working tree holds CRLF on Windows while the committed blob holds LF,
+    so a raw-byte digest would change on checkout with no content change —
+    pinning the platform instead of the dataset.
+    """
+    body = json.dumps(_case_payload(), indent=2)
+    lf = tmp_path / "lf.json"
+    crlf = tmp_path / "crlf.json"
+    lf.write_bytes(body.encode("utf-8"))
+    crlf.write_bytes(body.replace("\n", "\r\n").encode("utf-8"))
+    assert lf.read_bytes() != crlf.read_bytes()
+
+    lf_digest = _dataset_binding(lf, tmp_path)["files"]["lf.json"]["sha256"]
+    crlf_digest = _dataset_binding(crlf, tmp_path)["files"]["crlf.json"]["sha256"]
+
+    assert lf_digest == crlf_digest
+
+
 def test_incomplete_report_binding_raises_and_writes_no_file(tmp_path) -> None:
     output = tmp_path / "must-not-exist.json"
     case = case_from_mapping(_case_payload())
