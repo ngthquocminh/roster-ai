@@ -183,6 +183,23 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
     assert {case.capability for case in cases} == {"demonstration"}
 
 
+def test_every_golden_file_validates_and_malformed_contribution_fails(tmp_path) -> None:
+    assert len(load_cases(GOLDEN_DIR)) == len(tuple(GOLDEN_DIR.rglob("*.json")))
+    malformed = tmp_path / "future-contribution.json"
+    malformed.write_text(
+        json.dumps(_case_payload(risk_class="dangerous")), encoding="utf-8"
+    )
+    with pytest.raises(ValueError, match="dangerous"):
+        load_cases(tmp_path)
+
+
+def test_readme_documents_exact_contribution_shape_and_owners() -> None:
+    readme = (GOLDEN_DIR.parent / "README.md").read_text(encoding="utf-8")
+    assert "expected tool, arguments, allow/refuse outcome, evidence IDs, and visible state" in readme
+    assert "Stories 2.9, 3.10–3.12, and 4.5–4.6" in readme
+    assert "secrets" in readme.lower() and "PII" in readme
+
+
 def test_live_verdict_is_non_authoritative_by_data_shape() -> None:
     verdict = ToolRoutingEvaluator(run_source="live").evaluate(
         case_from_mapping(_case_payload()),

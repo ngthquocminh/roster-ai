@@ -72,14 +72,14 @@ So that every epic proves its own behavior deterministically instead of deferrin
   - [x] **Do not write cases for capabilities that don't exist.** Real cases for Stories 2.5, 2.7, 2.9, etc. are those stories' job, per `epics.md`'s own unblocks list — this story proves the schema and pipeline accept a contribution, not that Epic 2's real capabilities are covered.
   - [x] **Acceptance boundary:** at least one `allow`-outcome case and one `consequential`/approval-required case, both tagged per Task 1's schema and passing under Task 4's deterministic suite.
 
-- [ ] **Task 8: Document the regression-case contribution workflow** (AC: #3)
-  - [ ] `backend/evals/README.md` — the case schema (Task 1), the tag vocabulary (capability is free text; risk class is exactly AD-5's five values), and the contribution workflow: a reviewed failure is sanitized (secrets/PII scrubbed — NFR4: "Secrets never appear in prompts, browser payloads, audit summaries, logs, traces, or evaluation fixtures") and added as a new version-controlled case file under `backend/evals/golden/`, carrying its own case-level version distinct from any contract `schema_version`. State explicitly that Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute their **own** cases to this **same** directory — this story does not write those cases, only the pipeline that accepts them.
-  - [ ] Add a lightweight schema-validation guard (can live in Task 4's test file or its own small test) that fails CI if any file under `backend/evals/golden/` does not validate against Task 1's schema — so a malformed future contribution fails loudly rather than being silently skipped by the loader.
-  - [ ] **Acceptance boundary:** README exists and states the exact fixture shape from `epics.md` Story 2.9's AC ("expected tool, arguments, allow/refuse outcome, evidence IDs, and visible state"); the validation guard demonstrably fails on a temporarily-injected malformed case file and passes on the shipped tree (same red-then-green discipline Story 2.1's Task 9 used).
+- [x] **Task 8: Document the regression-case contribution workflow** (AC: #3)
+  - [x] `backend/evals/README.md` — the case schema (Task 1), the tag vocabulary (capability is free text; risk class is exactly AD-5's five values), and the contribution workflow: a reviewed failure is sanitized (secrets/PII scrubbed — NFR4: "Secrets never appear in prompts, browser payloads, audit summaries, logs, traces, or evaluation fixtures") and added as a new version-controlled case file under `backend/evals/golden/`, carrying its own case-level version distinct from any contract `schema_version`. State explicitly that Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute their **own** cases to this **same** directory — this story does not write those cases, only the pipeline that accepts them.
+  - [x] Add a lightweight schema-validation guard (can live in Task 4's test file or its own small test) that fails CI if any file under `backend/evals/golden/` does not validate against Task 1's schema — so a malformed future contribution fails loudly rather than being silently skipped by the loader.
+  - [x] **Acceptance boundary:** README exists and states the exact fixture shape from `epics.md` Story 2.9's AC ("expected tool, arguments, allow/refuse outcome, evidence IDs, and visible state"); the validation guard demonstrably fails on a temporarily-injected malformed case file and passes on the shipped tree (same red-then-green discipline Story 2.1's Task 9 used).
 
-- [ ] **Task 9: Make the harness's own boundary executable** (AC: #1)
-  - [ ] Extend `backend/tests/architecture/test_agent_runtime_boundaries.py` (or add a sibling file in the same directory — your call, document which) asserting `backend/evals/**` contains no live network call by construction: `models.ALLOW_MODEL_REQUESTS = False` appears at module scope in every module under `backend/evals/` that constructs a PydanticAI model, and no module under `backend/domain/**` or `backend/application/**` imports `evals` (dependency direction: `evals` may import `agent`/`application`/`domain`; the reverse must fail).
-  - [ ] **Acceptance boundary:** the guard fails when temporarily given a violating case, and passes on the shipped tree — demonstrate both, per Story 2.1's established convention for this suite.
+- [x] **Task 9: Make the harness's own boundary executable** (AC: #1)
+  - [x] Extend `backend/tests/architecture/test_agent_runtime_boundaries.py` (or add a sibling file in the same directory — your call, document which) asserting `backend/evals/**` contains no live network call by construction: `models.ALLOW_MODEL_REQUESTS = False` appears at module scope in every module under `backend/evals/` that constructs a PydanticAI model, and no module under `backend/domain/**` or `backend/application/**` imports `evals` (dependency direction: `evals` may import `agent`/`application`/`domain`; the reverse must fail).
+  - [x] **Acceptance boundary:** the guard fails when temporarily given a violating case, and passes on the shipped tree — demonstrate both, per Story 2.1's established convention for this suite.
 
 - [ ] **Task 10: Full regression gate** (AC: #1, #2, #3)
   - [ ] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker PostgreSQL 18 via `docker-compose.yml`); `uv run --frozen pytest -m live` (confirm it skips cleanly with no key present, and does not run by default); `alembic check` shows zero diff — this story adds no migration.
@@ -256,6 +256,14 @@ different identities for Story 2.2.
   makes no claim on NFR28's 50-case Gate B aggregate. That floor must be
   re-verified later by Story 2.9 or the Gate B report from real contributions;
   this story did not attempt it and did not pad the dataset.
+- Task 8: documented one-file-per-case contributions, exact tag/schema shape,
+  NFR4 sanitization, future story ownership, and the no-padding rule. The
+  recursive validation guard was demonstrated red with a malformed temporary
+  contribution and green on every shipped case.
+- Task 9: added sibling `test_evaluation_boundaries.py` so Story 2.1's guard
+  remains untouched. It enforces module-scope model-request disablement and
+  one-way `evals` dependencies; synthetic missing-disable and reverse-import
+  cases prove red, while the shipped architecture suite passes 18/18.
 
 ### File List
 
@@ -267,6 +275,8 @@ different identities for Story 2.2.
 - `backend/scripts/evidence_binding.py` (modified)
 - `backend/evals/golden/demonstration/repeat-once.json` (new)
 - `backend/evals/golden/demonstration/repeat-with-approval.json` (new)
+- `backend/evals/README.md` (new)
+- `backend/tests/architecture/test_evaluation_boundaries.py` (new)
 - `evidence/story-2.2/evaluation-harness-demonstration.json` (new, generated)
 - `backend/tests/test_evaluation_harness.py` (new)
 - `_bmad-output/implementation-artifacts/2-2-establish-the-deterministic-evaluation-harness.md` (modified)
