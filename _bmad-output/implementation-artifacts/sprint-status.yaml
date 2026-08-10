@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-09
+last_updated: 2026-08-10
 
 # NOTE (2026-08-09): Story 2-1 created and moved to ready-for-dev; epic-2 moved
 # to in-progress. It is the Epic 2 enabler and ships no planner-visible feature:
@@ -318,7 +318,7 @@ development_status:
 
   # Epic 2: Grounded Conversational Investigation
   epic-2: in-progress
-  2-1-establish-the-owned-agent-runtime-boundary: ready-for-dev
+  2-1-establish-the-owned-agent-runtime-boundary: review
   2-2-establish-the-deterministic-evaluation-harness: backlog
   2-3-create-and-revisit-durable-conversations: backlog
   2-4-replay-conversation-events-live: backlog

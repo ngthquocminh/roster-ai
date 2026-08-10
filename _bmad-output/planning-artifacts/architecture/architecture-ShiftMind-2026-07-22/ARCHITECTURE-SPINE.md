@@ -268,7 +268,7 @@ Versions are the 2026-07-22 seed; existing rows are repository locks, while plan
 | Python | 3.12 | planned container target within repository constraint `>=3.10,<3.13` |
 | FastAPI | 0.138.1 | repository lock |
 | Pydantic | 2.13.4 | repository lock |
-| PydanticAI | 2.14.1 | planned seed; compatibility spike and lock required before agent slice |
+| PydanticAI | 2.27.0 | repository lock (`pydantic-ai-slim[google,openrouter]`); replaces the 2.14.1 seed under AD-19's same-evidence clause — spike verdict in `docs/AGENT-RUNTIME-DECISION.md` |
 | OR-Tools CP-SAT | 9.11.4210 | repository lock; validated machine-specific pin |
 | PostgreSQL / Amazon RDS | 18.4 | planned seed; current RDS-supported release |
 | SQLAlchemy | 2.0.51 | planned seed |

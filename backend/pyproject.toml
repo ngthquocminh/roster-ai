@@ -16,12 +16,33 @@ dependencies = [
     "psycopg[binary]==3.3.4",
     "alembic==1.18.5",
     "authlib==1.7.2",
+    # Agent runtime (Story 2.1). Exact pin, not a floor: AR27 requires each
+    # planned dependency be LOCKED at its implementation gate. Replaces AD-19's
+    # 2.14.1 seed under its own "a different V2 release may replace the seed
+    # only with the same evidence" clause — evidence is the seven-capability
+    # spike in backend/spikes/agent_runtime/, verdict in
+    # docs/AGENT-RUNTIME-DECISION.md.
+    #
+    # `-slim` with exactly two extras, never the `pydantic-ai` meta-package:
+    # that resolves to [anthropic,cli,evals,google,logfire,mcp,openai,retries,web]
+    # and would pull the Logfire SDK, a stack row owned by Story 5.1.
+    # The extras mirror the providers already shipped: google -> llm/gemini.py,
+    # openrouter -> llm/openrouter.py.
+    "pydantic-ai-slim[google,openrouter]==2.27.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
     "httpx",  # required by fastapi.testclient.TestClient
+    # TEST-ONLY (Story 2.1). `opentelemetry-api` arrives transitively under
+    # pydantic-ai-slim, but it is a no-op: without the SDK nothing is recorded,
+    # so the AD-12/AD-15 guard could only inspect the settings object — which
+    # proves nothing about what is actually emitted. The SDK supplies the
+    # in-memory span exporter that lets the suite assert on OBSERVED span
+    # attributes. Deliberately in the dev group, never [project].dependencies:
+    # it is not shipped at runtime, and it is not the Logfire SDK (Story 5.1).
+    "opentelemetry-sdk",
 ]
 
 [tool.pytest.ini_options]

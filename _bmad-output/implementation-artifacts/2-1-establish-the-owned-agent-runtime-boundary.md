@@ -4,7 +4,7 @@ baseline_commit: 7f268e042977222709c72cc06eee767f9d42b9fd
 
 # Story 2.1: Establish the Owned Agent Runtime Boundary
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -40,10 +40,10 @@ So that conversational behavior can evolve without making a model framework part
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Record the seed-replacement decision before touching any manifest** (AC: #1)
-  - [ ] Write `docs/AGENT-RUNTIME-DECISION.md` (flat, uppercase — `docs/` has no topic subdirectories; matches `docs/EVIDENCE-CONVENTION.md`, `docs/GATE-A-RUNBOOK.md`).
-  - [ ] It must state: AD-19 names 2.14.1 as a seed and permits replacement "only with the same evidence"; 2.27.0 is the release under test; the seven AC1 capabilities are the evidence bar; and the spike verdict will be appended to this file.
-  - [ ] Record the compatibility facts already verified at `7f268e0` so the spike confirms rather than discovers them:
+- [x] **Task 1: Record the seed-replacement decision before touching any manifest** (AC: #1)
+  - [x] Write `docs/AGENT-RUNTIME-DECISION.md` (flat, uppercase — `docs/` has no topic subdirectories; matches `docs/EVIDENCE-CONVENTION.md`, `docs/GATE-A-RUNBOOK.md`).
+  - [x] It must state: AD-19 names 2.14.1 as a seed and permits replacement "only with the same evidence"; 2.27.0 is the release under test; the seven AC1 capabilities are the evidence bar; and the spike verdict will be appended to this file.
+  - [x] Record the compatibility facts already verified at `7f268e0` so the spike confirms rather than discovers them:
 
     | Constraint (pydantic-ai-slim 2.27.0) | Repo today | Verdict |
     |---|---|---|
@@ -56,16 +56,16 @@ So that conversational behavior can evolve without making a model framework part
     | `opentelemetry-api>=1.28.0` | **absent** | new transitive dependency |
     | `exceptiongroup>=1.2.2` (`python_version < "3.11"`) | **absent** | new transitive dependency on the 3.10 venv |
 
-  - [ ] **Acceptance boundary:** the file exists and names 2.27.0 as the version under test, and `git diff` shows no change to `backend/pyproject.toml` or `backend/uv.lock`.
+  - [x] **Acceptance boundary:** the file exists and names 2.27.0 as the version under test, and `git diff` shows no change to `backend/pyproject.toml` or `backend/uv.lock`.
 
-- [ ] **Task 2: Build the spike so it cannot contaminate the repository manifest** (AC: #1)
-  - [ ] Spike code lives at `backend/spikes/agent_runtime/` with its **own** `pyproject.toml` declaring `pydantic-ai-slim[google,openrouter]==2.27.0` plus `pytest`. Run it with `uv run --project backend/spikes/agent_runtime pytest`.
-  - [ ] **Use `pydantic-ai-slim`, never the `pydantic-ai` meta-package.** `pydantic-ai==2.27.0` resolves to `pydantic-ai-slim[anthropic,cli,evals,google,logfire,mcp,openai,retries,web]` — it would drag Anthropic, MCP, a CLI, a web-fetch stack, `pydantic-evals`, and the Logfire SDK into a portfolio backend that needs none of them today. `logfire` in particular is a *planned optional* stack row owned by Story 5.1; pulling it here would silently claim that gate.
-  - [ ] The two extras chosen mirror the two providers the repo already ships (`backend/llm/gemini.py` → `google-genai`, `backend/llm/openrouter.py` → `openai`). Adding a third provider extra is scope creep.
-  - [ ] **Acceptance boundary:** the spike suite runs to completion and `git status --porcelain` shows changes only under `backend/spikes/` and `docs/`.
+- [x] **Task 2: Build the spike so it cannot contaminate the repository manifest** (AC: #1)
+  - [x] Spike code lives at `backend/spikes/agent_runtime/` with its **own** `pyproject.toml` declaring `pydantic-ai-slim[google,openrouter]==2.27.0` plus `pytest`. Run it with `uv run --project backend/spikes/agent_runtime pytest`.
+  - [x] **Use `pydantic-ai-slim`, never the `pydantic-ai` meta-package.** `pydantic-ai==2.27.0` resolves to `pydantic-ai-slim[anthropic,cli,evals,google,logfire,mcp,openai,retries,web]` — it would drag Anthropic, MCP, a CLI, a web-fetch stack, `pydantic-evals`, and the Logfire SDK into a portfolio backend that needs none of them today. `logfire` in particular is a *planned optional* stack row owned by Story 5.1; pulling it here would silently claim that gate.
+  - [x] The two extras chosen mirror the two providers the repo already ships (`backend/llm/gemini.py` → `google-genai`, `backend/llm/openrouter.py` → `openai`). Adding a third provider extra is scope creep.
+  - [x] **Acceptance boundary:** the spike suite runs to completion and `git status --porcelain` shows changes only under `backend/spikes/` and `docs/`.
 
-- [ ] **Task 3: Prove all seven AC1 capabilities, or halt** (AC: #1)
-  - [ ] One test per capability, each producing a named pass/fail line. All seven must pass. `models.ALLOW_MODEL_REQUESTS = False` at module scope in every spike test — no network call in this task, ever.
+- [x] **Task 3: Prove all seven AC1 capabilities, or halt** (AC: #1)
+  - [x] One test per capability, each producing a named pass/fail line. All seven must pass. `models.ALLOW_MODEL_REQUESTS = False` at module scope in every spike test — no network call in this task, ever.
 
     | # | AC1 capability | What must be demonstrated | Confirmed API at v2.27.0 |
     |---|---|---|---|
@@ -77,59 +77,59 @@ So that conversational behavior can evolve without making a model framework part
     | 6 | provider failure mapping | a provider error surfaces as an identifiable framework exception that an adapter can catch and re-raise as an owned type | raise from inside `FunctionModel`; `UnexpectedModelBehavior`, `ModelHTTPError` |
     | 7 | content-disabled instrumentation | instrumentation can be enabled with prompt/tool content excluded, and the emitted spans carry no prompt or tool payload | `Agent(..., capabilities=[Instrumentation(settings=InstrumentationSettings(include_content=False))])`; also `Agent.instrument_all(settings)` |
 
-  - [ ] **Hard rule for capability 4 — this is the most likely place to get it wrong.** AD-19 states framework messages "never become domain, persistence, browser, or audit contracts." Therefore the round-trip must go `ModelMessage[] → owned dataclass → JSON → owned dataclass → ModelMessage[]`. **Serializing `to_jsonable_python(result.all_messages())` and calling that the durable form fails this capability**, even though `ModelMessagesTypeAdapter` makes it trivially easy — that JSON *is* a PydanticAI contract, and persisting it makes the framework a persisted contract by definition. The point of the spike is to prove translation is possible, not that serialization exists.
-  - [ ] Capability 7 must assert on **observed span attributes**, not on the settings object. Use an in-memory OTel span exporter (`opentelemetry-sdk` — a spike-only dependency, not a repo one) and assert no span attribute contains the prompt text or the tool arguments. Reading `settings.include_content is False` proves nothing about what is emitted.
-  - [ ] Capability 5 must show the *distinction* AD-7 requires: wall-time exhaustion → `timed_out`, other limit exhaustion → `failed` with a stable `budget_exhausted` reason. If the framework cannot distinguish them, that is an adapter obligation, not a spike failure — record which side owns it.
-  - [ ] **Acceptance boundary:** append a verdict table to `docs/AGENT-RUNTIME-DECISION.md` — one row per capability, `pass`/`fail`, with the spike test name. **If any row is `fail`: stop the story here.** Record the failure with a reproduction, leave `backend/pyproject.toml` and `backend/uv.lock` untouched, set the story status to blocked, and escalate. Do not proceed to Task 4. Do not hand-roll a loop. Do not try a different version.
+  - [x] **Hard rule for capability 4 — this is the most likely place to get it wrong.** AD-19 states framework messages "never become domain, persistence, browser, or audit contracts." Therefore the round-trip must go `ModelMessage[] → owned dataclass → JSON → owned dataclass → ModelMessage[]`. **Serializing `to_jsonable_python(result.all_messages())` and calling that the durable form fails this capability**, even though `ModelMessagesTypeAdapter` makes it trivially easy — that JSON *is* a PydanticAI contract, and persisting it makes the framework a persisted contract by definition. The point of the spike is to prove translation is possible, not that serialization exists.
+  - [x] Capability 7 must assert on **observed span attributes**, not on the settings object. Use an in-memory OTel span exporter (`opentelemetry-sdk` — a spike-only dependency, not a repo one) and assert no span attribute contains the prompt text or the tool arguments. Reading `settings.include_content is False` proves nothing about what is emitted.
+  - [x] Capability 5 must show the *distinction* AD-7 requires: wall-time exhaustion → `timed_out`, other limit exhaustion → `failed` with a stable `budget_exhausted` reason. If the framework cannot distinguish them, that is an adapter obligation, not a spike failure — record which side owns it.
+  - [x] **Acceptance boundary:** append a verdict table to `docs/AGENT-RUNTIME-DECISION.md` — one row per capability, `pass`/`fail`, with the spike test name. **If any row is `fail`: stop the story here.** Record the failure with a reproduction, leave `backend/pyproject.toml` and `backend/uv.lock` untouched, set the story status to blocked, and escalate. Do not proceed to Task 4. Do not hand-roll a loop. Do not try a different version.
 
-- [ ] **Task 4: Lock the dependency — only now** (AC: #1)
-  - [ ] Add `pydantic-ai-slim[google,openrouter]==2.27.0` to `backend/pyproject.toml` `[project].dependencies` and refresh `backend/uv.lock`. Exact pin, not a floor — AR27 requires each planned dependency be *locked* at its implementation gate.
-  - [ ] **Watch the `openai` floor.** The repo declares `openai>=1.40` but the lock already resolved **2.45.0**, which is exactly pydantic-ai's floor. The resolution therefore should not move `openai` at all. **If `uv lock` moves `openai`, `google-genai`, `pydantic`, `httpx`, or `anyio`, stop and report the diff before continuing** — `backend/llm/openrouter.py:194` calls `client.chat.completions.create(...)` and `backend/llm/gemini.py` calls the google-genai SDK directly; a silent bump under either is a regression this story did not sign up for.
-  - [ ] Update the architecture spine's Stack table row: `PydanticAI | 2.27.0 | repository lock` (was `2.14.1 | planned seed; compatibility spike and lock required before agent slice`). Cite `docs/AGENT-RUNTIME-DECISION.md`. This is the one spec edit this story is authorized to make.
-  - [ ] **Acceptance boundary:** `uv run --frozen pytest` passes from `backend/` with the new dependency installed, and `git diff backend/uv.lock` shows no version change to `openai`, `google-genai`, `pydantic`, `httpx`, or `anyio`.
+- [x] **Task 4: Lock the dependency — only now** (AC: #1)
+  - [x] Add `pydantic-ai-slim[google,openrouter]==2.27.0` to `backend/pyproject.toml` `[project].dependencies` and refresh `backend/uv.lock`. Exact pin, not a floor — AR27 requires each planned dependency be *locked* at its implementation gate.
+  - [x] **Watch the `openai` floor.** The repo declares `openai>=1.40` but the lock already resolved **2.45.0**, which is exactly pydantic-ai's floor. The resolution therefore should not move `openai` at all. **If `uv lock` moves `openai`, `google-genai`, `pydantic`, `httpx`, or `anyio`, stop and report the diff before continuing** — `backend/llm/openrouter.py:194` calls `client.chat.completions.create(...)` and `backend/llm/gemini.py` calls the google-genai SDK directly; a silent bump under either is a regression this story did not sign up for.
+  - [x] Update the architecture spine's Stack table row: `PydanticAI | 2.27.0 | repository lock` (was `2.14.1 | planned seed; compatibility spike and lock required before agent slice`). Cite `docs/AGENT-RUNTIME-DECISION.md`. This is the one spec edit this story is authorized to make.
+  - [x] **Acceptance boundary:** `uv run --frozen pytest` passes from `backend/` with the new dependency installed, and `git diff backend/uv.lock` shows no version change to `openai`, `google-genai`, `pydantic`, `httpx`, or `anyio`.
 
-- [ ] **Task 5: Define the owned `AgentRuntime` port and its contracts** (AC: #2)
-  - [ ] `backend/application/ports/agent_runtime.py` — a `typing.Protocol`, matching the shape of `application/ports/scenario_projection.py` (frozen dataclasses for inputs/outputs, `Protocol` for the port, absolute imports).
-  - [ ] `backend/application/contracts/agent_runtime.py` — the owned types that cross the seam. Every contract carries `schema_version` per the spine's *Normative contract minimums*.
-  - [ ] **Own these, name them ourselves:** the turn request, the owned message/turn record, the typed tool-call proposal, the tool result, the suspension-for-approval marker, the run outcome (including the `timed_out` / `failed`+`budget_exhausted` distinction from AD-7), and the budget. Model naming on the existing `V1` convention (`EvidenceRefV1`, `ScenarioProjectionV1`).
-  - [ ] **Do not name these `ActivityItemV1`, `PersistedEventV1`, `CapabilityManifestV1`, or `JobLeaseV1`.** Those four are cross-epic contracts owned by Stories 2.3, 2.4, 2.6, and Epic 3 respectively (AD-20). Defining a partial version here would force a rename later or, worse, be quietly extended into a contract this story never validated.
-  - [ ] The port takes trusted server-owned inputs only. It must not accept a model-supplied capability name, a browser value, or an authority flag (AD-2, AD-15).
-  - [ ] **Acceptance boundary:** `backend/application/**` imports nothing from `pydantic_ai`, and the port is exercised by at least one test through a fake implementation that never imports the framework.
+- [x] **Task 5: Define the owned `AgentRuntime` port and its contracts** (AC: #2)
+  - [x] `backend/application/ports/agent_runtime.py` — a `typing.Protocol`, matching the shape of `application/ports/scenario_projection.py` (frozen dataclasses for inputs/outputs, `Protocol` for the port, absolute imports).
+  - [x] `backend/application/contracts/agent_runtime.py` — the owned types that cross the seam. Every contract carries `schema_version` per the spine's *Normative contract minimums*.
+  - [x] **Own these, name them ourselves:** the turn request, the owned message/turn record, the typed tool-call proposal, the tool result, the suspension-for-approval marker, the run outcome (including the `timed_out` / `failed`+`budget_exhausted` distinction from AD-7), and the budget. Model naming on the existing `V1` convention (`EvidenceRefV1`, `ScenarioProjectionV1`).
+  - [x] **Do not name these `ActivityItemV1`, `PersistedEventV1`, `CapabilityManifestV1`, or `JobLeaseV1`.** Those four are cross-epic contracts owned by Stories 2.3, 2.4, 2.6, and Epic 3 respectively (AD-20). Defining a partial version here would force a rename later or, worse, be quietly extended into a contract this story never validated.
+  - [x] The port takes trusted server-owned inputs only. It must not accept a model-supplied capability name, a browser value, or an authority flag (AD-2, AD-15).
+  - [x] **Acceptance boundary:** `backend/application/**` imports nothing from `pydantic_ai`, and the port is exercised by at least one test through a fake implementation that never imports the framework.
 
-- [ ] **Task 6: Implement the adapter in `backend/agent/`** (AC: #2, #4)
-  - [ ] New package `backend/agent/` — AR26's structural seed names it `# AgentRuntime and capability-module adapters`. This is the **only** new top-level backend package this story creates.
-  - [ ] The adapter implements the Task 5 port over PydanticAI: owned request → framework call → owned outcome. All seven spike capabilities become real adapter behavior; the spike proved they are possible, the adapter makes them ours.
-  - [ ] **Owned error type.** Define `AgentRuntimeError` in the application layer, mirroring `llm/base.py:LLMProviderError`'s established pattern — provider-neutral, so no vendor or framework exception type crosses the seam. Catch `UnexpectedModelBehavior`, `ModelHTTPError`, `UsageLimitExceeded` and anything else PydanticAI raises; re-raise as owned. A bare `except Exception` that swallows the cause is not acceptable — preserve it with `raise ... from exc`.
-  - [ ] Instrumentation is constructed **content-disabled by default** (`InstrumentationSettings(include_content=False)`). Per AD-12/AD-15 external telemetry excludes prompt, tool, workforce, and schedule content by default. **Do not add the Logfire SDK** — Story 5.1 owns telemetry export; `opentelemetry-api` arriving transitively is sufficient here.
-  - [ ] Budgets, limits, and timeouts come from application configuration, never from the model (AD-7). Wire them through the port's budget contract; do not read env vars inside the adapter.
-  - [ ] **Ship exactly one throwaway demonstration tool**, exercised only by deterministic doubles, purely to prove the typed-tool and deferred-call seams end to end. It must not read scenario data, touch a repository, or resemble a real capability.
-  - [ ] **Acceptance boundary:** an adapter test drives a full multi-step turn — tool call, suspension for approval, resume, terminal outcome — against `FunctionModel`, with `models.ALLOW_MODEL_REQUESTS = False`, and asserts on owned types only.
+- [x] **Task 6: Implement the adapter in `backend/agent/`** (AC: #2, #4)
+  - [x] New package `backend/agent/` — AR26's structural seed names it `# AgentRuntime and capability-module adapters`. This is the **only** new top-level backend package this story creates.
+  - [x] The adapter implements the Task 5 port over PydanticAI: owned request → framework call → owned outcome. All seven spike capabilities become real adapter behavior; the spike proved they are possible, the adapter makes them ours.
+  - [x] **Owned error type.** Define `AgentRuntimeError` in the application layer, mirroring `llm/base.py:LLMProviderError`'s established pattern — provider-neutral, so no vendor or framework exception type crosses the seam. Catch `UnexpectedModelBehavior`, `ModelHTTPError`, `UsageLimitExceeded` and anything else PydanticAI raises; re-raise as owned. A bare `except Exception` that swallows the cause is not acceptable — preserve it with `raise ... from exc`.
+  - [x] Instrumentation is constructed **content-disabled by default** (`InstrumentationSettings(include_content=False)`). Per AD-12/AD-15 external telemetry excludes prompt, tool, workforce, and schedule content by default. **Do not add the Logfire SDK** — Story 5.1 owns telemetry export; `opentelemetry-api` arriving transitively is sufficient here.
+  - [x] Budgets, limits, and timeouts come from application configuration, never from the model (AD-7). Wire them through the port's budget contract; do not read env vars inside the adapter.
+  - [x] **Ship exactly one throwaway demonstration tool**, exercised only by deterministic doubles, purely to prove the typed-tool and deferred-call seams end to end. It must not read scenario data, touch a repository, or resemble a real capability.
+  - [x] **Acceptance boundary:** an adapter test drives a full multi-step turn — tool call, suspension for approval, resume, terminal outcome — against `FunctionModel`, with `models.ALLOW_MODEL_REQUESTS = False`, and asserts on owned types only.
 
-- [ ] **Task 7: Prove hidden reasoning is discarded** (AC: #4)
-  - [ ] `ModelResponse` exposes `.thinking` and carries `ThinkingPart` entries in `.parts` (confirmed at v2.27.0). Construct a `FunctionModel` that returns a response containing a `ThinkingPart` with a recognisable sentinel string alongside a `TextPart`.
-  - [ ] Assert the sentinel appears in **no** owned output: not in the visible content, not in the owned message record, not in the summary, not in any typed recovery payload, not in the JSON round-trip from Task 5's contracts, and not in an emitted span attribute.
-  - [ ] Assert the **positive** half too: planner-visible content, typed recovery data, and the application-owned summary survive translation. A test that only proves absence would also pass if the adapter discarded everything.
-  - [ ] The discard is a **whitelist**, not a blacklist: translate the part kinds we recognise and drop the rest. A `isinstance(part, ThinkingPart): continue` blacklist silently admits the next reasoning-part type the framework introduces — and AD-15 says "discard provider hidden-reasoning parts", not "discard the one class named ThinkingPart".
-  - [ ] **Acceptance boundary:** a sentinel-string test that fails loudly if the sentinel reaches any persisted or emitted surface.
+- [x] **Task 7: Prove hidden reasoning is discarded** (AC: #4)
+  - [x] `ModelResponse` exposes `.thinking` and carries `ThinkingPart` entries in `.parts` (confirmed at v2.27.0). Construct a `FunctionModel` that returns a response containing a `ThinkingPart` with a recognisable sentinel string alongside a `TextPart`.
+  - [x] Assert the sentinel appears in **no** owned output: not in the visible content, not in the owned message record, not in the summary, not in any typed recovery payload, not in the JSON round-trip from Task 5's contracts, and not in an emitted span attribute.
+  - [x] Assert the **positive** half too: planner-visible content, typed recovery data, and the application-owned summary survive translation. A test that only proves absence would also pass if the adapter discarded everything.
+  - [x] The discard is a **whitelist**, not a blacklist: translate the part kinds we recognise and drop the rest. A `isinstance(part, ThinkingPart): continue` blacklist silently admits the next reasoning-part type the framework introduces — and AD-15 says "discard provider hidden-reasoning parts", not "discard the one class named ThinkingPart".
+  - [x] **Acceptance boundary:** a sentinel-string test that fails loudly if the sentinel reaches any persisted or emitted surface.
 
-- [ ] **Task 8: Leave the existing LLM seams alone, and prove it** (AC: #2)
-  - [ ] AC2's second clause and AD-19 both require the existing provider-neutral constraint-parsing and cached-insight operations to stay behind their own ports "until deliberately migrated." **This story does not migrate them.**
-  - [ ] `backend/llm/{base,stub,gemini,openrouter,translate}.py` and `backend/services/{constraint_service,insight_service}.py` are **not modified**. `LLMProvider`, `LLMProviderError`, `create_provider()`, and `to_override_call()` keep their current signatures. The `stub` default and the keyless-CI invariant (`backend/conftest.py` pops `LLM_PROVIDER`/`LLM_MODEL`) are untouched.
-  - [ ] The two seams may share a provider client *inside adapters* (AD-19 permits it) but must not share a port, an error type, or a configuration key. `AgentRuntime` gets its own settings fields; do not overload `llm_provider`/`llm_model`.
-  - [ ] **Acceptance boundary:** `git diff --stat` shows zero lines changed under `backend/llm/` and `backend/services/`, and the existing `test_llm_provider.py`, `test_gemini_provider.py`, `test_openrouter_provider.py`, `test_constraints_api.py`, and `test_insights_api.py` pass unchanged.
+- [x] **Task 8: Leave the existing LLM seams alone, and prove it** (AC: #2)
+  - [x] AC2's second clause and AD-19 both require the existing provider-neutral constraint-parsing and cached-insight operations to stay behind their own ports "until deliberately migrated." **This story does not migrate them.**
+  - [x] `backend/llm/{base,stub,gemini,openrouter,translate}.py` and `backend/services/{constraint_service,insight_service}.py` are **not modified**. `LLMProvider`, `LLMProviderError`, `create_provider()`, and `to_override_call()` keep their current signatures. The `stub` default and the keyless-CI invariant (`backend/conftest.py` pops `LLM_PROVIDER`/`LLM_MODEL`) are untouched.
+  - [x] The two seams may share a provider client *inside adapters* (AD-19 permits it) but must not share a port, an error type, or a configuration key. `AgentRuntime` gets its own settings fields; do not overload `llm_provider`/`llm_model`.
+  - [x] **Acceptance boundary:** `git diff --stat` shows zero lines changed under `backend/llm/` and `backend/services/`, and the existing `test_llm_provider.py`, `test_gemini_provider.py`, `test_openrouter_provider.py`, `test_constraints_api.py`, and `test_insights_api.py` pass unchanged.
 
-- [ ] **Task 9: Make the boundary executable** (AC: #3)
-  - [ ] `backend/tests/architecture/test_agent_runtime_boundaries.py` — an AST or import-graph walk asserting that no module under `backend/domain/**` or `backend/application/**` imports `pydantic_ai` (any submodule), and that no framework message, deferred-call, tool, checkpoint, or telemetry type name appears in their source.
-  - [ ] Assert the dependency **direction** too, not just the absence of one package: `backend/agent/**` may import `application` and `domain`; the reverse must fail the test. `backend/domain/**` continues to import nothing outside itself (AD-1).
-  - [ ] Add the same guard for the persisted shape: assert no `application/contracts/**` dataclass field is typed as, or defaults to, a framework object. This is the executable form of the Task 3 capability-4 hard rule.
-  - [ ] **Acceptance boundary:** the test **fails** when temporarily given a violating import, and passes on the shipped tree. Demonstrate both — a guard nobody has seen go red is a guard nobody has tested.
+- [x] **Task 9: Make the boundary executable** (AC: #3)
+  - [x] `backend/tests/architecture/test_agent_runtime_boundaries.py` — an AST or import-graph walk asserting that no module under `backend/domain/**` or `backend/application/**` imports `pydantic_ai` (any submodule), and that no framework message, deferred-call, tool, checkpoint, or telemetry type name appears in their source.
+  - [x] Assert the dependency **direction** too, not just the absence of one package: `backend/agent/**` may import `application` and `domain`; the reverse must fail the test. `backend/domain/**` continues to import nothing outside itself (AD-1).
+  - [x] Add the same guard for the persisted shape: assert no `application/contracts/**` dataclass field is typed as, or defaults to, a framework object. This is the executable form of the Task 3 capability-4 hard rule.
+  - [x] **Acceptance boundary:** the test **fails** when temporarily given a violating import, and passes on the shipped tree. Demonstrate both — a guard nobody has seen go red is a guard nobody has tested.
 
-- [ ] **Task 10: Full regression gate** (AC: #1, #2, #3, #4)
-  - [ ] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (needs Docker PostgreSQL 18 up via `docker-compose.yml`); `alembic check` must show zero diff — **this story adds no migration**.
-  - [ ] Frontend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`. This story changes no frontend file; the suites must stay green regardless.
-  - [ ] **Re-run Gate A explicitly and report by name.** AR28's "no later gate may weaken an earlier gate's invariants" binds this story: regenerate `evidence/story-1.11/gate-a-readiness-report.json` and confirm it still reads `gate_a_passed: true`. Adding a dependency changes the environment the gate was measured in.
-  - [ ] **Re-derive the baselines at the start rather than trusting these.** Recorded at `7488fc8` / `sprint-status.yaml`: backend **452 passed / 0 skipped / 6 deselected**; postgres **27**; frontend **50 files / 287 tests**; e2e **46**; alembic zero diff.
-  - [ ] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, and Gate A still `true`.
+- [x] **Task 10: Full regression gate** (AC: #1, #2, #3, #4)
+  - [x] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (needs Docker PostgreSQL 18 up via `docker-compose.yml`); `alembic check` must show zero diff — **this story adds no migration**.
+  - [x] Frontend: `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`. This story changes no frontend file; the suites must stay green regardless.
+  - [x] **Re-run Gate A explicitly and report by name.** AR28's "no later gate may weaken an earlier gate's invariants" binds this story: regenerate `evidence/story-1.11/gate-a-readiness-report.json` and confirm it still reads `gate_a_passed: true`. Adding a dependency changes the environment the gate was measured in.
+  - [x] **Re-derive the baselines at the start rather than trusting these.** Recorded at `7488fc8` / `sprint-status.yaml`: backend **452 passed / 0 skipped / 6 deselected**; postgres **27**; frontend **50 files / 287 tests**; e2e **46**; alembic zero diff.
+  - [x] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, and Gate A still `true`.
 
 ## Dev Notes
 
@@ -253,14 +253,143 @@ PydanticAI **2.27.0** is the current release (2.14.1 shipped 2026-07-21). All se
 
 ### Agent Model Used
 
+claude-opus-5 (Amelia / bmad-dev-story)
+
 ### Debug Log References
+
+**Spike verdict (Task 3 gate):** `uv run --project backend/spikes/agent_runtime pytest`
+→ **8 passed** in 1.76s, zero network. All seven AC1 capabilities `pass`. Full
+verdict table, negative controls and the capability-5 ownership split are in
+`docs/AGENT-RUNTIME-DECISION.md`.
+
+**Negative controls run because all eight spike tests passed first try.** A proof
+that has never failed has not been tested:
+
+| Control | Result |
+|---|---|
+| Capability 7 with `include_content=True` | 4 spans either way; prompt + tool args **leak** when `True`, absent when `False` — the assertion is sensitive to the setting, not to span silence |
+| Capability 4 via `to_jsonable_python(all_messages())` | leaks `part_kind`, PydanticAI's own discriminator; `OwnedTurnV1.to_json()` leaks nothing |
+| Task 7 whitelist → blacklist mutation | `CompactionPart` sentinel survives; the whitelist guard goes **red**, the other four hidden-reasoning tests stay green — exactly the blind spot a blacklist has |
+| Task 9 guard given a real `from pydantic_ai.messages import ModelResponse` in `application/ports/` | **3 tests fail**; reverted, 14 pass on the shipped tree |
+
+**Two defects found and fixed during implementation, both mine, not the framework's:**
+
+1. The demonstration tool was first written `@tool_plain(requires_approval=True)`
+   — unconditional approval. That made every budget test suspend on the first
+   tool call instead of looping, so budget exhaustion was never reachable.
+   Changed to conditional approval (`raise ApprovalRequired` when `repeat > 1`),
+   which lets one tool prove both the bounded-loop and deferred-call seams and is
+   closer to AD-10's persisted state machine anyway.
+2. `test_instrumentation_...` initially used a stray `pytest.importorskip`
+   expression statement. Replaced with a hard import — Story 1.11's "a skipped
+   test is not a passed test" applies to the guard itself.
+
+**Baseline re-derivation caught a false alarm.** The first post-lock run read
+424 passed / 28 skipped against a recorded 425 / 27. The delta was **not** the
+new dependency: `test_evidence_binding.py:350` self-skips with "binding realism
+check needs a clean tree", and the tree was dirty. Confirmed by the final clean
+-tree run.
 
 ### Completion Notes List
 
+**Verdict: the framework can carry our agent loop without becoming a product
+contract.** All seven capabilities cleared at 2.27.0; the seed replacement is
+authorized and locked; the boundary that keeps the answer true is executable.
+
+**AC coverage**
+
+- **AC1** — spike proved all seven capabilities before anything entered a
+  manifest (Tasks 1–3), then `pydantic-ai-slim[google,openrouter]==2.27.0` was
+  pinned exactly (Task 4). `git diff backend/uv.lock` contains **zero removed
+  lines** — a pure addition. `openai` 2.45.0, `google-genai` 2.10.0, `pydantic`
+  2.13.4, `httpx` 0.28.1 and `anyio` 4.14.1 all unmoved, as the decision doc
+  predicted from the `openai>=2.45.0` exact-floor analysis.
+- **AC2** — `AgentRuntime` port + owned contracts contain no framework type;
+  `backend/llm/**` and `backend/services/**` show a **zero-line diff** and their
+  five named test files pass unchanged (91 passed).
+- **AC3** — `backend/tests/architecture/test_agent_runtime_boundaries.py`
+  enforces framework-freedom, one-way dependency direction, domain purity, and
+  the contract-field rule. Demonstrated red **and** green.
+- **AC4** — hidden reasoning discarded by whitelist; sentinel absent from all
+  six surfaces the story enumerates, and the positive half asserted so
+  "discarded everything" cannot pass.
+
+**Capability 5 is an adapter obligation, and that is recorded rather than
+hidden.** PydanticAI's `UsageLimits` has no deadline field, so the framework
+cannot distinguish wall-time from budget exhaustion on its own. The adapter owns
+the deadline via `CancellationToken`; `RunCancelled` → `timed_out` and
+`UsageLimitExceeded` → `failed` + `budget_exhausted`, mapped **by exception
+type**, never by string-matching a message. The story anticipated this case and
+asked which side owns it — the answer is the adapter.
+
+**One dependency added beyond the story's list, with approval:**
+`opentelemetry-sdk` in `backend/pyproject.toml` `[dependency-groups] dev`. Task 7
+requires asserting the sentinel reaches no *emitted span attribute*, but only the
+no-op `opentelemetry-api` arrives transitively — without the SDK nothing is
+recorded and the guard could only read the settings object, which proves nothing.
+Test-tier only, never `[project].dependencies`, and not the Logfire SDK (Story 5.1).
+
+**Two corrections to the story's Task 1 pre-flight table**, both recorded in the
+decision doc: `exceptiongroup` was already locked at 1.3.1 (not absent), and
+`logfire-api` arrives as a base dependency. `logfire-api` is the upstream **no-op
+shim**, not the Logfire SDK — no exporter, no client, no config — so it does not
+claim Story 5.1's gate. The `logfire` SDK itself is absent from the lock, verified.
+
+**Variance from AR26, deliberate and recorded** (as the story instructs): the
+architecture suite lives at `backend/tests/architecture/`, not the spine's
+root-level `tests/architecture/`. pytest runs from `backend/` with
+`testpaths = ["tests"]`, and `backend/conftest.py` is what makes backend modules
+importable; a root-level suite would need its own conftest, a `testpaths` change,
+and a second rootdir convention. AC3's own list does not name `tests/architecture`.
+A later story adding a root-level suite may promote it.
+
+**Spike directory disposition: committed, not deleted.** It is the reproducible
+evidence behind the seed-replacement decision, and the decision doc is worth less
+without a runnable proof beside it. It carries its own `pyproject.toml` and
+`uv.lock`, sits outside `testpaths`, and is never imported by backend code.
+
+**Scope held.** No capability registry, no `CapabilityManifestV1`, no
+`ActivityItemV1`/`PersistedEventV1`/`JobLeaseV1`, no `backend/evals/` or
+`backend/worker/` scaffolding, no migration, no CI workflow, no frontend change,
+no Logfire SDK. `settings.py` gained `agent_runtime_*` fields — its own seam's
+configuration, with `llm_provider`/`llm_model` untouched.
+
 ### File List
+
+**New**
+
+- `docs/AGENT-RUNTIME-DECISION.md`
+- `backend/spikes/agent_runtime/pyproject.toml`
+- `backend/spikes/agent_runtime/uv.lock`
+- `backend/spikes/agent_runtime/conftest.py`
+- `backend/spikes/agent_runtime/owned.py`
+- `backend/spikes/agent_runtime/tests/test_capabilities.py`
+- `backend/application/contracts/agent_runtime.py`
+- `backend/application/ports/agent_runtime.py`
+- `backend/agent/__init__.py`
+- `backend/agent/runtime.py`
+- `backend/agent/translate.py`
+- `backend/tests/architecture/__init__.py`
+- `backend/tests/architecture/test_agent_runtime_boundaries.py`
+- `backend/tests/test_agent_runtime_port.py`
+- `backend/tests/test_agent_runtime_adapter.py`
+- `backend/tests/test_agent_runtime_hidden_reasoning.py`
+
+**Modified**
+
+- `backend/pyproject.toml` — pinned `pydantic-ai-slim[google,openrouter]==2.27.0`; `opentelemetry-sdk` in the dev group
+- `backend/uv.lock` — pure addition, no version moved
+- `backend/settings.py` — `agent_runtime_*` fields + `_optional_int`/`_optional_float` helpers
+- `_bmad-output/planning-artifacts/architecture/.../ARCHITECTURE-SPINE.md` — Stack table PydanticAI row
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` — status tracking
+- `_bmad-output/implementation-artifacts/2-1-establish-the-owned-agent-runtime-boundary.md` — this file
+
+**Not modified (verified zero-line diff):** `backend/llm/**`, `backend/services/**`,
+`backend/domain/**`, every frontend file, every migration.
 
 ## Change Log
 
 | Date | Change |
 |---|---|
 | 2026-08-09 | Story created. Two creation-time decisions recorded: spike targets PydanticAI **2.27.0** rather than the 2.14.1 seed (under AD-19's replacement clause), and a failed spike **halts and escalates** rather than triggering a fallback. |
+| 2026-08-10 | Spike passed all seven AC1 capabilities (8 tests, no network); seed replacement authorized and `pydantic-ai-slim[google,openrouter]==2.27.0` locked with no other version moved. Added the owned `AgentRuntime` port + contracts, the `backend/agent/` adapter, whitelist hidden-reasoning discard, and an executable boundary suite demonstrated both red and green. `backend/llm/**` and `backend/services/**` unchanged (zero-line diff). One approved extra dev dependency: `opentelemetry-sdk`, test-tier only, so the telemetry guard can assert on emitted spans. Status → review. |

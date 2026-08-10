@@ -1,0 +1,39 @@
+[project]
+# Deliberately NOT named "rosterai" and deliberately not part of the backend
+# project. This spike exists to justify the PydanticAI dependency BEFORE that
+# dependency is allowed anywhere near backend/pyproject.toml or backend/uv.lock
+# (AR27: lock each planned dependency at its implementation gate, not before).
+#
+# Run it with:
+#     uv run --project backend/spikes/agent_runtime pytest
+#
+# It has its own pyproject.toml and its own uv.lock so `uv` never resolves it
+# together with the backend. Nothing here is imported by backend code.
+name = "shiftmind-agent-runtime-spike"
+version = "0.1.0"
+description = "Story 2.1 compatibility spike: does PydanticAI 2.27.0 clear the seven AC1 capabilities?"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    # pydantic-ai-slim, NEVER the `pydantic-ai` meta-package. The meta-package
+    # resolves to [anthropic,cli,evals,google,logfire,mcp,openai,retries,web],
+    # which would drag in the Logfire SDK — a *planned optional* stack row owned
+    # by Story 5.1. See docs/AGENT-RUNTIME-DECISION.md.
+    #
+    # The two extras mirror the two providers the repo already ships:
+    #   google     -> backend/llm/gemini.py     (google-genai)
+    #   openrouter -> backend/llm/openrouter.py (openai-compatible)
+    "pydantic-ai-slim[google,openrouter]==2.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    # Spike-only. Capability 7 must assert on OBSERVED span attributes, not on
+    # the settings object, so it needs a real in-memory exporter. This is NOT a
+    # repo dependency and must never become one — `opentelemetry-api` arriving
+    # transitively under pydantic-ai-slim is all the backend gets.
+    "opentelemetry-sdk",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

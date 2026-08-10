@@ -60,6 +60,18 @@ class Settings:
     # so a leaked session token alone can't also reconstruct the CSRF
     # token. repr=False for the same reason as the API keys above (T-04-01).
     csrf_secret: str = field(repr=False, default="shiftmind-local-csrf-secret")
+    # AgentRuntime seam (Story 2.1, AD-19). Deliberately SEPARATE fields from
+    # llm_provider/llm_model: the agent runtime and the task-specific
+    # LLMProvider are two seams, and overloading one seam's configuration onto
+    # the other is what makes them impossible to migrate independently later.
+    agent_runtime_model: str = "test"
+    # Same repr=False treatment as the other API keys (T-04-01).
+    agent_runtime_api_key: str | None = field(repr=False, default=None)
+    # AD-7: budgets are application configuration, never model output. These are
+    # the defaults; a caller may tighten them per request via AgentBudgetV1.
+    agent_runtime_request_limit: int | None = 8
+    agent_runtime_tool_calls_limit: int | None = 8
+    agent_runtime_deadline_seconds: float | None = 60.0
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
@@ -83,6 +95,31 @@ def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
     if candidate != data_dir_abs and not candidate.startswith(data_dir_abs + os.sep):
         return None
     return candidate
+
+
+def _optional_int(raw: str | None, fallback: int | None) -> int | None:
+    """Parse an optional integer budget. An explicit empty value means "no limit"
+    (None), which is a different thing from "unset" (fall back to the default).
+    """
+    if raw is None:
+        return fallback
+    if raw.strip() == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return fallback
+
+
+def _optional_float(raw: str | None, fallback: float | None) -> float | None:
+    if raw is None:
+        return fallback
+    if raw.strip() == "":
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return fallback
 
 
 def default_settings() -> Settings:
@@ -133,6 +170,17 @@ def default_settings() -> Settings:
     except ValueError:
         session_ttl_s = 3600
     csrf_secret = os.environ.get("CSRF_SECRET", "shiftmind-local-csrf-secret")
+    agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "test")
+    agent_runtime_api_key = os.environ.get("AGENT_RUNTIME_API_KEY")
+    agent_runtime_request_limit = _optional_int(
+        os.environ.get("AGENT_RUNTIME_REQUEST_LIMIT"), 8
+    )
+    agent_runtime_tool_calls_limit = _optional_int(
+        os.environ.get("AGENT_RUNTIME_TOOL_CALLS_LIMIT"), 8
+    )
+    agent_runtime_deadline_seconds = _optional_float(
+        os.environ.get("AGENT_RUNTIME_DEADLINE_SECONDS"), 60.0
+    )
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
@@ -153,4 +201,9 @@ def default_settings() -> Settings:
         app_base_url=app_base_url.rstrip("/"),
         session_ttl_s=session_ttl_s,
         csrf_secret=csrf_secret,
+        agent_runtime_model=agent_runtime_model,
+        agent_runtime_api_key=agent_runtime_api_key,
+        agent_runtime_request_limit=agent_runtime_request_limit,
+        agent_runtime_tool_calls_limit=agent_runtime_tool_calls_limit,
+        agent_runtime_deadline_seconds=agent_runtime_deadline_seconds,
     )
