@@ -61,10 +61,10 @@ So that every epic proves its own behavior deterministically instead of deferrin
   - [x] Make "a report missing any binding is rejected rather than recorded" literal: the file is written **only after** `resolve_bindings()` returns successfully. No partial or placeholder file on failure.
   - [x] **Acceptance boundary:** a test asserting an incomplete declared-bindings call raises and writes no file, and a complete call writes a JSON file that `backend/tests/test_evidence_convention.py`'s repo-wide `evidence/**/*.json` walk accepts unmodified (that test file needs no change — it already covers "a new evidence file in a later epic... automatically").
 
-- [ ] **Task 6: Produce this story's own demonstration evidence file** (AC: #1, #2)
-  - [ ] Follow `docs/EVIDENCE-CONVENTION.md` exactly: commit the code from Tasks 1–5 and 7 first, confirm `git status --porcelain` is empty, run the deterministic suite (Task 4) on that clean tree, generate `evidence/story-2.2/evaluation-harness-demonstration.json` via Task 5's generator, then commit the evidence file separately.
-  - [ ] **State explicitly, in the report and in Completion Notes, that this is a demonstration of the machinery — not a claim on NFR28's 50-case Gate B floor.** Gate B (`epics.md`'s Release Gate table, "Golden dataset size" row) is measured later, after Stories 2.9, 3.10–3.12, and 4.5–4.6 have all contributed their own cases; this story's seed cases (Task 7) exist only to prove the harness runs, evaluates, and reports correctly end to end.
-  - [ ] **Acceptance boundary:** `evidence/story-2.2/evaluation-harness-demonstration.json` exists, passes `backend/tests/test_evidence_convention.py`, and its `git_commit` is a real ancestor of `HEAD` that touches a code file (not a docs-only commit — this convention document names that exact defect).
+- [x] **Task 6: Produce this story's own demonstration evidence file** (AC: #1, #2)
+  - [x] Follow `docs/EVIDENCE-CONVENTION.md` exactly: commit the code from Tasks 1–5 and 7 first, confirm `git status --porcelain` is empty, run the deterministic suite (Task 4) on that clean tree, generate `evidence/story-2.2/evaluation-harness-demonstration.json` via Task 5's generator, then commit the evidence file separately.
+  - [x] **State explicitly, in the report and in Completion Notes, that this is a demonstration of the machinery — not a claim on NFR28's 50-case Gate B floor.** Gate B (`epics.md`'s Release Gate table, "Golden dataset size" row) is measured later, after Stories 2.9, 3.10–3.12, and 4.5–4.6 have all contributed their own cases; this story's seed cases (Task 7) exist only to prove the harness runs, evaluates, and reports correctly end to end.
+  - [x] **Acceptance boundary:** `evidence/story-2.2/evaluation-harness-demonstration.json` exists, passes `backend/tests/test_evidence_convention.py`, and its `git_commit` is a real ancestor of `HEAD` that touches a code file (not a docs-only commit — this convention document names that exact defect).
 
 - [x] **Task 7: Seed cases against the one tool that actually exists** (AC: #3)
   - [x] Add a small number of golden cases (this is a schema/shape demonstration, not a dataset-size target — see Task 6) exercising `shiftmind_demonstration`, the **only** tool Epic 2 has today (`backend/agent/runtime.py:126-130`). Tag them `capability="demonstration"` — deliberately not a real capability name; do not fabricate a `scheduling_inspect`-shaped case that Story 2.5 hasn't built yet.
@@ -248,6 +248,14 @@ different identities for Story 2.2.
 - Task 7 (Task 6 prerequisite): added exactly two `demonstration` cases—one
   free-running `inspect` call and one approval-suspended `consequential` call.
   They prove the schema/pipeline only and do not pad toward NFR28's Gate B floor.
+- Task 6: followed the evidence convention exactly. Code was committed at
+  `113604d`, the clean-tree deterministic measurement passed 12/12 (1 live
+  deselected), the generator bound that code commit plus the two dataset hashes,
+  and the unchanged repo-wide convention guard passed 42/42. The report is
+  explicitly `release_gate_eligible: false`: it demonstrates machinery and
+  makes no claim on NFR28's 50-case Gate B aggregate. That floor must be
+  re-verified later by Story 2.9 or the Gate B report from real contributions;
+  this story did not attempt it and did not pad the dataset.
 
 ### File List
 
@@ -259,6 +267,7 @@ different identities for Story 2.2.
 - `backend/scripts/evidence_binding.py` (modified)
 - `backend/evals/golden/demonstration/repeat-once.json` (new)
 - `backend/evals/golden/demonstration/repeat-with-approval.json` (new)
+- `evidence/story-2.2/evaluation-harness-demonstration.json` (new, generated)
 - `backend/tests/test_evaluation_harness.py` (new)
 - `_bmad-output/implementation-artifacts/2-2-establish-the-deterministic-evaluation-harness.md` (modified)
 

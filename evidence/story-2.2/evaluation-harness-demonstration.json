@@ -1,0 +1,87 @@
+{
+  "generated_at": "2026-08-10T07:35:50.658888+00:00",
+  "metrics": {
+    "authoritative_case_count": 2,
+    "consequential_prohibited_case_count": 1,
+    "consequential_prohibited_passed": 1,
+    "consequential_prohibited_tool_routing_percentage": 100.0,
+    "failed": 0,
+    "live_results_excluded": 0,
+    "passed": 2,
+    "tool_routing_percentage": 100.0
+  },
+  "purpose": "Demonstrates the Story 2.2 evaluation machinery; it does not claim or pad toward NFR28's 50-case Gate B aggregate floor.",
+  "release_gate_eligible": false,
+  "release_gate_status": "demonstration only \u2014 NFR28 aggregate thresholds are not evaluated",
+  "report_type": "evaluation-harness-demonstration",
+  "report_version": "1",
+  "results": [
+    {
+      "authoritative": true,
+      "capability": "demonstration",
+      "case_id": "demonstration-repeat-once",
+      "case_version": "1",
+      "passed": true,
+      "reason": "matched 1 expected tool route(s)",
+      "risk_class": "inspect",
+      "run_source": "double"
+    },
+    {
+      "authoritative": true,
+      "capability": "demonstration",
+      "case_id": "demonstration-repeat-with-approval",
+      "case_version": "1",
+      "passed": true,
+      "reason": "matched 1 expected tool route(s)",
+      "risk_class": "consequential",
+      "run_source": "double"
+    }
+  ],
+  "version_bindings": {
+    "application": "ShiftMind Story 2.2 deterministic evaluation harness",
+    "code": {
+      "git_commit": "113604d0218dbe593e8fdfde91d534191232df4d",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "capability_distribution": {
+        "demonstration": 2
+      },
+      "case_count": 2,
+      "case_versions": {
+        "demonstration-repeat-once": "1",
+        "demonstration-repeat-with-approval": "1"
+      },
+      "files": {
+        "backend/evals/golden/demonstration/repeat-once.json": {
+          "case_id": "demonstration-repeat-once",
+          "case_version": "1",
+          "sha256": "aae4e2c2bd7d43984ede7260e00294a7f78899bac81da688e550d244b0ccc9a2"
+        },
+        "backend/evals/golden/demonstration/repeat-with-approval.json": {
+          "case_id": "demonstration-repeat-with-approval",
+          "case_version": "1",
+          "sha256": "241b449b51d2d698a189d7244004ee46d46ce837c0f9c2098c94dbb4802ca0cb"
+        }
+      },
+      "kind": "version-controlled golden evaluation dataset",
+      "risk_class_distribution": {
+        "consequential": 1,
+        "inspect": 1
+      }
+    },
+    "evaluator": "ToolRoutingEvaluator v1 (exact tool name and JSON arguments)",
+    "image": {
+      "api": "local source tree",
+      "database": "postgres:18",
+      "web": "local source tree"
+    },
+    "model": "case-driven PydanticAI FunctionModel deterministic double",
+    "policy": "AD-5 risk tags; only double-sourced verdicts are authoritative",
+    "prompt": "versioned prompts in backend/evals/golden/**/*.json",
+    "scenario": "not applicable \u2014 no scenario fixture touched",
+    "schema_version": "5e2a4c9d1f70",
+    "solver": "not applicable \u2014 demonstration tool invokes no solver",
+    "tool": "shiftmind_demonstration from the Story 2.1 AgentRuntime adapter"
+  }
+}
