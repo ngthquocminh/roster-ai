@@ -4,7 +4,7 @@ baseline_commit: 0091dcf364c557eea00c49da39423c1822ce3e49
 
 # Story 2.2: Establish the Deterministic Evaluation Harness
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -102,7 +102,8 @@ Code review 2026-08-10 (baseline `0091dcf`..`a370d0c`). Verified green locally:
 - [x] [Review][Patch] `_percentage` returns `0.0` for an empty denominator, reading as total failure against NFR28's 100% protected-class threshold [backend/evals/report.py:174]
 - [x] [Review][Patch] Vacuous assertion in the "no file silently skipped" guard — compares `load_cases`'s enumeration against the identical `rglob` it uses internally [backend/tests/test_evaluation_harness.py:187]
 - [x] [Review][Patch] `use.baseURL` still resolves `localhost` while the preview server binds `127.0.0.1` only [frontend/playwright.config.ts:10,17-18]
-- [ ] [Review][Follow-up] **`evidence/story-2.2/evaluation-harness-demonstration.json` must be regenerated** — the review patches modified `backend/evals/cases.py` and `backend/evals/report.py`, both of which are code the report's `code.git_commit` (`113604d`) binds. Per `docs/EVIDENCE-CONVENTION.md` the sequence is: commit the patches → confirm `git status --porcelain` is empty → `uv run --frozen python -m evals.report ../evidence/story-2.2/evaluation-harness-demonstration.json` → commit the evidence separately. Do not hand-edit it. Expected delta is `generated_at` and `code.git_commit` only: the golden case files are untouched, so the dataset SHA-256s and every metric stay identical (both denominators are non-zero, so the `_percentage` change is not observable here).
+- [x] [Review][Follow-up] **`evidence/story-2.2/evaluation-harness-demonstration.json` regenerated** against the patched harness — bound to `45e5e08`, generated through `evals.report` on a verified-clean tree per `docs/EVIDENCE-CONVENTION.md`, never hand-edited. Final delta is `generated_at` and `code.git_commit` only; all metrics and both dataset SHA-256s are byte-identical to the original.
+- [x] [Review][Patch] **Golden-dataset digest was not reproducible across checkouts** — found while performing the regeneration above. `_evaluation_dataset_binding` used `file_digest()` (raw working-tree bytes); with `core.autocrlf=true` the tree holds CRLF on Windows while the committed blob holds LF, so the digest moved on checkout with no content change (`b411da10` on disk vs `aae4e2c2` in the blob and in the committed evidence). The evaluation dataset now hashes LF-normalized content, with a test asserting CRLF and LF inputs produce one digest. Scoped to the eval dataset: `file_digest()`'s other call sites hash generated JUnit XML and Gate A contract fixtures, where raw bytes are the correct identity. [backend/scripts/evidence_binding.py:445-461]
 - [x] [Review][Defer] Report pass-signal is narrower than the case schema — `expected_evidence_refs` is evaluated nowhere, and visible state/text are asserted by pytest but not by the report generator [backend/evals/report.py:87] — deferred, later evaluators (Stories 2.7/2.9) own this
 - [x] [Review][Defer] `alembic check` in Task 10 is not reproducible — no checked-in `alembic.ini` [repo root] — deferred, pre-existing
 - [x] [Review][Defer] No CI exists (`.github/workflows` absent), so AC1's "normal CI" and Task 8's "fails CI" depend entirely on local runs [repo root] — deferred, pre-existing
@@ -322,4 +323,4 @@ different identities for Story 2.2.
 |---|---|
 | 2026-08-10 | Story created. |
 | 2026-08-10 | Completed Task 10 regression gate; fixed Windows Playwright teardown, regenerated JUnit/Gate A evidence, and moved story to review. |
-| 2026-08-10 | Code review: 2 decisions resolved, 9 patches applied, 3 deferred. Backend 515 passed / 1 skipped / 7 deselected; frontend 50 files / 287 tests; e2e 46 passed; typecheck and lint clean. Story 2.2 evidence still needs regeneration against the patched harness code. |
+| 2026-08-10 | Code review: 2 decisions resolved, 10 patches applied, 3 deferred. Backend 516 passed / 7 deselected; frontend 50 files / 287 tests; e2e 46 passed; typecheck and lint clean. Evidence regenerated against the patched harness and bound to `45e5e08`; story moved to done. |

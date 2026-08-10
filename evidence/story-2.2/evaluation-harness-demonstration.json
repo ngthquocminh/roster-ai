@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-10T07:35:50.658888+00:00",
+  "generated_at": "2026-08-10T12:24:59.722428+00:00",
   "metrics": {
     "authoritative_case_count": 2,
     "consequential_prohibited_case_count": 1,
@@ -40,7 +40,7 @@
   "version_bindings": {
     "application": "ShiftMind Story 2.2 deterministic evaluation harness",
     "code": {
-      "git_commit": "113604d0218dbe593e8fdfde91d534191232df4d",
+      "git_commit": "45e5e08a40cd06a34e1e59e556a52a0f271b6794",
       "working_tree_dirty": false
     },
     "dataset": {
