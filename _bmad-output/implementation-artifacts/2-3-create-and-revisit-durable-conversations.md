@@ -1,5 +1,5 @@
 ---
-baseline_commit: 5ce7d1b1a2000371139338f03a27bb13dd727f45
+baseline_commit: 8c21de0bfc680920359f91740d13d3eb36776ff0
 ---
 
 # Story 2.3: Create and Revisit Durable Conversations
@@ -16,7 +16,9 @@ So that I can investigate a fixture without losing or duplicating the decision c
 
 **This is the first planner-visible Epic 2 feature**, and the first story in the repository that **writes to governed PostgreSQL from a request**. Everything before it was read-only by construction (Gate A / AD-4). That single fact is the source of most of the traps below.
 
-**Stories 2.1 and 2.2 are its foundation, not its subject.** `AgentRuntime`, its owned contracts, and the `backend/agent/` adapter exist and are green. This story *persists conversations*; it does not modify that seam and does not run the agent (see Decision 2).
+**Stories 2.1 and 2.2 are its foundation, not its subject — and both are `done`.** `AgentRuntime`, its owned contracts, the `backend/agent/` adapter, `backend/evals/`, and the evaluation harness all exist and are green at this story's `baseline_commit` (`8c21de0`, `main`). This story *persists conversations*; it does not modify either seam and does not run the agent (see Decision 2).
+
+**This story contributes no golden evaluation cases.** Story 2.2's harness now exists, and it is tempting to feed it. Resist: 2.3 has no evaluation AC, and 2.2's Task 3 ships exactly one evaluator (tool routing) that judges tool name and arguments — it has nothing to say about a message that was persisted but never routed to a tool. The evaluators that would make a 2.3 case meaningful are Story 2.7's (grounding) and 2.9's (refusal/injection). Adding cases here would pad NFR28's aggregate without measuring anything, which `epics.md`'s own dataset-threshold caveat explicitly warns against.
 
 **Unblocks:** Story 2.4 (SSE replay over the event stream this story persists), 2.5 (the inspect capability that finally gives an accepted turn something to execute), and every later conversational story.
 
@@ -163,16 +165,25 @@ Double-submit is handled where it belongs for this slice: the composer disables 
   - [ ] **Acceptance boundary:** the existing workspace and router tests stay green, and a route test deep-links to `/scenarios/:id` and renders Chat.
 
 - [ ] **Task 11: Make the new boundary executable** (AC: #1)
-  - [ ] Extend `backend/tests/architecture/test_agent_runtime_boundaries.py` (or add a sibling in the same package) to assert the **new** application-layer modules — `application/contracts/activity.py`, `contracts/persisted_event.py`, `ports/conversation.py`, `use_cases/**` — import neither `sqlalchemy` nor `fastapi`.
+  - [ ] Add a **sibling** file in `backend/tests/architecture/` asserting the **new** application-layer modules — `application/contracts/activity.py`, `contracts/persisted_event.py`, `ports/conversation.py`, `use_cases/**` — import neither `sqlalchemy` nor `fastapi`. Do not bolt this onto `test_agent_runtime_boundaries.py`, whose scope is the agent seam.
+  - [ ] **Model it on `backend/tests/architecture/test_evaluation_boundaries.py`**, which Story 2.2 added to this same package. It is the current best example in the repo: a focused guard plus explicit self-tests that prove the guard fails on a violating input (`test_network_guard_actually_fails_on_a_violating_builder`, `test_direction_guard_actually_fails_on_a_reverse_import`). Copy that shape — it satisfies this task's red-then-green requirement by construction.
+  - [ ] Note that `test_evaluation_boundaries.py::test_application_and_domain_never_import_evals` already covers `backend/application/**` and will pick up the new `use_cases/` package automatically. Nothing under `application/` may import `evals`; no action needed beyond not doing it.
   - [ ] Scope the new guard to those modules with an explicit, **documented** allow-list entry for the known `application/ports/scenario_catalogue.py` leak. A guard that lies about its own coverage is exactly the defect the Story 2.1 review fixed in this file's docstring (`deferred-work.md`, 2026-08-10) — state precisely what is and is not covered.
   - [ ] In the allow-list entry's comment, cite `deferred-work.md`'s *"Deferred from: story-2-3 creation (2026-08-10)"* item, which tracks the leak, records the three fix tiers, and names deleting this entry as its definition of done. A suppression with no ticket behind it becomes permanent.
   - [ ] **Acceptance boundary:** the guard **fails** when temporarily given a real `from sqlalchemy import Connection` in `ports/conversation.py`, and passes on the shipped tree. Demonstrate both — a guard nobody has seen go red is a guard nobody has tested.
 
 - [ ] **Task 12: Full regression gate** (AC: #1, #2, #3)
   - [ ] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker PostgreSQL 18 via `docker-compose.yml`); `alembic check` zero diff.
-  - [ ] Frontend: `npm run codegen`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`.
+  - [ ] **The exact alembic invocation, verified at `8c21de0` with Docker PostgreSQL up.** From the **repository root**:
+    ```
+    uv run --project backend alembic check     # → "No new upgrade operations detected."
+    ```
+    From `backend/` (pytest's working directory, and the natural place to stand) it fails with `FAILED: No 'script_location' key found in configuration.` — which reads exactly like a missing config and is **not**. `alembic.ini` is checked in at the repo root (Story 1.1, `3e9540c`), `script_location = %(here)s/backend/migrations`, and `backend/migrations/env.py:20-22` fills `sqlalchemy.url` from `default_settings().provisioning_database_url`, so no manual URL is needed.
+  - [ ] **Do not synthesize a temporary alembic config.** Story 2.2 did, on the basis of a `deferred-work.md` entry claiming the repository has no checked-in `alembic.ini`. That claim is false; the entry has been struck through and corrected in place with the measurement table above. You are the first story since to add a migration — get this right.
+  - [ ] Frontend: `npm run codegen`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`, `npm run test:e2e`. Note `test:e2e` is now build-first (`npm run build && playwright test`, `frontend/package.json:13`) — Story 2.2 changed it, so a stale `dist/` no longer silently passes.
   - [ ] **Re-run Gate A and report by name.** AR28 binds this story hard: it is the first to add a write path, and `gate_a_passed` must still read `true`. Regenerate `evidence/story-1.11/gate-a-readiness-report.json` per `docs/EVIDENCE-CONVENTION.md` — **commit code first, measure on a clean tree, generate through `backend/scripts/evidence_binding.py`, commit evidence separately.** Never hand-type it.
-  - [ ] **Re-derive baselines at the start rather than trusting these.** Recorded after Story 2.1 (`0091dcf`): backend **485 passed / 1 self-skip on a dirty tree**; postgres **27**; frontend **50 files / 287 tests**; e2e **46**; alembic zero diff. Story 2.2 is landing in parallel and will move the backend count — re-derive, do not assume.
+  - [ ] Story 2.2 extended `resolve_bindings()` with keyword-only `dataset_files=` and `code_binding=` parameters, both defaulted — **the signature is backward compatible and the Gate A call path is unchanged.** This story needs neither parameter (it produces no evaluation report); call it exactly as the existing Gate A flow does.
+  - [ ] **Re-derive baselines at the start rather than trusting these.** Recorded at this story's `baseline_commit` (`8c21de0`, Story 2.2 `done`): backend **510 passed / 7 deselected**; postgres **27 passed**; live **7 skipped** (no API key); frontend **50 files / 287 tests**; e2e **46 passed**; alembic zero diff; `gate_a_passed: true`. These are one story fresher than the numbers Story 2.2 worked from — still re-derive on a clean tree before treating any delta as this story's regression.
   - [ ] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, and Gate A still `true`.
 
 ## Dev Notes
