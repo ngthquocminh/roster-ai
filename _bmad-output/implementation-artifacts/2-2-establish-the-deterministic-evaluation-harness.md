@@ -30,47 +30,47 @@ So that every epic proves its own behavior deterministically instead of deferrin
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Define the golden-dataset case schema and create `backend/evals/`** (AC: #3)
-  - [ ] New top-level package `backend/evals/` — AR26's structural seed names it `# versioned AI and architecture proof datasets`. This is the only new top-level backend package this story creates; Story 2.1 deliberately left it unscaffolded for this story to own.
-  - [ ] `backend/evals/cases.py` — a frozen-dataclass case schema (not a cross-epic `V1` contract; this is dataset/test infrastructure, not a persisted product contract, so it does not join AD-20's sixteen-name list). One case declares, per Story 2.9's own line ("expected tool, arguments, allow/refuse outcome, evidence IDs, and visible state"): a stable case ID, an owning **capability** tag (free-text string; no relation to `CapabilityManifestV1` — that contract is Story 2.6's), a **risk class** restricted to AD-5's exact five values (`Literal["inspect", "draft", "compute", "consequential", "prohibited"]`). **Verified: no such literal exists in the repo yet** — nothing under `backend/` declares these five values today, because the registry that will enforce them is Story 2.5's. So you define it here, and you define it as a *dataset tag vocabulary*, not as the registry's authority type: it labels which class a case belongs to, and grants nothing. Use AD-5's five values exactly and invent no sixth; when Story 2.5 builds the real registry it may lift this vocabulary or define its own authoritative one — either way an out-of-vocabulary tag must be impossible here, a scripted turn (prompt + expected tool-call sequence with arguments), an expected outcome (`allow` / `refuse` / `clarify`), expected evidence references (empty tuple is valid — most Epic 2 cases have none yet), and expected visible state/text.
-  - [ ] `backend/evals/golden/` — the version-controlled case files live here as JSON, one case per file or grouped by capability subdirectory; your call, document whichever in the README (Task 8).
-  - [ ] **Acceptance boundary:** a loader test round-trips one hand-written case file through JSON → dataclass, and a case with an out-of-vocabulary `risk_class` (e.g. `"dangerous"`) is rejected at load time, not silently accepted.
+- [x] **Task 1: Define the golden-dataset case schema and create `backend/evals/`** (AC: #3)
+  - [x] New top-level package `backend/evals/` — AR26's structural seed names it `# versioned AI and architecture proof datasets`. This is the only new top-level backend package this story creates; Story 2.1 deliberately left it unscaffolded for this story to own.
+  - [x] `backend/evals/cases.py` — a frozen-dataclass case schema (not a cross-epic `V1` contract; this is dataset/test infrastructure, not a persisted product contract, so it does not join AD-20's sixteen-name list). One case declares, per Story 2.9's own line ("expected tool, arguments, allow/refuse outcome, evidence IDs, and visible state"): a stable case ID, an owning **capability** tag (free-text string; no relation to `CapabilityManifestV1` — that contract is Story 2.6's), a **risk class** restricted to AD-5's exact five values (`Literal["inspect", "draft", "compute", "consequential", "prohibited"]`). **Verified: no such literal exists in the repo yet** — nothing under `backend/` declares these five values today, because the registry that will enforce them is Story 2.5's. So you define it here, and you define it as a *dataset tag vocabulary*, not as the registry's authority type: it labels which class a case belongs to, and grants nothing. Use AD-5's five values exactly and invent no sixth; when Story 2.5 builds the real registry it may lift this vocabulary or define its own authoritative one — either way an out-of-vocabulary tag must be impossible here, a scripted turn (prompt + expected tool-call sequence with arguments), an expected outcome (`allow` / `refuse` / `clarify`), expected evidence references (empty tuple is valid — most Epic 2 cases have none yet), and expected visible state/text.
+  - [x] `backend/evals/golden/` — the version-controlled case files live here as JSON, one case per file or grouped by capability subdirectory; your call, document whichever in the README (Task 8).
+  - [x] **Acceptance boundary:** a loader test round-trips one hand-written case file through JSON → dataclass, and a case with an out-of-vocabulary `risk_class` (e.g. `"dangerous"`) is rejected at load time, not silently accepted.
 
-- [ ] **Task 2: Generalize the spike's model doubles into a reusable, case-driven double builder** (AC: #1)
-  - [ ] `backend/evals/doubles.py` — builds a deterministic PydanticAI double from a case's scripted tool-call/response sequence. This is what Story 2.1's "unblocks" line means by *"formalizes the model doubles this spike proves"*: `backend/spikes/agent_runtime/` and `backend/tests/test_agent_runtime_adapter.py`'s hand-written `FunctionModel` callables (e.g. `_demo_then_report`) are the pattern; this task makes that pattern **data-driven** so a new golden case needs a new JSON file, not a new Python function.
-  - [ ] `models.ALLOW_MODEL_REQUESTS = False` at module scope — this module must never be able to reach a network, by construction, same as `backend/tests/test_agent_runtime_adapter.py:35`.
-  - [ ] Drive cases through the **real** `AgentRuntime` port (`PydanticAIAgentRuntime.run_turn()`), never a bespoke parallel runner. The point of this harness is to prove the seam Story 2.1 built, not a second one that could silently diverge from it.
-  - [ ] **Acceptance boundary:** one demonstration case runs end to end through `PydanticAIAgentRuntime.run_turn()` using only the generated double, and the test asserts on the returned `AgentRunOutcomeV1` — an owned type, never a framework type (mirrors Story 2.1's Task 9 "assertions on owned types only" rule).
+- [x] **Task 2: Generalize the spike's model doubles into a reusable, case-driven double builder** (AC: #1)
+  - [x] `backend/evals/doubles.py` — builds a deterministic PydanticAI double from a case's scripted tool-call/response sequence. This is what Story 2.1's "unblocks" line means by *"formalizes the model doubles this spike proves"*: `backend/spikes/agent_runtime/` and `backend/tests/test_agent_runtime_adapter.py`'s hand-written `FunctionModel` callables (e.g. `_demo_then_report`) are the pattern; this task makes that pattern **data-driven** so a new golden case needs a new JSON file, not a new Python function.
+  - [x] `models.ALLOW_MODEL_REQUESTS = False` at module scope — this module must never be able to reach a network, by construction, same as `backend/tests/test_agent_runtime_adapter.py:35`.
+  - [x] Drive cases through the **real** `AgentRuntime` port (`PydanticAIAgentRuntime.run_turn()`), never a bespoke parallel runner. The point of this harness is to prove the seam Story 2.1 built, not a second one that could silently diverge from it.
+  - [x] **Acceptance boundary:** one demonstration case runs end to end through `PydanticAIAgentRuntime.run_turn()` using only the generated double, and the test asserts on the returned `AgentRunOutcomeV1` — an owned type, never a framework type (mirrors Story 2.1's Task 9 "assertions on owned types only" rule).
 
-- [ ] **Task 3: Build the tool-routing evaluator and its extension point** (AC: #1, #3)
-  - [ ] `backend/evals/evaluators.py` — define an `Evaluator` `Protocol` judged against `(case, AgentRunOutcomeV1) -> EvalVerdict` (pass/fail + a reason string). Ship **exactly one** evaluator in this story: tool routing — does the actual tool name + arguments (or the correct absence of a tool call, for a `refuse`/`clarify` case) match the case's expected outcome. This is what NFR28's "≥90% overall tool routing, 100% consequential/prohibited routing" measures against.
-  - [ ] **Do not build the grounding evaluator (NFR12, Story 2.7) or the refusal/injection evaluator (Story 2.9) here.** The `Protocol` is the extension point those stories plug into later — pre-building them speculatively is exactly the kind of scope creep Story 2.1's Dev Notes warned against for the capability registry.
-  - [ ] **Acceptance boundary:** three unit tests — a correct-routing pass, a wrong-tool fail, a wrong-arguments fail — each asserting the verdict's reason string names what differed.
+- [x] **Task 3: Build the tool-routing evaluator and its extension point** (AC: #1, #3)
+  - [x] `backend/evals/evaluators.py` — define an `Evaluator` `Protocol` judged against `(case, AgentRunOutcomeV1) -> EvalVerdict` (pass/fail + a reason string). Ship **exactly one** evaluator in this story: tool routing — does the actual tool name + arguments (or the correct absence of a tool call, for a `refuse`/`clarify` case) match the case's expected outcome. This is what NFR28's "≥90% overall tool routing, 100% consequential/prohibited routing" measures against.
+  - [x] **Do not build the grounding evaluator (NFR12, Story 2.7) or the refusal/injection evaluator (Story 2.9) here.** The `Protocol` is the extension point those stories plug into later — pre-building them speculatively is exactly the kind of scope creep Story 2.1's Dev Notes warned against for the capability registry.
+  - [x] **Acceptance boundary:** three unit tests — a correct-routing pass, a wrong-tool fail, a wrong-arguments fail — each asserting the verdict's reason string names what differed.
 
-- [ ] **Task 4: Wire the deterministic default suite and a separately gated live variant** (AC: #1)
-  - [ ] `backend/tests/test_evaluation_harness.py` — plain pytest, **no marker**, `models.ALLOW_MODEL_REQUESTS = False` at module scope. Loads every case under `backend/evals/golden/`, builds its double (Task 2), runs it through the real adapter, evaluates it (Task 3), and asserts pass. This is the suite normal CI runs; per AC1 it must reach zero network calls, ever.
-  - [ ] Live variant: **reuse the existing `live` marker** (`backend/pyproject.toml:51`, excluded by default via `addopts = -m "not live"`) — do not invent a second marker or a parallel gating mechanism. Add `@pytest.mark.live` test(s) at the bottom of the same file (mirroring `backend/tests/test_gemini_provider.py`'s single-file, mostly-deterministic-plus-one-live-block shape) that run the **same** golden cases against a real provider via `create_agent_runtime()`, and `@pytest.mark.skipif` cleanly when no API key is present (mirror `test_gemini_provider.py:28,243-244`'s `_HAS_KEY` pattern).
-  - [ ] A live run's result must be marked non-authoritative wherever it could be persisted or aggregated (e.g. a `run_source: Literal["double", "live"]` field on whatever result type Task 5's report consumes) — AC1's "a live-provider result can never satisfy a release gate on its own" has to be true of the *data shape*, not just of a marker CI happens to exclude by default.
-  - [ ] **Acceptance boundary:** a default `uv run --frozen pytest` run touches network zero times and passes; `uv run --frozen pytest -m live` is collected, runs (or skips cleanly without a key), and is demonstrably excluded from the default run.
+- [x] **Task 4: Wire the deterministic default suite and a separately gated live variant** (AC: #1)
+  - [x] `backend/tests/test_evaluation_harness.py` — plain pytest, **no marker**, `models.ALLOW_MODEL_REQUESTS = False` at module scope. Loads every case under `backend/evals/golden/`, builds its double (Task 2), runs it through the real adapter, evaluates it (Task 3), and asserts pass. This is the suite normal CI runs; per AC1 it must reach zero network calls, ever.
+  - [x] Live variant: **reuse the existing `live` marker** (`backend/pyproject.toml:51`, excluded by default via `addopts = -m "not live"`) — do not invent a second marker or a parallel gating mechanism. Add `@pytest.mark.live` test(s) at the bottom of the same file (mirroring `backend/tests/test_gemini_provider.py`'s single-file, mostly-deterministic-plus-one-live-block shape) that run the **same** golden cases against a real provider via `create_agent_runtime()`, and `@pytest.mark.skipif` cleanly when no API key is present (mirror `test_gemini_provider.py:28,243-244`'s `_HAS_KEY` pattern).
+  - [x] A live run's result must be marked non-authoritative wherever it could be persisted or aggregated (e.g. a `run_source: Literal["double", "live"]` field on whatever result type Task 5's report consumes) — AC1's "a live-provider result can never satisfy a release gate on its own" has to be true of the *data shape*, not just of a marker CI happens to exclude by default.
+  - [x] **Acceptance boundary:** a default `uv run --frozen pytest` run touches network zero times and passes; `uv run --frozen pytest -m live` is collected, runs (or skips cleanly without a key), and is demonstrably excluded from the default run.
 
-- [ ] **Task 5: Report generation bound to NFR27, rejecting an incomplete binding** (AC: #2)
-  - [ ] `backend/evals/report.py` — aggregate case verdicts (pass/fail counts; tool-routing percentage overall and separately for `consequential`+`prohibited` cases only) and call `scripts/evidence_binding.resolve_bindings()` to produce the `version_bindings` block. **Reuse it, do not reimplement it** — it already refuses a dirty tree and a missing declared key (`ValueError` naming which key), which is most of what AC2 asks for. Your job is supplying the seven declared keys correctly for an eval report: `evaluator`, `model`, `prompt`, `tool`, `policy`, `application`, `solver`.
-  - [ ] **Resolve this before writing the generator — it is a real design gap, not a style choice.** `resolve_bindings()` derives **both** `dataset` and `scenario` from the same Gate A `default_fixtures()` list (`fixture_id:version` pairs) — see `evidence/story-1.5/nfr35-evidence-target-resolution.json`'s `version_bindings.dataset` and `.scenario`, which are near-identical strings. That was correct for Gate A evidence, where the thing measured and the scenario fixture used were the same set. It is **not** correct here: this story's `dataset` binding must describe the *golden evaluation dataset* (case count, tag distribution, its own version) — a new artifact this story creates — while `scenario` should describe which Gate A scenario fixture, if any, a case actually touched (Task 7's demonstration-tool cases touch none at all, since `shiftmind_demonstration` reads no scenario data).
+- [x] **Task 5: Report generation bound to NFR27, rejecting an incomplete binding** (AC: #2)
+  - [x] `backend/evals/report.py` — aggregate case verdicts (pass/fail counts; tool-routing percentage overall and separately for `consequential`+`prohibited` cases only) and call `scripts/evidence_binding.resolve_bindings()` to produce the `version_bindings` block. **Reuse it, do not reimplement it** — it already refuses a dirty tree and a missing declared key (`ValueError` naming which key), which is most of what AC2 asks for. Your job is supplying the seven declared keys correctly for an eval report: `evaluator`, `model`, `prompt`, `tool`, `policy`, `application`, `solver`.
+  - [x] **Resolve this before writing the generator — it is a real design gap, not a style choice.** `resolve_bindings()` derives **both** `dataset` and `scenario` from the same Gate A `default_fixtures()` list (`fixture_id:version` pairs) — see `evidence/story-1.5/nfr35-evidence-target-resolution.json`'s `version_bindings.dataset` and `.scenario`, which are near-identical strings. That was correct for Gate A evidence, where the thing measured and the scenario fixture used were the same set. It is **not** correct here: this story's `dataset` binding must describe the *golden evaluation dataset* (case count, tag distribution, its own version) — a new artifact this story creates — while `scenario` should describe which Gate A scenario fixture, if any, a case actually touched (Task 7's demonstration-tool cases touch none at all, since `shiftmind_demonstration` reads no scenario data).
     - `resolve_bindings(fixtures=...)` already accepts an override — any object with `.fixture_id`/`.version` attributes counts, matching `scripts/gate_a_cutover.py:FixtureSpec`'s shape. Passing a synthetic single entry there is the mechanism, but doing so naively still aliases `dataset` and `scenario` to the same value, which does not fix the gap.
     - Decide, and record the decision and rationale in Dev Notes (matching Story 2.1's decision-recording convention): either (a) add a small, backward-compatible extension to `evidence_binding.py` — e.g. an optional parameter that lets `dataset` be derived independently (count + sha256 of the committed golden-dataset files, mirroring `contract_digests()`'s own file-hash pattern) while `scenario` keeps deriving from `fixtures=` (empty/`"not applicable"` when no case touches scenario data); or (b) some other resolution you can justify — but do not ship a report where `dataset` silently equals `scenario` with no rationale recorded, and do not change the derivation for existing Gate A call sites (`resolve_bindings()`'s default behavior with no override must keep working unmodified for `evidence/story-1.4`, `-1.5`, `-1.9`, `-1.10`, `-1.11`).
-  - [ ] Make "a report missing any binding is rejected rather than recorded" literal: the file is written **only after** `resolve_bindings()` returns successfully. No partial or placeholder file on failure.
-  - [ ] **Acceptance boundary:** a test asserting an incomplete declared-bindings call raises and writes no file, and a complete call writes a JSON file that `backend/tests/test_evidence_convention.py`'s repo-wide `evidence/**/*.json` walk accepts unmodified (that test file needs no change — it already covers "a new evidence file in a later epic... automatically").
+  - [x] Make "a report missing any binding is rejected rather than recorded" literal: the file is written **only after** `resolve_bindings()` returns successfully. No partial or placeholder file on failure.
+  - [x] **Acceptance boundary:** a test asserting an incomplete declared-bindings call raises and writes no file, and a complete call writes a JSON file that `backend/tests/test_evidence_convention.py`'s repo-wide `evidence/**/*.json` walk accepts unmodified (that test file needs no change — it already covers "a new evidence file in a later epic... automatically").
 
 - [ ] **Task 6: Produce this story's own demonstration evidence file** (AC: #1, #2)
   - [ ] Follow `docs/EVIDENCE-CONVENTION.md` exactly: commit the code from Tasks 1–5 and 7 first, confirm `git status --porcelain` is empty, run the deterministic suite (Task 4) on that clean tree, generate `evidence/story-2.2/evaluation-harness-demonstration.json` via Task 5's generator, then commit the evidence file separately.
   - [ ] **State explicitly, in the report and in Completion Notes, that this is a demonstration of the machinery — not a claim on NFR28's 50-case Gate B floor.** Gate B (`epics.md`'s Release Gate table, "Golden dataset size" row) is measured later, after Stories 2.9, 3.10–3.12, and 4.5–4.6 have all contributed their own cases; this story's seed cases (Task 7) exist only to prove the harness runs, evaluates, and reports correctly end to end.
   - [ ] **Acceptance boundary:** `evidence/story-2.2/evaluation-harness-demonstration.json` exists, passes `backend/tests/test_evidence_convention.py`, and its `git_commit` is a real ancestor of `HEAD` that touches a code file (not a docs-only commit — this convention document names that exact defect).
 
-- [ ] **Task 7: Seed cases against the one tool that actually exists** (AC: #3)
-  - [ ] Add a small number of golden cases (this is a schema/shape demonstration, not a dataset-size target — see Task 6) exercising `shiftmind_demonstration`, the **only** tool Epic 2 has today (`backend/agent/runtime.py:126-130`). Tag them `capability="demonstration"` — deliberately not a real capability name; do not fabricate a `scheduling_inspect`-shaped case that Story 2.5 hasn't built yet.
-  - [ ] Cover at least: one `repeat=1` case (executes freely, no approval — tag `risk_class="inspect"`, the closest AD-5 analog for a read-only free-running call) and one `repeat>1` case (suspends for approval — tag `risk_class="consequential"`, since AD-5 defines that class as needing "exact-action approval," which is exactly what `ApprovalRequired` triggers here).
-  - [ ] **Do not write cases for capabilities that don't exist.** Real cases for Stories 2.5, 2.7, 2.9, etc. are those stories' job, per `epics.md`'s own unblocks list — this story proves the schema and pipeline accept a contribution, not that Epic 2's real capabilities are covered.
-  - [ ] **Acceptance boundary:** at least one `allow`-outcome case and one `consequential`/approval-required case, both tagged per Task 1's schema and passing under Task 4's deterministic suite.
+- [x] **Task 7: Seed cases against the one tool that actually exists** (AC: #3)
+  - [x] Add a small number of golden cases (this is a schema/shape demonstration, not a dataset-size target — see Task 6) exercising `shiftmind_demonstration`, the **only** tool Epic 2 has today (`backend/agent/runtime.py:126-130`). Tag them `capability="demonstration"` — deliberately not a real capability name; do not fabricate a `scheduling_inspect`-shaped case that Story 2.5 hasn't built yet.
+  - [x] Cover at least: one `repeat=1` case (executes freely, no approval — tag `risk_class="inspect"`, the closest AD-5 analog for a read-only free-running call) and one `repeat>1` case (suspends for approval — tag `risk_class="consequential"`, since AD-5 defines that class as needing "exact-action approval," which is exactly what `ApprovalRequired` triggers here).
+  - [x] **Do not write cases for capabilities that don't exist.** Real cases for Stories 2.5, 2.7, 2.9, etc. are those stories' job, per `epics.md`'s own unblocks list — this story proves the schema and pipeline accept a contribution, not that Epic 2's real capabilities are covered.
+  - [x] **Acceptance boundary:** at least one `allow`-outcome case and one `consequential`/approval-required case, both tagged per Task 1's schema and passing under Task 4's deterministic suite.
 
 - [ ] **Task 8: Document the regression-case contribution workflow** (AC: #3)
   - [ ] `backend/evals/README.md` — the case schema (Task 1), the tag vocabulary (capability is free text; risk class is exactly AD-5's five values), and the contribution workflow: a reviewed failure is sanitized (secrets/PII scrubbed — NFR4: "Secrets never appear in prompts, browser payloads, audit summaries, logs, traces, or evaluation fixtures") and added as a new version-controlled case file under `backend/evals/golden/`, carrying its own case-level version distinct from any contract `schema_version`. State explicitly that Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute their **own** cases to this **same** directory — this story does not write those cases, only the pipeline that accepts them.
@@ -191,11 +191,76 @@ This is the single most likely place to under-think this story, because the exis
 
 ### Agent Model Used
 
+GPT-5 Codex (bmad-dev-story)
+
+### Implementation Plan
+
+1. Re-derive all clean-tree baselines, then implement the case schema, reusable
+   deterministic double, and single tool-routing evaluator in strict task order
+   with red-green-refactor tests.
+2. Add the default and live-gated harness paths, then extend
+   `resolve_bindings()` backward-compatibly so evaluation datasets bind
+   independently from scenario fixtures.
+3. Add only the two demonstration-tool seed cases, document contribution rules,
+   prove architecture guards red then green, and keep the Story 2.1 runtime seam
+   at a zero-line diff.
+4. Commit code, measure on a clean tree, generate Story 2.2 evidence through the
+   report generator, commit evidence separately, regenerate Gate A, and finish
+   the full regression/DoD sequence.
+
 ### Debug Log References
+
+**Clean baseline re-derived before implementation (2026-08-10, `5ce7d1b`):**
+backend 486 passed / 6 deselected; PostgreSQL 27 passed / 465 deselected;
+frontend 50 files / 287 tests; e2e 46 passed; typecheck, lint, build, and
+`alembic check` all green. The first concurrent frontend attempt exhausted
+Vitest workers and collided on preview port 4173; sequential reruns restored the
+recorded 50/287 and 46/46 baselines without code changes.
+
+**Task 5 dataset/scenario decision:** extended `resolve_bindings()` with an
+optional `dataset_files=` derivation path. Evaluation datasets are parsed for
+case count, case versions, capability/risk distributions and pinned by raw
+per-file SHA-256; `fixtures=` independently describes scenario data, with an
+explicit empty set rendered as `not applicable`. Gate A callers omit
+`dataset_files`, so their existing default derivation and every Story
+1.4/1.5/1.9/1.10/1.11 call site remain unchanged. This keeps both bindings
+derived (never caller-authored prose) while representing their genuinely
+different identities for Story 2.2.
 
 ### Completion Notes List
 
+- Task 1: added the frozen evaluation-case schema and strict JSON loader. The
+  five AD-5 values are explicitly dataset tags, not authority; malformed JSON,
+  mixed scripted-turn shapes, and out-of-vocabulary risks fail loudly.
+- Task 2: generalized Story 2.1's hand-written `FunctionModel` pattern into a
+  case-driven builder with model requests disabled at module scope; its test
+  runs through the real adapter and asserts only on `AgentRunOutcomeV1`.
+- Task 3: shipped the `Evaluator` Protocol and exactly one implementation,
+  `ToolRoutingEvaluator`; correct routing, wrong tool names, and wrong arguments
+  have explicit reason-string tests. No grounding or refusal evaluator added.
+- Task 4: default evaluation is unmarked and network-disabled; the existing
+  `live` marker collects a key-gated variant. `EvalVerdict.run_source` makes
+  live results non-authoritative by construction, not by CI convention alone.
+- Task 5: report generation aggregates overall and protected-class routing and
+  resolves all NFR27 bindings before creating a file. `dataset_files=` now
+  derives an independent, hashed golden-dataset identity while all Gate A
+  default call sites retain their original behavior.
+- Task 7 (Task 6 prerequisite): added exactly two `demonstration` cases—one
+  free-running `inspect` call and one approval-suspended `consequential` call.
+  They prove the schema/pipeline only and do not pad toward NFR28's Gate B floor.
+
 ### File List
+
+- `backend/evals/__init__.py` (new)
+- `backend/evals/cases.py` (new)
+- `backend/evals/doubles.py` (new)
+- `backend/evals/evaluators.py` (new)
+- `backend/evals/report.py` (new)
+- `backend/scripts/evidence_binding.py` (modified)
+- `backend/evals/golden/demonstration/repeat-once.json` (new)
+- `backend/evals/golden/demonstration/repeat-with-approval.json` (new)
+- `backend/tests/test_evaluation_harness.py` (new)
+- `_bmad-output/implementation-artifacts/2-2-establish-the-deterministic-evaluation-harness.md` (modified)
 
 ## Change Log
 

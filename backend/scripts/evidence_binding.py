@@ -336,6 +336,7 @@ def resolve_bindings(
     *,
     repo_root: Path = REPO_ROOT,
     fixtures: Iterable[Any] | None = None,
+    dataset_files: Iterable[Path] | None = None,
     migrations_dir: Path | None = None,
     contract_dir: Path | None = None,
     code_extra: Mapping[str, Any] | None = None,
@@ -348,6 +349,11 @@ def resolve_bindings(
     key in :data:`DECLARED_BINDING_KEYS` is required. Extra keys pass through
     (Story 1.10 carries `axe_core_version` and friends this way). The bindings
     in :data:`DERIVED_BINDING_KEYS` are resolved here and may not be supplied.
+
+    Gate A callers omit ``dataset_files`` and preserve the original behavior:
+    dataset and scenario both derive from the governed fixtures. Evaluation
+    callers pass committed golden JSON files, which derives an independent
+    dataset binding while ``fixtures`` continues to describe scenario data.
     """
     missing = [key for key in DECLARED_BINDING_KEYS if key not in declared]
     if missing:
@@ -397,18 +403,28 @@ def resolve_bindings(
     specs = list(fixtures) if fixtures is not None else list(_fixture_specs())
     identities = [f"{spec.fixture_id}:{spec.version}" for spec in specs]
 
-    bindings: dict[str, Any] = {
-        "dataset": (
+    dataset_binding: Any
+    if dataset_files is None:
+        dataset_binding = (
             f"{len(identities)} governed fixtures ({', '.join(identities)}); "
             "contract sha256 digests recorded alongside"
-        ),
+        )
+    else:
+        dataset_binding = _evaluation_dataset_binding(dataset_files, repo_root)
+
+    bindings: dict[str, Any] = {
+        "dataset": dataset_binding,
         "evaluator": declared["evaluator"],
         "model": declared["model"],
         "prompt": declared["prompt"],
         "tool": declared["tool"],
         "policy": declared["policy"],
         "application": declared["application"],
-        "scenario": " and ".join(identities),
+        "scenario": (
+            " and ".join(identities)
+            if identities
+            else "not applicable — no scenario fixture touched"
+        ),
         "solver": declared["solver"],
         "code": code,
         "image": dict(_LOCAL_IMAGE_BINDING),
@@ -424,6 +440,63 @@ def resolve_bindings(
         bindings["binding_override"] = _ALLOW_DIRTY_NOTE
 
     return bindings
+
+
+def _evaluation_dataset_binding(
+    dataset_files: Iterable[Path], repo_root: Path
+) -> dict[str, Any]:
+    """Derive an evaluation dataset identity from exact committed file bytes.
+
+    Parsing supplies the semantic identity NFR28 needs (count, versions and tag
+    distributions); raw SHA-256 pins the precise artifact bytes, matching
+    ``contract_digests()`` rather than fixture-payload canonicalization.
+    """
+    files: dict[str, dict[str, Any]] = {}
+    case_versions: dict[str, str] = {}
+    capabilities: dict[str, int] = {}
+    risks: dict[str, int] = {}
+    for source in sorted((Path(path) for path in dataset_files), key=str):
+        try:
+            document = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Cannot bind golden dataset file {source}: {exc}") from exc
+        if not isinstance(document, dict):
+            raise ValueError(f"Golden dataset file {source} is not a JSON object")
+        required = ("case_id", "case_version", "capability", "risk_class")
+        missing = [key for key in required if not isinstance(document.get(key), str)]
+        if missing:
+            raise ValueError(
+                f"Golden dataset file {source} lacks string field(s): "
+                f"{', '.join(missing)}"
+            )
+        case_id = document["case_id"]
+        if case_id in case_versions:
+            raise ValueError(f"Duplicate golden dataset case_id {case_id!r}")
+        case_versions[case_id] = document["case_version"]
+        capability = document["capability"]
+        risk = document["risk_class"]
+        capabilities[capability] = capabilities.get(capability, 0) + 1
+        risks[risk] = risks.get(risk, 0) + 1
+        try:
+            key = source.resolve().relative_to(repo_root.resolve()).as_posix()
+        except ValueError:
+            key = source.name
+        if key in files:
+            raise ValueError(f"Golden dataset binding path collision on {key!r}")
+        files[key] = {
+            "case_id": case_id,
+            "case_version": document["case_version"],
+            "sha256": file_digest(source),
+        }
+
+    return {
+        "kind": "version-controlled golden evaluation dataset",
+        "case_count": len(case_versions),
+        "case_versions": dict(sorted(case_versions.items())),
+        "capability_distribution": dict(sorted(capabilities.items())),
+        "risk_class_distribution": dict(sorted(risks.items())),
+        "files": dict(sorted(files.items())),
+    }
 
 
 # ---------------------------------------------------------------------------

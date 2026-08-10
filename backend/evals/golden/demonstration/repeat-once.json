@@ -1,0 +1,38 @@
+{
+  "case_id": "demonstration-repeat-once",
+  "case_version": "1",
+  "capability": "demonstration",
+  "risk_class": "inspect",
+  "prompt": "Demonstrate alpha once.",
+  "scripted_turns": [
+    {
+      "tool_name": "shiftmind_demonstration",
+      "arguments": {
+        "payload": {
+          "label": "alpha",
+          "repeat": 1
+        }
+      },
+      "tool_call_id": "demo-repeat-once"
+    },
+    {
+      "response_text": "tool said alpha"
+    }
+  ],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [
+    {
+      "tool_name": "shiftmind_demonstration",
+      "arguments": {
+        "payload": {
+          "label": "alpha",
+          "repeat": 1
+        }
+      }
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "tool said alpha",
+  "scenario_fixtures": []
+}
