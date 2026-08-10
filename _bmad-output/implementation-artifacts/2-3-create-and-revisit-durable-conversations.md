@@ -165,6 +165,7 @@ Double-submit is handled where it belongs for this slice: the composer disables 
 - [ ] **Task 11: Make the new boundary executable** (AC: #1)
   - [ ] Extend `backend/tests/architecture/test_agent_runtime_boundaries.py` (or add a sibling in the same package) to assert the **new** application-layer modules — `application/contracts/activity.py`, `contracts/persisted_event.py`, `ports/conversation.py`, `use_cases/**` — import neither `sqlalchemy` nor `fastapi`.
   - [ ] Scope the new guard to those modules with an explicit, **documented** allow-list entry for the known `application/ports/scenario_catalogue.py` leak. A guard that lies about its own coverage is exactly the defect the Story 2.1 review fixed in this file's docstring (`deferred-work.md`, 2026-08-10) — state precisely what is and is not covered.
+  - [ ] In the allow-list entry's comment, cite `deferred-work.md`'s *"Deferred from: story-2-3 creation (2026-08-10)"* item, which tracks the leak, records the three fix tiers, and names deleting this entry as its definition of done. A suppression with no ticket behind it becomes permanent.
   - [ ] **Acceptance boundary:** the guard **fails** when temporarily given a real `from sqlalchemy import Connection` in `ports/conversation.py`, and passes on the shipped tree. Demonstrate both — a guard nobody has seen go red is a guard nobody has tested.
 
 - [ ] **Task 12: Full regression gate** (AC: #1, #2, #3)
