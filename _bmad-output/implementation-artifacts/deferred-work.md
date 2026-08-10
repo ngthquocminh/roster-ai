@@ -121,3 +121,11 @@
   3. **The real fix:** the port takes no connection at all; the adapter owns its own unit of work, and the application calls a method rather than threading a driver handle through the boundary. This is a refactor of the port, its Postgres adapter, `api/deps.py:get_catalogue_reader`, and the fixture-catalogue router — not a one-liner.
 
   **No story owns this yet.** Earliest natural candidate is **Story 2.4**, which adds the next `application/ports/` module (the SSE/event-stream port) and will already be touching that guard; otherwise, the next story that modifies `ScenarioCatalogueReader` or `adapters/postgres/scenario_catalogue.py` for any reason. Whoever takes it: tier 3 touches Gate A code, so re-run the Gate A readiness report per `docs/EVIDENCE-CONVENTION.md` and confirm `gate_a_passed` still reads `true`.
+
+## Deferred from: code review of story-2-3-create-and-revisit-durable-conversations (2026-08-10)
+
+- **UX-DR35's "Send must be visually discontinuous from Run optimization and Approve" is neither expressed in code nor asserted by a test.** `Composer.tsx:6` renders `<button type="button" disabled={…}>Send</button>` with no styling at all, and nothing anywhere in `frontend/src/features/chat/` establishes a visual authority hierarchy. **Deferred reason: not actionable in this slice** — the Chat surface ships no Run or Approve control for Send to be discontinuous *from*, and Story 2.3's Task 9 explicitly forbids adding a disabled Run or Approve "for later". The requirement is therefore vacuously satisfied today and becomes real the moment a second, higher-authority action lands beside Send.
+
+  Separately resolved in the same review, so **not** part of this item: Chat's missing pending/error states and its non-use of `EmptyState` / `InlineAlert` / `StatusBadge` / `Skeleton` / `ReconnectBanner` were triaged as patches against Task 8, not deferred.
+
+  **Owner: the first story to ship a Run optimization or Approve control on the Chat surface** — Epic 3 under AD-7's approval flow is the natural candidate. Whoever takes it needs to introduce the discontinuity *and* an automated assertion of it, since `EXPERIENCE.md`'s Accessibility Floor makes automated coverage the only accepted proof in this repo.

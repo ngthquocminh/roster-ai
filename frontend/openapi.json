@@ -2529,11 +2529,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ConversationOut"
-                  },
-                  "title": "Response List Conversations Api V1 Conversations Get"
+                  "$ref": "#/components/schemas/ConversationListOut"
                 }
               }
             }
@@ -2836,6 +2832,10 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
           }
         },
         "type": "object",
@@ -2849,7 +2849,8 @@
           "scenario_version_id",
           "occurred_at",
           "message_id",
-          "text"
+          "text",
+          "sequence"
         ],
         "title": "ActivityItemOut"
       },
@@ -3222,13 +3223,45 @@
             "type": "string",
             "format": "uuid",
             "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
           }
         },
         "type": "object",
         "required": [
-          "scenario_id"
+          "scenario_id",
+          "scenario_version_id"
         ],
         "title": "ConversationCreateIn"
+      },
+      "ConversationListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "ConversationListOut"
       },
       "ConversationOut": {
         "properties": {
@@ -3830,6 +3863,11 @@
             "format": "uuid",
             "title": "Scenario Id"
           },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
           "fixture_version": {
             "type": "string",
             "title": "Fixture Version"
@@ -3867,6 +3905,7 @@
         "required": [
           "scenario_name",
           "scenario_id",
+          "scenario_version_id",
           "fixture_version",
           "checksum_algorithm",
           "checksum_schema_version",
@@ -4214,6 +4253,10 @@
           "limit": {
             "type": "integer",
             "title": "Limit"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
           }
         },
         "type": "object",
@@ -4222,7 +4265,8 @@
           "resource_version",
           "latest_agent_run_status",
           "items",
-          "limit"
+          "limit",
+          "has_more"
         ],
         "title": "TimelineOut"
       },

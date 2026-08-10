@@ -78,6 +78,7 @@ it("preserves heading hierarchy and keyboard reading order through Scenario Data
           schema_version: "v1",
           scenario_name: contract.fixture.fixture_id,
           scenario_id: scenarioId,
+          scenario_version_id: "33333333-3333-4333-8333-333333333333",
           fixture_version: contract.fixture.version,
           checksum_algorithm: "sha256",
           checksum_schema_version: "rfc8785-v1",

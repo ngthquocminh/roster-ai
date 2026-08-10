@@ -27,6 +27,11 @@ class FixtureCatalogueEntry:
 class ScenarioContext:
     scenario_name: str
     scenario_id: UUID
+    # The identity of the version this context describes. Callers that pin a
+    # version (AD-9) must select by this id rather than re-deriving "latest"
+    # themselves: this reader orders by version ordinal, so any second
+    # resolution rule would silently disagree with what the planner is shown.
+    scenario_version_id: UUID
     fixture_version: str
     checksum_algorithm: str
     checksum_schema_version: str

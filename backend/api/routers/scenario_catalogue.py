@@ -46,6 +46,7 @@ def _scenario_context_out(context: ScenarioContext) -> ScenarioContextOut:
     return ScenarioContextOut(
         scenario_name=context.scenario_name,
         scenario_id=context.scenario_id,
+        scenario_version_id=context.scenario_version_id,
         fixture_version=context.fixture_version,
         checksum_algorithm=context.checksum_algorithm,
         checksum_schema_version=context.checksum_schema_version,

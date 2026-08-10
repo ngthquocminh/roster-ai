@@ -107,6 +107,7 @@ class PostgresScenarioCatalogueReader:
             select(
                 scenario.c.name.label("scenario_name"),
                 scenario.c.id.label("scenario_id"),
+                scenario_version.c.id.label("scenario_version_id"),
                 scenario_version.c.version.label("fixture_version"),
                 scenario_version.c.checksum_algorithm,
                 scenario_version.c.checksum_schema_version,
@@ -130,6 +131,7 @@ class PostgresScenarioCatalogueReader:
         return ScenarioContext(
             scenario_name=row.scenario_name,
             scenario_id=row.scenario_id,
+            scenario_version_id=row.scenario_version_id,
             fixture_version=row.fixture_version,
             checksum_algorithm=row.checksum_algorithm,
             checksum_schema_version=row.checksum_schema_version,

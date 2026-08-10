@@ -321,7 +321,23 @@ persisted_event = Table(
     ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_persisted_event_conversation_site", ondelete="RESTRICT"),
     ForeignKeyConstraint(["agent_run_id", "site_id"], ["agent_run.id", "agent_run.site_id"], name="fk_persisted_event_agent_run_site", ondelete="RESTRICT"),
     UniqueConstraint("stream_id", "sequence", name="uq_persisted_event_stream_sequence"),
+    UniqueConstraint("id", "site_id", name="uq_persisted_event_id_site"),
+    # A conversation stream's identity IS the conversation's UUID (AD-21), so a
+    # second stream cannot be numbered against the same conversation and
+    # collide inside one rendered timeline.
+    CheckConstraint("stream_id = conversation_id", name="ck_persisted_event_stream_is_conversation"),
 )
+
+# Indexes for this aggregate's reads and for the site_id predicate that FORCE
+# RLS evaluates on every row of every query against these tables.
+Index("ix_conversation_site_id", conversation.c.site_id)
+Index("ix_message_site_id", message.c.site_id)
+Index("ix_agent_run_site_id", agent_run.c.site_id)
+Index("ix_persisted_event_site_id", persisted_event.c.site_id)
+Index("ix_conversation_scenario_id", conversation.c.scenario_id)
+Index("ix_message_conversation_id", message.c.conversation_id)
+Index("ix_agent_run_conversation_created", agent_run.c.conversation_id, agent_run.c.created_at)
+Index("ix_persisted_event_conversation_id", persisted_event.c.conversation_id)
 
 login_handshake = Table(
     "login_handshake",

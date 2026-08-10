@@ -72,8 +72,25 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["actor_id"], ["app_user.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_persisted_event_conversation_site", ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["agent_run_id", "site_id"], ["agent_run.id", "agent_run.site_id"], name="fk_persisted_event_agent_run_site", ondelete="RESTRICT"),
-        sa.PrimaryKeyConstraint("id"), sa.UniqueConstraint("stream_id", "sequence", name="uq_persisted_event_stream_sequence"),
+        # A conversation stream's identity IS the conversation's UUID (AD-21).
+        # Enforced structurally so a later story cannot number a second stream
+        # against the same conversation and collide inside one timeline.
+        sa.CheckConstraint("stream_id = conversation_id", name="ck_persisted_event_stream_is_conversation"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("stream_id", "sequence", name="uq_persisted_event_stream_sequence"),
+        # Carries the same composite (id, site_id) target the other three
+        # tables expose, so a future site-bound FK to an event row is possible
+        # without a follow-up migration.
+        sa.UniqueConstraint("id", "site_id", name="uq_persisted_event_id_site"),
     )
+    # Every read this aggregate performs, plus the site_id predicate FORCE RLS
+    # evaluates on every row of every query.
+    for table in ("conversation", "message", "agent_run", "persisted_event"):
+        op.create_index(f"ix_{table}_site_id", table, ["site_id"])
+    op.create_index("ix_conversation_scenario_id", "conversation", ["scenario_id"])
+    op.create_index("ix_message_conversation_id", "message", ["conversation_id"])
+    op.create_index("ix_agent_run_conversation_created", "agent_run", ["conversation_id", "created_at"])
+    op.create_index("ix_persisted_event_conversation_id", "persisted_event", ["conversation_id"])
     for table in ("conversation", "message", "agent_run", "persisted_event"):
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
         op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
@@ -88,5 +105,7 @@ def downgrade() -> None:
     for table in reversed(("conversation", "message", "agent_run", "persisted_event")):
         op.execute(f"REVOKE SELECT, INSERT, UPDATE, DELETE ON {table} FROM shiftmind_runtime")
         op.execute(f"DROP POLICY IF EXISTS {table}_site_isolation ON {table}")
+    # Indexes are owned by their tables and go with them; dropping them
+    # explicitly first only creates an ordering hazard.
     for table in ("persisted_event", "agent_run", "message", "conversation"):
         op.drop_table(table)

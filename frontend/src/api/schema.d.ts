@@ -620,6 +620,8 @@ export interface components {
             message_id: string;
             /** Text */
             text: string;
+            /** Sequence */
+            sequence: string;
         };
         /** AppliedConstraint */
         AppliedConstraint: {
@@ -789,6 +791,20 @@ export interface components {
              * Format: uuid
              */
             scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+        };
+        /** ConversationListOut */
+        ConversationListOut: {
+            /** Items */
+            items: components["schemas"]["ConversationOut"][];
+            /** Limit */
+            limit: number;
+            /** Has More */
+            has_more: boolean;
         };
         /** ConversationOut */
         ConversationOut: {
@@ -1056,6 +1072,11 @@ export interface components {
              * Format: uuid
              */
             scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
             /** Fixture Version */
             fixture_version: string;
             /** Checksum Algorithm */
@@ -1230,6 +1251,8 @@ export interface components {
             items: components["schemas"]["ActivityItemOut"][];
             /** Limit */
             limit: number;
+            /** Has More */
+            has_more: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -2675,7 +2698,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConversationOut"][];
+                    "application/json": components["schemas"]["ConversationListOut"];
                 };
             };
             /** @description Unauthorized */

@@ -79,7 +79,7 @@ def test_sequence_is_serialized_as_a_json_string_and_routes_are_peer_resources()
         schema_version="1", activity_id=uuid4(), activity_type="planner_message",
         conversation_id=uuid4(), conversation_resource_version=2,
         scenario_id=uuid4(), scenario_version_id=uuid4(), occurred_at=now,
-        message_id=uuid4(), text="Inspect",
+        message_id=uuid4(), text="Inspect", sequence="9007199254740993",
     )
     body = AcceptedTurnOut(activity=activity, resource_version=2, agent_run_status="agent_queued", sequence="9007199254740993").model_dump_json()
     assert '"sequence":"9007199254740993"' in body

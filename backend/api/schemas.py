@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 
 class ScenarioCreate(BaseModel):
@@ -90,10 +90,19 @@ class ProblemDetailsV1(BaseModel):
 
 class ConversationCreateIn(BaseModel):
     scenario_id: UUID
+    # The version the planner is actually looking at, taken from the scenario
+    # context they were served. Both fields are selectors to be validated
+    # server-side against the session's site — never authority (AD-2/AD-15).
+    # The server does NOT resolve "latest": an arbitrary initial pin makes
+    # AD-9's no-drift guarantee meaningless.
+    scenario_version_id: UUID
 
 
 class MessageCreateIn(BaseModel):
-    text: str = Field(min_length=1, max_length=20_000)
+    # Strip before length validation so whitespace-only text is rejected as a
+    # 422 by the request model rather than reaching the use case and escaping
+    # as an uncaught ValueError -> 500.
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20_000)]
 
 
 class ConversationOut(BaseModel):
@@ -101,6 +110,12 @@ class ConversationOut(BaseModel):
     scenario_id: UUID
     scenario_version_id: UUID
     resource_version: int
+
+
+class ConversationListOut(BaseModel):
+    items: list[ConversationOut]
+    limit: int
+    has_more: bool
 
 
 class ActivityItemOut(BaseModel):
@@ -114,6 +129,11 @@ class ActivityItemOut(BaseModel):
     occurred_at: datetime
     message_id: UUID
     text: str
+    # A JSON *string*, on reads as well as writes. AD-21's SSE id is
+    # `<stream_uuid>:<sequence>`; a JSON number becomes an IEEE-754 double in
+    # the browser, so a timeline that omitted this or emitted it as a number
+    # would leave Story 2.4 with no lossless resume point.
+    sequence: str
 
 
 class AcceptedTurnOut(BaseModel):
@@ -129,6 +149,10 @@ class TimelineOut(BaseModel):
     latest_agent_run_status: str | None
     items: list[ActivityItemOut]
     limit: int
+    # The window is anchored at the newest events; `has_more` reports that
+    # older ones exist beyond it. Without it a full page is indistinguishable
+    # from an exactly-`limit`-length stream.
+    has_more: bool
 
 
 class AuthSessionOut(BaseModel):
@@ -156,6 +180,10 @@ class ScenarioContextOut(BaseModel):
     schema_version: str = "v1"
     scenario_name: str
     scenario_id: UUID
+    # Exposed so a client that pins a version (AD-9) can select by identity
+    # instead of asking the server to re-derive "latest" under a second,
+    # divergent rule. See ConversationCreateIn.
+    scenario_version_id: UUID
     fixture_version: str
     checksum_algorithm: str
     checksum_schema_version: str
