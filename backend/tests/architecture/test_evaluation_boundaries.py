@@ -7,7 +7,7 @@ from pathlib import Path
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 EVALS_ROOT = BACKEND_ROOT / "evals"
 REVERSE_GUARDED_ROOTS = (BACKEND_ROOT / "domain", BACKEND_ROOT / "application")
-MODEL_CONSTRUCTORS = frozenset({"FunctionModel", "TestModel"})
+FRAMEWORK_PACKAGE = "pydantic_ai"
 
 
 def _python_files(root: Path) -> tuple[Path, ...]:
@@ -19,13 +19,35 @@ def _python_files(root: Path) -> tuple[Path, ...]:
 
 
 def constructs_pydantic_model(source: str) -> bool:
+    """Any call to a ``*Model`` name, by bare name or attribute access.
+
+    Deliberately not an allowlist of the two test doubles: the constructors that
+    can actually reach the network are the provider models (``GoogleModel``,
+    ``OpenAIModel``, ...), and an allowlist of doubles would wave those through.
+    """
     tree = ast.parse(source)
-    return any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Name)
-        and node.func.id in MODEL_CONSTRUCTORS
-        for node in ast.walk(tree)
-    )
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = (
+            func.id
+            if isinstance(func, ast.Name)
+            else func.attr if isinstance(func, ast.Attribute) else ""
+        )
+        if name.endswith("Model"):
+            return True
+    return False
+
+
+def touches_framework(source: str) -> bool:
+    """A module that imports the framework at all is in scope for the guard.
+
+    Catches the case that construction-site detection cannot: a module that
+    obtains a model indirectly (a factory, a fixture, a re-export) still has to
+    prove it cannot reach a provider.
+    """
+    return bool(imports_package(source, FRAMEWORK_PACKAGE))
 
 
 def disables_model_requests_at_module_scope(source: str) -> bool:
@@ -68,7 +90,7 @@ def test_every_eval_model_builder_disables_live_requests_at_module_scope() -> No
     violations: list[str] = []
     for path in _python_files(EVALS_ROOT):
         source = path.read_text(encoding="utf-8")
-        if constructs_pydantic_model(source):
+        if constructs_pydantic_model(source) or touches_framework(source):
             builders.append(path)
             if not disables_model_requests_at_module_scope(source):
                 violations.append(str(path.relative_to(BACKEND_ROOT)))
@@ -110,10 +132,31 @@ from pydantic_ai.models.function import FunctionModel
 models.ALLOW_MODEL_REQUESTS = False
 model = FunctionModel(lambda messages, info: None)
 """
+    provider_model = """
+from pydantic_ai.models.google import GoogleModel
+model = GoogleModel("gemini-2.5-flash")
+"""
+    attribute_call = """
+from pydantic_ai.models import function
+model = function.FunctionModel(lambda messages, info: None)
+"""
+    indirect = """
+from pydantic_ai import Agent
+agent = Agent()
+"""
     assert constructs_pydantic_model(violating)
     assert not disables_model_requests_at_module_scope(violating)
     assert not disables_model_requests_at_module_scope(nested_only)
     assert disables_model_requests_at_module_scope(clean)
+
+    # The constructors that can actually reach a provider must be in scope, and
+    # so must a module that never names a *Model constructor at all.
+    assert constructs_pydantic_model(provider_model)
+    assert constructs_pydantic_model(attribute_call)
+    assert not constructs_pydantic_model(indirect)
+    assert touches_framework(indirect)
+    for source in (provider_model, attribute_call, indirect):
+        assert not disables_model_requests_at_module_scope(source)
 
 
 def test_direction_guard_actually_fails_on_a_reverse_import() -> None:

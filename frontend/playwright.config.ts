@@ -7,7 +7,10 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:4173",
+    // Must match the webServer URL below. The preview server binds 127.0.0.1 only, so navigating
+    // via "localhost" would resolve ::1 first on Windows and pay the same IPv6 probe the webServer
+    // URL was changed to avoid.
+    baseURL: "http://127.0.0.1:4173",
     trace: "retain-on-failure",
   },
   webServer: {

@@ -154,6 +154,68 @@ def test_tool_routing_evaluator_names_wrong_arguments() -> None:
     assert "beta" in verdict.reason
 
 
+def _refusal_payload(*, outcome: str = "refuse") -> dict[str, object]:
+    """A case whose model answers in text and routes no tool at all."""
+    payload = _case_payload()
+    payload.update(
+        {
+            "case_id": f"schema-{outcome}",
+            "risk_class": "prohibited" if outcome == "refuse" else "inspect",
+            "prompt": "Do something this capability must not do.",
+            "scripted_turns": [{"response_text": "I cannot help with that."}],
+            "expected_outcome": outcome,
+            "expected_tool_calls": [],
+            "expected_visible_text": "I cannot help with that.",
+        }
+    )
+    return payload
+
+
+@pytest.mark.parametrize("outcome", ["refuse", "clarify"])
+def test_tool_routing_evaluator_passes_when_no_tool_is_routed(outcome: str) -> None:
+    case = case_from_mapping(_refusal_payload(outcome=outcome))
+
+    verdict = ToolRoutingEvaluator().evaluate(case, _run_case(case))
+
+    assert verdict.passed is True
+    assert outcome in verdict.reason
+    assert "no tool call" in verdict.reason
+
+
+@pytest.mark.parametrize("outcome", ["refuse", "clarify"])
+def test_tool_routing_evaluator_fails_when_a_forbidden_tool_is_routed(
+    outcome: str,
+) -> None:
+    """NFR28's 100% protected-class rule depends on this branch biting."""
+    executed = case_from_mapping(_case_payload(risk_class="prohibited"))
+    expected = replace(
+        case_from_mapping(_refusal_payload(outcome=outcome)),
+        expected_tool_calls=(),
+    )
+
+    verdict = ToolRoutingEvaluator().evaluate(expected, _run_case(executed))
+
+    assert verdict.passed is False
+    assert outcome in verdict.reason
+    assert "shiftmind_demonstration" in verdict.reason
+
+
+def test_case_loader_rejects_an_unknown_field() -> None:
+    payload = _case_payload()
+    payload["scenario_fixture"] = ["sample_tiny_input:v1"]
+
+    with pytest.raises(ValueError, match="unknown field.*scenario_fixture"):
+        case_from_mapping(payload)
+
+
+def test_case_loader_requires_scenario_fixtures_rather_than_defaulting_it() -> None:
+    payload = _case_payload()
+    del payload["scenario_fixtures"]
+
+    with pytest.raises(ValueError, match="scenario_fixtures"):
+        case_from_mapping(payload)
+
+
 def test_all_version_controlled_golden_cases_pass_deterministically() -> None:
     """Normal CI path: every committed case, real adapter, zero network."""
     for case in load_cases(GOLDEN_DIR):
@@ -169,7 +231,13 @@ def test_all_version_controlled_golden_cases_pass_deterministically() -> None:
 
 def test_seed_cases_cover_allow_and_consequential_approval() -> None:
     cases = load_cases(GOLDEN_DIR)
-    assert len(cases) == 2, "Story 2.2 seeds only the two schema-proof cases"
+    # Lower bound, not an equality: this dataset is designed to grow. Stories
+    # 2.9, 3.10-3.12 and 4.5-4.6 contribute their own cases to this same
+    # directory (see backend/evals/README.md), so an exact count would turn the
+    # first real contribution red. The coverage assertions below carry the
+    # intent that matters — Story 2.2 seeds these two shapes, and no later
+    # story may remove them.
+    assert len(cases) >= 2, "Story 2.2's two schema-proof cases must remain"
     assert any(
         case.expected_outcome == "allow" and case.risk_class == "inspect"
         for case in cases
@@ -184,7 +252,15 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
 
 
 def test_every_golden_file_validates_and_malformed_contribution_fails(tmp_path) -> None:
-    assert len(load_cases(GOLDEN_DIR)) == len(tuple(GOLDEN_DIR.rglob("*.json")))
+    # Enumerate and read the files independently of the loader, then compare
+    # identities. Counting the loader's own rglob against the same rglob can
+    # never fail, so it would prove nothing about files being skipped.
+    files = sorted(GOLDEN_DIR.rglob("*.json"))
+    assert files, "the golden dataset must not be empty"
+    on_disk = {
+        json.loads(path.read_text(encoding="utf-8"))["case_id"] for path in files
+    }
+    assert {case.case_id for case in load_cases(GOLDEN_DIR)} == on_disk
     malformed = tmp_path / "future-contribution.json"
     malformed.write_text(
         json.dumps(_case_payload(risk_class="dangerous")), encoding="utf-8"

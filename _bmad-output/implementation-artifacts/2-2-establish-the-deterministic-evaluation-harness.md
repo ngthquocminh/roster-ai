@@ -4,7 +4,7 @@ baseline_commit: 0091dcf364c557eea00c49da39423c1822ce3e49
 
 # Story 2.2: Establish the Deterministic Evaluation Harness
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -87,6 +87,25 @@ So that every epic proves its own behavior deterministically instead of deferrin
   - [x] **Re-run Gate A explicitly and report by name.** AR28's "no later gate may weaken an earlier gate's invariants" still binds every Epic 2 story: regenerate `evidence/story-1.11/gate-a-readiness-report.json` and confirm it still reads `gate_a_passed: true`.
   - [x] **Re-derive the baselines at the start rather than trusting these.** Story 2.1's own final change-log entry recorded 485/486 backend tests green (1 self-skip from a dirty-tree self-check, matching Story 1.11's documented pattern) at its `done` commit; re-derive the exact current numbers on a clean tree before treating any delta as this story's own regression.
   - [x] **Acceptance boundary:** every suite green at its re-derived baseline plus this story's new tests, `pytest -m live` confirmed skippable without a key, and Gate A still `true`.
+
+### Review Findings
+
+Code review 2026-08-10 (baseline `0091dcf`..`a370d0c`). Verified green locally:
+`pytest tests/test_evaluation_harness.py tests/architecture/` → 32 passed, 1 deselected.
+
+- [x] [Review][Patch] Relax `len(cases) == 2` to `>= 2` with a comment explaining why the dataset grows — resolved 2026-08-10: the hard count fails the first case Stories 2.9 / 3.10–3.12 / 4.5–4.6 contribute to the same directory (`backend/evals/README.md:44`); the allow/consequential presence assertions carry the real intent [backend/tests/test_evaluation_harness.py:172]
+- [x] [Review][Patch] Record `.claude/CLAUDE.md` in the File List — resolved 2026-08-10: the GSD-enforcement bypass for BMAD workflows is an intended change owned by this story, so it belongs in the change contract rather than being split out [.claude/CLAUDE.md:1-19]
+- [x] [Review][Patch] `npm run test:a11y` no longer builds — silently tests stale `dist/`, or fails outright on a clean tree [frontend/package.json:13]
+- [x] [Review][Patch] `refuse`/`clarify` branch of the only shipped evaluator has zero test coverage [backend/evals/evaluators.py:51-63]
+- [x] [Review][Patch] `scenario_fixtures` silently defaults to empty on a key typo, producing a false NFR27 `scenario` binding [backend/evals/cases.py:142]
+- [x] [Review][Patch] Architecture guard's two-name `MODEL_CONSTRUCTORS` allowlist would not catch a real provider model constructed under `evals/` [backend/tests/architecture/test_evaluation_boundaries.py:10,21-28]
+- [x] [Review][Patch] `_percentage` returns `0.0` for an empty denominator, reading as total failure against NFR28's 100% protected-class threshold [backend/evals/report.py:174]
+- [x] [Review][Patch] Vacuous assertion in the "no file silently skipped" guard — compares `load_cases`'s enumeration against the identical `rglob` it uses internally [backend/tests/test_evaluation_harness.py:187]
+- [x] [Review][Patch] `use.baseURL` still resolves `localhost` while the preview server binds `127.0.0.1` only [frontend/playwright.config.ts:10,17-18]
+- [ ] [Review][Follow-up] **`evidence/story-2.2/evaluation-harness-demonstration.json` must be regenerated** — the review patches modified `backend/evals/cases.py` and `backend/evals/report.py`, both of which are code the report's `code.git_commit` (`113604d`) binds. Per `docs/EVIDENCE-CONVENTION.md` the sequence is: commit the patches → confirm `git status --porcelain` is empty → `uv run --frozen python -m evals.report ../evidence/story-2.2/evaluation-harness-demonstration.json` → commit the evidence separately. Do not hand-edit it. Expected delta is `generated_at` and `code.git_commit` only: the golden case files are untouched, so the dataset SHA-256s and every metric stay identical (both denominators are non-zero, so the `_percentage` change is not observable here).
+- [x] [Review][Defer] Report pass-signal is narrower than the case schema — `expected_evidence_refs` is evaluated nowhere, and visible state/text are asserted by pytest but not by the report generator [backend/evals/report.py:87] — deferred, later evaluators (Stories 2.7/2.9) own this
+- [x] [Review][Defer] `alembic check` in Task 10 is not reproducible — no checked-in `alembic.ini` [repo root] — deferred, pre-existing
+- [x] [Review][Defer] No CI exists (`.github/workflows` absent), so AC1's "normal CI" and Task 8's "fails CI" depend entirely on local runs [repo root] — deferred, pre-existing
 
 ## Dev Notes
 
@@ -292,6 +311,8 @@ different identities for Story 2.2.
 - `backend/tests/test_evaluation_harness.py` (new)
 - `frontend/package.json` (modified, Windows-safe E2E build launcher)
 - `frontend/playwright.config.ts` (modified, direct Vite preview and IPv4 shutdown)
+- `frontend/e2e/keyboard-journey.spec.ts` (modified, clipboard grant origin follows baseURL)
+- `.claude/CLAUDE.md` (modified, BMAD workflows recorded as an authorized entry point)
 - `evidence/story-1.11/gate-a-readiness-report.json` (regenerated, `gate_a_passed: true`)
 - `_bmad-output/implementation-artifacts/2-2-establish-the-deterministic-evaluation-harness.md` (modified)
 
@@ -301,3 +322,4 @@ different identities for Story 2.2.
 |---|---|
 | 2026-08-10 | Story created. |
 | 2026-08-10 | Completed Task 10 regression gate; fixed Windows Playwright teardown, regenerated JUnit/Gate A evidence, and moved story to review. |
+| 2026-08-10 | Code review: 2 decisions resolved, 9 patches applied, 3 deferred. Backend 515 passed / 1 skipped / 7 deselected; frontend 50 files / 287 tests; e2e 46 passed; typecheck and lint clean. Story 2.2 evidence still needs regeneration against the patched harness code. |

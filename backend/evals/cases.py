@@ -86,8 +86,36 @@ def load_cases(directory: Path) -> tuple[GoldenCase, ...]:
     return tuple(load_case(path) for path in sorted(Path(directory).rglob("*.json")))
 
 
+CASE_FIELDS: frozenset[str] = frozenset(
+    {
+        "case_id",
+        "case_version",
+        "capability",
+        "risk_class",
+        "prompt",
+        "scripted_turns",
+        "expected_outcome",
+        "expected_tool_calls",
+        "expected_evidence_refs",
+        "expected_visible_state",
+        "expected_visible_text",
+        "scenario_fixtures",
+    }
+)
+
+
 def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) -> GoldenCase:
     label = str(source) if source is not None else "case"
+    # Every field is required and no unknown field is tolerated. A misspelled key
+    # would otherwise fall through to a default and silently weaken what the case
+    # asserts — `scenario_fixtures` in particular feeds the NFR27 `scenario`
+    # binding, where a silent empty reads as "no scenario fixture touched".
+    unknown = sorted(set(raw) - CASE_FIELDS)
+    if unknown:
+        raise ValueError(
+            f"{label} has unknown field(s) {', '.join(unknown)}; allowed fields "
+            f"are {', '.join(sorted(CASE_FIELDS))}"
+        )
     risk = _string(raw.get("risk_class"), f"{label}.risk_class")
     if risk not in RISK_CLASSES:
         raise ValueError(
@@ -139,7 +167,7 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
         ),
         scenario_fixtures=tuple(
             _string(value, f"{label}.scenario_fixtures")
-            for value in _list(raw.get("scenario_fixtures", []), "scenario_fixtures")
+            for value in _list(raw.get("scenario_fixtures"), "scenario_fixtures")
         ),
     )
 
@@ -198,6 +226,7 @@ def _optional_string(
 
 
 __all__ = [
+    "CASE_FIELDS",
     "ExpectedOutcome",
     "ExpectedToolCall",
     "GoldenCase",

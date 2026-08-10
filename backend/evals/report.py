@@ -170,8 +170,14 @@ def _scenario_specs(evaluations: Sequence[CaseEvaluation]) -> tuple[_ScenarioSpe
     return tuple(specs)
 
 
-def _percentage(numerator: int, denominator: int) -> float:
-    return round((numerator / denominator) * 100, 2) if denominator else 0.0
+def _percentage(numerator: int, denominator: int) -> float | None:
+    """``None`` for an empty denominator — "not measured", never "0% routed".
+
+    NFR28 reads the protected-class percentage against a 100% threshold, so a
+    report with no consequential/prohibited cases must not encode that absence
+    as a total routing failure.
+    """
+    return round((numerator / denominator) * 100, 2) if denominator else None
 
 
 def main() -> int:

@@ -21,7 +21,9 @@ async function tabTo(page: Page, locator: Locator, reverse = false, limit = 500)
 test("completes the Gate A Scenario Data journey with keyboard only", async ({ context, page }) => {
   test.setTimeout(180_000);
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-    origin: "http://localhost:4173",
+    // Must match playwright.config.ts's baseURL — a permission granted to a different origin
+    // than the one the page actually loads from is silently never applied.
+    origin: "http://127.0.0.1:4173",
   });
   await installApiStubs(page);
   await page.goto("/");
