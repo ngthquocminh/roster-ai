@@ -35,6 +35,25 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 const FALLBACK_POLL_INTERVAL_MS = 15_000;
 /** Same window the timeline read uses; see the merge below (UX-DR24). */
 const WINDOW_CAP = 200;
+/** How long "Connection restored." stays visible before the banner clears
+ * itself. Without this, a single transient blip leaves it mounted for the
+ * rest of the conversation's lifetime — it is meant to confirm a recovery
+ * just happened, not to describe the connection's state indefinitely. */
+const RECOVERY_BANNER_MS = 5_000;
+/** A hung connection never fires `error` — `readyState` stays OPEN and
+ * nothing ever learns the socket died. AD-21's 15s comment heartbeat exists
+ * on the wire for exactly this, but a plain `EventSource` gives JS no
+ * callback for "a comment line arrived": the WHATWG parsing algorithm
+ * discards them before dispatching anything, and Task 4 forbids emitting
+ * them as a named `event:` to make them observable. The next best signal is
+ * real activity — a data frame or the initial `open`. If neither has been
+ * seen for this long, treat the connection as dead through the same path
+ * `onError` uses. Deliberately generous (minutes, not seconds): a healthy,
+ * quiet conversation can go this long with nothing to say, and this is a
+ * coarse safety net against a silently stuck connection, not a true
+ * liveness check — see the story's "Note for review" for what would be
+ * required to do better (byte-level stream reading). */
+const STALE_AFTER_MS = 120_000;
 
 export const cursorStorageKey = (conversationId: string) =>
   `shiftmind.conversation-cursor.${conversationId}`;
@@ -108,6 +127,17 @@ export function useConversationStream(
     newestRef.current = newest;
   }, [newest]);
 
+  // `"reconnected"` is a confirmation, not an ongoing status — clear it back
+  // to `null` (no banner) after it has had a chance to be seen, so a single
+  // blip doesn't leave "Connection restored." on screen indefinitely.
+  useEffect(() => {
+    if (connection !== "reconnected") return;
+    const timeout = setTimeout(() => {
+      setConnection((state) => (state === "reconnected" ? null : state));
+    }, RECOVERY_BANNER_MS);
+    return () => clearTimeout(timeout);
+  }, [connection]);
+
   useEffect(() => {
     if (!ready || !eventSourceConstructor || updatesAreDelayed) return;
 
@@ -128,7 +158,25 @@ export function useConversationStream(
       conversationEventsUrl(conversationId, cursorRef.current),
     );
 
+    // Shared by the native `error` event and the idle watchdog below — a
+    // stalled connection and a rejected one recover the same way: close,
+    // mark disconnected, and let the next `attempt` re-open from the
+    // persisted cursor.
+    const forceReconnect = () => {
+      source.close();
+      setConnection("disconnected");
+      setFailures((count) => count + 1);
+      setAttempt((count) => count + 1);
+    };
+
+    let idleTimer = setTimeout(forceReconnect, STALE_AFTER_MS);
+    const resetIdleTimer = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(forceReconnect, STALE_AFTER_MS);
+    };
+
     const onFrame = (event: Event) => {
+      resetIdleTimer();
       const raw = (event as MessageEvent).data;
       let item: ActivityItem;
       try {
@@ -140,12 +188,21 @@ export function useConversationStream(
       // A string, always — never `Number(...)`. That is the whole reason Story
       // 2.3 serialized `sequence` as a string in the first place.
       cursorRef.current = item.sequence;
-      storage?.setItem(cursorStorageKey(conversationId), item.sequence);
+      try {
+        storage?.setItem(cursorStorageKey(conversationId), item.sequence);
+      } catch {
+        // Storage can throw (quota exceeded, disabled in this context). The
+        // resume cursor already advanced in memory, so the stream keeps
+        // going; only a future remount would replay from an earlier point.
+        // What must not happen is this activity failing to render because a
+        // storage write failed.
+      }
       setFailures(0);
       setLive((current) => [...current, item].slice(-WINDOW_CAP));
     };
 
     const onOpen = () => {
+      resetIdleTimer();
       setFailures(0);
       // Only report recovery to someone who was told about the loss.
       setConnection((state) => (state === null ? null : "reconnected"));
@@ -158,10 +215,7 @@ export function useConversationStream(
       // That is exactly what lets us re-establish from our own persisted
       // cursor: `EventSource` cannot set `Last-Event-ID` itself, so the new
       // source carries it as a query parameter instead.
-      source.close();
-      setConnection("disconnected");
-      setFailures((count) => count + 1);
-      setAttempt((count) => count + 1);
+      forceReconnect();
     };
 
     source.addEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
@@ -169,6 +223,7 @@ export function useConversationStream(
     source.addEventListener("error", onError);
 
     return () => {
+      clearTimeout(idleTimer);
       source.removeEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
       source.removeEventListener("open", onOpen);
       source.removeEventListener("error", onError);

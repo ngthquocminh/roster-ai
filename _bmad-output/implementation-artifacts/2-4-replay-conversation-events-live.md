@@ -4,7 +4,7 @@ baseline_commit: 7b8df5a5d57a908b0063a6465ed97b0eb416bd50
 
 # Story 2.4: Replay Conversation Events Live
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -21,7 +21,7 @@ explicitly handed this story four things by name: the SSE endpoint, `Last-Event-
 validation, replay, and 15-second heartbeats — plus the NFR35 reconnect-replay measurement
 (`2-3…md:72-73`).
 
-**This story is also the first NFR35 threshold owned outside Epic 1.** A miss blocks
+**This stmory is also the first NFR35 threshold owned outside Epic 1.** A miss blocks
 implementation acceptance (AD-26, and AC3's own words). That is not a formality: the
 measurement is the acceptance boundary, not a report written after the fact.
 
@@ -161,6 +161,39 @@ indistinguishable to a prober.
    5 seconds, measured from reconnect request receipt to delivery of the last outstanding
    persisted event **and** the measured values are recorded as release evidence and a miss
    blocks implementation acceptance of this story. *(NFR35)*
+
+## Note for review — a stalled stream is not an errored stream
+
+**Raised 2026-08-11, before the review pass. Please check this specifically.**
+
+Task 7 arms every recovery path off **one** trigger: *"On `error`: `close()` the dead source
+and re-establish…"*. That covers a stream that fails. It does **not** cover a stream that
+*hangs* — network lag, a sleeping proxy, a socket that is dead but never closed. In that case
+`EventSource.onerror` never fires and `readyState` stays `OPEN`, so:
+
+- the `ReconnectBanner` never leaves its connected state,
+- re-establish-from-cursor never runs,
+- the labelled-polling fallback is never armed.
+
+The planner is then shown stale activity **with no label saying it is stale**, which is
+arguably AC2's *"without duplicating or **silently dropping** visible activity"* rather than a
+nice-to-have.
+
+The detector already exists and is already being paid for: AD-21's **15-second heartbeat**.
+This story specifies it only as a server/proxy concern (Task 4: *"so a proxy sees bytes before
+any idle timeout"*) and never says the client should read it as a liveness signal. The missing
+piece is a **client-side heartbeat watchdog** — no frame of any kind (comment heartbeats
+included) for roughly two intervals → treat as disconnected → re-establish from the persisted
+cursor → labelled polling if that keeps failing. It reuses the heartbeat already on the wire
+and adds no new mechanism.
+
+**Explicitly not in scope of this note, and not a defect:** gating the composer during a
+reconnect. AR13 (*"Business commands remain durable without SSE"*) and AD-6 (*"neither process
+memory nor the stream is authoritative"*) make `POST /messages` independent of the stream, and
+EXPERIENCE.md's Chat row ties composer disabling to **model outage**, not to reconnect. Double
+submit is already held by Story 2.3's `mutation.isPending` guard, and the sender's own message
+is confirmed by the mutation's HTTP refetch without the stream. Do not "fix" this by disabling
+Send.
 
 ## Tasks / Subtasks
 
@@ -426,6 +459,129 @@ indistinguishable to a prober.
         `gate_a_passed: true`.
   - [x] **Acceptance boundary:** every suite green at its re-derived baseline plus this
         story's new tests, Gate A still `true`, and AC3's evidence file bound and passing.
+
+### Review Findings
+
+Code review run 2026-08-11 against `baseline_commit` (`7b8df5a`), diff group A+B
+(backend SSE transport + frontend live-timeline hook — Group C evidence/scripts/
+generated/docs deferred to a lighter follow-up pass). Three parallel layers:
+Blind Hunter, Edge Case Hunter, Acceptance Auditor.
+
+- [x] [Review][Patch] No client-side heartbeat watchdog for a *stalled* (not
+      errored) SSE connection — `useConversationStream.ts` registers only
+      `PLANNER_MESSAGE_ACCEPTED`, `open`, and `error` listeners; nothing tracks
+      time since the last frame received. Per the story's own "Note for
+      review" (2026-08-11): a hung socket never fires `EventSource`'s
+      `error`, so `connection` never leaves its healthy state, the
+      labelled-polling fallback never arms, and the planner sees increasingly
+      stale activity with no indication it has stopped updating — arguably
+      AC2's own "without ... silently dropping visible activity." **Resolved
+      2026-08-11, with a correction to the note's own proposed mechanism:**
+      the note's literal ask — reset a timer on *every* frame including
+      comment-only heartbeats — is not implementable on `EventSource`.
+      WHATWG's parsing algorithm discards comment lines before dispatching
+      any event, so JS has no callback for "a heartbeat arrived," and Task 4
+      forbids emitting heartbeats as a named `event:` to make them
+      observable (the only way to fix that would be a byte-level
+      `fetch()`/`ReadableStream` rewrite of the transport — out of scope of
+      this patch; see the third bullet below the dismissed list if that
+      becomes worth doing later). **Implemented instead:** an idle timer
+      (`STALE_AFTER_MS`, 120s — deliberately generous, since a healthy quiet
+      conversation can go that long with nothing to say) reset on every
+      observed `open`/data frame; on expiry it drives the same
+      close-and-re-establish path `onError` already drives, converging into
+      the existing failure-counted fallback. This is a coarse safety net, not
+      a true liveness check — it cannot distinguish "hung" from "healthy but
+      quiet" any better than the threshold allows, and a genuinely-stuck
+      connection can still show stale activity for up to ~2 minutes before
+      recovering. Covered by two new tests: one fast-forwarding past the
+      threshold with no frames (asserts reconnect), one with a frame at the
+      halfway point (asserts no false-positive reconnect).
+      [`frontend/src/hooks/useConversationStream.ts`,
+      `frontend/src/hooks/useConversationStream.test.tsx`]
+- [x] [Review][Dismissed] Once `MAX_CONSECUTIVE_FAILURES` (3) is reached,
+      `useConversationStream.ts`'s connect effect (`if (!ready ||
+      !eventSourceConstructor || updatesAreDelayed) return;`) permanently
+      short-circuits for the rest of that conversation mount — there is no
+      cooldown or retry path back to live SSE, even if the underlying failure
+      was transient. AC2 only requires falling back to labelled polling, not
+      ever returning to live updates. **Resolved 2026-08-11: accepted as
+      designed — labelled polling for the rest of the session is an
+      acceptable outcome; no change.**
+      [`frontend/src/hooks/useConversationStream.ts:82,111-112`]
+- [x] [Review][Patch] `_event_frames`'s poll loop only catches
+      `ClientDisconnect` and `UnsupportedActivityPayloadError`; any other
+      exception (a DB/pool error from `_poll`, or a `pydantic.ValidationError`
+      from `_frame`/`_activity`) propagates unhandled out of the async
+      generator instead of the "never a partial frame" clean termination the
+      surrounding comments promise. **Fixed:** added a trailing
+      `except Exception: return`, consistent with the two existing clauses.
+      [`backend/api/routers/conversations.py:190-227`]
+- [x] [Review][Patch] `ReconnectBanner` never returns to `null` after reaching
+      `"reconnected"` — nothing in the hook or the component ever clears it,
+      so the "Connection restored." banner stays mounted indefinitely after a
+      single transient blip, for the rest of that conversation's lifetime.
+      **Fixed:** a `RECOVERY_BANNER_MS` (5s) timeout clears `connection` back
+      to `null` after reaching `"reconnected"`, unless another disconnect
+      supersedes it first.
+      [`frontend/src/hooks/useConversationStream.ts:116-125`,
+      `frontend/src/features/chat/ChatView.tsx:147`]
+- [x] [Review][Patch] Dead import: `Header` imported from `fastapi` but never
+      referenced anywhere in the file. **Fixed:** import removed.
+      [`backend/api/routers/conversations.py:10`]
+- [x] [Review][Patch] `test_events_after_filters_on_stream_id_not_the_conversation_correlation`'s
+      name and docstring claim to prove replay filters on `stream_id` rather
+      than the `conversation_id` correlation column, but
+      `ck_persisted_event_stream_is_conversation` forces the two columns
+      always equal — the test cannot actually distinguish which column is
+      filtered under the current schema, so it doesn't guard against the
+      regression it names. **Fixed:** renamed to
+      `test_events_after_does_not_leak_a_different_conversations_events` with
+      an honest docstring documenting the current-schema limitation and what
+      would make the original claim testable (Story 3.5's run-scoped
+      streams). [`backend/tests/test_conversations_postgres.py:434-449`]
+- [x] [Review][Patch] Cursor precedence bug: an explicitly-empty (but
+      present, e.g. `Last-Event-ID: `) header is treated as "present" (`raw =
+      request.headers.get("last-event-id"); if raw is None: raw =
+      last_event_id`), silently overriding a valid `?last_event_id=` query
+      parameter and always rejecting the connection instead of falling
+      through to the query cursor. **Fixed:** `if raw is None` → `if not
+      raw`, so an empty header falls through to the query parameter exactly
+      like an absent one. [`backend/api/routers/conversations.py:247-251`]
+- [x] [Review][Patch] `useConversationStream`'s `onFrame` writes to
+      `sessionStorage` unguarded, between advancing the in-memory resume
+      cursor and updating the visible timeline — if `storage.setItem` throws
+      (quota exceeded, storage disabled), that one activity is silently
+      dropped from the UI forever even though the cursor already moved past
+      it. **Fixed:** the write is now wrapped in try/catch; the UI update and
+      failure-reset proceed regardless.
+      [`frontend/src/hooks/useConversationStream.ts:159-167`]
+- [ ] [Review][Patch] `EventSource` reconnect attempts (up to 3, driven by
+      `onError`) fire back-to-back with no backoff or jitter between them.
+      Bounded and minor, but worth a small delay to avoid bursting a
+      recovering backend. **Not applied.** All 12 existing reconnect tests in
+      `useConversationStream.test.tsx` assert synchronously with no fake
+      timers (e.g. 3 `emit("error")` calls → exactly 3 `StubEventSource`
+      instances, checked immediately). A real backoff needs `setTimeout`
+      between attempts, which would require converting that suite to fake
+      timers to keep asserting the same properties — a disproportionate
+      amount of test churn for a bounded-to-3, low-severity nuisance. Left as
+      an action item rather than silently skipped.
+      [`frontend/src/hooks/useConversationStream.ts:178-197`]
+
+Dismissed as noise or already addressed (7): a theoretical `format_event_id`
+non-canonical-`Decimal` concern with no reachable call site (the only caller
+sources `sequence` from the DB's `Numeric(38,0)` column, always integral); the
+two-DB-round-trips-per-connect design (already a documented, deliberate
+tradeoff in the Dev Agent Record); `_STREAM_RESPONSES` advertising `500` that
+is reachable only pre-flight (structurally unavoidable once a 200 SSE stream
+has started); an imprecise "before any database work" heartbeat comment
+(trivial wording only); the hand-rolled ASGI-scope test's drift risk (already
+disclosed and justified in the Debug Log); no unit-level assertion that the
+router threads the correct `site_id` into `open_site_context` (already proven
+at the Postgres-integration layer); and Task 8's literal `TestClient(...)`
+wording not implemented as written (already transparently disclosed and
+justified in the Dev Agent Record).
 
 ## Dev Notes
 
@@ -853,5 +1009,6 @@ show a zero-line diff, and no dependency was added to `pyproject.toml`,
 
 | Date | Change |
 |---|---|
+| 2026-08-11 | Code review (Blind Hunter, Edge Case Hunter, Acceptance Auditor) against `baseline_commit`, diff group A+B. 2 decision-needed, 7 patch, 7 dismissed. Both decisions resolved with the user: the flagged stalled-stream watchdog gap implemented (idle timer on observed frames, not literal heartbeat bytes — `EventSource` cannot observe comment-only heartbeats, contrary to the review note's literal proposal); the permanent labelled-polling lock-in after 3 failures accepted as designed. 6 of 7 remaining patches applied and verified (backend `pytest` 602 passed/1 skipped-needs-clean-tree/7 deselected, `pytest -m postgres` 43 passed, frontend `vitest` 55 files/321 tests, `tsc --noEmit` clean, `oxlint` clean at the 3 pre-existing warnings); the 7th (reconnect-attempt backoff) left as an action item — the fix would require converting a deliberately-synchronous test suite to fake timers for a bounded, low-severity gain. See Review Findings for detail. |
 | 2026-08-11 | Implemented and moved to review. **AC3 passes: 48.454 / 44.920 / 41.978 ms against NFR35's 5000 ms threshold**, three consecutive runs replaying a 200-event backlog from cursor 0; evidence generated on a clean tree at `d2789a7` and committed separately at `3c5f9d2`. Gate A re-run and still `true` with an empty blocking list. All five creation-time decisions held; no new dependency, no migration. Three plan deviations recorded in the Debug Log: `TestClient` structurally cannot prove incremental delivery (it buffers a streaming body to completion), so Task 8's transport test drives the real `app` at the ASGI boundary instead — a strictly stronger proof; `uq_app_user_singleton` forced Task 9's two `test_postgres_integration.py` neighbours onto a shared select-or-insert helper; and the published 200 response needed an `EventStreamResponse` subclass to stop FastAPI advertising `application/json` for a body that is never JSON. Baselines re-derived rather than trusted — the story's recorded postgres figure (27) predated Story 2.3 and is actually 36. |
 | 2026-08-11 | Story created on branch `story/2-4-replay-conversation-events-live`. Five creation-time decisions recorded: the SSE route must not hold a request-lifetime site transaction; SSE is hand-rolled on `StreamingResponse` rather than adding `sse-starlette` under AR27; the replay read extends the existing `ConversationRepository` rather than creating a new port (which falsifies the deferred-work ledger's premise for assigning the `scenario_catalogue` AD-1 leak here); a rejected cursor returns a non-200 so `EventSource` fails permanently and the client re-establishes from its own persisted cursor; and non-disclosure is guaranteed by issuing zero queries on a foreign-stream cursor. |

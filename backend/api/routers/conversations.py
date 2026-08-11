@@ -7,7 +7,7 @@ from time import monotonic
 from typing import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Connection
 from starlette.requests import ClientDisconnect
@@ -217,6 +217,14 @@ async def _event_frames(
         # A later story wrote an event this reader predates. Terminate this one
         # connection cleanly — never a partial frame, never a 500 mid-body.
         return
+    except Exception:
+        # Anything else — a lost DB connection, pool exhaustion, a malformed
+        # stored payload `_frame`/`_activity` cannot render — must still end
+        # the generator cleanly rather than propagate out of an async
+        # generator whose response has already sent a 200. The client's
+        # `EventSource` sees the connection close and reconnects from its own
+        # cursor; nothing here can safely change the already-sent status.
+        return
 
 
 @router.get(
@@ -244,8 +252,11 @@ async def conversation_events(
     # itself on an automatic reconnect; `?last_event_id=` is how a client passes
     # its own persisted cursor when it constructs a fresh `EventSource`, which
     # cannot set request headers at all. Absent means replay from 0.
+    # An empty-but-present header (e.g. `Last-Event-ID: `) is treated the same
+    # as absent, not as "present" — otherwise it would silently shadow a valid
+    # query parameter and reject a connection that should have resumed.
     raw = request.headers.get("last-event-id")
-    if raw is None:
+    if not raw:
         raw = last_event_id
 
     cursor = Decimal(0)

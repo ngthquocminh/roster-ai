@@ -431,13 +431,23 @@ def test_events_after_drains_forward_from_a_cursor_in_ascending_order(
     assert [str(e.sequence) for e in bounded] == ["1", "2"]
 
 
-def test_events_after_filters_on_stream_id_not_the_conversation_correlation(
+def test_events_after_does_not_leak_a_different_conversations_events(
     governed_postgres_engine, ids
 ) -> None:
-    """`persisted_event` carries both `stream_id` and a `conversation_id`
-    correlation column. Filtering on the latter would let a future run-scoped
-    stream on the same conversation bleed into this replay under a sequence
-    numbering that does not constrain it."""
+    """A stream scoped to one conversation returns none of another's events.
+
+    `persisted_event` carries both `stream_id` and a `conversation_id`
+    correlation column; the intent is that replay filters on `stream_id`, not
+    the correlation column, so a future run-scoped stream sharing a
+    conversation's correlation id could not bleed into this replay under a
+    sequence numbering that does not constrain it. Today
+    `ck_persisted_event_stream_is_conversation` forces the two columns always
+    equal, so this test cannot yet distinguish "filtered on stream_id" from
+    "filtered on conversation_id" — both conversations differ in both columns
+    at once. It still proves basic stream isolation; re-verify it actually
+    exercises `stream_id` specifically once a stream_id != conversation_id
+    case becomes constructible (Story 3.5's run-scoped streams are a
+    candidate)."""
     engine = governed_postgres_engine
     created = _create(engine, ids)
     assert created is not None

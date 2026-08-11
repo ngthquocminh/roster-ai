@@ -126,6 +126,7 @@ function timelineWith(items: ReturnType<typeof activity>[], limit = 200) {
 }
 
 beforeEach(() => {
+  vi.useRealTimers();
   mockTimeline.mockReset();
   StubEventSource.instances = [];
   renderedStates = [];
@@ -289,6 +290,48 @@ describe("useConversationStream", () => {
     // A malformed frame must not corrupt the cursor or the rendered window.
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     expect(sessionStorage.getItem(cursorStorageKey(CONVERSATION))).toBeNull();
+  });
+
+  it("treats prolonged silence as a stalled connection and re-establishes", () => {
+    // A hung connection never fires `error` — `readyState` stays OPEN and the
+    // stub, like a real `EventSource`, would never emit anything on its own.
+    // Only the idle watchdog can recover it, and it does so through the same
+    // reconnect path `onError` uses.
+    vi.useFakeTimers();
+    render(<Harness />);
+    const stalled = StubEventSource.latest();
+
+    act(() => {
+      vi.advanceTimersByTime(120_000);
+    });
+
+    expect(stalled.closed).toBe(true);
+    expect(StubEventSource.instances).toHaveLength(2);
+    vi.useRealTimers();
+  });
+
+  it("does not treat a quiet-but-healthy stream as stalled", () => {
+    vi.useFakeTimers();
+    render(<Harness />);
+    const first = StubEventSource.latest();
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    // Halfway to the stale threshold: still the same, still-open connection.
+    expect(StubEventSource.instances).toHaveLength(1);
+
+    act(() => {
+      StubEventSource.latest().emit(PLANNER_MESSAGE_ACCEPTED, {
+        data: JSON.stringify(activity(ARRIVING, "Night shift is short", "8")),
+      });
+      vi.advanceTimersByTime(90_000);
+    });
+    // A frame within the window resets the watchdog, so 90s more (150s total,
+    // past the original 120s threshold) still doesn't force a reconnect.
+    expect(first.closed).toBe(false);
+    expect(StubEventSource.instances).toHaveLength(1);
+    vi.useRealTimers();
   });
 
   it("opens nothing when no EventSource implementation is available", () => {
