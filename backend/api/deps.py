@@ -23,7 +23,11 @@ from application.ports.identity import OidcProvider, create_provider as create_o
 from application.ports.conversation import ConversationRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.scenario_projection import ScenarioProjectionReader
-from application.capabilities.registry import compose_granted_capabilities
+from application.capabilities.registry import (
+    CapabilityGrantContextV1,
+    compose_granted_capabilities,
+)
+from application.capabilities.scheduling_inspect import InspectCapabilityManifest
 from application.ports.session import IdentitySessionStore, ResolvedSession
 from engine.base import SchedulerEngine, create_engine
 from llm.base import LLMProvider, create_provider
@@ -81,8 +85,19 @@ def get_projection_reader() -> ScenarioProjectionReader:
     return _projection_reader
 
 
-def get_capability_registry():
-    """Depends-overridable application-owned capability composition seam."""
+CapabilityComposer = Callable[
+    [CapabilityGrantContextV1], tuple[InspectCapabilityManifest, ...]
+]
+
+
+def get_capability_registry() -> CapabilityComposer:
+    """Depends-overridable application-owned capability composition seam.
+
+    Returns the composer rather than a composed grant: the grant depends on
+    per-run trusted context (role, site, feature policy, conversation) that only
+    the caller holds. No route consumes this yet — Story 2.7 puts the first
+    agent turn on a request path and finds the seam already shaped.
+    """
     return compose_granted_capabilities
 
 

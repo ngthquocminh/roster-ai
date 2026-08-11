@@ -183,11 +183,12 @@ def default_settings() -> Settings:
     agent_runtime_deadline_seconds = _optional_float(
         os.environ.get("AGENT_RUNTIME_DEADLINE_SECONDS"), 60.0
     )
-    scheduling_inspect_row_limit = int(
-        os.environ.get("SCHEDULING_INSPECT_ROW_LIMIT", "200")
+    scheduling_inspect_row_limit = (
+        _optional_int(os.environ.get("SCHEDULING_INSPECT_ROW_LIMIT"), 200) or 200
     )
-    scheduling_inspect_timeout_seconds = float(
-        os.environ.get("SCHEDULING_INSPECT_TIMEOUT_SECONDS", "5.0")
+    scheduling_inspect_timeout_seconds = (
+        _optional_float(os.environ.get("SCHEDULING_INSPECT_TIMEOUT_SECONDS"), 5.0)
+        or 5.0
     )
     return Settings(
         db_path=db_path,

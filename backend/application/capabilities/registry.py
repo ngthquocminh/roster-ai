@@ -17,22 +17,40 @@ POLICY_VERSION = "one-user-mvp-v1"
 
 @dataclass(frozen=True)
 class CapabilityGrantContextV1:
-    """Trusted inputs; role/policy are constants until a second user is activated."""
+    """Trusted inputs; role/policy are constants until a second user is activated.
+
+    Currently constant in this milestone, and why: `role` is derived from the
+    single active membership (the membership table has no role column),
+    `feature_policy` is a server-side constant set, and `policy_version` is a
+    server-side constant string. `site_id`, `conversation_id`, and
+    `conversation_site_id` are genuinely varying server-derived values. Every
+    field is branched on by `compose_granted_capabilities`, so substituting a
+    real policy supplier later is a change of supplier, not of shape.
+    """
 
     role: str
     site_id: UUID
     feature_policy: frozenset[str]
     conversation_id: UUID
     conversation_site_id: UUID
+    revoked_conversation_ids: frozenset[UUID] = frozenset()
 
 
 def compose_granted_capabilities(
     context: CapabilityGrantContextV1,
 ) -> tuple[InspectCapabilityManifest, ...]:
+    """Compose the granted set from trusted context only.
+
+    Returns the granted declarations. An ungranted capability is ABSENT from
+    the result, never present-and-denied (AD-2/Decision 4): the caller registers
+    only what this returns, so a capability the run was not granted is a tool
+    that does not exist rather than one that refuses.
+    """
     if (
         context.role != PLANNER_ROLE
         or context.site_id != context.conversation_site_id
         or SCHEDULING_INSPECT_POLICY not in context.feature_policy
+        or context.conversation_id in context.revoked_conversation_ids
     ):
         return ()
     return (scheduling_inspect_manifest(),)

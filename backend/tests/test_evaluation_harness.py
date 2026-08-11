@@ -22,6 +22,7 @@ from agent.runtime import PydanticAIAgentRuntime, create_agent_runtime
 from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1, AgentTurnRequestV1
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.scheduling_inspect import scheduling_inspect_manifest
+from application.ports.scenario_projection import GroupQueryKeysV1
 from evals.cases import (
     ExpectedToolCall,
     GoldenCase,
@@ -112,6 +113,21 @@ def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
         identity = UUID("00000000-0000-0000-0000-000000000001")
 
         class ProjectionReader:
+            # Mirrors the adapter's published keys for the groups these cases
+            # use, so the capability's allow-list is exercised rather than
+            # bypassed.
+            _KEYS = {
+                "demand": (("start_minute",), ("family", "task_id")),
+                "assignments": (("start_minute",), ("worker_id", "task_id")),
+                "workers": (("contact_id",), ("contact_id",)),
+                "locks": (("scope",), ("scope",)),
+                "constraints": (("constraint_type",), ("constraint_type",)),
+            }
+
+            def get_query_keys(self, group):
+                sorts, filters = self._KEYS.get(group, ((), ()))
+                return GroupQueryKeysV1(group=group, sort_keys=sorts, filter_keys=filters)
+
             def _page(self):
                 return SimpleNamespace(
                     scenario_id=identity, scenario_version_id=identity,
@@ -123,6 +139,7 @@ def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
             get_workers = lambda self, *_args: self._page()
             get_locks = lambda self, *_args: self._page()
             get_constraints = lambda self, *_args: self._page()
+            get_overview = lambda self, *_args: self._page()
 
         kwargs = {
             "capabilities": (scheduling_inspect_manifest(),),
@@ -282,6 +299,23 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
         for case in cases
     )
     assert "demonstration" in {case.capability for case in cases}
+
+
+def test_every_capability_meets_the_nfr28_four_case_floor() -> None:
+    """NFR28: at least four golden cases per allowed capability. Without this,
+    three of the four scheduling_inspect cases could be deleted silently."""
+    cases = load_cases(GOLDEN_DIR)
+    counts: dict[str, int] = {}
+    for case in cases:
+        counts[case.capability] = counts.get(case.capability, 0) + 1
+    assert counts.get("scheduling_inspect", 0) >= 4, counts
+    # `demonstration` is deliberately exempt: Story 2.2 contributed exactly two
+    # schema-proving cases and is documented as not padding toward the floor.
+    below_floor = {
+        name: n for name, n in counts.items()
+        if n < 4 and name != "demonstration"
+    }
+    assert not below_floor, below_floor
 
 
 def test_every_golden_file_validates_and_malformed_contribution_fails(tmp_path) -> None:

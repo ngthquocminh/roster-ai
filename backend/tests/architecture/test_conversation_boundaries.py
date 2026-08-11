@@ -18,11 +18,14 @@ GUARDED = (
     # becomes a claim about coverage it no longer has.
     BACKEND_ROOT / "application/contracts/stream_cursor.py",
     BACKEND_ROOT / "application/ports/conversation.py",
-    BACKEND_ROOT / "application/capabilities/__init__.py",
-    BACKEND_ROOT / "application/capabilities/vocabulary.py",
-    BACKEND_ROOT / "application/capabilities/deps.py",
-    BACKEND_ROOT / "application/capabilities/registry.py",
-    BACKEND_ROOT / "application/capabilities/scheduling_inspect.py",
+)
+
+# Swept whole, not enumerated: Story 2.5's capability package will grow (2.6
+# adds and removes modules under it), and a hand-maintained file list would let
+# the next module in silently unguarded.
+SWEPT_PACKAGES = (
+    BACKEND_ROOT / "application/use_cases",
+    BACKEND_ROOT / "application/capabilities",
 )
 
 # Known, ticketed AD-1 violations outside this guard's coverage. Tracked in
@@ -44,11 +47,17 @@ def forbidden_imports(source: str) -> set[str]:
     return found
 
 
+def guarded_paths() -> tuple[Path, ...]:
+    swept = tuple(
+        sorted(p for package in SWEPT_PACKAGES for p in package.rglob("*.py"))
+    )
+    return GUARDED + swept
+
+
 def test_new_conversation_application_modules_are_framework_free() -> None:
-    paths = GUARDED + tuple(sorted((BACKEND_ROOT / "application/use_cases").rglob("*.py")))
     violations = {
         key: sorted(found)
-        for p in paths
+        for p in guarded_paths()
         if (key := p.relative_to(BACKEND_ROOT).as_posix()) not in ALLOWED_LEAKS
         and (found := forbidden_imports(p.read_text(encoding="utf-8")))
     }
@@ -57,8 +66,20 @@ def test_new_conversation_application_modules_are_framework_free() -> None:
 
 def test_boundary_guard_actually_fails_on_a_sqlalchemy_import() -> None:
     assert forbidden_imports("from sqlalchemy import Connection") == {"sqlalchemy"}
+    assert forbidden_imports("import fastapi") == {"fastapi"}
     assert forbidden_imports("from typing import Any") == set()
     assert all(path.exists() for path in GUARDED), "guard scope must not shrink silently"
+    assert all(p.is_dir() for p in SWEPT_PACKAGES), "swept package must not vanish"
+
+
+def test_the_sweep_actually_covers_the_capability_package() -> None:
+    """A sweep that matches nothing is a guard that guards nothing."""
+    covered = {p.relative_to(BACKEND_ROOT).as_posix() for p in guarded_paths()}
+    assert "application/capabilities/scheduling_inspect.py" in covered
+    assert "application/capabilities/registry.py" in covered
+    assert "application/use_cases/read_scenario_facts.py" in covered
+    capability_modules = {c for c in covered if c.startswith("application/capabilities/")}
+    assert len(capability_modules) >= 5
 
 
 def test_every_allowed_leak_still_exists_and_still_leaks() -> None:

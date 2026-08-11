@@ -32,6 +32,7 @@ from application.ports.scenario_projection import (
     AssignmentPageV1,
     ConstraintPageV1,
     DemandIntervalPageV1,
+    GroupQueryKeysV1,
     GroupQueryV1,
     LockPageV1,
     TaskPageV1,
@@ -409,6 +410,18 @@ CONSTRAINT_FILTERS: FilterTable = {
     "value_type": lambda item, value: item.value_type == value,
 }
 
+# Derived from the tables above, never hand-maintained: `get_query_keys` reports
+# exactly what `_apply_query` will interpret, so an allow-list built from it can
+# never drift from the interpretation it guards.
+GROUP_QUERY_TABLES: Mapping[str, tuple[SortTable, FilterTable]] = {
+    "tasks": (TASK_SORTS, TASK_FILTERS),
+    "workers": (WORKER_SORTS, WORKER_FILTERS),
+    "demand": (DEMAND_SORTS, DEMAND_FILTERS),
+    "assignments": (ASSIGNMENT_SORTS, ASSIGNMENT_FILTERS),
+    "locks": (LOCK_SORTS, LOCK_FILTERS),
+    "constraints": (CONSTRAINT_SORTS, CONSTRAINT_FILTERS),
+}
+
 
 def _slice_window(
     items: Sequence[T], cursor: int, limit: int
@@ -467,6 +480,14 @@ def _resolve_items(
 
 class PostgresScenarioProjectionReader:
     """Read one immutable payload through an already site-scoped connection."""
+
+    def get_query_keys(self, group: str) -> GroupQueryKeysV1:
+        sorts, filters = GROUP_QUERY_TABLES.get(group, ({}, {}))
+        return GroupQueryKeysV1(
+            group=group,
+            sort_keys=tuple(sorts),
+            filter_keys=tuple(filters),
+        )
 
     @staticmethod
     def _scenario_version_join():

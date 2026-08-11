@@ -1,5 +1,9 @@
 # Deferred Work
 
+## Deferred from: code review of story-2-5-inspect-scenario-facts-through-a-governed-capability (2026-08-11)
+
+- **`frontend/playwright.config.ts` breaks the story's mandated zero-line `frontend/` fence.** Decision 1 required "no frontend change whatsoever" and Task 10 ticked the fence as verified, but the branch adds `workers: 4` [frontend/playwright.config.ts:6-11]. The change is test-infrastructure only — `frontend/openapi.json` and `frontend/src/api/schema.d.ts` are both genuinely clean, and all seven backend fences verified empty — and the Completion Notes disclose it. Two residual concerns: the worker cap is hardcoded with no CI branch (unlike the adjacent `retries: process.env.CI ? 2 : 0`), justified in-comment by one developer's 16-thread Windows host and now pinned for every future runner regardless of core count; and it alters the conditions under which the Gate A `playwright.xml` (46 cases) was measured. **Owner/revisit trigger:** the first story that creates `.github/` and a CI workflow — at that point make the worker count CI-aware rather than fixed.
+
 ## Deferred from: story-2.5 implementation (2026-08-11)
 
 - **Trusted role and feature policy are server-owned constants in the one-user MVP.** Story 2.5 introduced the typed `CapabilityGrantContextV1` seam and branches on role, site, feature policy, and conversation scope, but `planner`, `scheduling_inspect_enabled`, and policy version `one-user-mvp-v1` have no database-backed supplier. This is deliberate: the membership model has one active member and no role column. **Owner/revisit trigger:** the first story activating a second user, or a customer security review. Replace the supplier without changing the registry shape.

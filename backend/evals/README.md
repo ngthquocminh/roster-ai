@@ -47,4 +47,6 @@ schema and pipeline. They are not padding toward NFR28's 50-case Gate B floor;
 that aggregate must be re-verified later against real story contributions.
 
 Story 2.5 contributes scheduling_inspect cases for demand, assignments, workers,
-and constraints against governed `sample_tiny_input` fixtures.
+constraints, and locks. They exercise tool routing and argument shape against a
+deterministic projection double; the `scenario_fixtures` tag records which
+governed fixture each question is *about*, not a fixture the harness loads.

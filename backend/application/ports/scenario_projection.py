@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from application.contracts.evidence_ref import (
@@ -24,6 +24,11 @@ from application.contracts.scenario_projection import (
 )
 
 
+ScenarioFactGroupV1 = Literal[
+    "overview", "tasks", "demand", "assignments", "workers", "locks", "constraints"
+]
+
+
 @dataclass(frozen=True)
 class GroupQueryV1:
     cursor: int = 0
@@ -31,6 +36,21 @@ class GroupQueryV1:
     sort: str | None = None
     order: str = "asc"
     filters: tuple[tuple[str, str | int], ...] = ()
+
+
+@dataclass(frozen=True)
+class GroupQueryKeysV1:
+    """The sort/filter keys the adapter actually interprets for one group.
+
+    The adapter owns source-data interpretation (AD-4). Callers that must
+    validate untrusted query input allow-list against this rather than
+    re-deriving the tables, so a second interpretation can never drift from the
+    first. `overview` takes no query and reports empty tuples.
+    """
+
+    group: ScenarioFactGroupV1
+    sort_keys: tuple[str, ...]
+    filter_keys: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -100,6 +120,8 @@ class ConstraintPageV1:
 
 
 class ScenarioProjectionReader(Protocol):
+    def get_query_keys(self, group: ScenarioFactGroupV1) -> GroupQueryKeysV1: ...
+
     def get_overview(
         self, connection: Any, scenario_id: UUID
     ) -> ScenarioOverviewV1 | None: ...

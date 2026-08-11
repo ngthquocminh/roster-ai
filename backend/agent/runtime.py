@@ -28,7 +28,6 @@ from pydantic_ai import (
     UnexpectedModelBehavior,
     UsageLimitExceeded,
     UsageLimits,
-    RunContext,
 )
 from pydantic_ai.capabilities import Instrumentation
 
@@ -45,9 +44,9 @@ from application.ports.agent_runtime import AgentRuntimeError
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.scheduling_inspect import (
     InspectCapabilityManifest,
-    SchedulingInspectRequestV1,
-    scheduling_inspect as run_scheduling_inspect,
+    SchedulingInspectError,
 )
+from agent.capability_tools import render_capabilities
 
 
 class DemonstrationRequestV1(BaseModel):
@@ -99,9 +98,6 @@ class PydanticAIAgentRuntime:
         self._config = config or AgentRuntimeConfig()
         self._model = model
         self._deps = deps
-        self._registered_capability_names = tuple(
-            capability.capability_name for capability in capabilities
-        )
 
         # AD-12/AD-15: external telemetry excludes prompt, tool, workforce, and
         # schedule content BY DEFAULT. This is constructed content-disabled and
@@ -143,21 +139,11 @@ class PydanticAIAgentRuntime:
                 raise ApprovalRequired
             return "|".join([payload.label] * payload.repeat)
 
-        for capability in capabilities:
-            if capability.capability_name == "scheduling_inspect":
-                if deps is None:
-                    raise ValueError("scheduling_inspect requires trusted AgentDepsV1")
-
-                @self._agent.tool(name="scheduling_inspect")
-                def scheduling_inspect(
-                    ctx: RunContext[AgentDepsV1 | None],
-                    request: SchedulingInspectRequestV1,
-                ) -> dict[str, object]:
-                    if ctx.deps is None:
-                        raise RuntimeError("trusted agent dependencies are unavailable")
-                    from dataclasses import asdict
-
-                    return asdict(run_scheduling_inspect(ctx.deps, request))
+        # Collected as each tool is actually registered, so this can never
+        # over-report a granted-but-unrendered capability.
+        self._registered_capability_names = render_capabilities(
+            self._agent, capabilities, deps
+        )
 
     @property
     def name(self) -> str:
@@ -165,7 +151,11 @@ class PydanticAIAgentRuntime:
 
     @property
     def registered_capability_names(self) -> tuple[str, ...]:
-        """Application-granted tools only; the demonstration seam is excluded."""
+        """Names of the application-granted tools actually registered on this run.
+
+        NOT COVERED: the always-present `shiftmind_demonstration` seam, which is
+        registered unconditionally and is owned by Story 2.6's removal proof.
+        """
         return self._registered_capability_names
 
     def run_turn(self, request: AgentTurnRequestV1) -> AgentRunOutcomeV1:
@@ -211,6 +201,21 @@ class PydanticAIAgentRuntime:
         except AgentRunError as exc:
             # Framework-level catch-all. Still an owned type, cause preserved —
             # never a bare `except Exception` that swallows the cause.
+            raise AgentRuntimeError("agent runtime call failed") from exc
+        except SchedulingInspectError as exc:
+            # A governed capability's own declared failure. Mapped to a stable
+            # `failure_reason` drawn from the manifest's error vocabulary, so
+            # the code the manifest advertises is the code callers observe.
+            return AgentRunOutcomeV1(
+                status="failed",
+                failure_reason=exc.code,
+                summary=str(exc)[:200],
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Nothing raw crosses this port. PydanticAI converts only
+            # `ToolFailed`/`ModelRetry`; every other tool-body exception
+            # propagates, so an unowned builtin would otherwise reach the
+            # caller as `KeyError`/`TypeError` instead of an owned type.
             raise AgentRuntimeError("agent runtime call failed") from exc
         finally:
             if timer is not None:
