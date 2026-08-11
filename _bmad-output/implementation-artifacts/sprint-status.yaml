@@ -42,7 +42,104 @@
 
 generated: 2026-07-24
 last_updated: 2026-08-11
-# (2026-08-11: story 2-4 created → ready-for-dev → implemented → review)
+# (2026-08-11: story 2-4 created → ready-for-dev → implemented → review → done;
+#  story 2-5 created → ready-for-dev)
+
+# NOTE (2026-08-11): Story 2-5 created on branch
+# `story/2-5-inspect-scenario-facts-through-a-governed-capability` and moved to
+# ready-for-dev. It is the TOOL GATEWAY story: an application-owned capability registry,
+# one governed `scheduling_inspect` capability whose handler reads Epic 1's normalized
+# projection, and a trusted `AgentDeps` that is the only source of actor, site, versions,
+# policy, clock, services, and remaining budget. It is the FIRST story permitted to modify
+# `backend/agent/**`, which has carried a mandated zero-line diff since Story 2.1.
+#
+# SIX DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) THE STORY COMPOSES AND EXECUTES THE CAPABILITY AT THE SEAM, NOT ON AN HTTP PATH.
+#     No new route, NO `agent_run` state transition, NO migration, no new
+#     `ActivityItemV1` payload, no new event type, ZERO frontend diff. No AC asks for it
+#     — AC1 says "composed FOR the run", AC4 says the agent "CAN answer" — and the
+#     decisive reason is a spec conflict, not a preference: an inspect answer is numbers,
+#     and UX-DR8 (epics.md:192) plus NFR12 require every numerical claim to carry an
+#     adjacent evidence link and pass the grounding evaluator. Story 2.7 wholly owns both.
+#     Shipping a visible answer here forces a choice between violating UX-DR8 and
+#     pre-empting 2.7. Story 2.3 also deliberately withheld the `agent_run` UPDATE grant
+#     ("it is that story's job to grant it, not this one's to grant it early"), and a
+#     migration moves the `schema_version` binding of EVERY evidence file in the repo for
+#     no acceptance benefit. HANDOFF RECORDED: Story 2.7 is the first story to execute a
+#     turn on a request path and inherits, together, the UPDATE grant + migration, the
+#     `agent_response` payload, `run_in_threadpool` for the synchronous `run_sync`,
+#     `create_agent_runtime()`'s missing live-model wiring, and translate.py's silent drops.
+# (2) THE HANDLER READS THROUGH `ScenarioProjectionReader`, NEVER `ScenarioCatalogueReader`.
+#     The projection port is AD-1 clean (`connection: Any`) and every `*PageV1` it returns
+#     ALREADY carries `site_id` and `scenario_version_id` — AC4's site/version scoping with
+#     nothing to synthesize — while `get_overview()` supplies the version pin. The
+#     catalogue port does `from sqlalchemy import Connection` at module scope and is the
+#     repo's ONE open AD-1 violation; deferred-work.md:112-131 names its owner as "the next
+#     story that modifies it for any reason", so touching it would drag a tier-3 refactor of
+#     Gate A code plus a Gate A re-measurement into this story. `ALLOWED_LEAKS` stays
+#     untouched.
+# (3) THE MANIFEST IS A MODULE-LOCAL `InspectCapabilityManifest`, NOT `CapabilityManifestV1`.
+#     epics.md:715 assigns the general contract wholly to Story 2.6 while AD-20 fixes that
+#     name to `application/contracts`. Claiming the canonical name now would leave 2.6
+#     either inheriting a contract it was told it owns or renaming a versioned contract
+#     already in use — a compatibility event. 2.6 lifts the module-local declaration.
+#     TRAP INSIDE IT: AC2's field list omits `approval_policy`, but AD-5 and
+#     `CapabilityManifestV1`'s required shape both require it — declare it as `none`
+#     explicitly; an absent field and "no approval" are different claims.
+# (4) AUTHORITY IS PROVED BY ABSENCE, NOT BY A CHECK THE MODEL CAN REACH. The registry
+#     composes the granted set from trusted context BEFORE the runtime is constructed and
+#     the adapter registers only those tools, so an ungranted capability is not a denied
+#     tool — it does not exist. Register-then-refuse puts the authority decision downstream
+#     of a model-supplied name, which is exactly what AD-2 forbids and what
+#     `AgentToolCallProposalV1`'s own docstring already warns about. PydanticAI's
+#     `prepare=` hook may be a SECOND gate, never the first.
+# (5) `AgentDeps` REACHES THE ADAPTER BY CONSTRUCTION, NEVER ON `AgentTurnRequestV1`.
+#     test_agent_runtime_port.py:196-204 pins that contract to exactly five fields and
+#     separately forbids the names capability/permission/scope/role/authority. One runtime
+#     is composed per run with its granted capabilities and deps — the pattern
+#     `evals/report.py:83` already uses per case. The `AgentRuntime` port signature is
+#     UNCHANGED.
+# (6) THE `translate.py` SILENT-DROP ITEM IS RE-ANNOTATED, NOT CLOSED. Story 2.3 reassigned
+#     it here on the premise that 2.5 "is the first story to run a turn and rehydrate
+#     history". VERIFIED AT CREATION: false under Decision 1 — the drop is reachable only
+#     when a persisted `AgentTurnV1` is deserialized, and this story persists none.
+#     Following Story 2.4's precedent for a false ledger premise: annotate in place, restate
+#     the owner as "the first story that persists an `AgentTurnV1` and rehydrates it", leave
+#     it OPEN. `backend/agent/translate.py` keeps a zero-line diff even though the rest of
+#     `backend/agent/**` does not.
+#
+# ONE HONEST GAP IS RAISED FOR REVIEW RATHER THAN PAPERED OVER: AC1 grants from "current
+# role, site, feature policy, and conversation context" and AC3 sources "policy version",
+# but VERIFIED BY EXHAUSTIVE GREP none of role, permission, feature_flag, entitlement, or
+# policy_version has ANY application-level representation — the only backend `role` is the
+# PostgreSQL role `shiftmind_runtime`, and `membership` has no role column under a
+# one-active-membership partial unique index. This is the spine's own Deferred row
+# ("multiple roles and separation of duties ... revisit when a second user is activated").
+# Required posture: model the grant inputs as a real server-owned typed structure whose
+# values are currently constants, take them as arguments and branch on them so a real
+# policy source is a change of SUPPLIER not of SHAPE, and record the reduction. Do NOT
+# fabricate a role table or policy service. A grant function that ignores three of its four
+# inputs is the same lie-about-coverage defect the Story 2.1 review fixed in a guard docstring.
+#
+# SEVEN TRAPS flagged rather than left to be discovered, the quietest first: registering an
+# ungranted capability and refusing inside it (reads correct, inverts AD-2); re-deriving
+# filter/sort semantics in the handler instead of building a `GroupQueryV1` (fails as WRONG
+# NUMBERS, never as a red test — the exact drift AD-4 exists to prevent); INVENTING "saved
+# metrics" (there is no metrics group and no `MetricSetV1` — map to `ScenarioOverviewV1`'s
+# counts, since a handler that computes coverage has become an ungoverned calculator 2.7
+# must later recompute against); and returning a 50-row default page as if it were the whole
+# answer, which is precisely the fabricated context FR5 names.
+#
+# NO EVIDENCE FILE IS OWED: no Story 2.5 AC carries a measured threshold (contrast 2.4-AC3's
+# explicit "a miss blocks implementation acceptance"), and NFR35's four rows belong to
+# Stories 1.4, 1.5, 2.4 and 3.5. Gate A must still be re-run per AR28. Golden cases ARE owed
+# — Story 2.2 named 2.5 their owner and forbade fabricating them earlier; ship at least four
+# tagged `capability="scheduling_inspect"`, `risk_class="inspect"` per NFR28's per-capability
+# floor, and do NOT pad toward the 50-case Gate B aggregate. Adding them turns
+# test_evaluation_harness.py:251's `== {"demonstration"}` red; relax it while preserving the
+# two coverage assertions. `backend/services/**`, `backend/domain/**`, `backend/engine/**`,
+# `backend/llm/**`, `backend/migrations/**`, `test_gate_a_mutation_audit.py`,
+# `backend/agent/translate.py` and ALL of `frontend/` must show a ZERO-LINE diff.
 
 # NOTE (2026-08-11): Story 2-4 implemented and moved to review. **AC3 PASSES —
 # 48.454 / 44.920 / 41.978 ms against NFR35's 5000 ms threshold**, three consecutive runs
@@ -548,7 +645,7 @@ development_status:
   2-2-establish-the-deterministic-evaluation-harness: done
   2-3-create-and-revisit-durable-conversations: done
   2-4-replay-conversation-events-live: done
-  2-5-inspect-scenario-facts-through-a-governed-capability: backlog
+  2-5-inspect-scenario-facts-through-a-governed-capability: ready-for-dev
   2-6-add-and-remove-a-governed-capability-module: backlog
   2-7-ground-schedule-claims-in-exact-evidence: backlog
   2-8-jump-to-evidence-and-return-to-the-claim: backlog
