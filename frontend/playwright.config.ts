@@ -3,6 +3,12 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
+  // Axe traverses every rendered node across seven Scenario Data groups. Letting Playwright
+  // derive this from host CPU count schedules all six Chromium/Edge axe sweeps alongside the
+  // layout suite on this 16-thread Windows host, which causes browser crashes and timeouts under
+  // load. Keep file/test parallelism, both browser projects, and every assertion, but cap the
+  // concurrent browser processes to a resource-safe level (matching the Vitest harness below).
+  workers: 4,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: "list",
