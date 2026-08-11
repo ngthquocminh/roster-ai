@@ -132,8 +132,8 @@
           },
           "backend/tests/test_postgres_integration.py": {
             "status": "passed",
-            "total": 15,
-            "passed": 15,
+            "total": 18,
+            "passed": 18,
             "skipped": 0,
             "failed": 0
           }
@@ -921,8 +921,8 @@
           },
           "backend/tests/test_evidence_convention.py": {
             "status": "passed",
-            "total": 42,
-            "passed": 42,
+            "total": 48,
+            "passed": 48,
             "skipped": 0,
             "failed": 0
           },
@@ -1023,21 +1023,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 545,
-      "run_started": "2026-08-11T02:05:02.202549+07:00",
-      "sha256": "b7c0a270e79af47daa1212dbb0fbd3e5de4d86b45df44422d0ff84557460629d"
+      "cases": 603,
+      "run_started": "2026-08-11T10:10:18.956313+07:00",
+      "sha256": "b61dcbc12cd06bd4a7b07caa04f6f098986f9fb02f4706545fa226f2044a9f30"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "cases": 307,
-      "run_started": "2026-08-10T19:06:54.043Z",
-      "sha256": "9d0f390f2d587776e8f93746eba36bd927a5b4b6a99041b73663a3dd36090530"
+      "cases": 319,
+      "run_started": "2026-08-11T03:06:58.961Z",
+      "sha256": "0b9e3de18227addd2e77f5d8ce6661d7320cba1c720b477a844b0d9b443af91a"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 46,
-      "run_started": "2026-08-10T19:07:14.006Z",
-      "sha256": "e7a1add481621cc1bda8e256906017ebc6b7875d59fb799ccf1761d97ec0deb2"
+      "run_started": "2026-08-11T03:07:09.283Z",
+      "sha256": "f8933342abe2426a5837f7bbc78fe59d9ec3053100ed9b5a3508591dc6b400f0"
     }
   },
   "version_bindings": {
@@ -1051,7 +1051,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "ab7899689190761c718dc96e1a73bb6c1223b3c9",
+      "git_commit": "d2789a77c8322aeb554d3aab117b1b222bb4ff8f",
       "working_tree_dirty": false
     },
     "image": {
