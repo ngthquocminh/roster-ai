@@ -65,6 +65,10 @@ EVIDENCE_FILES: tuple[str, ...] = (
     "evidence/story-1.5/nfr35-evidence-target-resolution.json",
     "evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json",
     "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
+    # Story 2.4. Bootstrapped by `scripts/generate_sse_replay_evidence.py`
+    # (this script rewrites existing files and cannot create one); registered
+    # here so it is re-bindable like every other evidence file.
+    "evidence/story-2.4/nfr35-sse-reconnect-replay.json",
 )
 
 #: Anchored at line end only. `pytest -q` prefixes the line with its progress
@@ -75,6 +79,9 @@ _MEASUREMENT_MARKERS = {
     ),
     "evidence/story-1.5/nfr35-evidence-target-resolution.json": re.compile(
         r"NFR35_EVIDENCE_MEASUREMENTS=(\[.*\])\s*$", re.MULTILINE
+    ),
+    "evidence/story-2.4/nfr35-sse-reconnect-replay.json": re.compile(
+        r"NFR35_SSE_REPLAY_MEASUREMENTS=(\[.*\])\s*$", re.MULTILINE
     ),
 }
 

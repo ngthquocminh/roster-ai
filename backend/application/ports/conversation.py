@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -85,6 +86,29 @@ class ConversationRepository(Protocol):
         conversation_id: UUID,
         limit: int = 200,
     ) -> ConversationTimelineV1 | None: ...
+
+    def events_after(
+        self,
+        connection: Any,
+        *,
+        stream_id: UUID,
+        after: Decimal,
+        limit: int,
+    ) -> tuple[PersistedEventV1, ...] | None:
+        """Events on one stream with sequence strictly greater than ``after``.
+
+        Oldest first, at most ``limit`` of them — this is SSE replay draining
+        forward from a client's cursor, not a timeline window.
+
+        ``after`` is a ``Decimal`` because the column is ``Numeric(38, 0)``:
+        compared as text, ``"10" < "9"`` and a client resuming at 9 would
+        silently lose everything from 10 on.
+
+        ``None`` means the conversation is not visible to this site — the same
+        absence-equals-denial answer :meth:`timeline` gives (AD-3). An empty
+        tuple is the *different*, legitimate answer "nothing outstanding".
+        """
+        ...
 
     def accept_turn(
         self,

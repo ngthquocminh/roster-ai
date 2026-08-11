@@ -5,8 +5,10 @@ be exercised without a real (slow) solve.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from functools import lru_cache
-from typing import Iterator
+from typing import Callable, ContextManager, Iterator
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -135,16 +137,28 @@ def _site_context_engine(database_url: str) -> Engine:
     return create_postgres_engine(database_url)
 
 
-def get_site_context(
-    session: ResolvedSession = Depends(get_session),
-    settings: Settings = Depends(get_settings),
-) -> Iterator[Connection]:
-    """Yield the sole supported site-scoped PostgreSQL transaction."""
-    engine = _site_context_engine(settings.database_url)
+@contextmanager
+def site_context(engine: Engine, site_id: UUID | str) -> Iterator[Connection]:
+    """Open one short site-scoped PostgreSQL transaction (AD-23).
+
+    The single place in this repository that establishes trusted site context.
+    Both callers go through it:
+
+    * :func:`get_site_context`, the FastAPI dependency, whose transaction lives
+      as long as the request.
+    * Story 2.4's SSE stream, which calls this **directly**, once per poll,
+      inside ``run_in_threadpool``. It must never take the dependency: that
+      would pin one pooled connection inside an open transaction for the life of
+      a stream measured in hours, and ``_site_context_engine``'s default pool
+      (5 + 10 overflow) means roughly fifteen concurrent Chat tabs would consume
+      every connection the application has — sign-in, Scenario Data and the
+      timeline read all block, while the held connections sit ``idle in
+      transaction`` pinning the oldest snapshot and blocking vacuum.
+    """
     with engine.begin() as connection:
         connection.execute(
             text("SELECT set_config('app.site_id', :site_id, true)"),
-            {"site_id": str(session.site_id)},
+            {"site_id": str(site_id)},
         )
         connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
         try:
@@ -161,3 +175,36 @@ def get_site_context(
                 )
             except Exception:
                 pass
+
+
+def get_site_context(
+    session: ResolvedSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+) -> Iterator[Connection]:
+    """Yield the sole supported site-scoped PostgreSQL transaction."""
+    engine = _site_context_engine(settings.database_url)
+    with site_context(engine, session.site_id) as connection:
+        yield connection
+
+
+#: Opens one site-scoped transaction on demand. See `get_site_context_opener`.
+SiteContextOpener = Callable[[UUID], ContextManager[Connection]]
+
+
+def get_site_context_opener(
+    settings: Settings = Depends(get_settings),
+) -> SiteContextOpener:
+    """A *factory* for site-scoped transactions — not a transaction.
+
+    The SSE endpoint opens and closes one short transaction per poll and must
+    therefore not take `get_site_context`, whose transaction lives as long as
+    the request (see `site_context` for what that costs a long-lived stream).
+    Depending on a factory keeps the same `dependency_overrides` seam every
+    other port uses while opening nothing at request time.
+    """
+    engine = _site_context_engine(settings.database_url)
+
+    def _open(site_id: UUID) -> ContextManager[Connection]:
+        return site_context(engine, site_id)
+
+    return _open

@@ -13,6 +13,10 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 GUARDED = (
     BACKEND_ROOT / "application/contracts/activity.py",
     BACKEND_ROOT / "application/contracts/persisted_event.py",
+    # Story 2.4's cursor contract. Added here rather than left uncovered: a
+    # guard whose file list stops growing with the layer it guards quietly
+    # becomes a claim about coverage it no longer has.
+    BACKEND_ROOT / "application/contracts/stream_cursor.py",
     BACKEND_ROOT / "application/ports/conversation.py",
 )
 

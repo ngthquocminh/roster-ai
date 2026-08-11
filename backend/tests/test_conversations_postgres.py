@@ -386,6 +386,126 @@ def test_the_timeline_window_is_anchored_at_the_newest_events(
     assert full.has_more is False
 
 
+def test_events_after_drains_forward_from_a_cursor_in_ascending_order(
+    governed_postgres_engine, ids
+) -> None:
+    """Replay is the mirror image of `timeline()`, not a copy of it.
+
+    `timeline()` shows the newest window of an unbounded history; replay drains
+    forward from wherever a disconnected client stopped. Ascending order here is
+    the whole point — a descending replay would deliver the backlog newest-first
+    and a client applying it in arrival order would render the conversation
+    inverted.
+    """
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+    for value in ("one", "two", "three"):
+        with _site_context(engine, ids["site"]) as c:
+            accept_turn(
+                repo, c, conversation_id=created.id, site_id=ids["site"],
+                actor_id=ids["actor"], text=value,
+            )
+
+    with _site_context(engine, ids["site"]) as c:
+        everything = repo.events_after(
+            c, stream_id=created.id, after=Decimal(0), limit=200
+        )
+        tail = repo.events_after(c, stream_id=created.id, after=Decimal(1), limit=200)
+        drained = repo.events_after(c, stream_id=created.id, after=Decimal(3), limit=200)
+        bounded = repo.events_after(c, stream_id=created.id, after=Decimal(0), limit=2)
+
+    # (a) `after=0` replays the whole stream, oldest first.
+    assert everything is not None
+    assert [e.payload.text for e in everything] == ["one", "two", "three"]
+    assert [str(e.sequence) for e in everything] == ["1", "2", "3"]
+    # Strictly greater, never greater-or-equal: a client that already rendered
+    # sequence 1 must not be handed it a second time.
+    assert tail is not None
+    assert [str(e.sequence) for e in tail] == ["2", "3"]
+    # (b) `after=max` is a legal, common state meaning "nothing outstanding".
+    assert drained == ()
+    # The limit bounds the batch; the caller drains by advancing the cursor.
+    assert bounded is not None
+    assert [str(e.sequence) for e in bounded] == ["1", "2"]
+
+
+def test_events_after_filters_on_stream_id_not_the_conversation_correlation(
+    governed_postgres_engine, ids
+) -> None:
+    """`persisted_event` carries both `stream_id` and a `conversation_id`
+    correlation column. Filtering on the latter would let a future run-scoped
+    stream on the same conversation bleed into this replay under a sequence
+    numbering that does not constrain it."""
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+    with _site_context(engine, ids["site"]) as c:
+        accept_turn(
+            repo, c, conversation_id=created.id, site_id=ids["site"],
+            actor_id=ids["actor"], text="only",
+        )
+
+    other = _create(engine, ids)
+    assert other is not None
+    with _site_context(engine, ids["site"]) as c:
+        assert repo.events_after(
+            c, stream_id=other.id, after=Decimal(0), limit=200
+        ) == ()
+
+
+def test_events_after_denies_another_site_indistinguishably_from_absence(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+    with _site_context(engine, ids["site"]) as c:
+        accept_turn(
+            repo, c, conversation_id=created.id, site_id=ids["site"],
+            actor_id=ids["actor"], text="private",
+        )
+
+    with _site_context(engine, ids["other_site"]) as c:
+        # (c) `None`, exactly as `timeline()` answers — denial and absence are
+        # the same answer (AD-3). An empty tuple would disclose existence.
+        assert repo.events_after(
+            c, stream_id=created.id, after=Decimal(0), limit=200
+        ) is None
+        assert repo.events_after(
+            c, stream_id=uuid4(), after=Decimal(0), limit=200
+        ) is None
+
+
+def test_events_after_raises_typed_on_an_unrenderable_variant(
+    governed_postgres_engine, ids
+) -> None:
+    """Same failure mode as `timeline()`. The SSE endpoint terminates that one
+    connection on it rather than letting a 500 escape mid-body."""
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+    with _site_context(engine, ids["site"]) as c:
+        accept_turn(
+            repo, c, conversation_id=created.id, site_id=ids["site"],
+            actor_id=ids["actor"], text="first",
+        )
+    with engine.begin() as admin:
+        admin.execute(
+            persisted_event.update()
+            .where(persisted_event.c.stream_id == created.id)
+            .values(payload={"activity_type": "draft", "schema_version": "1"})
+        )
+
+    with pytest.raises(UnsupportedActivityPayloadError):
+        with _site_context(engine, ids["site"]) as c:
+            repo.events_after(c, stream_id=created.id, after=Decimal(0), limit=200)
+
+
 def test_an_unrenderable_activity_variant_fails_typed_not_as_a_key_error(
     governed_postgres_engine, ids
 ) -> None:

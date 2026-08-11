@@ -3,10 +3,11 @@ import { useSearchParams } from "react-router";
 
 import { createConversation } from "@/api/conversations";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
+import { ReconnectBanner } from "@/components/primitives/ReconnectBanner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { conversationsKey, useConversations } from "@/hooks/useConversations";
-import { useConversationTimeline } from "@/hooks/useConversationTimeline";
+import { useConversationStream } from "@/hooks/useConversationStream";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { getErrorStatus, TERMINAL_STATUSES, USER_ERROR_COPY } from "@/lib/errors";
@@ -60,7 +61,8 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const requestedId = searchParams.get("conversation") ?? "";
   const items = conversations.data?.items ?? [];
   const selectedId = items.some((c) => c.id === requestedId) ? requestedId : "";
-  const timeline = useConversationTimeline(selectedId);
+  const stream = useConversationStream(selectedId);
+  const timeline = stream.timeline;
 
   const select = (id: string) => {
     const next = new URLSearchParams(searchParams);
@@ -140,7 +142,19 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
             <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} />
           ) : (
             <>
-              <ActivityTimeline items={timeline.data.items} />
+              {/* Only rendered once something has actually gone wrong; a
+                  healthy stream shows no banner at all. */}
+              {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
+              <ActivityTimeline items={stream.items} />
+              {stream.updatesAreDelayed ? (
+                // AC2 requires the fallback to be LABELLED. Silent polling
+                // would leave the planner believing they are seeing live
+                // activity when they are not.
+                <p className="text-sm text-muted-foreground" role="status">
+                  Live updates are unavailable. This conversation is refreshing on a
+                  delay.
+                </p>
+              ) : null}
               {timeline.data.has_more ? (
                 <p className="text-xs text-muted-foreground">
                   Showing the most recent {timeline.data.limit} activities. Earlier

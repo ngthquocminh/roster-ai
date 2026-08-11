@@ -113,13 +113,15 @@ describe("ChatView", () => {
     // reading (AC2).
     const selected = screen.getByRole("button", { current: "page" });
     expect(selected).toHaveTextContent(`Conversation ${OLDER.slice(0, 8)}`);
-    expect(mockTimeline).toHaveBeenCalledWith(OLDER);
+    // The second argument is the polling fallback's `refetchInterval`, `false`
+    // while the event stream is healthy.
+    expect(mockTimeline).toHaveBeenCalledWith(OLDER, false);
   });
 
   it("selects nothing until the planner chooses, and records the choice in the URL", async () => {
     const router = renderChat();
 
-    expect(mockTimeline).toHaveBeenCalledWith("");
+    expect(mockTimeline).toHaveBeenCalledWith("", false);
     await userEvent.click(
       screen.getByRole("button", { name: `Conversation ${OLDER.slice(0, 8)}` }),
     );

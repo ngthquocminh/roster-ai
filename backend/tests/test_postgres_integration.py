@@ -1,6 +1,7 @@
-"""Live PostgreSQL proofs for migration, RLS, and the Gate A cutover."""
+"""Live PostgreSQL proofs for migration, RLS, the Gate A cutover, and SSE replay."""
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
@@ -9,15 +10,16 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import perf_counter
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, inspect, select, text
+from sqlalchemy import create_engine, func, insert, inspect, select, text
 from sqlalchemy.exc import DBAPIError
 
+from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.fixture_history import PostgresFixtureHistoryAdapter
 from adapters.postgres.scenario_projection import (
     PostgresScenarioProjectionReader,
@@ -28,6 +30,7 @@ from adapters.postgres.schema import (
     app_user,
     membership,
     organization,
+    persisted_event,
     scenario_version,
     session_index,
     site,
@@ -38,10 +41,12 @@ from api.deps import (
     get_identity_store,
     get_settings,
     get_site_context,
+    site_context,
 )
 from api.main import app
 from application.ports.scenario_projection import GroupQueryV1
 from application.ports.session import ResolvedSession
+from application.use_cases.accept_turn import accept_turn
 from scripts.gate_a_cutover import FixtureSpec, REPO_ROOT, run_cutover
 from services import run_service
 from settings import default_settings
@@ -197,6 +202,326 @@ def _version_order_key(row) -> tuple[int, int, str, str]:
 
 def _catalogue_order_key(row) -> tuple:
     return (row.fixture_id,) + _version_order_key(row)
+
+
+@pytest.mark.postgres
+def test_site_context_returns_every_connection_it_borrows(postgres_engine) -> None:
+    """The resource property the SSE stream depends on, asserted directly.
+
+    `get_site_context` holds one pooled connection inside an open transaction
+    for a request's whole lifetime — correct for a 40 ms request, fatal for a
+    stream that lives for hours: `_site_context_engine` builds a default pool
+    (5 + 10 overflow), so ~15 concurrent Chat tabs would consume every
+    connection the application has, and they would sit `idle in transaction`
+    pinning the oldest snapshot. Story 2.4's stream therefore opens a SHORT
+    transaction per poll through this same manager and closes it.
+
+    Checking the pool's own checked-out count is what makes that a fact rather
+    than an intention: a leaked transaction shows up here and nowhere else.
+    """
+    engine = create_engine(
+        postgres_engine.url.set(
+            username="shiftmind_login", password="shiftmind_login"
+        ).render_as_string(hide_password=False)
+    )
+    site_id = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url, engine=postgres_engine
+    ).ensure_seed_site(f"Pool Org {uuid4().hex}", f"Pool Site {uuid4().hex}")
+    try:
+        with engine.connect() as warm:
+            warm.execute(text("SELECT 1"))
+        before = engine.pool.checkedout()
+
+        for _ in range(5):
+            with site_context(engine, site_id) as connection:
+                assert connection.execute(
+                    text("SELECT current_setting('app.site_id', true)")
+                ).scalar_one() == str(site_id)
+
+        assert engine.pool.checkedout() == before
+    finally:
+        engine.dispose()
+
+
+#: Story 2.4's fixed replay backlog. AC3 says "the largest Gate A replay
+#: backlog" and names no number, so one is chosen here and recorded in the
+#: evidence file's `protocol` block: 200 persisted events — the timeline read
+#: cap (`api/routers/conversations.py`), i.e. the largest number of activities
+#: the product will render at once.
+_SSE_REPLAY_BACKLOG = 200
+
+
+def _singleton_app_user(engine) -> UUID:
+    """Return this database's one `app_user`, creating it if absent.
+
+    `uq_app_user_singleton` is a unique index on `(true)`, so there is at most
+    one row per database and the module-scoped engine may already carry it.
+    """
+    with engine.begin() as connection:
+        existing = connection.execute(select(app_user.c.id).limit(1)).scalar_one_or_none()
+        if existing is not None:
+            return existing
+        return connection.execute(
+            insert(app_user)
+            .values(idp_subject=f"planner-{uuid4().hex}", email="planner@example.test")
+            .returning(app_user.c.id)
+        ).scalar_one()
+
+
+def _seed_conversation_stream(postgres_engine, *, site_id, scenario_id, version_id, events):
+    """Create a conversation and drive `events` real turns onto its stream."""
+    actor_id = _singleton_app_user(postgres_engine)
+    repository = PostgresConversationRepository()
+    engine = create_engine(
+        postgres_engine.url.set(
+            username="shiftmind_login", password="shiftmind_login"
+        ).render_as_string(hide_password=False)
+    )
+    try:
+        with site_context(engine, site_id) as connection:
+            created = repository.create(
+                connection,
+                scenario_id=scenario_id,
+                scenario_version_id=version_id,
+                site_id=site_id,
+                actor_id=actor_id,
+            )
+        assert created is not None
+        for index in range(events):
+            with site_context(engine, site_id) as connection:
+                accepted = accept_turn(
+                    repository,
+                    connection,
+                    conversation_id=created.id,
+                    site_id=site_id,
+                    actor_id=actor_id,
+                    text=f"backlog message {index + 1}",
+                )
+            assert accepted is not None
+        return created.id
+    finally:
+        engine.dispose()
+
+
+def _drive_sse_stream(*, path: str, stop_when: bytes) -> tuple[float, bytes]:
+    """Time an SSE connect at the ASGI boundary, stopping at `stop_when`.
+
+    `TestClient` cannot be used here. Its transport writes every
+    `http.response.body` message into a single `io.BytesIO` and blocks on
+    `response_complete` before returning a response at all
+    (`starlette/testclient.py`), so it can neither observe when an individual
+    frame crosses the boundary nor return from a stream that stays open.
+
+    Driving the real `app` object keeps both `@app.middleware("http")` layers
+    inside the measured path while making delivery observable per frame. The
+    clock starts immediately before the request is handed to the application —
+    AC3's "reconnect request receipt" — and stops on the ASGI `send` carrying
+    the last outstanding persisted event, which is the last point inside this
+    process before the socket. It therefore excludes network transit only, and
+    that is recorded in the evidence file's `protocol` block rather than
+    presented as full client receipt.
+    """
+    measured: dict[str, object] = {}
+
+    async def _drive() -> None:
+        chunks: list[bytes] = []
+        finished = asyncio.Event()
+        started = perf_counter()
+
+        async def receive():
+            await finished.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message) -> None:
+            if message["type"] != "http.response.body":
+                return
+            body = message.get("body", b"")
+            chunks.append(body)
+            if stop_when in body:
+                measured["duration_ms"] = round((perf_counter() - started) * 1_000, 3)
+                measured["body"] = b"".join(chunks)
+                finished.set()
+                # Break and close. A real closed socket makes `send` raise
+                # `OSError`, which `StreamingResponse` converts to
+                # `ClientDisconnect` — so this is the production teardown path,
+                # not a test-only shortcut.
+                raise OSError("client closed the connection")
+
+        try:
+            await app(
+                {
+                    "type": "http",
+                    "asgi": {"version": "3.0", "spec_version": "2.4"},
+                    "http_version": "1.1",
+                    "method": "GET",
+                    "scheme": "http",
+                    "path": path,
+                    "raw_path": path.encode(),
+                    "query_string": b"",
+                    "root_path": "",
+                    "headers": [
+                        (b"host", b"testserver"),
+                        (b"cookie", f"{SESSION_COOKIE_NAME}=nfr35-session".encode()),
+                    ],
+                    "client": ("testclient", 50000),
+                    "server": ("testserver", 80),
+                },
+                receive,
+                send,
+            )
+        except BaseException:  # noqa: BLE001
+            # The deliberate `OSError` above unwinds through anyio task groups
+            # and may surface wrapped. Swallowing it here is safe because the
+            # assertion below fails loudly if the stream never reached
+            # `stop_when` — an application error leaves `measured` empty.
+            pass
+
+    asyncio.run(_drive())
+    assert "duration_ms" in measured, "the stream never delivered the expected frame"
+    return float(measured["duration_ms"]), bytes(measured["body"])
+
+
+@pytest.mark.postgres
+def test_the_live_stream_persists_nothing_not_even_its_heartbeats(
+    postgres_engine, tmp_path
+) -> None:
+    """AD-21: heartbeats are comment frames that are never written to any table.
+
+    Asserted as a row count rather than as an inspection of the emitting code,
+    because the property that matters is what reaches the database.
+    """
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url, engine=postgres_engine
+    )
+    suffix = uuid4().hex
+    site_id = adapter.ensure_seed_site(
+        f"SSE Persist Organization {suffix}", f"SSE Persist Site {suffix}"
+    )
+    imported = adapter.import_fixture(
+        site_id=site_id,
+        fixture_id=f"sample_tiny_input-sse-persist-{suffix}",
+        version="v1",
+        payload=json.loads(
+            (REPO_ROOT / "data" / "sample_tiny_input_more_tm.json").read_text(
+                encoding="utf-8"
+            )
+        ),
+        source_package="tests",
+        source_path="data/sample_tiny_input_more_tm.json",
+    )
+    with postgres_engine.connect() as connection:
+        scenario_id = connection.execute(
+            select(scenario_version.c.scenario_id).where(
+                scenario_version.c.id == imported.scenario_version_id
+            )
+        ).scalar_one()
+    conversation_id = _seed_conversation_stream(
+        postgres_engine,
+        site_id=site_id,
+        scenario_id=scenario_id,
+        version_id=imported.scenario_version_id,
+        events=2,
+    )
+
+    def _count() -> int:
+        with postgres_engine.connect() as connection:
+            return connection.execute(
+                select(func.count())
+                .select_from(persisted_event)
+                .where(persisted_event.c.stream_id == conversation_id)
+            ).scalar_one()
+
+    before = _count()
+    with _catalogue_client(postgres_engine, site_id=site_id, tmp_path=tmp_path):
+        _, body = _drive_sse_stream(
+            path=f"/api/v1/conversations/{conversation_id}/events",
+            stop_when=f"id: {conversation_id}:2".encode(),
+        )
+
+    assert b": heartbeat" in body
+    assert before == 2
+    assert _count() == before
+
+
+@pytest.mark.postgres
+def test_nfr35_sse_reconnect_replay_meets_five_second_threshold(
+    postgres_engine,
+    tmp_path,
+    capsys,
+) -> None:
+    """AC3 / AD-26. A miss blocks implementation acceptance of this story.
+
+    Protocol, from `requirements-inventory.md`'s normative table: the largest
+    Gate A fixture at full committed size, warm process and warm pool, one
+    discarded warm-up, three consecutive runs of which every one must pass,
+    threshold 5000 ms. The clock boundary is AC3's own — reconnect request
+    receipt to delivery of the last outstanding persisted event — not Story
+    1.4's.
+    """
+    payload = json.loads(
+        (REPO_ROOT / "data" / "sample_tiny_input_more_tm.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url,
+        engine=postgres_engine,
+    )
+    suffix = uuid4().hex
+    site_id = adapter.ensure_seed_site(
+        f"NFR35 SSE Organization {suffix}", f"NFR35 SSE Site {suffix}"
+    )
+    imported = adapter.import_fixture(
+        site_id=site_id,
+        fixture_id=f"sample_tiny_input_more_tm-sse-{suffix}",
+        version="v1",
+        payload=payload,
+        source_package="tests",
+        source_path="data/sample_tiny_input_more_tm.json",
+    )
+    with postgres_engine.connect() as connection:
+        scenario_id = connection.execute(
+            select(scenario_version.c.scenario_id).where(
+                scenario_version.c.id == imported.scenario_version_id
+            )
+        ).scalar_one()
+
+    conversation_id = _seed_conversation_stream(
+        postgres_engine,
+        site_id=site_id,
+        scenario_id=scenario_id,
+        version_id=imported.scenario_version_id,
+        events=_SSE_REPLAY_BACKLOG,
+    )
+    # The stalest possible cursor: replay the entire backlog.
+    path = f"/api/v1/conversations/{conversation_id}/events"
+    final = f"id: {conversation_id}:{_SSE_REPLAY_BACKLOG}".encode()
+
+    measurements = []
+    with _catalogue_client(postgres_engine, site_id=site_id, tmp_path=tmp_path):
+        # One discarded warm-up: warms the process, the `lru_cache`d engine and
+        # its pool, so the recorded runs measure replay rather than connection
+        # establishment.
+        warmup_ms, warmup_body = _drive_sse_stream(path=path, stop_when=final)
+        assert warmup_body.count(b"id: ") == _SSE_REPLAY_BACKLOG
+        assert warmup_ms > 0
+        for run in range(1, 4):
+            duration_ms, body = _drive_sse_stream(path=path, stop_when=final)
+            assert body.count(b"id: ") == _SSE_REPLAY_BACKLOG
+            measurements.append(
+                {
+                    "run": run,
+                    "endpoint": "/api/v1/conversations/{conversation_id}/events",
+                    "replay_backlog_events": _SSE_REPLAY_BACKLOG,
+                    "last_event_id": "absent (replay from sequence 0)",
+                    "duration_ms": duration_ms,
+                }
+            )
+
+    assert len(measurements) == 3
+    # Every run must pass; an average that hides a miss is not the threshold.
+    assert all(item["duration_ms"] <= 5_000 for item in measurements)
+    print("NFR35_SSE_REPLAY_MEASUREMENTS=" + json.dumps(measurements))
 
 
 @pytest.mark.postgres
@@ -886,15 +1211,14 @@ def test_resolve_session_rechecks_current_membership_on_every_request(
         f"Session Site {suffix}",
     )
     session_token_hash = "a" * 64
+    # Via the shared helper rather than a bare insert: `uq_app_user_singleton`
+    # is a unique index on `(true)`, so this module-scoped database holds at
+    # most ONE app_user and whichever test runs first owns it. A second insert
+    # here made this test's result depend on execution order. Nothing about
+    # what it proves changes — the membership and session rows below are still
+    # its own, and the assertion is that `resolve_session` returns this user.
+    app_user_id = _singleton_app_user(postgres_engine)
     with postgres_engine.begin() as connection:
-        app_user_id = connection.execute(
-            app_user.insert()
-            .values(
-                idp_subject=f"session-planner-{suffix}",
-                email=f"session-{suffix}@example.test",
-            )
-            .returning(app_user.c.id)
-        ).scalar_one()
         membership_id = connection.execute(
             membership.insert()
             .values(app_user_id=app_user_id, site_id=site_id)

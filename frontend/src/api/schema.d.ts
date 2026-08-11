@@ -563,6 +563,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversation Events
+         * @description Replay and follow one conversation's persisted event stream (AD-21).
+         *
+         *     Note what this route does **not** depend on: `get_site_context`. That
+         *     dependency holds one pooled connection inside an open transaction for the
+         *     whole request, which is correct for a 40 ms read and an outage for a stream
+         *     that lives for hours. The stream opens a short transaction per poll instead.
+         */
+        get: operations["conversation_events_api_v1_conversations__conversation_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2917,6 +2942,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    conversation_events_api_v1_conversations__conversation_id__events_get: {
+        parameters: {
+            query?: {
+                last_event_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An SSE stream of persisted conversation activity. Each frame is `id: <stream_uuid>:<sequence>`, `event: <event_type>`, `data: <ActivityItemOut as compact JSON>`; comment-only heartbeats carry no id and are never persisted (AD-21). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": components["schemas"]["ProblemDetailsV1"];
                 };
             };
         };

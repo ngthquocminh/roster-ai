@@ -1,0 +1,204 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { conversationEventsUrl, type Timeline } from "@/api/conversations";
+import { useConversationTimeline } from "./useConversationTimeline";
+
+export type ActivityItem = Timeline["items"][number];
+
+/** The three states `ReconnectBanner` renders. `null` means "nothing has gone
+ * wrong yet" and shows no banner at all — the component has no runtime guard
+ * for a fourth value, so this hook must never invent one. */
+export type ReconnectState = "disconnected" | "reconnecting" | "reconnected";
+
+/** The minimal structural contract this hook uses. `EventSource` satisfies it,
+ * and so can a test stub — which matters because **jsdom does not implement
+ * `EventSource`**, so a hook that reached for the global would be untestable
+ * and a polyfill dependency is not warranted for one seam (AR27). */
+export type EventSourceLike = {
+  addEventListener(type: string, listener: (event: Event) => void): void;
+  removeEventListener(type: string, listener: (event: Event) => void): void;
+  close(): void;
+};
+export type EventSourceConstructor = new (url: string) => EventSourceLike;
+
+type CursorStorage = Pick<Storage, "getItem" | "setItem">;
+
+/** Frames carry `event: planner_message_accepted`, and `onmessage` fires only
+ * for the default `message` type — so a listener on that name is the only way
+ * these frames are ever seen. It is also the only event type that exists: no
+ * agent runs, nothing leaves `agent_queued`. */
+export const PLANNER_MESSAGE_ACCEPTED = "planner_message_accepted";
+
+/** Consecutive failed connections before giving up on the stream. Bounded so a
+ * permanently rejected cursor cannot retry-loop forever. */
+const MAX_CONSECUTIVE_FAILURES = 3;
+const FALLBACK_POLL_INTERVAL_MS = 15_000;
+/** Same window the timeline read uses; see the merge below (UX-DR24). */
+const WINDOW_CAP = 200;
+
+export const cursorStorageKey = (conversationId: string) =>
+  `shiftmind.conversation-cursor.${conversationId}`;
+
+function defaultEventSource(): EventSourceConstructor | null {
+  return (globalThis as { EventSource?: EventSourceConstructor }).EventSource ?? null;
+}
+
+function defaultStorage(): CursorStorage | null {
+  try {
+    return globalThis.sessionStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Live conversation activity that survives a reconnect (AR21, UX-DR6, UX-DR20).
+ *
+ * Owns the event source, the resume cursor, the merge, the reconnect state
+ * machine, and the labelled-polling fallback. It wraps `useConversationTimeline`
+ * rather than sitting beside it because the fallback *is* a `refetchInterval` on
+ * that query — two hooks would have to pass the degraded flag back and forth.
+ */
+export function useConversationStream(
+  conversationId: string,
+  options?: {
+    eventSourceConstructor?: EventSourceConstructor | null;
+    storage?: CursorStorage | null;
+  },
+) {
+  const eventSourceConstructor =
+    options?.eventSourceConstructor !== undefined
+      ? options.eventSourceConstructor
+      : defaultEventSource();
+  const storage = options?.storage !== undefined ? options.storage : defaultStorage();
+
+  const [failures, setFailures] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  const [live, setLive] = useState<ActivityItem[]>([]);
+  const [connection, setConnection] = useState<ReconnectState | null>(null);
+  const cursorRef = useRef<string | null>(null);
+  const newestRef = useRef<string | null>(null);
+
+  const updatesAreDelayed = failures >= MAX_CONSECUTIVE_FAILURES;
+  const timeline = useConversationTimeline(
+    conversationId,
+    updatesAreDelayed ? FALLBACK_POLL_INTERVAL_MS : false,
+  );
+
+  const items = timeline.data?.items;
+  const newest = items && items.length > 0 ? items[items.length - 1].sequence : null;
+  const ready = Boolean(conversationId) && timeline.isSuccess;
+
+  // Switching conversations must not carry the previous one's cursor or its
+  // accumulated frames across — the planner would resume a stream they are no
+  // longer reading.
+  useEffect(() => {
+    cursorRef.current = null;
+    setLive([]);
+    setConnection(null);
+    setFailures(0);
+    setAttempt(0);
+  }, [conversationId]);
+
+  // Declared before the connect effect so the seed below always reads the
+  // current value. Kept in a ref rather than a dependency: a timeline refetch
+  // changes `newest` on every new message, and treating that as a reason to
+  // tear down and re-open the stream would churn a healthy connection.
+  useEffect(() => {
+    newestRef.current = newest;
+  }, [newest]);
+
+  useEffect(() => {
+    if (!ready || !eventSourceConstructor || updatesAreDelayed) return;
+
+    if (cursorRef.current === null) {
+      // Seed from the timeline's newest item, **not** from 0. The timeline read
+      // is tail-anchored and capped at 200, so a first connect at 0 would
+      // replay the entire history that read deliberately truncated — every one
+      // of those events arriving as a "new" frame. A cursor stored by an
+      // earlier mount wins over it. Both absent (a conversation with no
+      // activity at all) is the only case that connects with no cursor.
+      const stored = storage?.getItem(cursorStorageKey(conversationId)) ?? null;
+      cursorRef.current = stored ?? newestRef.current;
+    }
+
+    if (attempt > 0) setConnection("reconnecting");
+
+    const source = new eventSourceConstructor(
+      conversationEventsUrl(conversationId, cursorRef.current),
+    );
+
+    const onFrame = (event: Event) => {
+      const raw = (event as MessageEvent).data;
+      let item: ActivityItem;
+      try {
+        item = JSON.parse(String(raw)) as ActivityItem;
+      } catch {
+        return;
+      }
+      if (typeof item?.activity_id !== "string" || typeof item?.sequence !== "string") return;
+      // A string, always — never `Number(...)`. That is the whole reason Story
+      // 2.3 serialized `sequence` as a string in the first place.
+      cursorRef.current = item.sequence;
+      storage?.setItem(cursorStorageKey(conversationId), item.sequence);
+      setFailures(0);
+      setLive((current) => [...current, item].slice(-WINDOW_CAP));
+    };
+
+    const onOpen = () => {
+      setFailures(0);
+      // Only report recovery to someone who was told about the loss.
+      setConnection((state) => (state === null ? null : "reconnected"));
+    };
+
+    const onError = () => {
+      // A rejected cursor comes back as a non-200 that is not
+      // `text/event-stream`, which per WHATWG fails an `EventSource`
+      // permanently — `error` fires, `readyState` becomes CLOSED, no retry.
+      // That is exactly what lets us re-establish from our own persisted
+      // cursor: `EventSource` cannot set `Last-Event-ID` itself, so the new
+      // source carries it as a query parameter instead.
+      source.close();
+      setConnection("disconnected");
+      setFailures((count) => count + 1);
+      setAttempt((count) => count + 1);
+    };
+
+    source.addEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
+    source.addEventListener("open", onOpen);
+    source.addEventListener("error", onError);
+
+    return () => {
+      source.removeEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
+      source.removeEventListener("open", onOpen);
+      source.removeEventListener("error", onError);
+      source.close();
+    };
+  }, [
+    ready,
+    eventSourceConstructor,
+    updatesAreDelayed,
+    conversationId,
+    attempt,
+    storage,
+  ]);
+
+  const merged = useMemo(() => {
+    const base = timeline.data?.items ?? [];
+    const limit = timeline.data?.limit ?? WINDOW_CAP;
+    // Merge by activity identity, never by position (UX-DR6). The sender's own
+    // message is the proof: `useSendMessage` invalidates the timeline on
+    // success, so it arrives twice — once from the refetch, once from the
+    // stream — and exactly one card must render.
+    const byId = new Map<string, ActivityItem>();
+    for (const item of base) byId.set(item.activity_id, item);
+    for (const item of live) byId.set(item.activity_id, item);
+    const all = [...byId.values()];
+    // Bounded to the same window the timeline read uses (UX-DR24): no
+    // unbounded growth, and the "Showing the most recent N activities" copy
+    // stays honest as live frames arrive.
+    return all.length > limit ? all.slice(all.length - limit) : all;
+  }, [timeline.data, live]);
+
+  return { timeline, items: merged, connection, updatesAreDelayed };
+}

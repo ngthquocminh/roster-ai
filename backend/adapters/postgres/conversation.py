@@ -134,6 +134,38 @@ class PostgresConversationRepository:
             has_more,
         )
 
+    def events_after(
+        self,
+        connection: Connection,
+        *,
+        stream_id: UUID,
+        after: Decimal,
+        limit: int,
+    ) -> tuple[PersistedEventV1, ...] | None:
+        # The RLS-filtered conversation row is the visibility check: a stream
+        # this site cannot see must answer `None`, indistinguishable from a
+        # stream that does not exist. Reading the events alone would answer with
+        # an empty tuple, which is a different and disclosing answer.
+        visible = connection.execute(
+            select(conversation.c.id).where(conversation.c.id == stream_id)
+        ).scalar_one_or_none()
+        if visible is None:
+            return None
+        # Ascending here, descending in `timeline()` — both are correct. The
+        # timeline shows the newest window of an unbounded history; replay
+        # drains forward from a cursor, so it must start at the oldest
+        # outstanding event.
+        rows = connection.execute(
+            select(persisted_event)
+            .where(
+                persisted_event.c.stream_id == stream_id,
+                persisted_event.c.sequence > after,
+            )
+            .order_by(persisted_event.c.sequence.asc())
+            .limit(limit)
+        ).all()
+        return tuple(_event_from_row(r) for r in rows)
+
     def accept_turn(
         self,
         connection: Connection,
