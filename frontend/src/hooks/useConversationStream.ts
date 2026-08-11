@@ -54,6 +54,13 @@ const RECOVERY_BANNER_MS = 5_000;
  * liveness check — see the story's "Note for review" for what would be
  * required to do better (byte-level stream reading). */
 const STALE_AFTER_MS = 120_000;
+/** Delay before opening a *retry* connection, indexed by consecutive
+ * failures so far (`failures - 1`, clamped to the last entry). The very
+ * first connect (`attempt === 0`) is never delayed. Bounded and small: this
+ * only softens the case where the server rejects a resumed cursor
+ * synchronously, so up to `MAX_CONSECUTIVE_FAILURES` attempts would
+ * otherwise fire back-to-back. */
+const RECONNECT_BACKOFF_MS = [250, 750];
 
 export const cursorStorageKey = (conversationId: string) =>
   `shiftmind.conversation-cursor.${conversationId}`;
@@ -152,24 +159,20 @@ export function useConversationStream(
       cursorRef.current = stored ?? newestRef.current;
     }
 
-    if (attempt > 0) setConnection("reconnecting");
-
-    const source = new eventSourceConstructor(
-      conversationEventsUrl(conversationId, cursorRef.current),
-    );
+    let source: EventSourceLike | null = null;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
 
     // Shared by the native `error` event and the idle watchdog below — a
     // stalled connection and a rejected one recover the same way: close,
     // mark disconnected, and let the next `attempt` re-open from the
     // persisted cursor.
     const forceReconnect = () => {
-      source.close();
+      source?.close();
       setConnection("disconnected");
       setFailures((count) => count + 1);
       setAttempt((count) => count + 1);
     };
 
-    let idleTimer = setTimeout(forceReconnect, STALE_AFTER_MS);
     const resetIdleTimer = () => {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(forceReconnect, STALE_AFTER_MS);
@@ -218,17 +221,47 @@ export function useConversationStream(
       forceReconnect();
     };
 
-    source.addEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
-    source.addEventListener("open", onOpen);
-    source.addEventListener("error", onError);
+    const connect = () => {
+      if (attempt > 0) setConnection("reconnecting");
+      source = new eventSourceConstructor(
+        conversationEventsUrl(conversationId, cursorRef.current),
+      );
+      resetIdleTimer();
+      source.addEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
+      source.addEventListener("open", onOpen);
+      source.addEventListener("error", onError);
+    };
+
+    // Retries only — the first connect (`attempt === 0`) runs synchronously,
+    // not through `setTimeout(fn, 0)`, which still defers to the next
+    // macrotask and would make every other test in this file wait a tick
+    // for no reason. `failures` isn't a dependency of this effect (adding it
+    // would tear down and reopen a perfectly healthy connection the moment
+    // it resets to 0 on the next successful frame); it's read here as a
+    // plain closure value instead, which is safe because `forceReconnect`
+    // always changes `attempt` and `failures` together, so this effect
+    // never re-runs without also seeing the `failures` value that produced
+    // this run.
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    if (attempt > 0) {
+      const backoffMs = RECONNECT_BACKOFF_MS[Math.max(0, failures - 1)] ?? 0;
+      connectTimer = setTimeout(connect, backoffMs);
+    } else {
+      connect();
+    }
 
     return () => {
+      clearTimeout(connectTimer);
       clearTimeout(idleTimer);
-      source.removeEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
-      source.removeEventListener("open", onOpen);
-      source.removeEventListener("error", onError);
-      source.close();
+      source?.removeEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
+      source?.removeEventListener("open", onOpen);
+      source?.removeEventListener("error", onError);
+      source?.close();
     };
+    // `failures` is deliberately excluded — see the comment above where it's
+    // read. Adding it would tear down and reopen a healthy connection every
+    // time it resets to 0 on a successful frame.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     ready,
     eventSourceConstructor,

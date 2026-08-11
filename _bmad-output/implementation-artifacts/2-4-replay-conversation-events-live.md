@@ -4,7 +4,7 @@ baseline_commit: 7b8df5a5d57a908b0063a6465ed97b0eb416bd50
 
 # Story 2.4: Replay Conversation Events Live
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -556,17 +556,24 @@ Blind Hunter, Edge Case Hunter, Acceptance Auditor.
       it. **Fixed:** the write is now wrapped in try/catch; the UI update and
       failure-reset proceed regardless.
       [`frontend/src/hooks/useConversationStream.ts:159-167`]
-- [ ] [Review][Patch] `EventSource` reconnect attempts (up to 3, driven by
+- [x] [Review][Patch] `EventSource` reconnect attempts (up to 3, driven by
       `onError`) fire back-to-back with no backoff or jitter between them.
       Bounded and minor, but worth a small delay to avoid bursting a
-      recovering backend. **Not applied.** All 12 existing reconnect tests in
-      `useConversationStream.test.tsx` assert synchronously with no fake
-      timers (e.g. 3 `emit("error")` calls → exactly 3 `StubEventSource`
-      instances, checked immediately). A real backoff needs `setTimeout`
-      between attempts, which would require converting that suite to fake
-      timers to keep asserting the same properties — a disproportionate
-      amount of test churn for a bounded-to-3, low-severity nuisance. Left as
-      an action item rather than silently skipped.
+      recovering backend. **Fixed 2026-08-11:** a retry (`attempt > 0`) now
+      opens through `setTimeout(connect, backoffMs)` with `backoffMs` from
+      `RECONNECT_BACKOFF_MS = [250, 750]` indexed by consecutive failures;
+      the *first* connect (`attempt === 0`) still runs synchronously —
+      `setTimeout(fn, 0)` still defers to the next macrotask, which would
+      have made every unrelated test in the suite wait a tick for nothing.
+      The 4 reconnect tests that asserted synchronously (`re-establishes a
+      rejected connection...`, `walks the banner through all three
+      states...`, `leaves the banner in a state...`, `falls back to visibly
+      labelled polling...`) were converted to fake timers with an explicit
+      advance between attempts; one new test
+      (`backs off before retrying instead of reconnecting immediately`)
+      asserts the delay itself, not just its eventual effect.
+      [`frontend/src/hooks/useConversationStream.ts:224-269`,
+      `frontend/src/hooks/useConversationStream.test.tsx`]
       [`frontend/src/hooks/useConversationStream.ts:178-197`]
 
 Dismissed as noise or already addressed (7): a theoretical `format_event_id`
@@ -1009,6 +1016,7 @@ show a zero-line diff, and no dependency was added to `pyproject.toml`,
 
 | Date | Change |
 |---|---|
+| 2026-08-11 | Closed the review's last action item: reconnect-attempt backoff. Retries (`attempt > 0`) now open through `setTimeout(connect, backoffMs)`, `backoffMs` from `RECONNECT_BACKOFF_MS = [250, 750]` indexed by consecutive failures; the first connect stays synchronous (a `setTimeout(fn, 0)` still defers a tick, which would have cost every unrelated test in the suite). 4 existing reconnect tests converted to fake timers with explicit advances between attempts; one new test asserts the delay itself. All 8 patch findings now resolved. Full regression re-verified: backend `pytest` 602 passed/1 skipped (dirty tree)/7 deselected, `pytest -m postgres` 43 passed, frontend `vitest` 55 files/322 tests, `tsc --noEmit` clean, `oxlint` clean (3 pre-existing warnings only). Status: `in-progress` → `done`. |
 | 2026-08-11 | Code review (Blind Hunter, Edge Case Hunter, Acceptance Auditor) against `baseline_commit`, diff group A+B. 2 decision-needed, 7 patch, 7 dismissed. Both decisions resolved with the user: the flagged stalled-stream watchdog gap implemented (idle timer on observed frames, not literal heartbeat bytes — `EventSource` cannot observe comment-only heartbeats, contrary to the review note's literal proposal); the permanent labelled-polling lock-in after 3 failures accepted as designed. 6 of 7 remaining patches applied and verified (backend `pytest` 602 passed/1 skipped-needs-clean-tree/7 deselected, `pytest -m postgres` 43 passed, frontend `vitest` 55 files/321 tests, `tsc --noEmit` clean, `oxlint` clean at the 3 pre-existing warnings); the 7th (reconnect-attempt backoff) left as an action item — the fix would require converting a deliberately-synchronous test suite to fake timers for a bounded, low-severity gain. See Review Findings for detail. |
 | 2026-08-11 | Implemented and moved to review. **AC3 passes: 48.454 / 44.920 / 41.978 ms against NFR35's 5000 ms threshold**, three consecutive runs replaying a 200-event backlog from cursor 0; evidence generated on a clean tree at `d2789a7` and committed separately at `3c5f9d2`. Gate A re-run and still `true` with an empty blocking list. All five creation-time decisions held; no new dependency, no migration. Three plan deviations recorded in the Debug Log: `TestClient` structurally cannot prove incremental delivery (it buffers a streaming body to completion), so Task 8's transport test drives the real `app` at the ASGI boundary instead — a strictly stronger proof; `uq_app_user_singleton` forced Task 9's two `test_postgres_integration.py` neighbours onto a shared select-or-insert helper; and the published 200 response needed an `EventStreamResponse` subclass to stop FastAPI advertising `application/json` for a body that is never JSON. Baselines re-derived rather than trusted — the story's recorded postgres figure (27) predated Story 2.3 and is actually 36. |
 | 2026-08-11 | Story created on branch `story/2-4-replay-conversation-events-live`. Five creation-time decisions recorded: the SSE route must not hold a request-lifetime site transaction; SSE is hand-rolled on `StreamingResponse` rather than adding `sse-starlette` under AR27; the replay read extends the existing `ConversationRepository` rather than creating a new port (which falsifies the deferred-work ledger's premise for assigning the `scenario_catalogue` AD-1 leak here); a rejected cursor returns a non-200 so `EventSource` fails permanently and the client re-establishes from its own persisted cursor; and non-disclosure is guaranteed by issuing zero queries on a foreign-stream cursor. |

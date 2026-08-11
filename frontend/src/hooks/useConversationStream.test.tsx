@@ -178,6 +178,7 @@ describe("useConversationStream", () => {
   });
 
   it("re-establishes a rejected connection with its own stored cursor", () => {
+    vi.useFakeTimers();
     render(<Harness />);
     StubEventSource.latest().emit(PLANNER_MESSAGE_ACCEPTED, {
       data: JSON.stringify(activity(ARRIVING, "Night shift is short", "8")),
@@ -185,6 +186,11 @@ describe("useConversationStream", () => {
     const rejected = StubEventSource.latest();
 
     rejected.emit("error");
+    // The retry is deliberately backed off rather than immediate (bounded
+    // reconnect-attempt backoff); advance past it to let the new source open.
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
 
     // The dead source is closed, not left retry-looping on a poisoned header,
     // and the replacement carries the cursor we persisted ourselves.
@@ -193,18 +199,40 @@ describe("useConversationStream", () => {
     expect(StubEventSource.latest().url).toContain(
       `last_event_id=${encodeURIComponent(`${CONVERSATION}:8`)}`,
     );
+    vi.useRealTimers();
+  });
+
+  it("backs off before retrying instead of reconnecting immediately", () => {
+    // Bounded so a synchronously-rejected cursor can't burst three
+    // back-to-back connection attempts at a possibly-struggling backend.
+    vi.useFakeTimers();
+    render(<Harness />);
+    StubEventSource.latest().emit("error");
+
+    expect(StubEventSource.instances).toHaveLength(1);
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(StubEventSource.instances).toHaveLength(2);
+    vi.useRealTimers();
   });
 
   it("walks the banner through all three reconnect states and no fourth one", () => {
+    vi.useFakeTimers();
     render(<Harness />);
     // A healthy stream shows no banner at all.
     expect(renderedStates.every((state) => state === null)).toBe(true);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 
     StubEventSource.latest().emit("error");
-    // Recovery is immediate, so `disconnected` is committed and then replaced
-    // by `reconnecting` — both happen, only the second is on screen.
+    // `disconnected` commits immediately; `reconnecting` only follows once
+    // the backoff elapses and the retry actually opens.
     expect(renderedStates).toContain("disconnected");
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
     expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
 
     StubEventSource.latest().emit("open");
@@ -213,12 +241,17 @@ describe("useConversationStream", () => {
     expect(new Set(renderedStates)).toEqual(
       new Set([null, "disconnected", "reconnecting", "reconnected"]),
     );
+    vi.useRealTimers();
   });
 
   it("leaves the banner in a state ReconnectBanner can actually render", () => {
+    vi.useFakeTimers();
     render(<Harness />);
     for (let attempt = 0; attempt < 4; attempt += 1) {
       StubEventSource.latest().emit("error");
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
     }
 
     // `ReconnectBanner`'s COPY lookup has no runtime guard for a value outside
@@ -227,13 +260,18 @@ describe("useConversationStream", () => {
     for (const state of renderedStates) {
       expect(["disconnected", "reconnecting", "reconnected", null]).toContain(state);
     }
+    vi.useRealTimers();
   });
 
   it("falls back to visibly labelled polling after repeated failures", () => {
+    vi.useFakeTimers();
     render(<Harness />);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       StubEventSource.latest().emit("error");
+      act(() => {
+        vi.advanceTimersByTime(1_000);
+      });
     }
 
     // AC2 requires the fallback; silent polling is a failure of it.
@@ -244,6 +282,7 @@ describe("useConversationStream", () => {
     expect(mockTimeline).toHaveBeenLastCalledWith(CONVERSATION, 15_000);
     // And it stopped opening new sources rather than retrying forever.
     expect(StubEventSource.instances).toHaveLength(3);
+    vi.useRealTimers();
   });
 
   it("keeps the stored cursor across a remount", () => {
@@ -302,7 +341,15 @@ describe("useConversationStream", () => {
     const stalled = StubEventSource.latest();
 
     act(() => {
+      // Past the 120s stale threshold — fires the idle watchdog.
       vi.advanceTimersByTime(120_000);
+    });
+    act(() => {
+      // The watchdog's `forceReconnect` only schedules the retry's own
+      // backoff once React flushes the resulting effect re-run, which
+      // happens after this `act()` callback returns above — so the backoff
+      // needs its own separate advance, not more of the same one.
+      vi.advanceTimersByTime(1_000);
     });
 
     expect(stalled.closed).toBe(true);
