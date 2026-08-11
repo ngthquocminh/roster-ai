@@ -9,14 +9,19 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from datetime import datetime, timezone
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from pydantic_ai import models
 
 from agent.runtime import PydanticAIAgentRuntime, create_agent_runtime
-from application.contracts.agent_runtime import AgentRunOutcomeV1, AgentTurnRequestV1
+from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1, AgentTurnRequestV1
+from application.capabilities.deps import AgentDepsV1
+from application.capabilities.scheduling_inspect import scheduling_inspect_manifest
 from evals.cases import (
     ExpectedToolCall,
     GoldenCase,
@@ -102,7 +107,35 @@ def test_generated_double_runs_case_through_real_owned_runtime() -> None:
 
 
 def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
-    runtime = PydanticAIAgentRuntime(model=build_model_double(case))
+    kwargs = {}
+    if case.capability == "scheduling_inspect":
+        identity = UUID("00000000-0000-0000-0000-000000000001")
+
+        class ProjectionReader:
+            def _page(self):
+                return SimpleNamespace(
+                    scenario_id=identity, scenario_version_id=identity,
+                    site_id=identity, items=(), next_cursor=None,
+                    total_count=0, matching_count=0,
+                )
+            get_demand = lambda self, *_args: self._page()
+            get_baseline_assignments = lambda self, *_args: self._page()
+            get_workers = lambda self, *_args: self._page()
+            get_locks = lambda self, *_args: self._page()
+            get_constraints = lambda self, *_args: self._page()
+
+        kwargs = {
+            "capabilities": (scheduling_inspect_manifest(),),
+            "deps": AgentDepsV1(
+                actor_id=identity, site_id=identity, membership_id=identity,
+                request_id=identity, agent_run_id=identity, conversation_id=identity,
+                scenario_id=identity, scenario_version_id=identity,
+                policy_version="one-user-mvp-v1", clock=lambda: datetime.now(timezone.utc),
+                projection_reader=ProjectionReader(), connection=object(),
+                remaining_budget=AgentBudgetV1(),
+            ),
+        }
+    runtime = PydanticAIAgentRuntime(model=build_model_double(case), **kwargs)
     return runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
 
 
@@ -248,7 +281,7 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
         and case.expected_visible_state == "suspended"
         for case in cases
     )
-    assert {case.capability for case in cases} == {"demonstration"}
+    assert "demonstration" in {case.capability for case in cases}
 
 
 def test_every_golden_file_validates_and_malformed_contribution_fails(tmp_path) -> None:
@@ -273,6 +306,7 @@ def test_readme_documents_exact_contribution_shape_and_owners() -> None:
     readme = (GOLDEN_DIR.parent / "README.md").read_text(encoding="utf-8")
     assert "expected tool, arguments, allow/refuse outcome, evidence IDs, and visible state" in readme
     assert "Stories 2.9, 3.10–3.12, and 4.5–4.6" in readme
+    assert "Story 2.5 contributes scheduling_inspect" in readme
     assert "secrets" in readme.lower() and "PII" in readme
 
 

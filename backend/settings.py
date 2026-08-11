@@ -72,6 +72,8 @@ class Settings:
     agent_runtime_request_limit: int | None = 8
     agent_runtime_tool_calls_limit: int | None = 8
     agent_runtime_deadline_seconds: float | None = 60.0
+    scheduling_inspect_row_limit: int = 200
+    scheduling_inspect_timeout_seconds: float = 5.0
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
@@ -181,6 +183,12 @@ def default_settings() -> Settings:
     agent_runtime_deadline_seconds = _optional_float(
         os.environ.get("AGENT_RUNTIME_DEADLINE_SECONDS"), 60.0
     )
+    scheduling_inspect_row_limit = int(
+        os.environ.get("SCHEDULING_INSPECT_ROW_LIMIT", "200")
+    )
+    scheduling_inspect_timeout_seconds = float(
+        os.environ.get("SCHEDULING_INSPECT_TIMEOUT_SECONDS", "5.0")
+    )
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
@@ -206,4 +214,6 @@ def default_settings() -> Settings:
         agent_runtime_request_limit=agent_runtime_request_limit,
         agent_runtime_tool_calls_limit=agent_runtime_tool_calls_limit,
         agent_runtime_deadline_seconds=agent_runtime_deadline_seconds,
+        scheduling_inspect_row_limit=scheduling_inspect_row_limit,
+        scheduling_inspect_timeout_seconds=scheduling_inspect_timeout_seconds,
     )

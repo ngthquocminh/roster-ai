@@ -4,7 +4,7 @@ baseline_commit: f89c92d22ec3569caf16f18b90d2492051fd272b
 
 # Story 2.5: Inspect Scenario Facts Through a Governed Capability
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

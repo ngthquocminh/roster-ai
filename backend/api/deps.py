@@ -23,6 +23,7 @@ from application.ports.identity import OidcProvider, create_provider as create_o
 from application.ports.conversation import ConversationRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.scenario_projection import ScenarioProjectionReader
+from application.capabilities.registry import compose_granted_capabilities
 from application.ports.session import IdentitySessionStore, ResolvedSession
 from engine.base import SchedulerEngine, create_engine
 from llm.base import LLMProvider, create_provider
@@ -78,6 +79,11 @@ _projection_reader: ScenarioProjectionReader = PostgresScenarioProjectionReader(
 def get_projection_reader() -> ScenarioProjectionReader:
     """Depends-overridable normalized scenario projection read port."""
     return _projection_reader
+
+
+def get_capability_registry():
+    """Depends-overridable application-owned capability composition seam."""
+    return compose_granted_capabilities
 
 
 _conversation_repository: ConversationRepository = PostgresConversationRepository()

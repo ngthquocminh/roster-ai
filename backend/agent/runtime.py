@@ -28,6 +28,7 @@ from pydantic_ai import (
     UnexpectedModelBehavior,
     UsageLimitExceeded,
     UsageLimits,
+    RunContext,
 )
 from pydantic_ai.capabilities import Instrumentation
 
@@ -41,6 +42,12 @@ from application.contracts.agent_runtime import (
     AgentTurnRequestV1,
 )
 from application.ports.agent_runtime import AgentRuntimeError
+from application.capabilities.deps import AgentDepsV1
+from application.capabilities.scheduling_inspect import (
+    InspectCapabilityManifest,
+    SchedulingInspectRequestV1,
+    scheduling_inspect as run_scheduling_inspect,
+)
 
 
 class DemonstrationRequestV1(BaseModel):
@@ -82,6 +89,8 @@ class PydanticAIAgentRuntime:
         config: AgentRuntimeConfig | None = None,
         model: object | None = None,
         tracer_provider: object | None = None,
+        capabilities: tuple[InspectCapabilityManifest, ...] = (),
+        deps: AgentDepsV1 | None = None,
     ) -> None:
         """`model` is an injected framework model (a deterministic double in
         tests). `tracer_provider` lets a caller observe emitted spans; it does not
@@ -89,6 +98,10 @@ class PydanticAIAgentRuntime:
         """
         self._config = config or AgentRuntimeConfig()
         self._model = model
+        self._deps = deps
+        self._registered_capability_names = tuple(
+            capability.capability_name for capability in capabilities
+        )
 
         # AD-12/AD-15: external telemetry excludes prompt, tool, workforce, and
         # schedule content BY DEFAULT. This is constructed content-disabled and
@@ -107,6 +120,7 @@ class PydanticAIAgentRuntime:
         )
 
         self._agent: Agent = Agent(
+            deps_type=AgentDepsV1 | None,
             output_type=[str, DeferredToolRequests],
             instructions=self._config.instructions,
             capabilities=[Instrumentation(settings=instrumentation_settings)],
@@ -129,9 +143,30 @@ class PydanticAIAgentRuntime:
                 raise ApprovalRequired
             return "|".join([payload.label] * payload.repeat)
 
+        for capability in capabilities:
+            if capability.capability_name == "scheduling_inspect":
+                if deps is None:
+                    raise ValueError("scheduling_inspect requires trusted AgentDepsV1")
+
+                @self._agent.tool(name="scheduling_inspect")
+                def scheduling_inspect(
+                    ctx: RunContext[AgentDepsV1 | None],
+                    request: SchedulingInspectRequestV1,
+                ) -> dict[str, object]:
+                    if ctx.deps is None:
+                        raise RuntimeError("trusted agent dependencies are unavailable")
+                    from dataclasses import asdict
+
+                    return asdict(run_scheduling_inspect(ctx.deps, request))
+
     @property
     def name(self) -> str:
         return "pydantic-ai"
+
+    @property
+    def registered_capability_names(self) -> tuple[str, ...]:
+        """Application-granted tools only; the demonstration seam is excluded."""
+        return self._registered_capability_names
 
     def run_turn(self, request: AgentTurnRequestV1) -> AgentRunOutcomeV1:
         budget = _merge_budget(self._config.default_budget, request.budget)
@@ -156,6 +191,7 @@ class PydanticAIAgentRuntime:
                 deferred_tool_results=deferred,
                 usage_limits=_to_usage_limits(budget),
                 cancellation_token=token,
+                deps=self._deps,
             )
         except RunCancelled as exc:
             # Wall-clock expiry -> `timed_out` (AD-7), distinguished BY TYPE and

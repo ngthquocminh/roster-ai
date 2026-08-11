@@ -15,8 +15,8 @@ schema is the frozen `GoldenCase` dataclass in `cases.py`:
 - `capability` is a free-text ownership tag. It is not
   `CapabilityManifestV1` and grants no authority.
 - `risk_class` is exactly one of `inspect`, `draft`, `compute`,
-  `consequential`, or `prohibited`. These are dataset tags only; Story 2.5 owns
-  the authoritative registry.
+  `consequential`, or `prohibited`. These remain dataset tags that grant no
+  authority and import their vocabulary from Story 2.5's application registry.
 - `prompt` plus `scripted_turns` drives the deterministic model double.
   A scripted turn contains either `tool_name` + JSON `arguments` +
   `tool_call_id`, or `response_text`—never both.
@@ -45,3 +45,6 @@ Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute their own real cases to this 
 directory. Story 2.2 contributes only two `demonstration` cases to prove the
 schema and pipeline. They are not padding toward NFR28's 50-case Gate B floor;
 that aggregate must be re-verified later against real story contributions.
+
+Story 2.5 contributes scheduling_inspect cases for demand, assignments, workers,
+and constraints against governed `sample_tiny_input` fixtures.

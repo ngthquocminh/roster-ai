@@ -9,20 +9,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Mapping, cast
+from typing import Literal, Mapping, cast, get_args
 
-RiskClass = Literal[
-    "inspect", "draft", "compute", "consequential", "prohibited"
-]
+from application.capabilities.vocabulary import RiskClassV1
+
+RiskClass = RiskClassV1
 ExpectedOutcome = Literal["allow", "refuse", "clarify"]
 VisibleState = Literal["completed", "suspended", "timed_out", "failed"]
 
-RISK_CLASSES: tuple[RiskClass, ...] = (
-    "inspect",
-    "draft",
-    "compute",
-    "consequential",
-    "prohibited",
+RISK_CLASSES: tuple[RiskClass, ...] = cast(
+    tuple[RiskClass, ...], get_args(RiskClassV1)
 )
 EXPECTED_OUTCOMES: tuple[ExpectedOutcome, ...] = ("allow", "refuse", "clarify")
 VISIBLE_STATES: tuple[VisibleState, ...] = (

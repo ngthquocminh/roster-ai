@@ -18,6 +18,11 @@ GUARDED = (
     # becomes a claim about coverage it no longer has.
     BACKEND_ROOT / "application/contracts/stream_cursor.py",
     BACKEND_ROOT / "application/ports/conversation.py",
+    BACKEND_ROOT / "application/capabilities/__init__.py",
+    BACKEND_ROOT / "application/capabilities/vocabulary.py",
+    BACKEND_ROOT / "application/capabilities/deps.py",
+    BACKEND_ROOT / "application/capabilities/registry.py",
+    BACKEND_ROOT / "application/capabilities/scheduling_inspect.py",
 )
 
 # Known, ticketed AD-1 violations outside this guard's coverage. Tracked in
@@ -53,6 +58,7 @@ def test_new_conversation_application_modules_are_framework_free() -> None:
 def test_boundary_guard_actually_fails_on_a_sqlalchemy_import() -> None:
     assert forbidden_imports("from sqlalchemy import Connection") == {"sqlalchemy"}
     assert forbidden_imports("from typing import Any") == set()
+    assert all(path.exists() for path in GUARDED), "guard scope must not shrink silently"
 
 
 def test_every_allowed_leak_still_exists_and_still_leaks() -> None:
