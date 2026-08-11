@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     Column,
     DateTime,
@@ -9,6 +10,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     MetaData,
+    Numeric,
     String,
     Table,
     Text,
@@ -268,6 +270,74 @@ session_index = Table(
     Column("revoked_at", DateTime(timezone=True), nullable=True),
     schema="auth",
 )
+
+conversation = Table(
+    "conversation", metadata, _id_column(), _site_id_column(),
+    Column("scenario_id", UUID(as_uuid=True), nullable=False),
+    Column("scenario_version_id", UUID(as_uuid=True), nullable=False),
+    Column("created_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
+    Column("resource_version", BigInteger, nullable=False, server_default=text("1")),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    ForeignKeyConstraint(["scenario_id", "site_id"], ["scenario.id", "scenario.site_id"], name="fk_conversation_scenario_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["scenario_version_id", "site_id"], ["scenario_version.id", "scenario_version.site_id"], name="fk_conversation_version_site", ondelete="RESTRICT"),
+    UniqueConstraint("id", "site_id", name="uq_conversation_id_site"),
+)
+
+message = Table(
+    "message", metadata, _id_column(), _site_id_column(),
+    Column("conversation_id", UUID(as_uuid=True), nullable=False),
+    Column("actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
+    Column("text", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_message_conversation_site", ondelete="RESTRICT"),
+    UniqueConstraint("id", "site_id", name="uq_message_id_site"),
+    CheckConstraint("length(btrim(text)) > 0", name="ck_message_text_nonempty"),
+)
+
+agent_run = Table(
+    "agent_run", metadata, _id_column(), _site_id_column(),
+    Column("conversation_id", UUID(as_uuid=True), nullable=False),
+    Column("message_id", UUID(as_uuid=True), nullable=False),
+    Column("status", String(40), nullable=False, server_default=text("'agent_queued'")),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_agent_run_conversation_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["message_id", "site_id"], ["message.id", "message.site_id"], name="fk_agent_run_message_site", ondelete="RESTRICT"),
+    UniqueConstraint("id", "site_id", name="uq_agent_run_id_site"),
+    CheckConstraint("status IN ('agent_queued','agent_running','approval_required','agent_completed','agent_timed_out','agent_cancelled','agent_failed')", name="ck_agent_run_status"),
+)
+
+persisted_event = Table(
+    "persisted_event", metadata, _id_column(), _site_id_column(),
+    Column("stream_id", UUID(as_uuid=True), nullable=False),
+    Column("sequence", Numeric(38, 0, asdecimal=True), nullable=False),
+    Column("event_type", String(100), nullable=False),
+    Column("occurred_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("resource_version", BigInteger, nullable=False),
+    Column("request_id", UUID(as_uuid=True), nullable=False),
+    Column("conversation_id", UUID(as_uuid=True), nullable=False),
+    Column("agent_run_id", UUID(as_uuid=True), nullable=False),
+    Column("actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
+    Column("payload", JSONB, nullable=False),
+    ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_persisted_event_conversation_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["agent_run_id", "site_id"], ["agent_run.id", "agent_run.site_id"], name="fk_persisted_event_agent_run_site", ondelete="RESTRICT"),
+    UniqueConstraint("stream_id", "sequence", name="uq_persisted_event_stream_sequence"),
+    UniqueConstraint("id", "site_id", name="uq_persisted_event_id_site"),
+    # A conversation stream's identity IS the conversation's UUID (AD-21), so a
+    # second stream cannot be numbered against the same conversation and
+    # collide inside one rendered timeline.
+    CheckConstraint("stream_id = conversation_id", name="ck_persisted_event_stream_is_conversation"),
+)
+
+# Indexes for this aggregate's reads and for the site_id predicate that FORCE
+# RLS evaluates on every row of every query against these tables.
+Index("ix_conversation_site_id", conversation.c.site_id)
+Index("ix_message_site_id", message.c.site_id)
+Index("ix_agent_run_site_id", agent_run.c.site_id)
+Index("ix_persisted_event_site_id", persisted_event.c.site_id)
+Index("ix_conversation_scenario_id", conversation.c.scenario_id)
+Index("ix_message_conversation_id", message.c.conversation_id)
+Index("ix_agent_run_conversation_created", agent_run.c.conversation_id, agent_run.c.created_at)
+Index("ix_persisted_event_conversation_id", persisted_event.c.conversation_id)
 
 login_handshake = Table(
     "login_handshake",

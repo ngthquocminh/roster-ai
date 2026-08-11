@@ -72,6 +72,7 @@ def catalogue_client(tmp_path):
     context = ScenarioContext(
         scenario_name=entry.scenario_name,
         scenario_id=scenario_id,
+        scenario_version_id=entry.scenario_version_id,
         fixture_version=entry.fixture_version,
         checksum_algorithm=entry.checksum_algorithm,
         checksum_schema_version=entry.checksum_schema_version,
@@ -147,6 +148,7 @@ def test_catalogue_and_context_return_versioned_site_owned_contracts(
         "schema_version": "v1",
         "scenario_name": entry.scenario_name,
         "scenario_id": str(entry.scenario_id),
+        "scenario_version_id": str(entry.scenario_version_id),
         "fixture_version": entry.fixture_version,
         "checksum_algorithm": entry.checksum_algorithm,
         "checksum_schema_version": entry.checksum_schema_version,

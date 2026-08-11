@@ -41,7 +41,73 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-10
+last_updated: 2026-08-11
+
+# NOTE (2026-08-10): Story 2-3 created and moved to ready-for-dev. It is the FIRST
+# planner-visible Epic 2 feature and the FIRST story in the repo that writes to
+# governed PostgreSQL from a request — every prior story was read-only by
+# construction under Gate A / AD-4. That one fact generates most of its risk.
+#
+# FOUR DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) CONVERSATION ROUTES MOUNT AT `/api/v1/conversations`, NOT under
+#     `/api/v1/scenarios`. VERIFIED AT CREATION:
+#     `backend/tests/test_gate_a_mutation_audit.py:25` asserts EVERY path
+#     starting `/api/v1/scenarios` exposes only `get`. A
+#     `POST /api/v1/scenarios/{id}/conversations` turns that Gate A test red,
+#     and AR28 forbids a later gate weakening an earlier one — editing the
+#     assertion would gut AD-4's "no scenario-source mutation route" proof that
+#     Story 1.9 built. Mounting elsewhere is also correct under AD-22, which
+#     gives `conversation` its own aggregate owner distinct from `scenario`.
+# (2) THIS STORY ACCEPTS AND PERSISTS A TURN; IT DOES NOT EXECUTE THE AGENT.
+#     AC1's own words are "accepted agent run", and AD-22 fixes the bundle at
+#     message + agent-run + event. The `AgentRun` is created in AD-7's initial
+#     `agent_queued` and never transitioned here: Story 2.5 is what first gives
+#     a turn something worth executing (the governed inspect capability), and
+#     running one now would need either a live provider on a request path or a
+#     test double in production code, plus the registry 2.5 owns. The story
+#     requires the queued state be rendered LITERALLY — UX-DR5 forbids
+#     anthropomorphic waiting, so no typing indicator, no "Thinking…", no ETA.
+# (3) `ActivityItemV1` + `PersistedEventV1` CONTRACTS AND THEIR WRITE/READ SIDES
+#     ARE OWNED HERE; STORY 2.4 OWNS THE SSE TRANSPORT. Story 2.1 explicitly
+#     deferred both names to 2.3/2.4 but did not split them; settled by what the
+#     ACs require — 2.3-AC1 cannot commit a "first persisted activity event"
+#     without them, while every 2.4 AC is about the stream (Last-Event-ID,
+#     replay, heartbeats, NFR35). The eight `ActivityItemV1` discriminants are
+#     defined as a CLOSED vocabulary but only the `planner_message` payload
+#     ships — the same "vocabulary that constrains without claiming unproven
+#     authority" move Story 2.2 made with AD-5's five risk classes.
+# (4) NO IDEMPOTENCY KEY. AD-8/AR8 scope keys to FR-12/16/18/19; FR-4 is NOT in
+#     that list and no AC mentions one. AC2's "replayed events never duplicate"
+#     is replay dedup by event identity (UX-DR6), a different mechanism.
+#     Double-submit is handled by disabling Send while the mutation is pending.
+#
+# TWO TRAPS THAT FAIL SILENTLY, flagged rather than left to be discovered:
+# AD-21 mandates a DECIMAL `sequence`, and serializing it as a JSON number makes
+# it an IEEE-754 double in the browser — which breaks Story 2.4's
+# `<stream_uuid>:<sequence>` SSE IDs before that story starts. The story requires
+# string serialization and a test asserting it. Second: `application/ports/
+# scenario_catalogue.py:9` does `from sqlalchemy import Connection` — a real
+# pre-existing AD-1 leak sitting right next to the clean
+# `scenario_projection.py:104` (`connection: Any`) pattern. The story names
+# which to copy, forbids fixing the old one here (Gate A code, out of scope),
+# and adds a scoped architecture guard with a DOCUMENTED allow-list entry for
+# the known leak — a guard that lies about its coverage is exactly the defect
+# the 2.1 review fixed in that file's docstring.
+#
+# ONE DEFERRED ITEM WAS ASSIGNED HERE BY NAME AND IS DELIBERATELY NOT CLOSED:
+# deferred-work.md's `translate.py:61-105` silent-drop item says it "becomes
+# reachable once persisted/deserialized turns exist ... belongs to Story 2.3".
+# Judged at creation: it does NOT become reachable here, because Decision 2
+# means no turn is executed and nothing rehydrates an `AgentTurnV1`. It goes
+# live in Story 2.5. The entry stays open; `backend/agent/**` must show a
+# ZERO-LINE diff, as it did for Story 2.2.
+#
+# Scope fences: no SSE, no capability registry, no grounding, no evidence
+# navigation, no worker/job queue, no clarification/refusal variants. Only
+# `agent_queued` is ever written, so the migration grants no UPDATE on
+# `agent_run` — Epic 3 grants it when Epic 3 needs it. Chat code must live in
+# `frontend/src/features/chat/`, NOT `features/scenario-data/`, whose directory
+# is audited for mutation affordances by `scenarioDataBoundaries.test.ts`.
 
 # NOTE (2026-08-10): Story 2-2 created and moved to ready-for-dev. Second Epic 2
 # enabler, ships no planner-visible feature: it builds the MACHINERY every later
@@ -366,7 +432,7 @@ development_status:
   epic-2: in-progress
   2-1-establish-the-owned-agent-runtime-boundary: done
   2-2-establish-the-deterministic-evaluation-harness: done
-  2-3-create-and-revisit-durable-conversations: backlog
+  2-3-create-and-revisit-durable-conversations: done
   2-4-replay-conversation-events-live: backlog
   2-5-inspect-scenario-facts-through-a-governed-capability: backlog
   2-6-add-and-remove-a-governed-capability-module: backlog

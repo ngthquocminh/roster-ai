@@ -111,6 +111,7 @@ def test_get_scenario_context_selects_governed_latest_version_without_site_input
     assert context == ScenarioContext(
         scenario_name=row.scenario_name,
         scenario_id=row.scenario_id,
+        scenario_version_id=row.scenario_version_id,
         fixture_version=row.fixture_version,
         checksum_algorithm=row.checksum_algorithm,
         checksum_schema_version=row.checksum_schema_version,

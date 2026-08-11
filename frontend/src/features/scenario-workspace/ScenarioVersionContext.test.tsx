@@ -9,6 +9,7 @@ const context = {
   schema_version: "v1",
   scenario_name: "Fixture A",
   scenario_id: "11111111-1111-4111-8111-111111111111",
+  scenario_version_id: "33333333-3333-4333-8333-333333333333",
   fixture_version: "v1",
   checksum_algorithm: "sha256",
   checksum_schema_version: "rfc8785-v1",
