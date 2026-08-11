@@ -659,6 +659,59 @@ Verified against the current PydanticAI documentation for the pinned line:
 - The adapter is instrumented content-disabled with no parameter to enable content
   (`runtime.py:96-108`) — AD-12/AD-15. Do not add one.
 
+### Operational notes for the implementing agent
+
+**Suggested order.** Tasks 1 → 2 → 3 → 4 → 5 build the application layer bottom-up and
+each is independently testable without touching `pydantic_ai`. Task 6 is the only task
+that needs the framework; do it after 5 so the handler it wraps already exists and is
+proven. Task 7 depends on 5 and 6 (the cases exercise the registered tool). Task 8 can
+start once 4 and 6 land. Task 9 is independent — do it whenever, but do not skip it.
+Task 10 is last and measures, it does not fix.
+
+**Do not regenerate `evidence/story-2.2/evaluation-harness-demonstration.json`.**
+Adding golden cases is the obvious trigger to think you should. Verified at creation:
+that file's `version_bindings.dataset` records a `files` map of exactly the two
+demonstration cases with their `sha256`, plus `case_count: 2` — all recorded values, not
+recomputed ones. `audit_evidence_drift` (`backend/scripts/evidence_binding.py`) checks
+only that *referenced paths still exist* and that *contract digests still match*; it
+never re-derives the dataset. New files under a different directory therefore produce no
+drift and `test_evidence_convention.py` stays green. Regenerating it would be wrong on
+principle anyway: it is a record of a measurement that happened, and the evidence
+convention's monotone rule exists precisely so a correct artifact does not become
+incorrect when the repo moves on.
+
+**Where the typed input/output live.** The manifest declares *refs*; the actual request
+and result dataclasses belong beside the handler in
+`backend/application/capabilities/scheduling_inspect.py`, following the house contract
+convention (frozen, `V1`-suffixed, `SCHEMA_VERSION`). They are capability-local, not
+AD-20 cross-epic contracts — do not add them to `application/contracts/`, which AD-20
+reserves for the named canonical set.
+
+**`PydanticAIAgentRuntime.__init__` gains parameters.** It currently accepts only
+`config`, `model`, `tracer_provider` (`backend/agent/runtime.py:79-84`). Decision 5 means
+it also needs the run's granted capabilities and its `AgentDeps`. Keep them
+keyword-only with defaults so every existing call site — `evals/report.py:83`,
+`test_agent_runtime_adapter.py`, `test_agent_runtime_hidden_reasoning.py`,
+`test_evaluation_harness.py` — keeps working unchanged. A runtime constructed with no
+granted capabilities must still behave exactly as it does today.
+
+**Golden-case fixture identifiers.** `scenario_fixtures` entries are
+`"<fixture_id>:<version>"` parsed by `evals/report.py:154-170`. The two governed
+fixtures are `sample_tiny_input:v1` and `sample_tiny_input_more_tm:v1`
+(`backend/scripts/gate_a_cutover.py:default_fixtures()`). Use the real identifiers;
+an invented one produces a false NFR27 `scenario` binding.
+
+**Repo hygiene while searching.** `backend/.venv/` and
+`backend/spikes/agent_runtime/.venv/` are present on disk and will flood any recursive
+`find`/`grep`. Scope searches to git-tracked paths (`git ls-files`) or to specific
+package directories, or you will spend a task's budget reading vendored library source.
+
+**PostgreSQL.** `pytest -m postgres` needs the Docker service from `docker-compose.yml`
+up; `backend/conftest.py:48-80` calls `pytest.skip("PostgreSQL integration service is
+not available")` when it cannot connect. Story 1.11 established that **a skipped test is
+not a passed test** — if the suite skips, bring the service up and re-run rather than
+reporting a green baseline.
+
 ### Project Structure Notes
 
 New modules, all converging on AR26's structural seed
