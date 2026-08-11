@@ -7,9 +7,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
+from uuid import UUID
 
 from agent.runtime import PydanticAIAgentRuntime
-from application.contracts.agent_runtime import AgentTurnRequestV1
+from application.capabilities.demonstration import demonstration_module
+from application.capabilities.deps import AgentDepsV1
+from application.capabilities.scheduling_inspect import scheduling_inspect_module
+from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
+from application.ports.scenario_projection import GroupQueryKeysV1
 from evals.cases import GoldenCase
 from evals.cases import load_cases
 from evals.doubles import build_model_double
@@ -33,7 +38,6 @@ DEMONSTRATION_BINDINGS: dict[str, str] = {
     "evaluator": "ToolRoutingEvaluator v1 (exact tool name and JSON arguments)",
     "model": "case-driven PydanticAI FunctionModel deterministic double",
     "prompt": "versioned prompts in backend/evals/golden/**/*.json",
-    "tool": "shiftmind_demonstration from the Story 2.1 AgentRuntime adapter",
     "policy": "AD-5 risk tags; only double-sourced verdicts are authoritative",
     "application": "ShiftMind Story 2.2 deterministic evaluation harness",
     "solver": "not applicable — demonstration tool invokes no solver",
@@ -81,17 +85,72 @@ def generate_demonstration_report(
     golden_dir = repo_root / "backend" / "evals" / "golden"
     cases = load_cases(golden_dir)
     evaluations: list[CaseEvaluation] = []
+    granted_modules = (scheduling_inspect_module(), demonstration_module())
     for case in cases:
-        runtime = PydanticAIAgentRuntime(model=build_model_double(case))
+        runtime = _runtime_for_case(case, granted_modules)
         outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
         verdict = ToolRoutingEvaluator(run_source="double").evaluate(case, outcome)
         evaluations.append(CaseEvaluation(case=case, verdict=verdict))
     return write_evaluation_report(
         output_path,
         evaluations=evaluations,
-        declared_bindings=DEMONSTRATION_BINDINGS,
+        declared_bindings={
+            **DEMONSTRATION_BINDINGS,
+            "tool": ", ".join(
+                f"{module.manifest.capability_name}@{module.manifest.capability_version}"
+                for module in granted_modules
+            ),
+        },
         dataset_files=sorted(golden_dir.rglob("*.json")),
         repo_root=repo_root,
+    )
+
+
+def _runtime_for_case(case: GoldenCase, modules) -> PydanticAIAgentRuntime:
+    identity = UUID(int=1)
+
+    class ProjectionReader:
+        _KEYS = {
+            "demand": (("start_minute",), ("family", "task_id")),
+            "assignments": (("start_minute",), ("worker_id", "task_id")),
+            "workers": (("contact_id",), ("contact_id",)),
+            "locks": (("scope",), ("scope",)),
+            "constraints": (("constraint_type",), ("constraint_type",)),
+        }
+
+        def get_query_keys(self, group):
+            sorts, filters = self._KEYS.get(group, ((), ()))
+            return GroupQueryKeysV1(group=group, sort_keys=sorts, filter_keys=filters)
+
+        def _page(self):
+            from types import SimpleNamespace
+            return SimpleNamespace(
+                scenario_id=identity, scenario_version_id=identity, site_id=identity,
+                items=(), next_cursor=None, total_count=0, matching_count=0,
+            )
+
+        get_demand = lambda self, *_args: self._page()
+        get_baseline_assignments = lambda self, *_args: self._page()
+        get_workers = lambda self, *_args: self._page()
+        get_locks = lambda self, *_args: self._page()
+        get_constraints = lambda self, *_args: self._page()
+        get_overview = lambda self, *_args: self._page()
+
+    selected = tuple(
+        module for module in modules
+        if (case.capability == "demonstration" and module.manifest.capability_name == "shiftmind_demonstration")
+        or module.manifest.capability_name == case.capability
+    )
+    deps = AgentDepsV1(
+        actor_id=UUID(int=2), site_id=identity,
+        membership_id=UUID(int=3), request_id=UUID(int=4),
+        agent_run_id=UUID(int=5), conversation_id=UUID(int=6),
+        scenario_id=identity, scenario_version_id=identity, policy_version="one-user-mvp-v1",
+        clock=lambda: datetime.now(timezone.utc), projection_reader=ProjectionReader(),
+        connection=object(), remaining_budget=AgentBudgetV1(),
+    )
+    return PydanticAIAgentRuntime(
+        model=build_model_double(case), capabilities=selected, deps=deps
     )
 
 

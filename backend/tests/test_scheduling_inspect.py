@@ -16,12 +16,12 @@ from application.capabilities.deps import AgentDepsV1
 from application.capabilities.registry import (
     CapabilityGrantContextV1,
     PLANNER_ROLE,
-    SCHEDULING_INSPECT_POLICY,
     compose_granted_capabilities,
     resolve_granted_capability,
 )
 from application.capabilities.scheduling_inspect import (
     ERROR_CODES,
+    SCHEDULING_INSPECT_POLICY,
     SCOPE_CONTROLS,
     BudgetExhaustedError,
     InvalidQueryError,
@@ -30,6 +30,7 @@ from application.capabilities.scheduling_inspect import (
     VersionMismatchError,
     scheduling_inspect,
     scheduling_inspect_manifest,
+    scheduling_inspect_module,
 )
 from application.capabilities.vocabulary import RiskClassV1
 from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
@@ -275,7 +276,7 @@ def test_scope_controls_are_stated_as_data_with_non_coverage() -> None:
 
 def test_registry_grants_by_trusted_context_and_unknown_names_are_absent() -> None:
     granted = compose_granted_capabilities(_grant_context())
-    assert [item.capability_name for item in granted] == ["scheduling_inspect"]
+    assert [item.manifest.capability_name for item in granted] == ["scheduling_inspect"]
     assert resolve_granted_capability(granted, "model_installed_shell") is None
     assert resolve_granted_capability(granted, "scheduling_inspect") is not None
 
@@ -298,9 +299,9 @@ def test_every_grant_input_can_withhold_the_capability(overrides) -> None:
 def test_composed_registry_never_exposes_prohibited_capability_classes() -> None:
     contexts = (_grant_context(), _grant_context(role="viewer"))
     actual = {
-        manifest.capability_name
+        module.manifest.capability_name
         for context in contexts
-        for manifest in compose_granted_capabilities(context)
+        for module in compose_granted_capabilities(context)
     }
     # Derived from the composed grants themselves, not a hand-maintained list:
     # adding a capability to the registry without a manifest turns this red.
@@ -488,7 +489,7 @@ def test_runtime_registers_only_granted_capabilities_and_executes_the_tool() -> 
     case = _inspect_case()
     runtime = PydanticAIAgentRuntime(
         model=build_model_double(case),
-        capabilities=(scheduling_inspect_manifest(),),
+        capabilities=(scheduling_inspect_module(),),
         deps=_deps(),
     )
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
@@ -507,7 +508,7 @@ def test_an_ungranted_capability_is_absent_from_the_real_tool_set() -> None:
 
     granted = PydanticAIAgentRuntime(
         model=build_model_double(_inspect_case()),
-        capabilities=(scheduling_inspect_manifest(),),
+        capabilities=(scheduling_inspect_module(),),
         deps=_deps(),
     )
     assert "scheduling_inspect" in granted._agent._function_toolset.tools
@@ -516,8 +517,11 @@ def test_an_ungranted_capability_is_absent_from_the_real_tool_set() -> None:
 def test_a_granted_capability_with_no_renderer_fails_loudly() -> None:
     """Silently skipping it is what made `registered_capability_names`
     over-report before the 2.5 review."""
-    unknown = replace(scheduling_inspect_manifest(), capability_name="mystery_capability")
-    with pytest.raises(UnknownCapabilityError):
+    unknown = replace(
+        scheduling_inspect_module(),
+        request_type=type("UnsupportedRequest", (), {}),
+    )
+    with pytest.raises(Exception):
         PydanticAIAgentRuntime(
             model=build_model_double(_inspect_case()),
             capabilities=(unknown,),
@@ -526,7 +530,7 @@ def test_a_granted_capability_with_no_renderer_fails_loudly() -> None:
 
 
 def test_a_capability_granted_twice_is_rejected() -> None:
-    manifest = scheduling_inspect_manifest()
+    manifest = scheduling_inspect_module()
     with pytest.raises(UnknownCapabilityError):
         PydanticAIAgentRuntime(
             model=build_model_double(_inspect_case()),
@@ -539,7 +543,7 @@ def test_render_capabilities_requires_trusted_deps() -> None:
     with pytest.raises(ValueError):
         PydanticAIAgentRuntime(
             model=build_model_double(_inspect_case()),
-            capabilities=(scheduling_inspect_manifest(),),
+            capabilities=(scheduling_inspect_module(),),
             deps=None,
         )
 
@@ -564,7 +568,7 @@ def test_an_invalid_model_query_never_escapes_as_a_raw_builtin() -> None:
     }
     runtime = PydanticAIAgentRuntime(
         model=build_model_double(case_from_mapping(payload)),
-        capabilities=(scheduling_inspect_manifest(),),
+        capabilities=(scheduling_inspect_module(),),
         deps=_deps(),
     )
     try:

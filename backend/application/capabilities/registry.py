@@ -4,14 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from application.capabilities.scheduling_inspect import (
-    CAPABILITY_NAME,
-    InspectCapabilityManifest,
-    scheduling_inspect_manifest,
-)
+from application.capabilities.installed import INSTALLED_MODULES
+from application.capabilities.module import CapabilityModuleV1
+from application.contracts.capability_manifest import validate_manifest
 
 PLANNER_ROLE = "planner"
-SCHEDULING_INSPECT_POLICY = "scheduling_inspect_enabled"
 POLICY_VERSION = "one-user-mvp-v1"
 
 
@@ -38,7 +35,8 @@ class CapabilityGrantContextV1:
 
 def compose_granted_capabilities(
     context: CapabilityGrantContextV1,
-) -> tuple[InspectCapabilityManifest, ...]:
+    modules: tuple[CapabilityModuleV1, ...] = INSTALLED_MODULES,
+) -> tuple[CapabilityModuleV1, ...]:
     """Compose the granted set from trusted context only.
 
     Returns the granted declarations. An ungranted capability is ABSENT from
@@ -46,23 +44,25 @@ def compose_granted_capabilities(
     only what this returns, so a capability the run was not granted is a tool
     that does not exist rather than one that refuses.
     """
-    if (
-        context.role != PLANNER_ROLE
-        or context.site_id != context.conversation_site_id
-        or SCHEDULING_INSPECT_POLICY not in context.feature_policy
-        or context.conversation_id in context.revoked_conversation_ids
-    ):
+    if (context.site_id != context.conversation_site_id
+            or context.conversation_id in context.revoked_conversation_ids):
         return ()
-    return (scheduling_inspect_manifest(),)
+    granted = []
+    for module in modules:
+        validate_manifest(module.manifest)
+        if (context.role == module.required_role
+                and module.required_feature_policy in context.feature_policy):
+            granted.append(module)
+    return tuple(granted)
 
 
 def resolve_granted_capability(
-    granted: tuple[InspectCapabilityManifest, ...], proposed_name: str
-) -> InspectCapabilityManifest | None:
-    return next((item for item in granted if item.capability_name == proposed_name), None)
+    granted: tuple[CapabilityModuleV1, ...], proposed_name: str
+) -> CapabilityModuleV1 | None:
+    return next((item for item in granted if item.manifest.capability_name == proposed_name), None)
 
 
 __all__ = [
-    "CAPABILITY_NAME", "CapabilityGrantContextV1", "PLANNER_ROLE", "POLICY_VERSION",
-    "SCHEDULING_INSPECT_POLICY", "compose_granted_capabilities", "resolve_granted_capability",
+    "CapabilityGrantContextV1", "PLANNER_ROLE", "POLICY_VERSION",
+    "compose_granted_capabilities", "resolve_granted_capability",
 ]

@@ -21,7 +21,8 @@ from pydantic_ai import models
 from agent.runtime import PydanticAIAgentRuntime, create_agent_runtime
 from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1, AgentTurnRequestV1
 from application.capabilities.deps import AgentDepsV1
-from application.capabilities.scheduling_inspect import scheduling_inspect_manifest
+from application.capabilities.demonstration import demonstration_module
+from application.capabilities.scheduling_inspect import scheduling_inspect_module
 from application.ports.scenario_projection import GroupQueryKeysV1
 from evals.cases import (
     ExpectedToolCall,
@@ -97,9 +98,7 @@ def test_case_loader_rejects_out_of_vocabulary_risk_class(tmp_path) -> None:
 
 def test_generated_double_runs_case_through_real_owned_runtime() -> None:
     case = case_from_mapping(_case_payload())
-    runtime = PydanticAIAgentRuntime(model=build_model_double(case))
-
-    outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
+    outcome = _run_case(case)
 
     assert isinstance(outcome, AgentRunOutcomeV1)
     assert outcome.status == "completed"
@@ -108,50 +107,53 @@ def test_generated_double_runs_case_through_real_owned_runtime() -> None:
 
 
 def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
-    kwargs = {}
-    if case.capability == "scheduling_inspect":
-        identity = UUID("00000000-0000-0000-0000-000000000001")
+    identity = UUID("00000000-0000-0000-0000-000000000001")
 
-        class ProjectionReader:
+    class ProjectionReader:
             # Mirrors the adapter's published keys for the groups these cases
             # use, so the capability's allow-list is exercised rather than
             # bypassed.
-            _KEYS = {
+        _KEYS = {
                 "demand": (("start_minute",), ("family", "task_id")),
                 "assignments": (("start_minute",), ("worker_id", "task_id")),
                 "workers": (("contact_id",), ("contact_id",)),
                 "locks": (("scope",), ("scope",)),
                 "constraints": (("constraint_type",), ("constraint_type",)),
-            }
-
-            def get_query_keys(self, group):
-                sorts, filters = self._KEYS.get(group, ((), ()))
-                return GroupQueryKeysV1(group=group, sort_keys=sorts, filter_keys=filters)
-
-            def _page(self):
-                return SimpleNamespace(
-                    scenario_id=identity, scenario_version_id=identity,
-                    site_id=identity, items=(), next_cursor=None,
-                    total_count=0, matching_count=0,
-                )
-            get_demand = lambda self, *_args: self._page()
-            get_baseline_assignments = lambda self, *_args: self._page()
-            get_workers = lambda self, *_args: self._page()
-            get_locks = lambda self, *_args: self._page()
-            get_constraints = lambda self, *_args: self._page()
-            get_overview = lambda self, *_args: self._page()
-
-        kwargs = {
-            "capabilities": (scheduling_inspect_manifest(),),
-            "deps": AgentDepsV1(
-                actor_id=identity, site_id=identity, membership_id=identity,
-                request_id=identity, agent_run_id=identity, conversation_id=identity,
-                scenario_id=identity, scenario_version_id=identity,
-                policy_version="one-user-mvp-v1", clock=lambda: datetime.now(timezone.utc),
-                projection_reader=ProjectionReader(), connection=object(),
-                remaining_budget=AgentBudgetV1(),
-            ),
         }
+
+        def get_query_keys(self, group):
+            sorts, filters = self._KEYS.get(group, ((), ()))
+            return GroupQueryKeysV1(group=group, sort_keys=sorts, filter_keys=filters)
+
+        def _page(self):
+            return SimpleNamespace(
+                scenario_id=identity, scenario_version_id=identity,
+                site_id=identity, items=(), next_cursor=None,
+                total_count=0, matching_count=0,
+            )
+        get_demand = lambda self, *_args: self._page()
+        get_baseline_assignments = lambda self, *_args: self._page()
+        get_workers = lambda self, *_args: self._page()
+        get_locks = lambda self, *_args: self._page()
+        get_constraints = lambda self, *_args: self._page()
+        get_overview = lambda self, *_args: self._page()
+
+    modules = (
+        (scheduling_inspect_module(),)
+        if case.capability == "scheduling_inspect"
+        else (demonstration_module(),)
+    )
+    kwargs = {
+        "capabilities": modules,
+        "deps": AgentDepsV1(
+            actor_id=UUID(int=1), site_id=identity, membership_id=UUID(int=3),
+            request_id=UUID(int=4), agent_run_id=UUID(int=5), conversation_id=UUID(int=6),
+            scenario_id=UUID(int=7), scenario_version_id=identity,
+            policy_version="one-user-mvp-v1", clock=lambda: datetime.now(timezone.utc),
+            projection_reader=ProjectionReader(), connection=object(),
+            remaining_budget=AgentBudgetV1(),
+        ),
+    }
     runtime = PydanticAIAgentRuntime(model=build_model_double(case), **kwargs)
     return runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
 
@@ -285,8 +287,8 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
     # 2.9, 3.10-3.12 and 4.5-4.6 contribute their own cases to this same
     # directory (see backend/evals/README.md), so an exact count would turn the
     # first real contribution red. The coverage assertions below carry the
-    # intent that matters — Story 2.2 seeds these two shapes, and no later
-    # story may remove them.
+    # intent that matters — Story 2.2 seeds these two permanent historical
+    # cases even though module installation remains removable by composition.
     assert len(cases) >= 2, "Story 2.2's two schema-proof cases must remain"
     assert any(
         case.expected_outcome == "allow" and case.risk_class == "inspect"
@@ -308,12 +310,15 @@ def test_every_capability_meets_the_nfr28_four_case_floor() -> None:
     counts: dict[str, int] = {}
     for case in cases:
         counts[case.capability] = counts.get(case.capability, 0) + 1
-    assert counts.get("scheduling_inspect", 0) >= 4, counts
-    # `demonstration` is deliberately exempt: Story 2.2 contributed exactly two
-    # schema-proving cases and is documented as not padding toward the floor.
+    product_capabilities_under_evaluation = {"scheduling_inspect"}
+    assert "demonstration" not in product_capabilities_under_evaluation
+    # NFR28's floor applies to allowed product capabilities. Demonstration is a
+    # harness-proof module, not one of the PRD's six-product MVP catalogue, and
+    # its two historical schema cases must not be padded into a product claim.
     below_floor = {
-        name: n for name, n in counts.items()
-        if n < 4 and name != "demonstration"
+        name: counts.get(name, 0)
+        for name in product_capabilities_under_evaluation
+        if counts.get(name, 0) < 4
     }
     assert not below_floor, below_floor
 

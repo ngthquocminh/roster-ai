@@ -50,6 +50,11 @@ AgentFailureReasonV1 = Literal[
     "cancelled",          # cancelled by something other than the deadline
 ]
 
+# A governed capability may also return one of the error codes declared in its
+# granted CapabilityManifestV1. The runtime enforces that provenance at the
+# adapter/module boundary; this owned contract deliberately remains framework-free.
+CapabilityFailureReasonV1 = str
+
 # Owned message roles. Not PydanticAI's `kind`/`part_kind` vocabulary — this is a
 # whitelist of what ShiftMind chooses to record.
 AgentMessageRoleV1 = Literal["user", "system", "assistant", "tool_result"]
@@ -197,7 +202,7 @@ class AgentRunOutcomeV1:
 
     schema_version: str = SCHEMA_VERSION
     status: AgentRunStatusV1 = "completed"
-    failure_reason: AgentFailureReasonV1 | None = None
+    failure_reason: AgentFailureReasonV1 | CapabilityFailureReasonV1 | None = None
     # Planner-visible final content. None unless status == "completed".
     output_text: str | None = None
     turn: AgentTurnV1 = field(default_factory=AgentTurnV1)

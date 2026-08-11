@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from datetime import datetime, timezone
+from uuid import UUID
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
@@ -37,7 +39,9 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent.runtime import PydanticAIAgentRuntime
 from agent.translate import to_owned_turn
-from application.contracts.agent_runtime import AgentTurnRequestV1
+from application.capabilities.demonstration import demonstration_module
+from application.capabilities.deps import AgentDepsV1
+from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
 
 models.ALLOW_MODEL_REQUESTS = False
 
@@ -47,6 +51,24 @@ COMPACTION_SENTINEL = "SENTINEL-COMPACTION-do-not-persist-6b23"
 
 VISIBLE_TEXT = "Coverage on day 3 is 92 percent."
 TOOL_LABEL = "day3"
+
+
+def _runtime(**kwargs) -> PydanticAIAgentRuntime:
+    class UnusedProjectionReader:
+        pass
+
+    return PydanticAIAgentRuntime(
+        capabilities=(demonstration_module(),),
+        deps=AgentDepsV1(
+            actor_id=UUID(int=1), site_id=UUID(int=2), membership_id=UUID(int=3),
+            request_id=UUID(int=4), agent_run_id=UUID(int=5), conversation_id=UUID(int=6),
+            scenario_id=UUID(int=7), scenario_version_id=UUID(int=8),
+            policy_version="one-user-mvp-v1", clock=lambda: datetime.now(timezone.utc),
+            projection_reader=UnusedProjectionReader(), connection=object(),
+            remaining_budget=AgentBudgetV1(),
+        ),
+        **kwargs,
+    )
 
 
 def _thinking_then_visible(
@@ -81,7 +103,7 @@ def _run_with_spans():
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-    runtime = PydanticAIAgentRuntime(
+    runtime = _runtime(
         model=FunctionModel(_thinking_then_visible), tracer_provider=provider
     )
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how is day 3 coverage?"))
@@ -197,7 +219,7 @@ def test_hidden_reasoning_is_dropped_from_rehydrated_history_too() -> None:
     """Resuming from an owned transcript cannot reintroduce the sentinel."""
     outcome, _ = _run_with_spans()
 
-    replayed = PydanticAIAgentRuntime(
+    replayed = _runtime(
         model=FunctionModel(_thinking_then_visible)
     ).run_turn(AgentTurnRequestV1(prompt="again", history=outcome.turn))
 

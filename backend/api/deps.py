@@ -27,7 +27,7 @@ from application.capabilities.registry import (
     CapabilityGrantContextV1,
     compose_granted_capabilities,
 )
-from application.capabilities.scheduling_inspect import InspectCapabilityManifest
+from application.capabilities.module import CapabilityModuleV1
 from application.ports.session import IdentitySessionStore, ResolvedSession
 from engine.base import SchedulerEngine, create_engine
 from llm.base import LLMProvider, create_provider
@@ -86,7 +86,7 @@ def get_projection_reader() -> ScenarioProjectionReader:
 
 
 CapabilityComposer = Callable[
-    [CapabilityGrantContextV1], tuple[InspectCapabilityManifest, ...]
+    [CapabilityGrantContextV1], tuple[CapabilityModuleV1, ...]
 ]
 
 

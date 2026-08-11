@@ -381,6 +381,7 @@ def test_guard_rejects_the_real_adapter_source_if_it_were_in_a_guarded_layer() -
     "layer_file",
     [
         "application/contracts/agent_runtime.py",
+        "application/contracts/capability_manifest.py",
         "application/ports/agent_runtime.py",
     ],
 )

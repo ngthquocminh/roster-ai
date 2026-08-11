@@ -14,7 +14,8 @@ from dataclasses import asdict, dataclass
 from typing import Literal, Mapping
 
 from application.capabilities.deps import AgentDepsV1
-from application.capabilities.vocabulary import RiskClassV1
+from application.capabilities.module import CapabilityModuleV1
+from application.contracts.capability_manifest import CapabilityError, CapabilityManifestV1
 from application.ports.scenario_projection import GroupQueryV1
 from application.use_cases.read_scenario_facts import (
     ScenarioFactGroupV1,
@@ -23,6 +24,7 @@ from application.use_cases.read_scenario_facts import (
 
 SCHEMA_VERSION = "1"
 CAPABILITY_NAME = "scheduling_inspect"
+SCHEDULING_INSPECT_POLICY = "scheduling_inspect_enabled"
 EVALUATION_FIXTURES = (
     "evals/golden/scheduling_inspect/wednesday-demand.json",
     "evals/golden/scheduling_inspect/wednesday-assignments.json",
@@ -58,7 +60,7 @@ SCOPE_CONTROLS: Mapping[str, str] = {
 }
 
 
-class SchedulingInspectError(Exception):
+class SchedulingInspectError(CapabilityError):
     """Typed capability failure. `code` is the manifest's error vocabulary."""
 
     code = "invalid_query"
@@ -119,34 +121,14 @@ class SchedulingInspectResultV1:
     schema_version: str = SCHEMA_VERSION
 
 
-@dataclass(frozen=True)
-class InspectCapabilityManifest:
-    capability_name: str
-    capability_version: str
-    input_schema_ref: str
-    output_schema_ref: str
-    risk_class: RiskClassV1
-    permission: str
-    scope: str
-    version_semantics: str
-    idempotency_semantics: str
-    budget_limit: int
-    timeout_seconds: float
-    approval_policy: str
-    audit_mapping: str
-    evidence_mapping: str
-    errors: tuple[str, ...]
-    evaluation_fixtures: tuple[str, ...]
-
-
-def scheduling_inspect_manifest() -> InspectCapabilityManifest:
+def scheduling_inspect_manifest() -> CapabilityManifestV1:
     # Imported here, not at module scope: `application/**` must not depend on
     # process configuration to be importable, and the registry composes the
     # manifest once per run rather than once per tool call.
     from settings import default_settings
 
     settings = default_settings()
-    return InspectCapabilityManifest(
+    return CapabilityManifestV1(
         capability_name=CAPABILITY_NAME,
         capability_version=SCHEMA_VERSION,
         input_schema_ref="application.capabilities.scheduling_inspect.SchedulingInspectRequestV1",
@@ -169,7 +151,7 @@ def scheduling_inspect_manifest() -> InspectCapabilityManifest:
 def _validated_query(
     deps: AgentDepsV1,
     request: SchedulingInspectRequestV1,
-    manifest: InspectCapabilityManifest,
+    manifest: CapabilityManifestV1,
 ) -> GroupQueryV1:
     """Allow-list untrusted, model-supplied query input (AD-2).
 
@@ -206,7 +188,7 @@ def _validated_query(
 def scheduling_inspect(
     deps: AgentDepsV1,
     request: SchedulingInspectRequestV1,
-    manifest: InspectCapabilityManifest | None = None,
+    manifest: CapabilityManifestV1 | None = None,
 ) -> SchedulingInspectResultV1:
     resolved = manifest or scheduling_inspect_manifest()
 
@@ -282,11 +264,23 @@ def scheduling_inspect(
     )
 
 
+def scheduling_inspect_module() -> CapabilityModuleV1:
+    return CapabilityModuleV1(
+        manifest=scheduling_inspect_manifest(),
+        handler=scheduling_inspect,
+        request_type=SchedulingInspectRequestV1,
+        error_type=SchedulingInspectError,
+        retryable_error_codes=frozenset({"invalid_query"}),
+        required_role="planner",
+        required_feature_policy=SCHEDULING_INSPECT_POLICY,
+    )
+
+
 __all__ = [
-    "CAPABILITY_NAME", "ERROR_CODES", "InspectCapabilityManifest",
+    "CAPABILITY_NAME", "ERROR_CODES", "SCHEDULING_INSPECT_POLICY",
     "InvalidQueryError", "BudgetExhaustedError", "SCOPE_CONTROLS",
     "ScenarioNotFoundError", "SchedulingInspectError",
     "SchedulingInspectRequestV1", "SchedulingInspectResultV1",
     "SiteMismatchError", "VersionMismatchError",
-    "scheduling_inspect", "scheduling_inspect_manifest",
+    "scheduling_inspect", "scheduling_inspect_manifest", "scheduling_inspect_module",
 ]

@@ -13,7 +13,6 @@ from __future__ import annotations
 import threading
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel
 from pydantic_ai import (
     Agent,
     AgentRunError,
@@ -42,22 +41,9 @@ from application.contracts.agent_runtime import (
 )
 from application.ports.agent_runtime import AgentRuntimeError
 from application.capabilities.deps import AgentDepsV1
-from application.capabilities.scheduling_inspect import (
-    InspectCapabilityManifest,
-    SchedulingInspectError,
-)
+from application.capabilities.module import CapabilityModuleV1
+from application.contracts.capability_manifest import CapabilityError
 from agent.capability_tools import render_capabilities
-
-
-class DemonstrationRequestV1(BaseModel):
-    """Typed argument for the single throwaway demonstration tool.
-
-    Pydantic-typed on purpose: it is what proves the model's raw JSON arguments
-    arrive *validated* rather than passed through.
-    """
-
-    label: str
-    repeat: int = 1
 
 
 @dataclass(frozen=True)
@@ -88,7 +74,7 @@ class PydanticAIAgentRuntime:
         config: AgentRuntimeConfig | None = None,
         model: object | None = None,
         tracer_provider: object | None = None,
-        capabilities: tuple[InspectCapabilityManifest, ...] = (),
+        capabilities: tuple[CapabilityModuleV1, ...] = (),
         deps: AgentDepsV1 | None = None,
     ) -> None:
         """`model` is an injected framework model (a deterministic double in
@@ -122,23 +108,6 @@ class PydanticAIAgentRuntime:
             capabilities=[Instrumentation(settings=instrumentation_settings)],
         )
 
-        # Exactly ONE throwaway demonstration tool, proving the typed-tool and
-        # deferred-call seams end to end. It reads no scenario data, touches no
-        # repository, and resembles no real capability — the capability registry
-        # is Story 2.5's and `CapabilityManifestV1` is Story 2.6's.
-        #
-        # Approval is CONDITIONAL rather than unconditional so one tool can prove
-        # both halves of the seam: `repeat == 1` executes freely (an ordinary
-        # bounded tool loop), `repeat > 1` suspends for approval. Raising
-        # ApprovalRequired from the body is also the shape ShiftMind actually
-        # needs — approval is a persisted one-time state machine (AD-10), not an
-        # in-process callback.
-        @self._agent.tool
-        def shiftmind_demonstration(ctx, payload: DemonstrationRequestV1) -> str:
-            if payload.repeat > 1 and not ctx.tool_call_approved:
-                raise ApprovalRequired
-            return "|".join([payload.label] * payload.repeat)
-
         # Collected as each tool is actually registered, so this can never
         # over-report a granted-but-unrendered capability.
         self._registered_capability_names = render_capabilities(
@@ -153,8 +122,8 @@ class PydanticAIAgentRuntime:
     def registered_capability_names(self) -> tuple[str, ...]:
         """Names of the application-granted tools actually registered on this run.
 
-        NOT COVERED: the always-present `shiftmind_demonstration` seam, which is
-        registered unconditionally and is owned by Story 2.6's removal proof.
+        Loading a module grants no authority: only the supplied granted tuple is
+        rendered, and absent modules cannot be called by a model-generated name.
         """
         return self._registered_capability_names
 
@@ -202,7 +171,7 @@ class PydanticAIAgentRuntime:
             # Framework-level catch-all. Still an owned type, cause preserved —
             # never a bare `except Exception` that swallows the cause.
             raise AgentRuntimeError("agent runtime call failed") from exc
-        except SchedulingInspectError as exc:
+        except CapabilityError as exc:
             # A governed capability's own declared failure. Mapped to a stable
             # `failure_reason` drawn from the manifest's error vocabulary, so
             # the code the manifest advertises is the code callers observe.

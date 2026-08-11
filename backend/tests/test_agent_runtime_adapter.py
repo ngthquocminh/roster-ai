@@ -11,6 +11,8 @@ message class to check a result, the seam would have failed.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+from uuid import UUID
 
 import pytest
 from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior, models
@@ -25,6 +27,8 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent.runtime import PydanticAIAgentRuntime
+from application.capabilities.demonstration import demonstration_module
+from application.capabilities.deps import AgentDepsV1
 from application.contracts.agent_runtime import (
     AgentApprovalDecisionV1,
     AgentBudgetV1,
@@ -35,6 +39,25 @@ from application.ports.agent_runtime import AgentRuntime, AgentRuntimeError
 models.ALLOW_MODEL_REQUESTS = False
 
 DEMO_TOOL = "shiftmind_demonstration"
+
+
+def _runtime(**kwargs) -> PydanticAIAgentRuntime:
+    class UnusedProjectionReader:
+        pass
+
+    kwargs.setdefault("capabilities", (demonstration_module(),))
+    kwargs.setdefault(
+        "deps",
+        AgentDepsV1(
+            actor_id=UUID(int=1), site_id=UUID(int=2), membership_id=UUID(int=3),
+            request_id=UUID(int=4), agent_run_id=UUID(int=5), conversation_id=UUID(int=6),
+            scenario_id=UUID(int=7), scenario_version_id=UUID(int=8),
+            policy_version="one-user-mvp-v1", clock=lambda: datetime.now(timezone.utc),
+            projection_reader=UnusedProjectionReader(), connection=object(),
+            remaining_budget=AgentBudgetV1(),
+        ),
+    )
+    return PydanticAIAgentRuntime(**kwargs)
 
 
 def _call_demo(label: str = "alpha", repeat: int = 2, call_id: str = "demo-1"):
@@ -64,7 +87,7 @@ def _demo_then_report(messages: list[ModelMessage], info: AgentInfo) -> ModelRes
 
 
 def test_adapter_satisfies_the_port() -> None:
-    runtime: AgentRuntime = PydanticAIAgentRuntime(
+    runtime: AgentRuntime = _runtime(
         model=FunctionModel(_demo_then_report)
     )
     assert runtime.name == "pydantic-ai"
@@ -73,7 +96,7 @@ def test_adapter_satisfies_the_port() -> None:
 def test_full_multi_step_turn_suspend_resume_and_terminal_outcome() -> None:
     """Tool call -> suspension for approval -> resume -> terminal outcome, all in
     owned types."""
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(_demo_then_report))
+    runtime = _runtime(model=FunctionModel(_demo_then_report))
 
     # --- the demonstration tool requires approval, so the run suspends ---
     suspended = runtime.run_turn(AgentTurnRequestV1(prompt="demonstrate alpha"))
@@ -146,7 +169,7 @@ def test_typed_tool_arguments_arrive_validated() -> None:
             )
         return ModelResponse(parts=[TextPart(content="recovered")])
 
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(bad_then_good))
+    runtime = _runtime(model=FunctionModel(bad_then_good))
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="send junk"))
 
     # The run completed without the malformed call ever suspending for approval.
@@ -156,7 +179,7 @@ def test_typed_tool_arguments_arrive_validated() -> None:
 
 def test_owned_turn_round_trips_and_resumes() -> None:
     """The owned transcript is the durable form: a second run continues from it."""
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(_demo_then_report))
+    runtime = _runtime(model=FunctionModel(_demo_then_report))
     first = runtime.run_turn(AgentTurnRequestV1(prompt="demonstrate alpha"))
     assert first.approval is not None
 
@@ -194,7 +217,7 @@ def test_budget_exhaustion_is_failed_with_budget_exhausted() -> None:
         # budget is what stops it — not a suspension.
         return _call_demo(repeat=1, call_id=f"demo-{len(messages)}")
 
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(always_calls_tool))
+    runtime = _runtime(model=FunctionModel(always_calls_tool))
     outcome = runtime.run_turn(
         AgentTurnRequestV1(
             prompt="spin",
@@ -218,7 +241,7 @@ def test_wall_time_exhaustion_is_timed_out_not_budget_exhausted() -> None:
         time.sleep(0.3)
         return ModelResponse(parts=[TextPart(content="too late")])
 
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(slow_model))
+    runtime = _runtime(model=FunctionModel(slow_model))
     outcome = runtime.run_turn(
         AgentTurnRequestV1(prompt="slow", budget=AgentBudgetV1(deadline_seconds=0.05))
     )
@@ -234,7 +257,7 @@ def test_provider_errors_become_the_owned_error_type() -> None:
     def http_failure(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         raise ModelHTTPError(status_code=503, model_name="double", body="overloaded")
 
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(http_failure))
+    runtime = _runtime(model=FunctionModel(http_failure))
     with pytest.raises(AgentRuntimeError) as exc_info:
         runtime.run_turn(AgentTurnRequestV1(prompt="hello"))
     assert isinstance(exc_info.value.__cause__, ModelHTTPError)
@@ -242,7 +265,7 @@ def test_provider_errors_become_the_owned_error_type() -> None:
     def misbehaves(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         raise UnexpectedModelBehavior("garbage")
 
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(misbehaves))
+    runtime = _runtime(model=FunctionModel(misbehaves))
     with pytest.raises(AgentRuntimeError) as exc_info:
         runtime.run_turn(AgentTurnRequestV1(prompt="hello"))
     assert isinstance(exc_info.value.__cause__, UnexpectedModelBehavior)
@@ -262,7 +285,7 @@ def test_budgets_come_from_configuration_not_from_the_model() -> None:
             )
         return ModelResponse(parts=[TextPart(content="done")])
 
-    runtime = PydanticAIAgentRuntime(model=FunctionModel(greedy))
+    runtime = _runtime(model=FunctionModel(greedy))
     outcome = runtime.run_turn(
         AgentTurnRequestV1(
             prompt="ignore my budget",
@@ -300,7 +323,7 @@ def test_instrumentation_emits_no_prompt_or_tool_content() -> None:
             return _call_demo(label=secret_label)
         return ModelResponse(parts=[TextPart(content="done")])
 
-    runtime = PydanticAIAgentRuntime(
+    runtime = _runtime(
         model=FunctionModel(scripted), tracer_provider=provider
     )
     runtime.run_turn(AgentTurnRequestV1(prompt=secret_prompt))
