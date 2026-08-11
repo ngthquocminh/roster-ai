@@ -4,7 +4,7 @@ baseline_commit: 7b8df5a5d57a908b0063a6465ed97b0eb416bd50
 
 # Story 2.4: Replay Conversation Events Live
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -164,267 +164,267 @@ indistinguishable to a prober.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: The cursor contract — parse, validate, compare** (AC: #1, #2)
-  - [ ] `backend/application/contracts/stream_cursor.py` — a frozen `StreamCursorV1`
+- [x] **Task 1: The cursor contract — parse, validate, compare** (AC: #1, #2)
+  - [x] `backend/application/contracts/stream_cursor.py` — a frozen `StreamCursorV1`
         (`stream_id: UUID`, `sequence: Decimal`) plus a parser for AD-21's
         `<stream_uuid>:<sequence>` format. Frozen dataclass, `V1` suffix, `schema_version` —
         mirror `contracts/persisted_event.py`, the closest existing example.
-  - [ ] The parser returns a typed failure, never raises past the boundary and never returns
+  - [x] The parser returns a typed failure, never raises past the boundary and never returns
         a partially-parsed value. Reject: missing or extra `:`, a non-UUID left side, a
         non-numeric right side, a **non-integral** decimal (`persisted_event.sequence` is
         `Numeric(38, 0)` — `1.5` is a value the stream cannot contain), a negative value, and
         anything exceeding 38 digits.
-  - [ ] **Compare sequences as `Decimal`, never as strings.** `"10" < "9"` is true for strings
+  - [x] **Compare sequences as `Decimal`, never as strings.** `"10" < "9"` is true for strings
         and is the classic silent replay bug — it would drop every event from sequence 10
         onward for a client resuming at 9.
-  - [ ] Zero is a legal *cursor* (meaning "replay everything") while never being a legal
+  - [x] Zero is a legal *cursor* (meaning "replay everything") while never being a legal
         *stored* sequence: allocation is `max + 1` starting from 0, so the lowest stored value
         is 1. Say so in the module docstring and test both.
-  - [ ] **Acceptance boundary:** a table-driven test over at least the eight rejection cases
+  - [x] **Acceptance boundary:** a table-driven test over at least the eight rejection cases
         above plus the accepting cases, asserting each rejection is the *same* typed failure —
         Decision 5 requires callers be unable to branch on the reason.
 
-- [ ] **Task 2: Extend the conversation port and its adapter with a replay read** (AC: #1, #2)
-  - [ ] Add one method to `backend/application/ports/conversation.py`:
+- [x] **Task 2: Extend the conversation port and its adapter with a replay read** (AC: #1, #2)
+  - [x] Add one method to `backend/application/ports/conversation.py`:
         `events_after(connection: Any, *, stream_id: UUID, after: Decimal, limit: int) ->
         tuple[PersistedEventV1, ...] | None`. `None` means the conversation is not visible to
         this site — the same absence-equals-denial shape `timeline()` already uses.
-  - [ ] Keep `connection: Any` (`ports/scenario_projection.py:104`). **Do not** copy
+  - [x] Keep `connection: Any` (`ports/scenario_projection.py:104`). **Do not** copy
         `ports/scenario_catalogue.py:9`'s `from sqlalchemy import Connection`; the guard in
         `tests/architecture/test_conversation_boundaries.py` already covers this file and will
         go red.
-  - [ ] `backend/adapters/postgres/conversation.py` — implement it beside `timeline()`. Filter
+  - [x] `backend/adapters/postgres/conversation.py` — implement it beside `timeline()`. Filter
         on `stream_id` (not `conversation_id`), order by `sequence` **ascending**, bound with
         `limit`. Reuse the existing `_event_from_row`; do not write a second row mapper.
-  - [ ] Ascending here, descending in `timeline()`, and both are correct: `timeline()` shows
+  - [x] Ascending here, descending in `timeline()`, and both are correct: `timeline()` shows
         the newest window of an unbounded history, replay drains forward from a cursor. Add a
         one-line comment saying so, because the asymmetry looks like a bug.
-  - [ ] Reaching a reserved discriminant raises `UnsupportedActivityPayloadError` exactly as
+  - [x] Reaching a reserved discriminant raises `UnsupportedActivityPayloadError` exactly as
         `timeline()` does. **The stream must not die on it** — Task 4 terminates that one
         connection with a stable state; it does not let a `500` escape mid-body.
-  - [ ] **Acceptance boundary:** a `@pytest.mark.postgres` test proves (a) `after=0` returns
+  - [x] **Acceptance boundary:** a `@pytest.mark.postgres` test proves (a) `after=0` returns
         the whole stream in ascending sequence order, (b) `after=max` returns empty, (c) a
         Site B session gets `None` for a Site A conversation, indistinguishable from absence —
         same shape as the existing cases in `tests/test_conversations_postgres.py`.
 
-- [ ] **Task 3: One reusable site-context manager** (AC: #1, #3)
-  - [ ] Extract the body of `get_site_context` (`api/deps.py:138-163`) into a
+- [x] **Task 3: One reusable site-context manager** (AC: #1, #3)
+  - [x] Extract the body of `get_site_context` (`api/deps.py:138-163`) into a
         `@contextmanager site_context(engine, site_id) -> Iterator[Connection]` in the same
         module. `get_site_context` becomes a thin dependency that yields from it. **Behaviour
         must not change** — including the `finally` block's deliberate swallow of the
         `InFailedSqlTransaction` that would otherwise mask a real error.
-  - [ ] The stream uses `site_context(...)` directly, per **Decision 1**: one short
+  - [x] The stream uses `site_context(...)` directly, per **Decision 1**: one short
         transaction per poll, opened and closed inside `run_in_threadpool`. Never a
         request-lifetime transaction, never a second engine (`_site_context_engine` is
         `lru_cache`d — reuse it).
-  - [ ] **Acceptance boundary:** every existing test that exercises `get_site_context` stays
+  - [x] **Acceptance boundary:** every existing test that exercises `get_site_context` stays
         green unmodified, and a new test asserts a poll leaves no open transaction — take the
         pool's checked-out-connection count before and after and assert it returns to its
         prior value.
 
-- [ ] **Task 4: The SSE endpoint** (AC: #1, #2)
-  - [ ] `GET /api/v1/conversations/{conversation_id}/events` in the existing
+- [x] **Task 4: The SSE endpoint** (AC: #1, #2)
+  - [x] `GET /api/v1/conversations/{conversation_id}/events` in the existing
         `backend/api/routers/conversations.py`. **A GET, under `/conversations`** — Story 2.3's
         Decision 1 still binds: nothing may mount under `/api/v1/scenarios`.
-  - [ ] `StreamingResponse(media_type="text/event-stream")` with
+  - [x] `StreamingResponse(media_type="text/event-stream")` with
         `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`. `no-transform`
         and `X-Accel-Buffering` exist because AD-21 says *"no generic CloudFront buffering
         toggle is assumed"* — Story 6.3 proves the edge, this story must not make that
         story's job harder by omitting the origin-side hints.
-  - [ ] Frame format, exactly: `id: <stream_uuid>:<sequence>\n`, `event: <event_type>\n`,
+  - [x] Frame format, exactly: `id: <stream_uuid>:<sequence>\n`, `event: <event_type>\n`,
         `data: <compact json of the activity item>\n\n`. The `data:` payload is the **same**
         `ActivityItemOut` shape the timeline returns, including `sequence` **as a string**
         (`api/schemas.py:138`) — one shape, so a client can merge a replayed event and a
         fetched timeline item without a second mapper.
-  - [ ] **Build that payload with the router's existing `_activity(event)` helper**
+  - [x] **Build that payload with the router's existing `_activity(event)` helper**
         (`api/routers/conversations.py:33-39`), not a second projection function. A frame and a
         timeline item that drift apart break the client's merge silently.
-  - [ ] Heartbeat: `: heartbeat\n\n` — a **comment** frame, every 15 s of stream idleness.
+  - [x] Heartbeat: `: heartbeat\n\n` — a **comment** frame, every 15 s of stream idleness.
         No `id:`, no `event:`, no `data:`, never persisted, never written to any table.
         Emit one immediately on connect so a proxy sees bytes before any idle timeout.
-  - [ ] Replay first (all events after the cursor, drained in bounded batches), then poll for
+  - [x] Replay first (all events after the cursor, drained in bounded batches), then poll for
         new ones on a fixed short interval. Track the last emitted sequence in the generator
         so the heartbeat timer and the poll cursor cannot disagree.
-  - [ ] Exit cleanly on `starlette.requests.ClientDisconnect` and on
+  - [x] Exit cleanly on `starlette.requests.ClientDisconnect` and on
         `UnsupportedActivityPayloadError`; both end the generator without emitting a partial
         frame. Do not build a second disconnect watchdog (**Decision 2**).
-  - [ ] **Acceptance boundary:** `TestClient(...).stream("GET", …)` receives, in order, a
+  - [x] **Acceptance boundary:** `TestClient(...).stream("GET", …)` receives, in order, a
         heartbeat comment, then every replayed frame with a well-formed `id:`; a test asserts
         no heartbeat line contains `id:`; and a test asserts `persisted_event`'s row count is
         unchanged across a stream that emitted heartbeats.
 
-- [ ] **Task 5: Cursor rejection — one code, one body, zero queries** (AC: #2)
-  - [ ] Resolve the cursor per **Decision 4**: `Last-Event-ID` header first, then
+- [x] **Task 5: Cursor rejection — one code, one body, zero queries** (AC: #2)
+  - [x] Resolve the cursor per **Decision 4**: `Last-Event-ID` header first, then
         `?last_event_id=`, then absent (= replay from 0).
-  - [ ] Reject all three AC2 causes with the *same* RFC 7807 response via `api/problems.py`:
+  - [x] Reject all three AC2 causes with the *same* RFC 7807 response via `api/problems.py`:
         status `400`, one stable code (`stream_cursor_invalid`), fixed title and detail.
         Unknown or cross-site conversation keeps the existing `404 resource_not_found` — that
         is the conversation's own non-disclosure shape, unchanged from Story 2.3.
-  - [ ] **Foreign-stream rejection issues no query at all** (**Decision 5**). Compare the
+  - [x] **Foreign-stream rejection issues no query at all** (**Decision 5**). Compare the
         parsed `stream_id` to the path UUID before touching the database.
-  - [ ] "A sequence the stream cannot contain" = anything Task 1 rejects, **plus** a value
+  - [x] "A sequence the stream cannot contain" = anything Task 1 rejects, **plus** a value
         greater than the stream's current maximum sequence. That check reads only the URL's
         own authorized stream, so it discloses nothing. A cursor *equal* to the maximum is
         legal and means "nothing outstanding" — a common, correct state, not an error.
-  - [ ] Because the rejection is a non-200 before the body opens, the response is
+  - [x] Because the rejection is a non-200 before the body opens, the response is
         `application/problem+json`, not `text/event-stream`. That is what makes the browser
         fail the source permanently instead of retry-looping (**Decision 4**).
-  - [ ] **Acceptance boundary:** four HTTP tests — malformed cursor, foreign-stream cursor,
+  - [x] **Acceptance boundary:** four HTTP tests — malformed cursor, foreign-stream cursor,
         beyond-maximum cursor, non-integral cursor — each returning byte-identical problem
         bodies; plus a test asserting the foreign-stream path performs zero database calls
         (patch the repository and assert it was never invoked).
 
-- [ ] **Task 6: Publish the contract without pretending it is JSON** (AC: #1, #2)
-  - [ ] Declare the route in OpenAPI with a `text/event-stream` 200 response and the
+- [x] **Task 6: Publish the contract without pretending it is JSON** (AC: #1, #2)
+  - [x] Declare the route in OpenAPI with a `text/event-stream` 200 response and the
         `ProblemDetailsV1` error statuses, so the endpoint is discoverable and the Gate A
         OpenAPI audit sees it. Run `npm run codegen`; **never hand-edit `schema.d.ts`.**
-  - [ ] **This is the one endpoint the frontend does not call through `client.ts`.**
+  - [x] **This is the one endpoint the frontend does not call through `client.ts`.**
         `openapi-fetch` returns parsed bodies and cannot consume a stream. Add a small
         `conversationEventsUrl(conversationId, cursor?)` helper to
         `frontend/src/api/conversations.ts` that builds the URL from `API_BASE_URL` — so
         there is still exactly one module that knows the base URL, which is the actual rule
         `client.ts`'s docstring is protecting. Document the exception where the helper lives.
-  - [ ] **Leave `withCredentials` at its default.** `API_BASE_URL` is the SPA's own origin
+  - [x] **Leave `withCredentials` at its default.** `API_BASE_URL` is the SPA's own origin
         (`frontend/.env.example`; Vite proxies `/api` in both `server` and `preview`), so the
         session cookie rides along same-origin. Setting `withCredentials: true` would only
         matter cross-origin, where it fails anyway — the API leaves `allow_credentials` at
         `False` under D-02 (`api/main.py:248-256`). A cross-origin `VITE_API_BASE_URL` breaks
         this feature; say so in the helper's comment.
-  - [ ] **Acceptance boundary:** `npm run typecheck` passes and the new module hand-authors no
+  - [x] **Acceptance boundary:** `npm run typecheck` passes and the new module hand-authors no
         request/response interface.
 
-- [ ] **Task 7: The live timeline hook** (AC: #2)
-  - [ ] `frontend/src/hooks/useConversationStream.ts`. It owns: opening the source, holding
+- [x] **Task 7: The live timeline hook** (AC: #2)
+  - [x] `frontend/src/hooks/useConversationStream.ts`. It owns: opening the source, holding
         the cursor, merging events, the reconnect state machine, and the polling fallback.
-  - [ ] **jsdom has no `EventSource`** — verified absent from jsdom's interface registry at
+  - [x] **jsdom has no `EventSource`** — verified absent from jsdom's interface registry at
         this baseline. Take the constructor as an injectable parameter defaulting to
         `globalThis.EventSource`, matching the repo's "dependency overrides in tests"
         convention. A hook that reaches for a global jsdom does not define is untestable, and
         a polyfill dependency is not warranted for one seam.
-  - [ ] Cursor persistence: keep the last seen `sequence` **as a string** (never `Number` —
+  - [x] Cursor persistence: keep the last seen `sequence` **as a string** (never `Number` —
         the whole reason 2.3 serialized it as a string), keyed by conversation ID in
         `sessionStorage`, mirrored in a ref. This is AC2's *"its own persisted cursor"*.
-  - [ ] **Seed the first cursor from the timeline's newest item, not from `0`.** The timeline
+  - [x] **Seed the first cursor from the timeline's newest item, not from `0`.** The timeline
         read is tail-anchored and capped at 200 (`api/routers/conversations.py:68`), so a
         first connect at `0` would replay the entire history the read deliberately truncated —
         every one of those events arriving as a "new" frame. Connect with no cursor **only**
         when the conversation has no items at all.
-  - [ ] The merged list is the timeline window plus what has arrived since; it must stay
+  - [x] The merged list is the timeline window plus what has arrived since; it must stay
         bounded (UX-DR24 — no unbounded growth, no infinite scroll). Cap it at the same window
         the timeline uses and keep the existing "Showing the most recent N activities" copy
         honest.
-  - [ ] **Merge by `activity_id`, never by position** (UX-DR6). The same-tab case is the
+  - [x] **Merge by `activity_id`, never by position** (UX-DR6). The same-tab case is the
         proof: `useSendMessage` already invalidates the timeline on success, so the sender's
         own message arrives twice — once from the refetch, once from the stream. Exactly one
         card must render.
-  - [ ] Reconnect state machine drives the existing `ReconnectBanner`
+  - [x] Reconnect state machine drives the existing `ReconnectBanner`
         (`components/primitives/ReconnectBanner.tsx`): `disconnected` → `reconnecting` →
         `reconnected`. Do not invent a fourth state — the component has no runtime guard for
         one (`deferred-work.md`, story-1.6 review). **This hook is that component's first
         real caller**; its own Dev Notes predicted exactly this.
-  - [ ] On `error`: `close()` the dead source and re-establish from the persisted cursor
+  - [x] On `error`: `close()` the dead source and re-establish from the persisted cursor
         (**Decision 4**). After a bounded number of consecutive failures, fall back to
         **labelled** polling — TanStack Query `refetchInterval` on the existing
         `useConversationTimeline`, with visible copy saying updates are delayed. AC2 requires
         the fallback; EXPERIENCE.md's Runs row fixes the wording rule (*"labels delayed
         updates"*). Silent polling is a failure of this AC.
-  - [ ] **Acceptance boundary:** five tests against a stub `EventSource` — a replayed event
+  - [x] **Acceptance boundary:** five tests against a stub `EventSource` — a replayed event
         already present renders one card; a rejected connection re-establishes with the
         stored cursor in the query string; repeated failures switch to labelled polling and
         the label is visible; the banner walks all three states; and the stored cursor
         survives a remount.
 
-- [ ] **Task 8: Prove the transport, not just the handler** (AC: #1, #2)
-  - [ ] A test that streams **through the real app** (`TestClient(app)`, both
+- [x] **Task 8: Prove the transport, not just the handler** (AC: #1, #2)
+  - [x] A test that streams **through the real app** (`TestClient(app)`, both
         `@app.middleware("http")` layers active) and asserts frames arrive **incrementally** —
         that the first frame is readable before the generator has finished. Decision 2 is
         based on reading Starlette's `BaseHTTPMiddleware.body_stream()`; this test is what
         keeps it true. If it ever fails, the feature is dead and the cause will be invisible
         without it.
-  - [ ] A test that the unauthenticated case is rejected by the existing middleware
+  - [x] A test that the unauthenticated case is rejected by the existing middleware
         (`401 authentication_required`) before any stream opens — the response must be
         `application/problem+json`, never an empty `text/event-stream`.
-  - [ ] No CSRF test is needed and none should be added: `GET` is not in `_UNSAFE_METHODS`
+  - [x] No CSRF test is needed and none should be added: `GET` is not in `_UNSAFE_METHODS`
         (`api/main.py:160`). `EventSource` cannot send `X-CSRF-Token`, which is precisely why
         this endpoint has to be a `GET`.
-  - [ ] **Acceptance boundary:** all three above green, and
+  - [x] **Acceptance boundary:** all three above green, and
         `test_gate_a_mutation_audit.py::test_gate_a_scenario_openapi_surface_is_get_only`
         still green and **unmodified**.
 
-- [ ] **Task 9: The NFR35 reconnect-replay measurement** (AC: #3)
-  - [ ] `@pytest.mark.postgres` test in `backend/tests/test_postgres_integration.py`, modelled
+- [x] **Task 9: The NFR35 reconnect-replay measurement** (AC: #3)
+  - [x] `@pytest.mark.postgres` test in `backend/tests/test_postgres_integration.py`, modelled
         exactly on `test_nfr35_exact_evidence_targets_meet_two_second_threshold` there — the
         established shape, including the `print("…MEASUREMENTS=" + json.dumps(...))` marker
         that `scripts/regenerate_evidence.py` parses.
-  - [ ] Protocol, verbatim from `requirements-inventory.md`'s normative table: largest Gate A
+  - [x] Protocol, verbatim from `requirements-inventory.md`'s normative table: largest Gate A
         fixture at full committed size (`sample_tiny_input_more_tm.json`, `v1`); warm process
         and warm pool; **one discarded warm-up**; **three consecutive runs, every one must
         pass**; threshold **5000 ms**.
-  - [ ] Clock boundary is AC3's, not Story 1.4's: **reconnect request receipt → delivery of
+  - [x] Clock boundary is AC3's, not Story 1.4's: **reconnect request receipt → delivery of
         the last outstanding persisted event.** Start the clock at the request, stop it when
         the test reads the final replayed frame off the stream, then break and close.
-  - [ ] *"The largest Gate A replay backlog"* names no number, so **fix one and record it**:
+  - [x] *"The largest Gate A replay backlog"* names no number, so **fix one and record it**:
         seed the stream with at least **200** persisted events — the timeline read cap
         (`api/routers/conversations.py:68`), i.e. the largest number of activities the product
         will render at once. Reconnect with a cursor of `0` (the stalest possible) so the whole
         backlog replays. Write the chosen count into the evidence file's `protocol` block; do
         not leave it implied by the measurement array's length alone.
-  - [ ] Generate `evidence/story-2.4/nfr35-sse-reconnect-replay.json`. **Follow
+  - [x] Generate `evidence/story-2.4/nfr35-sse-reconnect-replay.json`. **Follow
         `docs/EVIDENCE-CONVENTION.md` exactly: commit code → confirm `git status --porcelain`
         is empty → measure → generate through `scripts/evidence_binding.resolve_bindings()` →
         commit the evidence separately.** Never hand-type it, and never copy Story 1.4's file
         as a template — that habit is what produced four unreproducible bindings (the
         convention doc's own table).
-  - [ ] This is a **new** evidence file, so `regenerate_evidence.py` cannot bootstrap it — that
+  - [x] This is a **new** evidence file, so `regenerate_evidence.py` cannot bootstrap it — that
         script rewrites bindings on files that already exist. Follow `backend/evals/report.py`'s
         `write_evaluation_report` instead: resolve bindings first, then write. Afterwards, add
         the file to `EVIDENCE_FILES` and a marker to `_MEASUREMENT_MARKERS` in
         `regenerate_evidence.py` so it is re-bindable like every other file.
-  - [ ] **Do not register this in the Gate A registry** (`scripts/gate_a_checks.py`). Gate A is
+  - [x] **Do not register this in the Gate A registry** (`scripts/gate_a_checks.py`). Gate A is
         Epic 1's gate and is closed; NFR35's aggregate is a **Gate B** row (`epics.md:1522`).
         The repo-wide `test_evidence_convention.py` sweep picks the new file up automatically —
         that is the coverage that matters here.
-  - [ ] **Acceptance boundary:** three runs all ≤ 5000 ms with the backlog recorded, the file
+  - [x] **Acceptance boundary:** three runs all ≤ 5000 ms with the backlog recorded, the file
         fully bound with `working_tree_dirty: false`, and
         `uv run --frozen pytest tests/test_evidence_convention.py` green.
 
-- [ ] **Task 10: Ledger hygiene** (AC: none — housekeeping, do not skip)
-  - [ ] Correct the `deferred-work.md` *"Deferred from: story-2-3 creation (2026-08-10)"* entry
+- [x] **Task 10: Ledger hygiene** (AC: none — housekeeping, do not skip)
+  - [x] Correct the `deferred-work.md` *"Deferred from: story-2-3 creation (2026-08-10)"* entry
         in place: strike the false premise that Story 2.4 adds a new `application/ports/`
         module, record **why** (Decision 3 — the replay read belongs on the existing
         `ConversationRepository` under AD-22), and restate the owner as *"the next story that
         modifies `ScenarioCatalogueReader` or its adapter for any reason."* Follow the
         strike-through-and-correct-in-place format the `alembic.ini` entry already uses; do not
         delete the item and do not close it.
-  - [ ] Leave `ALLOWED_LEAKS` in `tests/architecture/test_conversation_boundaries.py` exactly
+  - [x] Leave `ALLOWED_LEAKS` in `tests/architecture/test_conversation_boundaries.py` exactly
         as it is. `test_every_allowed_leak_still_exists_and_still_leaks` will go red if anyone
         half-fixes the leak, which is the behaviour we want.
-  - [ ] The `translate.py:61-105` silent-drop item stays open and untouched — Story 2.3
+  - [x] The `translate.py:61-105` silent-drop item stays open and untouched — Story 2.3
         judged it live in **2.5**, and that judgement is unchanged here: this story still
         executes no turn and rehydrates no `AgentTurnV1`.
 
-- [ ] **Task 11: Full regression gate** (AC: #1, #2, #3)
-  - [ ] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker
+- [x] **Task 11: Full regression gate** (AC: #1, #2, #3)
+  - [x] Backend: `uv run --frozen pytest`; `uv run --frozen pytest -m postgres` (Docker
         PostgreSQL 18 via `docker-compose.yml`).
-  - [ ] `alembic check` **from the repository root**: `uv run --project backend alembic check`
+  - [x] `alembic check` **from the repository root**: `uv run --project backend alembic check`
         → *"No new upgrade operations detected."* From `backend/` it fails with
         `No 'script_location' key found in configuration` — a working-directory mistake that
         reads like a missing config. `deferred-work.md` carries the corrected measurement
         table; **do not synthesize a temporary alembic config.**
-  - [ ] **This story adds no migration.** It only reads `persisted_event`, and `GRANT SELECT`
+  - [x] **This story adds no migration.** It only reads `persisted_event`, and `GRANT SELECT`
         is already in place from `a4f92d7c8e31`. If you find yourself writing a revision, stop
         — something has gone wrong.
-  - [ ] Frontend: `npm run codegen`, `npm run typecheck`, `npm run lint`, `npm test`,
+  - [x] Frontend: `npm run codegen`, `npm run typecheck`, `npm run lint`, `npm test`,
         `npm run build`, `npm run test:e2e` (build-first since Story 2.2).
-  - [ ] **Re-run Gate A and report by name.** AR28 binds every story. Regenerate
+  - [x] **Re-run Gate A and report by name.** AR28 binds every story. Regenerate
         `evidence/story-1.11/gate-a-readiness-report.json` per the evidence convention and
         confirm `gate_a_passed` still reads `true`.
-  - [ ] **Re-derive baselines at the start rather than trusting these.** Recorded at
+  - [x] **Re-derive baselines at the start rather than trusting these.** Recorded at
         `baseline_commit` (`7b8df5a`, Story 2.3 `done` and merged): backend **545 passed /
         7 deselected**; postgres **27 passed**; live **7 skipped** (no API key); frontend
         **54 files / 307 tests**; e2e **46 passed**; `alembic check` zero diff;
         `gate_a_passed: true`.
-  - [ ] **Acceptance boundary:** every suite green at its re-derived baseline plus this
+  - [x] **Acceptance boundary:** every suite green at its re-derived baseline plus this
         story's new tests, Gate A still `true`, and AC3's evidence file bound and passing.
 
 ## Dev Notes
@@ -665,16 +665,193 @@ without a requirement asking for it.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 5 (`claude-opus-5`)
 
 ### Debug Log References
 
+Re-derived baselines at `baseline_commit` (`7b8df5a`) before touching anything,
+as Task 11 instructs. Two of the story's recorded figures were stale and are
+corrected here:
+
+| Suite | Story recorded | Re-derived at `7b8df5a` |
+|---|---|---|
+| backend `pytest` | 545 passed / 7 deselected | **545** passed / 7 deselected (544 + 1 skip that needs a clean tree) |
+| `pytest -m postgres` | 27 passed | **36** passed — the story's figure predates Story 2.3's nine conversation tests |
+| frontend `vitest` | 54 files / 307 tests | 54 files / 307 tests ✓ |
+| `alembic check` | zero diff | zero diff ✓ |
+| `gate_a_passed` | true | true ✓ |
+
+Three findings during implementation that changed the plan; all three are
+recorded rather than quietly absorbed.
+
+1. **`TestClient` cannot prove incremental delivery (Task 8).** Task 8 asks for
+   a `TestClient(app)` test asserting the first frame is readable before the
+   generator finishes. It is not achievable: Starlette's test transport writes
+   every `http.response.body` message into one `io.BytesIO` and blocks on
+   `response_complete` before constructing a response
+   (`starlette/testclient.py:295-369`), so it reports every frame arriving at
+   the end *even when the middleware is behaving*, and it never returns at all
+   from a stream that stays open. A `TestClient`-based version of this test
+   would have been vacuous in the passing direction and a hang in the failing
+   one. Replaced with a driver that calls the real `app` object at the ASGI
+   boundary — both `@app.middleware("http")` layers still in the measured path
+   — and records the arrival time of each `send`. That puts the assertion
+   exactly where buffering would occur and is strictly stronger. Verified
+   non-vacuous: the first `id:` chunk arrives at ~0 s against a ~3 s stream, so
+   a buffering regression turns it red.
+
+2. **`uq_app_user_singleton` made Task 9's placement order-dependent.** Task 9
+   names `test_postgres_integration.py`, and the measurement needs an
+   `app_user` to own the seeded conversation. That index is unique on `(true)`
+   — one row per database — and `test_resolve_session_rechecks_current_
+   membership_on_every_request` inserted its own, so whichever test ran first
+   won and the other failed. Fixed by giving both a shared
+   `_singleton_app_user()` select-or-insert helper rather than by moving the
+   new test to its own module. Nothing that test proves changes: its membership
+   and session rows are still its own and the assertion is unchanged. Verified
+   order-independent by running the two together and each alone.
+
+3. **The published 200 response advertised `application/json` (Task 6).** Task
+   6's own title is *"publish the contract without pretending it is JSON"*, and
+   FastAPI derives a route's default 200 media type from `response_class` —
+   plain `StreamingResponse` leaves `media_type` at `None`, so the generated
+   schema carried an `application/json` entry beside the `text/event-stream`
+   one. Fixed with a two-line `EventStreamResponse` subclass that declares the
+   media type on the class. `openapi.json` now publishes `text/event-stream`
+   alone.
+
 ### Completion Notes List
 
+**AC1 — replay, canonical SSE ids, non-persisted heartbeats.** The stream opens
+with a comment heartbeat before any database work (so a proxy sees bytes ahead
+of its idle timeout), then replays every event with sequence *strictly* greater
+than the cursor in ascending order, then polls forward on a 1 s interval with a
+15 s idle heartbeat. Frames are `id: <stream_uuid>:<sequence>` /
+`event: <event_type>` / `data: <ActivityItemOut>`, built through the router's
+existing `_activity()` so a frame and a timeline item cannot drift apart.
+Heartbeats carry no id, no event name and no data, and
+`test_the_live_stream_persists_nothing_not_even_its_heartbeats` proves the
+`persisted_event` row count is unchanged across a stream that emitted one —
+asserted as a row count, not as an inspection of the emitting code.
+
+**AC2 — one rejection, zero disclosure, a recovering client.** Malformed,
+foreign-stream and beyond-maximum cursors all return status `400`, code
+`stream_cursor_invalid`, and a byte-identical body; a test asserts the four
+causes collapse to a single distinct response text. The foreign-stream path is
+rejected on the string comparison alone and
+`test_a_foreign_stream_cursor_is_rejected_without_touching_the_database`
+asserts the repository was never invoked — the mechanism, not the wording. On
+the client, `useConversationStream` closes the dead source and re-establishes
+from its own `sessionStorage` cursor (as a query parameter, since `EventSource`
+cannot set headers), merges by `activity_id`, and after three consecutive
+failures switches to *labelled* polling.
+
+**AC3 — measured, and it passes.** `48.454 / 44.920 / 41.978 ms` across three
+consecutive runs replaying a 200-event backlog from the stalest possible
+cursor, against NFR35's **5000 ms** threshold. Every run passes.
+`evidence/story-2.4/nfr35-sse-reconnect-replay.json` was generated on a clean
+tree at `d2789a7` through `scripts/generate_sse_replay_evidence.py` — resolve
+bindings first, then write, following `evals/report.py` — and committed
+separately in `3c5f9d2`. `working_tree_dirty: false`. Nothing was tuned: the
+threshold, the run count and the backlog are all fixed in code.
+
+Judgement calls worth a reviewer's attention:
+
+- **The maximum-sequence check reuses `timeline(limit=1)`.** AC2's third
+  rejection cause needs the stream's current maximum, but the port method Task 2
+  specifies returns only events after a cursor. Rather than add a second method,
+  the pre-flight calls the existing tail-anchored `timeline()` with `limit=1`,
+  whose single event *is* the maximum. One read answers both "does this
+  conversation exist for this site" (the 404) and "can it contain that
+  sequence". Cost: it maps that one row through `_activity_from_payload`, so an
+  unrenderable newest event fails the connect — handled explicitly as a stable
+  `500 internal_error` rather than left to escape.
+- **Clock boundary.** AC3 says "delivery of the last outstanding persisted
+  event". Measured at the ASGI `send` carrying the final frame — the last point
+  inside the process before the socket — so it excludes network transit only.
+  Stated in the evidence file's `protocol.clock_boundary_note` rather than
+  presented as full client receipt.
+- **`dataset`/`scenario` bindings use the default `default_fixtures()`
+  derivation**, identical to the sibling NFR35 files for Stories 1.4 and 1.5.
+  `resolve_bindings(fixtures=...)` would have narrowed them to the one fixture
+  actually touched, but the two bindings alias under either choice — that is
+  the open ledger item from Story 2.2's review, and changing the rule for one
+  file would leave three NFR35 files deriving it two different ways.
+- **`GUARDED` in `test_conversation_boundaries.py` grew by one entry** for the
+  new contract module. `ALLOWED_LEAKS` is untouched, per Task 10.
+- **`useConversationStream` wraps `useConversationTimeline`** rather than
+  sitting beside it, because AC2's fallback *is* a `refetchInterval` on that
+  query; two sibling hooks would have to pass the degraded flag between them.
+  Two assertions in `ChatView.test.tsx` were updated for the added
+  `refetchInterval` argument — no behaviour was changed to accommodate them.
+
+Regression at completion (all re-run after the final change):
+
+| Suite | Result |
+|---|---|
+| backend `uv run --frozen pytest` | **603 passed**, 0 skipped, 7 deselected |
+| `uv run --frozen pytest -m postgres` | **43 passed** |
+| `uv run --project backend alembic check` (repo root) | *No new upgrade operations detected.* |
+| frontend `npm test` | **55 files / 319 tests** passed |
+| `npm run typecheck` / `npm run lint` | clean (3 pre-existing `only-export-components` warnings) |
+| `npm run build` | ✓ |
+| `npm run test:e2e` | **46 passed** |
+| `test_evidence_convention.py` | 48 passed |
+| `gate_a_passed` | **true**, `blocking: []` |
+
+No migration was written; `backend/agent/**`, `backend/llm/**`,
+`backend/services/**`, `backend/domain/**`, `backend/engine/**`,
+`backend/migrations/**` and `backend/tests/test_gate_a_mutation_audit.py` all
+show a zero-line diff, and no dependency was added to `pyproject.toml`,
+`uv.lock` or `package.json`.
+
 ### File List
+
+**New — backend**
+
+- `backend/application/contracts/stream_cursor.py`
+- `backend/scripts/generate_sse_replay_evidence.py`
+- `backend/tests/test_stream_cursor.py`
+- `backend/tests/test_conversation_stream_api.py`
+
+**Modified — backend**
+
+- `backend/application/ports/conversation.py`
+- `backend/adapters/postgres/conversation.py`
+- `backend/api/deps.py`
+- `backend/api/routers/conversations.py`
+- `backend/scripts/regenerate_evidence.py`
+- `backend/tests/architecture/test_conversation_boundaries.py`
+- `backend/tests/test_conversations_postgres.py`
+- `backend/tests/test_postgres_integration.py`
+
+**New — frontend**
+
+- `frontend/src/hooks/useConversationStream.ts`
+- `frontend/src/hooks/useConversationStream.test.tsx`
+
+**Modified — frontend**
+
+- `frontend/src/api/conversations.ts`
+- `frontend/src/hooks/useConversationTimeline.ts`
+- `frontend/src/features/chat/ChatView.tsx`
+- `frontend/src/features/chat/ChatView.test.tsx`
+- `frontend/openapi.json` *(generated)*
+- `frontend/src/api/schema.d.ts` *(generated)*
+
+**New — evidence**
+
+- `evidence/story-2.4/nfr35-sse-reconnect-replay.json`
+
+**Modified — evidence / artifacts**
+
+- `evidence/story-1.11/gate-a-readiness-report.json` *(regenerated, AR28)*
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-08-11 | Implemented and moved to review. **AC3 passes: 48.454 / 44.920 / 41.978 ms against NFR35's 5000 ms threshold**, three consecutive runs replaying a 200-event backlog from cursor 0; evidence generated on a clean tree at `d2789a7` and committed separately at `3c5f9d2`. Gate A re-run and still `true` with an empty blocking list. All five creation-time decisions held; no new dependency, no migration. Three plan deviations recorded in the Debug Log: `TestClient` structurally cannot prove incremental delivery (it buffers a streaming body to completion), so Task 8's transport test drives the real `app` at the ASGI boundary instead — a strictly stronger proof; `uq_app_user_singleton` forced Task 9's two `test_postgres_integration.py` neighbours onto a shared select-or-insert helper; and the published 200 response needed an `EventStreamResponse` subclass to stop FastAPI advertising `application/json` for a body that is never JSON. Baselines re-derived rather than trusted — the story's recorded postgres figure (27) predated Story 2.3 and is actually 36. |
 | 2026-08-11 | Story created on branch `story/2-4-replay-conversation-events-live`. Five creation-time decisions recorded: the SSE route must not hold a request-lifetime site transaction; SSE is hand-rolled on `StreamingResponse` rather than adding `sse-starlette` under AR27; the replay read extends the existing `ConversationRepository` rather than creating a new port (which falsifies the deferred-work ledger's premise for assigning the `scenario_catalogue` AD-1 leak here); a rejected cursor returns a non-200 so `EventSource` fails permanently and the client re-establishes from its own persisted cursor; and non-disclosure is guaranteed by issuing zero queries on a foreign-stream cursor. |
