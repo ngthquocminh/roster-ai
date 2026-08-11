@@ -1,0 +1,82 @@
+{
+  "story": "2.4",
+  "requirement": "NFR35",
+  "measurement_date": "2026-08-11",
+  "fixture": {
+    "name": "sample_tiny_input_more_tm.json",
+    "version": "v1"
+  },
+  "environment": {
+    "description": "Equivalent local developer reference environment; in-process ASGI driver over the real FastAPI app with a local Docker PostgreSQL connection pool",
+    "operating_system": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "python": "3.10.9",
+    "database": "PostgreSQL 18 in Docker Desktop",
+    "network_transit": "none; in-process ASGI application driver"
+  },
+  "protocol": {
+    "process_state": "warm",
+    "database_pool_state": "warm",
+    "warmup_requests_discarded": 1,
+    "consecutive_runs": 3,
+    "all_runs_must_pass": true,
+    "threshold_ms": 5000,
+    "clock_boundary": "reconnect request receipt to delivery of the last outstanding persisted event",
+    "clock_boundary_note": "Delivery is observed at the ASGI send boundary — the last point inside the application process before the socket — so the figure excludes network transit only. Starlette's TestClient buffers a streaming body to completion before returning, so it can observe neither per-frame delivery nor a stream that stays open, and was deliberately not used.",
+    "replay_backlog_events": 200,
+    "replay_backlog_rationale": "the timeline read cap in api/routers/conversations.py — the largest number of activities the product renders at once",
+    "last_event_id": "absent; the stalest possible cursor, replaying the entire backlog from sequence 0"
+  },
+  "code_versions": {
+    "git_commit": "d2789a77c8322aeb554d3aab117b1b222bb4ff8f",
+    "working_tree_dirty": false,
+    "api_image": "local source tree",
+    "database_image": "postgres:18"
+  },
+  "measurements": [
+    {
+      "run": 1,
+      "endpoint": "/api/v1/conversations/{conversation_id}/events",
+      "replay_backlog_events": 200,
+      "last_event_id": "absent (replay from sequence 0)",
+      "duration_ms": 48.454
+    },
+    {
+      "run": 2,
+      "endpoint": "/api/v1/conversations/{conversation_id}/events",
+      "replay_backlog_events": 200,
+      "last_event_id": "absent (replay from sequence 0)",
+      "duration_ms": 44.92
+    },
+    {
+      "run": 3,
+      "endpoint": "/api/v1/conversations/{conversation_id}/events",
+      "replay_backlog_events": 200,
+      "last_event_id": "absent (replay from sequence 0)",
+      "duration_ms": 41.978
+    }
+  ],
+  "maximum_duration_ms": 48.454,
+  "passed": true,
+  "version_bindings": {
+    "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
+    "evaluator": "pytest, @pytest.mark.postgres test_nfr35_sse_reconnect_replay_meets_five_second_threshold",
+    "model": "not applicable — no model invocation",
+    "prompt": "not applicable — no model invocation",
+    "tool": "in-process ASGI driver over the real FastAPI app (both http middleware layers active), PostgreSQL 18 in Docker Desktop",
+    "policy": "NFR35/AD-26: reconnect replay to current state completes within 5000 ms; a miss blocks implementation acceptance of Story 2.4",
+    "application": "local backend source tree",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable — no solver run",
+    "code": {
+      "git_commit": "d2789a77c8322aeb554d3aab117b1b222bb4ff8f",
+      "working_tree_dirty": false
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    },
+    "schema_version": "a4f92d7c8e31"
+  }
+}
