@@ -22,6 +22,7 @@ from agent.runtime import PydanticAIAgentRuntime, create_agent_runtime
 from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1, AgentTurnRequestV1
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.demonstration import demonstration_module
+from application.capabilities.installed import installed_modules
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
 from application.ports.scenario_projection import GroupQueryKeysV1
 from evals.cases import (
@@ -33,7 +34,12 @@ from evals.cases import (
 )
 from evals.doubles import build_model_double
 from evals.evaluators import Evaluator, ToolRoutingEvaluator
-from evals.report import CaseEvaluation, write_evaluation_report
+from evals.report import (
+    CaseEvaluation,
+    _runtime_for_case,
+    generate_demonstration_report,
+    write_evaluation_report,
+)
 from scripts.evidence_binding import audit_evidence_file, resolve_bindings
 
 models.ALLOW_MODEL_REQUESTS = False
@@ -303,22 +309,46 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
     assert "demonstration" in {case.capability for case in cases}
 
 
+# NFR28's floor reads on ALLOWED PRODUCT capabilities (prd.md:191-202 lists the
+# six-capability MVP catalogue). Capabilities present in the dataset that are not
+# product capabilities are exempt — but the exemption is declared here with its
+# reason, never inferred from a name at the point of use.
+MVP_PRODUCT_CAPABILITIES = {"scheduling_inspect"}
+NON_PRODUCT_CAPABILITIES = {
+    # A harness-proof module, not a product capability: Story 2.2 seeded exactly
+    # two schema cases and epics.md:1527 forbids padding a dataset to clear a
+    # threshold. Its installation is removable by composition; the cases are not.
+    "demonstration",
+}
+
+
 def test_every_capability_meets_the_nfr28_four_case_floor() -> None:
-    """NFR28: at least four golden cases per allowed capability. Without this,
-    three of the four scheduling_inspect cases could be deleted silently."""
+    """NFR28: at least four golden cases per allowed product capability.
+
+    Without this, three of the four scheduling_inspect cases could be deleted
+    silently. The floor must also keep reading on capabilities that do not exist
+    yet, so an unclassified capability fails rather than slipping past.
+    """
     cases = load_cases(GOLDEN_DIR)
     counts: dict[str, int] = {}
     for case in cases:
         counts[case.capability] = counts.get(case.capability, 0) + 1
-    product_capabilities_under_evaluation = {"scheduling_inspect"}
-    assert "demonstration" not in product_capabilities_under_evaluation
-    # NFR28's floor applies to allowed product capabilities. Demonstration is a
-    # harness-proof module, not one of the PRD's six-product MVP catalogue, and
-    # its two historical schema cases must not be padded into a product claim.
+
+    # The exemption is asserted, not assumed: a capability cannot be both a
+    # product capability and exempt from the floor that governs product ones.
+    assert MVP_PRODUCT_CAPABILITIES.isdisjoint(NON_PRODUCT_CAPABILITIES)
+
+    # A new capability contributing cases must be classified as product or
+    # non-product. Without this the floor would silently ignore it entirely.
+    unclassified = set(counts) - MVP_PRODUCT_CAPABILITIES - NON_PRODUCT_CAPABILITIES
+    assert not unclassified, (
+        f"classify these capabilities as product or non-product: {sorted(unclassified)}"
+    )
+
     below_floor = {
-        name: counts.get(name, 0)
-        for name in product_capabilities_under_evaluation
-        if counts.get(name, 0) < 4
+        name: count
+        for name, count in counts.items()
+        if name in MVP_PRODUCT_CAPABILITIES and count < 4
     }
     assert not below_floor, below_floor
 
@@ -507,3 +537,34 @@ def test_complete_report_is_accepted_by_repo_wide_evidence_audit(
     assert report["release_gate_eligible"] is False
     assert "50-case" in report["purpose"]
     assert audit_evidence_file(output, repo_root=repo_root) == ()
+
+
+def test_report_generator_routes_every_golden_case_to_a_registered_tool(tmp_path) -> None:
+    """AC4's "the Story 2.2 harness runs the conformance and regression suites"
+    covers the report generator too, not pytest alone. It had no test caller,
+    which is exactly why a case routing to a tool that did not exist on its
+    agent stayed green.
+    """
+    report = generate_demonstration_report(tmp_path / "report.json", allow_dirty=True)
+
+    metrics = report["metrics"]
+    assert metrics["authoritative_case_count"] == len(load_cases(GOLDEN_DIR))
+    # Every case must actually route to a registered tool. Before this generator
+    # composed per-case grants, the scheduling cases addressed a tool that did
+    # not exist on their agent and nothing went red.
+    assert metrics["failed"] == 0, report["results"]
+    assert metrics["tool_routing_percentage"] == 100.0
+    # NFR27: the tool binding names the capabilities that were actually granted,
+    # derived from their manifests rather than a hardcoded string.
+    tool_binding = report["version_bindings"]["tool"]
+    for module in installed_modules():
+        assert module.manifest.capability_name in tool_binding
+
+
+def test_report_generator_refuses_a_case_naming_an_uninstalled_capability() -> None:
+    """A case whose capability matches no module used to register zero tools and
+    still count as a result."""
+    orphan = replace(case_from_mapping(_case_payload()), capability="not_installed")
+
+    with pytest.raises(ValueError, match="no supplied module provides"):
+        _runtime_for_case(orphan, installed_modules())

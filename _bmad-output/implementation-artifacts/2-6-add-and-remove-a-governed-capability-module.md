@@ -4,7 +4,7 @@ baseline_commit: ba8f86d7f8e6fa85e7992169064a167411080df3
 
 # Story 2.6: Add and Remove a Governed Capability Module
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -559,6 +559,49 @@ docstring.
   - [x] **Acceptance boundary:** every fence verified empty by `git diff --stat`, the ledger
         reflects reality, and the Gate A report is bound to a clean tree at this story's commit.
 
+### Review Findings
+
+*Code review 2026-08-12 against `ba8f86d..HEAD`. Three adversarial layers (Blind Hunter,
+Edge Case Hunter, Acceptance Auditor). Backend suite independently re-run and green at
+671 passed / 1 skipped / 7 deselected, confirming the Completion Notes figure.*
+
+*Three decision-needed findings were resolved by Minh on 2026-08-12; all three took option 1
+and are recorded below as patches with their chosen approach.*
+
+- [x] [Review][Patch] **[HIGH] [DECIDED] Enforce `failure_reason` provenance instead of leaving the widened type unchecked** [backend/application/contracts/agent_runtime.py:53-56] — `CapabilityFailureReasonV1 = str` collapses `failure_reason` to `str | None`, so the four-value Literal is decorative. The mandated invariant test (*any `failure_reason` outside `AgentFailureReasonV1` must appear in a granted manifest's `errors`*) does not exist, and no ledger entry was added either. `runtime.py:180` assigns `exc.code` with no manifest lookup, `CapabilityError.code` defaults to `"capability_error"` (declared in no manifest), and `test_capability_conformance.py:42` uses `<=` so an undeclared code is explicitly permitted. `contracts/agent_runtime.py:53-55` asserts "The runtime enforces that provenance at the adapter/module boundary" — a claim with no implementation. **Chosen approach:** store the granted tuple on the runtime (it is received at the constructor but not retained), check `exc.code` against the union of granted manifests' `errors` inside the existing `except CapabilityError` clause, raise `AgentRuntimeError` for an undeclared code, tighten the conformance check from `<=` to `==` (verified feasible today: scheduling 5 classes ↔ 5 codes, demonstration 3 ↔ 3), and add the per-module invariant test. The check goes inside the existing except clause, so no per-capability branch is added.
+- [x] [Review][Patch] **[DECIDED] Replace `_render_result`'s structural sniff with a declared rendering binding** [backend/agent/capability_tools.py:19-25] — the renderer unwraps any dataclass whose field set is exactly `{"text", "schema_version"}` to a bare string. That set is `DemonstrationResultV1` and nothing else; it exists to keep the frozen golden cases byte-identical, and it evades `test_core_is_capability_name_agnostic` only because it sniffs shape instead of name. It also discards the `schema_version` the manifest's `evidence_mapping` advertises, and silently downgrades any future module whose result happens to be `(text, schema_version)`. **Chosen approach:** add `model_facing_text_field: str | None = None` to `CapabilityModuleV1` (a string field name, not a callable, and on the executable binding rather than the pure-data manifest so AD-20 is unaffected); demonstration declares `"text"`, scheduling leaves it `None` and keeps `asdict`. Delete the sniff. Demonstration's output is unchanged, so the golden bytes are preserved.
+- [x] [Review][Patch] **[DECIDED] Let the handler check approval before it computes** [backend/application/capabilities/demonstration.py:93-97] — the handler must compute the full result and attach it to `CapabilityApprovalRequired` before raising; `capability_tools.py:52-55` discards it when unapproved, then the handler re-runs on resume. Harmless for a string join, but this is the reference shape every Epic 3/4 consequential module inherits: "perform the action, then ask", followed by performing it twice. **Chosen approach — minimum scope only, no durable approval state machine (that stays AD-10/Epic 4):** add `tool_call_approved: bool = False` to `AgentDepsV1` (additive with a default, so no existing call site changes), and in the renderer pass a per-call copy via `replace(ctx.deps, tool_call_approved=ctx.tool_call_approved)`. The handler then refuses before computing. This also removes the need for `approved_result` on `CapabilityApprovalRequired`, and incidentally closes the unbounded-`repeat` allocation below, since an unapproved call computes nothing. Verified shape-safe: unapproved → suspended, resume → computes → `"a|a"`, so `repeat-with-approval.json` is unaffected.
+
+- [x] [Review][Patch] **[HIGH] AC4's removal proof cannot go red** [backend/tests/test_capability_conformance.py:81-97] — `_runtime_for_case` re-filters the granted tuple by `case.capability` (`evals/report.py:139-143`), discarding the removal before it can matter. Verified by executing the same body with the full, unremoved `INSTALLED_MODULES` and both modules granted: tools registered `['scheduling_inspect']`, demonstration absent anyway. The story's sole mechanical proof of removal-by-composition passes identically whether or not removal happens.
+- [x] [Review][Patch] **[HIGH] The NFR28 four-case floor is now unenforced for every future capability** [backend/tests/test_evaluation_harness.py:313-323] — the floor check was changed from "all capabilities in `counts` except one named exemption" to a comprehension iterating only the literal `{"scheduling_inspect"}`. A Story 2.7 capability contributing one golden case passes silently. The added `assert "demonstration" not in product_capabilities_under_evaluation` compares two adjacent literals and can never fail. Task 11 required the exemption be *asserted* in terms of allowed product capabilities; net coverage went down.
+- [x] [Review][Patch] **[HIGH] A missing wrapper key kills the run instead of retrying** [backend/agent/capability_tools.py:46-49] — `Tool.from_schema`'s default validator does not enforce the `required` it advertises (verified: `validate_python({})` returns `{}`). A model emitting `{"label": "x"}` instead of `{"payload": {...}}` reaches `kwargs[request_argument]` → `KeyError` → `runtime.py:183`'s catch-all → `AgentRuntimeError`, terminating the run. The deleted pydantic-annotated `@agent.tool` gave framework-enforced, retryable validation here. Pass `args_validator`, or raise `ModelRetry` on the missing key.
+- [x] [Review][Patch] **[HIGH] The AD-15 discovery guard misses the two most likely bypasses** [backend/tests/test_capability_conformance.py:64-78] — collects `ast.Name` ids and `ast.Import` aliases only, never `ast.ImportFrom`, so `from importlib import import_module` and `from pkgutil import iter_modules` pass undetected. This is exactly Story 2.5 review finding 7, which Task 9's handler walk remembered (`:53-54`) and this guard did not. It also uses non-recursive `glob("*.py")`, leaving any future subpackage outside the guard, and has no self-redness proof.
+- [x] [Review][Patch] **The model-facing argument name is derived from a Python parameter name** [backend/agent/capability_tools.py:36-37] — `signature(handler).parameters[1]` is why demonstration's tool takes `payload` and scheduling's takes `request`. Nothing declares it in the manifest and nothing tests it, so a purely local parameter rename silently changes the tool's JSON contract and invalidates the two frozen Story 2.2 golden cases. `handler_parameters[1]` also raises `IndexError` for a handler with fewer than two parameters, and `handler: Callable[..., object]` enforces no arity.
+- [x] [Review][Patch] **`$defs` are not hoisted, producing dangling `$ref`s for nested request types** [backend/agent/capability_tools.py:38-44] — the request schema is embedded as a sub-schema while pydantic emits `$defs` at the schema root with document-root-relative `$ref`s. Today's two request types are flat so nothing is red; the first module with a nested model or enum gets a tool schema whose `$ref` resolves to nothing, failing at the provider rather than at registration.
+- [x] [Review][Patch] **`INSTALLED_MODULES` snapshots settings at import time** [backend/application/capabilities/installed.py:15] — composing the tuple at module scope calls `scheduling_inspect_manifest()` → `from settings import default_settings`, so importing `registry.py` now drags process configuration in. Verified: after an in-process env change, the fresh factory returns 37 while the granted manifest still returns 200. `manifest.budget_limit` is the enforced row cap, and `default_settings` documents "read fresh each call so env overrides apply at request time". The comment at `scheduling_inspect.py:125-127` still asserts both properties this breaks. A negative configured limit also raises `IncompleteManifestError` at import, refusing API startup.
+- [x] [Review][Patch] **`validate_manifest` hand-copies a narrowed risk vocabulary** [backend/application/contracts/capability_manifest.py:82] — hardcodes four values while `RiskClassV1`, imported in the same file and the declared type of the field, has five (`prohibited`). Rejecting `prohibited` may be right, but it is undocumented, untested, and will drift; `test_scheduling_inspect.py:216` pins the five-value vocabulary and never touches `validate_manifest`.
+- [x] [Review][Patch] **Task 9's self-redness proof does not exercise the conformance suite** [backend/tests/test_capability_conformance.py:58-61] — it only calls `validate_manifest(replace(manifest, audit_mapping=""))`, duplicating a case already covered in `test_capability_manifest.py:72`. It constructs no `CapabilityModuleV1`, and none of the four assertions unique to this suite — fixture existence on disk, `input_schema_ref`→`request_type` identity, error-code reachability, the handler import fence — has a redness proof.
+- [x] [Review][Patch] **Task 4's grant matrix does not exist; demonstration is never granted through the registry** [backend/application/capabilities/demonstration.py:109] — `demonstration_enabled` appears exactly once in the repo: its own declaration. No test puts it in a `feature_policy`, so `compose_granted_capabilities` is never observed granting the module. Every consumer constructs `demonstration_module()` directly and hands it to the runtime, bypassing the registry entirely. Task 4 required a {granted, wrong role, missing policy, site mismatch, revoked} × {scheduling, demonstration} matrix including "grants only that one".
+- [x] [Review][Patch] **The core-agnosticism guard greps one literal of the two required** [backend/tests/test_capability_conformance.py:100-107] — Task 4 required failing on `scheduling_inspect` *and* `shiftmind_demonstration`; only `demonstration` is checked. The code is in fact clean of `scheduling_inspect` today, so this is a guard gap, not a violation.
+- [x] [Review][Patch] **Task 9's per-module grant-by-absence assertion is missing** — there is no `parametrize("module", INSTALLED_MODULES)` absence test. Coverage is two hand-written one-offs (`test_capability_conformance.py:95`, demonstration only; and the pre-existing `test_scheduling_inspect.py:507-514`). Nothing asserts a model-supplied call to an ungranted name cannot execute.
+- [x] [Review][Patch] **Task 5's replacement test carries a stale name, a stale docstring, and a blanket exception** [backend/tests/test_scheduling_inspect.py:517-529] — still named `..._with_no_renderer_fails_loudly` and still documented in terms of `registered_capability_names` over-reporting, a mechanism Task 5 deleted. `pytest.raises(UnknownCapabilityError)` was weakened to `pytest.raises(Exception)`, which passes on any failure including an unrelated import error. The behaviour is correct (`PydanticSchemaGenerationError` at construction) — assert that type. This also makes Task 7's "no assertion weakened" boundary inaccurate.
+- [x] [Review][Patch] **The demonstration module's declared errors are never executed** [backend/application/capabilities/demonstration.py:22] — no `test_demonstration.py` exists and no test references `DemonstrationError`, `DemonstrationBudgetExhausted`, or `invalid_repeat`. Two of the three codes in `ERROR_CODES` have no executing test, yet the module reports conformant because `test_installed_module_conforms` only checks that classes carrying those codes exist. Task 6's boundary ("a test drives *each* installed module to raise its own declared error") is met for scheduling only.
+- [x] [Review][Patch] **Duplicate `capability_name` is not rejected at install** [backend/application/capabilities/installed.py:8-12] — each manifest is validated individually but names are never checked for uniqueness, so a collision surfaces as `UnknownCapabilityError` at every per-run runtime construction rather than once at import.
+- [x] [Review][Patch] **The demonstration module's `SCOPE_CONTROLS` reduction is declared but never asserted** [backend/application/capabilities/demonstration.py:28-32] — the honest-gap section required recording the reduction *in the asserted `SCOPE_CONTROLS` style*; the only assertion (`test_scheduling_inspect.py:267-270`) covers scheduling's copy. The conformance suite, meant to make a future module inherit every assertion, does not check `SCOPE_CONTROLS` at all. A claim that outlives its enforcement is the defect the 2.1 review fixed.
+- [x] [Review][Patch] **`evals/report.py` re-enumerates the installed set instead of importing it** [backend/evals/report.py:88] — `(scheduling_inspect_module(), demonstration_module())` is a second installation list that a third module must be added to by hand, and the NFR27 tool binding at `:98-101` is derived from *that* list, so an installed-but-unlisted module would be missing from the binding. Import `INSTALLED_MODULES`.
+- [x] [Review][Patch] **`repeat` is unbounded before approval suspends** [backend/application/capabilities/demonstration.py:93-97] — a model-supplied `repeat=10**9` builds the full joined string *before* the approval signal is raised, allocating unboundedly on an unapproved, model-controlled argument. Clamp against `manifest.budget_limit`.
+- [x] [Review][Patch] **`retryable_error_codes` is never checked against the manifest's declared `errors`** [backend/application/capabilities/module.py:16] — a module can mark a code retryable that no manifest declares, making the model-visible error vocabulary exceed the declared one. Assert the subset in `validate`/install and in the conformance suite.
+- [x] [Review][Patch] **`application/contracts/` now imports from `application/capabilities/`** [backend/application/contracts/capability_manifest.py:11] — `RiskClassV1` is pulled from `application.capabilities.vocabulary` while every capability module imports back from `contracts.capability_manifest`. It resolves only because `vocabulary.py` imports nothing; `contracts/__init__.py` now eagerly drags `application.capabilities` into any `import application.contracts.*`. One import added to `vocabulary.py` produces a circular import at package init.
+- [x] [Review][Patch] **`generate_demonstration_report` still has zero test callers** [backend/evals/report.py:79] — the exact mechanism Task 11 diagnosed ("which is exactly why nothing went red") is unchanged. Only the extracted `_runtime_for_case` gained a caller. The report generator's multi-case loop is verified by a manual run recorded in the Completion Notes, not by anything that will go red next time.
+- [x] [Review][Patch] **A module declaring `approval_policy="none"` can still suspend the run** [backend/agent/capability_tools.py:52-54] — the renderer honours `CapabilityApprovalRequired` regardless of the manifest's declared policy, making `approval_policy` decorative as an enforcement control.
+- [x] [Review][Patch] **Dead framework import** [backend/agent/runtime.py:19] — `ApprovalRequired` is imported and never used; its only consumer was the inline tool Task 8 deleted.
+- [x] [Review][Patch] **`capability_tools.py` lost its rationale docstring** [backend/agent/capability_tools.py:1] — the baseline recorded AD-2 and the framework-confinement rule ("the authority decision has already been made … never decides what may be registered"); the rewrite replaced it with one line. No spec clause mandates preserving it, but the reason this file must not decide authority is now unrecorded.
+
+- [x] [Review][Defer] **Capability timeout is reported to the model as a correctable argument error** [backend/application/capabilities/scheduling_inspect.py:222-226] — deferred, pre-existing (Story 2.5). The base `SchedulingInspectError` carries code `invalid_query`, which this story moves verbatim into `retryable_error_codes`, so a timeout overrun becomes `ModelRetry("invalid_query: …")` and the model reissues the same slow query until the run-level budget kills it.
+- [x] [Review][Defer] **`remaining_budget` is a per-run snapshot, never decremented** [backend/application/capabilities/deps.py:29] — deferred, pre-existing (Story 2.5). Both handlers' `budget_exhausted` precheck can only fire if an operator configures a non-positive limit, never on actual consumption.
+- [x] [Review][Defer] **Grant predicates are self-declared by the governed module with no allow-list** [backend/application/capabilities/module.py:17-18] — deferred, pre-existing by design (Decision 7). `required_role`/`required_feature_policy` are free strings the module writes about itself; `validate_manifest` never sees them. Owner is the same as the constant role/policy supplier entry.
+- [x] [Review][Defer] **Reserved tool-name collisions are unchecked** [backend/agent/capability_tools.py:61-68] — deferred, pre-existing shape. A `capability_name` matching a framework tool name (e.g. `final_result`) would shadow it; registration collision goes undetected.
+
 ## Dev Notes
 
 ### What this story is, and what it is not
@@ -703,6 +746,51 @@ GPT-5 Codex
 - Regression results: backend 671 passed / 1 skipped / 7 deselected in Gate A capture; frontend 55 files / 322 tests; Playwright 46 passed; lint and typecheck pass.
 - Gate A: `gate_a_passed: true`, `blocking: []`; all mandated zero-diff fences verified empty.
 
+### Review Fix Notes (2026-08-12)
+
+All 27 patch findings and all 3 resolved decision findings were applied in one pass.
+
+- **Proofs that could not fail, now able to fail.** AC4's removal proof was passing with
+  the demonstration module granted, because `_runtime_for_case` re-filtered the composed
+  set by the case's `capability` tag. Rendering now goes through a new
+  `runtime_for_modules(case, modules)` that grants exactly what it is handed, and the test
+  carries a positive control asserting the module IS present in the unremoved world.
+  The NFR28 floor no longer iterates a hardcoded one-element set: capabilities must be
+  classified as product or non-product, so an unclassified capability fails. Verified by
+  simulation — a new capability with one case is RED, and deleting scheduling cases is RED.
+- **Provenance is enforced, not asserted in a comment.** `PydanticAIAgentRuntime` retains
+  the granted tuple and rejects any capability failure whose code is absent from the granted
+  manifests' `errors`; the conformance check tightened from `<=` to `==`. The false comment
+  on `CapabilityFailureReasonV1` was replaced with what actually holds.
+- **Renderer.** Declared `request_argument` and `model_facing_text_field` on
+  `CapabilityModuleV1` replace deriving the model-facing JSON key from a Python parameter
+  name and guessing the result shape by field set. `$defs` are hoisted to the schema root,
+  a missing wrapper key raises `ModelRetry` instead of `KeyError`, and a module declaring
+  `approval_policy="none"` can no longer suspend a run.
+- **Approval before effect.** `AgentDepsV1.tool_call_approved` (additive, defaulted) is set
+  per call by the adapter, so the handler refuses before computing and executes exactly once
+  when approved. `CapabilityApprovalRequired` no longer carries a precomputed result.
+- **Layering.** `RiskClassV1` moved to `application/contracts/capability_manifest.py` and
+  `capabilities/vocabulary.py` re-exports it, so `application/contracts/**` no longer imports
+  `application/capabilities/**`. `INSTALLABLE_RISK_CLASSES` derives from the vocabulary
+  minus `prohibited` rather than hand-copying four values.
+- **Installation.** `INSTALLED_MODULES` became `installed_modules()`, resolved at call time:
+  the import-time tuple froze settings-derived manifest values for the process lifetime and
+  made `application/**` unimportable without configuration. Duplicate capability names are
+  now rejected at installation rather than at every runtime construction.
+- **Coverage added.** New `tests/test_demonstration_capability.py` drives every declared
+  demonstration error code; the conformance suite gained per-module grant-matrix, absence,
+  declared-failure, and `SCOPE_CONTROLS` assertions, plus self-redness proofs for the four
+  assertions that exist only in that suite. `generate_demonstration_report` has a test caller.
+- **Regression after fixes: backend 704 passed / 2 skipped / 7 deselected.** The second skip
+  is `test_evidence_binding.py`'s clean-tree self-skip, which runs only on a clean tree — it
+  accounts for the 1-vs-2 skip difference between this run and the Gate A capture.
+- **OUTSTANDING:** these changes are uncommitted, so the Gate A report at
+  `evidence/story-1.11/gate-a-readiness-report.json` is still bound to `02b7100` and no
+  longer describes this tree. Gate A must be re-run per `docs/GATE-A-RUNBOOK.md` §3 and the
+  evidence rebound in a separate commit (the two-commit sequence Task 12 describes) before
+  this story can move to `done`.
+
 ### File List
 
 - `_bmad-output/implementation-artifacts/2-6-add-and-remove-a-governed-capability-module.md`
@@ -712,10 +800,12 @@ GPT-5 Codex
 - `backend/agent/runtime.py`
 - `backend/api/deps.py`
 - `backend/application/capabilities/demonstration.py`
+- `backend/application/capabilities/deps.py` *(review fix: per-call `tool_call_approved`)*
 - `backend/application/capabilities/installed.py`
 - `backend/application/capabilities/module.py`
 - `backend/application/capabilities/registry.py`
 - `backend/application/capabilities/scheduling_inspect.py`
+- `backend/application/capabilities/vocabulary.py` *(review fix: re-exports the contract definition)*
 - `backend/application/contracts/__init__.py`
 - `backend/application/contracts/agent_runtime.py`
 - `backend/application/contracts/capability_manifest.py`
@@ -725,6 +815,7 @@ GPT-5 Codex
 - `backend/tests/test_agent_runtime_hidden_reasoning.py`
 - `backend/tests/test_capability_conformance.py`
 - `backend/tests/test_capability_manifest.py`
+- `backend/tests/test_demonstration_capability.py` *(review fix: new)*
 - `backend/tests/test_evaluation_harness.py`
 - `backend/tests/test_scheduling_inspect.py`
 - `evidence/story-1.11/gate-a-readiness-report.json`
@@ -735,3 +826,4 @@ GPT-5 Codex
 |---|---|
 | 2026-08-11 | Story created; seven creation decisions recorded. |
 | 2026-08-12 | Implemented governed module generalization, conformance/removal proofs, harness integration, and clean-bound Gate A evidence; moved to review. |
+| 2026-08-12 | Code review: 3 decisions resolved, 27 patches applied, 4 items deferred. Backend 704 passed / 2 skipped. Returned to in-progress pending a Gate A re-run and evidence rebind. |

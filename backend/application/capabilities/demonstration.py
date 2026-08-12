@@ -25,10 +25,19 @@ EVALUATION_FIXTURES = (
     "evals/golden/demonstration/repeat-with-approval.json",
 )
 
+# An upper bound on model-supplied repetition. Distinct from the manifest's
+# `budget_limit`, which counts tool calls, not characters: without this a
+# model-supplied `repeat=10**9` would allocate unboundedly inside the handler.
+MAX_REPEAT = 64
+
 SCOPE_CONTROLS: Mapping[str, str] = {
     "budget": "Reads the trusted remaining tool-call budget. NOT COVERED: durable budget accounting.",
     "audit": "Declares safe identifiers in the manifest. NOT COVERED: audit envelope emission (Epic 4).",
     "evidence": "Declares output mapping in the manifest. NOT COVERED: EvidenceRefV1 emission (Story 2.7).",
+    "approval": (
+        "Refuses before computing when exact-action approval is absent, so an unapproved call "
+        "performs no work. NOT COVERED: durable one-time approval state (AD-10, Epic 4)."
+    ),
 }
 
 
@@ -90,12 +99,14 @@ def demonstrate(
         raise DemonstrationBudgetExhausted("no tool-call budget remains for this run")
     if payload.repeat < 1:
         raise DemonstrationError("repeat must be at least 1")
-    if payload.repeat > 1:
-        raise DemonstrationApprovalRequired(
-            "repetition requires exact-action approval",
-            DemonstrationResultV1(text="|".join([payload.label] * payload.repeat)),
-        )
-    return DemonstrationResultV1(text=payload.label)
+    if payload.repeat > MAX_REPEAT:
+        raise DemonstrationError(f"repeat must not exceed {MAX_REPEAT}")
+    # Authority BEFORE effect: nothing is computed on an unapproved call, and
+    # the approved call executes exactly once. Raising after building the result
+    # would mean "act, then ask" -- and then act a second time on resume.
+    if payload.repeat > 1 and not deps.tool_call_approved:
+        raise DemonstrationApprovalRequired("repetition requires exact-action approval")
+    return DemonstrationResultV1(text="|".join([payload.label] * payload.repeat))
 
 
 def demonstration_module() -> CapabilityModuleV1:
@@ -107,11 +118,13 @@ def demonstration_module() -> CapabilityModuleV1:
         retryable_error_codes=frozenset({"invalid_repeat"}),
         required_role="planner",
         required_feature_policy="demonstration_enabled",
+        request_argument="payload",
+        model_facing_text_field="text",
     )
 
 
 __all__ = [
-    "CAPABILITY_NAME", "ERROR_CODES", "SCOPE_CONTROLS",
+    "CAPABILITY_NAME", "ERROR_CODES", "MAX_REPEAT", "SCOPE_CONTROLS",
     "DemonstrationApprovalRequired", "DemonstrationBudgetExhausted",
     "DemonstrationError", "DemonstrationRequestV1", "DemonstrationResultV1",
     "demonstrate", "demonstration_manifest", "demonstration_module",

@@ -8,6 +8,7 @@ from typing import get_args
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic.errors import PydanticSchemaGenerationError
 from pydantic_ai import models
 
 from agent.capability_tools import UnknownCapabilityError, render_capabilities
@@ -514,14 +515,16 @@ def test_an_ungranted_capability_is_absent_from_the_real_tool_set() -> None:
     assert "scheduling_inspect" in granted._agent._function_toolset.tools
 
 
-def test_a_granted_capability_with_no_renderer_fails_loudly() -> None:
-    """Silently skipping it is what made `registered_capability_names`
-    over-report before the 2.5 review."""
+def test_a_module_with_an_unrenderable_request_type_fails_at_registration() -> None:
+    """Every granted module is renderable by construction, so the old
+    "no renderer exists" case is gone. What remains is a module whose declared
+    request type cannot produce a JSON schema: that must fail LOUDLY when the
+    runtime is built, not silently at the first model call."""
     unknown = replace(
         scheduling_inspect_module(),
         request_type=type("UnsupportedRequest", (), {}),
     )
-    with pytest.raises(Exception):
+    with pytest.raises(PydanticSchemaGenerationError):
         PydanticAIAgentRuntime(
             model=build_model_double(_inspect_case()),
             capabilities=(unknown,),

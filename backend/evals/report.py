@@ -10,11 +10,16 @@ from typing import Iterable, Mapping, Sequence
 from uuid import UUID
 
 from agent.runtime import PydanticAIAgentRuntime
-from application.capabilities.demonstration import demonstration_module
 from application.capabilities.deps import AgentDepsV1
-from application.capabilities.scheduling_inspect import scheduling_inspect_module
+from application.capabilities.installed import installed_modules
+from application.capabilities.module import CapabilityModuleV1
 from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
 from application.ports.scenario_projection import GroupQueryKeysV1
+
+# Golden cases tag themselves with an evaluation `capability` label, which is not
+# always the registered tool name. Declared once, here, rather than branched on
+# at each construction site.
+EVAL_TAG_TO_CAPABILITY = {"demonstration": "shiftmind_demonstration"}
 from evals.cases import GoldenCase
 from evals.cases import load_cases
 from evals.doubles import build_model_double
@@ -80,12 +85,15 @@ def generate_demonstration_report(
     output_path: Path,
     *,
     repo_root: Path = REPO_ROOT,
+    allow_dirty: bool = False,
 ) -> dict[str, object]:
     """Run the committed golden cases deterministically and persist evidence."""
     golden_dir = repo_root / "backend" / "evals" / "golden"
     cases = load_cases(golden_dir)
     evaluations: list[CaseEvaluation] = []
-    granted_modules = (scheduling_inspect_module(), demonstration_module())
+    # The installed set itself, never a second hand-maintained list: a module
+    # installed but missing here would silently drop out of the NFR27 binding.
+    granted_modules = installed_modules()
     for case in cases:
         runtime = _runtime_for_case(case, granted_modules)
         outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
@@ -103,10 +111,14 @@ def generate_demonstration_report(
         },
         dataset_files=sorted(golden_dir.rglob("*.json")),
         repo_root=repo_root,
+        # Only ever True from a test writing to a temporary path: committed
+        # evidence still requires a clean tree.
+        allow_dirty=allow_dirty,
     )
 
 
-def _runtime_for_case(case: GoldenCase, modules) -> PydanticAIAgentRuntime:
+def _report_deps() -> AgentDepsV1:
+    """Trusted deps for a deterministic, offline report run."""
     identity = UUID(int=1)
 
     class ProjectionReader:
@@ -136,12 +148,7 @@ def _runtime_for_case(case: GoldenCase, modules) -> PydanticAIAgentRuntime:
         get_constraints = lambda self, *_args: self._page()
         get_overview = lambda self, *_args: self._page()
 
-    selected = tuple(
-        module for module in modules
-        if (case.capability == "demonstration" and module.manifest.capability_name == "shiftmind_demonstration")
-        or module.manifest.capability_name == case.capability
-    )
-    deps = AgentDepsV1(
+    return AgentDepsV1(
         actor_id=UUID(int=2), site_id=identity,
         membership_id=UUID(int=3), request_id=UUID(int=4),
         agent_run_id=UUID(int=5), conversation_id=UUID(int=6),
@@ -149,9 +156,38 @@ def _runtime_for_case(case: GoldenCase, modules) -> PydanticAIAgentRuntime:
         clock=lambda: datetime.now(timezone.utc), projection_reader=ProjectionReader(),
         connection=object(), remaining_budget=AgentBudgetV1(),
     )
+
+
+def runtime_for_modules(
+    case: GoldenCase, modules: tuple[CapabilityModuleV1, ...]
+) -> PydanticAIAgentRuntime:
+    """Build a runtime granting EXACTLY `modules` -- no tag filtering.
+
+    Kept separate from `_runtime_for_case` so a caller composing its own granted
+    set (a removed-world proof, for instance) gets that set rendered verbatim
+    rather than re-filtered behind its back.
+    """
     return PydanticAIAgentRuntime(
-        model=build_model_double(case), capabilities=selected, deps=deps
+        model=build_model_double(case), capabilities=modules, deps=_report_deps()
     )
+
+
+def _runtime_for_case(
+    case: GoldenCase, modules: tuple[CapabilityModuleV1, ...]
+) -> PydanticAIAgentRuntime:
+    """Grant a case exactly the module its `capability` tag names."""
+    wanted = EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
+    selected = tuple(
+        module for module in modules if module.manifest.capability_name == wanted
+    )
+    if not selected:
+        # Silently registering no tool would let the case "pass" without ever
+        # routing anything, which is the hole this generator was fixed for.
+        raise ValueError(
+            f"case {case.case_id!r} names capability {case.capability!r}, "
+            f"which no supplied module provides"
+        )
+    return runtime_for_modules(case, selected)
 
 
 def build_evaluation_report(

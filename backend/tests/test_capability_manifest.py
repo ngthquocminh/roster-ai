@@ -1,17 +1,22 @@
 """Contract tests for the canonical governed-capability manifest."""
 from dataclasses import FrozenInstanceError, fields, replace
+from typing import get_args
 
 import pytest
 
 from application import contracts
 from application.contracts.capability_manifest import (
+    INSTALLABLE_RISK_CLASSES,
     SCHEMA_VERSION,
     CapabilityError,
     CapabilityManifestV1,
     IncompleteManifestError,
+    RiskClassV1,
     validate_manifest,
 )
-from application.capabilities.installed import INSTALLED_MODULES
+from application.capabilities.installed import installed_modules
+
+INSTALLED_MODULES = installed_modules()
 
 
 def test_capability_manifest_v1_has_the_exact_ad20_shape() -> None:
@@ -90,3 +95,22 @@ def test_manifest_validation_rejects_each_incomplete_shape(changes, message) -> 
 @pytest.mark.parametrize("module", INSTALLED_MODULES)
 def test_every_installed_manifest_is_complete(module) -> None:
     validate_manifest(module.manifest)
+
+
+def test_installable_risk_classes_derive_from_the_vocabulary_minus_prohibited() -> None:
+    """The accepted set is derived, not hand-copied, so a new risk class cannot
+    be silently rejected -- and `prohibited` names a capability the system must
+    refuse to install, so it is excluded deliberately and provably."""
+    assert set(INSTALLABLE_RISK_CLASSES) == set(get_args(RiskClassV1)) - {"prohibited"}
+
+    prohibited = replace(INSTALLED_MODULES[0].manifest, risk_class="prohibited")
+    with pytest.raises(IncompleteManifestError, match="risk_class"):
+        validate_manifest(prohibited)
+
+
+def test_the_vocabulary_module_re_exports_the_contract_definition() -> None:
+    """`application/contracts/**` must not depend on `application/capabilities/**`;
+    the vocabulary's published import site now points at the contract."""
+    from application.capabilities.vocabulary import RiskClassV1 as ReExported
+
+    assert ReExported is RiskClassV1

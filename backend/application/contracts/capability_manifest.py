@@ -3,17 +3,34 @@
 The manifest is serializable contract data.  It deliberately excludes the
 handler and framework objects so durable records can retain the exact declared
 capability version without binding application contracts to an agent runtime.
+
+`RiskClassV1` is defined HERE rather than in `application/capabilities/`: the
+manifest is the contract and capabilities are its consumers, so the dependency
+must point capabilities -> contracts.  `capabilities/vocabulary.py` re-exports
+this name, which keeps the AD-5 vocabulary importable from its original home
+without `application/contracts/**` depending on `application/capabilities/**`.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
-from typing import Literal
-
-from application.capabilities.vocabulary import RiskClassV1
+from typing import Literal, get_args
 
 SCHEMA_VERSION = "1"
 
+RiskClassV1 = Literal[
+    "inspect", "draft", "compute", "consequential", "prohibited"
+]
+
 ApprovalPolicyV1 = Literal["none", "exact_action"]
+
+# Every risk class EXCEPT `prohibited`, derived from the vocabulary rather than
+# hand-copied so a new class cannot silently fail validation.  `prohibited`
+# names a capability the system must refuse to install at all, so a manifest
+# declaring it is incomplete by construction -- there is no legitimate module
+# that both declares itself prohibited and asks to be registered.
+INSTALLABLE_RISK_CLASSES = tuple(
+    value for value in get_args(RiskClassV1) if value != "prohibited"
+)
 
 
 class CapabilityError(Exception):
@@ -23,13 +40,15 @@ class CapabilityError(Exception):
 
 
 class CapabilityApprovalRequired(CapabilityError):
-    """Application signal translated to framework approval by the adapter."""
+    """Application signal translated to framework approval by the adapter.
+
+    Carries NO precomputed result on purpose.  A handler raises this BEFORE
+    doing its work, so an unapproved call performs nothing; the adapter grants
+    approval by re-invoking the handler with `AgentDepsV1.tool_call_approved`
+    set, and the handler then executes exactly once.
+    """
 
     code = "approval_required"
-
-    def __init__(self, message: str, approved_result: object) -> None:
-        super().__init__(message)
-        self.approved_result = approved_result
 
 
 class IncompleteManifestError(ValueError):
@@ -79,9 +98,9 @@ def validate_manifest(manifest: CapabilityManifestV1) -> None:
         raise IncompleteManifestError("budget_limit must be at least 1")
     if manifest.timeout_seconds <= 0:
         raise IncompleteManifestError("timeout_seconds must be positive")
-    if manifest.risk_class not in ("inspect", "draft", "compute", "consequential"):
+    if manifest.risk_class not in INSTALLABLE_RISK_CLASSES:
         raise IncompleteManifestError("risk_class is not recognized")
-    if manifest.approval_policy not in ("none", "exact_action"):
+    if manifest.approval_policy not in get_args(ApprovalPolicyV1):
         raise IncompleteManifestError("approval_policy is not recognized")
     if not manifest.errors:
         raise IncompleteManifestError("errors must not be empty")
@@ -94,7 +113,9 @@ __all__ = [
     "CapabilityApprovalRequired",
     "CapabilityError",
     "CapabilityManifestV1",
+    "INSTALLABLE_RISK_CLASSES",
     "IncompleteManifestError",
+    "RiskClassV1",
     "SCHEMA_VERSION",
     "validate_manifest",
 ]

@@ -16,7 +16,6 @@ from dataclasses import dataclass, field
 from pydantic_ai import (
     Agent,
     AgentRunError,
-    ApprovalRequired,
     CancellationToken,
     DeferredToolRequests,
     DeferredToolResults,
@@ -108,6 +107,10 @@ class PydanticAIAgentRuntime:
             capabilities=[Instrumentation(settings=instrumentation_settings)],
         )
 
+        # Retained so a capability failure can be checked against the error
+        # vocabulary its own manifest advertises (see `run_turn`).
+        self._granted = capabilities
+
         # Collected as each tool is actually registered, so this can never
         # over-report a granted-but-unrendered capability.
         self._registered_capability_names = render_capabilities(
@@ -126,6 +129,12 @@ class PydanticAIAgentRuntime:
         rendered, and absent modules cannot be called by a model-generated name.
         """
         return self._registered_capability_names
+
+    def _declared_error_codes(self) -> frozenset[str]:
+        """Every error code the granted manifests advertise for this run."""
+        return frozenset(
+            code for module in self._granted for code in module.manifest.errors
+        )
 
     def run_turn(self, request: AgentTurnRequestV1) -> AgentRunOutcomeV1:
         budget = _merge_budget(self._config.default_budget, request.budget)
@@ -175,6 +184,16 @@ class PydanticAIAgentRuntime:
             # A governed capability's own declared failure. Mapped to a stable
             # `failure_reason` drawn from the manifest's error vocabulary, so
             # the code the manifest advertises is the code callers observe.
+            #
+            # Provenance is CHECKED, not assumed: `failure_reason` admits any
+            # manifest-declared code, so without this a typo, or the
+            # `CapabilityError` base's own default code, would cross the port as
+            # a stable-looking reason no manifest ever declared.
+            if exc.code not in self._declared_error_codes():
+                raise AgentRuntimeError(
+                    f"capability failure code {exc.code!r} is not declared by any "
+                    "granted capability manifest"
+                ) from exc
             return AgentRunOutcomeV1(
                 status="failed",
                 failure_reason=exc.code,

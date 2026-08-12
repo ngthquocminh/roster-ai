@@ -50,9 +50,17 @@ AgentFailureReasonV1 = Literal[
     "cancelled",          # cancelled by something other than the deadline
 ]
 
-# A governed capability may also return one of the error codes declared in its
-# granted CapabilityManifestV1. The runtime enforces that provenance at the
-# adapter/module boundary; this owned contract deliberately remains framework-free.
+# A governed capability may also fail with one of the error codes declared in
+# its granted CapabilityManifestV1. Those codes are open at the type level --
+# each module declares its own vocabulary -- so this alias is deliberately `str`
+# and carries NO guarantee by itself.
+#
+# What makes the wider type safe is a runtime check, not the annotation:
+# `PydanticAIAgentRuntime.run_turn` rejects any capability failure whose code is
+# absent from the granted manifests' `errors`, so every value that actually
+# reaches `failure_reason` is either an AgentFailureReasonV1 member or a
+# manifest-declared code. The invariant is asserted per installed module in
+# tests/test_capability_conformance.py.
 CapabilityFailureReasonV1 = str
 
 # Owned message roles. Not PydanticAI's `kind`/`part_kind` vocabulary — this is a

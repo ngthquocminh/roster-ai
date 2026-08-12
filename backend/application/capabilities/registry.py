@@ -4,9 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from application.capabilities.installed import INSTALLED_MODULES
-from application.capabilities.module import CapabilityModuleV1
-from application.contracts.capability_manifest import validate_manifest
+from application.capabilities.installed import installed_modules
+from application.capabilities.module import CapabilityModuleV1, validate_module
 
 PLANNER_ROLE = "planner"
 POLICY_VERSION = "one-user-mvp-v1"
@@ -35,7 +34,7 @@ class CapabilityGrantContextV1:
 
 def compose_granted_capabilities(
     context: CapabilityGrantContextV1,
-    modules: tuple[CapabilityModuleV1, ...] = INSTALLED_MODULES,
+    modules: tuple[CapabilityModuleV1, ...] | None = None,
 ) -> tuple[CapabilityModuleV1, ...]:
     """Compose the granted set from trusted context only.
 
@@ -43,13 +42,18 @@ def compose_granted_capabilities(
     the result, never present-and-denied (AD-2/Decision 4): the caller registers
     only what this returns, so a capability the run was not granted is a tool
     that does not exist rather than one that refuses.
+
+    `modules` defaults to the installed set resolved at CALL time, not at import
+    time, so manifest values read from configuration stay current. Passing an
+    explicit tuple is what makes a removed-world composition a real composition.
     """
+    resolved = installed_modules() if modules is None else modules
     if (context.site_id != context.conversation_site_id
             or context.conversation_id in context.revoked_conversation_ids):
         return ()
     granted = []
-    for module in modules:
-        validate_manifest(module.manifest)
+    for module in resolved:
+        validate_module(module)
         if (context.role == module.required_role
                 and module.required_feature_policy in context.feature_policy):
             granted.append(module)
