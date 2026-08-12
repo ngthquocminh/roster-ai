@@ -1023,21 +1023,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 672,
-      "run_started": "2026-08-12T00:38:11.172602+07:00",
-      "sha256": "25c6b612744bf97e92e26494f69bb4fc01352596914b92e104c5e6b315d43874"
+      "cases": 706,
+      "run_started": "2026-08-12T13:09:48.333289+07:00",
+      "sha256": "63f00291c48b0e8a5f95397d75e4eeb89c5ad8078fea554bd3bc37fdd333d3ba"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 322,
-      "run_started": "2026-08-11T17:37:21.552Z",
-      "sha256": "ae49f4520736b04e7c0e7024fc585090999156efdef2abc1a2e06f89a0202d9e"
+      "run_started": "2026-08-12T06:12:30.083Z",
+      "sha256": "102465cef86b2e5b52b2ceb722c6ceec5286fa0225633ee22770d8de136d24e4"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 46,
-      "run_started": "2026-08-12T01:16:18.160Z",
-      "sha256": "5559ac5f810bdb0c27315749ca6a84637776bd3e3eab9bd7a48c744191ca9c52"
+      "run_started": "2026-08-12T06:12:54.103Z",
+      "sha256": "adeed72d1b8a73e21fad7eaa3b536dd6c16289a1ad51282d4f657d6558cc27af"
     }
   },
   "version_bindings": {
@@ -1051,7 +1051,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "02b7100085991f1201983c6348327133344bc43c",
+      "git_commit": "00f8ae075bcfb21499eb4811a186043201b18782",
       "working_tree_dirty": false
     },
     "image": {
