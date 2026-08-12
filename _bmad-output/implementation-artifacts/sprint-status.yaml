@@ -743,7 +743,7 @@ development_status:
   2-3-create-and-revisit-durable-conversations: done
   2-4-replay-conversation-events-live: done
   2-5-inspect-scenario-facts-through-a-governed-capability: done
-  2-6-add-and-remove-a-governed-capability-module: in-progress
+  2-6-add-and-remove-a-governed-capability-module: done
   2-7-ground-schedule-claims-in-exact-evidence: backlog
   2-8-jump-to-evidence-and-return-to-the-claim: backlog
   2-9-clarify-refuse-and-fail-safely: backlog

@@ -4,7 +4,7 @@ baseline_commit: ba8f86d7f8e6fa85e7992169064a167411080df3
 
 # Story 2.6: Add and Remove a Governed Capability Module
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -782,14 +782,15 @@ All 27 patch findings and all 3 resolved decision findings were applied in one p
   demonstration error code; the conformance suite gained per-module grant-matrix, absence,
   declared-failure, and `SCOPE_CONTROLS` assertions, plus self-redness proofs for the four
   assertions that exist only in that suite. `generate_demonstration_report` has a test caller.
-- **Regression after fixes: backend 704 passed / 2 skipped / 7 deselected.** The second skip
-  is `test_evidence_binding.py`'s clean-tree self-skip, which runs only on a clean tree — it
-  accounts for the 1-vs-2 skip difference between this run and the Gate A capture.
-- **OUTSTANDING:** these changes are uncommitted, so the Gate A report at
-  `evidence/story-1.11/gate-a-readiness-report.json` is still bound to `02b7100` and no
-  longer describes this tree. Gate A must be re-run per `docs/GATE-A-RUNBOOK.md` §3 and the
-  evidence rebound in a separate commit (the two-commit sequence Task 12 describes) before
-  this story can move to `done`.
+- **Regression after fixes, re-measured on a clean tree at `00f8ae0`: backend 705 passed /
+  1 skipped / 7 deselected** (postgres included), frontend vitest 322 tests / 0 failures,
+  Playwright 46 passed. The single skip is `test_evidence_binding.py`'s clean-tree self-skip;
+  it is also why a dirty-tree run reports 704/2 instead — the skip count tracks tree state,
+  which explains the 1-vs-2 discrepancy noted during review.
+- **Gate A re-run per `docs/GATE-A-RUNBOOK.md` §3:** `gate_a_passed: true`, `blocking: []`,
+  all eight checks passing, bound to code commit `00f8ae0` with `working_tree_dirty: false`.
+  Committed separately as `0ffdfb2`, preserving the commit-measure-generate-commit ordering.
+  All Task 12 zero-diff fences re-verified empty after the review fixes.
 
 ### File List
 
@@ -826,4 +827,5 @@ All 27 patch findings and all 3 resolved decision findings were applied in one p
 |---|---|
 | 2026-08-11 | Story created; seven creation decisions recorded. |
 | 2026-08-12 | Implemented governed module generalization, conformance/removal proofs, harness integration, and clean-bound Gate A evidence; moved to review. |
-| 2026-08-12 | Code review: 3 decisions resolved, 27 patches applied, 4 items deferred. Backend 704 passed / 2 skipped. Returned to in-progress pending a Gate A re-run and evidence rebind. |
+| 2026-08-12 | Code review: 3 decisions resolved, 27 patches applied, 4 items deferred. |
+| 2026-08-12 | Review fixes committed (`00f8ae0`); Gate A re-run and evidence rebound (`0ffdfb2`) with `gate_a_passed: true`, `blocking: []`. Story done. |
