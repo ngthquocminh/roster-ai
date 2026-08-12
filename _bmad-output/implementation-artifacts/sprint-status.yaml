@@ -43,7 +43,142 @@
 generated: 2026-07-24
 last_updated: 2026-08-12
 # (2026-08-11: story 2-4 created → ready-for-dev → implemented → review → done;
-#  story 2-5 created → ready-for-dev → done; story 2-6 created → ready-for-dev)
+#  story 2-5 created → ready-for-dev → done; story 2-6 created → ready-for-dev → done;
+#  2026-08-12: story 2-7 created → ready-for-dev)
+
+# NOTE (2026-08-12): Story 2-7 created and moved to ready-for-dev.
+#
+# IT REMAINS ONE STORY but RUNS IN THREE PHASES WITH A REPORTING CHECKPOINT between A and B (the
+# phase boundary — NOT Gate A, and not the grounding gate). Splitting
+# into two BMAD stories was considered at creation and REJECTED: it costs a correct-course run
+# against epics.md and yields two stories each satisfying a fraction of the ACs. The phases are
+# ordering plus a decision point — one sprint entry, one story file, one review, one Gate A run —
+# placed where the only clean split WOULD be, so that decision can be revisited with numbers instead
+# of guessed before any code existed. PHASE A (Tasks 1-6:
+# contracts, calculators, gate, adapter opt-in, evaluator + golden cases) satisfies AC1 IN FULL plus
+# AC3's evaluation-fixture clause and needs NO route, NO migration and NO frontend change — the
+# seam-level shape Story 2.5 proved. THE CHECKPOINT requires a commit plus five reported numbers,
+# the load-bearing one being PROOF THE PAGING TEST WAS OBSERVED RED against a single-page
+# implementation (trap 1 is why it exists; a paging test never seen to fail proves nothing). It is NOT an
+# unconditional pause — it must work in an unattended bmad-dev-auto/bmad-loop run, so the dev
+# CONTINUES into Phase B unless one of four named conditions fires (paging test never seen red;
+# Phase A over ~2x estimate; the honest gap turned out wrong in code; an AC1 behaviour needs a
+# route). PHASE B
+# (Tasks 7-13: live model, timeout code, migration, agent_response variant, endpoint, history,
+# Chat rendering) satisfies AC2 plus AC3's persistence clause. PHASE C (Task 14) is regression +
+# Gate A. If Phase A overruns, the split is free and the decision is the human's, taken WITH the
+# numbers rather than guessed before any code existed.
+#
+# TWO MECHANICAL GUARDS were added to Task 11 because two of the story's most dangerous traps
+# otherwise rested on prose alone — the same gap Story 2.6 closed with source-level assertions:
+# (a) the execute route's dependency set must NOT include `get_site_context` (holding one pooled
+# connection in an open transaction across a 60s run_sync is correct at 40ms and a pool outage at
+# 60s — Story 2.4's Decision 1 described this and never guarded it); (b) `BackgroundTasks`,
+# `asyncio.create_task` and `ThreadPoolExecutor` are banned under `backend/api/**` and
+# `backend/application/**`, with ONE documented allow-list entry for `services/run_service.py`'s
+# legacy SQLite solve pool, plus the companion still-exists-and-still-matches test so a half-fix
+# goes red.
+#
+# It is BOTH the grounding story
+# (FR7/NFR12/AR11) and THE REQUEST-PATH STORY every earlier Epic 2 story deferred to by name:
+# 2-5 Decision 1 (sprint-status.yaml:164-168), 2-6's out-of-scope table (2-6-...md:611-612), and
+# api/deps.py:98 ("Story 2.7 puts the first agent turn on a request path and finds the seam already
+# shaped"). It carries ONE migration, ONE new route, and NO new dependency.
+#
+# SEVEN DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) THE TURN EXECUTES ON A NEW EXPLICIT ENDPOINT; `POST /messages` STAYS BYTE-IDENTICAL. Executing
+#     inside the accept POST would fold a 60s-deadline turn into the acknowledgement path and make
+#     `agent_queued` — the status 2.3 required be rendered LITERALLY under UX-DR5 — a state nothing
+#     observes; AD-22 also fixes the accept-turn bundle and 2.3's contract tests pin it. Executing
+#     in a BackgroundTask is a job queue with no lease, no fencing epoch and no recovery, which
+#     AD-18 and Story 3.3 own. The `agent_queued -> agent_running -> terminal` transition is the
+#     double-submit guard; NO idempotency key (AD-8/AR8 scope keys to FR-12/16/18/19, and FR-7 is
+#     not among them — the same reading 2.3 used). MOUNT UNDER `/api/v1/conversations`:
+#     test_gate_a_mutation_audit.py:24-34 asserts every `/api/v1/scenarios` path exposes only `get`,
+#     and AR28 forbids editing it. Two short transactions, never one held across `run_sync`.
+# (2) THE MODEL NEVER SUPPLIES A NUMBER THAT RENDERS. It proposes typed claims from a closed metric
+#     vocabulary with an asserted value; application calculators recompute against the pinned
+#     immutable version and the gate COMPARES. The asserted value exists precisely so AC1's own
+#     failure clause ("unsupported numbers fail the grounding gate") is provable — without it
+#     nothing could ever be unsupported. What renders is always the calculator's value.
+# (3) STRUCTURED OUTPUT IS AN OPT-IN ADAPTER PARAMETER. VERIFIED AT CREATION by executing against
+#     the installed pydantic-ai-slim 2.27.0: today's `[str, DeferredToolRequests]` yields
+#     `output_tools == []` — `final_result` appears NOWHERE in the repo — while
+#     `[GroundedAnswerV1, DeferredToolRequests]` yields `['final_result']` and
+#     `allow_text_output is False`, putting a ToolCallPart AND a ToolReturnPart named `final_result`
+#     into all_messages(), which translate.py faithfully records. That would silently break
+#     ToolRoutingEvaluator's tool count on all 7 committed golden cases, add a bogus entry to
+#     `_tool_results`, and turn `output_text` into a dataclass repr. `answer_type=None` reproduces
+#     today exactly, so ~15 construction sites and every case stay untouched. ALSO VERIFIED: a
+#     strict agent whose model answers in prose retries once then raises UnexpectedModelBehavior,
+#     which runtime.py:175 ALREADY maps to AgentRuntimeError — the gate's outermost fail-closed
+#     ring exists for free.
+# (4) CALCULATORS MUST PAGE TO EXHAUSTION. THE QUIETEST TRAP IN THE STORY. `GroupQueryV1.limit`
+#     defaults to 50 and `scheduling_inspect_row_limit` caps at 200; a shortfall computed from one
+#     page is a WRONG NUMBER WEARING A VALID EVIDENCE LOCATOR — worse than no grounding, and no
+#     test you would write yourself goes red. Drain via `next_cursor`, assert against
+#     `matching_count`, RAISE on truncation. Consume only projection contracts, never SQL or
+#     fixture JSON (AD-4).
+# (5) `EvidenceRefV1` GAINS `schema_version` AND THE TWO GROUP VOCABULARIES GET ONE MAPPING. The
+#     spine's Normative contract minimums require `schema_version` on every contract and this is
+#     the first story to PERSIST a locator. test_evidence_ref.py:66-78 pins the exact field ORDER
+#     and is a Gate A check (gate_a_checks.py:245) — extending it to twelve fields STRENGTHENS the
+#     invariant, so AR28 is satisfied. Separately, `EvidenceGroupV1` is hyphenated planner-facing
+#     (`baseline-assignments`) while `ScenarioFactGroupV1` is short (`assignments`); one mapping,
+#     asserted exhaustive in BOTH directions, or an Evidence link names a group the planner cannot
+#     find and nothing notices.
+# (6) FAILURE IS PER CLAIM, IS A PERSISTED STATE, AND NEVER RETARGETS. Supported and failed claims
+#     coexist in one message; AR11's three causes (missing / unauthorized / version-mismatched)
+#     stay distinct. Non-retargeting needs a TEST asserting no emitted locator names a different
+#     record_id or scenario_version_id — "we don't do that" is not a control.
+# (7) `agent_response` BECOMES A REAL `ActivityItemV1` VARIANT; THE OTHER SIX STAY RESERVED.
+#     ActivityItemV1 is currently FLAT with required message_id/text. Five points change: contract,
+#     writer, reader, `ActivityItemOut`, renderer. `planner_message`'s serialized payload must stay
+#     BYTE-IDENTICAL. VERIFIED AT CREATION: test_conversations_postgres.py:519-544 uses
+#     `agent_response` as its unrenderable-variant probe and WILL go red — re-point it at a still
+#     reserved discriminant, never delete it; it is the only proof an unknown payload fails typed
+#     rather than as a 500 mid-timeline.
+#
+# ONE HONEST GAP IS RAISED RATHER THAN PAPERED OVER: AC1 says "immutable scenario/SCHEDULE/RUN
+# versions", but VERIFIED BY EXHAUSTIVE SEARCH no schedule_run, schedule_version or baseline-pointer
+# table exists, and RunSnapshotV1/ScheduleVersionV1/MetricSetV1/ComparisonV1 exist nowhere in
+# application/contracts. Required posture: `producing_run_version` stays None (do NOT repurpose
+# agent_run_id — different aggregates, AD-22); `baseline_schedule_version` IS populated from
+# ScenarioOverviewV1, which already carries it; the reduction is recorded in the SCOPE_CONTROLS
+# "NOT COVERED" form. Same posture as Story 2.6 for AuditEnvelopeV1/EvidenceSnapshot, which still
+# exist nowhere — declaration only; building either here pre-empts Epic 4.
+#
+# LEDGER: this story CLOSES deferred-work.md:5 (a capability timeout reaching the model as a
+# retryable `invalid_query` and re-driving the same slow query until the run deadline — the ledger
+# names 2.7 because this story creates the request path that can observe the loop), :102
+# (create_agent_runtime never wiring a real model), and :107 (translate.py's silent role/kind drops,
+# now reachable because history is rehydrated from the PERSISTED ACTIVITY TIMELINE rather than a
+# stored raw transcript — AD-19 stays true and Epic 4 keeps provenance). It PARTIALLY closes :115
+# (expected_evidence_refs is evaluated NOWHERE in the repo today; the new GroundingEvaluator closes
+# the grounding half, the visible-state half goes to 2.9). It RE-ANNOTATES :106 WITHOUT CLOSING IT:
+# that item asks whether a raw httpx/openai/google-genai exception can cross the seam unwrapped, and
+# it was written when NO endpoint called create_agent_runtime() — Task 7 makes a real provider client
+# reachable from a real request for the first time, so the exposure moves from hypothetical to
+# live-and-untested even though the item stays open (owner: the first story adding live-provider
+# coverage, which NFR26 keeps out of normal CI). Deliberately NOT touched at all: :6, :7, :8, and the
+# ScenarioCatalogueReader AD-1 leak at :130-147 — `ALLOWED_LEAKS` stays untouched.
+#
+# NO EVIDENCE FILE IS OWED (no AC carries a measured threshold; NFR35's four rows belong to 1.4,
+# 1.5, 2.4 and 3.5). Gate A must still be re-run per AR28 — expect the two-commit dance, the gate
+# cannot run twice in a row (:97). A migration IS safe for the six existing evidence files: Story
+# 1.11's review made the schema_version rule MONOTONE (evidence_binding.py:610-621), which is why
+# Story 2.5's objection to a migration no longer applies. Golden cases are tagged
+# `capability="scheduling_inspect"` — grounding is a second EVALUATOR over the same capability, not
+# a new one; a `grounding` tag would be unclassified and turn test_evaluation_harness.py:343-346
+# red, dragging the NFR28 floor in for no benefit. Do NOT regenerate
+# evidence/story-2.2/evaluation-harness-demonstration.json. BASELINES at 00f8ae0: backend 705
+# passed / 1 skipped / 7 deselected, frontend 55 files / 322 tests, Playwright 46, alembic zero
+# diff — re-derive them, do not trust them. `backend/services/**`, `backend/domain/**`,
+# `backend/engine/**`, `backend/llm/**`, `backend/ingest/**`, `backend/store/**`,
+# `application/ports/scenario_catalogue.py`, `adapters/postgres/scenario_catalogue.py`,
+# `test_gate_a_mutation_audit.py` and `frontend/src/features/scenario-data/**` must show a
+# ZERO-LINE diff. `backend/agent/translate.py`'s fence, held since Story 2.1, is broken here for
+# Task 11 alone.
 
 # NOTE (2026-08-11): Story 2-6 created on branch
 # `story/2-6-add-and-remove-a-governed-capability-module` and moved to ready-for-dev. It is the
@@ -744,7 +879,7 @@ development_status:
   2-4-replay-conversation-events-live: done
   2-5-inspect-scenario-facts-through-a-governed-capability: done
   2-6-add-and-remove-a-governed-capability-module: done
-  2-7-ground-schedule-claims-in-exact-evidence: backlog
+  2-7-ground-schedule-claims-in-exact-evidence: ready-for-dev
   2-8-jump-to-evidence-and-return-to-the-claim: backlog
   2-9-clarify-refuse-and-fail-safely: backlog
   epic-2-retrospective: optional
