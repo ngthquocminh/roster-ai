@@ -4,7 +4,7 @@ baseline_commit: 4e2b8126c9efd41ffc55fd9ac66d6c9b4710935f
 
 # Story 2.7: Ground Schedule Claims in Exact Evidence
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -784,30 +784,30 @@ Do the same here. A rule with no guard is a comment.
 
 ### Task 14 — Regression, fences, and Gate A (AC: 1, 2, 3)
 
-- [ ] **Re-derive baselines; do not trust the numbers below.** At `00f8ae0` (Story 2.6 post-review,
+- [x] **Re-derive baselines; do not trust the numbers below.** At `00f8ae0` (Story 2.6 post-review,
       clean tree): backend **705 passed / 1 skipped / 7 deselected** (postgres included), frontend
       **55 files / 322 tests**, Playwright **46 passed**, `alembic check` zero diff. The single skip
       is `test_evidence_binding.py`'s clean-tree self-skip, which is why a dirty-tree run reports
       704/2 instead — the skip count tracks tree state.
-- [ ] Full backend suite, postgres suite, frontend vitest, typecheck, lint, Playwright.
-- [ ] **Zero-line diff, verified per path, not assumed:** `backend/services/**`, `backend/domain/**`,
+- [x] Full backend suite, postgres suite, frontend vitest, typecheck, lint, Playwright.
+- [x] **Zero-line diff, verified per path, not assumed:** `backend/services/**`, `backend/domain/**`,
       `backend/engine/**`, `backend/llm/**`, `backend/ingest/**`, `backend/store/**`,
       `backend/application/ports/scenario_catalogue.py`,
       `backend/adapters/postgres/scenario_catalogue.py`,
       `backend/tests/test_gate_a_mutation_audit.py`, `frontend/src/features/scenario-data/**`.
       `ALLOWED_LEAKS` stays untouched — `deferred-work.md:130-147` keeps its owner.
-- [ ] **No evidence file is owed.** No AC here carries a measured threshold, and NFR35's four rows
+- [x] **No evidence file is owed.** No AC here carries a measured threshold, and NFR35's four rows
       belong to Stories 1.4, 1.5, 2.4 and 3.5 (`requirements-inventory.md:71`). Do not invent one.
-- [ ] **Gate A must still be re-run per AR28** (`docs/GATE-A-RUNBOOK.md`). Expect the two-commit
+- [x] **Gate A must still be re-run per AR28** (`docs/GATE-A-RUNBOOK.md`). Expect the two-commit
       dance Stories 2.5 and 2.6 used: the gate cannot be run twice in a row because
       `gate_a_readiness.main()` dirties `evidence/` (`deferred-work.md:97`). Commit the code, then
       measure, then generate, then commit the evidence **separately**
       (`docs/EVIDENCE-CONVENTION.md`). Confirm `gate_a_passed: true`, `blocking: []`.
-- [ ] Update `deferred-work.md`: **close** `:5` (Task 8), `:102` (Task 7), `:107` (Task 12);
+- [x] Update `deferred-work.md`: **close** `:5` (Task 8), `:102` (Task 7), `:107` (Task 12);
       **partially close** `:115` (Task 6) with the visible-state half restated and reassigned;
       **re-annotate** `:106` (Task 7) without closing it;
       leave `:6`, `:7`, `:8`, `:106`, `:130-147` open and untouched.
-- [ ] Record any new deferred item this story creates in the same file, with an owner and a revisit
+- [x] Record any new deferred item this story creates in the same file, with an owner and a revisit
       trigger.
 
 ---
@@ -996,6 +996,9 @@ priced at creation, a new dependency was not.
 - Task 13 RED: the timeline assumed every activity had `text`, no execute client existed, and SSE listened only for planner messages.
 - Task 13 GREEN/regression: frontend 56 files / 325 tests and typecheck passed; supported and failed claims, adjacent accessible evidence, queued-between-calls state, agent-response SSE, and identity dedup are covered; scenario-data has zero diff from the Phase A commit.
 - Phase B full backend regression: 761 passed, 2 skipped, 7 deselected.
+- Task 14 clean-tree baselines: backend 762 passed, 1 skipped, 7 deselected; PostgreSQL 45 passed; frontend 56 files / 325 tests; Playwright 46 passed; Alembic zero diff; lint clean apart from three pre-existing Fast Refresh warnings.
+- Task 14 deterministic evaluation: 11/11 authoritative double cases passed, 100% tool routing, explicitly demonstration-only and not release-gate eligible.
+- Gate A regeneration bound to `a3bbebf`: all eight readiness checks passed, `gate_a_passed: true`, `blocking: []`; generated report committed separately as `d346cb7`.
 
 ### Implementation Plan
 
@@ -1016,9 +1019,12 @@ priced at creation, a new dependency was not.
 - Task 11: added a conversation-scoped execute endpoint with short RLS claim/finalize transactions, runtime execution outside transactions, trusted grant/dependency composition, terminal failure handling, and mechanical detached-work guards.
 - Task 12: rehydrated a bounded owned history from persisted visible activities only; raw framework transcripts and `AgentTurnV1` persistence remain deliberately deferred to Epic 4.
 - Task 13: rendered grounded responses with structurally adjacent evidence controls, visible per-claim failures, dual-event SSE handling, and a send-then-execute client flow that exposes the queued state.
+- Task 14: re-derived every baseline, verified every zero-diff fence, regenerated Gate A from fresh clean-tree JUnit artifacts, and recorded no story-specific evidence because no measured AC requires one.
 
 ### File List
 
+- _bmad-output/implementation-artifacts/2-7-ground-schedule-claims-in-exact-evidence.md
+- _bmad-output/planning-artifacts/sprint-change-proposal-2026-08-13.md
 - backend/application/contracts/evidence_ref.py
 - backend/application/contracts/grounding.py
 - backend/application/contracts/agent_runtime.py
@@ -1081,6 +1087,8 @@ priced at creation, a new dependency was not.
 - frontend/src/hooks/useConversationStream.ts
 - frontend/src/features/chat/ActivityTimeline.tsx
 - frontend/src/features/chat/ActivityTimeline.test.tsx
+- evidence/story-1.11/gate-a-readiness-report.json
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 
@@ -1091,3 +1099,4 @@ priced at creation, a new dependency was not.
 | 2026-08-12 | Gate changed from an unconditional stop to a reporting gate with four named halt conditions, so it works in an unattended `bmad-dev-auto` / `bmad-loop` run; restated in both the story and `sprint-status.yaml` that this remains ONE BMAD story and the phases are not a split. |
 | 2026-08-13 | Decision 2 amended before implementation (correct-course, zero code written): the model now **cites** an application-computed `result_id` instead of asserting a value; calculators ship as the governed `scheduling_compute` capability; the gate **verifies citations** rather than recomputing; prose segments may carry no bare numerals. Tasks 2, 3, 4, 6 and the traps list updated to match. No AC, PRD, epic, architecture, or UX change — AD-11's `produce` branch and AR11's three named failures are satisfied as written. See `sprint-change-proposal-2026-08-13.md`. |
 | 2026-08-13 | Phase B completed: configured runtime construction, stable capability failures, column-scoped status grant, durable response activity, request-path execution, persisted-history rehydration, and grounded chat rendering. |
+| 2026-08-13 | Task 14 completed: full regression and fences passed; Gate A regenerated from clean-tree measurements and passed with no blockers; story moved to review. |
