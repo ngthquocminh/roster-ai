@@ -44,6 +44,10 @@ CONVERSATION = UUID(int=2)
 # Arguments that reach each module's handler. Test fixture data, not control
 # flow: a test may name capabilities, core code may not.
 _PROBE_ARGS = {
+    "scheduling_compute": {
+        "metric": "qualified_worker_count",
+        "arguments": {"task_id": "pick"},
+    },
     "scheduling_inspect": {"group": "overview"},
     "shiftmind_demonstration": {"label": "alpha", "repeat": 1},
 }
@@ -361,7 +365,7 @@ def test_core_is_capability_name_agnostic() -> None:
         "application/contracts/capability_manifest.py",
     )
     # Both installed names, per Task 4 -- not only the one this story added.
-    literals = ("demonstration", "scheduling_inspect")
+    literals = ("demonstration", "scheduling_compute", "scheduling_inspect")
     violations = [
         f"{path}:{literal}"
         for path in files
@@ -395,7 +399,9 @@ def test_removed_world_keeps_scheduling_executable_without_core_changes() -> Non
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
 
     assert "shiftmind_demonstration" not in runtime._agent._function_toolset.tools
-    assert runtime.registered_capability_names == ("scheduling_inspect",)
+    assert runtime.registered_capability_names == tuple(
+        module.manifest.capability_name for module in granted
+    )
     assert outcome.status == "completed"
 
 

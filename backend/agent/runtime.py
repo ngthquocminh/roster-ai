@@ -42,6 +42,7 @@ from application.ports.agent_runtime import AgentRuntimeError
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
+from application.contracts.grounding import GroundedAnswerV1
 from agent.capability_tools import render_capabilities
 
 
@@ -75,6 +76,7 @@ class PydanticAIAgentRuntime:
         tracer_provider: object | None = None,
         capabilities: tuple[CapabilityModuleV1, ...] = (),
         deps: AgentDepsV1 | None = None,
+        answer_type: type | None = None,
     ) -> None:
         """`model` is an injected framework model (a deterministic double in
         tests). `tracer_provider` lets a caller observe emitted spans; it does not
@@ -83,6 +85,7 @@ class PydanticAIAgentRuntime:
         self._config = config or AgentRuntimeConfig()
         self._model = model
         self._deps = deps
+        self._answer_type = answer_type
 
         # AD-12/AD-15: external telemetry excludes prompt, tool, workforce, and
         # schedule content BY DEFAULT. This is constructed content-disabled and
@@ -100,11 +103,21 @@ class PydanticAIAgentRuntime:
             else InstrumentationSettings(include_content=False)
         )
 
+        output_type = (
+            [str, DeferredToolRequests]
+            if answer_type is None
+            else [answer_type, DeferredToolRequests]
+        )
         self._agent: Agent = Agent(
             deps_type=AgentDepsV1 | None,
-            output_type=[str, DeferredToolRequests],
+            output_type=output_type,
             instructions=self._config.instructions,
             capabilities=[Instrumentation(settings=instrumentation_settings)],
+        )
+        output_toolset = self._agent._output_toolset
+        self._output_tool_names = frozenset(
+            definition.name
+            for definition in (() if output_toolset is None else output_toolset._tool_defs)
         )
 
         # Retained so a capability failure can be checked against the error
@@ -232,10 +245,15 @@ class PydanticAIAgentRuntime:
 
         return AgentRunOutcomeV1(
             status="completed",
-            output_text=str(result.output),
+            output_text=(str(result.output) if self._answer_type is None else None),
+            answer=(
+                result.output
+                if isinstance(result.output, GroundedAnswerV1)
+                else None
+            ),
             turn=turn,
             summary=summary,
-            tool_results=_tool_results(turn),
+            tool_results=_tool_results(turn, excluded_names=self._output_tool_names),
         )
 
 
@@ -305,7 +323,9 @@ def _to_deferred_results(request: AgentTurnRequestV1) -> DeferredToolResults | N
     return DeferredToolResults(approvals=approvals)
 
 
-def _tool_results(turn) -> tuple[AgentToolResultV1, ...]:
+def _tool_results(
+    turn, *, excluded_names: frozenset[str] = frozenset()
+) -> tuple[AgentToolResultV1, ...]:
     return tuple(
         AgentToolResultV1(
             tool_call_id=part.tool_call_id or "",
@@ -315,6 +335,7 @@ def _tool_results(turn) -> tuple[AgentToolResultV1, ...]:
         for message in turn.messages
         if message.role == "tool_result"
         for part in message.parts
+        if part.tool_name not in excluded_names
     )
 
 

@@ -16,6 +16,9 @@ from application.capabilities.vocabulary import RiskClassV1
 RiskClass = RiskClassV1
 ExpectedOutcome = Literal["allow", "refuse", "clarify"]
 VisibleState = Literal["completed", "suspended", "timed_out", "failed"]
+GroundingOracle = Literal[
+    "supported", "version_mismatch", "missing_evidence", "argument_mismatch"
+]
 
 RISK_CLASSES: tuple[RiskClass, ...] = cast(
     tuple[RiskClass, ...], get_args(RiskClassV1)
@@ -26,6 +29,9 @@ VISIBLE_STATES: tuple[VisibleState, ...] = (
     "suspended",
     "timed_out",
     "failed",
+)
+GROUNDING_ORACLES: tuple[GroundingOracle, ...] = (
+    "supported", "version_mismatch", "missing_evidence", "argument_mismatch"
 )
 
 
@@ -41,6 +47,7 @@ class ScriptedModelTurn:
     arguments: dict[str, object] | None = None
     tool_call_id: str | None = None
     response_text: str | None = None
+    response_data: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -64,6 +71,7 @@ class GoldenCase:
     expected_evidence_refs: tuple[str, ...]
     expected_visible_state: VisibleState
     expected_visible_text: str
+    expected_grounding_outcome: GroundingOracle | None = None
     scenario_fixtures: tuple[str, ...] = ()
 
 
@@ -96,6 +104,7 @@ CASE_FIELDS: frozenset[str] = frozenset(
         "expected_visible_state",
         "expected_visible_text",
         "scenario_fixtures",
+        "expected_grounding_outcome",
     }
 )
 
@@ -141,6 +150,15 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
         )
     )
 
+    grounding_oracle = _optional_string(
+        raw.get("expected_grounding_outcome"),
+        f"{label}.expected_grounding_outcome",
+    )
+    if grounding_oracle is not None and grounding_oracle not in GROUNDING_ORACLES:
+        raise ValueError(
+            f"{label}.expected_grounding_outcome {grounding_oracle!r} is invalid"
+        )
+
     return GoldenCase(
         case_id=_string(raw.get("case_id"), f"{label}.case_id"),
         case_version=_string(raw.get("case_version"), f"{label}.case_version"),
@@ -161,6 +179,7 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
             raw.get("expected_visible_text"), f"{label}.expected_visible_text",
             allow_empty=True,
         ),
+        expected_grounding_outcome=cast(GroundingOracle | None, grounding_oracle),
         scenario_fixtures=tuple(
             _string(value, f"{label}.scenario_fixtures")
             for value in _list(raw.get("scenario_fixtures"), "scenario_fixtures")
@@ -174,10 +193,17 @@ def _scripted_turn(value: object, label: str) -> ScriptedModelTurn:
     response_text = _optional_string(
         raw.get("response_text"), f"{label}.response_text", allow_empty=True
     )
-    if (tool_name is None) == (response_text is None):
+    response_data_raw = raw.get("response_data")
+    response_data = (
+        None if response_data_raw is None
+        else dict(_mapping(response_data_raw, f"{label}.response_data"))
+    )
+    if sum(value is not None for value in (tool_name, response_text, response_data)) != 1:
         raise ValueError(
-            f"{label} must declare exactly one of tool_name or response_text"
+            f"{label} must declare exactly one of tool_name, response_text, or response_data"
         )
+    if response_data is not None:
+        return ScriptedModelTurn(response_data=response_data)
     if tool_name is None:
         return ScriptedModelTurn(response_text=response_text)
     return ScriptedModelTurn(
@@ -226,6 +252,8 @@ __all__ = [
     "ExpectedOutcome",
     "ExpectedToolCall",
     "GoldenCase",
+    "GROUNDING_ORACLES",
+    "GroundingOracle",
     "RiskClass",
     "ScriptedModelTurn",
     "VisibleState",

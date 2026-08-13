@@ -1,5 +1,5 @@
 # generated: 2026-07-24
-# last_updated: 2026-08-12
+# last_updated: 2026-08-13
 # project: ShiftMind
 # project_key: NOKEY
 # tracking_system: file-system
@@ -879,7 +879,7 @@ development_status:
   2-4-replay-conversation-events-live: done
   2-5-inspect-scenario-facts-through-a-governed-capability: done
   2-6-add-and-remove-a-governed-capability-module: done
-  2-7-ground-schedule-claims-in-exact-evidence: ready-for-dev
+  2-7-ground-schedule-claims-in-exact-evidence: in-progress
   2-8-jump-to-evidence-and-return-to-the-claim: backlog
   2-9-clarify-refuse-and-fail-safely: backlog
   epic-2-retrospective: optional

@@ -11,7 +11,9 @@ message class to check a result, the seam would have failed.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -34,6 +36,7 @@ from application.contracts.agent_runtime import (
     AgentBudgetV1,
     AgentTurnRequestV1,
 )
+from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
 from application.ports.agent_runtime import AgentRuntime, AgentRuntimeError
 
 models.ALLOW_MODEL_REQUESTS = False
@@ -175,6 +178,66 @@ def test_typed_tool_arguments_arrive_validated() -> None:
     # The run completed without the malformed call ever suspending for approval.
     assert outcome.status == "completed"
     assert outcome.output_text == "recovered"
+
+
+def test_default_answer_mode_preserves_the_existing_text_outcome() -> None:
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="same text")])
+        )
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="hello"))
+
+    assert outcome.status == "completed"
+    assert outcome.output_text == "same text"
+    assert outcome.answer is None
+    assert [result.tool_name for result in outcome.tool_results] == []
+
+
+def test_opt_in_structured_answer_is_typed_and_output_tool_is_not_a_capability_result() -> None:
+    expected = GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="Grounded summary"),)
+    )
+
+    def structured(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=output_tool.name,
+                    args=json.dumps(asdict(expected)),
+                    tool_call_id="answer-1",
+                )
+            ]
+        )
+
+    runtime = _runtime(
+        model=FunctionModel(structured), answer_type=GroundedAnswerV1
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="answer structurally"))
+
+    assert outcome.answer == expected
+    assert outcome.output_text is None
+    assert outcome.tool_results == ()
+
+
+def test_strict_answer_rejects_unstructured_prose_with_preserved_cause() -> None:
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="confident prose")])
+        ),
+        answer_type=GroundedAnswerV1,
+    )
+    with pytest.raises(AgentRuntimeError) as exc_info:
+        runtime.run_turn(AgentTurnRequestV1(prompt="answer structurally"))
+    assert isinstance(exc_info.value.__cause__, UnexpectedModelBehavior)
+
+
+def test_output_tool_name_is_derived_not_hardcoded_in_the_owned_adapter() -> None:
+    source = (Path(__file__).resolve().parents[1] / "agent/runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert "final_result" not in source
 
 
 def test_owned_turn_round_trips_and_resumes() -> None:

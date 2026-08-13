@@ -26,7 +26,6 @@ def build_model_double(case: GoldenCase) -> FunctionModel:
     """Build a deterministic response sequence solely from versioned case data."""
 
     def respond(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        del info
         response_index = sum(
             isinstance(message, ModelResponse) for message in messages
         )
@@ -37,12 +36,12 @@ def build_model_double(case: GoldenCase) -> FunctionModel:
                 f"golden case {case.case_id!r} exhausted its scripted turns "
                 f"at response {response_index}"
             ) from exc
-        return _to_model_response(turn)
+        return _to_model_response(turn, info)
 
     return FunctionModel(respond)
 
 
-def _to_model_response(turn: ScriptedModelTurn) -> ModelResponse:
+def _to_model_response(turn: ScriptedModelTurn, info: AgentInfo) -> ModelResponse:
     if turn.tool_name is not None:
         if turn.arguments is None or turn.tool_call_id is None:
             raise UnexpectedModelBehavior("scripted tool call is incomplete")
@@ -56,7 +55,17 @@ def _to_model_response(turn: ScriptedModelTurn) -> ModelResponse:
             ]
         )
     if turn.response_text is None:
-        raise UnexpectedModelBehavior("scripted text response is incomplete")
+        if turn.response_data is None or not info.output_tools:
+            raise UnexpectedModelBehavior("scripted structured response is incomplete")
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=info.output_tools[0].name,
+                    args=json.dumps(turn.response_data, sort_keys=True),
+                    tool_call_id="scripted-final-answer",
+                )
+            ]
+        )
     return ModelResponse(parts=[TextPart(content=turn.response_text)])
 
 

@@ -23,7 +23,9 @@ from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.installed import installed_modules
+from application.capabilities.scheduling_compute import scheduling_compute_module
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
+from application.contracts.grounding import GroundedAnswerV1
 from application.ports.scenario_projection import GroupQueryKeysV1
 from evals.cases import (
     ExpectedToolCall,
@@ -144,11 +146,10 @@ def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
         get_constraints = lambda self, *_args: self._page()
         get_overview = lambda self, *_args: self._page()
 
-    modules = (
-        (scheduling_inspect_module(),)
-        if case.capability == "scheduling_inspect"
-        else (demonstration_module(),)
-    )
+    modules = {
+        "scheduling_compute": (scheduling_compute_module(),),
+        "scheduling_inspect": (scheduling_inspect_module(),),
+    }.get(case.capability, (demonstration_module(),))
     kwargs = {
         "capabilities": modules,
         "deps": AgentDepsV1(
@@ -160,7 +161,11 @@ def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
             remaining_budget=AgentBudgetV1(),
         ),
     }
-    runtime = PydanticAIAgentRuntime(model=build_model_double(case), **kwargs)
+    runtime = PydanticAIAgentRuntime(
+        model=build_model_double(case),
+        answer_type=(GroundedAnswerV1 if case.expected_grounding_outcome else None),
+        **kwargs,
+    )
     return runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
 
 
@@ -313,7 +318,7 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
 # six-capability MVP catalogue). Capabilities present in the dataset that are not
 # product capabilities are exempt — but the exemption is declared here with its
 # reason, never inferred from a name at the point of use.
-MVP_PRODUCT_CAPABILITIES = {"scheduling_inspect"}
+MVP_PRODUCT_CAPABILITIES = {"scheduling_compute", "scheduling_inspect"}
 NON_PRODUCT_CAPABILITIES = {
     # A harness-proof module, not a product capability: Story 2.2 seeded exactly
     # two schema cases and epics.md:1527 forbids padding a dataset to clear a
@@ -376,7 +381,21 @@ def test_readme_documents_exact_contribution_shape_and_owners() -> None:
     assert "expected tool, arguments, allow/refuse outcome, evidence IDs, and visible state" in readme
     assert "Stories 2.9, 3.10–3.12, and 4.5–4.6" in readme
     assert "Story 2.5 contributes scheduling_inspect" in readme
+    assert "Story 2.7 contributes exactly four scheduling_compute cases" in readme
     assert "secrets" in readme.lower() and "PII" in readme
+
+
+def test_grounding_cases_have_literal_result_ids_nonempty_refs_and_oracles() -> None:
+    cases = [case for case in load_cases(GOLDEN_DIR) if case.capability == "scheduling_compute"]
+    assert len(cases) == 4
+    assert {case.expected_grounding_outcome for case in cases} == {
+        "supported", "version_mismatch", "missing_evidence", "argument_mismatch"
+    }
+    assert all(case.expected_evidence_refs for case in cases)
+    for case in cases:
+        final = case.scripted_turns[-1].response_data
+        claim = next(segment for segment in final["segments"] if segment["kind"] == "claim")
+        assert len(claim["result_id"]) == 64
 
 
 def test_live_verdict_is_non_authoritative_by_data_shape() -> None:

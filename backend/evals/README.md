@@ -22,7 +22,9 @@ schema is the frozen `GoldenCase` dataclass in `cases.py`:
   `tool_call_id`, or `response_text`—never both.
 - `expected_outcome` is `allow`, `refuse`, or `clarify`;
   `expected_tool_calls` lists exact tool names and argument objects.
-- `expected_evidence_refs` is an array and may be empty.
+- `expected_evidence_refs` uses the stable
+  `scenario_version|group|record|field:start-end` form and carries no per-run
+  UUID. It is non-empty for Story 2.7 grounding cases.
 - `expected_visible_state` and `expected_visible_text` describe the owned
   `AgentRunOutcomeV1` surface. `scenario_fixtures` lists any governed scenario
   identities as `fixture_id:version`; demonstration cases use an empty array.
@@ -50,3 +52,9 @@ Story 2.5 contributes scheduling_inspect cases for demand, assignments, workers,
 constraints, and locks. They exercise tool routing and argument shape against a
 deterministic projection double; the `scenario_fixtures` tag records which
 governed fixture each question is *about*, not a fixture the harness loads.
+
+Story 2.7 contributes exactly four scheduling_compute cases: supported,
+version-mismatch, missing-evidence, and argument-mismatch. ToolRoutingEvaluator
+continues to judge routing while the second GroundingEvaluator independently
+judges exact evidence IDs and the authored grounding oracle; these four cases
+meet, but do not pad beyond, NFR28's per-capability floor.

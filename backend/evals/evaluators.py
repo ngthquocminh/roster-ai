@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from application.contracts.agent_runtime import AgentRunOutcomeV1
+from application.contracts.evidence_ref import EvidenceRefV1
 from evals.cases import GoldenCase
 
 
@@ -37,12 +38,16 @@ class ToolRoutingEvaluator:
     run_source: RunSource = "double"
 
     def evaluate(self, case: GoldenCase, outcome: AgentRunOutcomeV1) -> EvalVerdict:
+        capability_result_call_ids = {
+            result.tool_call_id for result in outcome.tool_results
+        }
         actual = tuple(
             (part.tool_name or "", _arguments(part.tool_args_json))
             for message in outcome.turn.messages
             if message.role == "assistant"
             for part in message.parts
             if part.kind == "tool_call"
+            if outcome.answer is None or part.tool_call_id in capability_result_call_ids
         )
         expected = tuple(
             (call.tool_name, call.arguments) for call in case.expected_tool_calls
@@ -102,6 +107,60 @@ class ToolRoutingEvaluator:
         )
 
 
+def stable_evidence_ref(reference: EvidenceRefV1) -> str:
+    """Stable locator oracle: no per-run activity, message, or tool-call UUID."""
+    field_or_range = reference.field or ""
+    if reference.start_minute is not None or reference.end_minute is not None:
+        field_or_range += f":{reference.start_minute}-{reference.end_minute}"
+    return "|".join(
+        (str(reference.scenario_version_id), reference.group, reference.record_id, field_or_range)
+    )
+
+
+@dataclass(frozen=True)
+class GroundingEvaluator:
+    """Judge exact evidence IDs and the authored per-case grounding oracle."""
+
+    run_source: RunSource = "double"
+
+    def evaluate(self, case: GoldenCase, outcome: AgentRunOutcomeV1) -> EvalVerdict:
+        response = outcome.grounded_response
+        if response is None or case.expected_grounding_outcome is None:
+            return EvalVerdict(False, "grounded response or oracle is missing", self.run_source)
+        actual_refs = tuple(
+            stable_evidence_ref(reference)
+            for claim in response.claims
+            for reference in claim.evidence_refs
+        )
+        expected_failure = {
+            "supported": None,
+            "version_mismatch": "version_mismatch",
+            "missing_evidence": "missing_evidence",
+            "argument_mismatch": "missing_evidence",
+        }[case.expected_grounding_outcome]
+        actual_failures = tuple(claim.failure for claim in response.claims if claim.failure)
+        if expected_failure is None:
+            if actual_failures:
+                return EvalVerdict(False, f"expected supported, got {actual_failures}", self.run_source)
+            if actual_refs != case.expected_evidence_refs:
+                return EvalVerdict(
+                    False,
+                    f"evidence differed: expected {case.expected_evidence_refs}, actual {actual_refs}",
+                    self.run_source,
+                )
+        elif actual_failures != (expected_failure,):
+            return EvalVerdict(
+                False,
+                f"oracle differed: expected {expected_failure}, actual {actual_failures}",
+                self.run_source,
+            )
+        return EvalVerdict(
+            True,
+            f"matched grounding oracle {case.expected_grounding_outcome} and exact evidence IDs",
+            self.run_source,
+        )
+
+
 def _arguments(raw: str | None) -> object:
     if raw is None:
         return None
@@ -115,4 +174,7 @@ def _stable(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
-__all__ = ["EvalVerdict", "Evaluator", "RunSource", "ToolRoutingEvaluator"]
+__all__ = [
+    "EvalVerdict", "Evaluator", "GroundingEvaluator", "RunSource",
+    "ToolRoutingEvaluator", "stable_evidence_ref",
+]

@@ -14,6 +14,7 @@ from application.contracts.scenario_projection import (
     WorkerV1,
 )
 
+SCHEMA_VERSION = "1"
 
 EvidenceGroupV1 = Literal[
     "work-areas-and-tasks",
@@ -39,6 +40,7 @@ class EvidenceRefV1:
     field: str | None = None
     start_minute: int | None = None
     end_minute: int | None = None
+    schema_version: str = SCHEMA_VERSION
 
 
 @dataclass(frozen=True)

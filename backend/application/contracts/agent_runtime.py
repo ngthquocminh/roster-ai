@@ -27,6 +27,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedResponseV1
+
 SCHEMA_VERSION = "1"
 
 # What an agent turn can be doing when control returns to the application.
@@ -213,6 +216,8 @@ class AgentRunOutcomeV1:
     failure_reason: AgentFailureReasonV1 | CapabilityFailureReasonV1 | None = None
     # Planner-visible final content. None unless status == "completed".
     output_text: str | None = None
+    answer: GroundedAnswerV1 | None = None
+    grounded_response: GroundedResponseV1 | None = None
     turn: AgentTurnV1 = field(default_factory=AgentTurnV1)
     summary: str | None = None
     approval: AgentApprovalPendingV1 | None = None

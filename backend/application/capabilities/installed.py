@@ -16,11 +16,16 @@ from __future__ import annotations
 
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.module import CapabilityModuleV1, validate_module
+from application.capabilities.scheduling_compute import scheduling_compute_module
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
 from application.contracts.capability_manifest import IncompleteManifestError
 
 # The literal installation set. One line per governed capability.
-_INSTALLED_FACTORIES = (scheduling_inspect_module, demonstration_module)
+_INSTALLED_FACTORIES = (
+    scheduling_compute_module,
+    scheduling_inspect_module,
+    demonstration_module,
+)
 
 
 def installed_modules() -> tuple[CapabilityModuleV1, ...]:

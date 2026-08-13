@@ -4,6 +4,7 @@ from dataclasses import FrozenInstanceError, fields
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from typing import get_args
 from uuid import uuid4
 
 import pytest
@@ -12,10 +13,16 @@ from application.contracts.evidence_ref import (
     AssignmentResolutionV1,
     ConstraintResolutionV1,
     DemandIntervalResolutionV1,
+    EvidenceGroupV1,
     EvidenceRefV1,
     LockResolutionV1,
     TaskResolutionV1,
     WorkerResolutionV1,
+)
+from application.grounding.evidence_groups import (
+    EVIDENCE_GROUP_BY_SCENARIO_FACT_GROUP,
+    evidence_group_for_scenario_fact_group,
+    scenario_fact_group_for_evidence_group,
 )
 from application.contracts.scenario_projection import TaskV1
 from adapters.postgres.scenario_projection import (
@@ -26,7 +33,11 @@ from adapters.postgres.scenario_projection import (
     _normalize_tasks,
     _normalize_workers,
 )
-from application.ports.scenario_projection import GroupQueryV1, ScenarioProjectionReader
+from application.ports.scenario_projection import (
+    GroupQueryV1,
+    ScenarioFactGroupV1,
+    ScenarioProjectionReader,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -75,7 +86,10 @@ def test_evidence_ref_v1_has_the_normative_frozen_transport_free_shape() -> None
         "field",
         "start_minute",
         "end_minute",
+        # AD-20's Normative contract minimums require every contract versioned.
+        "schema_version",
     ]
+    assert reference.schema_version == "1"
     assert reference.producing_run_version is None
     assert reference.baseline_schedule_version is None
     with pytest.raises(FrozenInstanceError):
@@ -86,6 +100,19 @@ def test_evidence_ref_v1_has_the_normative_frozen_transport_free_shape() -> None
     assert "fastapi" not in source_names
     assert "pydantic" not in source_names
     assert "sqlalchemy" not in source_names
+
+
+def test_evidence_and_projection_group_mapping_is_exhaustive_both_ways() -> None:
+    evidence_groups = set(get_args(EvidenceGroupV1))
+    scenario_groups = set(get_args(ScenarioFactGroupV1))
+
+    assert set(EVIDENCE_GROUP_BY_SCENARIO_FACT_GROUP) == scenario_groups - {"overview"}
+    assert set(EVIDENCE_GROUP_BY_SCENARIO_FACT_GROUP.values()) == evidence_groups
+    assert evidence_group_for_scenario_fact_group("overview") is None
+
+    for scenario_group, evidence_group in EVIDENCE_GROUP_BY_SCENARIO_FACT_GROUP.items():
+        assert evidence_group_for_scenario_fact_group(scenario_group) == evidence_group
+        assert scenario_fact_group_for_evidence_group(evidence_group) == scenario_group
 
 
 def test_resolution_contracts_are_group_specific_and_share_outcomes() -> None:

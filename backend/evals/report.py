@@ -14,6 +14,9 @@ from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import installed_modules
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
+from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.evidence_ref import DemandIntervalResolutionV1
+from application.contracts.scenario_projection import DemandIntervalV1
 from application.ports.scenario_projection import GroupQueryKeysV1
 
 # Golden cases tag themselves with an evaluation `capability` label, which is not
@@ -23,7 +26,8 @@ EVAL_TAG_TO_CAPABILITY = {"demonstration": "shiftmind_demonstration"}
 from evals.cases import GoldenCase
 from evals.cases import load_cases
 from evals.doubles import build_model_double
-from evals.evaluators import EvalVerdict, ToolRoutingEvaluator
+from evals.evaluators import EvalVerdict, GroundingEvaluator, ToolRoutingEvaluator
+from evals.grounding import ground_case_outcome
 from scripts.evidence_binding import REPO_ROOT, resolve_bindings
 
 
@@ -97,7 +101,17 @@ def generate_demonstration_report(
     for case in cases:
         runtime = _runtime_for_case(case, granted_modules)
         outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
-        verdict = ToolRoutingEvaluator(run_source="double").evaluate(case, outcome)
+        routing = ToolRoutingEvaluator(run_source="double").evaluate(case, outcome)
+        if case.expected_grounding_outcome:
+            outcome = ground_case_outcome(case, outcome, runtime._deps)
+            grounding = GroundingEvaluator(run_source="double").evaluate(case, outcome)
+            verdict = EvalVerdict(
+                passed=routing.passed and grounding.passed,
+                reason=f"routing: {routing.reason}; grounding: {grounding.reason}",
+                run_source="double",
+            )
+        else:
+            verdict = routing
         evaluations.append(CaseEvaluation(case=case, verdict=verdict))
     return write_evaluation_report(
         output_path,
@@ -148,6 +162,18 @@ def _report_deps() -> AgentDepsV1:
         get_constraints = lambda self, *_args: self._page()
         get_overview = lambda self, *_args: self._page()
 
+        def resolve_demand_interval(
+            self, _connection, scenario_id, scenario_version_id, record_id
+        ):
+            return DemandIntervalResolutionV1(
+                outcome="resolved",
+                scenario_id=scenario_id,
+                current_scenario_version_id=scenario_version_id,
+                item=DemandIntervalV1(
+                    record_id, "outbound", "pick", None, 2880, 4320, 1, "headcount"
+                ),
+            )
+
     return AgentDepsV1(
         actor_id=UUID(int=2), site_id=identity,
         membership_id=UUID(int=3), request_id=UUID(int=4),
@@ -168,7 +194,8 @@ def runtime_for_modules(
     rather than re-filtered behind its back.
     """
     return PydanticAIAgentRuntime(
-        model=build_model_double(case), capabilities=modules, deps=_report_deps()
+        model=build_model_double(case), capabilities=modules, deps=_report_deps(),
+        answer_type=(GroundedAnswerV1 if case.expected_grounding_outcome else None),
     )
 
 
