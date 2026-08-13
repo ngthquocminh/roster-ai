@@ -79,26 +79,39 @@ an already-accepted, still-queued run and persists its outcome.
   the `agent_response` event. Holding one open across a 60-second model call is precisely the
   connection-pool outage `api/deps.py:161-178` exists to prevent.
 
-#### Decision 2 — The model never supplies a number that renders. It proposes typed claims; **application calculators produce the value**, and the gate compares
+#### Decision 2 — The model never supplies a number that renders. **Application calculators produce the value through a governed tool**, and the gate verifies the citation
 
-AR11: *"Application calculators produce or verify every numerical claim … against immutable
-snapshots."* FR-7's testable consequence (`prd.md:134`): *"every displayed KPI can be recomputed
-from saved evidence, and an unsupported number fails the grounding gate."*
+AD-11 (`ARCHITECTURE-SPINE.md:154`): *"Application calculators **produce or verify** every numerical
+claim … against immutable snapshots."* Both branches are sanctioned. **This story takes the
+`produce` branch.** FR-7's testable consequence (`prd.md:134`): *"every displayed KPI can be
+recomputed from saved evidence, and an unsupported number fails the grounding gate."*
 
 The run is constructed with a **strict structured output type** — a ShiftMind-owned
-`GroundedAnswerV1` carrying prose segments and typed `ClaimProposalV1`s. Each proposal names a
-metric from a **closed vocabulary**, its arguments (task/family/window), and the value the model
-asserts. The application then:
+`GroundedAnswerV1` carrying prose segments and typed `ClaimProposalV1`s. A proposal **cites** a
+metric result the application already computed; it never asserts a value.
 
-1. recomputes the value with its own calculator against the pinned immutable scenario version;
-2. compares; and
-3. attaches the `EvidenceRefV1` locators of the records the calculation actually read.
+1. The model calls `scheduling_compute` (Task 3) with a metric from the **closed vocabulary** and
+   its arguments (task/family/window).
+2. The capability computes against the pinned immutable scenario version, **paging to exhaustion**,
+   and returns `{value, unit, evidence_refs, scenario_version_id, result_id}`.
+3. The model composes its answer; each claim carries a `result_id`.
+4. The gate **verifies the citation** — `result_id` is among this turn's tool results, the claim's
+   arguments match the originating call's, the version matches the pin — and attaches the
+   `EvidenceRefV1` locators the capability returned.
 
-**Why the model still asserts a value, when it is going to be overwritten.** Without an asserted
-value nothing could ever be "unsupported", and AC1's own failure clause — *"unsupported or
-version-mismatched numbers fail the grounding gate"* — would be unprovable by construction. The
-asserted value is the thing the gate falsifies. What renders is always the calculator's value, and
-a mismatch is a **failed claim** (Decision 6), never a silently corrected one.
+**Why the model does not assert its own value.** `scheduling_inspect` states it *"never computes a
+metric"* (`scheduling_inspect.py:4`) and returns paged rows (`GroupQueryV1.limit` default **50**,
+`scheduling_inspect_row_limit` cap **200**). A model asserting a total would routinely compute it
+from the first page — Decision 4's trap, aimed at the model instead of the calculator. Under
+assert-and-compare, mismatch becomes the **common** case, and a claim whose calculator value is
+correct, evidenced, and version-pinned would render as a *failure*. AD-11 and AR11 (`epics.md:157`)
+each name exactly three distinct failures — **missing**, **unauthorized**, **version-mismatched**.
+*"The model's discarded arithmetic disagreed"* is not among them and is not promoted into one here.
+
+**What the gate still falsifies** (AC1's failure clause remains provable): a fabricated `result_id`;
+a `result_id` whose arguments do not match the claim; a result whose `scenario_version_id` differs
+from the pin; and a claim with no citation at all. Each is a per-claim failure under Decision 6.
+Exactly one calculation happens per metric — the capability's.
 
 **VERIFIED AT CREATION against the installed pydantic-ai-slim 2.27.0** (executed, not read from
 docs):
@@ -329,15 +342,29 @@ Task 14, and to the **grounding gate** in Task 4.)*
       __future__ import annotations`, `SCHEMA_VERSION = "1"`, frozen dataclasses only, `V1` suffix
       on every type including `Literal` aliases, a docstring that explains *why the shape is this
       shape* with AD numbers, explicit `__all__`.
-- [ ] `MetricV1` — the **closed** metric vocabulary (Task 3 fixes the members).
-- [ ] `ClaimProposalV1` — what the model proposes: metric, arguments, asserted value. This is
-      **untrusted model output**; say so in the docstring, as
-      `AgentToolCallProposalV1`'s docstring already does for tool names.
+- [ ] `MetricV1` — the **closed** metric vocabulary (Task 3 fixes the members). It lives **here, in
+      contracts**, and Task 3's capability imports it: `capability_manifest.py`'s docstring fixes the
+      dependency direction as *capabilities → contracts*, and inverting it for a vocabulary would put
+      an application contract behind a capability module.
+- [ ] `ClaimProposalV1` — what the model proposes: metric, arguments, and the **`result_id` it
+      cites**. It carries **no value**: under Decision 2 the value is the capability's, and a field
+      the model could fill with a number is a field that will eventually render one.
+- [ ] `ClaimProposalV1` is **untrusted model output** — say so in the docstring, as
+      `AgentToolCallProposalV1`'s already does for tool names. The citation is the untrusted part
+      now: a `result_id` is a claim *about* provenance, not proof of it, and Task 4 is what makes it
+      proof.
 - [ ] `GroundedAnswerV1` — the strict output type: ordered segments of prose and claim proposals.
 - [ ] `GroundingFailureV1` — one of `missing_evidence`, `unauthorized_evidence`,
-      `version_mismatch`, `calculation_failed`, `unsupported_value`, as a `Literal`. AR11's three
-      causes must remain distinguishable; the last two are this story's own additions and must not
-      collapse into the first three.
+      `version_mismatch`, `calculation_failed`, `uncited_claim`, as a `Literal`. AD-11
+      (`ARCHITECTURE-SPINE.md:154`) and AR11 (`epics.md:157`) each name exactly **three** causes —
+      missing, unauthorized, version-mismatched — and those three must stay distinguishable and must
+      not be collapsed.
+- [ ] The last two are this story's own additions and are **mechanical, not evaluative**:
+      `calculation_failed` is the capability raising (truncation, budget, timeout), and
+      `uncited_claim` is a claim node with no `result_id` or a bare numeral found in a prose segment
+      (Task 4). **Neither is a judgement about whether a number "looks right"** — there is no failure
+      type meaning *"the model's arithmetic disagreed"*, because under Decision 2 the model performs
+      no arithmetic.
 - [ ] `GroundedClaimV1` — computed value, unit, `tuple[EvidenceRefV1, ...]`, and either a supported
       verdict or a `GroundingFailureV1`.
 - [ ] `GroundedResponseV1` — the persisted, planner-visible result: segments, claims, and the
@@ -346,7 +373,7 @@ Task 14, and to the **grounding gate** in Task 4.)*
       `tests/architecture/test_agent_runtime_boundaries.py:380-394` parametrizes contract modules by
       name "so a future refactor that deletes them fails loudly" — **add this module to that list**.
 
-### Task 3 — Application calculators (AC: 1)
+### Task 3 — Application calculators, exposed as the `scheduling_compute` capability (AC: 1)
 
 - [ ] New `backend/application/grounding/calculators.py` (the spine names a "grounding service" at
       `ARCHITECTURE-SPINE.md:436`; this is it).
@@ -370,21 +397,69 @@ Task 14, and to the **grounding gate** in Task 4.)*
       confidently.
 - [ ] Half-open interval overlap is the arithmetic here. Test the boundary cases explicitly:
       touching-but-not-overlapping (`a.end == b.start`), fully contained, partial on each side.
+- [ ] New `backend/application/capabilities/scheduling_compute.py`, in `scheduling_inspect.py`'s
+      exact shape: `CAPABILITY_NAME`, typed error classes with `code`, a module-level `ERROR_CODES`,
+      `SchedulingComputeRequestV1` / `SchedulingComputeResultV1`, a `SCOPE_CONTROLS` mapping, and a
+      manifest factory that imports `default_settings` **inside** the function (`application/**`
+      stays importable without process configuration).
+- [ ] The handler delegates to `application/grounding/calculators.py` — it does not compute. This
+      mirrors `scheduling_inspect`, whose handler delegates to `use_cases/read_scenario_facts.py`.
+- [ ] `risk_class="inspect"`, **not `"compute"`**. AR5's `compute` class is the solver — PRD §4.8 #3,
+      *"start bounded CP-SAT optimization"*, which Epic 3 owns. A read that derives a total changes
+      nothing and must not claim solver-grade authority. Its own `required_feature_policy`
+      (`scheduling_compute_enabled`), mirroring `scheduling_inspect_enabled`.
+- [ ] Register in `installed.py`'s `_INSTALLED_FACTORIES` — one line, per that module's *"One line
+      per governed capability"* rule. Duplicate-name and manifest validation are already enforced
+      there.
+- [ ] **`scheduling_inspect` shows a zero-line diff.** Its docstring's *"This capability never
+      computes a metric"* stays true, and Story 2.5's boundary is preserved rather than quietly
+      widened.
+- [ ] `result_id` is **derived, not random**: the RFC 8785 canonical-JSON SHA-256 hash of
+      `(metric, canonical arguments, scenario_version_id)` — the hashing convention AR20 already
+      fixes for this repository.
+- [ ] **Why this is load-bearing and not a detail:** golden cases drive a deterministic model double
+      whose turns are *authored* (`ScriptedModelTurn`). A scripted turn must be able to **cite a
+      `result_id` written into the case file**. A per-call UUID would make every grounded case
+      unwritable, and the failure would surface late — after Task 6's cases are already being
+      authored. A content hash is stable across runs, so a case file can name it. Same reasoning as
+      the existing rule that `expected_evidence_refs` must carry no per-run UUID.
+- [ ] Test: two identical calls in one turn yield the same `result_id`; calls differing only in
+      window or metric yield different ones.
+- [ ] `SchedulingComputeResultV1` is a **capability result**, not `MetricSetV1`. AR20 names
+      `MetricSet` as its own contract and the *honest gap* section assigns it to Epic 3. Do not name,
+      shape, or import this type as if it were that one.
 
 ### Task 4 — The grounding gate (AC: 1, 3)
 
 - [ ] New `backend/application/grounding/gate.py`. Input: a `GroundedAnswerV1` plus trusted deps.
       Output: a `GroundedResponseV1`.
-- [ ] For each `ClaimProposalV1`: resolve the metric from the closed vocabulary (an unknown metric
-      is `unsupported_value`, never a pass-through), recompute against the **pinned**
-      `scenario_version_id` from trusted deps — never one carried on the proposal — compare, and
-      attach locators.
-- [ ] Comparison tolerance is **declared and justified in a comment**, not discovered. These are
-      integer-minute quantities; prefer exact equality and say why. A silent float epsilon is how an
-      unsupported number passes.
-- [ ] Version mismatch: if a page or resolution returns a `scenario_version_id` other than the
-      pinned one, that claim fails `version_mismatch`. Reuse `scheduling_inspect.py:228-237`'s
-      shape — do not invent a second convention.
+- [ ] Input gains this turn's **capability results**, keyed by `result_id`. The gate performs **no
+      computation** — Decision 2 puts the single calculation in Task 3's capability, and a second one
+      here would reintroduce exactly the divergence this design removes.
+- [ ] For each `ClaimProposalV1`, in order, stopping at the first failure:
+      1. `result_id` present and found among this turn's results → else `uncited_claim` /
+         `missing_evidence`;
+      2. the claim's metric and arguments equal the originating call's → else `missing_evidence`.
+         **This check is not optional bookkeeping:** a result computed for Thursday, cited on a claim
+         about Friday, carries a real value and real locators attached to the wrong question, and
+         nothing else in the system would notice;
+      3. `result.scenario_version_id` equals the **pinned** version from trusted deps — never one
+         carried on the proposal → else `version_mismatch`;
+      4. attach the locators **the capability returned**. The gate never derives a locator; only the
+         calculator knows which records it read.
+- [ ] Version mismatch reuses `scheduling_inspect.py:228-237`'s shape — do not invent a second
+      convention.
+- [ ] **A prose segment containing a decimal digit fails the answer.** Without this the grounding
+      invariant is not actually total: the model can write *"you're short about two hours"* in prose,
+      bypass every claim node, and render an ungoverned number with no locator. No other task closes
+      this hole.
+- [ ] The rule is **blunt on purpose**: reject any Unicode decimal digit in a prose segment,
+      fail-closed. Every number the answer needs is a claim node, and the renderer draws windows and
+      identifiers from claim arguments rather than from prose.
+- [ ] If Task 6's authored cases show this is too strict to write natural prose against, the
+      relaxation must be a **declared allow-list with its own test** (and a comment naming what it
+      admits and why) — never a quiet widening of the pattern. Record it in `SCOPE_CONTROLS` either
+      way.
 - [ ] **Never retarget.** Test: a claim whose record does not resolve in the cited version fails,
       and no emitted `EvidenceRefV1` names a different `record_id` or `scenario_version_id`.
 - [ ] Test: one failed claim among three leaves the other two supported, with their evidence intact
@@ -424,14 +499,32 @@ Task 14, and to the **grounding gate** in Task 4.)*
       stays open and belongs to Story 2.9.
 - [ ] Choose and document the locator's stable string form for `expected_evidence_refs`. It must not
       contain a UUID that changes per test run, or the cases are unmaintainable.
-- [ ] Contribute golden cases with **non-empty** `expected_evidence_refs`: at least one supported
-      claim, one version-mismatch failure, one missing-evidence failure, one unsupported-value
-      (asserted-vs-computed mismatch).
-- [ ] **Tag them `capability="scheduling_inspect"`** — that is the tool they route.
-      `test_evaluation_harness.py:316` sets `MVP_PRODUCT_CAPABILITIES = {"scheduling_inspect"}` and
-      `:343-346` fails on any **unclassified** capability tag, so inventing a `grounding` tag would
-      turn that test red and drag the NFR28 floor into this story for no benefit. Grounding is a
-      second **evaluator** over the same capability, not a new capability.
+- [ ] Contribute golden cases with **non-empty** `expected_evidence_refs`, one per verified path: one
+      **supported** claim; one **version-mismatch** (result carries a version other than the pin);
+      one **missing-evidence** (the scripted turn cites a `result_id` no call produced); one
+      **argument-mismatch** (a real result cited on a claim whose window or metric differs from the
+      originating call — the failure Task 4 exists to catch, and the only one that would otherwise
+      render a true number against the wrong question).
+- [ ] Each scripted turn cites a `result_id` **written literally into the case file**. Task 3's
+      content-hash derivation is what makes that possible; if a case cannot be authored because the
+      id is unpredictable, that is Task 3 regressing, not a case-authoring problem.
+- [ ] **Tag them `capability="scheduling_compute"`** — that is the tool they route (Task 3). Add
+      `"scheduling_compute"` to `MVP_PRODUCT_CAPABILITIES` (`test_evaluation_harness.py:316`) as a
+      **product** capability: it is item #1 of PRD §4.8's catalogue (*"inspect the selected scenario,
+      including … coverage … evidence"*), so it is not exempt like `demonstration`.
+      `test_every_capability_meets_the_nfr28_four_case_floor` is **designed** to fail on an
+      unclassified capability; making it pass by classification is the intended path, not a
+      workaround.
+- [ ] NFR28's *"≥4 per allowed capability"* is met by exactly the four cases above — **at the floor,
+      deliberately**. `epics.md:1527` forbids padding. A reviewer removing one of the four takes the
+      capability below the floor, and that test is what says so.
+- [ ] The new manifest's `evaluation_fixtures` names these four case files by path, as
+      `scheduling_inspect`'s does. `generate_demonstration_report` runs every committed case and
+      raises on an uninstalled capability (`report.py:186-189`) — Task 3's `installed.py`
+      registration is what keeps it green.
+- [ ] `GroundingEvaluator` remains a **second evaluator**, now over `scheduling_compute`:
+      `ToolRoutingEvaluator` keeps judging routing, and grounding is judged separately. Story 2.2's
+      "no second evaluator until 2.7" fence is satisfied by adding exactly one.
 - [ ] **Do not pad toward NFR28's 50-case Gate B aggregate** (`epics.md:1527`). Contribute what the
       ACs need.
 - [ ] Extend `backend/evals/README.md` with a Story 2.7 paragraph in the existing style.
@@ -725,7 +818,7 @@ Do the same here. A rule with no guard is a comment.
 
 | In scope | Out of scope | Owner |
 |---|---|---|
-| Grounding gate, calculators, `EvidenceRefV1` emission (FR7, NFR12) | Evidence **jump/return**, origin keys, focus restoration, exception panels | Story 2.8 |
+| Grounding gate, calculators behind the `scheduling_compute` capability, `EvidenceRefV1` emission (FR7, NFR12) | Evidence **jump/return**, origin keys, focus restoration, exception panels | Story 2.8 |
 | First agent execution on a request path | Clarification, refusal, injection, the full failure taxonomy | Story 2.9 |
 | `agent_response` activity variant + renderer | The other six `ActivityItemV1` discriminants | 2.9 / Epic 3 / Epic 4 |
 | `UPDATE (status)` grant on `agent_run` | Durable job lease, fencing, worker recovery | Epic 3 (AD-18) |
@@ -733,10 +826,12 @@ Do the same here. A rule with no guard is a comment.
 | History rehydrated from persisted activity | Persisting `AgentTurnV1`; `AuditEnvelopeV1`; `EvidenceSnapshot` | Epic 4 (AD-12) |
 | `GroundingEvaluator` + its golden cases | A second evaluator for refusal/injection | Story 2.9 |
 
-**One migration. One new route. No new dependency.** PydanticAI 2.27.0 is already a repository lock
+**One migration. One new route. One new capability. No new dependency.** The capability is
+`scheduling_compute` (Task 3) — a governed module registered in `installed.py`, not a helper
+function; `scheduling_inspect` shows a zero-line diff. PydanticAI 2.27.0 is already a repository lock
 (`ARCHITECTURE-SPINE.md:271`, `backend/pyproject.toml`), so AR27's add-and-lock-at-the-gate ceremony
-is **not** owed. If you find yourself reaching for a new package, stop — that is a signal the design
-drifted.
+is **not** owed. If you find yourself reaching for a new *package*, stop — a new capability was
+priced at creation, a new dependency was not.
 
 ### The traps, ranked by how quietly they fail
 
@@ -745,9 +840,12 @@ drifted.
    in this story, because grounding that lies is worse than no grounding.
 2. **Two ad-hoc group-name translations** instead of Task 1's single mapping. The Evidence link
    names a group the planner cannot find in Scenario Data; nothing in the backend notices.
-3. **Letting the model's asserted number render** — passing the proposal straight through when the
-   calculator returns the same value, and forgetting the path where it does not. Test the mismatch
-   path first; it is the one AC1's failure clause is about.
+3. **Accepting a citation without checking its arguments** (Task 4, step 2). The model calls
+   `scheduling_compute` for Thursday, receives a correct value with correct locators, and cites it on
+   a claim about Friday. Every part is genuine except the pairing. The number renders, the Evidence
+   link resolves to real rows, and the planner verifies it successfully — against the wrong
+   question. This is the only remaining way for a fully grounded response to be false, which is why
+   Task 6 contributes a case for it specifically.
 4. **Retargeting on a miss.** Picking the nearest row, or the current version, when the cited one
    does not resolve. Reads as helpful, is the exact thing AR11 forbids, and is invisible unless
    asserted.
@@ -770,6 +868,12 @@ drifted.
     of re-pointing it (Task 10). It goes red for a legitimate reason, and the cheapest way to make it
     green is to remove the repo's only proof that an unknown activity payload fails typed rather
     than as a 500 mid-timeline.
+11. **Re-adding a recompute-and-compare step "to be safe."** It reads like defence in depth and is
+    the opposite: the gate holds no second value to compare against, so the only way to have one is
+    to make the model produce it — which restores the manufactured-failure mode Decision 2 removed,
+    where a correct, evidenced, version-pinned number renders as a failure because a discarded
+    arithmetic guess disagreed. AD-11 sanctions `produce` **or** `verify`; this story took
+    `produce`, and one calculation per metric is the invariant.
 
 ### Existing conventions to match, not reinvent
 
@@ -875,3 +979,4 @@ drifted.
 | 2026-08-12 | Story created; seven creation decisions recorded, one honest gap raised, framework behaviour verified against the installed 2.27.0 lock. |
 | 2026-08-12 | Restructured into Phase A / CHECKPOINT / Phase B / Phase C so the split boundary is built in rather than remembered; evaluator + golden cases moved into Phase A as Task 6; mechanical guards added for traps #7 and #8, which until now rested on prose alone; Task 12 (history rehydration) confirmed required rather than optional; `deferred-work.md:106` scheduled for in-place re-annotation because Task 7 makes it reachable. |
 | 2026-08-12 | Gate changed from an unconditional stop to a reporting gate with four named halt conditions, so it works in an unattended `bmad-dev-auto` / `bmad-loop` run; restated in both the story and `sprint-status.yaml` that this remains ONE BMAD story and the phases are not a split. |
+| 2026-08-13 | Decision 2 amended before implementation (correct-course, zero code written): the model now **cites** an application-computed `result_id` instead of asserting a value; calculators ship as the governed `scheduling_compute` capability; the gate **verifies citations** rather than recomputing; prose segments may carry no bare numerals. Tasks 2, 3, 4, 6 and the traps list updated to match. No AC, PRD, epic, architecture, or UX change — AD-11's `produce` branch and AR11's three named failures are satisfied as written. See `sprint-change-proposal-2026-08-13.md`. |
