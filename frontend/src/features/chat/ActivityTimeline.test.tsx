@@ -25,6 +25,64 @@ const second = {
   sequence: "2",
 };
 
+const agentResponse = {
+  schema_version: "1",
+  activity_id: "88888888-8888-8888-8888-888888888888",
+  activity_type: "agent_response" as const,
+  conversation_id: item.conversation_id,
+  conversation_resource_version: 3,
+  scenario_id: item.scenario_id,
+  scenario_version_id: item.scenario_version_id,
+  occurred_at: "2026-08-10T00:00:01Z",
+  sequence: "2",
+  response: {
+    schema_version: "1",
+    scenario_version_id: item.scenario_version_id,
+    segments: [
+      { schema_version: "1", kind: "prose" as const, text: "Coverage has a shortfall of" },
+      {
+        schema_version: "1",
+        kind: "claim" as const,
+        metric: "shortfall_minutes" as const,
+        arguments: { schema_version: "1" },
+        result_id: "result-1",
+        value: 45,
+        unit: "minutes" as const,
+        verdict: "supported" as const,
+        failure: null,
+        evidence_refs: [
+          {
+            schema_version: "1",
+            scenario_version_id: item.scenario_version_id,
+            checksum_algorithm: "sha256",
+            checksum_schema_version: "1",
+            checksum_digest: "a".repeat(64),
+            producing_run_version: null,
+            baseline_schedule_version: null,
+            group: "demand" as const,
+            record_id: "DEM-204",
+            field: null,
+            start_minute: 780,
+            end_minute: 1020,
+          },
+        ],
+      },
+      {
+        schema_version: "1",
+        kind: "claim" as const,
+        metric: "qualified_worker_count" as const,
+        arguments: { schema_version: "1" },
+        result_id: "result-2",
+        value: null,
+        unit: null,
+        verdict: "failed" as const,
+        failure: "version_mismatch" as const,
+        evidence_refs: [],
+      },
+    ],
+  },
+};
+
 function renderedIds() {
   return screen
     .getAllByRole("listitem")
@@ -58,5 +116,29 @@ describe("ActivityTimeline", () => {
 
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
     expect(screen.getByText(/Start a new conversation about this scenario/)).toBeInTheDocument();
+  });
+
+  it("renders supported evidence adjacent to its claim and failed claims distinctly", () => {
+    render(<ActivityTimeline items={[agentResponse]} />);
+
+    expect(screen.getByLabelText("ShiftMind response")).toBeInTheDocument();
+    const supported = screen.getByText("45 minutes").closest("[data-claim-state]");
+    const evidence = screen.getByRole("button", {
+      name: `Evidence: demand DEM-204, 780–1020 minutes, fixture ${item.scenario_version_id}`,
+    });
+    expect(supported).toContainElement(evidence);
+    expect(evidence.className).toContain("focus-visible:ring-3");
+    expect(screen.getByText("Claim unavailable: version mismatch")).toHaveAttribute(
+      "data-claim-state",
+      "failed",
+    );
+    expect(screen.queryByText(/approximately|confidence|%/i)).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toMatch(/gradient|animate-pulse|ai-glow/i);
+  });
+
+  it("deduplicates an agent response delivered by SSE and timeline refetch", () => {
+    render(<ActivityTimeline items={[agentResponse, agentResponse]} />);
+    expect(screen.getAllByLabelText("ShiftMind response")).toHaveLength(1);
+    expect(screen.getAllByText("45 minutes")).toHaveLength(1);
   });
 });

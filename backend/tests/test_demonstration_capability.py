@@ -22,12 +22,19 @@ from application.capabilities.demonstration import (
     DemonstrationApprovalRequired,
     DemonstrationBudgetExhausted,
     DemonstrationError,
+    DemonstrationInvalidRepeat,
     DemonstrationRequestV1,
     DemonstrationResultV1,
     demonstrate,
     demonstration_manifest,
     demonstration_module,
 )
+
+
+def test_generic_demonstration_failure_is_not_a_retryable_argument_code() -> None:
+    module = demonstration_module()
+    assert DemonstrationError.code not in module.retryable_error_codes
+    assert DemonstrationInvalidRepeat.code in module.retryable_error_codes
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
 from application.contracts.capability_manifest import CapabilityApprovalRequired
@@ -116,6 +123,7 @@ def test_repeat_is_bounded_before_any_allocation_happens() -> None:
 def test_every_declared_error_code_is_produced_by_a_real_class() -> None:
     produced = {
         DemonstrationError.code,
+        DemonstrationInvalidRepeat.code,
         DemonstrationApprovalRequired.code,
         DemonstrationBudgetExhausted.code,
     }

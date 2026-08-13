@@ -15,8 +15,14 @@ from starlette.responses import Response, StreamingResponse
 
 from adapters.postgres.conversation import UnsupportedActivityPayloadError
 from api.deps import (
+    AgentRuntimeFactory,
+    CapabilityComposer,
     SiteContextOpener,
     get_conversation_repository,
+    get_agent_runtime_factory,
+    get_capability_registry,
+    get_projection_reader,
+    get_settings,
     get_session,
     get_site_context,
     get_site_context_opener,
@@ -28,10 +34,12 @@ from api.schemas import (
     ConversationCreateIn,
     ConversationListOut,
     ConversationOut,
+    ExecutedTurnOut,
     MessageCreateIn,
     ProblemDetailsV1,
     TimelineOut,
 )
+from pydantic import TypeAdapter
 from application.contracts.persisted_event import PersistedEventV1
 from application.contracts.stream_cursor import (
     StreamCursorV1,
@@ -39,8 +47,21 @@ from application.contracts.stream_cursor import (
     parse_stream_cursor,
 )
 from application.ports.conversation import ConversationRepository, ConversationV1
+from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
+from application.use_cases.execute_turn import execute_turn, terminal_status, visible_response
+from application.capabilities.deps import AgentDepsV1
+from application.capabilities.installed import installed_modules
+from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_VERSION
+from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1
+from application.contracts.grounding import GroundedAnswerV1
+from application.ports.agent_runtime import AgentRuntimeError
+from application.ports.scenario_projection import ScenarioProjectionReader
+from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
+from datetime import datetime, timezone
+from uuid import uuid4
+from settings import Settings
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 _PROBLEM_RESPONSES = {401: {"model": ProblemDetailsV1}, 403: {"model": ProblemDetailsV1}, 404: {"model": ProblemDetailsV1}, 422: {"model": ProblemDetailsV1}}
@@ -98,7 +119,9 @@ def _activity(event: PersistedEventV1) -> ActivityItemOut:
     `sequence` is carried down from the envelope and rendered as a string; see
     ActivityItemOut.
     """
-    return ActivityItemOut(**event.payload.__dict__, sequence=str(event.sequence))
+    return TypeAdapter(ActivityItemOut).validate_python(
+        {**event.payload.__dict__, "sequence": str(event.sequence)}
+    )
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=ConversationOut, responses=_PROBLEM_RESPONSES)
@@ -123,7 +146,114 @@ def send_message(conversation_id: UUID, body: MessageCreateIn, connection: Conne
     value = accept_turn(repository, connection, conversation_id=conversation_id, site_id=session.site_id, actor_id=session.app_user_id, text=body.text)
     if value is None:
         raise HTTPException(status_code=404)
-    return AcceptedTurnOut(activity=_activity(value.event), resource_version=value.resource_version, agent_run_status=value.agent_run_status, sequence=str(value.event.sequence))
+    return AcceptedTurnOut(activity=_activity(value.event), resource_version=value.resource_version, agent_run_status=value.agent_run_status, sequence=str(value.event.sequence), agent_run_id=value.event.agent_run_id)
+
+
+@router.post(
+    "/{conversation_id}/agent-runs/{agent_run_id}/execute",
+    response_model=ExecutedTurnOut,
+    responses={409: {"model": ProblemDetailsV1}, **_PROBLEM_RESPONSES},
+)
+async def execute_agent_turn(
+    conversation_id: UUID,
+    agent_run_id: UUID,
+    session: ResolvedSession = Depends(get_session),
+    repository: ConversationRepository = Depends(get_conversation_repository),
+    open_site_context: SiteContextOpener = Depends(get_site_context_opener),
+    compose_capabilities: CapabilityComposer = Depends(get_capability_registry),
+    projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
+    runtime_factory: AgentRuntimeFactory = Depends(get_agent_runtime_factory),
+    settings: Settings = Depends(get_settings),
+) -> ExecutedTurnOut | Response:
+    """Claim, execute, and finalize without holding a transaction over the model."""
+
+    def _claim():
+        with open_site_context(session.site_id) as connection:
+            return repository.claim_queued_run(
+                connection,
+                conversation_id=conversation_id,
+                agent_run_id=agent_run_id,
+            )
+
+    try:
+        claimed = await run_in_threadpool(_claim)
+    except AgentRunNotQueuedError:
+        return problem_response(
+            status=409,
+            code="agent_run_not_queued",
+            title="Agent run not queued",
+            detail="The agent run cannot be executed from its current state.",
+        )
+    if claimed is None:
+        raise HTTPException(status_code=404)
+
+    feature_policy = frozenset(
+        module.required_feature_policy for module in installed_modules()
+    )
+    granted = compose_capabilities(
+        CapabilityGrantContextV1(
+            role=PLANNER_ROLE,
+            site_id=claimed.site_id,
+            feature_policy=feature_policy,
+            conversation_id=claimed.conversation_id,
+            conversation_site_id=claimed.site_id,
+        )
+    )
+    raw_results: list[object] = []
+    deps = AgentDepsV1(
+        actor_id=claimed.actor_id,
+        site_id=claimed.site_id,
+        membership_id=claimed.membership_id,
+        request_id=uuid4(),
+        agent_run_id=claimed.agent_run_id,
+        conversation_id=claimed.conversation_id,
+        scenario_id=claimed.scenario_id,
+        scenario_version_id=claimed.scenario_version_id,
+        policy_version=POLICY_VERSION,
+        clock=lambda: datetime.now(timezone.utc),
+        projection_reader=ShortTransactionScenarioProjectionReader(
+            projection_reader, open_site_context, claimed.site_id
+        ),
+        connection=None,
+        remaining_budget=AgentBudgetV1(),
+        tool_result_sink=raw_results.append,
+    )
+    runtime = runtime_factory(
+        settings=settings,
+        capabilities=granted,
+        deps=deps,
+        answer_type=GroundedAnswerV1,
+    )
+    try:
+        outcome = await run_in_threadpool(
+            execute_turn,
+            runtime,
+            deps,
+            prompt=claimed.prompt,
+            calculation_results=raw_results,
+            history=claimed.history,
+        )
+    except AgentRuntimeError:
+        outcome = AgentRunOutcomeV1(status="failed")
+
+    def _finish():
+        with open_site_context(session.site_id) as connection:
+            return repository.finish_agent_run(
+                connection,
+                claimed=claimed,
+                status=terminal_status(outcome),
+                response=visible_response(outcome, deps),
+                request_id=deps.request_id,
+            )
+
+    completed = await run_in_threadpool(_finish)
+    return ExecutedTurnOut(
+        activity=_activity(completed.event),
+        resource_version=completed.resource_version,
+        agent_run_status=completed.agent_run_status,
+        sequence=str(completed.event.sequence),
+        agent_run_id=completed.event.agent_run_id,
+    )
 
 
 @router.get("/{conversation_id}/timeline", response_model=TimelineOut, responses=_PROBLEM_RESPONSES)

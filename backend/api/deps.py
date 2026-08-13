@@ -32,6 +32,7 @@ from application.ports.session import IdentitySessionStore, ResolvedSession
 from engine.base import SchedulerEngine, create_engine
 from llm.base import LLMProvider, create_provider
 from settings import Settings, default_settings
+from agent.runtime import create_agent_runtime
 from store import db
 
 
@@ -88,6 +89,7 @@ def get_projection_reader() -> ScenarioProjectionReader:
 CapabilityComposer = Callable[
     [CapabilityGrantContextV1], tuple[CapabilityModuleV1, ...]
 ]
+AgentRuntimeFactory = Callable[..., object]
 
 
 def get_capability_registry() -> CapabilityComposer:
@@ -99,6 +101,11 @@ def get_capability_registry() -> CapabilityComposer:
     agent turn on a request path and finds the seam already shaped.
     """
     return compose_granted_capabilities
+
+
+def get_agent_runtime_factory() -> AgentRuntimeFactory:
+    """Depends-overridable constructor for one fully scoped agent runtime."""
+    return create_agent_runtime
 
 
 _conversation_repository: ConversationRepository = PostgresConversationRepository()

@@ -546,6 +546,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{conversation_id}/agent-runs/{agent_run_id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute Agent Turn
+         * @description Claim, execute, and finalize without holding a transaction over the model.
+         */
+        post: operations["execute_agent_turn_api_v1_conversations__conversation_id__agent_runs__agent_run_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}/timeline": {
         parameters: {
             query?: never;
@@ -594,16 +614,22 @@ export interface components {
     schemas: {
         /** AcceptedTurnOut */
         AcceptedTurnOut: {
-            activity: components["schemas"]["ActivityItemOut"];
+            /** Activity */
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"];
             /** Resource Version */
             resource_version: number;
             /** Agent Run Status */
             agent_run_status: string;
             /** Sequence */
             sequence: string;
+            /**
+             * Agent Run Id
+             * Format: uuid
+             */
+            agent_run_id: string;
         };
-        /** ActivityItemOut */
-        ActivityItemOut: {
+        /** AgentResponseActivityOut */
+        AgentResponseActivityOut: {
             /** Schema Version */
             schema_version: string;
             /**
@@ -611,11 +637,6 @@ export interface components {
              * Format: uuid
              */
             activity_id: string;
-            /**
-             * Activity Type
-             * @enum {string}
-             */
-            activity_type: "planner_message" | "agent_response" | "clarification" | "draft" | "run_progress" | "comparison" | "approval_request" | "terminal_outcome";
             /**
              * Conversation Id
              * Format: uuid
@@ -638,15 +659,14 @@ export interface components {
              * Format: date-time
              */
             occurred_at: string;
-            /**
-             * Message Id
-             * Format: uuid
-             */
-            message_id: string;
-            /** Text */
-            text: string;
             /** Sequence */
             sequence: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            activity_type: "agent_response";
+            response: components["schemas"]["GroundedResponseV1"];
         };
         /** AppliedConstraint */
         AppliedConstraint: {
@@ -743,6 +763,25 @@ export interface components {
             start_minute: number;
             /** End Minute */
             end_minute: number;
+        };
+        /**
+         * ClaimArgumentsV1
+         * @description Canonical metric arguments shared by a call and the claim citing it.
+         */
+        ClaimArgumentsV1: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+            /** Task Id */
+            task_id?: string | null;
+            /** Family */
+            family?: ("outbound" | "inbound" | "indirect") | null;
+            /** Start Minute */
+            start_minute?: number | null;
+            /** End Minute */
+            end_minute?: number | null;
         };
         /** ConstraintPageOut */
         ConstraintPageOut: {
@@ -912,6 +951,58 @@ export interface components {
             /** Matching Count */
             matching_count: number;
         };
+        /** EvidenceRefV1 */
+        EvidenceRefV1: {
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /** Checksum Algorithm */
+            checksum_algorithm: string;
+            /** Checksum Schema Version */
+            checksum_schema_version: string;
+            /** Checksum Digest */
+            checksum_digest: string;
+            /** Producing Run Version */
+            producing_run_version: string | null;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
+            /**
+             * Group
+             * @enum {string}
+             */
+            group: "work-areas-and-tasks" | "workers" | "demand" | "baseline-assignments" | "locks" | "constraints-and-objectives";
+            /** Record Id */
+            record_id: string;
+            /** Field */
+            field?: string | null;
+            /** Start Minute */
+            start_minute?: number | null;
+            /** End Minute */
+            end_minute?: number | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
+        /** ExecutedTurnOut */
+        ExecutedTurnOut: {
+            /** Activity */
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"];
+            /** Resource Version */
+            resource_version: number;
+            /** Agent Run Status */
+            agent_run_status: string;
+            /** Sequence */
+            sequence: string;
+            /**
+             * Agent Run Id
+             * Format: uuid
+             */
+            agent_run_id: string;
+        };
         /** FixtureCatalogueEntryOut */
         FixtureCatalogueEntryOut: {
             /**
@@ -951,6 +1042,97 @@ export interface components {
              * Format: uuid
              */
             site_id: string;
+        };
+        /**
+         * GroundedClaimV1
+         * @description A supported computed value or one inspectable per-claim failure.
+         */
+        GroundedClaimV1: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+            /**
+             * Kind
+             * @default claim
+             * @constant
+             */
+            kind: "claim";
+            /**
+             * Metric
+             * @default required_demand_minutes
+             * @enum {string}
+             */
+            metric: "required_demand_minutes" | "staffed_minutes" | "shortfall_minutes" | "qualified_worker_count";
+            /**
+             * @default {
+             *       "schema_version": "1"
+             *     }
+             */
+            arguments: components["schemas"]["ClaimArgumentsV1"];
+            /**
+             * Result Id
+             * @default
+             */
+            result_id: string;
+            /** Value */
+            value?: number | null;
+            /** Unit */
+            unit?: ("minutes" | "workers") | null;
+            /**
+             * Evidence Refs
+             * @default []
+             */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /**
+             * Verdict
+             * @default failed
+             * @enum {string}
+             */
+            verdict: "supported" | "failed";
+            /** Failure */
+            failure?: ("missing_evidence" | "unauthorized_evidence" | "version_mismatch" | "calculation_failed" | "uncited_claim") | null;
+        };
+        /**
+         * GroundedProseSegmentV1
+         * @description Non-numeric prose in its original answer position.
+         */
+        GroundedProseSegmentV1: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+            /**
+             * Kind
+             * @default prose
+             * @constant
+             */
+            kind: "prose";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+        };
+        /**
+         * GroundedResponseV1
+         * @description Persistable planner-visible response pinned to one immutable version.
+         */
+        GroundedResponseV1: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+            /** Scenario Version Id */
+            scenario_version_id?: string | null;
+            /**
+             * Segments
+             * @default []
+             */
+            segments: (components["schemas"]["GroundedProseSegmentV1"] | components["schemas"]["GroundedClaimV1"])[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1036,6 +1218,52 @@ export interface components {
             };
             /** Parsed Constraint */
             parsed_constraint?: string | null;
+        };
+        /** PlannerMessageActivityOut */
+        PlannerMessageActivityOut: {
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Conversation Resource Version */
+            conversation_resource_version: number;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            activity_type: "planner_message";
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+            /** Text */
+            text: string;
         };
         /** ProblemDetailsV1 */
         ProblemDetailsV1: {
@@ -1273,7 +1501,7 @@ export interface components {
             /** Latest Agent Run Status */
             latest_agent_run_status: string | null;
             /** Items */
-            items: components["schemas"]["ActivityItemOut"][];
+            items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"])[];
             /** Limit */
             limit: number;
             /** Has More */
@@ -2868,6 +3096,74 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    execute_agent_turn_api_v1_conversations__conversation_id__agent_runs__agent_run_id__execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                agent_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutedTurnOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

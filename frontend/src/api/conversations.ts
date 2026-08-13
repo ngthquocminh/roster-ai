@@ -4,11 +4,13 @@ import { API_BASE_URL } from "../lib/env";
 
 type Root = paths["/api/v1/conversations"];
 type Message = paths["/api/v1/conversations/{conversation_id}/messages"];
+type Execute = paths["/api/v1/conversations/{conversation_id}/agent-runs/{agent_run_id}/execute"];
 export type ConversationPage = Root["get"]["responses"][200]["content"]["application/json"];
 export type Conversation = ConversationPage["items"][number];
 export type ConversationCreate = Root["post"]["requestBody"]["content"]["application/json"];
 export type MessageCreate = Message["post"]["requestBody"]["content"]["application/json"];
 export type AcceptedTurn = Message["post"]["responses"][201]["content"]["application/json"];
+export type ExecutedTurn = Execute["post"]["responses"][200]["content"]["application/json"];
 export type Timeline = paths["/api/v1/conversations/{conversation_id}/timeline"]["get"]["responses"][200]["content"]["application/json"];
 
 export async function listConversations(scenarioId: string): Promise<ConversationPage> {
@@ -28,6 +30,14 @@ export async function getConversationTimeline(conversationId: string): Promise<T
 }
 export async function sendMessage(conversationId: string, body: MessageCreate): Promise<AcceptedTurn> {
   const { data, error, response } = await client.POST("/api/v1/conversations/{conversation_id}/messages", { params: { path: { conversation_id: conversationId } }, body });
+  if (error) throw { ...error, status: response.status };
+  return data;
+}
+export async function executeTurn(conversationId: string, agentRunId: string): Promise<ExecutedTurn> {
+  const { data, error, response } = await client.POST(
+    "/api/v1/conversations/{conversation_id}/agent-runs/{agent_run_id}/execute",
+    { params: { path: { conversation_id: conversationId, agent_run_id: agentRunId } } },
+  );
   if (error) throw { ...error, status: response.status };
   return data;
 }

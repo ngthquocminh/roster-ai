@@ -112,3 +112,16 @@ def test_first_revision_enforces_rls_and_runtime_immutability() -> None:
     assert "GRANT UPDATE" not in migration
     assert "GRANT DELETE" not in migration
     assert "REVOKE UPDATE, DELETE ON scenario_version FROM shiftmind_runtime" in migration
+
+
+def test_agent_run_status_grant_revision_is_column_scoped_and_reversible() -> None:
+    migration = (
+        BACKEND_ROOT
+        / "migrations"
+        / "versions"
+        / "c7d6e5f4a3b2_grant_agent_run_status_update.py"
+    ).read_text(encoding="utf-8")
+    assert 'down_revision: str = "a4f92d7c8e31"' in migration
+    assert "GRANT UPDATE (status) ON agent_run TO shiftmind_runtime" in migration
+    assert "REVOKE UPDATE (status) ON agent_run FROM shiftmind_runtime" in migration
+    assert "ADD COLUMN" not in migration.upper()

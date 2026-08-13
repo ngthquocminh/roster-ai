@@ -31,6 +31,9 @@ class AgentDepsV1:
     # by the adapter so a handler can check authority BEFORE acting without
     # importing a framework type. Defaults to False: unapproved unless proven.
     tool_call_approved: bool = False
+    # Captures trusted raw handler results for the post-run grounding gate.
+    # The model sees only the separately rendered representation.
+    tool_result_sink: Callable[[object], None] | None = None
     schema_version: str = SCHEMA_VERSION
 
 

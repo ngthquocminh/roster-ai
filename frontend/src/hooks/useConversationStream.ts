@@ -28,6 +28,7 @@ type CursorStorage = Pick<Storage, "getItem" | "setItem">;
  * these frames are ever seen. It is also the only event type that exists: no
  * agent runs, nothing leaves `agent_queued`. */
 export const PLANNER_MESSAGE_ACCEPTED = "planner_message_accepted";
+export const AGENT_RESPONSE = "agent_response";
 
 /** Consecutive failed connections before giving up on the stream. Bounded so a
  * permanently rejected cursor cannot retry-loop forever. */
@@ -228,6 +229,7 @@ export function useConversationStream(
       );
       resetIdleTimer();
       source.addEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
+      source.addEventListener(AGENT_RESPONSE, onFrame);
       source.addEventListener("open", onOpen);
       source.addEventListener("error", onError);
     };
@@ -254,6 +256,7 @@ export function useConversationStream(
       clearTimeout(connectTimer);
       clearTimeout(idleTimer);
       source?.removeEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
+      source?.removeEventListener(AGENT_RESPONSE, onFrame);
       source?.removeEventListener("open", onOpen);
       source?.removeEventListener("error", onError);
       source?.close();

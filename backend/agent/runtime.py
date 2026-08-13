@@ -28,6 +28,7 @@ from pydantic_ai import (
     UsageLimits,
 )
 from pydantic_ai.capabilities import Instrumentation
+from pydantic_ai.models import infer_model
 
 from agent.translate import summarize, to_framework_messages, to_owned_turn
 from application.contracts.agent_runtime import (
@@ -83,7 +84,7 @@ class PydanticAIAgentRuntime:
         change what is emitted.
         """
         self._config = config or AgentRuntimeConfig()
-        self._model = model
+        self._model = model if model is not None else _configured_model(self._config)
         self._deps = deps
         self._answer_type = answer_type
 
@@ -339,8 +340,36 @@ def _tool_results(
     )
 
 
+def _configured_model(config: AgentRuntimeConfig) -> object:
+    """Resolve the owned model setting without consulting another LLM seam."""
+    if config.model == "test":
+        return infer_model("test")
+    provider_name, separator, model_name = config.model.partition(":")
+    if not separator or not model_name:
+        raise ValueError(
+            "agent runtime model must be 'test' or '<provider>:<model-name>'"
+        )
+    if provider_name == "openrouter":
+        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+        return OpenAIChatModel(
+            model_name,
+            provider=OpenRouterProvider(api_key=config.api_key),
+        )
+    if provider_name == "google":
+        from pydantic_ai.models.google import GoogleModel
+        from pydantic_ai.providers.google import GoogleProvider
+
+        return GoogleModel(model_name, provider=GoogleProvider(api_key=config.api_key))
+    return infer_model(config.model)
+
+
 def create_agent_runtime(
-    *, settings=None, model: object | None = None
+    *, settings=None, model: object | None = None,
+    capabilities: tuple[CapabilityModuleV1, ...] = (),
+    deps: AgentDepsV1 | None = None,
+    answer_type: type | None = None,
 ) -> PydanticAIAgentRuntime:
     """Factory mirroring `llm/base.py:create_provider`'s shape.
 
@@ -359,4 +388,10 @@ def create_agent_runtime(
                 deadline_seconds=settings.agent_runtime_deadline_seconds,
             ),
         )
-    return PydanticAIAgentRuntime(config=config, model=model)
+    return PydanticAIAgentRuntime(
+        config=config,
+        model=model,
+        capabilities=capabilities,
+        deps=deps,
+        answer_type=answer_type,
+    )

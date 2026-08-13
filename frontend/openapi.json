@@ -2660,6 +2660,100 @@
         }
       }
     },
+    "/api/v1/conversations/{conversation_id}/agent-runs/{agent_run_id}/execute": {
+      "post": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Execute Agent Turn",
+        "description": "Claim, execute, and finalize without holding a transaction over the model.",
+        "operationId": "execute_agent_turn_api_v1_conversations__conversation_id__agent_runs__agent_run_id__execute_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "agent_run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Agent Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutedTurnOut"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
     "/api/v1/conversations/{conversation_id}/timeline": {
       "get": {
         "tags": [
@@ -2861,7 +2955,22 @@
       "AcceptedTurnOut": {
         "properties": {
           "activity": {
-            "$ref": "#/components/schemas/ActivityItemOut"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PlannerMessageActivityOut"
+              },
+              {
+                "$ref": "#/components/schemas/AgentResponseActivityOut"
+              }
+            ],
+            "title": "Activity",
+            "discriminator": {
+              "propertyName": "activity_type",
+              "mapping": {
+                "agent_response": "#/components/schemas/AgentResponseActivityOut",
+                "planner_message": "#/components/schemas/PlannerMessageActivityOut"
+              }
+            }
           },
           "resource_version": {
             "type": "integer",
@@ -2874,6 +2983,11 @@
           "sequence": {
             "type": "string",
             "title": "Sequence"
+          },
+          "agent_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Agent Run Id"
           }
         },
         "type": "object",
@@ -2881,11 +2995,12 @@
           "activity",
           "resource_version",
           "agent_run_status",
-          "sequence"
+          "sequence",
+          "agent_run_id"
         ],
         "title": "AcceptedTurnOut"
       },
-      "ActivityItemOut": {
+      "AgentResponseActivityOut": {
         "properties": {
           "schema_version": {
             "type": "string",
@@ -2895,20 +3010,6 @@
             "type": "string",
             "format": "uuid",
             "title": "Activity Id"
-          },
-          "activity_type": {
-            "type": "string",
-            "enum": [
-              "planner_message",
-              "agent_response",
-              "clarification",
-              "draft",
-              "run_progress",
-              "comparison",
-              "approval_request",
-              "terminal_outcome"
-            ],
-            "title": "Activity Type"
           },
           "conversation_id": {
             "type": "string",
@@ -2934,35 +3035,33 @@
             "format": "date-time",
             "title": "Occurred At"
           },
-          "message_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Message Id"
-          },
-          "text": {
-            "type": "string",
-            "title": "Text"
-          },
           "sequence": {
             "type": "string",
             "title": "Sequence"
+          },
+          "activity_type": {
+            "type": "string",
+            "const": "agent_response",
+            "title": "Activity Type"
+          },
+          "response": {
+            "$ref": "#/components/schemas/GroundedResponseV1"
           }
         },
         "type": "object",
         "required": [
           "schema_version",
           "activity_id",
-          "activity_type",
           "conversation_id",
           "conversation_resource_version",
           "scenario_id",
           "scenario_version_id",
           "occurred_at",
-          "message_id",
-          "text",
-          "sequence"
+          "sequence",
+          "activity_type",
+          "response"
         ],
-        "title": "ActivityItemOut"
+        "title": "AgentResponseActivityOut"
       },
       "AppliedConstraint": {
         "properties": {
@@ -3162,6 +3261,67 @@
           "end_minute"
         ],
         "title": "AvailabilityWindowOut"
+      },
+      "ClaimArgumentsV1": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "outbound",
+                  "inbound",
+                  "indirect"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "start_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Minute"
+          },
+          "end_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Minute"
+          }
+        },
+        "type": "object",
+        "title": "ClaimArgumentsV1",
+        "description": "Canonical metric arguments shared by a call and the claim citing it."
       },
       "ConstraintPageOut": {
         "properties": {
@@ -3535,6 +3695,163 @@
         ],
         "title": "DemandIntervalPageOut"
       },
+      "EvidenceRefV1": {
+        "properties": {
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "checksum_algorithm": {
+            "type": "string",
+            "title": "Checksum Algorithm"
+          },
+          "checksum_schema_version": {
+            "type": "string",
+            "title": "Checksum Schema Version"
+          },
+          "checksum_digest": {
+            "type": "string",
+            "title": "Checksum Digest"
+          },
+          "producing_run_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producing Run Version"
+          },
+          "baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Schedule Version"
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "work-areas-and-tasks",
+              "workers",
+              "demand",
+              "baseline-assignments",
+              "locks",
+              "constraints-and-objectives"
+            ],
+            "title": "Group"
+          },
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "start_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Minute"
+          },
+          "end_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Minute"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scenario_version_id",
+          "checksum_algorithm",
+          "checksum_schema_version",
+          "checksum_digest",
+          "producing_run_version",
+          "baseline_schedule_version",
+          "group",
+          "record_id"
+        ],
+        "title": "EvidenceRefV1"
+      },
+      "ExecutedTurnOut": {
+        "properties": {
+          "activity": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PlannerMessageActivityOut"
+              },
+              {
+                "$ref": "#/components/schemas/AgentResponseActivityOut"
+              }
+            ],
+            "title": "Activity",
+            "discriminator": {
+              "propertyName": "activity_type",
+              "mapping": {
+                "agent_response": "#/components/schemas/AgentResponseActivityOut",
+                "planner_message": "#/components/schemas/PlannerMessageActivityOut"
+              }
+            }
+          },
+          "resource_version": {
+            "type": "integer",
+            "title": "Resource Version"
+          },
+          "agent_run_status": {
+            "type": "string",
+            "title": "Agent Run Status"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "agent_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Agent Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "activity",
+          "resource_version",
+          "agent_run_status",
+          "sequence",
+          "agent_run_id"
+        ],
+        "title": "ExecutedTurnOut"
+      },
       "FixtureCatalogueEntryOut": {
         "properties": {
           "schema_version": {
@@ -3601,6 +3918,172 @@
           "site_id"
         ],
         "title": "FixtureCatalogueEntryOut"
+      },
+      "GroundedClaimV1": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          },
+          "kind": {
+            "type": "string",
+            "const": "claim",
+            "title": "Kind",
+            "default": "claim"
+          },
+          "metric": {
+            "type": "string",
+            "enum": [
+              "required_demand_minutes",
+              "staffed_minutes",
+              "shortfall_minutes",
+              "qualified_worker_count"
+            ],
+            "title": "Metric",
+            "default": "required_demand_minutes"
+          },
+          "arguments": {
+            "$ref": "#/components/schemas/ClaimArgumentsV1",
+            "default": {
+              "schema_version": "1"
+            }
+          },
+          "result_id": {
+            "type": "string",
+            "title": "Result Id",
+            "default": ""
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "minutes",
+                  "workers"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs",
+            "default": []
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "failed"
+            ],
+            "title": "Verdict",
+            "default": "failed"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "missing_evidence",
+                  "unauthorized_evidence",
+                  "version_mismatch",
+                  "calculation_failed",
+                  "uncited_claim"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure"
+          }
+        },
+        "type": "object",
+        "title": "GroundedClaimV1",
+        "description": "A supported computed value or one inspectable per-claim failure."
+      },
+      "GroundedProseSegmentV1": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          },
+          "kind": {
+            "type": "string",
+            "const": "prose",
+            "title": "Kind",
+            "default": "prose"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "GroundedProseSegmentV1",
+        "description": "Non-numeric prose in its original answer position."
+      },
+      "GroundedResponseV1": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "segments": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GroundedProseSegmentV1"
+                },
+                {
+                  "$ref": "#/components/schemas/GroundedClaimV1"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Segments",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "GroundedResponseV1",
+        "description": "Persistable planner-visible response pinned to one immutable version."
       },
       "HTTPValidationError": {
         "properties": {
@@ -3815,6 +4298,76 @@
           "args"
         ],
         "title": "OverrideOut"
+      },
+      "PlannerMessageActivityOut": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "activity_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Activity Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "conversation_resource_version": {
+            "type": "integer",
+            "title": "Conversation Resource Version"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "activity_type": {
+            "type": "string",
+            "const": "planner_message",
+            "title": "Activity Type"
+          },
+          "message_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Message Id"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema_version",
+          "activity_id",
+          "conversation_id",
+          "conversation_resource_version",
+          "scenario_id",
+          "scenario_version_id",
+          "occurred_at",
+          "sequence",
+          "activity_type",
+          "message_id",
+          "text"
+        ],
+        "title": "PlannerMessageActivityOut"
       },
       "ProblemDetailsV1": {
         "properties": {
@@ -4355,7 +4908,21 @@
           },
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ActivityItemOut"
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PlannerMessageActivityOut"
+                },
+                {
+                  "$ref": "#/components/schemas/AgentResponseActivityOut"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "activity_type",
+                "mapping": {
+                  "agent_response": "#/components/schemas/AgentResponseActivityOut",
+                  "planner_message": "#/components/schemas/PlannerMessageActivityOut"
+                }
+              }
             },
             "type": "array",
             "title": "Items"

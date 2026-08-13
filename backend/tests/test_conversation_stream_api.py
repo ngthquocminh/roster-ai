@@ -32,7 +32,7 @@ from api.deps import (
     get_site_context_opener,
 )
 from api.main import app
-from application.contracts.activity import ActivityItemV1
+from application.contracts.activity import PlannerMessageActivityV1
 from application.contracts.persisted_event import PersistedEventV1
 from application.contracts.stream_cursor import StreamCursorV1, parse_stream_cursor
 from application.ports.conversation import ConversationTimelineV1
@@ -65,7 +65,7 @@ def _event(conversation_id: UUID, sequence: int) -> PersistedEventV1:
         agent_run_id=uuid4(),
         site_id=uuid4(),
         actor_id=uuid4(),
-        payload=ActivityItemV1(
+        payload=PlannerMessageActivityV1(
             activity_id=uuid4(),
             activity_type="planner_message",
             conversation_id=conversation_id,

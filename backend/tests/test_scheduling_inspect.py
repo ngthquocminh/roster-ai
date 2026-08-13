@@ -26,6 +26,7 @@ from application.capabilities.scheduling_inspect import (
     SCOPE_CONTROLS,
     BudgetExhaustedError,
     InvalidQueryError,
+    InspectionTimeoutError,
     SchedulingInspectRequestV1,
     SiteMismatchError,
     VersionMismatchError,
@@ -432,9 +433,10 @@ def test_declared_timeout_is_enforced_as_an_overrun_error() -> None:
         datetime(2026, 8, 11, tzinfo=timezone.utc) + timedelta(seconds=99),
     ])
     deps = _deps(clock=lambda: next(ticks))
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(InspectionTimeoutError) as excinfo:
         scheduling_inspect(deps, SchedulingInspectRequestV1(group="demand"))
     assert "budget" in str(excinfo.value)
+    assert excinfo.value.code not in scheduling_inspect_module().retryable_error_codes
 
 
 def test_handler_module_imports_no_adapter_and_no_sqlalchemy() -> None:

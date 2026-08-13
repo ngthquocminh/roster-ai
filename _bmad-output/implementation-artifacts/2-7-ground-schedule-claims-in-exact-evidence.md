@@ -587,18 +587,18 @@ so that decision *can* be revisited with evidence, not because it has been taken
 
 ### Task 7 — `create_agent_runtime()` wires a real model (AC: 1) — closes `deferred-work.md:102`
 
-- [ ] `AgentRuntimeConfig.model` / `.api_key` are currently stored and never read; `self._model` is
+- [x] `AgentRuntimeConfig.model` / `.api_key` are currently stored and never read; `self._model` is
       only ever set by the constructor kwarg. Wire them into a real PydanticAI model.
-- [ ] Keep the injected-`model` seam intact and winning: every existing test supplies a
+- [x] Keep the injected-`model` seam intact and winning: every existing test supplies a
       `FunctionModel` double and must keep working unchanged.
-- [ ] `AGENT_RUNTIME_MODEL` defaults to `"test"` (`settings.py:175`). Decide what that resolves to
+- [x] `AGENT_RUNTIME_MODEL` defaults to `"test"` (`settings.py:175`). Decide what that resolves to
       and make it explicit — a default that silently constructs a network-capable client is how a
       keyless CI run starts making live calls. `models.ALLOW_MODEL_REQUESTS = False` in the eval
       harness protects the harness, not the API.
-- [ ] Close the ledger entry with a note naming the commit.
-- [ ] **Do not** add a live-provider test. `deferred-work.md:106`'s unwrapped-transport-exception
+- [x] Close the ledger entry with a note naming the commit.
+- [x] **Do not** add a live-provider test. `deferred-work.md:106`'s unwrapped-transport-exception
       item stays open and needs live coverage that NFR26 keeps out of normal CI.
-- [ ] **Re-annotate `deferred-work.md:106` in place — do not carry it forward silently.** That item
+- [x] **Re-annotate `deferred-work.md:106` in place — do not carry it forward silently.** That item
       asks whether a raw `httpx`/`openai`/`google-genai` exception could cross the seam unwrapped
       past `except AgentRunError`. It was written when *no endpoint called `create_agent_runtime()`*,
       so the question was theoretical. This task makes a real provider client reachable from a real
@@ -609,101 +609,101 @@ so that decision *can* be revisited with evidence, not because it has been taken
 
 ### Task 8 — A capability timeout stops being a retryable argument error (AC: 1) — closes `deferred-work.md:5`
 
-- [ ] `SchedulingInspectError`'s base `code` is `invalid_query`
+- [x] `SchedulingInspectError`'s base `code` is `invalid_query`
       (`scheduling_inspect.py:63-67`), and `retryable_error_codes = frozenset({"invalid_query"})`
       (`:273`). The timeout overrun at `:222-226` raises the **base** class, so it reaches the model
       as `ModelRetry("invalid_query: inspection exceeded the 5.0s budget")`. The model "fixes"
       arguments that were never wrong, reissues the same slow query, and burns the wall-clock budget
       the timeout existed to protect.
-- [ ] Give the overrun its own non-retryable code, declared in `ERROR_CODES` and therefore in the
+- [x] Give the overrun its own non-retryable code, declared in `ERROR_CODES` and therefore in the
       manifest. `runtime.py:192-196` already rejects any code absent from a granted manifest, so a
       typo fails loudly.
-- [ ] Check `DemonstrationError` for the same generic-base-with-a-retryable-code shape and fix it if
+- [x] Check `DemonstrationError` for the same generic-base-with-a-retryable-code shape and fix it if
       present — the ledger entry names it explicitly.
-- [ ] Test: a timed-out capability call produces a terminal failure, not a retry loop.
-- [ ] The ledger names Story 2.7 as an owner because this story creates the request path that can
+- [x] Test: a timed-out capability call produces a terminal failure, not a retry loop.
+- [x] The ledger names Story 2.7 as an owner because this story creates the request path that can
       observe the loop. Close it.
 
 ### Task 9 — Migration: `UPDATE (status)` on `agent_run` (AC: 3)
 
-- [ ] New Alembic revision on top of `a4f92d7c8e31`. `GRANT UPDATE (status) ON agent_run TO
+- [x] New Alembic revision on top of `a4f92d7c8e31`. `GRANT UPDATE (status) ON agent_run TO
       shiftmind_runtime` — column-scoped, mirroring `GRANT UPDATE (resource_version) ON conversation`
       (`a4f92d7c8e31_add_durable_conversations.py:100`). Nothing else.
-- [ ] The `downgrade()` revokes it, matching `:104`.
-- [ ] **No new columns.** The terminal reason and evidence live in the `agent_response` activity
+- [x] The `downgrade()` revokes it, matching `:104`.
+- [x] **No new columns.** The terminal reason and evidence live in the `agent_response` activity
       payload (AD-20's `ActivityItemV1` row). Adding `failure_reason`/`completed_at` to `agent_run`
       duplicates that record in a second place with no acceptance benefit.
-- [ ] The existing `ck_agent_run_status` CHECK already admits all seven AD-7 statuses
+- [x] The existing `ck_agent_run_status` CHECK already admits all seven AD-7 statuses
       (`schema.py:306`) — do not touch it.
-- [ ] **A migration is safe for existing evidence, verified:** Story 1.11's review made the
+- [x] **A migration is safe for existing evidence, verified:** Story 1.11's review made the
       `schema_version` audit rule *monotone* (`evidence_binding.py:610-621` — the recorded revision
       must lie on the migration chain, not equal head). The six committed evidence files stay valid.
       This is why Story 2.5's Decision 1 objection to a migration no longer applies.
-- [ ] Extend `test_postgres_schema.py` / `test_identity_role_boundaries.py` in their existing shape:
+- [x] Extend `test_postgres_schema.py` / `test_identity_role_boundaries.py` in their existing shape:
       the runtime role can update `status` and still **cannot** update any other `agent_run` column,
       and still cannot `DELETE`.
-- [ ] `uv run --project backend alembic check` from the **repository root** — not from `backend/`;
+- [x] `uv run --project backend alembic check` from the **repository root** — not from `backend/`;
       `deferred-work.md:117-126` records exactly that mistake and its cost.
 
 ### Task 10 — `agent_response` becomes a real activity variant (AC: 2, 3)
 
-- [ ] Make `ActivityItemV1` discriminated. `planner_message`'s serialized payload must stay
+- [x] Make `ActivityItemV1` discriminated. `planner_message`'s serialized payload must stay
       **byte-identical** — `_payload_to_json` (`conversation.py:266-278`) writes rows that are
       already committed in developer databases and pinned by
       `test_conversation_contracts.py`/`test_conversations_postgres.py`.
-- [ ] `agent_response` payload per AD-20: visible summary + evidence refs. Concretely: the
+- [x] `agent_response` payload per AD-20: visible summary + evidence refs. Concretely: the
       `GroundedResponseV1` segments, each claim's computed value/unit/verdict, and its
       `EvidenceRefV1[]`.
-- [ ] Writer and reader: extend `_payload_to_json` and `_activity_from_payload`. An unknown
+- [x] Writer and reader: extend `_payload_to_json` and `_activity_from_payload`. An unknown
       `activity_type` must still raise `UnsupportedActivityPayloadError` (`:281-286`) — the closed
       vocabulary keeps its teeth.
-- [ ] `ActivityItemOut` (`api/schemas.py:121-136`): `message_id` and `text` are currently required
+- [x] `ActivityItemOut` (`api/schemas.py:121-136`): `message_id` and `text` are currently required
       and are `planner_message`-only. Make the variant explicit in the published schema rather than
       loosening both fields to optional and letting the discriminant become advisory.
-- [ ] `sequence` stays a **JSON string** on every variant. Story 2.3's trap: a JSON number becomes an
+- [x] `sequence` stays a **JSON string** on every variant. Story 2.3's trap: a JSON number becomes an
       IEEE-754 double in the browser and poisons Story 2.4's resume cursor.
-- [ ] **`test_an_unrenderable_activity_variant_fails_typed_not_as_a_key_error`
+- [x] **`test_an_unrenderable_activity_variant_fails_typed_not_as_a_key_error`
       (`test_conversations_postgres.py:519-544`) uses `agent_response` as its unrenderable probe**
       and will go red the moment this story makes it renderable. Re-point it at a discriminant that
       is *still* reserved — `comparison` and `approval_request` are Epic 4's and safest — and update
       its docstring from "Seven of AD-20's eight discriminants" to six. Do **not** delete it: it is
       the only proof that an unknown payload fails typed instead of taking the timeline down with a
       `KeyError`-turned-500. The sibling at `:507-516` probes `draft` and stays green untouched.
-- [ ] Regenerate the published contract with the existing scripts — `npm run codegen:export` then
+- [x] Regenerate the published contract with the existing scripts — `npm run codegen:export` then
       `npm run codegen:types` (`frontend/package.json:15-16`). Do not hand-edit `frontend/openapi.json`
       or `frontend/src/api/schema.d.ts`.
-- [ ] Test: an `agent_response` event round-trips write → read → `ActivityItemOut` → SSE frame with
+- [x] Test: an `agent_response` event round-trips write → read → `ActivityItemOut` → SSE frame with
       its evidence refs intact, through the **same** `_activity` projection the timeline uses
       (`conversations.py:95-101`) — a frame and a timeline item that drift apart break the client's
       merge silently.
 
 ### Task 11 — The execute-turn use case and endpoint (AC: 1, 3)
 
-- [ ] New `backend/application/use_cases/execute_turn.py`, in the shape of `accept_turn.py`.
-- [ ] Claim the run: `agent_queued → agent_running` under `FOR UPDATE` on the RLS-filtered row,
+- [x] New `backend/application/use_cases/execute_turn.py`, in the shape of `accept_turn.py`.
+- [x] Claim the run: `agent_queued → agent_running` under `FOR UPDATE` on the RLS-filtered row,
       mirroring `accept_turn`'s serialization (`conversation.py:179-190`). A run in any other status
       is refused with a stable problem response and **no** side effect.
-- [ ] Compose `CapabilityGrantContextV1` and call `compose_granted_capabilities` through the
+- [x] Compose `CapabilityGrantContextV1` and call `compose_granted_capabilities` through the
       **existing** `get_capability_registry` seam (`api/deps.py:93-101`). Grant is composed
       **before** the runtime is constructed; an ungranted capability is absent, never
       present-and-refusing (AD-2, Story 2.5 Decision 4).
-- [ ] Build `AgentDepsV1` from trusted server-owned values only (`capabilities/deps.py`). Distinct
+- [x] Build `AgentDepsV1` from trusted server-owned values only (`capabilities/deps.py`). Distinct
       UUIDs per identity field — sharing one made every scope assertion vacuous; that was Story 2.5
       review finding 8.
-- [ ] `run_in_threadpool` around `run_sync`. The site-scoped transaction is **not** held across it
+- [x] `run_in_threadpool` around `run_sync`. The site-scoped transaction is **not** held across it
       (Decision 1).
-- [ ] Route: `POST` under `/api/v1/conversations`. **Verify** `test_gate_a_mutation_audit.py` stays
+- [x] Route: `POST` under `/api/v1/conversations`. **Verify** `test_gate_a_mutation_audit.py` stays
       green — mounting under `/api/v1/scenarios` turns it red.
-- [ ] Persist in one short second transaction: terminal `agent_run.status` + the `agent_response`
+- [x] Persist in one short second transaction: terminal `agent_run.status` + the `agent_response`
       persisted event at the next `sequence`, with `resource_version` bumped exactly as
       `accept_turn` does.
-- [ ] A runtime failure (`AgentRuntimeError`, `timed_out`, `budget_exhausted`) still reaches a
+- [x] A runtime failure (`AgentRuntimeError`, `timed_out`, `budget_exhausted`) still reaches a
       **terminal** `agent_run` status and leaves the accepted conversation history durable. Keep
       this minimal: the full failure taxonomy and its visible states are **Story 2.9's** AC3, not
       this story's. Do not build a refusal or clarification variant here.
-- [ ] Test: two concurrent executions of one queued run produce exactly one terminal transition and
+- [x] Test: two concurrent executions of one queued run produce exactly one terminal transition and
       one `agent_response` event.
-- [ ] Test: the endpoint requires an authenticated session and is site-scoped; a cross-site
+- [x] Test: the endpoint requires an authenticated session and is site-scoped; a cross-site
       conversation is a non-disclosing 404, unchanged from Story 2.3.
 
 **Two mechanical guards, because traps #7 and #8 otherwise rest on nothing but Decision 1.** Story
@@ -711,11 +711,11 @@ so that decision *can* be revisited with evidence, not because it has been taken
 solved it with source-level assertions (the `_RENDERERS` check and the `importlib`/`pkgutil` ban).
 Do the same here. A rule with no guard is a comment.
 
-- [ ] **Guard for trap #7:** a test asserting the execute route's dependency set does **not** include
+- [x] **Guard for trap #7:** a test asserting the execute route's dependency set does **not** include
       `get_site_context`. Read it off the route's own signature or FastAPI's `dependant`, not off a
       hardcoded string. This is exactly the failure Story 2.4's Decision 1 described in prose and
       never guarded: correct at 40 ms, a connection-pool outage at 60 s.
-- [ ] **Guard for trap #8:** an architecture test banning `BackgroundTasks`, `asyncio.create_task`,
+- [x] **Guard for trap #8:** an architecture test banning `BackgroundTasks`, `asyncio.create_task`,
       and `ThreadPoolExecutor` under `backend/api/**` and `backend/application/**`. Carry ONE
       documented allow-list entry for `backend/services/run_service.py`, which legitimately holds a
       `ThreadPoolExecutor` for the legacy SQLite solve path — the `ALLOWED_LEAKS` pattern, including
@@ -731,52 +731,52 @@ Do the same here. A rule with no guard is a comment.
 > `deferred-work.md:107` also names its owner as *"the first story that persists an `AgentTurnV1`
 > and rehydrates it"*, and this is that story. It is ~30 lines and one test.
 
-- [ ] Build `AgentTurnRequestV1.history` from the conversation's **persisted `ActivityItemV1`
+- [x] Build `AgentTurnRequestV1.history` from the conversation's **persisted `ActivityItemV1`
       timeline** — planner message text as `user`, prior `agent_response` visible summary as
       `assistant` — not from a stored raw transcript. AD-19: framework messages never become
       persisted contracts, and this keeps that true while making the product's central noun
       ("conversation") actually true for the agent.
-- [ ] **Out of scope:** persisting `AgentTurnV1` itself. Raw-transcript provenance is AD-12's
+- [x] **Out of scope:** persisting `AgentTurnV1` itself. Raw-transcript provenance is AD-12's
       envelope and belongs to Epic 4. Say so in the Dev Notes so a reviewer does not read this task
       as half of it.
-- [ ] This makes `to_framework_messages` (`translate.py:61-105`) reachable with owned records for the
+- [x] This makes `to_framework_messages` (`translate.py:61-105`) reachable with owned records for the
       first time. The ledger item is about its **silent drops**: an unrecognized
       `AgentMessageV1.role` and an unrecognized `AgentPartV1.kind` fall through with no `else`. Fix
       both — raise, or drop with an explicit and tested decision — and close the entry.
-- [ ] Bound the rehydrated history explicitly. An unbounded transcript is an unbounded token bill
+- [x] Bound the rehydrated history explicitly. An unbounded transcript is an unbounded token bill
       against a budget AD-7 says the application owns.
-- [ ] `backend/agent/translate.py` has carried a zero-line-diff fence since Story 2.1 and **this
+- [x] `backend/agent/translate.py` has carried a zero-line-diff fence since Story 2.1 and **this
       task is the first authorized break of it.** Nothing else in that file changes.
 
 ### Task 13 — Chat renders the grounded response (AC: 2)
 
-- [ ] `ActivityTimeline.tsx` currently renders `item.text` for every item (`:22`). Branch on
+- [x] `ActivityTimeline.tsx` currently renders `item.text` for every item (`:22`). Branch on
       `activity_type` and render the `agent_response` variant.
-- [ ] Each **supported** claim renders its computed value with an **adjacent** `EvidenceLink`.
+- [x] Each **supported** claim renders its computed value with an **adjacent** `EvidenceLink`.
       `EvidenceLink` already exists (`components/primitives/EvidenceLink.tsx`) and has **no
       non-fixture call site** — this is its first real consumer. Its label is already
       `Evidence: {group} {record}{, fieldOrRange}, fixture {version}`, which is exactly UX-DR8's
       requirement; pass the planner-facing group name from Task 1's mapping, not the port's.
-- [ ] Adjacency is structural, not decorative: the link is inside the claim's own element. A single
+- [x] Adjacency is structural, not decorative: the link is inside the claim's own element. A single
       message-level Sources list fails AC2 explicitly.
-- [ ] `onActivate`/`href`: **Story 2.8 owns navigation.** Do not build jump/return, origin keys,
+- [x] `onActivate`/`href`: **Story 2.8 owns navigation.** Do not build jump/return, origin keys,
       focus restoration, or the exception panels here. Note in a comment that
       `deferred-work.md:68` flags an inert `EvidenceLink` with neither prop — decide what this story
       passes and make it deliberate.
-- [ ] A **failed** claim renders its distinct state naming the cause, keeps its position, and
+- [x] A **failed** claim renders its distinct state naming the cause, keeps its position, and
       renders no number. Sibling supported claims still render normally.
-- [ ] No confidence score, no gauge, no percentage, no "approximately", no AI glow, no gradient, no
+- [x] No confidence score, no gauge, no percentage, no "approximately", no AI glow, no gradient, no
       pulsing evidence (UX-DR5, UX-DR32). Assert the absence — `index.test.ts` and
       `accessibility-contract.test.tsx` establish that pattern.
-- [ ] Accessibility: the response block is distinguishable by author/type label (EXPERIENCE.md:85);
+- [x] Accessibility: the response block is distinguishable by author/type label (EXPERIENCE.md:85);
       the Evidence link is keyboard-operable with a visible focus ring and a self-describing
       accessible name. Extend the existing jsdom a11y suites; **do not** add new tooling.
-- [ ] Chat code stays in `frontend/src/features/chat/`.
+- [x] Chat code stays in `frontend/src/features/chat/`.
       `frontend/src/features/scenario-data/**` must show a **zero-line diff** — its directory is
       audited for mutation affordances by `scenarioDataBoundaries.test.ts`.
-- [ ] Wire the execute call after send. Keep `agent_queued` visible between the two calls; the
+- [x] Wire the execute call after send. Keep `agent_queued` visible between the two calls; the
       existing `runStatusLabel` (`ChatView.tsx:24-27`) already renders it literally.
-- [ ] The stream merge is by `activity_id` (`useConversationStream.ts:281-283`) — the
+- [x] The stream merge is by `activity_id` (`useConversationStream.ts:281-283`) — the
       `agent_response` arriving from both the SSE frame and the timeline refetch must render **once**
       (UX-DR6). Test it; that dedup is the one Story 2.4 built and this is its first real exercise.
 
@@ -981,6 +981,21 @@ priced at creation, a new dependency was not.
 - Task 6 RED: evaluation harness initially rejected structured case turns and counted the framework output tool as a second routed capability.
 - Task 6 GREEN/regression: evaluation harness 25 passed, 1 deselected; full backend suite 743 passed, 2 skipped, 7 deselected. Demonstration evidence was not regenerated.
 - Phase A checkpoint: 4 metrics shipped; 3 are not exercised by the four AC oracle cases. Paging mutation observed RED (60 vs 90). 4 golden cases: 1 supported, 1 version-mismatch, 1 missing-evidence, 1 argument-mismatch; NFR28 floor green. Honest-gap assumptions contradicted by code: 0. Elapsed implementation time: approximately 25 minutes against a 30-minute working estimate; revised Phase B estimate: 45 minutes. Halt conditions triggered: 0.
+- Task 7 RED: adapter tests observed `NoneType` instead of configured TestModel/OpenRouter model instances.
+- Task 7 GREEN/regression: 15 focused adapter checks passed; full backend suite 745 passed, 2 skipped, 7 deselected. No live-provider test was added.
+- Task 8 RED: focused suites could not import the required timeout and dedicated invalid-repeat errors.
+- Task 8 GREEN/regression: 87 focused capability/conformance checks passed (1 expected group skip); full backend suite 746 passed, 2 skipped, 7 deselected.
+- Task 9 RED: the schema test failed because the revision did not exist; the first full regression then exposed the intentionally changed Alembic head expectation.
+- Task 9 GREEN/regression: Alembic check reports no new operations; PostgreSQL suite 44 passed; full backend suite 748 passed, 2 skipped, 7 deselected.
+- Task 10 RED: the first transport round-trip rejected an owned `GroundedResponseV1` as an untyped dictionary.
+- Task 10 GREEN/regression: 49 focused conversation checks passed; full backend suite 749 passed, 2 skipped, 7 deselected; generated frontend typecheck passed.
+- Task 11 RED: the execute route, run claim/finalization repository operations, and detached-work guards did not exist.
+- Task 11 GREEN/regression: 63 focused runtime/conversation/architecture checks passed; the PostgreSQL race test proved one claim, one terminal transition, and one response event; Gate A mutation audit stayed green.
+- Task 12 RED: execute-turn supplied an empty history and reverse translation silently accepted unknown discriminants.
+- Task 12 GREEN/regression: 19 focused history/runtime checks passed; persisted visible activities rehydrate into a 100-activity owned-history window and unknown roles/parts fail explicitly; the deferred item is closed.
+- Task 13 RED: the timeline assumed every activity had `text`, no execute client existed, and SSE listened only for planner messages.
+- Task 13 GREEN/regression: frontend 56 files / 325 tests and typecheck passed; supported and failed claims, adjacent accessible evidence, queued-between-calls state, agent-response SSE, and identity dedup are covered; scenario-data has zero diff from the Phase A commit.
+- Phase B full backend regression: 761 passed, 2 skipped, 7 deselected.
 
 ### Implementation Plan
 
@@ -994,6 +1009,13 @@ priced at creation, a new dependency was not.
 - Task 4: added fail-closed citation verification with argument/version checks, exact target resolution, Unicode-decimal prose rejection, distinct per-claim failures, and no-retarget preservation.
 - Task 5: made structured answers opt-in, kept default text outcomes unchanged, returned typed owned answers without repr leakage, and filtered framework output tools by the agent-derived name.
 - Task 6: added the independent grounding evaluator and exactly four scheduling-compute cases covering supported, version-mismatch, missing-evidence, and argument-mismatch outcomes with stable locator IDs.
+- Task 7: wired explicit test/OpenRouter/Google runtime models from the owned configuration, kept injected doubles authoritative, and updated the deferred-work exposure record.
+- Task 8: separated retryable argument errors from terminal capability/timeout failures in both governed modules and closed the retry-loop ledger item.
+- Task 9: added the single column-scoped agent-run status grant/revoke revision and verified all other columns plus DELETE remain denied.
+- Task 10: made planner-message/agent-response explicit discriminated variants, persisted and rehydrated grounded claims, preserved string sequences, re-pointed the reserved-variant guard, and regenerated OpenAPI/types.
+- Task 11: added a conversation-scoped execute endpoint with short RLS claim/finalize transactions, runtime execution outside transactions, trusted grant/dependency composition, terminal failure handling, and mechanical detached-work guards.
+- Task 12: rehydrated a bounded owned history from persisted visible activities only; raw framework transcripts and `AgentTurnV1` persistence remain deliberately deferred to Epic 4.
+- Task 13: rendered grounded responses with structurally adjacent evidence controls, visible per-claim failures, dual-event SSE handling, and a send-then-execute client flow that exposes the queued state.
 
 ### File List
 
@@ -1007,9 +1029,27 @@ priced at creation, a new dependency was not.
 - backend/application/grounding/gate.py
 - backend/application/capabilities/installed.py
 - backend/application/capabilities/scheduling_compute.py
+- backend/application/capabilities/scheduling_inspect.py
+- backend/application/capabilities/demonstration.py
 - backend/tests/test_evidence_ref.py
 - backend/tests/test_grounding_contracts.py
 - backend/tests/test_scheduling_compute.py
+- backend/tests/test_scheduling_inspect.py
+- backend/tests/test_demonstration_capability.py
+- backend/migrations/versions/c7d6e5f4a3b2_grant_agent_run_status_update.py
+- backend/tests/test_postgres_schema.py
+- backend/tests/test_identity_role_boundaries.py
+- backend/tests/test_evidence_binding.py
+- backend/application/contracts/activity.py
+- backend/adapters/postgres/conversation.py
+- backend/api/schemas.py
+- backend/api/routers/conversations.py
+- backend/tests/test_conversation_contracts.py
+- backend/tests/test_conversations_api.py
+- backend/tests/test_conversation_stream_api.py
+- backend/tests/test_conversations_postgres.py
+- frontend/openapi.json
+- frontend/src/api/schema.d.ts
 - backend/tests/test_grounding_gate.py
 - backend/tests/test_agent_runtime_adapter.py
 - backend/evals/cases.py
@@ -1023,8 +1063,24 @@ priced at creation, a new dependency was not.
 - backend/evals/golden/scheduling_compute/missing-evidence.json
 - backend/evals/golden/scheduling_compute/argument-mismatch.json
 - backend/tests/test_evaluation_harness.py
+- _bmad-output/implementation-artifacts/deferred-work.md
 - backend/tests/test_capability_conformance.py
 - backend/tests/architecture/test_agent_runtime_boundaries.py
+- backend/application/ports/conversation.py
+- backend/application/capabilities/deps.py
+- backend/application/use_cases/execute_turn.py
+- backend/adapters/postgres/short_transaction_projection.py
+- backend/agent/capability_tools.py
+- backend/agent/translate.py
+- backend/api/deps.py
+- backend/tests/architecture/test_execute_turn_boundaries.py
+- backend/tests/test_execute_turn_use_case.py
+- frontend/src/api/conversations.ts
+- frontend/src/hooks/useSendMessage.ts
+- frontend/src/hooks/useSendMessage.test.tsx
+- frontend/src/hooks/useConversationStream.ts
+- frontend/src/features/chat/ActivityTimeline.tsx
+- frontend/src/features/chat/ActivityTimeline.test.tsx
 
 ## Change Log
 
@@ -1034,3 +1090,4 @@ priced at creation, a new dependency was not.
 | 2026-08-12 | Restructured into Phase A / CHECKPOINT / Phase B / Phase C so the split boundary is built in rather than remembered; evaluator + golden cases moved into Phase A as Task 6; mechanical guards added for traps #7 and #8, which until now rested on prose alone; Task 12 (history rehydration) confirmed required rather than optional; `deferred-work.md:106` scheduled for in-place re-annotation because Task 7 makes it reachable. |
 | 2026-08-12 | Gate changed from an unconditional stop to a reporting gate with four named halt conditions, so it works in an unattended `bmad-dev-auto` / `bmad-loop` run; restated in both the story and `sprint-status.yaml` that this remains ONE BMAD story and the phases are not a split. |
 | 2026-08-13 | Decision 2 amended before implementation (correct-course, zero code written): the model now **cites** an application-computed `result_id` instead of asserting a value; calculators ship as the governed `scheduling_compute` capability; the gate **verifies citations** rather than recomputing; prose segments may carry no bare numerals. Tasks 2, 3, 4, 6 and the traps list updated to match. No AC, PRD, epic, architecture, or UX change — AD-11's `produce` branch and AR11's three named failures are satisfied as written. See `sprint-change-proposal-2026-08-13.md`. |
+| 2026-08-13 | Phase B completed: configured runtime construction, stable capability failures, column-scoped status grant, durable response activity, request-path execution, persisted-history rehydration, and grounded chat rendering. |

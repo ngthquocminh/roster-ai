@@ -8,6 +8,7 @@ governed-storage side.
 from __future__ import annotations
 
 from dataclasses import replace
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -17,21 +18,30 @@ from fastapi.testclient import TestClient
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import (
+    get_agent_runtime_factory,
+    get_capability_registry,
     get_conversation_repository,
     get_identity_store,
     get_settings,
     get_site_context,
+    get_site_context_opener,
+    get_projection_reader,
 )
 from api.main import app
-from application.contracts.activity import ActivityItemV1
+from application.contracts.activity import AgentResponseActivityV1, PlannerMessageActivityV1
+from application.contracts.agent_runtime import AgentRunOutcomeV1
+from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1, GroundedResponseV1
 from application.contracts.persisted_event import PersistedEventV1
 from application.ports.conversation import (
     AcceptedTurnV1,
+    ClaimedAgentRunV1,
     ConversationPageV1,
     ConversationTimelineV1,
     ConversationV1,
+    ExecutedAgentRunV1,
 )
 from application.ports.session import ResolvedSession
+from application.ports.agent_runtime import AgentRuntimeError
 from settings import default_settings
 
 _CSRF_TOKEN = "csrf-token-value"
@@ -68,7 +78,7 @@ def _event(conversation_id: UUID, scenario_id: UUID, version_id: UUID, sequence:
         agent_run_id=uuid4(),
         site_id=uuid4(),
         actor_id=uuid4(),
-        payload=ActivityItemV1(
+        payload=PlannerMessageActivityV1(
             activity_id=activity_id,
             activity_type="planner_message",
             conversation_id=conversation_id,
@@ -96,6 +106,7 @@ class _Repository:
         self.conversation_id = conversation_id
         self.accepted: list[str] = []
         self.timeline_has_more = False
+        self.claimed_statuses: list[str] = []
 
     def _conversation(self) -> ConversationV1:
         return ConversationV1(self.conversation_id, self.scenario_id, self.version_id, 2)
@@ -132,6 +143,72 @@ class _Repository:
             "agent_queued",
         )
 
+    def claim_queued_run(self, _connection, *, conversation_id, agent_run_id):
+        if conversation_id != self.conversation_id:
+            return None
+        self._run_id = agent_run_id
+        return ClaimedAgentRunV1(
+            agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
+            scenario_id=self.scenario_id,
+            scenario_version_id=self.version_id,
+            site_id=self.site_id,
+            actor_id=self.actor_id,
+            membership_id=uuid4(),
+            prompt="Check coverage",
+        )
+
+    def finish_agent_run(self, _connection, *, claimed, status, response, request_id):
+        self.claimed_statuses.append(status)
+        activity_id = uuid4()
+        event = PersistedEventV1(
+            stream_id=claimed.conversation_id,
+            sequence=Decimal(2),
+            event_type="agent_response",
+            occurred_at=_NOW,
+            resource_version=3,
+            request_id=request_id,
+            conversation_id=claimed.conversation_id,
+            agent_run_id=claimed.agent_run_id,
+            site_id=claimed.site_id,
+            actor_id=claimed.actor_id,
+            payload=AgentResponseActivityV1(
+                activity_id=activity_id,
+                activity_type="agent_response",
+                conversation_id=claimed.conversation_id,
+                conversation_resource_version=3,
+                scenario_id=claimed.scenario_id,
+                scenario_version_id=claimed.scenario_version_id,
+                occurred_at=_NOW,
+                response=response,
+            ),
+        )
+        return ExecutedAgentRunV1(event, 3, status)
+
+
+class _Runtime:
+    name = "test"
+
+    def run_turn(self, request):
+        return AgentRunOutcomeV1(
+            status="completed",
+            answer=GroundedAnswerV1(
+                segments=(GroundedProseSegmentV1(text="Coverage checked."),)
+            ),
+        )
+
+
+class _FailingRuntime:
+    name = "test"
+
+    def run_turn(self, request):
+        raise AgentRuntimeError("provider unavailable")
+
+
+@contextmanager
+def _open_context(_site_id):
+    yield object()
+
 
 @pytest.fixture()
 def conversation_client(tmp_path):
@@ -143,6 +220,8 @@ def conversation_client(tmp_path):
         csrf_token_hash=hash_secret(_CSRF_TOKEN),
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
+    repository.site_id = resolved.site_id
+    repository.actor_id = resolved.app_user_id
     settings = replace(
         default_settings(),
         db_path=str(tmp_path / "legacy.db"),
@@ -153,6 +232,12 @@ def conversation_client(tmp_path):
     app.dependency_overrides[get_identity_store] = lambda: _IdentityStore(resolved)
     app.dependency_overrides[get_site_context] = lambda: object()
     app.dependency_overrides[get_conversation_repository] = lambda: repository
+    app.dependency_overrides[get_site_context_opener] = lambda: _open_context
+    app.dependency_overrides[get_capability_registry] = lambda: (lambda _context: ())
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **_kwargs: _Runtime()
+    )
     try:
         with TestClient(app) as client:
             yield client, repository, settings
@@ -258,8 +343,63 @@ def test_accepted_turn_serializes_sequence_as_a_lossless_string(conversation_cli
     # browser and break AD-21's `<stream_uuid>:<sequence>` SSE id.
     assert '"sequence":"9007199254740993"' in response.text
     assert body["sequence"] == "9007199254740993"
+    assert UUID(body["agent_run_id"])
     assert body["activity"]["sequence"] == "9007199254740993"
     assert body["agent_run_status"] == "agent_queued"
+
+
+def test_execute_turn_is_conversation_scoped_and_persists_terminal_response(
+    conversation_client,
+) -> None:
+    client, repository, settings = conversation_client
+    run_id = uuid4()
+
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{run_id}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent_run_id"] == str(run_id)
+    assert response.json()["activity"]["activity_type"] == "agent_response"
+    assert repository.claimed_statuses == ["agent_completed"]
+
+
+def test_execute_turn_foreign_conversation_is_non_disclosing_404(
+    conversation_client,
+) -> None:
+    client, _repository, settings = conversation_client
+    response = client.post(
+        f"/api/v1/conversations/{uuid4()}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+    assert response.status_code == 404
+    assert response.json() == _NOT_FOUND_BODY
+
+
+def test_execute_turn_requires_an_authenticated_session(conversation_client) -> None:
+    client, repository, _settings = conversation_client
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute"
+    )
+    assert response.status_code == 401
+    assert response.json()["code"] == "authentication_required"
+
+
+def test_runtime_failure_still_finalizes_the_claimed_run(conversation_client) -> None:
+    client, repository, settings = conversation_client
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **_kwargs: _FailingRuntime()
+    )
+
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["agent_run_status"] == "agent_failed"
+    assert repository.claimed_statuses == ["agent_failed"]
 
 
 @pytest.mark.parametrize("text", ["   ", "\t\n", "　"])

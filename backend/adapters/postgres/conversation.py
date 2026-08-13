@@ -11,16 +11,24 @@ from adapters.postgres.schema import (
     agent_run,
     conversation,
     message,
+    membership,
     persisted_event,
     scenario_version,
 )
-from application.contracts.activity import ActivityItemV1
+from application.contracts.activity import (
+    ActivityItemV1,
+    AgentResponseActivityV1,
+    PlannerMessageActivityV1,
+)
 from application.contracts.persisted_event import PersistedEventV1
 from application.ports.conversation import (
     AcceptedTurnV1,
+    AgentRunNotQueuedError,
+    ClaimedAgentRunV1,
     ConversationPageV1,
     ConversationTimelineV1,
     ConversationV1,
+    ExecutedAgentRunV1,
 )
 
 # The conversation stream's identity IS the conversation's own UUID (AD-21).
@@ -227,7 +235,7 @@ class PostgresConversationRepository:
             agent_run_id=run_id,
             site_id=site_id,
             actor_id=actor_id,
-            payload=ActivityItemV1(
+            payload=PlannerMessageActivityV1(
                 activity_id=activity_id,
                 activity_type=_PLANNER_MESSAGE,
                 conversation_id=conversation_id,
@@ -262,9 +270,156 @@ class PostgresConversationRepository:
         )
         return AcceptedTurnV1(event, new_version, "agent_queued")
 
+    def claim_queued_run(
+        self,
+        connection: Connection,
+        *,
+        conversation_id: UUID,
+        agent_run_id: UUID,
+    ) -> ClaimedAgentRunV1 | None:
+        row = connection.execute(
+            select(
+                agent_run.c.id.label("agent_run_id"),
+                agent_run.c.status,
+                conversation.c.id.label("conversation_id"),
+                conversation.c.scenario_id,
+                conversation.c.scenario_version_id,
+                conversation.c.site_id,
+                message.c.actor_id,
+                message.c.text.label("prompt"),
+                membership.c.id.label("membership_id"),
+            )
+            .join(conversation, conversation.c.id == agent_run.c.conversation_id)
+            .join(message, message.c.id == agent_run.c.message_id)
+            .join(
+                membership,
+                (membership.c.app_user_id == message.c.actor_id)
+                & (membership.c.site_id == conversation.c.site_id)
+                & membership.c.revoked_at.is_(None),
+            )
+            .where(
+                conversation.c.id == conversation_id,
+                agent_run.c.id == agent_run_id,
+            )
+            .with_for_update(of=agent_run)
+        ).one_or_none()
+        if row is None:
+            return None
+        if row.status != "agent_queued":
+            raise AgentRunNotQueuedError("agent run is not queued")
+        connection.execute(
+            update(agent_run)
+            .where(agent_run.c.id == agent_run_id)
+            .values(status="agent_running")
+        )
+        history_rows = connection.execute(
+            select(persisted_event)
+            .where(
+                persisted_event.c.stream_id == conversation_id,
+                persisted_event.c.agent_run_id != agent_run_id,
+            )
+            .order_by(persisted_event.c.sequence.desc())
+            .limit(100)
+        ).all()
+        return ClaimedAgentRunV1(
+            agent_run_id=row.agent_run_id,
+            conversation_id=row.conversation_id,
+            scenario_id=row.scenario_id,
+            scenario_version_id=row.scenario_version_id,
+            site_id=row.site_id,
+            actor_id=row.actor_id,
+            membership_id=row.membership_id,
+            prompt=row.prompt,
+            history=tuple(
+                _event_from_row(item).payload for item in reversed(history_rows)
+            ),
+        )
+
+    def finish_agent_run(
+        self,
+        connection: Connection,
+        *,
+        claimed: ClaimedAgentRunV1,
+        status: str,
+        response,
+        request_id: UUID,
+    ) -> ExecutedAgentRunV1:
+        conv = connection.execute(
+            select(conversation)
+            .where(conversation.c.id == claimed.conversation_id)
+            .with_for_update()
+        ).one_or_none()
+        if conv is None:
+            raise RuntimeError("claimed conversation is no longer visible")
+        current = connection.execute(
+            select(agent_run.c.status)
+            .where(agent_run.c.id == claimed.agent_run_id)
+            .with_for_update()
+        ).scalar_one_or_none()
+        if current != "agent_running":
+            raise AgentRunNotQueuedError("agent run is no longer running")
+        new_version = conv.resource_version + 1
+        activity_id = uuid4()
+        occurred_at = datetime.now(timezone.utc)
+        sequence = connection.execute(
+            select(
+                func.coalesce(func.max(persisted_event.c.sequence), Decimal(0)) + 1
+            ).where(persisted_event.c.stream_id == claimed.conversation_id)
+        ).scalar_one()
+        payload = AgentResponseActivityV1(
+            activity_id=activity_id,
+            activity_type="agent_response",
+            conversation_id=claimed.conversation_id,
+            conversation_resource_version=new_version,
+            scenario_id=claimed.scenario_id,
+            scenario_version_id=claimed.scenario_version_id,
+            occurred_at=occurred_at,
+            response=response,
+        )
+        event = PersistedEventV1(
+            stream_id=claimed.conversation_id,
+            sequence=sequence,
+            event_type="agent_response",
+            occurred_at=occurred_at,
+            resource_version=new_version,
+            request_id=request_id,
+            conversation_id=claimed.conversation_id,
+            agent_run_id=claimed.agent_run_id,
+            site_id=claimed.site_id,
+            actor_id=claimed.actor_id,
+            payload=payload,
+        )
+        connection.execute(
+            update(agent_run)
+            .where(agent_run.c.id == claimed.agent_run_id)
+            .values(status=status)
+        )
+        connection.execute(
+            insert(persisted_event).values(
+                id=activity_id,
+                site_id=claimed.site_id,
+                stream_id=event.stream_id,
+                sequence=event.sequence,
+                event_type=event.event_type,
+                resource_version=event.resource_version,
+                request_id=event.request_id,
+                conversation_id=event.conversation_id,
+                agent_run_id=event.agent_run_id,
+                actor_id=event.actor_id,
+                occurred_at=event.occurred_at,
+                payload=_payload_to_json(payload),
+            )
+        )
+        connection.execute(
+            update(conversation)
+            .where(conversation.c.id == claimed.conversation_id)
+            .values(resource_version=new_version)
+        )
+        return ExecutedAgentRunV1(event, new_version, status)
+
 
 def _payload_to_json(activity: ActivityItemV1) -> dict:
-    return {
+    common = {
         "schema_version": activity.schema_version,
         "activity_id": str(activity.activity_id),
         "activity_type": activity.activity_type,
@@ -273,18 +428,29 @@ def _payload_to_json(activity: ActivityItemV1) -> dict:
         "scenario_id": str(activity.scenario_id),
         "scenario_version_id": str(activity.scenario_version_id),
         "occurred_at": activity.occurred_at.isoformat(),
-        "message_id": str(activity.message_id),
-        "text": activity.text,
+    }
+    if isinstance(activity, PlannerMessageActivityV1):
+        return {
+            **common,
+            "message_id": str(activity.message_id),
+            "text": activity.text,
+        }
+    from pydantic import TypeAdapter
+    return {
+        **common,
+        "response": TypeAdapter(type(activity.response)).dump_python(
+            activity.response, mode="json"
+        ),
     }
 
 
 def _activity_from_payload(value: dict) -> ActivityItemV1:
     activity_type = value.get("activity_type")
-    if activity_type != _PLANNER_MESSAGE:
+    if activity_type not in (_PLANNER_MESSAGE, "agent_response"):
         raise UnsupportedActivityPayloadError(
             f"activity_type {activity_type!r} has no payload shape in this reader"
         )
-    return ActivityItemV1(
+    common = dict(
         activity_id=UUID(value["activity_id"]),
         activity_type=activity_type,
         conversation_id=UUID(value["conversation_id"]),
@@ -294,9 +460,19 @@ def _activity_from_payload(value: dict) -> ActivityItemV1:
         occurred_at=datetime.fromisoformat(value["occurred_at"]).astimezone(
             timezone.utc
         ),
-        message_id=UUID(value["message_id"]),
-        text=value["text"],
         schema_version=value["schema_version"],
+    )
+    if activity_type == _PLANNER_MESSAGE:
+        return PlannerMessageActivityV1(
+            **common,
+            message_id=UUID(value["message_id"]),
+            text=value["text"],
+        )
+    from pydantic import TypeAdapter
+    from application.contracts.grounding import GroundedResponseV1
+    return AgentResponseActivityV1(
+        **common,
+        response=TypeAdapter(GroundedResponseV1).validate_python(value["response"]),
     )
 
 

@@ -6,6 +6,7 @@ from typing import Annotated, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
+from application.contracts.grounding import GroundedResponseV1
 
 
 class ScenarioCreate(BaseModel):
@@ -118,17 +119,14 @@ class ConversationListOut(BaseModel):
     has_more: bool
 
 
-class ActivityItemOut(BaseModel):
+class ActivityCommonOut(BaseModel):
     schema_version: str
     activity_id: UUID
-    activity_type: Literal["planner_message", "agent_response", "clarification", "draft", "run_progress", "comparison", "approval_request", "terminal_outcome"]
     conversation_id: UUID
     conversation_resource_version: int
     scenario_id: UUID
     scenario_version_id: UUID
     occurred_at: datetime
-    message_id: UUID
-    text: str
     # A JSON *string*, on reads as well as writes. AD-21's SSE id is
     # `<stream_uuid>:<sequence>`; a JSON number becomes an IEEE-754 double in
     # the browser, so a timeline that omitted this or emitted it as a number
@@ -136,11 +134,37 @@ class ActivityItemOut(BaseModel):
     sequence: str
 
 
+class PlannerMessageActivityOut(ActivityCommonOut):
+    activity_type: Literal["planner_message"]
+    message_id: UUID
+    text: str
+
+
+class AgentResponseActivityOut(ActivityCommonOut):
+    activity_type: Literal["agent_response"]
+    response: GroundedResponseV1
+
+
+ActivityItemOut = Annotated[
+    PlannerMessageActivityOut | AgentResponseActivityOut,
+    Field(discriminator="activity_type"),
+]
+
+
 class AcceptedTurnOut(BaseModel):
     activity: ActivityItemOut
     resource_version: int
     agent_run_status: str
     sequence: str
+    agent_run_id: UUID
+
+
+class ExecutedTurnOut(BaseModel):
+    activity: ActivityItemOut
+    resource_version: int
+    agent_run_status: str
+    sequence: str
+    agent_run_id: UUID
 
 
 class TimelineOut(BaseModel):

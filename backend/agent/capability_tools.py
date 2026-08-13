@@ -101,6 +101,8 @@ def _register_module(
             if exc.code in module.retryable_error_codes:
                 raise ModelRetry(f"{exc.code}: {exc}") from exc
             raise
+        if ctx.deps.tool_result_sink is not None:
+            ctx.deps.tool_result_sink(result)
         return _render_result(result, module.model_facing_text_field)
 
     tool = Tool.from_schema(

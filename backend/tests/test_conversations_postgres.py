@@ -11,14 +11,17 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from adapters.postgres import conversation as conversation_adapter
 from adapters.postgres.conversation import (
+    AgentRunNotQueuedError,
     PostgresConversationRepository,
     UnsupportedActivityPayloadError,
 )
+from application.contracts.grounding import GroundedResponseV1
 from adapters.postgres.schema import (
     agent_run,
     app_user,
     conversation,
     message,
+    membership,
     organization,
     persisted_event,
     scenario,
@@ -45,7 +48,7 @@ def ids(governed_postgres_engine):
 def _seed(engine):
     ids = {
         name: uuid4()
-        for name in ("org", "site", "other_site", "scenario", "v1", "v2", "actor")
+        for name in ("org", "site", "other_site", "scenario", "v1", "v2", "actor", "membership")
     }
     with engine.begin() as c:
         c.execute(insert(organization).values(id=ids["org"], name="Org"))
@@ -59,6 +62,13 @@ def _seed(engine):
         c.execute(
             insert(app_user).values(
                 id=ids["actor"], idp_subject="planner", email="planner@example.test"
+            )
+        )
+        c.execute(
+            insert(membership).values(
+                id=ids["membership"],
+                app_user_id=ids["actor"],
+                site_id=ids["site"],
             )
         )
         c.execute(
@@ -519,7 +529,7 @@ def test_events_after_raises_typed_on_an_unrenderable_variant(
 def test_an_unrenderable_activity_variant_fails_typed_not_as_a_key_error(
     governed_postgres_engine, ids
 ) -> None:
-    """Seven of AD-20's eight discriminants are reserved names with no shipped
+    """Six of AD-20's eight discriminants are reserved names with no shipped
     payload. Reaching one must not take the whole timeline down with a
     KeyError-turned-500."""
     engine = governed_postgres_engine
@@ -536,7 +546,7 @@ def test_an_unrenderable_activity_variant_fails_typed_not_as_a_key_error(
         admin.execute(
             persisted_event.update()
             .where(persisted_event.c.stream_id == created.id)
-            .values(payload={"activity_type": "agent_response", "schema_version": "1"})
+            .values(payload={"activity_type": "comparison", "schema_version": "1"})
         )
 
     with pytest.raises(UnsupportedActivityPayloadError):
@@ -574,3 +584,64 @@ def test_another_site_can_neither_read_nor_write_this_conversation(
             is None
         )
         assert repo.list_for_scenario(c, scenario_id=ids["scenario"]).items == ()
+
+
+def test_two_executors_claim_one_run_but_persist_one_terminal_response(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+    with _site_context(engine, ids["site"]) as connection:
+        accepted = accept_turn(
+            repo,
+            connection,
+            conversation_id=created.id,
+            site_id=ids["site"],
+            actor_id=ids["actor"],
+            text="execute once",
+        )
+    assert accepted is not None
+
+    def execute_once() -> str:
+        try:
+            with _site_context(engine, ids["site"]) as connection:
+                claimed = repo.claim_queued_run(
+                    connection,
+                    conversation_id=created.id,
+                    agent_run_id=accepted.event.agent_run_id,
+                )
+            assert claimed is not None
+            with _site_context(engine, ids["site"]) as connection:
+                repo.finish_agent_run(
+                    connection,
+                    claimed=claimed,
+                    status="agent_completed",
+                    response=GroundedResponseV1(
+                        scenario_version_id=claimed.scenario_version_id
+                    ),
+                    request_id=uuid4(),
+                )
+            return "completed"
+        except AgentRunNotQueuedError:
+            return "refused"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(lambda _value: execute_once(), range(2)))
+
+    assert sorted(outcomes) == ["completed", "refused"]
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(agent_run.c.status).where(
+                agent_run.c.id == accepted.event.agent_run_id
+            )
+        ).scalar_one() == "agent_completed"
+        assert admin.execute(
+            select(func.count())
+            .select_from(persisted_event)
+            .where(
+                persisted_event.c.agent_run_id == accepted.event.agent_run_id,
+                persisted_event.c.event_type == "agent_response",
+            )
+        ).scalar_one() == 1

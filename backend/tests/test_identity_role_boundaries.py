@@ -161,6 +161,31 @@ def test_shiftmind_login_can_set_role_shiftmind_runtime_but_gets_no_table_access
 
 
 @pytest.mark.postgres
+def test_runtime_can_update_only_agent_run_status_and_cannot_delete(
+    restricted_engine,
+) -> None:
+    with restricted_engine.connect() as connection:
+        connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
+        privileges = {
+            column: connection.execute(
+                text(
+                    "SELECT has_column_privilege(current_user, 'agent_run', :column, 'UPDATE')"
+                ),
+                {"column": column},
+            ).scalar_one()
+            for column in ("id", "site_id", "conversation_id", "message_id", "status", "created_at")
+        }
+        can_delete = connection.execute(
+            text("SELECT has_table_privilege(current_user, 'agent_run', 'DELETE')")
+        ).scalar_one()
+    assert privileges == {
+        "id": False, "site_id": False, "conversation_id": False,
+        "message_id": False, "status": True, "created_at": False,
+    }
+    assert can_delete is False
+
+
+@pytest.mark.postgres
 def test_identity_store_completes_full_lifecycle_under_the_restricted_role(
     postgres_engine,
     restricted_engine,

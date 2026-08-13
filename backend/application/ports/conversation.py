@@ -7,6 +7,8 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from application.contracts.persisted_event import PersistedEventV1
+from application.contracts.grounding import GroundedResponseV1
+from application.contracts.activity import ActivityItemV1
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,30 @@ class AcceptedTurnV1:
     event: PersistedEventV1
     resource_version: int
     agent_run_status: str
+
+
+@dataclass(frozen=True)
+class ClaimedAgentRunV1:
+    agent_run_id: UUID
+    conversation_id: UUID
+    scenario_id: UUID
+    scenario_version_id: UUID
+    site_id: UUID
+    actor_id: UUID
+    membership_id: UUID
+    prompt: str
+    history: tuple[ActivityItemV1, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExecutedAgentRunV1:
+    event: PersistedEventV1
+    resource_version: int
+    agent_run_status: str
+
+
+class AgentRunNotQueuedError(ValueError):
+    """A visible run exists but cannot be claimed from its current state."""
 
 
 class ConversationRepository(Protocol):
@@ -120,3 +146,21 @@ class ConversationRepository(Protocol):
         text: str,
         request_id: UUID,
     ) -> AcceptedTurnV1 | None: ...
+
+    def claim_queued_run(
+        self,
+        connection: Any,
+        *,
+        conversation_id: UUID,
+        agent_run_id: UUID,
+    ) -> ClaimedAgentRunV1 | None: ...
+
+    def finish_agent_run(
+        self,
+        connection: Any,
+        *,
+        claimed: ClaimedAgentRunV1,
+        status: str,
+        response: GroundedResponseV1,
+        request_id: UUID,
+    ) -> ExecutedAgentRunV1: ...

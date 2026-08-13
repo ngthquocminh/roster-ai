@@ -28,7 +28,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from agent.runtime import PydanticAIAgentRuntime
+from agent.runtime import AgentRuntimeConfig, PydanticAIAgentRuntime, create_agent_runtime
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.agent_runtime import (
@@ -94,6 +94,49 @@ def test_adapter_satisfies_the_port() -> None:
         model=FunctionModel(_demo_then_report)
     )
     assert runtime.name == "pydantic-ai"
+
+
+def test_factory_wires_configured_model_but_injected_model_wins() -> None:
+    injected = FunctionModel(_demo_then_report)
+    configured = create_agent_runtime(
+        settings=type(
+            "SettingsStub",
+            (),
+            {
+                "agent_runtime_model": "test",
+                "agent_runtime_api_key": None,
+                "agent_runtime_request_limit": 1,
+                "agent_runtime_tool_calls_limit": 1,
+                "agent_runtime_deadline_seconds": 1.0,
+            },
+        )()
+    )
+    assert configured._model.__class__.__name__ == "TestModel"
+
+    overridden = create_agent_runtime(
+        settings=type(
+            "SettingsStub",
+            (),
+            {
+                "agent_runtime_model": "test",
+                "agent_runtime_api_key": None,
+                "agent_runtime_request_limit": 1,
+                "agent_runtime_tool_calls_limit": 1,
+                "agent_runtime_deadline_seconds": 1.0,
+            },
+        )(),
+        model=injected,
+    )
+    assert overridden._model is injected
+
+
+def test_openrouter_model_uses_the_explicit_agent_runtime_key() -> None:
+    runtime = PydanticAIAgentRuntime(
+        config=AgentRuntimeConfig(
+            model="openrouter:openai/gpt-oss-20b:free", api_key="test-key"
+        )
+    )
+    assert runtime._model.__class__.__name__ == "OpenAIChatModel"
 
 
 def test_full_multi_step_turn_suspend_resume_and_terminal_outcome() -> None:

@@ -63,18 +63,24 @@ def to_framework_messages(turn: AgentTurnV1) -> list[ModelMessage]:
     rebuilt: list[ModelMessage] = []
     for message in turn.messages:
         if message.role == "user":
+            if any(part.kind != "text" for part in message.parts):
+                raise ValueError("user messages may contain only text parts")
             rebuilt.append(
                 ModelRequest(
                     parts=[UserPromptPart(content=p.text or "") for p in message.parts]
                 )
             )
         elif message.role == "system":
+            if any(part.kind != "text" for part in message.parts):
+                raise ValueError("system messages may contain only text parts")
             rebuilt.append(
                 ModelRequest(
                     parts=[SystemPromptPart(content=p.text or "") for p in message.parts]
                 )
             )
         elif message.role == "tool_result":
+            if any(part.kind != "tool_result" for part in message.parts):
+                raise ValueError("tool-result messages may contain only tool_result parts")
             rebuilt.append(
                 ModelRequest(
                     parts=[
@@ -100,8 +106,12 @@ def to_framework_messages(turn: AgentTurnV1) -> list[ModelMessage]:
                             tool_call_id=p.tool_call_id or "",
                         )
                     )
+                else:
+                    raise ValueError(f"unsupported assistant part kind: {p.kind!r}")
             if parts:
                 rebuilt.append(ModelResponse(parts=parts))
+        else:
+            raise ValueError(f"unsupported agent message role: {message.role!r}")
     return rebuilt
 
 

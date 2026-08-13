@@ -19,7 +19,9 @@ from application.contracts.capability_manifest import (
 
 SCHEMA_VERSION = "1"
 CAPABILITY_NAME = "shiftmind_demonstration"
-ERROR_CODES = ("approval_required", "budget_exhausted", "invalid_repeat")
+ERROR_CODES = (
+    "demonstration_failed", "approval_required", "budget_exhausted", "invalid_repeat"
+)
 EVALUATION_FIXTURES = (
     "evals/golden/demonstration/repeat-once.json",
     "evals/golden/demonstration/repeat-with-approval.json",
@@ -42,6 +44,10 @@ SCOPE_CONTROLS: Mapping[str, str] = {
 
 
 class DemonstrationError(CapabilityError):
+    code = "demonstration_failed"
+
+
+class DemonstrationInvalidRepeat(DemonstrationError):
     code = "invalid_repeat"
 
 
@@ -98,9 +104,9 @@ def demonstrate(
     if remaining is not None and remaining <= 0:
         raise DemonstrationBudgetExhausted("no tool-call budget remains for this run")
     if payload.repeat < 1:
-        raise DemonstrationError("repeat must be at least 1")
+        raise DemonstrationInvalidRepeat("repeat must be at least 1")
     if payload.repeat > MAX_REPEAT:
-        raise DemonstrationError(f"repeat must not exceed {MAX_REPEAT}")
+        raise DemonstrationInvalidRepeat(f"repeat must not exceed {MAX_REPEAT}")
     # Authority BEFORE effect: nothing is computed on an unapproved call, and
     # the approved call executes exactly once. Raising after building the result
     # would mean "act, then ask" -- and then act a second time on resume.
@@ -126,6 +132,6 @@ def demonstration_module() -> CapabilityModuleV1:
 __all__ = [
     "CAPABILITY_NAME", "ERROR_CODES", "MAX_REPEAT", "SCOPE_CONTROLS",
     "DemonstrationApprovalRequired", "DemonstrationBudgetExhausted",
-    "DemonstrationError", "DemonstrationRequestV1", "DemonstrationResultV1",
+    "DemonstrationError", "DemonstrationInvalidRepeat", "DemonstrationRequestV1", "DemonstrationResultV1",
     "demonstrate", "demonstration_manifest", "demonstration_module",
 ]

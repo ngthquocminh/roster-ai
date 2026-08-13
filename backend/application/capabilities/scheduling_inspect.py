@@ -63,7 +63,7 @@ SCOPE_CONTROLS: Mapping[str, str] = {
 class SchedulingInspectError(CapabilityError):
     """Typed capability failure. `code` is the manifest's error vocabulary."""
 
-    code = "invalid_query"
+    code = "inspection_failed"
 
 
 class ScenarioNotFoundError(SchedulingInspectError):
@@ -86,12 +86,18 @@ class BudgetExhaustedError(SchedulingInspectError):
     code = "budget_exhausted"
 
 
+class InspectionTimeoutError(SchedulingInspectError):
+    code = "inspection_timeout"
+
+
 ERROR_CODES = (
+    "inspection_failed",
     "scenario_not_found",
     "version_mismatch",
     "site_mismatch",
     "invalid_query",
     "budget_exhausted",
+    "inspection_timeout",
 )
 
 
@@ -220,7 +226,7 @@ def scheduling_inspect(
     # AgentBudgetV1 remains the interrupting control.
     elapsed = (deps.clock() - started_at).total_seconds()
     if elapsed > resolved.timeout_seconds:
-        raise SchedulingInspectError(
+        raise InspectionTimeoutError(
             f"inspection exceeded the {resolved.timeout_seconds}s budget "
             f"({elapsed:.2f}s)"
         )
@@ -278,7 +284,7 @@ def scheduling_inspect_module() -> CapabilityModuleV1:
 
 __all__ = [
     "CAPABILITY_NAME", "ERROR_CODES", "SCHEDULING_INSPECT_POLICY",
-    "InvalidQueryError", "BudgetExhaustedError", "SCOPE_CONTROLS",
+    "InvalidQueryError", "BudgetExhaustedError", "InspectionTimeoutError", "SCOPE_CONTROLS",
     "ScenarioNotFoundError", "SchedulingInspectError",
     "SchedulingInspectRequestV1", "SchedulingInspectResultV1",
     "SiteMismatchError", "VersionMismatchError",
