@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 import json
-from typing import Mapping
+from typing import Literal, Mapping
 from uuid import UUID
 
 from application.capabilities.deps import AgentDepsV1
@@ -48,6 +48,33 @@ SCOPE_CONTROLS: Mapping[str, str] = {
     "paging:bounded_exhaustion": (
         "AUTHORITATIVE. matching_count is drained under an explicit row bound or the call fails. "
         "NOT COVERED: datasets larger than the configured bound; they fail closed."
+    ),
+    "filters:task_and_family_only": (
+        "AUTHORITATIVE. task_id and family are pushed into the query so the row bound is "
+        "tested against the matching subset. "
+        "NOT COVERED: the time window, which the adapter can only express as containment "
+        "(start_minute_gte/end_minute_lte) and not as overlap; pushing it down would drop "
+        "partially-overlapping rows and yield a wrong number carrying a valid locator."
+    ),
+    "units:no_volume_to_minutes_conversion": (
+        "AUTHORITATIVE. headcount demand yields minutes and volume demand yields units; the "
+        "two are never multiplied together or reported under one unit. "
+        "NOT COVERED: converting volume to minutes, which needs a rate. The only rate in the "
+        "projection is QualificationRefV1.rate -- per worker, per task -- so the conversion "
+        "depends on an assignment and belongs to Epic 3's solver, not to a read model."
+    ),
+    "volume:uniform_within_interval": (
+        "COVERS restricting a volume demand row to a requested window by pro-rating it across "
+        "the row's own interval. "
+        "NOT COVERED: any non-uniform intra-interval distribution; the source states one "
+        "quantity per interval and carries no shape within it."
+    ),
+    "evidence:consumed_rows_only": (
+        "AUTHORITATIVE. Every locator names a row folded into the value, and consumed_row_count "
+        "reports how many were. "
+        "NOT COVERED: an empty match set carries no locator -- EvidenceRefV1 addresses records, "
+        "and absence has no record_id. The gate reads consumed_row_count to tell a correct zero "
+        "from a calculator fault."
     ),
 }
 
@@ -95,6 +122,16 @@ class SchedulingComputeRequestV1:
 
 @dataclass(frozen=True)
 class SchedulingComputeResultV1:
+    """TRUSTED result. Reaches the grounding gate whole; the model sees only
+    `SchedulingComputeModelViewV1`.
+
+    `consumed_row_count` is the completeness proof: the number of rows the
+    calculator folded into `value`. Without it the gate cannot tell a
+    legitimately empty match set from a calculator that consumed rows and
+    emitted no locator -- one is a correct zero, the other is an application
+    fault, and they must not share a failure state.
+    """
+
     metric: MetricV1
     arguments: ClaimArgumentsV1
     value: int | float
@@ -102,22 +139,84 @@ class SchedulingComputeResultV1:
     evidence_refs: tuple[EvidenceRefV1, ...]
     scenario_version_id: UUID
     result_id: str
+    consumed_row_count: int = 0
     schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
+class SchedulingComputeModelViewV1:
+    """What the MODEL sees when this capability returns.
+
+    It carries no quantity -- no value, no row count, no evidence refs. The
+    model's only jobs are to pick a metric, pass arguments, and cite
+    `result_id`; the displayed number travels the trusted path (handler ->
+    `tool_result_sink` -> gate -> claim) and never passes through the model.
+
+    The consequence is the point: since no tool ever hands the model a
+    quantity, a numeral appearing in a prose segment can only be fabricated,
+    which is what makes the gate's blunt prose-digit ban a rare fabrication
+    signal instead of a routine event. `matched` is deliberately qualitative --
+    a count is a quantity, and "there are 8 demand rows" is itself an
+    unlocated numerical claim.
+    """
+
+    result_id: str
+    metric: MetricV1
+    unit: GroundingUnitV1
+    matched: Literal["none", "some"]
+    schema_version: str = SCHEMA_VERSION
+
+
+def _model_view(result: SchedulingComputeResultV1) -> SchedulingComputeModelViewV1:
+    return SchedulingComputeModelViewV1(
+        result_id=result.result_id,
+        metric=result.metric,
+        unit=result.unit,
+        matched="some" if result.consumed_row_count else "none",
+    )
 
 
 def derive_result_id(
     metric: MetricV1, arguments: ClaimArgumentsV1, scenario_version_id: UUID
 ) -> str:
-    """RFC-8785 canonical SHA-256 for this restricted string/int/null shape."""
+    """RFC 8785 (JCS) canonical SHA-256, valid for this restricted shape only.
+
+    JCS conformance here rests on three properties and one restriction, stated
+    so a later reader can check rather than trust:
+
+    * key ordering -- `sort_keys=True` orders by Unicode code point, which
+      equals JCS's UTF-16 code-unit ordering for every key below U+10000. All
+      keys are ASCII field names.
+    * literals/whitespace -- `separators=(",", ":")` gives JCS's compact form.
+    * encoding -- `ensure_ascii=False` plus UTF-8 is JCS's serialization.
+    * RESTRICTION -- JCS number serialization (ECMAScript `Number::toString`)
+      is NOT implemented, so the payload must contain no float. Asserted below
+      rather than assumed: this identifier binds a model citation to trusted
+      evidence, and a silent shape change here would silently change identity.
+    """
     payload = {
         "arguments": asdict(arguments),
         "metric": metric,
         "scenario_version_id": str(scenario_version_id),
     }
+    if _contains_float(payload):
+        raise InvalidQueryError(
+            "result_id payload must contain no float; JCS number form is not implemented"
+        )
     canonical = json.dumps(
         payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return sha256(canonical).hexdigest()
+
+
+def _contains_float(value: object) -> bool:
+    if isinstance(value, float):
+        return True
+    if isinstance(value, dict):
+        return any(_contains_float(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_float(item) for item in value)
+    return False
 
 
 def scheduling_compute_manifest() -> CapabilityManifestV1:
@@ -134,8 +233,8 @@ def scheduling_compute_manifest() -> CapabilityManifestV1:
         scope="current_site/current_scenario_version",
         version_semantics="result and every evidence locator are pinned to the selected scenario version",
         idempotency_semantics="content-addressed and repeatable for an immutable version",
-        budget_limit=settings.scheduling_inspect_row_limit,
-        timeout_seconds=settings.scheduling_inspect_timeout_seconds,
+        budget_limit=settings.scheduling_compute_row_limit,
+        timeout_seconds=settings.scheduling_compute_timeout_seconds,
         approval_policy="none",
         audit_mapping="agent run + tool call + deterministic result identifier; no hidden reasoning",
         evidence_mapping="exact consumed records, fields/ranges, checksum, and scenario version",
@@ -189,6 +288,7 @@ def scheduling_compute(
         result_id=derive_result_id(
             calculated.metric, calculated.arguments, calculated.scenario_version_id
         ),
+        consumed_row_count=calculated.consumed_row_count,
     )
 
 
@@ -200,6 +300,9 @@ def scheduling_compute_module() -> CapabilityModuleV1:
         retryable_error_codes=frozenset({"invalid_query"}),
         required_role="planner",
         required_feature_policy=SCHEDULING_COMPUTE_POLICY,
+        # The model gets a receipt, never the number. See
+        # SchedulingComputeModelViewV1 for why `matched` is qualitative.
+        model_facing_view=_model_view,
     )
 
 
@@ -207,6 +310,7 @@ __all__ = [
     "CAPABILITY_NAME", "ERROR_CODES", "EVALUATION_FIXTURES", "SCHEDULING_COMPUTE_POLICY",
     "SCOPE_CONTROLS", "BudgetExhaustedError", "CalculationFailedError",
     "InvalidQueryError", "ScenarioNotFoundError", "SchedulingComputeError",
+    "SchedulingComputeModelViewV1",
     "SchedulingComputeRequestV1", "SchedulingComputeResultV1", "SiteMismatchError",
     "VersionMismatchError", "derive_result_id", "scheduling_compute",
     "scheduling_compute_manifest", "scheduling_compute_module",

@@ -187,5 +187,7 @@ def test_the_module_declares_its_model_facing_rendering() -> None:
     module = demonstration_module()
 
     assert module.request_argument == "payload"
-    assert module.model_facing_text_field == "text"
+    # Projecting the bare string keeps Story 2.2's seven frozen golden cases
+    # byte-identical; rendering the whole record would change the transcript.
+    assert module.model_facing_view(DemonstrationResultV1(text="a|a")) == "a|a"
     assert replace(module).manifest.approval_policy == "exact_action"

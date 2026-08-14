@@ -1061,10 +1061,10 @@ export interface components {
             kind: "claim";
             /**
              * Metric
-             * @default required_demand_minutes
+             * @default required_headcount_minutes
              * @enum {string}
              */
-            metric: "required_demand_minutes" | "staffed_minutes" | "shortfall_minutes" | "qualified_worker_count";
+            metric: "required_headcount_minutes" | "required_demand_volume" | "staffed_minutes" | "shortfall_minutes" | "qualified_worker_count";
             /**
              * @default {
              *       "schema_version": "1"
@@ -1079,7 +1079,7 @@ export interface components {
             /** Value */
             value?: number | null;
             /** Unit */
-            unit?: ("minutes" | "workers") | null;
+            unit?: ("minutes" | "workers" | "units") | null;
             /**
              * Evidence Refs
              * @default []

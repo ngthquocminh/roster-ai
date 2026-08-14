@@ -16,12 +16,30 @@ from application.contracts.evidence_ref import EvidenceRefV1
 SCHEMA_VERSION = "1"
 
 MetricV1 = Literal[
-    "required_demand_minutes",
+    # Demand splits by the dimension it is measured in, because
+    # `DemandIntervalV1.unit` is `volume | headcount` and the two are not
+    # interconvertible here: the only rate in the projection is
+    # `QualificationRefV1.rate`, which is per WORKER per task. Converting volume
+    # to minutes therefore depends on who performs the work, which is an
+    # assignment -- a solver question owned by Epic 3, not a read-model one.
+    # This is a fifth member for dimensional honesty, NOT padding toward a
+    # rounder catalogue; `epics.md:1527` forbids the latter and this is not it.
+    "required_headcount_minutes",
+    "required_demand_volume",
     "staffed_minutes",
     "shortfall_minutes",
     "qualified_worker_count",
 ]
 DemandFamilyV1 = Literal["outbound", "inbound", "indirect"]
+
+# `family` is a property of a demand row alone and is NOT a function of
+# `task_id` -- one task carries rows in several families (measured on
+# `sample_tiny_input`: task 1E5596F1 has 197 inbound, 53 outbound, 6 indirect).
+# `AssignmentV1` does not carry it and it cannot be derived, so any metric that
+# reads assignments is per-task and family-agnostic.
+FAMILY_AWARE_METRICS: frozenset[str] = frozenset(
+    {"required_headcount_minutes", "required_demand_volume"}
+)
 GroundingFailureV1 = Literal[
     "missing_evidence",
     "unauthorized_evidence",
@@ -30,7 +48,9 @@ GroundingFailureV1 = Literal[
     "uncited_claim",
 ]
 GroundingVerdictV1 = Literal["supported", "failed"]
-GroundingUnitV1 = Literal["minutes", "workers"]
+# "units" is demand volume as the source states it (cartons, pieces, ...). It is
+# deliberately NOT convertible to "minutes" here -- see MetricV1's note.
+GroundingUnitV1 = Literal["minutes", "workers", "units"]
 
 
 @dataclass(frozen=True)
@@ -63,7 +83,7 @@ class ClaimProposalV1:
 
     schema_version: str = SCHEMA_VERSION
     kind: Literal["claim"] = "claim"
-    metric: MetricV1 = "required_demand_minutes"
+    metric: MetricV1 = "required_headcount_minutes"
     arguments: ClaimArgumentsV1 = ClaimArgumentsV1()
     result_id: str = ""
 
@@ -85,7 +105,7 @@ class GroundedClaimV1:
 
     schema_version: str = SCHEMA_VERSION
     kind: Literal["claim"] = "claim"
-    metric: MetricV1 = "required_demand_minutes"
+    metric: MetricV1 = "required_headcount_minutes"
     arguments: ClaimArgumentsV1 = ClaimArgumentsV1()
     result_id: str = ""
     value: int | float | None = None
@@ -114,6 +134,7 @@ class GroundedResponseV1:
 
 
 __all__ = [
+    "FAMILY_AWARE_METRICS",
     "SCHEMA_VERSION",
     "ClaimArgumentsV1",
     "ClaimProposalV1",

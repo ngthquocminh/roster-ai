@@ -44,4 +44,31 @@ def installed_modules() -> tuple[CapabilityModuleV1, ...]:
     return modules
 
 
-__all__ = ["installed_modules"]
+def enabled_feature_policy(settings: object) -> frozenset[str]:
+    """Resolve AD-2's feature policy from operator configuration.
+
+    `compose_granted_capabilities` tests `required_feature_policy in
+    feature_policy`, so the ONLY safe supplier is one where a module's presence
+    depends on something outside the module. Building the set from the
+    installed modules' own policy names -- the shape this replaces -- makes the
+    predicate unfalsifiable: installing a capability grants it, including a
+    consequential one whose approval suspension terminates a planner's turn.
+
+    A declared policy with no corresponding setting raises rather than
+    defaulting: a capability must never become grantable because nobody
+    supplied its switch.
+    """
+    enabled: list[str] = []
+    for module in installed_modules():
+        policy = module.required_feature_policy
+        if not hasattr(settings, policy):
+            raise IncompleteManifestError(
+                f"{module.manifest.capability_name} requires feature policy "
+                f"{policy!r}, which no setting supplies"
+            )
+        if getattr(settings, policy):
+            enabled.append(policy)
+    return frozenset(enabled)
+
+
+__all__ = ["enabled_feature_policy", "installed_modules"]

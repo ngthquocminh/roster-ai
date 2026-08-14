@@ -85,7 +85,16 @@ def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
         if isinstance(activity, PlannerMessageActivityV1):
             role, text = "user", activity.text
         elif isinstance(activity, AgentResponseActivityV1):
-            role, text = "assistant", _response_visible_text(activity.response)
+            # A failed or timed-out turn persists a response with no segments,
+            # which is truthful -- it produced no visible content. Dropping it
+            # here would leave two adjacent user turns in the rehydrated
+            # history, which several providers reject outright. This is
+            # application-owned text standing in for a turn that produced none;
+            # it is never presented as model output.
+            role = "assistant"
+            text = _response_visible_text(activity.response) or (
+                "The previous turn did not complete."
+            )
         else:  # defensive for future ActivityItemV1 variants
             raise ValueError(f"unsupported history activity {type(activity).__name__}")
         if text:

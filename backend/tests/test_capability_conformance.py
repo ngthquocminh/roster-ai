@@ -7,12 +7,14 @@ has never been shown to fail is a guard nobody has tested.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import hashlib
 import importlib
 import inspect
 import json
 from dataclasses import replace
 from pathlib import Path
+import uuid
 from uuid import UUID
 
 import pytest
@@ -418,3 +420,58 @@ def test_removed_world_retains_historical_case_versions_and_digests() -> None:
         assert case["case_version"] == binding["case_version"]
         normalized = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
         assert hashlib.sha256(normalized.encode("utf-8")).hexdigest() == binding["sha256"]
+
+
+def test_every_installed_module_declares_a_model_facing_view() -> None:
+    """There is no default view, so a new capability cannot leak by omission.
+
+    `validate_module` rejects a module that declares nothing; this asserts the
+    installed set actually carries one rather than relying on a default that no
+    longer exists.
+    """
+    for module in installed_modules():
+        assert callable(module.model_facing_view), module.manifest.capability_name
+
+
+def test_no_model_facing_view_hands_the_model_a_quantity() -> None:
+    """The invariant that makes the gate's prose-digit ban meaningful.
+
+    If no capability ever gives the model a number, then a numeral appearing in
+    a prose segment can only be fabricated -- which turns a fail-closed rule
+    that would otherwise fire on ordinary behaviour into a real signal. Asserted
+    over each module's PROJECTED output, which is stronger than inspecting a
+    list of field names.
+
+    `scheduling_inspect` is exempt and must stay exempt: it exists to hand the
+    model rows to reason about and computes no metric, so its counts are its
+    purpose. `scheduling_compute` is the one whose entire premise is that the
+    model never holds the value.
+    """
+    from application.capabilities.scheduling_compute import (
+        SchedulingComputeResultV1,
+        scheduling_compute_module,
+    )
+    from application.contracts.grounding import ClaimArgumentsV1
+
+    result = SchedulingComputeResultV1(
+        metric="required_headcount_minutes",
+        arguments=ClaimArgumentsV1(task_id="pick", start_minute=0, end_minute=60),
+        value=4321,
+        unit="minutes",
+        evidence_refs=(),
+        scenario_version_id=uuid.UUID(int=7),
+        result_id="c0ffee",
+        consumed_row_count=99,
+    )
+    projected = scheduling_compute_module().model_facing_view(result)
+    rendered = json.dumps(dataclasses.asdict(projected))
+
+    assert "4321" not in rendered
+    assert "99" not in rendered
+    assert projected.matched == "some"
+    assert projected.result_id == "c0ffee"
+    assert not any(
+        isinstance(getattr(projected, field.name), (int, float))
+        and not isinstance(getattr(projected, field.name), bool)
+        for field in dataclasses.fields(projected)
+    )

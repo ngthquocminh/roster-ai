@@ -73,4 +73,54 @@ describe("useSendMessage", () => {
     releaseExecute();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
+  it("refetches the timeline when executeTurn fails so a queued turn cannot wedge", async () => {
+    // The optimistic write has already put the accepted message and
+    // `agent_queued` into the cache. Invalidating only on success left a
+    // rejected execute showing a queued turn that never refetched and never
+    // resolved -- no rollback, no retry, no resume.
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData<Timeline>(conversationTimelineKey("conversation-1"), {
+      conversation_id: "conversation-1",
+      resource_version: 1,
+      latest_agent_run_status: null,
+      items: [],
+      limit: 200,
+      has_more: false,
+    });
+    const invalidated = vi.spyOn(queryClient, "invalidateQueries");
+    mockSend.mockResolvedValue({
+      activity: {
+        schema_version: "1",
+        activity_id: "33333333-3333-3333-3333-333333333333",
+        activity_type: "planner_message" as const,
+        conversation_id: "conversation-1",
+        conversation_resource_version: 2,
+        scenario_id: "scenario-1",
+        scenario_version_id: "version-1",
+        occurred_at: "2026-08-13T00:00:00Z",
+        message_id: "44444444-4444-4444-4444-444444444444",
+        text: "Check coverage",
+        sequence: "1",
+      },
+      resource_version: 2,
+      agent_run_status: "agent_queued",
+      sequence: "1",
+      agent_run_id: "run-1",
+    } as never);
+    mockExecute.mockRejectedValue({ status: 409, code: "agent_run_not_queued" });
+
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSendMessage("conversation-1", "scenario-1"), { wrapper });
+
+    act(() => result.current.mutate({ text: "Check coverage" }));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(invalidated).toHaveBeenCalledWith({
+      queryKey: conversationTimelineKey("conversation-1"),
+    });
+  });
 });

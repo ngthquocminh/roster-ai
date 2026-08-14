@@ -29,6 +29,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent.runtime import AgentRuntimeConfig, PydanticAIAgentRuntime, create_agent_runtime
+from evals.doubles import build_model_double
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.agent_runtime import (
@@ -235,6 +236,99 @@ def test_default_answer_mode_preserves_the_existing_text_outcome() -> None:
     assert outcome.output_text == "same text"
     assert outcome.answer is None
     assert [result.tool_name for result in outcome.tool_results] == []
+
+
+def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() -> None:
+    """Decision 3's regression fence, as specified: a REAL committed golden case
+    producing a byte-identical `AgentRunOutcomeV1`.
+
+    Asserting four fields against a one-line FunctionModel -- which is what this
+    replaces -- could not detect the three consequences Decision 3 named: a
+    `final_result` entry appearing in `tool_results`, `output_text` degrading to
+    a dataclass repr, or the framework output tool being counted as a routed
+    capability. Only the whole serialized outcome catches those.
+    """
+    from pathlib import Path
+
+    from application.capabilities.installed import installed_modules
+    from evals.cases import load_case
+    from evals.report import _runtime_for_case
+
+    golden = Path(__file__).resolve().parents[1] / "evals/golden/demonstration/repeat-once.json"
+    case = load_case(golden)
+    modules = installed_modules()
+
+    outcome = _runtime_for_case(case, modules).run_turn(
+        AgentTurnRequestV1(prompt=case.prompt)
+    )
+
+    # json round-trip so tuple-vs-list is not the thing under test.
+    assert json.loads(json.dumps(asdict(outcome))) == {
+        "schema_version": "1",
+        "status": "completed",
+        "failure_reason": None,
+        "output_text": "tool said alpha",
+        # The two fields the seam added stay absent on the default path.
+        "answer": None,
+        "grounded_response": None,
+        "turn": {
+            "schema_version": "1",
+            "messages": [
+                {
+                    "schema_version": "1",
+                    "role": "user",
+                    "parts": [{
+                        "schema_version": "1", "kind": "text",
+                        "text": "Demonstrate alpha once.", "tool_name": None,
+                        "tool_call_id": None, "tool_args_json": None,
+                    }],
+                },
+                {
+                    "schema_version": "1",
+                    "role": "assistant",
+                    "parts": [{
+                        "schema_version": "1", "kind": "tool_call", "text": None,
+                        "tool_name": "shiftmind_demonstration",
+                        "tool_call_id": "demo-repeat-once",
+                        "tool_args_json": '{"payload": {"label": "alpha", "repeat": 1}}',
+                    }],
+                },
+                {
+                    "schema_version": "1",
+                    "role": "tool_result",
+                    "parts": [{
+                        "schema_version": "1", "kind": "tool_result", "text": "alpha",
+                        "tool_name": "shiftmind_demonstration",
+                        "tool_call_id": "demo-repeat-once", "tool_args_json": None,
+                    }],
+                },
+                {
+                    "schema_version": "1",
+                    "role": "assistant",
+                    "parts": [{
+                        "schema_version": "1", "kind": "text", "text": "tool said alpha",
+                        "tool_name": None, "tool_call_id": None, "tool_args_json": None,
+                    }],
+                },
+            ],
+        },
+        "summary": "tool said alpha",
+        "approval": None,
+        "tool_results": [{
+            "schema_version": "1",
+            "tool_call_id": "demo-repeat-once",
+            "tool_name": "shiftmind_demonstration",
+            "content": "alpha",
+        }],
+    }
+    # Omitting the parameter and passing it as None must be the same path.
+    explicit = PydanticAIAgentRuntime(
+        model=build_model_double(case),
+        capabilities=modules,
+        deps=_runtime_for_case(case, modules)._deps,
+        answer_type=None,
+    ).run_turn(AgentTurnRequestV1(prompt=case.prompt))
+    assert asdict(explicit) == asdict(outcome)
 
 
 def test_opt_in_structured_answer_is_typed_and_output_tool_is_not_a_capability_result() -> None:

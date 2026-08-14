@@ -74,6 +74,27 @@ class Settings:
     agent_runtime_deadline_seconds: float | None = 60.0
     scheduling_inspect_row_limit: int = 200
     scheduling_inspect_timeout_seconds: float = 5.0
+    # scheduling_compute drains whole fact groups to compute a total, so it is
+    # bounded separately from scheduling_inspect's page limit. Sized against
+    # real data, not guessed: `sample_tiny_input` holds 1547 demand rows, and
+    # task+family pushdown leaves 53-197 -- but `family` is optional, and
+    # task-only pushdown leaves 218-295. 200 fails closed on five of six tasks.
+    scheduling_compute_row_limit: int = 400
+    scheduling_compute_timeout_seconds: float = 5.0
+    # AD-2 feature policy. `compose_granted_capabilities` refuses any module
+    # whose `required_feature_policy` is absent here, so this is the supplier
+    # that gate has always expected. It must NEVER be derived from the
+    # installed set -- that makes the predicate unfalsifiable and grants every
+    # installed module by construction.
+    #
+    # `demonstration` defaults OFF: it is a harness module (risk_class
+    # "consequential", approval_policy "exact_action") that exists to prove
+    # capability add/removal, and an approval suspension from it terminates a
+    # real planner turn. Story 2.6's proof is unaffected -- it stays installed
+    # and grantable whenever this flag is on.
+    scheduling_compute_enabled: bool = True
+    scheduling_inspect_enabled: bool = True
+    demonstration_enabled: bool = False
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
@@ -97,6 +118,21 @@ def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
     if candidate != data_dir_abs and not candidate.startswith(data_dir_abs + os.sep):
         return None
     return candidate
+
+
+def _flag(raw: str | None, fallback: bool) -> bool:
+    """Parse a feature-policy flag. Unset falls back; anything unrecognized is
+    treated as the fallback rather than as True, so a typo cannot silently
+    enable a capability.
+    """
+    if raw is None:
+        return fallback
+    normalized = raw.strip().lower()
+    if normalized in ("1", "true", "yes", "on"):
+        return True
+    if normalized in ("0", "false", "no", "off"):
+        return False
+    return fallback
 
 
 def _optional_int(raw: str | None, fallback: int | None) -> int | None:
@@ -190,6 +226,20 @@ def default_settings() -> Settings:
         _optional_float(os.environ.get("SCHEDULING_INSPECT_TIMEOUT_SECONDS"), 5.0)
         or 5.0
     )
+    scheduling_compute_row_limit = (
+        _optional_int(os.environ.get("SCHEDULING_COMPUTE_ROW_LIMIT"), 400) or 400
+    )
+    scheduling_compute_timeout_seconds = (
+        _optional_float(os.environ.get("SCHEDULING_COMPUTE_TIMEOUT_SECONDS"), 5.0)
+        or 5.0
+    )
+    scheduling_compute_enabled = _flag(
+        os.environ.get("SCHEDULING_COMPUTE_ENABLED"), True
+    )
+    scheduling_inspect_enabled = _flag(
+        os.environ.get("SCHEDULING_INSPECT_ENABLED"), True
+    )
+    demonstration_enabled = _flag(os.environ.get("DEMONSTRATION_ENABLED"), False)
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
@@ -217,4 +267,9 @@ def default_settings() -> Settings:
         agent_runtime_deadline_seconds=agent_runtime_deadline_seconds,
         scheduling_inspect_row_limit=scheduling_inspect_row_limit,
         scheduling_inspect_timeout_seconds=scheduling_inspect_timeout_seconds,
+        scheduling_compute_row_limit=scheduling_compute_row_limit,
+        scheduling_compute_timeout_seconds=scheduling_compute_timeout_seconds,
+        scheduling_compute_enabled=scheduling_compute_enabled,
+        scheduling_inspect_enabled=scheduling_inspect_enabled,
+        demonstration_enabled=demonstration_enabled,
     )

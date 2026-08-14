@@ -21,7 +21,12 @@ export function useSendMessage(conversationId: string, scenarioId: string) {
       );
       return executeTurn(conversationId, accepted.agent_run_id);
     },
-    onSuccess: async () => {
+    // onSettled, not onSuccess: the optimistic write above has already put the
+    // accepted message and `agent_queued` into the cache, so an executeTurn
+    // rejection (409, a 500, a dropped connection) would otherwise leave the
+    // timeline showing a queued turn that never refetches and never resolves.
+    // Refetching on both paths lets the server state win either way.
+    onSettled: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: conversationTimelineKey(conversationId) }),
         queryClient.invalidateQueries({ queryKey: conversationsKey(scenarioId) }),

@@ -23,6 +23,11 @@ from application.use_cases.read_scenario_facts import (
 )
 
 SCHEMA_VERSION = "1"
+# Distinct from SCHEMA_VERSION: the request/result SHAPES are unchanged, but
+# the model-visible error vocabulary changed in Story 2.7 (a timeout overrun
+# stopped being a retryable `invalid_query`), and a consumer that cannot see
+# that change cannot react to it.
+CAPABILITY_VERSION = "2"
 CAPABILITY_NAME = "scheduling_inspect"
 SCHEDULING_INSPECT_POLICY = "scheduling_inspect_enabled"
 EVALUATION_FIXTURES = (
@@ -136,7 +141,7 @@ def scheduling_inspect_manifest() -> CapabilityManifestV1:
     settings = default_settings()
     return CapabilityManifestV1(
         capability_name=CAPABILITY_NAME,
-        capability_version=SCHEMA_VERSION,
+        capability_version=CAPABILITY_VERSION,
         input_schema_ref="application.capabilities.scheduling_inspect.SchedulingInspectRequestV1",
         output_schema_ref="application.capabilities.scheduling_inspect.SchedulingInspectResultV1",
         risk_class="inspect",
@@ -279,6 +284,12 @@ def scheduling_inspect_module() -> CapabilityModuleV1:
         retryable_error_codes=frozenset({"invalid_query"}),
         required_role="planner",
         required_feature_policy=SCHEDULING_INSPECT_POLICY,
+        # Declared explicitly rather than inherited from a default. This
+        # capability reads rows FOR the model -- it never computes a metric
+        # (see the module docstring) -- so the page, its cursor, its truncation
+        # flag and its counts are exactly what the model needs to reason about
+        # coverage and to ask a narrower follow-up question.
+        model_facing_view=lambda result: result,
     )
 
 

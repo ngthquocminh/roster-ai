@@ -12,6 +12,7 @@ per-capability branch here belongs on the module's declaration instead.
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass, replace
+from typing import Callable
 
 from pydantic import TypeAdapter
 from pydantic_ai import Agent, ApprovalRequired, ModelRetry, RunContext, Tool
@@ -25,19 +26,23 @@ class UnknownCapabilityError(ValueError):
     """The granted set contains the same tool name more than once."""
 
 
-def _render_result(value: object, text_field: str | None) -> object:
-    """Render a handler result for the model.
+def _render_result(value: object, view: Callable[[object], object]) -> object:
+    """Render a handler result for the model through the module's own view.
 
-    `text_field` is DECLARED by the module. The adapter never inspects the
-    result's shape to decide -- guessing by field set would be a per-capability
-    branch wearing a structural disguise, and would silently downgrade any
-    future module whose result happened to match.
+    The view is DECLARED and REQUIRED. The adapter never inspects the result's
+    shape to decide -- guessing by field set would be a per-capability branch
+    wearing a structural disguise -- and there is no "render everything"
+    fallback, because that default is what leaked a computed value into the
+    transcript of a capability whose entire premise is that the model never
+    holds one.
+
+    Dataclasses are still normalized after projection so a view may return the
+    record it was handed.
     """
-    if not is_dataclass(value) or isinstance(value, type):
-        return value
-    if text_field is not None:
-        return getattr(value, text_field)
-    return asdict(value)
+    projected = view(value)
+    if is_dataclass(projected) and not isinstance(projected, type):
+        return asdict(projected)
+    return projected
 
 
 def _tool_schema(module: CapabilityModuleV1) -> dict[str, object]:
@@ -103,7 +108,7 @@ def _register_module(
             raise
         if ctx.deps.tool_result_sink is not None:
             ctx.deps.tool_result_sink(result)
-        return _render_result(result, module.model_facing_text_field)
+        return _render_result(result, module.model_facing_view)
 
     tool = Tool.from_schema(
         execute,

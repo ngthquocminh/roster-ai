@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Connection, func, insert, select, update
+from sqlalchemy import Connection, func, insert, or_, select, update
 
 from adapters.postgres.schema import (
     agent_run,
@@ -316,7 +316,15 @@ class PostgresConversationRepository:
             select(persisted_event)
             .where(
                 persisted_event.c.stream_id == conversation_id,
-                persisted_event.c.agent_run_id != agent_run_id,
+                # `!=` alone is SQL NULL for any event with a NULL
+                # agent_run_id, which silently drops it from the rehydrated
+                # history with no signal that anything was skipped. History has
+                # to be built from every prior visible activity, not from
+                # whichever ones happen to carry a run id.
+                or_(
+                    persisted_event.c.agent_run_id.is_(None),
+                    persisted_event.c.agent_run_id != agent_run_id,
+                ),
             )
             .order_by(persisted_event.c.sequence.desc())
             .limit(100)

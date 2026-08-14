@@ -40,6 +40,7 @@ from application.ports.conversation import (
     ConversationV1,
     ExecutedAgentRunV1,
 )
+from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.ports.agent_runtime import AgentRuntimeError
 from settings import default_settings
@@ -107,6 +108,7 @@ class _Repository:
         self.accepted: list[str] = []
         self.timeline_has_more = False
         self.claimed_statuses: list[str] = []
+        self.raise_not_queued_on_claim = False
 
     def _conversation(self) -> ConversationV1:
         return ConversationV1(self.conversation_id, self.scenario_id, self.version_id, 2)
@@ -146,6 +148,8 @@ class _Repository:
     def claim_queued_run(self, _connection, *, conversation_id, agent_run_id):
         if conversation_id != self.conversation_id:
             return None
+        if self.raise_not_queued_on_claim:
+            raise AgentRunNotQueuedError("agent run is not queued")
         self._run_id = agent_run_id
         return ClaimedAgentRunV1(
             agent_run_id=agent_run_id,
@@ -203,6 +207,20 @@ class _FailingRuntime:
 
     def run_turn(self, request):
         raise AgentRuntimeError("provider unavailable")
+
+
+class _NumericProseRuntime:
+    """Answers with a bare numeral in prose, which the gate refuses."""
+
+    name = "test"
+
+    def run_turn(self, request):
+        return AgentRunOutcomeV1(
+            status="completed",
+            answer=GroundedAnswerV1(
+                segments=(GroundedProseSegmentV1(text="You are short by 2 hours."),)
+            ),
+        )
 
 
 @contextmanager
@@ -399,6 +417,47 @@ def test_runtime_failure_still_finalizes_the_claimed_run(conversation_client) ->
 
     assert response.status_code == 200
     assert response.json()["agent_run_status"] == "agent_failed"
+    assert repository.claimed_statuses == ["agent_failed"]
+
+
+def test_a_run_that_is_not_queued_is_refused_with_a_stable_problem(
+    conversation_client,
+) -> None:
+    """Decision 1 makes the agent_run state machine the double-submit guard, so
+    the refusal is the guard's only visible behaviour. It was implemented but
+    never driven: the repository double never raised.
+    """
+    client, repository, settings = conversation_client
+    repository.raise_not_queued_on_claim = True
+
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "agent_run_not_queued"
+    assert repository.claimed_statuses == []
+
+
+def test_a_gate_failure_still_reaches_a_terminal_status(conversation_client) -> None:
+    """The claim already committed `agent_running`, and only `agent_queued` can
+    be claimed -- so an exception escaping the turn leaves a run no request can
+    ever execute again. `UncitedNumericProseError` is the likeliest source
+    because it is the gate's own fail-closed rule, and it is a ValueError, not
+    an AgentRuntimeError.
+    """
+    client, repository, settings = conversation_client
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **_kwargs: _NumericProseRuntime()
+    )
+
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
     assert repository.claimed_statuses == ["agent_failed"]
 
 

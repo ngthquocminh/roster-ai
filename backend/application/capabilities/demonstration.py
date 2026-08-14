@@ -18,6 +18,11 @@ from application.contracts.capability_manifest import (
 )
 
 SCHEMA_VERSION = "1"
+# Distinct from SCHEMA_VERSION: the request/result SHAPES are unchanged, but
+# the model-visible error vocabulary changed in Story 2.7 (a timeout overrun
+# stopped being a retryable `invalid_query`), and a consumer that cannot see
+# that change cannot react to it.
+CAPABILITY_VERSION = "2"
 CAPABILITY_NAME = "shiftmind_demonstration"
 ERROR_CODES = (
     "demonstration_failed", "approval_required", "budget_exhausted", "invalid_repeat"
@@ -74,7 +79,7 @@ class DemonstrationResultV1:
 def demonstration_manifest() -> CapabilityManifestV1:
     return CapabilityManifestV1(
         capability_name=CAPABILITY_NAME,
-        capability_version=SCHEMA_VERSION,
+        capability_version=CAPABILITY_VERSION,
         input_schema_ref="application.capabilities.demonstration.DemonstrationRequestV1",
         output_schema_ref="application.capabilities.demonstration.DemonstrationResultV1",
         risk_class="consequential",
@@ -125,7 +130,10 @@ def demonstration_module() -> CapabilityModuleV1:
         required_role="planner",
         required_feature_policy="demonstration_enabled",
         request_argument="payload",
-        model_facing_text_field="text",
+        # The result IS this string. Projecting the whole record instead would
+        # change the transcript and therefore the bytes of Story 2.2's seven
+        # frozen golden cases and the sha256-pinned demonstration evidence.
+        model_facing_view=lambda result: result.text,
     )
 
 

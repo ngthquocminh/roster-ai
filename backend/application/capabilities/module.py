@@ -22,9 +22,23 @@ class CapabilityModuleV1:
     parameter name would let a purely local rename silently change the tool's
     wire contract and invalidate frozen golden cases.
 
-    `model_facing_text_field`, when set, names the single result field the model
-    receives instead of the whole record -- the explicit replacement for the
-    adapter guessing by result shape.  Left `None`, the full record is rendered.
+    `model_facing_view` is REQUIRED and projects the handler's trusted result
+    into what the model may see. There is deliberately no fallback: a default
+    of "render the whole record" is fail-open, and it is what let a metric
+    module hand the model the very value the design says only the calculator
+    produces. Safety must not depend on a future module author remembering to
+    opt in.
+
+    This revisits -- rather than reverses by accident -- Story 2.6's narrower
+    choice of a declared field NAME instead of a callable. That choice fit the
+    only case then in existence (unwrap one string field). A projection that
+    must derive a field cannot be expressed as a field name, and
+    inspectability is preserved more strongly by asserting over each module's
+    actual projected output than over a list of names.
+
+    Note the trusted path is unaffected: `tool_result_sink` captures the raw
+    handler result BEFORE this projection runs, so narrowing the model's view
+    can never starve the grounding gate.
     """
 
     manifest: CapabilityManifestV1
@@ -34,8 +48,8 @@ class CapabilityModuleV1:
     retryable_error_codes: frozenset[str]
     required_role: str
     required_feature_policy: str
+    model_facing_view: Callable[[object], object]
     request_argument: str = "request"
-    model_facing_text_field: str | None = None
 
 
 def validate_module(module: CapabilityModuleV1) -> None:
@@ -64,6 +78,11 @@ def validate_module(module: CapabilityModuleV1) -> None:
         )
     if not module.request_argument.isidentifier():
         raise IncompleteManifestError(f"{name} request argument must be an identifier")
+
+    if not callable(module.model_facing_view):
+        raise IncompleteManifestError(
+            f"{name} must declare what the model may see; there is no default view"
+        )
 
 
 __all__ = ["CapabilityModuleV1", "validate_module"]

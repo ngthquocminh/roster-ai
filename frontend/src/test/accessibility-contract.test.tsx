@@ -142,3 +142,77 @@ for (const group of Object.keys(hookByGroup) as Array<keyof typeof hookByGroup>)
     expect(caption?.textContent).toBe(region.getAttribute("aria-label"));
   });
 }
+
+it("gives a grounded response an author label and a keyboard-operable evidence control", async () => {
+  // Task 13 places this here rather than in the component suite: the
+  // accessibility floor is proven by automated coverage alone (EXPERIENCE.md),
+  // so the assertions belong with the other floor checks, and the focus ring is
+  // asserted behaviourally rather than as a Tailwind class string.
+  const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
+  const versionId = "44444444-4444-4444-4444-444444444444";
+  const response = {
+    schema_version: "1",
+    activity_id: "88888888-8888-8888-8888-888888888888",
+    activity_type: "agent_response" as const,
+    conversation_id: "22222222-2222-2222-2222-222222222222",
+    conversation_resource_version: 3,
+    scenario_id: "33333333-3333-3333-3333-333333333333",
+    scenario_version_id: versionId,
+    occurred_at: "2026-08-14T00:00:00Z",
+    sequence: "2",
+    response: {
+      schema_version: "1",
+      scenario_version_id: versionId,
+      segments: [
+        {
+          schema_version: "1",
+          kind: "claim" as const,
+          metric: "required_headcount_minutes" as const,
+          arguments: {
+            schema_version: "1",
+            task_id: "pick",
+            family: "outbound" as const,
+            start_minute: 2880,
+            end_minute: 4320,
+          },
+          result_id: "result-1",
+          value: 2160,
+          unit: "minutes" as const,
+          verdict: "supported" as const,
+          failure: null,
+          evidence_refs: [
+            {
+              schema_version: "1",
+              scenario_version_id: versionId,
+              checksum_algorithm: "sha256",
+              checksum_schema_version: "1",
+              checksum_digest: "a".repeat(64),
+              producing_run_version: null,
+              baseline_schedule_version: null,
+              group: "demand" as const,
+              record_id: "d-outbound-0",
+              field: "amount",
+              start_minute: 2880,
+              end_minute: 3600,
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  render(<ActivityTimeline items={[response] as never} />);
+
+  // EXPERIENCE.md:85 -- the block is distinguishable by author/type label.
+  expect(screen.getByLabelText("ShiftMind response")).toBeInTheDocument();
+
+  // Self-describing accessible name naming group, record, field/range, version.
+  const evidence = screen.getByRole("button", {
+    name: `Evidence: demand d-outbound-0, amount, 2880–3600 minutes, fixture ${versionId}`,
+  });
+
+  // Keyboard-reachable and focusable, asserted by driving the keyboard rather
+  // than by matching a utility class.
+  await userEvent.tab();
+  expect(evidence).toHaveFocus();
+});

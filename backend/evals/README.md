@@ -24,7 +24,9 @@ schema is the frozen `GoldenCase` dataclass in `cases.py`:
   `expected_tool_calls` lists exact tool names and argument objects.
 - `expected_evidence_refs` uses the stable
   `scenario_version|group|record|field:start-end` form and carries no per-run
-  UUID. It is non-empty for Story 2.7 grounding cases.
+  UUID. A supported grounding case names the locators the calculator must
+  emit; a failure case names none, and asserting that emptiness is what
+  proves a failed claim never retargets another record or version (AR11).
 - `expected_visible_state` and `expected_visible_text` describe the owned
   `AgentRunOutcomeV1` surface. `scenario_fixtures` lists any governed scenario
   identities as `fixture_id:version`; demonstration cases use an empty array.
@@ -58,3 +60,16 @@ version-mismatch, missing-evidence, and argument-mismatch. ToolRoutingEvaluator
 continues to judge routing while the second GroundingEvaluator independently
 judges exact evidence IDs and the authored grounding oracle; these four cases
 meet, but do not pad beyond, NFR28's per-capability floor.
+
+These four run against a real projection (`evals/fixture_projection.py`), so
+the calculator genuinely computes and the gate verifies locators the
+calculator itself produced -- captured on the trusted path through
+`deps.tool_result_sink`, exactly as the request route does. Nothing in the
+harness constructs a capability result. That matters because the earlier
+driver fabricated one and branched its contents on the case's own expected
+outcome, which made all four cases pass by construction; a row bound that
+fails closed on real data and volume demand multiplied into minutes both
+survived review because of it. Three of the four outcomes arise from case
+data alone; only `version_mismatch` needs an environmental knob, and it
+rotates the PIN the gate checks against rather than editing the result --
+the same condition as a scenario re-versioned mid-turn.

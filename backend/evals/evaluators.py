@@ -110,7 +110,11 @@ class ToolRoutingEvaluator:
 def stable_evidence_ref(reference: EvidenceRefV1) -> str:
     """Stable locator oracle: no per-run activity, message, or tool-call UUID."""
     field_or_range = reference.field or ""
-    if reference.start_minute is not None or reference.end_minute is not None:
+    # Both bounds, or neither. `start_minute` and `end_minute` are independently
+    # optional on the contract, and the previous `or` emitted "amount:None-4320"
+    # for a half-specified interval -- a string no authored expectation can ever
+    # match, producing an unreadable diff instead of a clear failure.
+    if reference.start_minute is not None and reference.end_minute is not None:
         field_or_range += f":{reference.start_minute}-{reference.end_minute}"
     return "|".join(
         (str(reference.scenario_version_id), reference.group, reference.record_id, field_or_range)
@@ -142,16 +146,22 @@ class GroundingEvaluator:
         if expected_failure is None:
             if actual_failures:
                 return EvalVerdict(False, f"expected supported, got {actual_failures}", self.run_source)
-            if actual_refs != case.expected_evidence_refs:
-                return EvalVerdict(
-                    False,
-                    f"evidence differed: expected {case.expected_evidence_refs}, actual {actual_refs}",
-                    self.run_source,
-                )
         elif actual_failures != (expected_failure,):
             return EvalVerdict(
                 False,
                 f"oracle differed: expected {expected_failure}, actual {actual_failures}",
+                self.run_source,
+            )
+        # Compared on EVERY branch, not only the supported one. On a failure
+        # branch the expectation is empty, and asserting that emptiness is what
+        # proves AR11's non-retargeting rule: a failed claim must not emit a
+        # locator naming some other record or version. Checking refs only when
+        # the case already passed left `expected_evidence_refs` unread on three
+        # of the four cases.
+        if actual_refs != case.expected_evidence_refs:
+            return EvalVerdict(
+                False,
+                f"evidence differed: expected {case.expected_evidence_refs}, actual {actual_refs}",
                 self.run_source,
             )
         return EvalVerdict(

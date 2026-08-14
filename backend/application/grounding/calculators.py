@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence, TypeVar
+from typing import Any, Callable, Sequence
 from uuid import UUID
 
 from application.contracts.evidence_ref import EvidenceRefV1
 from application.contracts.grounding import (
+    FAMILY_AWARE_METRICS,
     ClaimArgumentsV1,
     GroundingUnitV1,
     MetricV1,
@@ -14,6 +15,13 @@ from application.contracts.grounding import (
 from application.contracts.scenario_projection import ScenarioOverviewV1
 from application.grounding.evidence_groups import evidence_group_for_scenario_fact_group
 from application.ports.scenario_projection import GroupQueryV1, ScenarioProjectionReader
+
+# A projection page can legitimately be empty while still advancing its cursor
+# (a keyset cursor over a filtered group). `seen_cursors` catches repeats and
+# `next_cursor <= cursor` catches non-advance, but neither bounds a reader that
+# advances forever over empty pages, and the capability's timeout is only
+# checked AFTER `calculate_metric` returns. This is that missing bound.
+MAX_PAGES = 512
 
 
 class CalculationError(Exception):
@@ -42,12 +50,25 @@ class CalculationLimitError(CalculationError):
 
 @dataclass(frozen=True)
 class CalculatedMetricV1:
+    """One computed value plus a locator for every row folded into it.
+
+    `consumed_row_count` is the completeness proof the gate needs, and it is
+    deliberately NOT the port's `matching_count`: that number is measured
+    before the calculator's own window-overlap and unit filters, so a task with
+    200 matching rows and none overlapping the requested window would look like
+    a fault rather than a correct zero. The invariant that matters downstream
+    is `len(evidence_refs) == consumed_row_count` -- a calculator that folded
+    rows into a value without citing them is an application fault, while
+    consuming nothing is a correct empty answer.
+    """
+
     metric: MetricV1
     arguments: ClaimArgumentsV1
     value: int | float
     unit: GroundingUnitV1
     evidence_refs: tuple[EvidenceRefV1, ...]
     scenario_version_id: UUID
+    consumed_row_count: int = 0
 
 
 def interval_overlap_minutes(
@@ -78,9 +99,6 @@ def _overview(
     return overview
 
 
-PageItem = TypeVar("PageItem")
-
-
 def _drain(
     getter: Callable[[Any, UUID, GroupQueryV1], object | None],
     connection: Any,
@@ -90,21 +108,39 @@ def _drain(
     site_id: UUID,
     page_size: int,
     max_rows: int,
+    filters: tuple[tuple[str, str | int], ...] = (),
 ) -> tuple[object, ...]:
+    """Drain one fact group to exhaustion under an explicit bound.
+
+    `filters` is pushed into the query rather than applied afterwards, because
+    the adapter computes `matching_count` as the size of the FILTERED set
+    (`adapters/postgres/scenario_projection.py`) -- the very number the bound
+    below tests. Selecting in Python instead would compare the bound against
+    the whole group and fail closed on data that easily fits.
+    """
     if page_size < 1 or max_rows < 1:
         raise CalculationArgumentsError("page_size and max_rows must be positive")
     cursor = 0
     items: list[object] = []
     matching_count: int | None = None
     seen_cursors: set[int] = set()
-    while True:
+    for _ in range(MAX_PAGES):
         if cursor in seen_cursors:
             raise CalculationLimitError("projection cursor did not advance")
         seen_cursors.add(cursor)
+        remaining = max_rows - len(items)
+        if remaining < 1:
+            # Reached only when the group still reports a next cursor at the
+            # bound. Requesting `limit=0` here would come back as an empty page
+            # with a non-advancing cursor and surface as a misleading "cursor
+            # did not advance"; name the bound that was actually hit instead.
+            raise CalculationLimitError(f"calculation exceeded row bound {max_rows}")
         page = getter(
             connection,
             scenario_id,
-            GroupQueryV1(cursor=cursor, limit=min(page_size, max_rows - len(items))),
+            GroupQueryV1(
+                cursor=cursor, limit=min(page_size, remaining), filters=filters
+            ),
         )
         if page is None:
             raise CalculationScenarioNotFoundError(
@@ -138,6 +174,9 @@ def _drain(
         if page.next_cursor <= cursor:
             raise CalculationLimitError("projection cursor did not advance")
         cursor = page.next_cursor
+    raise CalculationLimitError(
+        f"projection did not terminate within {MAX_PAGES} pages"
+    )
 
 
 def _evidence(
@@ -181,6 +220,41 @@ def _require_task(arguments: ClaimArgumentsV1) -> str:
     return arguments.task_id
 
 
+def _check_family_is_meaningful(metric: MetricV1, arguments: ClaimArgumentsV1) -> None:
+    """`family` is a demand-row property and exists on no other record.
+
+    One task carries demand rows in several families, so family is not a
+    function of `task_id`, and neither `AssignmentV1` nor `WorkerV1` records
+    it. Honouring `family` on a metric that reads assignments would subtract
+    all-family staffed minutes from single-family required minutes and present
+    the difference as an exact, cited shortfall. Refusing the argument on every
+    metric that cannot express it is the only sound resolution.
+    """
+    if arguments.family is not None and metric not in FAMILY_AWARE_METRICS:
+        raise CalculationArgumentsError(
+            f"{metric} does not read demand rows, which are the only records "
+            "carrying family; it is per-task and family-agnostic"
+        )
+
+
+def _demand_filters(
+    task_id: str, arguments: ClaimArgumentsV1
+) -> tuple[tuple[str, str | int], ...]:
+    """Push task and family down; NEVER the window.
+
+    `DEMAND_FILTERS` offers `start_minute_gte`/`end_minute_lte`, which express
+    CONTAINMENT, not overlap. Using them would silently drop rows that only
+    partially overlap the window -- rows `interval_overlap_minutes` counts
+    correctly -- turning a fail-closed bound error into a wrong number wearing
+    a valid evidence locator. Expressing overlap needs `start_minute_lt` /
+    `end_minute_gt` on the adapter; see `deferred-work.md`.
+    """
+    filters: list[tuple[str, str | int]] = [("task_id", task_id)]
+    if arguments.family is not None:
+        filters.append(("family", arguments.family))
+    return tuple(filters)
+
+
 def calculate_metric(
     reader: ScenarioProjectionReader,
     connection: Any,
@@ -191,17 +265,27 @@ def calculate_metric(
     metric: MetricV1,
     arguments: ClaimArgumentsV1,
     page_size: int = 50,
-    max_rows: int = 10_000,
+    max_rows: int = 400,
 ) -> CalculatedMetricV1:
     """Produce one value and locators from every normalized row it consumes."""
     overview = _overview(reader, connection, scenario_id, scenario_version_id, site_id)
     task_id = _require_task(arguments)
+    _check_family_is_meaningful(metric, arguments)
 
     if metric == "qualified_worker_count":
+        if arguments.start_minute is not None or arguments.end_minute is not None:
+            # The count is horizon-wide. Accepting a window here would hash it
+            # into `result_id` and let the gate verify arguments the
+            # calculation never honoured -- a whole-week count rendered as if
+            # it were scoped to Wednesday.
+            raise CalculationArgumentsError(
+                "qualified_worker_count is horizon-wide and takes no window"
+            )
         workers = _drain(
             reader.get_workers, connection, scenario_id,
             scenario_version_id=scenario_version_id, site_id=site_id,
             page_size=page_size, max_rows=max_rows,
+            filters=(("qualified_task_id", task_id),),
         )
         matched = tuple(
             worker for worker in workers
@@ -211,39 +295,67 @@ def calculate_metric(
             _evidence(overview, "workers", worker.record_id, field="qualifications")
             for worker in matched
         )
-        return CalculatedMetricV1(metric, arguments, len(matched), "workers", refs, scenario_version_id)
+        return CalculatedMetricV1(
+            metric, arguments, len(matched), "workers", refs,
+            scenario_version_id, consumed_row_count=len(matched),
+        )
 
     window_start, window_end = _window(arguments)
     demand_rows: Sequence[object] = ()
     assignment_rows: Sequence[object] = ()
-    if metric in ("required_demand_minutes", "shortfall_minutes"):
+    reads_demand = metric in (
+        "required_headcount_minutes", "required_demand_volume", "shortfall_minutes"
+    )
+    reads_assignments = metric in ("staffed_minutes", "shortfall_minutes")
+    if reads_demand:
         demand_rows = _drain(
             reader.get_demand, connection, scenario_id,
             scenario_version_id=scenario_version_id, site_id=site_id,
             page_size=page_size, max_rows=max_rows,
+            filters=_demand_filters(task_id, arguments),
         )
-    if metric in ("staffed_minutes", "shortfall_minutes"):
+    if reads_assignments:
         assignment_rows = _drain(
             reader.get_baseline_assignments, connection, scenario_id,
             scenario_version_id=scenario_version_id, site_id=site_id,
             page_size=page_size, max_rows=max_rows,
+            filters=(("task_id", task_id),),
         )
 
+    # `unit` decides which metric a demand row can answer at all. A "volume"
+    # row is a quantity of work (cartons), not a rate, and the only rate in the
+    # projection is `QualificationRefV1.rate` -- per WORKER, per task. So
+    # volume -> minutes depends on who performs the work, which is an
+    # assignment and therefore Epic 3's solver question. The two dimensions are
+    # reported separately rather than silently multiplied together.
+    wanted_unit = "headcount" if metric != "required_demand_volume" else "volume"
     matched_demand = tuple(
         row for row in demand_rows
         if row.task_id == task_id
+        and row.unit == wanted_unit
         and (arguments.family is None or row.family == arguments.family)
         and interval_overlap_minutes(row.start_minute, row.end_minute, window_start, window_end)
-    )
-    required = sum(
-        interval_overlap_minutes(row.start_minute, row.end_minute, window_start, window_end)
-        * row.amount
-        for row in matched_demand
     )
     matched_assignments = tuple(
         row for row in assignment_rows
         if row.task_id == task_id
         and interval_overlap_minutes(row.start_minute, row.end_minute, window_start, window_end)
+    )
+    # headcount is a RATE (persons held over the interval), so overlap x amount
+    # is exact worker-minutes with no distributional assumption.
+    required_minutes = sum(
+        interval_overlap_minutes(row.start_minute, row.end_minute, window_start, window_end)
+        * row.amount
+        for row in matched_demand
+    )
+    # volume is a QUANTITY over the interval, so restricting it to a window
+    # assumes the volume is spread evenly across that interval. Declared in
+    # SCOPE_CONTROLS rather than left implicit.
+    required_volume = sum(
+        row.amount
+        * interval_overlap_minutes(row.start_minute, row.end_minute, window_start, window_end)
+        / (row.end_minute - row.start_minute)
+        for row in matched_demand
     )
     staffed = sum(
         interval_overlap_minutes(row.start_minute, row.end_minute, window_start, window_end)
@@ -263,19 +375,32 @@ def calculate_metric(
         )
         for row in matched_assignments
     )
-    if metric == "required_demand_minutes":
-        value, refs = required, demand_refs
+    # `consumed` counts the rows folded into the VALUE and is derived from the
+    # matched row sets, NOT from `refs`. Deriving it from `refs` would make the
+    # gate's `len(evidence_refs) == consumed_row_count` check true by
+    # construction and unable to catch the fault it exists for: a calculator
+    # that used rows and cited none.
+    unit: GroundingUnitV1 = "minutes"
+    if metric == "required_headcount_minutes":
+        value, refs, consumed = required_minutes, demand_refs, len(matched_demand)
+    elif metric == "required_demand_volume":
+        value, refs, consumed = required_volume, demand_refs, len(matched_demand)
+        unit = "units"
     elif metric == "staffed_minutes":
-        value, refs = staffed, assignment_refs
+        value, refs, consumed = staffed, assignment_refs, len(matched_assignments)
     elif metric == "shortfall_minutes":
-        value, refs = max(0, required - staffed), demand_refs + assignment_refs
+        value = max(0, required_minutes - staffed)
+        refs = demand_refs + assignment_refs
+        consumed = len(matched_demand) + len(matched_assignments)
     else:
         raise CalculationArgumentsError(f"unsupported metric: {metric}")
-    return CalculatedMetricV1(metric, arguments, value, "minutes", refs, scenario_version_id)
+    return CalculatedMetricV1(
+        metric, arguments, value, unit, refs, scenario_version_id, consumed
+    )
 
 
 __all__ = [
-    "CalculatedMetricV1", "CalculationArgumentsError", "CalculationError",
+    "MAX_PAGES", "CalculatedMetricV1", "CalculationArgumentsError", "CalculationError",
     "CalculationLimitError", "CalculationScenarioNotFoundError",
     "CalculationSiteMismatchError", "CalculationVersionMismatchError",
     "calculate_metric", "interval_overlap_minutes",

@@ -44,7 +44,13 @@ const agentResponse = {
         schema_version: "1",
         kind: "claim" as const,
         metric: "shortfall_minutes" as const,
-        arguments: { schema_version: "1" },
+        arguments: {
+          schema_version: "1",
+          task_id: "pick",
+          family: "outbound" as const,
+          start_minute: 780,
+          end_minute: 1020,
+        },
         result_id: "result-1",
         value: 45,
         unit: "minutes" as const,
@@ -61,7 +67,7 @@ const agentResponse = {
             baseline_schedule_version: null,
             group: "demand" as const,
             record_id: "DEM-204",
-            field: null,
+            field: "amount",
             start_minute: 780,
             end_minute: 1020,
           },
@@ -124,7 +130,7 @@ describe("ActivityTimeline", () => {
     expect(screen.getByLabelText("ShiftMind response")).toBeInTheDocument();
     const supported = screen.getByText("45 minutes").closest("[data-claim-state]");
     const evidence = screen.getByRole("button", {
-      name: `Evidence: demand DEM-204, 780–1020 minutes, fixture ${item.scenario_version_id}`,
+      name: `Evidence: demand DEM-204, amount, 780–1020 minutes, fixture ${item.scenario_version_id}`,
     });
     expect(supported).toContainElement(evidence);
     expect(evidence.className).toContain("focus-visible:ring-3");
@@ -139,6 +145,51 @@ describe("ActivityTimeline", () => {
   it("deduplicates an agent response delivered by SSE and timeline refetch", () => {
     render(<ActivityTimeline items={[agentResponse, agentResponse]} />);
     expect(screen.getAllByLabelText("ShiftMind response")).toHaveLength(1);
-    expect(screen.getAllByText("45 minutes")).toHaveLength(1);
+    expect(screen.getAllByText(/45 minutes/)).toHaveLength(1);
+  });
+
+  it("names the task and window a number belongs to", () => {
+    // The gate forbids numerals in prose and a claim carries no prose of its
+    // own, so without this the answer is exact and unattributed at once.
+    render(<ActivityTimeline items={[agentResponse]} />);
+    expect(screen.getByText(/pick · outbound · 780–1020 min/)).toBeInTheDocument();
+  });
+
+  it("rounds a float value rather than showing its raw repr", () => {
+    // Demand volume carries float amounts throughout the fixture, so
+    // 90.00000000000001 is reachable in a feature whose premise is exactness.
+    const floaty = {
+      ...agentResponse,
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            ...agentResponse.response.segments[1],
+            value: 90.00000000000001,
+            unit: "units" as const,
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline items={[floaty]} />);
+
+    expect(screen.getByText(/90\.00 units/)).toBeInTheDocument();
+    expect(screen.queryByText(/90\.00000000000001/)).not.toBeInTheDocument();
+  });
+
+  it("renders a failed run's empty response as a named state, not a blank bubble", () => {
+    // A failed or timed-out run persists a response with no segments. That is
+    // truthful, but an empty bubble under the ShiftMind label reads as the
+    // assistant having said nothing at all.
+    const empty = {
+      ...agentResponse,
+      response: { ...agentResponse.response, segments: [] },
+    };
+    render(<ActivityTimeline items={[empty]} />);
+
+    expect(screen.getByText(/This turn did not complete/)).toHaveAttribute(
+      "data-response-state",
+      "unavailable",
+    );
   });
 });

@@ -23,10 +23,14 @@ from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.installed import installed_modules
-from application.capabilities.scheduling_compute import scheduling_compute_module
+from application.capabilities.scheduling_compute import (
+    derive_result_id,
+    scheduling_compute_module,
+)
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import ClaimArgumentsV1, GroundedAnswerV1
 from application.ports.scenario_projection import GroupQueryKeysV1
+from evals.fixture_projection import FIXTURE_IDENTITY
 from evals.cases import (
     ExpectedToolCall,
     GoldenCase,
@@ -391,11 +395,33 @@ def test_grounding_cases_have_literal_result_ids_nonempty_refs_and_oracles() -> 
     assert {case.expected_grounding_outcome for case in cases} == {
         "supported", "version_mismatch", "missing_evidence", "argument_mismatch"
     }
-    assert all(case.expected_evidence_refs for case in cases)
-    for case in cases:
+    by_outcome = {case.expected_grounding_outcome: case for case in cases}
+    # The supported case names the locators the calculator must emit; a failure
+    # case names none, and asserting that emptiness is what proves AR11's
+    # non-retargeting rule rather than leaving the field decorative.
+    assert by_outcome["supported"].expected_evidence_refs
+    assert all(
+        not case.expected_evidence_refs
+        for outcome, case in by_outcome.items()
+        if outcome != "supported"
+    )
+
+    # Ids are the real content hash, not merely 64 characters long: this is what
+    # makes a `derive_result_id` regression turn the cases red instead of
+    # letting them keep passing against a stale literal.
+    expected_id = derive_result_id(
+        "required_headcount_minutes",
+        ClaimArgumentsV1(
+            task_id="pick", family="outbound", start_minute=2880, end_minute=4320
+        ),
+        FIXTURE_IDENTITY,
+    )
+    for outcome, case in by_outcome.items():
         final = case.scripted_turns[-1].response_data
         claim = next(segment for segment in final["segments"] if segment["kind"] == "claim")
         assert len(claim["result_id"]) == 64
+        if outcome != "missing_evidence":
+            assert claim["result_id"] == expected_id, outcome
 
 
 def test_live_verdict_is_non_authoritative_by_data_shape() -> None:

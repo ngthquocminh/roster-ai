@@ -52,7 +52,7 @@ from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
 from application.use_cases.execute_turn import execute_turn, terminal_status, visible_response
 from application.capabilities.deps import AgentDepsV1
-from application.capabilities.installed import installed_modules
+from application.capabilities.installed import enabled_feature_policy
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_VERSION
 from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1
 from application.contracts.grounding import GroundedAnswerV1
@@ -187,9 +187,13 @@ async def execute_agent_turn(
     if claimed is None:
         raise HTTPException(status_code=404)
 
-    feature_policy = frozenset(
-        module.required_feature_policy for module in installed_modules()
-    )
+    # NEVER derive this from `installed_modules()`. `compose_granted_capabilities`
+    # tests `module.required_feature_policy in context.feature_policy`, so a set
+    # built from the modules being tested makes the predicate unfalsifiable and
+    # grants every installed capability by construction -- including the
+    # consequential demonstration harness module. Guarded by
+    # tests/architecture/test_execute_turn_boundaries.py.
+    feature_policy = enabled_feature_policy(settings)
     granted = compose_capabilities(
         CapabilityGrantContextV1(
             role=PLANNER_ROLE,
@@ -233,7 +237,17 @@ async def execute_agent_turn(
             calculation_results=raw_results,
             history=claimed.history,
         )
-    except AgentRuntimeError:
+    except Exception:  # noqa: BLE001
+        # The claim already committed `agent_running` in its own short
+        # transaction, and `claim_queued_run` only ever claims `agent_queued`,
+        # so ANY exception escaping here leaves a run no request can execute
+        # again -- there is no reaper until Epic 3's lease. `AgentRuntimeError`
+        # alone was too narrow: the gate's own fail-closed prose rule raises
+        # `UncitedNumericProseError`, and history rehydration raises
+        # `ValueError` on an unknown variant. Both are ordinary operation, not
+        # infrastructure failure. Reaching a terminal status is what keeps the
+        # accepted conversation durable (AC3), so it wins over surfacing a
+        # richer error here; Story 2.9 owns the failure taxonomy.
         outcome = AgentRunOutcomeV1(status="failed")
 
     def _finish():
@@ -246,7 +260,18 @@ async def execute_agent_turn(
                 request_id=deps.request_id,
             )
 
-    completed = await run_in_threadpool(_finish)
+    try:
+        completed = await run_in_threadpool(_finish)
+    except AgentRunNotQueuedError:
+        # Something else moved the run out of `agent_running` between the claim
+        # and here. It is already terminal or owned elsewhere; report the same
+        # stable refusal as an unclaimable run rather than a 500.
+        return problem_response(
+            status=409,
+            code="agent_run_not_queued",
+            title="Agent run not queued",
+            detail="The agent run cannot be executed from its current state.",
+        )
     return ExecutedTurnOut(
         activity=_activity(completed.event),
         resource_version=completed.resource_version,

@@ -1,1 +1,75 @@
-{"case_id":"grounding-argument-mismatch","case_version":"1","capability":"scheduling_compute","risk_class":"inspect","prompt":"Compute Wednesday outbound required demand minutes with exact evidence.","scripted_turns":[{"tool_name":"scheduling_compute","arguments":{"request":{"metric":"required_demand_minutes","arguments":{"schema_version":"1","task_id":"pick","family":"outbound","start_minute":2880,"end_minute":4320}}},"tool_call_id":"compute-1"},{"response_data":{"schema_version":"1","segments":[{"schema_version":"1","kind":"prose","text":"Computed requirement"},{"schema_version":"1","kind":"claim","metric":"required_demand_minutes","arguments":{"schema_version":"1","task_id":"pick","family":"outbound","start_minute":4320,"end_minute":5760},"result_id":"923112b80ea9f3635349755a21f414e47f1fabe7cf73e94a63e1aed0a13d3c87"}]}}],"expected_outcome":"allow","expected_tool_calls":[{"tool_name":"scheduling_compute","arguments":{"request":{"metric":"required_demand_minutes","arguments":{"schema_version":"1","task_id":"pick","family":"outbound","start_minute":2880,"end_minute":4320}}}}],"expected_evidence_refs":["00000000-0000-0000-0000-000000000001|demand|outbound:0|amount:2880-4320"],"expected_visible_state":"completed","expected_visible_text":"","expected_grounding_outcome":"argument_mismatch","scenario_fixtures":["sample_tiny_input:v1"]}
+{
+  "case_id": "grounding-argument-mismatch",
+  "case_version": "1",
+  "capability": "scheduling_compute",
+  "risk_class": "inspect",
+  "prompt": "Compute Wednesday outbound required headcount minutes with exact evidence.",
+  "scripted_turns": [
+    {
+      "tool_name": "scheduling_compute",
+      "arguments": {
+        "request": {
+          "metric": "required_headcount_minutes",
+          "arguments": {
+            "schema_version": "1",
+            "task_id": "pick",
+            "family": "outbound",
+            "start_minute": 2880,
+            "end_minute": 4320
+          }
+        }
+      },
+      "tool_call_id": "compute-1"
+    },
+    {
+      "response_data": {
+        "schema_version": "1",
+        "segments": [
+          {
+            "schema_version": "1",
+            "kind": "prose",
+            "text": "Wednesday outbound requirement"
+          },
+          {
+            "schema_version": "1",
+            "kind": "claim",
+            "metric": "required_headcount_minutes",
+            "arguments": {
+              "schema_version": "1",
+              "task_id": "pick",
+              "family": "outbound",
+              "start_minute": 4320,
+              "end_minute": 5760
+            },
+            "result_id": "6507fea5c74f5e6b02752316814527ef085118ec5259c139a4c9bb46acef8db1"
+          }
+        ]
+      }
+    }
+  ],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [
+    {
+      "tool_name": "scheduling_compute",
+      "arguments": {
+        "request": {
+          "metric": "required_headcount_minutes",
+          "arguments": {
+            "schema_version": "1",
+            "task_id": "pick",
+            "family": "outbound",
+            "start_minute": 2880,
+            "end_minute": 4320
+          }
+        }
+      }
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "",
+  "expected_grounding_outcome": "argument_mismatch",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ]
+}

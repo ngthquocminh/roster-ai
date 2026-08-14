@@ -15,9 +15,7 @@ from application.capabilities.installed import installed_modules
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
 from application.contracts.grounding import GroundedAnswerV1
-from application.contracts.evidence_ref import DemandIntervalResolutionV1
-from application.contracts.scenario_projection import DemandIntervalV1
-from application.ports.scenario_projection import GroupQueryKeysV1
+from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 
 # Golden cases tag themselves with an evaluation `capability` label, which is not
 # always the registered tool name. Declared once, here, rather than branched on
@@ -99,11 +97,14 @@ def generate_demonstration_report(
     # installed but missing here would silently drop out of the NFR27 binding.
     granted_modules = installed_modules()
     for case in cases:
-        runtime = _runtime_for_case(case, granted_modules)
+        results: list[object] = []
+        runtime = _runtime_for_case(case, granted_modules, results)
         outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
         routing = ToolRoutingEvaluator(run_source="double").evaluate(case, outcome)
         if case.expected_grounding_outcome:
-            outcome = ground_case_outcome(case, outcome, runtime._deps)
+            outcome = ground_case_outcome(
+                case, outcome, runtime._deps, tuple(results)
+            )
             grounding = GroundingEvaluator(run_source="double").evaluate(case, outcome)
             verdict = EvalVerdict(
                 passed=routing.passed and grounding.passed,
@@ -131,61 +132,31 @@ def generate_demonstration_report(
     )
 
 
-def _report_deps() -> AgentDepsV1:
-    """Trusted deps for a deterministic, offline report run."""
-    identity = UUID(int=1)
+def _report_deps(sink: list | None = None) -> AgentDepsV1:
+    """Trusted deps for a deterministic, offline report run.
 
-    class ProjectionReader:
-        _KEYS = {
-            "demand": (("start_minute",), ("family", "task_id")),
-            "assignments": (("start_minute",), ("worker_id", "task_id")),
-            "workers": (("contact_id",), ("contact_id",)),
-            "locks": (("scope",), ("scope",)),
-            "constraints": (("constraint_type",), ("constraint_type",)),
-        }
-
-        def get_query_keys(self, group):
-            sorts, filters = self._KEYS.get(group, ((), ()))
-            return GroupQueryKeysV1(group=group, sort_keys=sorts, filter_keys=filters)
-
-        def _page(self):
-            from types import SimpleNamespace
-            return SimpleNamespace(
-                scenario_id=identity, scenario_version_id=identity, site_id=identity,
-                items=(), next_cursor=None, total_count=0, matching_count=0,
-            )
-
-        get_demand = lambda self, *_args: self._page()
-        get_baseline_assignments = lambda self, *_args: self._page()
-        get_workers = lambda self, *_args: self._page()
-        get_locks = lambda self, *_args: self._page()
-        get_constraints = lambda self, *_args: self._page()
-        get_overview = lambda self, *_args: self._page()
-
-        def resolve_demand_interval(
-            self, _connection, scenario_id, scenario_version_id, record_id
-        ):
-            return DemandIntervalResolutionV1(
-                outcome="resolved",
-                scenario_id=scenario_id,
-                current_scenario_version_id=scenario_version_id,
-                item=DemandIntervalV1(
-                    record_id, "outbound", "pick", None, 2880, 4320, 1, "headcount"
-                ),
-            )
-
+    The projection carries REAL rows (`evals/fixture_projection.py`) so a
+    grounded case exercises the actual calculator; `sink` captures each raw
+    capability result on the same trusted path the request route uses.
+    """
+    identity = FIXTURE_IDENTITY
     return AgentDepsV1(
         actor_id=UUID(int=2), site_id=identity,
         membership_id=UUID(int=3), request_id=UUID(int=4),
         agent_run_id=UUID(int=5), conversation_id=UUID(int=6),
-        scenario_id=identity, scenario_version_id=identity, policy_version="one-user-mvp-v1",
-        clock=lambda: datetime.now(timezone.utc), projection_reader=ProjectionReader(),
+        scenario_id=identity, scenario_version_id=identity,
+        policy_version="one-user-mvp-v1",
+        clock=lambda: datetime.now(timezone.utc),
+        projection_reader=FixtureProjectionReader(),
         connection=object(), remaining_budget=AgentBudgetV1(),
+        tool_result_sink=(sink.append if sink is not None else None),
     )
 
 
 def runtime_for_modules(
-    case: GoldenCase, modules: tuple[CapabilityModuleV1, ...]
+    case: GoldenCase,
+    modules: tuple[CapabilityModuleV1, ...],
+    sink: list | None = None,
 ) -> PydanticAIAgentRuntime:
     """Build a runtime granting EXACTLY `modules` -- no tag filtering.
 
@@ -194,13 +165,15 @@ def runtime_for_modules(
     rather than re-filtered behind its back.
     """
     return PydanticAIAgentRuntime(
-        model=build_model_double(case), capabilities=modules, deps=_report_deps(),
+        model=build_model_double(case), capabilities=modules, deps=_report_deps(sink),
         answer_type=(GroundedAnswerV1 if case.expected_grounding_outcome else None),
     )
 
 
 def _runtime_for_case(
-    case: GoldenCase, modules: tuple[CapabilityModuleV1, ...]
+    case: GoldenCase,
+    modules: tuple[CapabilityModuleV1, ...],
+    sink: list | None = None,
 ) -> PydanticAIAgentRuntime:
     """Grant a case exactly the module its `capability` tag names."""
     wanted = EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
@@ -214,7 +187,7 @@ def _runtime_for_case(
             f"case {case.case_id!r} names capability {case.capability!r}, "
             f"which no supplied module provides"
         )
-    return runtime_for_modules(case, selected)
+    return runtime_for_modules(case, selected, sink)
 
 
 def build_evaluation_report(

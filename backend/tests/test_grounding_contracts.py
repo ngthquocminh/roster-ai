@@ -13,17 +13,28 @@ from application.contracts.grounding import (
     GroundedClaimV1,
     GroundedProseSegmentV1,
     GroundedResponseV1,
+    FAMILY_AWARE_METRICS,
     GroundingFailureV1,
     MetricV1,
 )
 
 
 def test_grounding_contracts_are_closed_versioned_and_frozen() -> None:
+    # Demand splits by dimension because `DemandIntervalV1.unit` is
+    # volume|headcount and the only rate in the projection is per WORKER per
+    # task, so volume -> minutes needs an assignment and belongs to Epic 3.
     assert set(get_args(MetricV1)) == {
-        "required_demand_minutes",
+        "required_headcount_minutes",
+        "required_demand_volume",
         "staffed_minutes",
         "shortfall_minutes",
         "qualified_worker_count",
+    }
+    # family lives only on demand rows and is not a function of task_id, so
+    # only demand-reading metrics may accept it.
+    assert FAMILY_AWARE_METRICS == {
+        "required_headcount_minutes",
+        "required_demand_volume",
     }
     assert set(get_args(GroundingFailureV1)) == {
         "missing_evidence",
