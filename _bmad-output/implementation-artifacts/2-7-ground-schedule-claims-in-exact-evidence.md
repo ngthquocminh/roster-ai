@@ -4,7 +4,7 @@ baseline_commit: 4e2b8126c9efd41ffc55fd9ac66d6c9b4710935f
 
 # Story 2.7: Ground Schedule Claims in Exact Evidence
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -1201,3 +1201,4 @@ priced at creation, a new dependency was not.
 | 2026-08-13 | Decision 2 amended before implementation (correct-course, zero code written): the model now **cites** an application-computed `result_id` instead of asserting a value; calculators ship as the governed `scheduling_compute` capability; the gate **verifies citations** rather than recomputing; prose segments may carry no bare numerals. Tasks 2, 3, 4, 6 and the traps list updated to match. No AC, PRD, epic, architecture, or UX change — AD-11's `produce` branch and AR11's three named failures are satisfied as written. See `sprint-change-proposal-2026-08-13.md`. |
 | 2026-08-13 | Phase B completed: configured runtime construction, stable capability failures, column-scoped status grant, durable response activity, request-path execution, persisted-history rehydration, and grounded chat rendering. |
 | 2026-08-13 | Task 14 completed: full regression and fences passed; Gate A regenerated from clean-tree measurements and passed with no blockers; story moved to review. |
+| 2026-08-14 | Code review completed: 7 decision-needed resolved with Minh and 24 patches applied. Notable outcomes -- the demand metric split by dimension because volume->minutes needs a per-worker rate and belongs to Epic 3; grounding failures routed to the correct side of the trust boundary, giving `calculation_failed` its first producer; the model-facing projection made mandatory so no capability hands the model a quantity; and the four golden cases rebuilt against a real projection after the previous driver was found to fabricate the capability result, which is why the row-bound and unit defects survived Phase A. Gate A regenerated and passed at `1f2dc54`. |
