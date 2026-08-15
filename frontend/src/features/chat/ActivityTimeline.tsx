@@ -32,6 +32,17 @@ function claimSubject(claim: Claim): string | undefined {
   return parts.length ? parts.join(" · ") : undefined;
 }
 
+// Exactness is this feature's whole premise, so neither a raw float repr
+// (90.00000000000001) nor a fixed 2-decimal truncation is acceptable: the first
+// is noise, the second renders a real 0.0001 as "0.00" beside an Evidence link
+// that proves it is not zero. `toPrecision(12)` drops IEEE-754 representation
+// noise well below any magnitude the projection carries, and `Number()` strips
+// the trailing zeros it introduces.
+function formatClaimValue(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return String(Number(value.toPrecision(12)));
+}
+
 function ClaimSegment({ claim }: Readonly<{ claim: Claim }>) {
   if (claim.verdict === "failed") {
     return (
@@ -41,6 +52,17 @@ function ClaimSegment({ claim }: Readonly<{ claim: Claim }>) {
     );
   }
   const subject = claimSubject(claim);
+  // A proven-empty match set is supported and carries NO locator, because
+  // EvidenceRefV1 addresses records and absence has none. Rendering it as a bare
+  // "0" left a number with no adjacent Evidence link, which AC2 forbids -- so it
+  // gets an explicit state instead of an implicit absence.
+  if (!claim.evidence_refs.length) {
+    return (
+      <span className="text-muted-foreground" data-claim-state="empty">
+        No matching records{subject ? ` (${subject})` : ""}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex flex-wrap items-center gap-2" data-claim-state="supported">
       {/* Exactness is this feature's whole premise, so a raw float repr
@@ -48,8 +70,7 @@ function ClaimSegment({ claim }: Readonly<{ claim: Claim }>) {
           float amounts throughout the fixture, so this is reachable, not
           theoretical. Integers keep rendering unchanged. */}
       <span>
-        {Number.isInteger(claim.value) ? claim.value : Number(claim.value).toFixed(2)}{" "}
-        {claim.unit}
+        {formatClaimValue(Number(claim.value))} {claim.unit}
         {subject ? <span className="text-muted-foreground"> ({subject})</span> : null}
       </span>
       {claim.evidence_refs.map((reference) => (
@@ -69,17 +90,20 @@ function ClaimSegment({ claim }: Readonly<{ claim: Claim }>) {
 }
 
 function AgentResponse({ item }: Readonly<{ item: AgentResponse }>) {
-  // A failed or timed-out run persists a response with no segments, which is
-  // truthful — it produced no visible content. Rendering it as an empty bubble
-  // under the ShiftMind label reads as the assistant having said nothing at
-  // all. The full failure taxonomy is Story 2.9's; this is only the neutral
-  // placeholder that keeps an empty record legible.
+  // An empty segment list means no visible answer was saved. It does NOT mean
+  // the run failed: `terminal_status` returns `agent_completed` whenever a
+  // grounded response exists, so a model that answers with zero segments
+  // completes successfully and lands here too. The activity payload carries no
+  // run status, so this cannot tell the two apart -- and asserting "did not
+  // complete" in destructive styling was therefore wrong for the completed case.
+  // Stay neutral and factual; Story 2.9 owns the failure taxonomy and the
+  // visible states that distinguish them.
   if (!item.response.segments.length) {
     return (
       <div aria-label="ShiftMind response" className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">ShiftMind</p>
-        <p className="text-sm text-destructive" data-response-state="unavailable">
-          This turn did not complete. No answer was saved.
+        <p className="text-sm text-muted-foreground" data-response-state="empty">
+          No answer was saved for this turn.
         </p>
       </div>
     );

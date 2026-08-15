@@ -173,6 +173,18 @@ def test_conformance_rejects_a_module_whose_request_argument_lies() -> None:
         validate_module(invalid)
 
 
+def test_conformance_rejects_a_module_that_declares_no_model_facing_view() -> None:
+    """The `asdict` fallback was deleted so a capability cannot leak by omission.
+
+    Its siblings above all prove their guard can go red; this one shipped
+    without that proof, in the one suite whose stated purpose is that a guard
+    nobody has seen fail is a guard nobody has tested.
+    """
+    invalid = _synthetic_module(model_facing_view=None)
+    with pytest.raises(IncompleteManifestError, match="model may see"):
+        validate_module(invalid)
+
+
 def test_conformance_rejects_a_manifest_whose_schema_ref_does_not_resolve() -> None:
     """The `input_schema_ref` -> `request_type` identity check exists only in
     this suite, so its redness is proved here rather than assumed."""
@@ -433,19 +445,21 @@ def test_every_installed_module_declares_a_model_facing_view() -> None:
         assert callable(module.model_facing_view), module.manifest.capability_name
 
 
-def test_no_model_facing_view_hands_the_model_a_quantity() -> None:
-    """The invariant that makes the gate's prose-digit ban meaningful.
+def test_scheduling_compute_never_hands_the_model_its_computed_value() -> None:
+    """`scheduling_compute`'s premise: the model cites the number, never holds it.
 
-    If no capability ever gives the model a number, then a numeral appearing in
-    a prose segment can only be fabricated -- which turns a fail-closed rule
-    that would otherwise fire on ordinary behaviour into a real signal. Asserted
-    over each module's PROJECTED output, which is stronger than inspecting a
-    list of field names.
+    Asserted over the module's PROJECTED output, which is stronger than
+    inspecting a list of field names.
 
-    `scheduling_inspect` is exempt and must stay exempt: it exists to hand the
-    model rows to reason about and computes no metric, so its counts are its
-    purpose. `scheduling_compute` is the one whose entire premise is that the
-    model never holds the value.
+    NOTE what this does NOT establish, because an earlier version of this
+    docstring claimed it and the claim was false: there is no repo-wide "no
+    capability hands the model a quantity" invariant. `scheduling_inspect`
+    deliberately hands the model rows and counts -- that is its entire purpose --
+    and rehydrated history carries prior claim values so a follow-up question can
+    resolve against them. Grounding does not rest on the model being ignorant of
+    numbers; it rests on the gate refusing to render any number that is not a
+    verified citation, and on the prose rule, which the adapter now enforces
+    in-loop so an echoed numeral costs a retry rather than the whole turn.
     """
     from application.capabilities.scheduling_compute import (
         SchedulingComputeResultV1,

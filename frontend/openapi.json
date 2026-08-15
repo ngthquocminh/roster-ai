@@ -3938,7 +3938,6 @@
               "required_headcount_minutes",
               "required_demand_volume",
               "staffed_minutes",
-              "shortfall_minutes",
               "qualified_worker_count"
             ],
             "title": "Metric",

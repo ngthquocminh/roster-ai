@@ -23,11 +23,14 @@ def test_grounding_contracts_are_closed_versioned_and_frozen() -> None:
     # Demand splits by dimension because `DemandIntervalV1.unit` is
     # volume|headcount and the only rate in the projection is per WORKER per
     # task, so volume -> minutes needs an assignment and belongs to Epic 3.
+    # `shortfall_minutes` is deliberately ABSENT and must stay absent until a
+    # per-worker rate exists: required-in-minutes is headcount-only (family
+    # `indirect`), staffed minutes come from assignments that carry no family,
+    # so the subtraction mixed dimensions in every case. Epic 3 owns it.
     assert set(get_args(MetricV1)) == {
         "required_headcount_minutes",
         "required_demand_volume",
         "staffed_minutes",
-        "shortfall_minutes",
         "qualified_worker_count",
     }
     # family lives only on demand rows and is not a function of task_id, so

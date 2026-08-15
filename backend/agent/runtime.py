@@ -21,6 +21,7 @@ from pydantic_ai import (
     DeferredToolResults,
     InstrumentationSettings,
     ModelHTTPError,
+    ModelRetry,
     RunCancelled,
     ToolDenied,
     UnexpectedModelBehavior,
@@ -44,6 +45,7 @@ from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV1
+from application.grounding.gate import numeric_prose_violation
 from agent.capability_tools import render_capabilities
 
 
@@ -120,6 +122,37 @@ class PydanticAIAgentRuntime:
             definition.name
             for definition in (() if output_toolset is None else output_toolset._tool_defs)
         )
+
+        if answer_type is not None:
+            # The grounding gate forbids numerals in prose segments, and it runs
+            # AFTER the turn completes -- so a violation used to kill the whole
+            # turn and persist an empty response. Registering the same rule as an
+            # output validator turns it into one corrective retry inside the run,
+            # which is the framework's own mechanism for "the model produced
+            # something unusable" and is already how a non-structured answer is
+            # handled.
+            #
+            # The rule itself stays in `application/grounding/gate.py`; this is
+            # wiring only. `ground_answer` still enforces it as the backstop, so
+            # bypassing the validator cannot bypass the invariant.
+            @self._agent.output_validator
+            def _reject_numeric_prose(output: object) -> object:
+                for segment in getattr(output, "segments", ()) or ():
+                    text = getattr(segment, "text", None)
+                    if text is None:
+                        continue
+                    offending = numeric_prose_violation(text)
+                    if offending is not None:
+                        raise ModelRetry(
+                            f"The prose segment {text!r} contains the numeral(s) "
+                            f"{offending!r}. Every number shown to the planner must be a "
+                            "claim node citing a result_id returned by a tool, because only "
+                            "then does it carry verifiable evidence. Rewrite that segment "
+                            "with no numerals and express the quantity as a claim. Task "
+                            "identifiers and time windows do not belong in prose either -- "
+                            "they are rendered from each claim's own arguments."
+                        )
+                return output
 
         # Retained so a capability failure can be checked against the error
         # vocabulary its own manifest advertises (see `run_turn`).

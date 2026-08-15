@@ -913,6 +913,123 @@ Recorded so a future review does not re-raise them — note that a sixth, unroun
 
 ---
 
+### Review Findings — remediation re-review (2026-08-14)
+
+*Second code review, against `31204a1..HEAD` (42 files, +2161/−234) — the remediation pass that
+applied the 7 decisions and 24 patches above. Three adversarial layers (Blind Hunter, Edge Case
+Hunter, Acceptance Auditor); no layer failed. Every finding below was re-verified against the
+working tree before rating, and the shipped fixture was re-measured rather than taken from the
+earlier review's numbers.*
+
+*Independently verified green at HEAD: backend **789 passed / 1 skipped / 7 deselected**, frontend
+**56 files / 330 tests**, `tsc --noEmit` clean. The postgres suite (7 deselected), Playwright, and
+`alembic check` were **not** run in this review. Fences re-verified clean across this range:
+`backend/services|domain|engine|llm|ingest|store/**`, both `scenario_catalogue.py`,
+`test_gate_a_mutation_audit.py`, `frontend/src/features/scenario-data/**`, `translate.py`,
+`ALLOWED_LEAKS`; `evidence/story-2.2/evaluation-harness-demonstration.json` not regenerated; still
+exactly one new `ActivityItemV1` discriminant. The D1 row-bound and filter pushdown, the D5
+de-fabrication of `evals/grounding.py`, and the Task 5 golden-case fence all landed as decided.*
+
+**The headline: three of the seven decisions did not fully land, and two of them interact to produce
+a new failure the first review did not have.** D2's empty-set allowance and D4's unit split combine
+so that on the only seeded fixture the flagship Wednesday question returns a *supported* zero with
+no evidence link. That is trap #1's failure mode — a wrong number wearing valid grounding — reached
+through a path the remediation itself opened.
+
+#### Decision needed — all three RESOLVED with Minh, 2026-08-14
+
+**D1 → fail closed at compute time.** Keep the set of rows overlapping the window *before* the unit
+filter; if that set is non-empty while `matched_demand` is empty, raise a new dimension error
+declared in `scheduling_compute`'s `ERROR_CODES`, which the gate reports as `calculation_failed`.
+Made **retryable** (argument-class, not infrastructure), so the model can re-issue against the metric
+that can answer. Ships with its own test plus a self-redness test.
+
+*Rejected: a static rejection of `metric × family` combinations at argument-validation time.* Minh
+corrected the domain model that option rested on, and the correction is load-bearing — record it so
+it is not re-derived wrongly. Asking about **headcount on an outbound/inbound task is a valid planner
+question**; it is answered from **assignments**, not from demand, and is family-agnostic. What is
+unanswerable is *required demand in minutes* for outbound/inbound, because that demand is measured in
+`volume` and converting it needs `QualificationRefV1.rate` — per worker, per task — which is Epic 3's
+solver question. The genuinely meaningless direction is the reverse: units produced by `indirect`
+work. So the two impossible directions are **not symmetric**, and a guard keyed on `family` would
+have wrongly told planners their staffing questions were invalid. Error messages must steer
+(*"this metric measures required demand; outbound demand is measured in volume"*) rather than refuse.
+
+**D2 → move the prose-numeral check into the agent loop as an output validator.** The rule stays
+single-sourced as a pure predicate in `application/grounding/gate.py` (no `pydantic_ai` import, so the
+`application/**` boundary holds); `backend/agent/runtime.py` registers an output validator that calls
+it and raises `ModelRetry` with corrective feedback when a strict `answer_type` is in use;
+`ground_answer` keeps the post-hoc check as a fail-closed backstop. **Verified on the installed lock:**
+`pydantic_ai 2.27.0` exposes `Agent.output_validator`, `ModelRetry`, and a configurable `retries`.
+
+Consequence: neither leak channel needs closing. Rehydrated history keeps its claim values, so Task
+12's conversation memory survives intact, and `scheduling_inspect` keeps handing the model rows to
+reason about — which is its stated purpose. A prose numeral becomes a correction the model can act on
+instead of a turn that dies into a blank bubble. The docstrings and the test name that currently
+assert the *"no capability hands the model a quantity"* invariant must still be corrected, since that
+invariant is false and is not what makes the design safe — the gate is.
+
+*Weighed and rejected along the way:* narrowing both channels (fights `scheduling_inspect`'s purpose
+and breaks Task 12), narrowing history only, and a declared prose allow-list. The allow-list was
+initially recommended and then withdrawn on measurement: `claimSubject`
+(`ActivityTimeline.tsx:25-33`) already renders `task_id`, `family` and the minute range from claim
+arguments, so the model never needs to write a window in prose and the allow-list's benefit shrank to
+near nothing. Only D addresses an incidental numeral — *"day 3"* — which every other option leaves as
+a turn-killer.
+
+**D3 → drop `shortfall_minutes`; Epic 3 owns it.** Measured, and the measurement killed the rescue
+option: **0 of 6 tasks carry demand in a single family** (five have no `indirect` rows at all; one is
+mixed 53/197/6), so "compute only when the task's demand is single-dimension" would refuse on 6/6
+tasks and leave dead code plus an unexercisable golden case. On shipped data the metric is also
+redundant — `baseline-assignments` has 0 rows, so `staffed` is always 0 and `shortfall` merely repeats
+`required_headcount_minutes`. And it cannot be made sound: `AssignmentV1` carries no family, so the
+all-family staffed side can never be scoped to match the indirect-only required side. Removing it
+returns `MetricV1` to the four members Task 3 asked for.
+
+**D3b → render a proven-empty match set as its own visible state.** With `shortfall_minutes` gone,
+`staffed_minutes` is the only remaining producer of a truthful-but-locator-free zero (the assignments
+group is genuinely empty). Rather than rendering a bare number with no Evidence link, give it an
+explicit "no matching records" treatment, closing AC2's last gap with an affordance instead of an
+absence. Frontend-only.
+
+**New ledger items arising from these decisions:** the missing "how many people are working" metric
+(`staffed_minutes` returns worker-minutes, not a headcount, so the plainest staffing question has no
+direct answer — deliberately not added here because Task 3 closed the vocabulary), and
+`shortfall_minutes`'s reassignment to Epic 3 with the per-worker-rate reason recorded.
+
+---
+
+- [x] [Review][Decision] **[HIGH] A "proven empty set" cannot be distinguished from "1541 rows were read and discarded as the wrong dimension", and on shipped data that is every outbound/inbound question** — `calculators.py:331-338,384-398` + `gate.py:149-167` + `ActivityTimeline.tsx:55-66`. Re-measured on `data/contract/sample_tiny_input.projection-v1.json`: demand is **1547 rows — 493 `volume/outbound`, 1048 `volume/inbound`, 6 `headcount/indirect`** — and `baseline-assignments` is **0 rows**. `wanted_unit` narrows `matched_demand` *after* the drain, and `consumed` is `len(matched_demand)` — i.e. counted post-filter. So `required_headcount_minutes` on any outbound/inbound task drains its rows, discards all of them as the wrong dimension, and returns `value=0, refs=(), consumed=0`, which `gate.py:151-167` reports as **`verdict="supported"`**. The frontend then maps an empty `evidence_refs` to zero `EvidenceLink`s, so a number renders with no locator at all — **an AC2 violation** ("each supported claim has an adjacent Evidence link"), which the D2 decision text argued only against AC3 and never considered. Same for `staffed_minutes` and `shortfall_minutes` against the 0-row assignments group. Before D2 these fell closed as `missing_evidence`; the remediation converted a fail-closed state into a confident wrong answer. **Folded in:** D2's stated mechanism was to route on the *drained* `matching_count`, but the implementation carries `consumed_row_count` derived from the same matched tuples that build `refs`, so `gate.py:149`'s `len(refs) != consumed` check is true by construction and `calculation_failed` has no reachable producer from `calculate_metric` — the very thing the Change Log claims D2 delivered. The two halves are one root cause: **the count that reaches the gate is post-filter.** Choosing between "carry the pre-filter drained count and fail closed", "reject the metric when rows exist but none match the dimension", and "render an evidence-free zero as its own visible state" changes what the planner sees, so it is yours to call.
+- [x] [Review][Decision] **[HIGH] D3's "main prize" invariant is false through two channels, so the prose-digit ban still fires on ordinary behaviour — now into a catch that discards the reason** — the D3 decision recorded the emergent invariant as *"the model receives no quantity from any tool, so a numeral appearing in a prose segment can only be fabricated … the prose ban stops firing on reasonable behaviour."* Two channels falsify it. (a) `execute_turn.py:71` renders a supported claim into rehydrated history as `f"{segment.value} {segment.unit}"`, so on turn 2 the model is handed `"2160 minutes"` as literal assistant text. (b) `scheduling_inspect.py:292` declares `model_facing_view=lambda result: result` — the full result including `items` with float `amount`s and three counts — and is enabled by default. `test_no_model_facing_view_hands_the_model_a_quantity` (`test_capability_conformance.py:436`) states the invariant in its docstring but exercises only `scheduling_compute` and explicitly exempts `scheduling_inspect`. Consequence chain: a model echoing a number it was just shown raises `UncitedNumericProseError`, which the new broad catch (`conversations.py:240`) turns into a bare `agent_failed` with an empty response and a "This turn did not complete" bubble. A successful claim in turn 1 makes turn 2 prone to hard failure. The posture question — narrow the history text, narrow the inspect view, relax the prose ban to an allow-list per Task 4, or accept it — is a product call.
+- [x] [Review][Decision] **[HIGH] `shortfall_minutes` still mixes dimensions across the subtraction — the explicit `family` argument was removed, the implicit one was not** — `calculators.py:331,391-394`. `_check_family_is_meaningful` now rejects `family` on assignment-touching metrics, exactly as the "settled by analysis" item decided. But `wanted_unit="headcount"` narrows `matched_demand` to the only headcount rows that exist (family `indirect`), while `matched_assignments` covers every family. `required_minutes` is therefore indirect-only and `staffed` is all-work, so `max(0, required − staffed)` subtracts all-family staffing from single-family demand — the same defect the earlier analysis set out to remove, reintroduced through the unit filter rather than the argument. On the shipped fixture only one task has indirect demand at all, so for the other five this degenerates to the supported zero above. Resolving it needs the same call as the first item, plus whether `shortfall_minutes` should survive at all before Epic 3 supplies a comparable staffing dimension.
+
+#### Patch
+
+- [x] [Review][Patch] **[HIGH] D6's mechanical guard does not watch the line it was ordered to protect** [backend/api/routers/conversations.py:194-196, backend/tests/architecture/test_execute_turn_boundaries.py:60-93] — D6 required *"a mechanical guard asserting `feature_policy` is **not** derived from `installed_modules()` … or this exact line grows back."* The route comment claims it is guarded; nothing reads `conversations.py`'s source or route object. Verified exhaustively: the only test that parses `api/**` is `_background_primitives`, which looks solely for `BackgroundTasks`/`ThreadPoolExecutor`/`asyncio.create_task`. Reverting `:196` to the tautological form leaves all 789 tests green. Trap #7's guard in the same file already reads FastAPI's `dependant` — the required shape existed and was not used.
+- [x] [Review][Patch] **[HIGH] The stranded-run patch closed neither of the two halves the finding named** [backend/api/routers/conversations.py:196-230, 263-274] — `_claim` commits `agent_running` in its own transaction, then `enabled_feature_policy` (`:196`), `compose_capabilities` (`:197`) and `runtime_factory` (`:225`) all run **outside** the `try` at `:231`. `PydanticAIAgentRuntime.__init__` eagerly calls `_configured_model`, which raises `ValueError` on any `AGENT_RUNTIME_MODEL` lacking a `provider:model` colon and constructs a live provider that raises on a missing key — so the most likely first-deploy misconfiguration 500s and leaves the run permanently unclaimable. Separately, the original item explicitly said *"`_finish` itself is also unguarded"*; the remediation catches only `AgentRunNotQueuedError`, while `conversation.py:361` still raises `RuntimeError("claimed conversation is no longer visible")`. Both halves reproduce the exact condition the item existed to close.
+- [x] [Review][Patch] **The broad catch records no diagnostic at all** [backend/api/routers/conversations.py:240-251] — it produces `AgentRunOutcomeV1(status="failed")` with `failure_reason=None`, the route has no logging, and `finish_agent_run` persists no error string. A `KeyError` in the gate, a provider auth failure, and a genuine model refusal are stored identically as `agent_failed` with a blank response, with no post-hoc way to tell them apart. Catching broadly is right; discarding the cause is not.
+- [x] [Review][Patch] **`test_a_disabled_capability_is_absent_from_the_composed_grant` never composes a grant** [backend/tests/architecture/test_execute_turn_boundaries.py:60-93] — the body calls only `enabled_feature_policy` and asserts `len(policy_set) == len(capability_name_set)`, two different quantities that coincide only because each module happens to declare a unique policy name. `compose_granted_capabilities` is never invoked, so the AD-2 property the test is named for is unasserted.
+- [x] [Review][Patch] **No test drives the calculator against the shipped fixture** [backend/tests/] — the new end-to-end proof (`test_grounding_gate.py:265-320`) runs against the synthetic 6-row `evals/fixture_projection.py`. Nothing drives `calculate_metric` or `scheduling_compute` against `data/contract/sample_tiny_input.projection-v1.json`. This is the test that would have caught the first decision item, and its absence is why the prior review's residual AC1 gap — *"a correct number can actually be produced and proven on the shipped data"* — is closed by prose measurement rather than a red-able assertion.
+- [x] [Review][Patch] **`eval-fixture:v1` ships a fabricated checksum in a provenance field** [backend/evals/fixture_projection.py:114] — `checksum_digest="e" * 64`. The retag away from `sample_tiny_input:v1` is sanctioned by D5, but `evals/report.py:249-265` feeds this identity straight into the NFR27 report's scenario binding with no catalogue check, so a regenerated report would record a version whose digest is a literal and whose fixture is a Python module. Hash the fixture's actual content instead.
+- [x] [Review][Patch] **Three golden cases ship empty `expected_evidence_refs` under a test whose name asserts the opposite** [backend/evals/golden/scheduling_compute/{version-mismatch,missing-evidence,argument-mismatch}.json, backend/tests/test_evaluation_harness.py:398-410] — Task 6 required *"golden cases with **non-empty** `expected_evidence_refs`"*; three of four now carry `[]`, and `test_grounding_cases_have_literal_result_ids_nonempty_refs_and_oracles` asserts that emptiness while keeping "nonempty" in its name. Defensible under D5, but the task bullet and the test name both now read false.
+- [x] [Review][Patch] **`toFixed(2)` rounds a value the feature promises is exact** [frontend/src/features/chat/ActivityTimeline.tsx:51] — this fixes the `90.00000000000001` case, but `required_demand_volume` pro-rates float amounts (`calculators.py:354-359`), so a genuine `90.126` renders `90.13` and any value below 0.005 renders **`0.00 units`** — carrying a checksummed, version-pinned Evidence link that contradicts the displayed figure.
+- [x] [Review][Patch] **`_flag` silently ignores an unrecognized *disable* token** [backend/settings.py:123-135] — the docstring claims "a typo cannot silently enable a capability", which holds only for `demonstration_enabled`. For the two capabilities defaulting `True`, `SCHEDULING_COMPUTE_ENABLED=disabled` returns the `True` fallback, so an operator's attempt to turn a capability off fails silently. Raise on an unrecognized token, or narrow the docstring.
+- [x] [Review][Patch] **The new required-view guard has no self-redness test** [backend/tests/test_capability_conformance.py:147-180] — D3 required `validate_module` to refuse a module declaring no view, and `module.py:82-85` adds the check. The suite's "Self-redness" section — whose docstring says *"a guard that has never been shown to fail is a guard nobody has tested"* — gained no case for it, unlike its three siblings. The new tests assert the installed set *has* a view, not that the validator rejects one without.
+- [x] [Review][Patch] **A completed turn with zero segments renders as a failure** [frontend/src/features/chat/ActivityTimeline.tsx:77-86] — the branch keys on segment emptiness alone, but `terminal_status` returns `agent_completed` whenever `grounded_response is not None` (`execute_turn.py:46-55`), so a model answering with an empty `GroundedAnswerV1` is labelled "This turn did not complete" in destructive styling. Key on the run status, not the segment count.
+- [x] [Review][Patch] **The NULL `agent_run_id` guard is unreachable and its comment asserts an impossible defect** [backend/adapters/postgres/conversation.py:324-327] — `persisted_event.agent_run_id` is `nullable=False` with a composite FK (`schema.py:318`) and every writer sets it, so `or_(is_(None), …)` can never evaluate true. The original finding was a false positive; the patch is inert and its comment will mislead the next reader into believing NULLs occur.
+- [x] [Review][Patch] **The File List omits four files the remediation changed** [_bmad-output/implementation-artifacts/2-7-…md:1127-1192] — `backend/evals/fixture_projection.py` (new, 188 lines), `backend/settings.py`, `backend/application/capabilities/module.py`, and `frontend/src/test/accessibility-contract.test.tsx` all appear in `git diff --stat` and none appear in the File List. The Debug Log References also stop at the pre-review Gate A run, with no entry for the remediation regression.
+- [x] [Review][Patch] **`AgentRunOutcomeV1`'s second added field is neither justified nor reverted** [backend/application/contracts/agent_runtime.py] — the original item named two halves; the golden-case fence was built (a genuine improvement), but *"`AgentRunOutcomeV1` gained **two** fields where Task 5 declared one"* is unaddressed anywhere, and the item is marked `[x]`.
+
+#### Deferred
+
+- [x] [Review][Defer] **`argument_mismatch` is not an observably distinct failure, so two of the four NFR28 cases assert an identical pair** [backend/application/grounding/gate.py:140-141, backend/evals/evaluators.py:143] — deferred, spec-compliant: Task 4 step 2 explicitly prescribes `missing_evidence` for an arguments mismatch, and AR11 names only three causes, so the collapse is as designed. The consequence is an oracle weakness rather than a defect — nothing in the harness distinguishes "cited an id no call produced" from "cited a real result against different arguments", which is trap #3, the one case the story added specifically to catch.
+- [x] [Review][Defer] **Removing `required_demand_minutes` from `MetricV1` breaks deserialization of any already-persisted claim** [backend/application/contracts/grounding.py:19-35 vs backend/adapters/postgres/conversation.py:483] — deferred, pre-production: `TypeAdapter(GroundedResponseV1).validate_python` raises `ValidationError` for any `persisted_event` row written before this commit carrying the old metric name, permanently 500-ing that conversation's timeline. There is no compat alias and no data migration. Reachable only in developer databases at this milestone; `GroundingUnitV1` gaining `"units"` is additive and safe.
+
+*Dismissed as noise (1): a supported claim with a null `value` rendering as `0.00` — type-reachable
+via `schema.d.ts`, but the gate always sets `value` on the supported path, so it has no producer.*
+
+---
+
 ## Dev Notes
 
 ### What this story is, and what it is not
@@ -1100,6 +1217,10 @@ priced at creation, a new dependency was not.
 - Task 14 clean-tree baselines: backend 762 passed, 1 skipped, 7 deselected; PostgreSQL 45 passed; frontend 56 files / 325 tests; Playwright 46 passed; Alembic zero diff; lint clean apart from three pre-existing Fast Refresh warnings.
 - Task 14 deterministic evaluation: 11/11 authoritative double cases passed, 100% tool routing, explicitly demonstration-only and not release-gate eligible.
 - Gate A regeneration bound to `a3bbebf`: all eight readiness checks passed, `gate_a_passed: true`, `blocking: []`; generated report committed separately as `d346cb7`.
+- Second code review (remediation re-review, `31204a1..HEAD`): three adversarial layers, no layer failed; 3 decisions resolved with Minh and 17 patches applied. Suites re-derived at the start of that review: backend 789 passed / 1 skipped / 7 deselected, frontend 56 files / 330 tests, typecheck clean.
+- Post-remediation regression: backend **810 passed, 2 skipped, 7 deselected**; frontend **56 files / 332 tests**; `tsc --noEmit` clean. New suites: `test_grounding_on_shipped_fixture.py` (6) drives the calculators against `sample_tiny_input`'s 1547 real rows, and `test_settings.py` (10) covers feature-flag parsing.
+- D1 guard observed non-vacuous: `test_the_dimension_guard_is_non_vacuous` reproduces the pre-guard post-filter count and shows it yields the evidence-free zero the gate stamped `supported`; `test_asking_outbound_for_headcount_minutes_fails_closed_on_real_data` exercises the same path on shipped data.
+- D2 verified against the installed lock: `pydantic_ai 2.27.0` exposes `Agent.output_validator`/`ModelRetry`; `test_numeral_in_prose_is_corrected_in_loop_instead_of_killing_the_turn` asserts exactly one retry and a completed turn.
 
 ### Implementation Plan
 
@@ -1190,6 +1311,12 @@ priced at creation, a new dependency was not.
 - frontend/src/features/chat/ActivityTimeline.test.tsx
 - evidence/story-1.11/gate-a-readiness-report.json
 - _bmad-output/implementation-artifacts/sprint-status.yaml
+- backend/evals/fixture_projection.py
+- backend/settings.py
+- backend/application/capabilities/module.py
+- backend/tests/test_settings.py
+- backend/tests/test_grounding_on_shipped_fixture.py
+- frontend/src/test/accessibility-contract.test.tsx
 
 ## Change Log
 
@@ -1201,4 +1328,5 @@ priced at creation, a new dependency was not.
 | 2026-08-13 | Decision 2 amended before implementation (correct-course, zero code written): the model now **cites** an application-computed `result_id` instead of asserting a value; calculators ship as the governed `scheduling_compute` capability; the gate **verifies citations** rather than recomputing; prose segments may carry no bare numerals. Tasks 2, 3, 4, 6 and the traps list updated to match. No AC, PRD, epic, architecture, or UX change — AD-11's `produce` branch and AR11's three named failures are satisfied as written. See `sprint-change-proposal-2026-08-13.md`. |
 | 2026-08-13 | Phase B completed: configured runtime construction, stable capability failures, column-scoped status grant, durable response activity, request-path execution, persisted-history rehydration, and grounded chat rendering. |
 | 2026-08-13 | Task 14 completed: full regression and fences passed; Gate A regenerated from clean-tree measurements and passed with no blockers; story moved to review. |
+| 2026-08-15 | Second code review (remediation re-review) completed: 3 decisions resolved with Minh and 17 patches applied. Notable outcomes -- the D2 empty-set allowance and the D4 unit split were found to combine into a *supported* zero with no Evidence link on every outbound/inbound question, so calculators now fail closed on a dimension miss and a proven-empty set renders as its own state; `shortfall_minutes` was removed because required-in-minutes is structurally indirect-only while staffing is family-agnostic (0 of 6 tasks carry single-family demand, so no rescue exists) and Epic 3 owns it; the prose-numeral rule moved into the agent loop as an output validator so a numeral costs one corrective retry instead of the whole turn, and the "no capability hands the model a quantity" invariant was retracted as false rather than defended; D6's mechanical guard was rebuilt to read the route's own source, since the shipped one watched a helper and left the tautology re-addable; and the calculators gained their first test against the shipped 1547-row projection, the absence of which is why the row-bound and unit defects survived Phase A. |
 | 2026-08-14 | Code review completed: 7 decision-needed resolved with Minh and 24 patches applied. Notable outcomes -- the demand metric split by dimension because volume->minutes needs a per-worker rate and belongs to Epic 3; grounding failures routed to the correct side of the trust boundary, giving `calculation_failed` its first producer; the model-facing projection made mandatory so no capability hands the model a quantity; and the four golden cases rebuilt against a real projection after the previous driver was found to fabricate the capability result, which is why the row-bound and unit defects survived Phase A. Gate A regenerated and passed at `1f2dc54`. |

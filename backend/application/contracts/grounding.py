@@ -22,12 +22,20 @@ MetricV1 = Literal[
     # `QualificationRefV1.rate`, which is per WORKER per task. Converting volume
     # to minutes therefore depends on who performs the work, which is an
     # assignment -- a solver question owned by Epic 3, not a read-model one.
-    # This is a fifth member for dimensional honesty, NOT padding toward a
-    # rounder catalogue; `epics.md:1527` forbids the latter and this is not it.
+    #
+    # NOTE on what is deliberately ABSENT: `shortfall_minutes` (required minus
+    # staffed) was removed in code review. It cannot be made sound at this
+    # layer. Required-in-minutes exists only for `headcount` demand, which the
+    # adapter emits only for family `indirect`; staffed minutes come from
+    # `AssignmentV1`, which carries no family and cannot be scoped to match. So
+    # the subtraction always took all-family staffing away from indirect-only
+    # demand. Measured on `sample_tiny_input`: 0 of 6 tasks carry demand in a
+    # single family, so no "single-dimension task" rescue exists either.
+    # Epic 3 owns it -- once the solver supplies a per-worker rate, required
+    # minutes exist for every family and the subtraction becomes meaningful.
     "required_headcount_minutes",
     "required_demand_volume",
     "staffed_minutes",
-    "shortfall_minutes",
     "qualified_worker_count",
 ]
 DemandFamilyV1 = Literal["outbound", "inbound", "indirect"]

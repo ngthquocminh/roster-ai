@@ -43,7 +43,7 @@ const agentResponse = {
       {
         schema_version: "1",
         kind: "claim" as const,
-        metric: "shortfall_minutes" as const,
+        metric: "staffed_minutes" as const,
         arguments: {
           schema_version: "1",
           task_id: "pick",
@@ -155,9 +155,11 @@ describe("ActivityTimeline", () => {
     expect(screen.getByText(/pick · outbound · 780–1020 min/)).toBeInTheDocument();
   });
 
-  it("rounds a float value rather than showing its raw repr", () => {
+  it("drops float repr noise without truncating a real magnitude", () => {
     // Demand volume carries float amounts throughout the fixture, so
     // 90.00000000000001 is reachable in a feature whose premise is exactness.
+    // A fixed 2-decimal form fixed that but created a worse failure: a genuine
+    // 0.0001 rendered as "0.00" beside an Evidence link proving it is nonzero.
     const floaty = {
       ...agentResponse,
       response: {
@@ -173,23 +175,73 @@ describe("ActivityTimeline", () => {
     };
     render(<ActivityTimeline items={[floaty]} />);
 
-    expect(screen.getByText(/90\.00 units/)).toBeInTheDocument();
+    expect(screen.getByText(/90 units/)).toBeInTheDocument();
     expect(screen.queryByText(/90\.00000000000001/)).not.toBeInTheDocument();
   });
 
-  it("renders a failed run's empty response as a named state, not a blank bubble", () => {
-    // A failed or timed-out run persists a response with no segments. That is
-    // truthful, but an empty bubble under the ShiftMind label reads as the
-    // assistant having said nothing at all.
+  it("never renders a small nonzero value as zero", () => {
+    const tiny = {
+      ...agentResponse,
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            ...agentResponse.response.segments[1],
+            value: 0.0001,
+            unit: "units" as const,
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline items={[tiny]} />);
+
+    expect(screen.getByText(/0\.0001 units/)).toBeInTheDocument();
+    expect(screen.queryByText(/^0 units/)).not.toBeInTheDocument();
+  });
+
+  it("renders a proven-empty match set as its own state, never a bare number", () => {
+    // A calculator that legitimately matches nothing returns value 0 with NO
+    // locator, because EvidenceRefV1 addresses records and absence has none.
+    // Rendering that as "0" left a number with no adjacent Evidence link, which
+    // AC2 forbids.
+    const emptySet = {
+      ...agentResponse,
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            ...agentResponse.response.segments[1],
+            value: 0,
+            evidence_refs: [],
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline items={[emptySet]} />);
+
+    expect(screen.getByText(/No matching records/)).toHaveAttribute(
+      "data-claim-state",
+      "empty",
+    );
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("reports an empty response neutrally, without asserting the run failed", () => {
+    // An empty segment list does NOT imply failure: `terminal_status` returns
+    // `agent_completed` whenever a grounded response exists, so a model that
+    // answers with zero segments completes successfully and renders here too.
+    // The activity payload carries no run status, so claiming "did not
+    // complete" in destructive styling was wrong for the completed case.
+    // Story 2.9 owns the taxonomy that can tell them apart.
     const empty = {
       ...agentResponse,
       response: { ...agentResponse.response, segments: [] },
     };
     render(<ActivityTimeline items={[empty]} />);
 
-    expect(screen.getByText(/This turn did not complete/)).toHaveAttribute(
+    expect(screen.getByText(/No answer was saved for this turn/)).toHaveAttribute(
       "data-response-state",
-      "unavailable",
+      "empty",
     );
   });
 });

@@ -389,7 +389,7 @@ def test_readme_documents_exact_contribution_shape_and_owners() -> None:
     assert "secrets" in readme.lower() and "PII" in readme
 
 
-def test_grounding_cases_have_literal_result_ids_nonempty_refs_and_oracles() -> None:
+def test_grounding_cases_have_literal_result_ids_authored_refs_and_oracles() -> None:
     cases = [case for case in load_cases(GOLDEN_DIR) if case.capability == "scheduling_compute"]
     assert len(cases) == 4
     assert {case.expected_grounding_outcome for case in cases} == {

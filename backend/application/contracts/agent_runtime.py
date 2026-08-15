@@ -216,6 +216,20 @@ class AgentRunOutcomeV1:
     failure_reason: AgentFailureReasonV1 | CapabilityFailureReasonV1 | None = None
     # Planner-visible final content. None unless status == "completed".
     output_text: str | None = None
+    # Two fields, deliberately, though Task 5 declared only `answer`. They sit
+    # on opposite sides of the trust boundary and collapsing them would erase it:
+    #
+    #   `answer`            UNTRUSTED. The model's structured output exactly as
+    #                       the adapter received it. Set in `backend/agent/`.
+    #   `grounded_response` TRUSTED. What the gate produced from that answer --
+    #                       values and locators come only from calculator
+    #                       results. Set by `use_cases/execute_turn.py`, never
+    #                       by the adapter, and it is what gets persisted and
+    #                       rendered.
+    #
+    # The second was added during Phase B without being recorded against Task 5,
+    # which declared the adapter's one field; it is the USE CASE's field, which
+    # is why it fell outside that task's wording rather than contradicting it.
     answer: GroundedAnswerV1 | None = None
     grounded_response: GroundedResponseV1 | None = None
     turn: AgentTurnV1 = field(default_factory=AgentTurnV1)

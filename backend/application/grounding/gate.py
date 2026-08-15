@@ -50,16 +50,38 @@ SCOPE_CONTROLS: Mapping[str, str] = {
     "prose:no_numeric_characters": (
         "COVERS every Unicode character with a numeric value -- decimal digits plus "
         "superscripts, circled forms, Roman numerals and vulgar fractions -- so a quantity "
-        "cannot bypass a claim node. "
-        "NOT COVERED: spelled-out quantities; the strict model prompt must avoid them. This "
-        "fires rarely by construction: no capability hands the model a quantity, so a numeral "
-        "in prose is fabricated rather than echoed."
+        "cannot bypass a claim node. Enforced TWICE: as an in-loop output validator that gives "
+        "the model one corrective retry, and here as the fail-closed backstop. "
+        "NOT COVERED: spelled-out quantities; the strict model prompt must avoid them. "
+        "NOT COVERED, and previously over-claimed here: any guarantee that the model has not "
+        "SEEN a quantity. It has -- scheduling_inspect hands it rows and counts by design, and "
+        "rehydrated history carries prior claim values so a follow-up question can resolve. "
+        "Correctness does not rest on that: it rests on this rule plus the citation checks "
+        "above, which is why the model gets a retry instead of the turn being killed."
     ),
 }
 
 
 class UncitedNumericProseError(ValueError):
     failure: GroundingFailureV1 = "uncited_claim"
+
+
+def numeric_prose_violation(text: str) -> str | None:
+    """The prose rule, as a pure predicate. Returns the offending run or None.
+
+    Single-sourced deliberately. `backend/agent/` registers this as a pydantic-ai
+    output validator so a violation becomes a `ModelRetry` the model can act on,
+    while `ground_answer` below keeps it as the fail-closed backstop. Two call
+    sites, one rule -- a second implementation in the adapter is exactly the
+    drift this function exists to prevent, and `application/**` must stay free of
+    framework imports (AD-19), so the predicate lives here and the framework
+    wiring lives there.
+
+    `isnumeric()` rather than `isdecimal()`: the latter is False for
+    superscripts, circled digits, Roman numerals and vulgar fractions.
+    """
+    offending = "".join(character for character in text if character.isnumeric())
+    return offending or None
 
 
 class TrustedCalculationResultV1(Protocol):
@@ -192,14 +214,13 @@ def ground_answer(
         if isinstance(segment, ClaimProposalV1):
             grounded.append(_ground_claim(segment, deps, results))
             continue
-        # `isnumeric()` rather than `isdecimal()`: the latter is False for
-        # superscripts, circled digits, Roman numerals and vulgar fractions
-        # ('2', '(5)', 'IV', '1/2' in their single-codepoint forms), so the
-        # declared control below over-claimed its own coverage. isnumeric is a
-        # strict superset of isdecimal and isdigit.
-        if any(character.isnumeric() for character in segment.text):
+        # Backstop. The output validator in `backend/agent/runtime.py` has
+        # already given the model one chance to correct this, so reaching here
+        # means it did not -- which is the rare, meaningful signal the design
+        # wants, rather than the routine event it used to be.
+        if numeric_prose_violation(segment.text) is not None:
             raise UncitedNumericProseError(
-                "decimal digits in prose must be represented by a cited claim"
+                "numerals in prose must be represented by a cited claim"
             )
         grounded.append(segment)
     return GroundedResponseV1(
@@ -210,5 +231,5 @@ def ground_answer(
 
 __all__ = [
     "SCOPE_CONTROLS", "TrustedCalculationResultV1",
-    "UncitedNumericProseError", "ground_answer",
+    "UncitedNumericProseError", "ground_answer", "numeric_prose_violation",
 ]

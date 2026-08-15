@@ -18,6 +18,7 @@ from application.contracts.grounding import (
 )
 from application.grounding.calculators import (
     CalculationArgumentsError,
+    CalculationDimensionError,
     CalculationError,
     CalculationLimitError,
     CalculationScenarioNotFoundError,
@@ -69,6 +70,15 @@ SCOPE_CONTROLS: Mapping[str, str] = {
         "NOT COVERED: any non-uniform intra-interval distribution; the source states one "
         "quantity per interval and carries no shape within it."
     ),
+    "dimension:fail_closed_on_unit_miss": (
+        "AUTHORITATIVE. When demand rows exist for the task and window but none carry the unit "
+        "the metric reports, the call FAILS rather than returning a zero. Without this a "
+        "dimension miss is indistinguishable from a proven-empty set and renders as a supported "
+        "zero carrying no locator -- a wrong answer wearing valid grounding. "
+        "NOT COVERED: judging whether the planner's question was reasonable. Asking about "
+        "staffing on an outbound task is valid and is answered from assignments; only the "
+        "demand-side metric is dimension-bound."
+    ),
     "evidence:consumed_rows_only": (
         "AUTHORITATIVE. Every locator names a row folded into the value, and consumed_row_count "
         "reports how many were. "
@@ -107,9 +117,25 @@ class BudgetExhaustedError(SchedulingComputeError):
     code = "budget_exhausted"
 
 
+class MetricDimensionMismatchError(SchedulingComputeError):
+    """Demand exists here but not in the unit this metric reports.
+
+    RETRYABLE on purpose, unlike every other terminal failure in this module.
+    The arguments are not malformed and nothing is broken -- the model picked a
+    metric whose dimension the data cannot answer, and the message names the one
+    that can. That is precisely the "fix your arguments and reissue" case
+    `invalid_query` exists for, and re-issuing is cheap because the rows are
+    already drained. Contrast the timeout, which Task 8 made non-retryable
+    because reissuing it burns the very budget it was protecting.
+    """
+
+    code = "metric_dimension_mismatch"
+
+
 ERROR_CODES = (
     "scenario_not_found", "version_mismatch", "site_mismatch",
-    "invalid_query", "calculation_failed", "budget_exhausted",
+    "invalid_query", "metric_dimension_mismatch", "calculation_failed",
+    "budget_exhausted",
 )
 
 
@@ -152,12 +178,14 @@ class SchedulingComputeModelViewV1:
     `result_id`; the displayed number travels the trusted path (handler ->
     `tool_result_sink` -> gate -> claim) and never passes through the model.
 
-    The consequence is the point: since no tool ever hands the model a
-    quantity, a numeral appearing in a prose segment can only be fabricated,
-    which is what makes the gate's blunt prose-digit ban a rare fabrication
-    signal instead of a routine event. `matched` is deliberately qualitative --
-    a count is a quantity, and "there are 8 demand rows" is itself an
-    unlocated numerical claim.
+    `matched` is deliberately qualitative -- a count is a quantity, and "there
+    are 8 demand rows" is itself an unlocated numerical claim.
+
+    This narrows what THIS capability reveals; it does not establish a repo-wide
+    "the model never sees a number" invariant. `scheduling_inspect` hands the
+    model rows and counts by design, and rehydrated history carries prior claim
+    values. Grounding rests on the gate refusing to render an unverified number,
+    not on the model's ignorance.
     """
 
     result_id: str
@@ -265,6 +293,8 @@ def scheduling_compute(
         )
     except CalculationArgumentsError as exc:
         raise InvalidQueryError(str(exc)) from exc
+    except CalculationDimensionError as exc:
+        raise MetricDimensionMismatchError(str(exc)) from exc
     except CalculationScenarioNotFoundError as exc:
         raise ScenarioNotFoundError(str(exc)) from exc
     except CalculationVersionMismatchError as exc:
@@ -297,7 +327,7 @@ def scheduling_compute_module() -> CapabilityModuleV1:
         manifest=scheduling_compute_manifest(), handler=scheduling_compute,
         request_type=SchedulingComputeRequestV1,
         error_type=SchedulingComputeError,
-        retryable_error_codes=frozenset({"invalid_query"}),
+        retryable_error_codes=frozenset({"invalid_query", "metric_dimension_mismatch"}),
         required_role="planner",
         required_feature_policy=SCHEDULING_COMPUTE_POLICY,
         # The model gets a receipt, never the number. See
@@ -309,7 +339,8 @@ def scheduling_compute_module() -> CapabilityModuleV1:
 __all__ = [
     "CAPABILITY_NAME", "ERROR_CODES", "EVALUATION_FIXTURES", "SCHEDULING_COMPUTE_POLICY",
     "SCOPE_CONTROLS", "BudgetExhaustedError", "CalculationFailedError",
-    "InvalidQueryError", "ScenarioNotFoundError", "SchedulingComputeError",
+    "InvalidQueryError", "MetricDimensionMismatchError", "ScenarioNotFoundError",
+    "SchedulingComputeError",
     "SchedulingComputeModelViewV1",
     "SchedulingComputeRequestV1", "SchedulingComputeResultV1", "SiteMismatchError",
     "VersionMismatchError", "derive_result_id", "scheduling_compute",

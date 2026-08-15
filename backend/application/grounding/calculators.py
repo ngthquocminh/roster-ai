@@ -48,6 +48,50 @@ class CalculationLimitError(CalculationError):
     pass
 
 
+class CalculationDimensionError(CalculationError):
+    """Demand exists for this task and window, but not in the unit asked for.
+
+    The planner's QUESTION is usually fine -- it is the metric that cannot
+    express it, and the two impossible directions are not symmetric:
+
+    * "required minutes" for `outbound`/`inbound` is unanswerable HERE because
+      that demand is measured in `volume`, and volume -> minutes needs
+      `QualificationRefV1.rate`, which is per worker per task. That makes it an
+      assignment question and therefore Epic 3's. `required_demand_volume`
+      answers the same question in units, today.
+    * "how many units" for `indirect` work is meaningless in itself: indirect
+      workforce requirement has no output quantity.
+
+    Note what this error does NOT mean: asking about STAFFING on an
+    outbound/inbound task is perfectly valid and is answered from assignments
+    (`staffed_minutes`), which are family-agnostic. Never phrase this as "that
+    question is invalid".
+    """
+
+
+def _dimension_message(metric: MetricV1, rows: Sequence[Any]) -> str:
+    present = sorted({row.unit for row in rows})
+    families = sorted({row.family for row in rows})
+    if metric == "required_demand_volume":
+        remedy = (
+            "this demand is a workforce requirement, not an output quantity, so "
+            "no volume exists for it; use required_headcount_minutes"
+        )
+    else:
+        remedy = (
+            "this demand is measured in volume, which cannot be converted to "
+            "minutes without a per-worker rate (Epic 3); use "
+            "required_demand_volume for the quantity, or staffed_minutes to ask "
+            "about the people assigned to this task"
+        )
+    return (
+        f"{metric} needs demand measured in "
+        f"{'headcount' if metric != 'required_demand_volume' else 'volume'}, but "
+        f"every matching row for this task and window is {'/'.join(present)} "
+        f"(family {'/'.join(families)}): {remedy}"
+    )
+
+
 @dataclass(frozen=True)
 class CalculatedMetricV1:
     """One computed value plus a locator for every row folded into it.
@@ -303,10 +347,8 @@ def calculate_metric(
     window_start, window_end = _window(arguments)
     demand_rows: Sequence[object] = ()
     assignment_rows: Sequence[object] = ()
-    reads_demand = metric in (
-        "required_headcount_minutes", "required_demand_volume", "shortfall_minutes"
-    )
-    reads_assignments = metric in ("staffed_minutes", "shortfall_minutes")
+    reads_demand = metric in ("required_headcount_minutes", "required_demand_volume")
+    reads_assignments = metric == "staffed_minutes"
     if reads_demand:
         demand_rows = _drain(
             reader.get_demand, connection, scenario_id,
@@ -329,13 +371,20 @@ def calculate_metric(
     # assignment and therefore Epic 3's solver question. The two dimensions are
     # reported separately rather than silently multiplied together.
     wanted_unit = "headcount" if metric != "required_demand_volume" else "volume"
-    matched_demand = tuple(
+    # Everything the window admits, BEFORE the unit narrows it. Keeping this set
+    # is what lets the guard below tell "there is no demand here" (a truthful
+    # zero) from "there is demand here and this metric cannot express it".
+    # Deriving the count after the unit filter collapses the two, which is how a
+    # dimension miss came to render as an evidence-free `supported` zero.
+    window_demand = tuple(
         row for row in demand_rows
         if row.task_id == task_id
-        and row.unit == wanted_unit
         and (arguments.family is None or row.family == arguments.family)
         and interval_overlap_minutes(row.start_minute, row.end_minute, window_start, window_end)
     )
+    matched_demand = tuple(row for row in window_demand if row.unit == wanted_unit)
+    if reads_demand and window_demand and not matched_demand:
+        raise CalculationDimensionError(_dimension_message(metric, window_demand))
     matched_assignments = tuple(
         row for row in assignment_rows
         if row.task_id == task_id
@@ -388,10 +437,6 @@ def calculate_metric(
         unit = "units"
     elif metric == "staffed_minutes":
         value, refs, consumed = staffed, assignment_refs, len(matched_assignments)
-    elif metric == "shortfall_minutes":
-        value = max(0, required_minutes - staffed)
-        refs = demand_refs + assignment_refs
-        consumed = len(matched_demand) + len(matched_assignments)
     else:
         raise CalculationArgumentsError(f"unsupported metric: {metric}")
     return CalculatedMetricV1(
@@ -400,7 +445,8 @@ def calculate_metric(
 
 
 __all__ = [
-    "MAX_PAGES", "CalculatedMetricV1", "CalculationArgumentsError", "CalculationError",
+    "MAX_PAGES", "CalculatedMetricV1", "CalculationArgumentsError",
+    "CalculationDimensionError", "CalculationError",
     "CalculationLimitError", "CalculationScenarioNotFoundError",
     "CalculationSiteMismatchError", "CalculationVersionMismatchError",
     "calculate_metric", "interval_overlap_minutes",

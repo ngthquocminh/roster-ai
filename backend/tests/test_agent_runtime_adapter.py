@@ -551,3 +551,54 @@ def test_instrumentation_emits_no_prompt_or_tool_content() -> None:
     )
     assert secret_prompt not in blob, "prompt content leaked into telemetry"
     assert secret_label not in blob, "tool arguments leaked into telemetry"
+
+
+def test_numeral_in_prose_is_corrected_in_loop_instead_of_killing_the_turn() -> None:
+    """The D2 remediation, asserted as behaviour.
+
+    The gate's prose rule runs after the turn, so a violation used to reach the
+    route as an exception and persist an empty response the planner saw as a
+    blank bubble. As an output validator it becomes a `ModelRetry` the model can
+    act on -- the same mechanism the framework already uses for unusable output.
+    """
+    attempts: list[str] = []
+    clean = GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="Coverage is short"),))
+    dirty = GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="Short by 90 minutes"),))
+
+    def echoes_a_number_then_corrects(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> ModelResponse:
+        output_tool = info.output_tools[0]
+        payload = dirty if not attempts else clean
+        attempts.append("call")
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=output_tool.name,
+                    args=json.dumps(asdict(payload)),
+                    tool_call_id=f"answer-{len(attempts)}",
+                )
+            ]
+        )
+
+    runtime = _runtime(
+        model=FunctionModel(echoes_a_number_then_corrects), answer_type=GroundedAnswerV1
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how short are we"))
+
+    assert len(attempts) == 2, "the validator must have forced exactly one retry"
+    assert outcome.answer == clean
+    assert outcome.status == "completed"
+
+
+def test_the_prose_rule_has_one_implementation_shared_with_the_gate() -> None:
+    """A second copy in the adapter is the drift this arrangement prevents.
+
+    The adapter may WIRE the rule to the framework, but the rule itself lives in
+    `application/grounding/gate.py`, which cannot import pydantic_ai (AD-19).
+    """
+    source = (Path(__file__).resolve().parents[1] / "agent/runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert "numeric_prose_violation" in source
+    assert "isnumeric" not in source, "the adapter must call the rule, not restate it"

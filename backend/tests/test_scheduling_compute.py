@@ -25,6 +25,7 @@ from application.contracts.scenario_projection import (
 )
 from application.grounding.calculators import (
     CalculationArgumentsError,
+    CalculationDimensionError,
     CalculationLimitError,
     calculate_metric,
     interval_overlap_minutes,
@@ -247,9 +248,7 @@ def test_volume_is_pro_rated_across_the_rows_own_interval() -> None:
 
 
 @pytest.mark.parametrize(
-    ("metric", "expected", "unit"),
-    [("staffed_minutes", 50, "minutes"),
-     ("shortfall_minutes", 580, "minutes")],
+    ("metric", "expected", "unit"), [("staffed_minutes", 50, "minutes")],
 )
 def test_assignment_reading_metrics_are_family_agnostic(metric, expected, unit) -> None:
     result = calculate_metric(
@@ -279,8 +278,6 @@ def test_qualified_worker_count_is_horizon_wide() -> None:
         # reads assignments subtracts all-family staffing from single-family
         # demand and reports the difference as an exact, cited shortfall.
         ("staffed_minutes", ClaimArgumentsV1(
-            task_id="pick", family="outbound", start_minute=0, end_minute=60)),
-        ("shortfall_minutes", ClaimArgumentsV1(
             task_id="pick", family="outbound", start_minute=0, end_minute=60)),
         ("qualified_worker_count", ClaimArgumentsV1(task_id="pick", family="outbound")),
         # a window the calculation cannot honour would still be hashed into
@@ -367,7 +364,7 @@ def test_result_id_is_canonical_stable_and_argument_sensitive() -> None:
         ClaimArgumentsV1(task_id="pick", start_minute=0, end_minute=61),
         VERSION,
     )
-    assert first != derive_result_id("shortfall_minutes", args, VERSION)
+    assert first != derive_result_id("required_headcount_minutes", args, VERSION)
 
 
 def test_capability_delegates_and_is_installed_as_inspect() -> None:
@@ -384,3 +381,65 @@ def test_capability_delegates_and_is_installed_as_inspect() -> None:
     assert "scheduling_compute" in {
         module.manifest.capability_name for module in installed_modules()
     }
+
+
+def test_a_dimension_miss_fails_closed_instead_of_returning_a_supported_zero() -> None:
+    """The defect this guard exists for, stated as behaviour.
+
+    `pack` carries only a volume row in the stub, so asking it for headcount
+    minutes drains rows, discards every one as the wrong dimension, and -- before
+    this guard -- returned value=0 with no locator, which the gate reported as a
+    SUPPORTED zero. Measured on `sample_tiny_input` that was not an edge case:
+    1541 of 1547 demand rows are volume, so every outbound/inbound question took
+    this path.
+    """
+    stub = ProjectionStub()
+    stub.demand = (
+        DemandIntervalV1("v1", "outbound", "pack", None, 0, 60, 100, "volume"),
+    )
+    with pytest.raises(CalculationDimensionError) as excinfo:
+        calculate_metric(
+            stub, object(), scenario_id=SCENARIO, scenario_version_id=VERSION,
+            site_id=SITE, metric="required_headcount_minutes",
+            arguments=ClaimArgumentsV1(task_id="pack", start_minute=0, end_minute=60),
+            page_size=2, max_rows=10,
+        )
+    message = str(excinfo.value)
+    # It must steer, not scold: the planner's question is answerable, just not
+    # by this metric. Never phrase a dimension miss as an invalid question.
+    assert "required_demand_volume" in message
+    assert "staffed_minutes" in message
+
+
+def test_the_dimension_guard_does_not_fire_on_a_genuinely_empty_set() -> None:
+    """A truthful zero must stay a truthful zero.
+
+    No demand rows at all, or none overlapping the window, is a correct 0 --
+    fail-closing on it would trade one wrong answer for another.
+    """
+    stub = ProjectionStub()
+    stub.demand = (
+        DemandIntervalV1("d9", "indirect", "pick", None, 600, 660, 3, "headcount"),
+    )
+    result = calculate_metric(
+        stub, object(), scenario_id=SCENARIO, scenario_version_id=VERSION,
+        site_id=SITE, metric="required_headcount_minutes",
+        arguments=ClaimArgumentsV1(task_id="pick", start_minute=0, end_minute=60),
+        page_size=2, max_rows=10,
+    )
+    assert (result.value, result.evidence_refs, result.consumed_row_count) == (0, (), 0)
+
+
+def test_the_dimension_guard_is_non_vacuous() -> None:
+    """Self-redness: the pre-guard implementation must be observably wrong.
+
+    Reproduces exactly what the code did before -- count consumed rows AFTER the
+    unit filter -- and asserts it produces the evidence-free zero the gate would
+    have stamped `supported`. If this ever stops holding, the guard above is no
+    longer testing anything.
+    """
+    rows = (DemandIntervalV1("v1", "outbound", "pack", None, 0, 60, 100, "volume"),)
+    matched_the_old_way = tuple(row for row in rows if row.unit == "headcount")
+    assert matched_the_old_way == ()
+    assert sum(r.amount for r in matched_the_old_way) == 0
+    assert len(matched_the_old_way) == 0  # consumed == 0 == len(refs) -> "supported"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import uuid
 from pathlib import Path
 
 import pytest
@@ -62,9 +63,15 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
 
     The shape this replaces built `feature_policy` from the installed modules'
     own policy names, so `required_feature_policy in feature_policy` could
-    never be false and installing a capability granted it. Asserted as
-    behaviour rather than as "does not call installed_modules", because the
-    property that matters is that something outside the module can exclude it.
+    never be false and installing a capability granted it.
+
+    This asserts the property over a REAL composed grant. An earlier version
+    compared `len(policy_set) == len(capability_names)` and never called
+    `compose_granted_capabilities` at all -- two different quantities that
+    coincide only because each module happens to declare a unique policy name,
+    so the property the test is named for went unasserted. The route-source
+    guard further down is its companion: this proves exclusion is possible, that
+    one proves the route actually uses it.
     """
     from dataclasses import replace as replace_dataclass
 
@@ -73,6 +80,11 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
         installed_modules,
     )
     from settings import default_settings
+
+    from application.capabilities.registry import (
+        CapabilityGrantContextV1,
+        compose_granted_capabilities,
+    )
 
     settings = default_settings()
     every_name = {module.manifest.capability_name for module in installed_modules()}
@@ -89,8 +101,31 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
         scheduling_inspect_enabled=False,
         demonstration_enabled=False,
     )
-    assert len(enabled_feature_policy(all_on)) == len(every_name)
-    assert enabled_feature_policy(all_off) == frozenset()
+
+    def _granted(configured) -> set[str]:
+        # Compose the grant for real. Comparing policy-set sizes -- what this
+        # test used to do -- compares two different quantities that coincide only
+        # because each module happens to declare a unique policy name, and never
+        # exercises the predicate the property depends on.
+        return {
+            module.manifest.capability_name
+            for module in compose_granted_capabilities(
+                CapabilityGrantContextV1(
+                    role="planner",
+                    site_id=uuid.UUID(int=1),
+                    feature_policy=enabled_feature_policy(configured),
+                    conversation_id=uuid.UUID(int=2),
+                    conversation_site_id=uuid.UUID(int=1),
+                ),
+                installed_modules(),
+            )
+        }
+
+    assert _granted(all_on) == every_name
+    assert _granted(all_off) == set(), "a disabled capability must be ABSENT, not refusing"
+    # And the discriminating case: turning exactly one off removes exactly it.
+    compute_off = replace_dataclass(all_on, scheduling_compute_enabled=False)
+    assert _granted(compute_off) == every_name - {"scheduling_compute"}
 
 
 def test_the_consequential_demonstration_module_is_off_by_default() -> None:
@@ -126,3 +161,70 @@ def test_the_single_legacy_executor_allow_list_entry_still_matches() -> None:
         path = BACKEND_ROOT / relative
         assert path.exists()
         assert _background_primitives(path) == {"ThreadPoolExecutor"}
+
+
+def test_the_execute_route_never_derives_feature_policy_from_installed_modules() -> None:
+    """The guard D6 asked for, watching the line that actually regresses.
+
+    The behavioural test above proves `enabled_feature_policy` CAN exclude a
+    capability. It cannot prove the route calls it -- reverting
+    `conversations.py` to
+    `frozenset(module.required_feature_policy for module in installed_modules())`
+    left that test, and the whole suite, green. That construction makes
+    `module.required_feature_policy in context.feature_policy` unfalsifiable, so
+    every installed capability is granted by construction, which is the AD-2
+    violation ("an ungranted capability is ABSENT, never present-and-refusing")
+    and quietly grants the consequential demonstration harness on live turns.
+
+    Read off the route's own source, in the shape of the trap #7 guard above.
+    """
+    source = (BACKEND_ROOT / "api" / "routers" / "conversations.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    route = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "execute_agent_turn"
+    )
+    called = {
+        node.func.id
+        for node in ast.walk(route)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "enabled_feature_policy" in called, (
+        "the route must source feature_policy from Settings"
+    )
+    assert "installed_modules" not in called, (
+        "feature_policy derived from installed_modules() grants every capability"
+    )
+
+
+def test_grant_composition_and_runtime_construction_are_inside_the_failure_guard() -> None:
+    """Both were outside the `try` and each can raise on a real deployment.
+
+    `enabled_feature_policy` raises `IncompleteManifestError` for a capability
+    with no settings flag, and `runtime_factory` eagerly constructs a provider
+    client -- raising on a malformed `AGENT_RUNTIME_MODEL` or a missing key. The
+    claim has already committed `agent_running` by then and nothing can re-claim
+    it, so an exception there strands the run permanently.
+    """
+    source = (BACKEND_ROOT / "api" / "routers" / "conversations.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    route = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "execute_agent_turn"
+    )
+    guarded: set[str] = set()
+    for node in ast.walk(route):
+        if isinstance(node, ast.Try):
+            for child in ast.walk(node):
+                if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+                    guarded.add(child.func.id)
+    for required in ("enabled_feature_policy", "compose_capabilities", "runtime_factory"):
+        assert required in guarded, f"{required} must run inside the failure guard"

@@ -120,10 +120,19 @@ def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
     return candidate
 
 
-def _flag(raw: str | None, fallback: bool) -> bool:
-    """Parse a feature-policy flag. Unset falls back; anything unrecognized is
-    treated as the fallback rather than as True, so a typo cannot silently
-    enable a capability.
+class InvalidFlagError(ValueError):
+    """A feature-policy flag was set to something that is not a boolean."""
+
+
+def _flag(name: str, raw: str | None, fallback: bool) -> bool:
+    """Parse a feature-policy flag. Unset falls back; a malformed value RAISES.
+
+    Falling back on an unrecognized token was fail-open in the direction that
+    matters. For the two capabilities defaulting True, `SCHEDULING_COMPUTE_ENABLED
+    =disabled` silently left the capability granted -- an operator's attempt to
+    turn something off did nothing and said nothing. A flag that governs whether
+    a governed capability reaches a live planner has to fail loudly at startup
+    rather than quietly resolve to the more permissive answer.
     """
     if raw is None:
         return fallback
@@ -132,7 +141,9 @@ def _flag(raw: str | None, fallback: bool) -> bool:
         return True
     if normalized in ("0", "false", "no", "off"):
         return False
-    return fallback
+    raise InvalidFlagError(
+        f"{name}={raw!r} is not a boolean; use one of 1/true/yes/on or 0/false/no/off"
+    )
 
 
 def _optional_int(raw: str | None, fallback: int | None) -> int | None:
@@ -234,12 +245,16 @@ def default_settings() -> Settings:
         or 5.0
     )
     scheduling_compute_enabled = _flag(
+        "SCHEDULING_COMPUTE_ENABLED",
         os.environ.get("SCHEDULING_COMPUTE_ENABLED"), True
     )
     scheduling_inspect_enabled = _flag(
+        "SCHEDULING_INSPECT_ENABLED",
         os.environ.get("SCHEDULING_INSPECT_ENABLED"), True
     )
-    demonstration_enabled = _flag(os.environ.get("DEMONSTRATION_ENABLED"), False)
+    demonstration_enabled = _flag(
+        "DEMONSTRATION_ENABLED", os.environ.get("DEMONSTRATION_ENABLED"), False
+    )
     return Settings(
         db_path=db_path,
         data_dir=data_dir,

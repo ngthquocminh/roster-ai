@@ -14,8 +14,10 @@ whether it is right.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from hashlib import sha256
+import json
 from typing import Any
 from uuid import UUID
 
@@ -61,6 +63,35 @@ WORKERS: tuple[WorkerV1, ...] = (
     WorkerV1("w1", "w1", "A", "FT", "1", "eba", 38, (QualificationRefV1("pick", 1.0),), ()),
     WorkerV1("w2", "w2", "B", "FT", "1", "eba", 38, (), ()),
 )
+
+def _fixture_digest() -> str:
+    """A REAL sha256 over the rows this fixture serves.
+
+    The literal `"e" * 64` that stood here was a fabricated digest in a
+    provenance field: `evals/report.py` feeds this identity straight into the
+    NFR27 report's scenario binding with no catalogue check, so a regenerated
+    report would have recorded a checksum that verified nothing. Deriving it
+    from the rows means editing a row changes the digest, which is the only
+    property a checksum is for.
+
+    Canonical form matches `derive_result_id`'s: sorted keys, compact
+    separators, UTF-8.
+    """
+    payload = json.dumps(
+        {
+            "assignments": [asdict(row) for row in ASSIGNMENTS],
+            "demand": [asdict(row) for row in DEMAND],
+            "workers": [asdict(row) for row in WORKERS],
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
+FIXTURE_CHECKSUM_DIGEST = _fixture_digest()
+
 
 _FILTERS = {
     "demand": {
@@ -111,7 +142,7 @@ class FixtureProjectionReader:
             fixture_version="v1",
             checksum_algorithm="sha256",
             checksum_schema_version="rfc8785-v1",
-            checksum_digest="e" * 64,
+            checksum_digest=FIXTURE_CHECKSUM_DIGEST,
             horizon_start=datetime(2026, 8, 10, tzinfo=timezone.utc),
             site_timezone="UTC",
             horizon_minutes=10080,

@@ -1,6 +1,8 @@
 """Durable conversation commands, bounded timeline reads, and the live SSE stream."""
 from __future__ import annotations
 
+import logging
+
 import asyncio
 from decimal import Decimal
 from time import monotonic
@@ -62,6 +64,8 @@ from adapters.postgres.short_transaction_projection import ShortTransactionScena
 from datetime import datetime, timezone
 from uuid import uuid4
 from settings import Settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 _PROBLEM_RESPONSES = {401: {"model": ProblemDetailsV1}, 403: {"model": ProblemDetailsV1}, 404: {"model": ProblemDetailsV1}, 422: {"model": ProblemDetailsV1}}
@@ -187,22 +191,6 @@ async def execute_agent_turn(
     if claimed is None:
         raise HTTPException(status_code=404)
 
-    # NEVER derive this from `installed_modules()`. `compose_granted_capabilities`
-    # tests `module.required_feature_policy in context.feature_policy`, so a set
-    # built from the modules being tested makes the predicate unfalsifiable and
-    # grants every installed capability by construction -- including the
-    # consequential demonstration harness module. Guarded by
-    # tests/architecture/test_execute_turn_boundaries.py.
-    feature_policy = enabled_feature_policy(settings)
-    granted = compose_capabilities(
-        CapabilityGrantContextV1(
-            role=PLANNER_ROLE,
-            site_id=claimed.site_id,
-            feature_policy=feature_policy,
-            conversation_id=claimed.conversation_id,
-            conversation_site_id=claimed.site_id,
-        )
-    )
     raw_results: list[object] = []
     deps = AgentDepsV1(
         actor_id=claimed.actor_id,
@@ -222,13 +210,40 @@ async def execute_agent_turn(
         remaining_budget=AgentBudgetV1(),
         tool_result_sink=raw_results.append,
     )
-    runtime = runtime_factory(
-        settings=settings,
-        capabilities=granted,
-        deps=deps,
-        answer_type=GroundedAnswerV1,
-    )
+    # EVERYTHING below runs after `_claim` committed `agent_running` in its own
+    # short transaction, and `claim_queued_run` only ever claims `agent_queued`
+    # -- so any exception that escapes leaves a run no request can execute again,
+    # and there is no reaper until Epic 3's lease. The guard therefore has to
+    # start HERE, not at the model call: grant composition raises
+    # `IncompleteManifestError` on a capability with no settings flag, and
+    # `runtime_factory` eagerly builds a provider client, which raises on a
+    # malformed `AGENT_RUNTIME_MODEL` or a missing API key -- the likeliest
+    # first-deploy misconfiguration there is.
+    #
+    # NEVER derive `feature_policy` from `installed_modules()`.
+    # `compose_granted_capabilities` tests
+    # `module.required_feature_policy in context.feature_policy`, so a set built
+    # from the modules being tested makes the predicate unfalsifiable and grants
+    # every installed capability by construction -- including the consequential
+    # demonstration harness module. Guarded at source level by
+    # tests/architecture/test_execute_turn_boundaries.py.
     try:
+        feature_policy = enabled_feature_policy(settings)
+        granted = compose_capabilities(
+            CapabilityGrantContextV1(
+                role=PLANNER_ROLE,
+                site_id=claimed.site_id,
+                feature_policy=feature_policy,
+                conversation_id=claimed.conversation_id,
+                conversation_site_id=claimed.site_id,
+            )
+        )
+        runtime = runtime_factory(
+            settings=settings,
+            capabilities=granted,
+            deps=deps,
+            answer_type=GroundedAnswerV1,
+        )
         outcome = await run_in_threadpool(
             execute_turn,
             runtime,
@@ -238,17 +253,16 @@ async def execute_agent_turn(
             history=claimed.history,
         )
     except Exception:  # noqa: BLE001
-        # The claim already committed `agent_running` in its own short
-        # transaction, and `claim_queued_run` only ever claims `agent_queued`,
-        # so ANY exception escaping here leaves a run no request can execute
-        # again -- there is no reaper until Epic 3's lease. `AgentRuntimeError`
-        # alone was too narrow: the gate's own fail-closed prose rule raises
-        # `UncitedNumericProseError`, and history rehydration raises
-        # `ValueError` on an unknown variant. Both are ordinary operation, not
-        # infrastructure failure. Reaching a terminal status is what keeps the
-        # accepted conversation durable (AC3), so it wins over surfacing a
-        # richer error here; Story 2.9 owns the failure taxonomy.
-        outcome = AgentRunOutcomeV1(status="failed")
+        # Reaching a terminal status is what keeps the accepted conversation
+        # durable (AC3), so it wins over surfacing a richer error here; Story 2.9
+        # owns the failure taxonomy. But swallowing the cause entirely made a
+        # gate fault, a provider auth failure and a genuine model refusal
+        # indistinguishable after the fact, so the exception is logged with its
+        # traceback before it is collapsed.
+        logger.exception(
+            "execute_agent_turn failed; finalizing run %s as terminal", agent_run_id
+        )
+        outcome = AgentRunOutcomeV1(status="failed", failure_reason="invalid_output")
 
     def _finish():
         with open_site_context(session.site_id) as connection:
@@ -266,6 +280,20 @@ async def execute_agent_turn(
         # Something else moved the run out of `agent_running` between the claim
         # and here. It is already terminal or owned elsewhere; report the same
         # stable refusal as an unclaimable run rather than a 500.
+        return problem_response(
+            status=409,
+            code="agent_run_not_queued",
+            title="Agent run not queued",
+            detail="The agent run cannot be executed from its current state.",
+        )
+    except RuntimeError:
+        # `finish_agent_run` raises this when the claimed conversation is no
+        # longer visible under RLS -- a membership revoked between claim and
+        # finish. The run stays `agent_running` and only Epic 3's recovery sweep
+        # can drain it (recorded in the ledger), but the request must not 500:
+        # the caller cannot act on it, and the non-disclosing refusal is the same
+        # answer they would get for any run they cannot currently reach.
+        logger.exception("finalizing run %s failed; it remains claimed", agent_run_id)
         return problem_response(
             status=409,
             code="agent_run_not_queued",
