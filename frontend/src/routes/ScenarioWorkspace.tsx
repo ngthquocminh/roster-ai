@@ -143,7 +143,7 @@ export function ScenarioWorkspace() {
       ) : null}
       <ScenarioVersionContext context={query.data} />
       <WorkspaceTabs scenarioId={scenarioId} />
-      <Outlet />
+      <Outlet context={{ scenarioVersionId: query.data.scenario_version_id }} />
     </main>
   );
 }

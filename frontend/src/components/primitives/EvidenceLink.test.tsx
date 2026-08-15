@@ -10,6 +10,7 @@ describe("EvidenceLink", () => {
       <EvidenceLink
         fieldOrRange="13:00–17:00"
         group="Demand"
+        id="evidence-origin-activity-1-0-0"
         onActivate={onActivate}
         record="DEM-204"
         version="v7"
@@ -19,6 +20,7 @@ describe("EvidenceLink", () => {
     const control = screen.getByRole("button", {
       name: "Evidence: Demand DEM-204, 13:00–17:00, fixture v7",
     });
+    expect(control).toHaveAttribute("id", "evidence-origin-activity-1-0-0");
     fireEvent.click(control);
     expect(onActivate).toHaveBeenCalledOnce();
   });

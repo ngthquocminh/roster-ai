@@ -48,6 +48,19 @@ export function getErrorStatus(error: unknown): number | undefined {
 }
 
 /**
+ * Single typed accessor for the RFC 7807 `code` carried by API failures.
+ *
+ * TanStack Query exposes thrown API errors as `unknown`; centralizing this
+ * structural check keeps evidence-state branching independent of transport
+ * status without repeating casts in rendering code.
+ */
+export function getErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+/**
  * Statuses where retrying re-issues a request that cannot succeed: the
  * scenario doesn't exist (404), or the id itself is malformed (422, a
  * truncated or hand-edited URL). Shared by every surface that reads a

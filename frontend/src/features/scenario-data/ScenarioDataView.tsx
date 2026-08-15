@@ -1,6 +1,9 @@
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EvidenceTargetPanel } from "@/features/evidence/EvidenceTargetPanel";
+import { EVIDENCE_GROUP_TO_TAB, readTarget } from "@/features/evidence/locator";
+import type { EvidenceOrigin } from "@/features/evidence/origin";
 import type { ComponentType } from "react";
 import { COLUMNS_BY_GROUP, type ScenarioDataListGroup } from "./columns";
 import { ColumnChooser } from "./ColumnChooser";
@@ -27,10 +30,13 @@ const groups = [
 ] as const;
 const knownGroups = new Set<string>(groups.map(([slug]) => slug));
 
-export function ScenarioDataView({ scenarioId }: Readonly<{ scenarioId: string }>) {
+export function ScenarioDataView({ scenarioId, selectedVersion }: Readonly<{ scenarioId: string; selectedVersion?: string }>) {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const target = readTarget(searchParams);
+  const origin = (location.state as { evidenceOrigin?: EvidenceOrigin } | null)?.evidenceOrigin;
   const requested = searchParams.get("group") ?? "overview";
-  const selected = knownGroups.has(requested) ? requested : "overview";
+  const selected = target ? EVIDENCE_GROUP_TO_TAB[target.group] : knownGroups.has(requested) ? requested : "overview";
   const isListGroup = selected !== "overview";
   const controlGroup = (isListGroup ? selected : "work-areas-and-tasks") as ScenarioDataListGroup;
   const controls = useGroupControls(controlGroup);
@@ -39,6 +45,7 @@ export function ScenarioDataView({ scenarioId }: Readonly<{ scenarioId: string }
   return (
     <section aria-labelledby="scenario-data-heading" className="mt-6">
       <h2 className="text-xl font-semibold" id="scenario-data-heading">Scenario Data</h2>
+      {target ? <EvidenceTargetPanel origin={origin} scenarioId={scenarioId} selectedVersion={selectedVersion} target={target} /> : null}
       <Tabs
         value={selected}
         onValueChange={controls.changeGroup}

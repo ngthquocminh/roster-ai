@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from "vitest";
 
-import { getErrorStatus } from "./errors";
+import { getErrorCode, getErrorStatus } from "./errors";
 
 describe("getErrorStatus", () => {
   it("returns the numeric status from a { status } error object", () => {
@@ -28,5 +28,13 @@ describe("getErrorStatus", () => {
     expect(getErrorStatus("boom")).toBeUndefined();
     expect(getErrorStatus(500)).toBeUndefined();
     expect(getErrorStatus(undefined)).toBeUndefined();
+  });
+});
+
+describe("getErrorCode", () => {
+  it("reads only string RFC 7807 codes from unknown errors", () => {
+    expect(getErrorCode({ code: "evidence_not_found" })).toBe("evidence_not_found");
+    expect(getErrorCode({ code: 404 })).toBeUndefined();
+    expect(getErrorCode(null)).toBeUndefined();
   });
 });

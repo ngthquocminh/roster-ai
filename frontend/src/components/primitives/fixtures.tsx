@@ -145,7 +145,7 @@ export const PRIMITIVE_FIXTURES: readonly PrimitiveFixture[] = [
     primitive: "EvidenceLink",
     state: "record",
     render: () => (
-      <EvidenceLink group="Employee" href="#employee-emp-102" record="EMP-102" version="v7" />
+      <EvidenceLink group="Employee" href="#employee-emp-102" id="fixture-evidence-record" record="EMP-102" version="v7" />
     ),
   },
   {
@@ -155,6 +155,8 @@ export const PRIMITIVE_FIXTURES: readonly PrimitiveFixture[] = [
       <EvidenceLink
         fieldOrRange="13:00–17:00"
         group="Demand"
+        id="fixture-evidence-field-range"
+        onActivate={() => undefined}
         record="DEM-204"
         version="v7"
       />

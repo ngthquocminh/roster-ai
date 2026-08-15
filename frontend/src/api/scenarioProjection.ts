@@ -15,6 +15,12 @@ export type DemandQuery = NonNullable<paths["/api/v1/scenarios/{scenario_id}/pro
 export type AssignmentQuery = NonNullable<paths["/api/v1/scenarios/{scenario_id}/projection/baseline-assignments"]["get"]["parameters"]["query"]>;
 export type LockQuery = NonNullable<paths["/api/v1/scenarios/{scenario_id}/projection/locks"]["get"]["parameters"]["query"]>;
 export type ConstraintQuery = NonNullable<paths["/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives"]["get"]["parameters"]["query"]>;
+export type TaskRecord = paths["/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks/{record_id}"]["get"]["responses"][200]["content"]["application/json"];
+export type WorkerRecord = paths["/api/v1/scenarios/{scenario_id}/projection/workers/{record_id}"]["get"]["responses"][200]["content"]["application/json"];
+export type DemandIntervalRecord = paths["/api/v1/scenarios/{scenario_id}/projection/demand/{record_id}"]["get"]["responses"][200]["content"]["application/json"];
+export type AssignmentRecord = paths["/api/v1/scenarios/{scenario_id}/projection/baseline-assignments/{record_id}"]["get"]["responses"][200]["content"]["application/json"];
+export type LockRecord = paths["/api/v1/scenarios/{scenario_id}/projection/locks/{record_id}"]["get"]["responses"][200]["content"]["application/json"];
+export type ConstraintRecord = paths["/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives/{record_id}"]["get"]["responses"][200]["content"]["application/json"];
 
 function compactQuery<T extends object>(params: T): T {
   return Object.fromEntries(
@@ -60,6 +66,42 @@ export async function getLocks(scenarioId: string, params: LockQuery = {}): Prom
 
 export async function getConstraintsAndObjectives(scenarioId: string, params: ConstraintQuery = {}): Promise<ConstraintPage> {
   const { data, error, response } = await client.GET("/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives", { params: { path: { scenario_id: scenarioId }, query: compactQuery(params) } });
+  if (error) throw { ...error, status: response.status };
+  return data;
+}
+
+export async function resolveTask(scenarioId: string, recordId: string, versionId: string): Promise<TaskRecord> {
+  const { data, error, response } = await client.GET("/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks/{record_id}", { params: { path: { scenario_id: scenarioId, record_id: recordId }, query: { scenario_version_id: versionId } } });
+  if (error) throw { ...error, status: response.status };
+  return data;
+}
+
+export async function resolveWorker(scenarioId: string, recordId: string, versionId: string): Promise<WorkerRecord> {
+  const { data, error, response } = await client.GET("/api/v1/scenarios/{scenario_id}/projection/workers/{record_id}", { params: { path: { scenario_id: scenarioId, record_id: recordId }, query: { scenario_version_id: versionId } } });
+  if (error) throw { ...error, status: response.status };
+  return data;
+}
+
+export async function resolveDemandInterval(scenarioId: string, recordId: string, versionId: string): Promise<DemandIntervalRecord> {
+  const { data, error, response } = await client.GET("/api/v1/scenarios/{scenario_id}/projection/demand/{record_id}", { params: { path: { scenario_id: scenarioId, record_id: recordId }, query: { scenario_version_id: versionId } } });
+  if (error) throw { ...error, status: response.status };
+  return data;
+}
+
+export async function resolveAssignment(scenarioId: string, recordId: string, versionId: string): Promise<AssignmentRecord> {
+  const { data, error, response } = await client.GET("/api/v1/scenarios/{scenario_id}/projection/baseline-assignments/{record_id}", { params: { path: { scenario_id: scenarioId, record_id: recordId }, query: { scenario_version_id: versionId } } });
+  if (error) throw { ...error, status: response.status };
+  return data;
+}
+
+export async function resolveLock(scenarioId: string, recordId: string, versionId: string): Promise<LockRecord> {
+  const { data, error, response } = await client.GET("/api/v1/scenarios/{scenario_id}/projection/locks/{record_id}", { params: { path: { scenario_id: scenarioId, record_id: recordId }, query: { scenario_version_id: versionId } } });
+  if (error) throw { ...error, status: response.status };
+  return data;
+}
+
+export async function resolveConstraint(scenarioId: string, recordId: string, versionId: string): Promise<ConstraintRecord> {
+  const { data, error, response } = await client.GET("/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives/{record_id}", { params: { path: { scenario_id: scenarioId, record_id: recordId }, query: { scenario_version_id: versionId } } });
   if (error) throw { ...error, status: response.status };
   return data;
 }

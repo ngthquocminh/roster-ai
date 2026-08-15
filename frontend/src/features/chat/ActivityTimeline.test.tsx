@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ActivityTimeline } from "./ActivityTimeline";
+import { clearEvidenceUnavailable, markEvidenceUnavailable } from "@/features/evidence/availability";
+
+beforeEach(() => clearEvidenceUnavailable());
 
 const item = {
   schema_version: "1",
@@ -96,6 +99,35 @@ function renderedIds() {
 }
 
 describe("ActivityTimeline", () => {
+  it("builds the jump only from the persisted locator and activity scenario", () => {
+    const navigate = vi.fn();
+    render(<ActivityTimeline items={[agentResponse]} navigate={navigate} />);
+
+    screen.getByRole("button", { name: /Evidence: demand DEM-204/ }).click();
+
+    expect(navigate).toHaveBeenCalledWith(
+      `/scenarios/${agentResponse.scenario_id}/data?group=demand&record=DEM-204&version=${agentResponse.scenario_version_id}&field=amount&start=780&end=1020`,
+      { state: { evidenceOrigin: {
+        conversationId: agentResponse.conversation_id,
+        activityId: agentResponse.activity_id,
+        segmentIndex: 1,
+        refIndex: 0,
+      } } },
+    );
+  });
+
+  it("keeps a supported historical claim visible while marking lost evidence unavailable", () => {
+    markEvidenceUnavailable({
+      conversationId: agentResponse.conversation_id,
+      activityId: agentResponse.activity_id,
+      segmentIndex: 1,
+      refIndex: 0,
+    });
+    render(<ActivityTimeline items={[agentResponse]} />);
+
+    expect(screen.getByText("45 minutes")).toBeInTheDocument();
+    expect(screen.getByText("Evidence unavailable")).toBeInTheDocument();
+  });
   it("deduplicates replayed activity by stable identity", () => {
     render(<ActivityTimeline items={[item, item]} />);
 
@@ -132,6 +164,10 @@ describe("ActivityTimeline", () => {
     const evidence = screen.getByRole("button", {
       name: `Evidence: demand DEM-204, amount, 780–1020 minutes, fixture ${item.scenario_version_id}`,
     });
+    expect(evidence).toHaveAttribute(
+      "id",
+      `evidence-origin-${agentResponse.activity_id}-1-0`,
+    );
     expect(supported).toContainElement(evidence);
     expect(evidence.className).toContain("focus-visible:ring-3");
     expect(screen.getByText("Claim unavailable: version mismatch")).toHaveAttribute(

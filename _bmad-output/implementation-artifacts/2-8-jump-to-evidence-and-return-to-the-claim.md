@@ -1,3 +1,7 @@
+---
+baseline_commit: fa18cf1f5e3e74c87fef4578a8867c4a0a9e11a0
+---
+
 # Story 2.8: Jump to Evidence and Return to the Claim
 
 Status: ready-for-dev
@@ -212,13 +216,13 @@ Same posture Story 2.5 took for the audit/evidence declaration and Story 2.7 too
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1** — App-owned locator and origin contract (AC: 1, 3)
-- [ ] **Task 2** — `EvidenceLink` becomes a real, identifiable navigation control (AC: 1, 3)
-- [ ] **Task 3** — Resolve-endpoint client, dispatcher, and hook (AC: 1, 2)
-- [ ] **Task 4** — The evidence target region (AC: 1, 3)
-- [ ] **Task 5** — Wire the jump (AC: 1)
-- [ ] **Task 6** — Return to claim and browser Back (AC: 1, 3)
-- [ ] **Task 7** — The four exception states (AC: 2)
+- [x] **Task 1** — App-owned locator and origin contract (AC: 1, 3)
+- [x] **Task 2** — `EvidenceLink` becomes a real, identifiable navigation control (AC: 1, 3)
+- [x] **Task 3** — Resolve-endpoint client, dispatcher, and hook (AC: 1, 2)
+- [x] **Task 4** — The evidence target region (AC: 1, 3)
+- [x] **Task 5** — Wire the jump (AC: 1)
+- [x] **Task 6** — Return to claim and browser Back (AC: 1, 3)
+- [x] **Task 7** — The four exception states (AC: 2)
 - [ ] **Task 8** — Accessibility proof, fences, ledger, Gate A (AC: 3)
 
 New feature home: **`frontend/src/features/evidence/`** (AR26's `frontend/src/features` structural
@@ -231,61 +235,61 @@ Scenario Data must not import from the chat feature.
 
 ### Task 1 — App-owned locator and origin contract (AC: 1, 3)
 
-- [ ] Create `frontend/src/features/evidence/locator.ts`.
-  - [ ] `EvidenceTarget` derived from the **generated** schema, never hand-authored — follow
+- [x] Create `frontend/src/features/evidence/locator.ts`.
+  - [x] `EvidenceTarget` derived from the **generated** schema, never hand-authored — follow
         `src/api/scenarioProjection.ts:5-17`'s `paths[…]` derivation convention. The `group` union
         must come from the generated `EvidenceRefV1`.
-  - [ ] `EVIDENCE_GROUP_TO_TAB: Record<EvidenceGroup, ScenarioDataListGroup>` with
+  - [x] `EVIDENCE_GROUP_TO_TAB: Record<EvidenceGroup, ScenarioDataListGroup>` with
         `satisfies` so `tsc --noEmit` fails if the backend ever adds a seventh group. This is the
         frontend half of Story 2.7's trap #2 (two ad-hoc group translations, *"the Evidence link
         names a group the planner cannot find in Scenario Data; nothing in the backend notices"*).
         **One mapping, exhaustive, compile-checked.**
-  - [ ] `toSearchParams(ref)` → `URLSearchParams` with `group`, `record`, `version`, and `field`
+  - [x] `toSearchParams(ref)` → `URLSearchParams` with `group`, `record`, `version`, and `field`
         only when present. `field` **must** use the key `field` — `useColumnVisibility` already
         reads `searchParams.get("field")` (`ScenarioDataView.tsx:38`) and reveals a hidden targeted
         column with the explanation *"… is shown because an evidence link targets it."* Reusing that
         param is free; inventing `?column=` silently disables a shipped mechanism.
-  - [ ] `readTarget(searchParams)` → `EvidenceTarget | null`. Validate `group` against the closed
+  - [x] `readTarget(searchParams)` → `EvidenceTarget | null`. Validate `group` against the closed
         vocabulary and `version` as a UUID shape. **An unknown group returns `null` — never a
         guess, never a fallback to `overview`.**
-- [ ] Create `frontend/src/features/evidence/origin.ts`.
-  - [ ] `EvidenceOrigin = { conversationId, activityId, segmentIndex, refIndex }`.
-  - [ ] `originElementId(origin)` — one function, used by **both** the link's `id` and the return
+- [x] Create `frontend/src/features/evidence/origin.ts`.
+  - [x] `EvidenceOrigin = { conversationId, activityId, segmentIndex, refIndex }`.
+  - [x] `originElementId(origin)` — one function, used by **both** the link's `id` and the return
         focus lookup, so the two cannot drift.
-  - [ ] `rememberOrigin(origin)` / `consumeOrigin()` over a single `sessionStorage` key, wrapped in
+  - [x] `rememberOrigin(origin)` / `consumeOrigin()` over a single `sessionStorage` key, wrapped in
         `try/catch` (match `useColumnVisibility.ts:49-52`'s storage-unavailable posture: the feature
         degrades, it never throws). `consumeOrigin` removes the entry.
-- [ ] Tests: round-trip `toSearchParams`→`readTarget`; unknown group → `null`; malformed version →
+- [x] Tests: round-trip `toSearchParams`→`readTarget`; unknown group → `null`; malformed version →
       `null`; `consumeOrigin` returns once then `null`; storage-disabled path does not throw.
 
 ### Task 2 — `EvidenceLink` becomes a real, identifiable navigation control (AC: 1, 3)
 
-- [ ] `frontend/src/components/primitives/EvidenceLink.tsx`:
-  - [ ] Add an `id` prop (required for the return focus target).
-  - [ ] Make the activation props a discriminated union so **neither-prop is a type error**. This
+- [x] `frontend/src/components/primitives/EvidenceLink.tsx`:
+  - [x] Add an `id` prop (required for the return focus target).
+  - [x] Make the activation props a discriminated union so **neither-prop is a type error**. This
         closes `deferred-work.md:78` (*"renders an inert focusable control … becomes relevant when
         Story 2.8 wires real usage"*) properly — by making the state unrepresentable, not by adding
         a runtime warning.
-  - [ ] Everything else stays byte-identical: the label format, the `min-h-11` target, the
+  - [x] Everything else stays byte-identical: the label format, the `min-h-11` target, the
         `text-evidence-link underline` treatment (UX-DR34 "conventionally link-identifiable"), the
         `focus-visible:ring-3` ring.
-- [ ] `ActivityTimeline.tsx`: replace `onActivate={() => undefined}` (line 83, the comment there
+- [x] `ActivityTimeline.tsx`: replace `onActivate={() => undefined}` (line 83, the comment there
       already names this story) with the real handler from Task 5, and pass
       `id={originElementId(...)}`. The `key` stays as-is.
-- [ ] **Do not** change `fieldOrRange`, `claimSubject`, `formatClaimValue`, the empty-claim state, or
+- [x] **Do not** change `fieldOrRange`, `claimSubject`, `formatClaimValue`, the empty-claim state, or
       the failed-claim state. Those are Story 2.7 review outcomes with tests behind them.
 
 ### Task 3 — Resolve-endpoint client, dispatcher, and hook (AC: 1, 2)
 
-- [ ] `src/api/scenarioProjection.ts`: six wrappers, one per group, matching the file's existing
+- [x] `src/api/scenarioProjection.ts`: six wrappers, one per group, matching the file's existing
       shape exactly — `client.GET(...)`, `if (error) throw { ...error, status: response.status }`,
       types derived from `paths[…]`. **GET-only**: `scenarioDataBoundaries.test.ts:47-53` asserts
       this file never calls `client.POST|PUT|PATCH|DELETE`.
-- [ ] `src/features/evidence/resolve.ts`: `RESOLVERS: Record<EvidenceGroup, Resolver>` — a **map,
+- [x] `src/features/evidence/resolve.ts`: `RESOLVERS: Record<EvidenceGroup, Resolver>` — a **map,
       not a `switch`/`isinstance` chain**. Same posture as Story 2.6 Decision 4 (`_RENDERERS` was
       deleted for being a per-capability branch); a chain here reads as cleanup and reintroduces the
       shape, and exhaustiveness stops being compile-checked.
-- [ ] `src/hooks/useEvidenceRecord.ts`: thin TanStack Query wrapper (`useScenarioProjection.ts` is
+- [x] `src/hooks/useEvidenceRecord.ts`: thin TanStack Query wrapper (`useScenarioProjection.ts` is
       the model). `enabled: Boolean(target)`, `retry: false` (an exception state is a real answer,
       not a transient failure). **The query key must include `target.version`** — a cited version is
       part of the record's identity, and a key that omits it serves a different version's cached row
@@ -293,37 +297,37 @@ Scenario Data must not import from the chat feature.
 
 ### Task 4 — The evidence target region (AC: 1, 3)
 
-- [ ] `src/features/evidence/EvidenceTargetPanel.tsx`.
-  - [ ] Renders `EvidenceHighlight` with a `ref`, its default `tabIndex={-1}`, and **exactly**
+- [x] `src/features/evidence/EvidenceTargetPanel.tsx`.
+  - [x] Renders `EvidenceHighlight` with a `ref`, its default `tabIndex={-1}`, and **exactly**
         `EVIDENCE_HIGHLIGHT_CLASS` — no `transition`, `animate`, or `pulse` utility classes
         (UX-DR32 prohibits pulsing/flashing evidence; UX-DR34 requires reduced-motion equivalence,
         and `e2e/reduced-motion.spec.ts` reads that exported constant).
-  - [ ] Accessible name states **group, record, field/range, and cited version** — the same four
+  - [x] Accessible name states **group, record, field/range, and cited version** — the same four
         facts `EvidenceLink`'s label states (`EvidenceLink.tsx:22`) and what
         `EXPERIENCE.md:137` requires the target to announce.
-  - [ ] Renders the resolved record's fields read-only. Reuse `IdentifierCopyButton` for identifiers
+  - [x] Renders the resolved record's fields read-only. Reuse `IdentifierCopyButton` for identifiers
         and `formatMinuteWindow` for windows — the group panels already do
         (`DemandPanel.tsx:40-47`); do not hand-format either.
-  - [ ] Renders **Return to claim** only when an origin exists. A pasted deep link with no origin
+  - [x] Renders **Return to claim** only when an origin exists. A pasted deep link with no origin
         shows the target and no return control — correct, and it must not render a dead button.
-  - [ ] **Focus moves exactly once, after the query settles** — not on mount. `EXPERIENCE.md:137`:
+  - [x] **Focus moves exactly once, after the query settles** — not on mount. `EXPERIENCE.md:137`:
         *"receives programmatic focus with `tabindex=-1` **after its row/window loads**"*. Focusing
         an empty box first loses the announcement. `ScenarioWorkspace.tsx:26-30` is the in-repo
         precedent for a settled-state single focus effect, including why: *"previously both fired
         and a screen reader was interrupted mid-announcement."*
-- [ ] `ScenarioDataView.tsx` composes it above the `Tabs` region when `readTarget(searchParams)` is
+- [x] `ScenarioDataView.tsx` composes it above the `Tabs` region when `readTarget(searchParams)` is
       non-null, and forces the selected tab to `EVIDENCE_GROUP_TO_TAB[target.group]`.
-- [ ] Loading state: the panel's own skeleton, matching the region's expected shape (UX-DR25 /
+- [x] Loading state: the panel's own skeleton, matching the region's expected shape (UX-DR25 /
       `EXPERIENCE.md:105` — *"No fake values"*). Do **not** render an empty highlight.
-- [ ] **Field-key correspondence guard.** `useColumnVisibility` silently ignores a `field` that is
+- [x] **Field-key correspondence guard.** `useColumnVisibility` silently ignores a `field` that is
       not a column key of the group — so an evidence link targeting an unknown field reveals
       nothing and nothing goes red. Two mechanical defences, both required:
-  - [ ] A test parsing every `expected_evidence_refs` entry in
+  - [x] A test parsing every `expected_evidence_refs` entry in
         `backend/evals/golden/scheduling_compute/*.json` (format:
         `<version>|<group>|<record_id>|<field>:<start>-<end>`) and asserting each `<group>` is a
         real tab slug and each `<field>` is a column key of that group. Thin today (one case carries
         `demand|amount`) and it grows automatically as cases are added.
-  - [ ] The panel names the targeted field in its own output regardless of column visibility, so an
+  - [x] The panel names the targeted field in its own output regardless of column visibility, so an
         unmatched field degrades to *visible and stated* rather than *silently ignored*.
 
   Verified at creation: the three `field` values any calculator can emit today —
@@ -334,62 +338,62 @@ Scenario Data must not import from the chat feature.
 
 ### Task 5 — Wire the jump (AC: 1)
 
-- [ ] The handler in `ActivityTimeline` navigates to
+- [x] The handler in `ActivityTimeline` navigates to
       `/scenarios/${item.scenario_id}/data?${toSearchParams(ref)}` with
       `{ state: { evidenceOrigin } }`, and calls `rememberOrigin(origin)` first.
-- [ ] **The scenario id comes from `item.scenario_id`** (on `ActivityCommonOut`), not from a route
+- [x] **The scenario id comes from `item.scenario_id`** (on `ActivityCommonOut`), not from a route
       param and not from anything the model produced. UX-DR2: *"never switch scenario implicitly
       from an evidence link."*
-- [ ] The origin captures the currently selected `?conversation=` value so the return trip lands on
+- [x] The origin captures the currently selected `?conversation=` value so the return trip lands on
       the same conversation — Chat's selection lives in the URL for exactly this reason
       (`ChatView.tsx:55-62`).
-- [ ] Test: a locator whose `scenario_version_id` differs from the workspace context does **not**
+- [x] Test: a locator whose `scenario_version_id` differs from the workspace context does **not**
       change the workspace scenario or version — it renders the version-mismatch panel (Task 7).
 
 ### Task 6 — Return to claim and browser Back (AC: 1, 3)
 
-- [ ] *Return to claim* navigates to `/scenarios/${scenarioId}?conversation=${conversationId}`.
-- [ ] Chat restores focus to `originElementId(origin)` once, from `consumeOrigin()`, after the
+- [x] *Return to claim* navigates to `/scenarios/${scenarioId}?conversation=${conversationId}`.
+- [x] Chat restores focus to `originElementId(origin)` once, from `consumeOrigin()`, after the
       timeline has data. **The same code path serves both** *Return to claim* and browser Back —
       that is why the origin is mirrored in `sessionStorage` (Decision 3). One restoration path, two
       entry points; do not write two.
-- [ ] Required assertions:
-  - [ ] `sendMessage`, `executeTurn`, and `createConversation` are **never called** on the return
+- [x] Required assertions:
+  - [x] `sendMessage`, `executeTurn`, and `createConversation` are **never called** on the return
         trip. AC1's *"does not resend, regenerate"*. Spy the module, assert zero calls.
-  - [ ] The `?conversation=` value is byte-identical before the jump and after the return.
-  - [ ] The scenario id in the path is unchanged.
-  - [ ] Focus lands on the exact invoking `EvidenceLink`, not on the message, the timeline, or the
+  - [x] The `?conversation=` value is byte-identical before the jump and after the return.
+  - [x] The scenario id in the path is unchanged.
+  - [x] Focus lands on the exact invoking `EvidenceLink`, not on the message, the timeline, or the
         first link in the list.
-  - [ ] A second Back does **not** re-steal focus (`consumeOrigin` is read-once).
+  - [x] A second Back does **not** re-steal focus (`consumeOrigin` is read-once).
 
 ### Task 7 — The four exception states (AC: 2)
 
-- [ ] Add `getErrorCode(error): string | undefined` to `src/lib/errors.ts`, beside `getErrorStatus`
+- [x] Add `getErrorCode(error): string | undefined` to `src/lib/errors.ts`, beside `getErrorStatus`
       and with the same rationale in its docstring (one typed accessor, no repeated casts).
-- [ ] Four states, per Decision 5's table:
-  - [ ] **Version mismatch** — names the cited version and the selected version. Actions: *Return to
+- [x] Four states, per Decision 5's table:
+  - [x] **Version mismatch** — names the cited version and the selected version. Actions: *Return to
         claim*. No *Open cited version* (Decision 5). Does not switch the workspace.
-  - [ ] **Missing evidence** — confirms the locator could not resolve **in the exact cited
+  - [x] **Missing evidence** — confirms the locator could not resolve **in the exact cited
         version**, shows the safe locator fields, offers **Retry** and *Return to claim*, and marks
         the originating claim "Evidence unavailable" (Decision 6).
-  - [ ] **Unauthorized** — copy is exactly *"Evidence is not available to this session."* It states
+  - [x] **Unauthorized** — copy is exactly *"Evidence is not available to this session."* It states
         no value and makes **no claim about whether the record exists**. Action: *Return to claim*.
-  - [ ] **Stale cached record** — labelled *"Stale — last verified at {timestamp}"* with a refresh
+  - [x] **Stale cached record** — labelled *"Stale — last verified at {timestamp}"* with a refresh
         action. Reuse the existing pattern and copy from `ScenarioWorkspace.tsx:118-137`
         (`role="status"` on the message only, control outside it); do not invent second wording for
         a state EXPERIENCE.md already fixed.
-- [ ] Use `InlineAlert` — the shared primitive with the persistent-within-surface contract. Do not
+- [x] Use `InlineAlert` — the shared primitive with the persistent-within-surface contract. Do not
       hand-roll a panel.
-- [ ] Required assertions:
-  - [ ] Each of the four states is **distinct** in rendered output (UX-DR20).
-  - [ ] On every exception, the resolver is called **exactly once, with the cited locator** — no
+- [x] Required assertions:
+  - [x] Each of the four states is **distinct** in rendered output (UX-DR20).
+  - [x] On every exception, the resolver is called **exactly once, with the cited locator** — no
         retry against a different record, a different version, or the current version. AR11's
         no-retarget rule, and Story 2.7's trap #4 (*"Picking the nearest row … reads as helpful, is
         the exact thing AR11 forbids, and is invisible unless asserted"*).
-  - [ ] No exception state renders any record inside `EvidenceHighlight`.
-  - [ ] The unauthorized panel's rendered text is **byte-identical** whether the underlying record
+  - [x] No exception state renders any record inside `EvidenceHighlight`.
+  - [x] The unauthorized panel's rendered text is **byte-identical** whether the underlying record
         exists or not — drive both and compare.
-  - [ ] The originating claim remains **visible** in the timeline when marked "Evidence unavailable"
+  - [x] The originating claim remains **visible** in the timeline when marked "Evidence unavailable"
         (AC2's own word), and no request mutates the persisted activity.
 
 ### Task 8 — Accessibility proof, fences, ledger, Gate A (AC: 3)
@@ -642,9 +646,47 @@ tests; assume the same and measure on a clean tree before you start.
 
 ### Implementation Plan
 
+- Implement each numbered task in story order using focused Vitest failures first, minimal production code second, and full frontend regression/type checks before marking the task complete.
+- Keep the evidence destination derived from generated contracts, retain the exact cited locator in query identity, and use one read-once origin path for explicit return and browser Back.
+
 ### Completion Notes List
 
+- Task 1: Added generated-schema-derived evidence locator parsing/serialization, an exhaustive group-to-tab map, and guarded read-once session origin storage. Added 5 focused tests; full frontend regression is green (58 files / 337 tests) and TypeScript passes.
+- Task 2: Made EvidenceLink activation states compile-time complete, added stable DOM IDs, and replaced the inert timeline seam with app-owned origin construction and navigation. Preserved all Story 2.7 claim formatting/states; 11 focused tests and the full 337-test frontend regression pass.
+- Task 3: Added six generated-contract GET resolvers, an exhaustive map dispatcher, and a no-retry TanStack Query hook whose identity includes the cited version. Added 9 tests; full frontend regression is green (60 files / 346 tests) and TypeScript passes.
+- Task 4: Added the single post-resolution focused EvidenceHighlight region, read-only identifier/window formatting, origin-aware return control, loading skeleton, forced cited tab, and golden-dataset field-key guard. Full frontend regression is green (61 files / 350 tests).
+- Task 5: Wired jump activation exclusively from persisted activity/ref data, preserved scenario and selected workspace version, and proved a mismatched citation renders the mismatch panel without retargeting. Full frontend regression is green (61 files / 352 tests).
+- Task 6: Added one read-once post-timeline focus restoration path shared by explicit return and browser Back. Proved exact scenario/conversation restoration, exact-link focus, no second focus steal, and zero create/send/execute calls; full frontend regression is green (61 files / 354 tests).
+- Task 7: Added four RFC-7807-code-driven InlineAlert states, exact no-retarget assertions, and a non-persisted lost-evidence marker. The marker survives the SPA jump→return trip and intentionally does not survive reload; no persisted activity is mutated. Full frontend regression is green (61 files / 363 tests), TypeScript and lint pass (three pre-existing Fast Refresh warnings remain).
+
 ### File List
+
+- frontend/src/features/evidence/locator.test.ts
+- frontend/src/features/evidence/locator.ts
+- frontend/src/features/evidence/origin.test.ts
+- frontend/src/features/evidence/origin.ts
+- frontend/src/components/primitives/EvidenceLink.test.tsx
+- frontend/src/components/primitives/EvidenceLink.tsx
+- frontend/src/components/primitives/fixtures.tsx
+- frontend/src/features/chat/ActivityTimeline.test.tsx
+- frontend/src/features/chat/ActivityTimeline.tsx
+- frontend/src/features/chat/ChatView.tsx
+- frontend/src/api/scenarioProjection.test.ts
+- frontend/src/api/scenarioProjection.ts
+- frontend/src/features/evidence/resolve.test.ts
+- frontend/src/features/evidence/resolve.ts
+- frontend/src/hooks/useEvidenceRecord.test.tsx
+- frontend/src/hooks/useEvidenceRecord.ts
+- frontend/src/features/evidence/EvidenceTargetPanel.test.tsx
+- frontend/src/features/evidence/EvidenceTargetPanel.tsx
+- frontend/src/features/scenario-data/ScenarioDataView.test.tsx
+- frontend/src/features/scenario-data/ScenarioDataView.tsx
+- frontend/src/lib/errors.ts
+- frontend/src/routes/ScenarioData.tsx
+- frontend/src/routes/ScenarioWorkspace.tsx
+- frontend/src/components/primitives/InlineAlert.tsx
+- frontend/src/features/evidence/availability.ts
+- frontend/src/lib/errors.test.ts
 
 ## Change Log
 

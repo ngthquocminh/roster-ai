@@ -11,6 +11,12 @@ import {
   getScenarioOverview,
   getWorkAreasAndTasks,
   getWorkers,
+  resolveAssignment,
+  resolveConstraint,
+  resolveDemandInterval,
+  resolveLock,
+  resolveTask,
+  resolveWorker,
 } from "./scenarioProjection";
 
 const mockGET = client.GET as unknown as ReturnType<typeof vi.fn>;
@@ -68,6 +74,24 @@ describe("scenario projection API", () => {
     await expect(call("scenario-a", {})).rejects.toMatchObject({
       code: "projection_unavailable",
       status: 503,
+    });
+  });
+
+  it.each([
+    ["task", resolveTask, "/api/v1/scenarios/{scenario_id}/projection/work-areas-and-tasks/{record_id}"],
+    ["worker", resolveWorker, "/api/v1/scenarios/{scenario_id}/projection/workers/{record_id}"],
+    ["demand", resolveDemandInterval, "/api/v1/scenarios/{scenario_id}/projection/demand/{record_id}"],
+    ["assignment", resolveAssignment, "/api/v1/scenarios/{scenario_id}/projection/baseline-assignments/{record_id}"],
+    ["lock", resolveLock, "/api/v1/scenarios/{scenario_id}/projection/locks/{record_id}"],
+    ["constraint", resolveConstraint, "/api/v1/scenarios/{scenario_id}/projection/constraints-and-objectives/{record_id}"],
+  ])("resolves the exact cited %s", async (_name, resolver, path) => {
+    mockGET.mockResolvedValueOnce(success);
+    await resolver("scenario-a", "record-a", "11111111-1111-4111-8111-111111111111");
+    expect(mockGET).toHaveBeenCalledWith(path, {
+      params: {
+        path: { scenario_id: "scenario-a", record_id: "record-a" },
+        query: { scenario_version_id: "11111111-1111-4111-8111-111111111111" },
+      },
     });
   });
 });

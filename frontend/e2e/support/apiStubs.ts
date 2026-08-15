@@ -27,7 +27,9 @@ function loadContract(fixture: FixtureKey): Contract {
 }
 
 export const SCENARIO_ID = "11111111-1111-4111-8111-111111111111";
-const SCENARIO_VERSION_ID = "22222222-2222-4222-8222-222222222222";
+export const SCENARIO_VERSION_ID = "22222222-2222-4222-8222-222222222222";
+export const CONVERSATION_ID = "55555555-5555-4555-8555-555555555555";
+export const EVIDENCE_RECORD_ID = "outbound:0";
 const SITE_ID = "33333333-3333-4333-8333-333333333333";
 const common = {
   schema_version: "v1",
@@ -115,6 +117,62 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
     if (path === "/api/v1/scenarios") {
       return json(route, [catalogueEntry(contract)]);
     }
+    if (path === "/api/v1/conversations") {
+      return json(route, {
+        items: [{ id: CONVERSATION_ID, scenario_id: SCENARIO_ID, scenario_version_id: SCENARIO_VERSION_ID, resource_version: 2 }],
+        limit: 100,
+        has_more: false,
+      });
+    }
+    if (path === `/api/v1/conversations/${CONVERSATION_ID}/timeline`) {
+      return json(route, {
+        conversation_id: CONVERSATION_ID,
+        resource_version: 2,
+        latest_agent_run_status: null,
+        items: [{
+          schema_version: "1",
+          activity_id: "66666666-6666-4666-8666-666666666666",
+          activity_type: "agent_response",
+          conversation_id: CONVERSATION_ID,
+          conversation_resource_version: 2,
+          scenario_id: SCENARIO_ID,
+          scenario_version_id: SCENARIO_VERSION_ID,
+          occurred_at: "2026-08-15T00:00:00Z",
+          sequence: "1",
+          response: {
+            schema_version: "1",
+            scenario_version_id: SCENARIO_VERSION_ID,
+            segments: [{
+              schema_version: "1",
+              kind: "claim",
+              metric: "required_headcount_minutes",
+              arguments: { schema_version: "1", task_id: "pick", family: "outbound", start_minute: 2880, end_minute: 3600 },
+              result_id: "e2e-result-1",
+              value: 720,
+              unit: "minutes",
+              verdict: "supported",
+              failure: null,
+              evidence_refs: [{
+                schema_version: "1",
+                scenario_version_id: SCENARIO_VERSION_ID,
+                checksum_algorithm: "sha256",
+                checksum_schema_version: "rfc8785-v1",
+                checksum_digest: "a".repeat(64),
+                producing_run_version: null,
+                baseline_schedule_version: null,
+                group: "demand",
+                record_id: EVIDENCE_RECORD_ID,
+                field: "amount",
+                start_minute: 2880,
+                end_minute: 3600,
+              }],
+            }],
+          },
+        }],
+        limit: 200,
+        has_more: false,
+      });
+    }
     if (path === `/api/v1/scenarios/${SCENARIO_ID}`) {
       return json(route, {
         ...catalogueEntry(contract),
@@ -132,7 +190,17 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
     }
     const prefix = `/api/v1/scenarios/${SCENARIO_ID}/projection/`;
     if (path.startsWith(prefix)) {
-      return json(route, pageFor(contract, path.slice(prefix.length), url));
+      const [group, recordId] = path.slice(prefix.length).split("/");
+      if (recordId) {
+        if (url.searchParams.get("scenario_version_id") !== SCENARIO_VERSION_ID) {
+          return json(route, { type: "about:blank", title: "Evidence version mismatch", status: 404, detail: "The cited version differs.", code: "evidence_version_mismatch" }, 404);
+        }
+        const record = contract.groups[group!]?.find((item) => item.record_id === decodeURIComponent(recordId));
+        return record
+          ? json(route, record)
+          : json(route, { type: "about:blank", title: "Evidence not found", status: 404, detail: "The cited evidence record was not found.", code: "evidence_not_found" }, 404);
+      }
+      return json(route, pageFor(contract, group!, url));
     }
     return json(route, { detail: `Unhandled e2e API path: ${path}` }, 404);
   });

@@ -7,7 +7,9 @@ vi.mock("@/hooks/useScenarioProjection", () => ({
   useDemand: vi.fn(), useBaselineAssignments: vi.fn(), useLocks: vi.fn(),
   useConstraintsAndObjectives: vi.fn(),
 }));
+vi.mock("@/hooks/useEvidenceRecord", () => ({ useEvidenceRecord: vi.fn() }));
 
+import { useEvidenceRecord } from "@/hooks/useEvidenceRecord";
 import * as hooks from "@/hooks/useScenarioProjection";
 import { ScenarioDataView } from "./ScenarioDataView";
 
@@ -27,6 +29,21 @@ beforeEach(() => {
   vi.mocked(hooks.useBaselineAssignments).mockReturnValue(state as never);
   vi.mocked(hooks.useLocks).mockReturnValue(state as never);
   vi.mocked(hooks.useConstraintsAndObjectives).mockReturnValue(state as never);
+  vi.mocked(useEvidenceRecord).mockReturnValue({ ...state, isSuccess: false } as never);
+});
+
+it("forces the cited group and composes the resolved target above its grid", async () => {
+  vi.mocked(useEvidenceRecord).mockReturnValue({
+    ...state,
+    data: { record_id: "d1", family: "outbound", task_id: "t1", area_id: null, start_minute: 0, end_minute: 30, amount: 1, unit: "volume" },
+    isSuccess: true,
+  } as never);
+  renderView("/data?group=demand&record=d1&version=11111111-1111-4111-8111-111111111111&field=amount");
+
+  expect(screen.getByRole("tab", { name: "Demand" })).toHaveAttribute("aria-selected", "true");
+  const target = screen.getByRole("region", { name: /Evidence target: demand d1, amount/ });
+  await waitFor(() => expect(target).toHaveFocus());
+  expect(target.compareDocumentPosition(screen.getByRole("tabpanel", { name: "Demand" }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 });
 
 it("renders the seven groups in fixed order and defaults to Overview", () => {

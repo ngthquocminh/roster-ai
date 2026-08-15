@@ -14,9 +14,10 @@ vi.mock("@/hooks/useConversationTimeline", async (importOriginal) => ({
 }));
 vi.mock("@/hooks/useScenarioContext", () => ({ useScenarioContext: vi.fn() }));
 vi.mock("@/hooks/useSendMessage", () => ({ useSendMessage: vi.fn() }));
-vi.mock("@/api/conversations", () => ({ createConversation: vi.fn() }));
+vi.mock("@/api/conversations", () => ({ createConversation: vi.fn(), executeTurn: vi.fn(), sendMessage: vi.fn() }));
 
-import { createConversation } from "@/api/conversations";
+import { createConversation, executeTurn, sendMessage } from "@/api/conversations";
+import { originElementId, rememberOrigin } from "@/features/evidence/origin";
 import { useConversations } from "@/hooks/useConversations";
 import { useConversationTimeline } from "@/hooks/useConversationTimeline";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
@@ -28,6 +29,8 @@ const mockTimeline = useConversationTimeline as unknown as ReturnType<typeof vi.
 const mockContext = useScenarioContext as unknown as ReturnType<typeof vi.fn>;
 const mockSend = useSendMessage as unknown as ReturnType<typeof vi.fn>;
 const mockCreate = createConversation as unknown as ReturnType<typeof vi.fn>;
+const mockExecute = executeTurn as unknown as ReturnType<typeof vi.fn>;
+const mockSendMessage = sendMessage as unknown as ReturnType<typeof vi.fn>;
 
 const SCENARIO = "33333333-3333-3333-3333-333333333333";
 const VERSION = "44444444-4444-4444-4444-444444444444";
@@ -74,11 +77,14 @@ function renderChat(initialEntry = `/scenarios/${SCENARIO}`) {
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   mockConversations.mockReset();
   mockTimeline.mockReset();
   mockContext.mockReset();
   mockSend.mockReset();
   mockCreate.mockReset();
+  mockExecute.mockReset();
+  mockSendMessage.mockReset();
   mockContext.mockReturnValue({ data: { scenario_version_id: VERSION } });
   mockSend.mockReturnValue({ isPending: false, mutateAsync: vi.fn() });
   mockConversations.mockReturnValue({
@@ -105,6 +111,71 @@ beforeEach(() => {
 });
 
 describe("ChatView", () => {
+  it("restores the exact invoking evidence link once without resending or regenerating", async () => {
+    const agentActivityId = "88888888-8888-4888-8888-888888888888";
+    const origin = { conversationId: NEWER, activityId: agentActivityId, segmentIndex: 0, refIndex: 0 };
+    const agentResponse = {
+      schema_version: "1",
+      activity_id: agentActivityId,
+      activity_type: "agent_response" as const,
+      conversation_id: NEWER,
+      conversation_resource_version: 3,
+      scenario_id: SCENARIO,
+      scenario_version_id: VERSION,
+      occurred_at: "2026-08-15T00:00:00Z",
+      sequence: "3",
+      response: {
+        schema_version: "1",
+        scenario_version_id: VERSION,
+        segments: [{
+          schema_version: "1",
+          kind: "claim" as const,
+          metric: "required_headcount_minutes" as const,
+          arguments: { schema_version: "1" },
+          result_id: "result-1",
+          value: 12,
+          unit: "workers" as const,
+          verdict: "supported" as const,
+          failure: null,
+          evidence_refs: [{
+            schema_version: "1",
+            scenario_version_id: VERSION,
+            checksum_algorithm: "sha256",
+            checksum_schema_version: "1",
+            checksum_digest: "a".repeat(64),
+            producing_run_version: null,
+            baseline_schedule_version: null,
+            group: "demand" as const,
+            record_id: "demand-1",
+            field: "amount",
+            start_minute: 0,
+            end_minute: 30,
+          }],
+        }],
+      },
+    };
+    mockTimeline.mockReturnValue({
+      data: { conversation_id: NEWER, resource_version: 3, latest_agent_run_status: null, items: [agentResponse], limit: 200, has_more: false },
+      error: null, isError: false, isPending: false, refetch: vi.fn(),
+    });
+    rememberOrigin(origin);
+    const router = renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    const evidence = await screen.findByRole("button", { name: /Evidence: demand demand-1/ });
+    await waitFor(() => expect(evidence).toHaveFocus());
+    expect(evidence).toHaveAttribute("id", originElementId(origin));
+    expect(router.state.location.pathname).toBe(`/scenarios/${SCENARIO}`);
+    expect(router.state.location.search).toBe(`?conversation=${NEWER}`);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockSendMessage).not.toHaveBeenCalled();
+    expect(mockExecute).not.toHaveBeenCalled();
+
+    const newConversation = screen.getByRole("button", { name: "New conversation" });
+    newConversation.focus();
+    await router.navigate(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(newConversation).toHaveFocus();
+  });
   it("restores the conversation named in the URL rather than the newest one", () => {
     renderChat(`/scenarios/${SCENARIO}?conversation=${OLDER}`);
 

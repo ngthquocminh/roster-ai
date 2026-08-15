@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { installApiStubs } from "./support/apiStubs";
+import { CONVERSATION_ID, EVIDENCE_RECORD_ID, installApiStubs, SCENARIO_ID } from "./support/apiStubs";
 
 async function expectKeyboardFocus(locator: Locator) {
   await expect(locator).toBeFocused();
@@ -97,4 +97,27 @@ test("completes the Gate A Scenario Data journey with keyboard only", async ({ c
   await expect(chooser).toBeFocused();
   await expect(page.getByRole("columnheader", { name: "Family" })).toHaveCount(0);
   expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+});
+
+test("jumps to exact evidence and returns to the invoking link with keyboard only", async ({ page }) => {
+  await installApiStubs(page);
+  await page.goto(`/scenarios/${SCENARIO_ID}?conversation=${CONVERSATION_ID}`);
+
+  const evidence = page.getByRole("button", { name: new RegExp(`Evidence: demand ${EVIDENCE_RECORD_ID}`) });
+  await tabTo(page, evidence);
+  await expectKeyboardFocus(evidence);
+  await page.keyboard.press("Enter");
+
+  const target = page.getByRole("region", { name: new RegExp(`Evidence target: demand ${EVIDENCE_RECORD_ID}`) });
+  await expectKeyboardFocus(target);
+  await expect(page).toHaveURL(new RegExp(`/scenarios/${SCENARIO_ID}/data\\?`));
+  expect(new URL(page.url()).searchParams.get("record")).toBe(EVIDENCE_RECORD_ID);
+
+  const returnToClaim = page.getByRole("button", { name: "Return to claim" });
+  await tabTo(page, returnToClaim);
+  await expectKeyboardFocus(returnToClaim);
+  await page.keyboard.press("Enter");
+
+  await expect(page).toHaveURL(`/scenarios/${SCENARIO_ID}?conversation=${CONVERSATION_ID}`);
+  await expectKeyboardFocus(evidence);
 });

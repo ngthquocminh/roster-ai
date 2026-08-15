@@ -1,6 +1,14 @@
 import type { Timeline } from "@/api/conversations";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { EvidenceLink } from "@/components/primitives/EvidenceLink";
+import { toSearchParams } from "@/features/evidence/locator";
+import { isEvidenceUnavailable } from "@/features/evidence/availability";
+import {
+  originElementId,
+  rememberOrigin,
+  type EvidenceOrigin,
+} from "@/features/evidence/origin";
+import type { NavigateFunction } from "react-router";
 
 type Activity = Timeline["items"][number];
 type AgentResponse = Extract<Activity, { activity_type: "agent_response" }>;
@@ -43,7 +51,17 @@ function formatClaimValue(value: number): string {
   return String(Number(value.toPrecision(12)));
 }
 
-function ClaimSegment({ claim }: Readonly<{ claim: Claim }>) {
+function ClaimSegment({
+  claim,
+  item,
+  navigate,
+  segmentIndex,
+}: Readonly<{
+  claim: Claim;
+  item: AgentResponse;
+  navigate?: NavigateFunction;
+  segmentIndex: number;
+}>) {
   if (claim.verdict === "failed") {
     return (
       <span className="text-destructive" data-claim-state="failed">
@@ -73,23 +91,39 @@ function ClaimSegment({ claim }: Readonly<{ claim: Claim }>) {
         {formatClaimValue(Number(claim.value))} {claim.unit}
         {subject ? <span className="text-muted-foreground"> ({subject})</span> : null}
       </span>
-      {claim.evidence_refs.map((reference) => (
-        <EvidenceLink
-          fieldOrRange={fieldOrRange(reference)}
-          group={reference.group}
-          key={`${reference.group}:${reference.record_id}:${reference.field ?? reference.start_minute ?? ""}`}
-          // Story 2.8 owns navigation. Supplying the activation seam now is a
-          // deliberate inert state, not an EvidenceLink with neither prop.
-          onActivate={() => undefined}
-          record={reference.record_id}
-          version={reference.scenario_version_id}
-        />
-      ))}
+      {claim.evidence_refs.map((reference, refIndex) => {
+        const origin: EvidenceOrigin = {
+          conversationId: item.conversation_id,
+          activityId: item.activity_id,
+          segmentIndex,
+          refIndex,
+        };
+        const activate = () => {
+          rememberOrigin(origin);
+          navigate?.(
+            `/scenarios/${item.scenario_id}/data?${toSearchParams(reference)}`,
+            { state: { evidenceOrigin: origin } },
+          );
+        };
+        return (
+          <span className="inline-flex flex-wrap items-center gap-2" key={`${reference.group}:${reference.record_id}:${reference.field ?? reference.start_minute ?? ""}`}>
+          <EvidenceLink
+            fieldOrRange={fieldOrRange(reference)}
+            group={reference.group}
+            id={originElementId(origin)}
+            onActivate={activate}
+            record={reference.record_id}
+            version={reference.scenario_version_id}
+          />
+          {isEvidenceUnavailable(origin) ? <span className="text-destructive">Evidence unavailable</span> : null}
+          </span>
+        );
+      })}
     </span>
   );
 }
 
-function AgentResponse({ item }: Readonly<{ item: AgentResponse }>) {
+function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navigate?: NavigateFunction }>) {
   // An empty segment list means no visible answer was saved. It does NOT mean
   // the run failed: `terminal_status` returns `agent_completed` whenever a
   // grounded response exists, so a model that answers with zero segments
@@ -116,7 +150,7 @@ function AgentResponse({ item }: Readonly<{ item: AgentResponse }>) {
           segment.kind === "prose" ? (
             <span key={`prose-${index}`}>{segment.text}</span>
           ) : (
-            <ClaimSegment claim={segment} key={`claim-${segment.result_id}-${index}`} />
+            <ClaimSegment claim={segment} item={item} key={`claim-${segment.result_id}-${index}`} navigate={navigate} segmentIndex={index} />
           ),
         )}
       </p>
@@ -124,7 +158,7 @@ function AgentResponse({ item }: Readonly<{ item: AgentResponse }>) {
   );
 }
 
-export function ActivityTimeline({ items }: Readonly<{ items: Timeline["items"] }>) {
+export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline["items"]; navigate?: NavigateFunction }>) {
   // Deduplicate by activity identity, not array position (UX-DR6): a refetch
   // that re-delivers an already-rendered activity must not produce a second
   // card, and a reorder must not merge two distinct ones.
@@ -148,7 +182,7 @@ export function ActivityTimeline({ items }: Readonly<{ items: Timeline["items"] 
               <p className="text-sm whitespace-pre-wrap">{item.text}</p>
             </div>
           ) : (
-            <AgentResponse item={item} />
+            <AgentResponse item={item} navigate={navigate} />
           )}
         </li>
       ))}

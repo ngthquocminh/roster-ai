@@ -1,20 +1,25 @@
 import { cn } from "@/lib/utils";
 
-type EvidenceLinkProps = Readonly<{
+type EvidenceLinkBaseProps = Readonly<{
   group: string;
+  id: string;
   record: string;
   fieldOrRange?: string;
   version: string;
-  href?: string;
-  onActivate?: () => void;
   className?: string;
 }>;
+
+type EvidenceLinkProps = EvidenceLinkBaseProps & (
+  | Readonly<{ href: string; onActivate?: () => void }>
+  | Readonly<{ href?: never; onActivate: () => void }>
+);
 
 export function EvidenceLink({
   className,
   fieldOrRange,
   group,
   href,
+  id,
   onActivate,
   record,
   version,
@@ -27,14 +32,14 @@ export function EvidenceLink({
 
   if (href) {
     return (
-      <a className={classes} href={href} onClick={onActivate}>
+      <a className={classes} href={href} id={id} onClick={onActivate}>
         {label}
       </a>
     );
   }
 
   return (
-    <button className={classes} onClick={onActivate} type="button">
+    <button className={classes} id={id} onClick={onActivate} type="button">
       {label}
     </button>
   );

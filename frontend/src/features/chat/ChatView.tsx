@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router";
+import { useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { createConversation } from "@/api/conversations";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
@@ -7,6 +8,7 @@ import { ReconnectBanner } from "@/components/primitives/ReconnectBanner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { conversationsKey, useConversations } from "@/hooks/useConversations";
+import { consumeOrigin, originElementId } from "@/features/evidence/origin";
 import { useConversationStream } from "@/hooks/useConversationStream";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
 import { useSendMessage } from "@/hooks/useSendMessage";
@@ -51,6 +53,7 @@ function ErrorState({ error, onRetry }: Readonly<{ error: unknown; onRetry: () =
 
 export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const context = useScenarioContext(scenarioId);
   const conversations = useConversations(scenarioId);
   // Selection lives in the URL, not component state: switching workspace tabs
@@ -63,6 +66,13 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const selectedId = items.some((c) => c.id === requestedId) ? requestedId : "";
   const stream = useConversationStream(selectedId);
   const timeline = stream.timeline;
+
+  useEffect(() => {
+    if (!selectedId || timeline.isPending) return;
+    const origin = consumeOrigin();
+    if (!origin || origin.conversationId !== selectedId) return;
+    document.getElementById(originElementId(origin))?.focus();
+  }, [selectedId, timeline.isPending, stream.items]);
 
   const select = (id: string) => {
     const next = new URLSearchParams(searchParams);
@@ -145,7 +155,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
               {/* Only rendered once something has actually gone wrong; a
                   healthy stream shows no banner at all. */}
               {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
-              <ActivityTimeline items={stream.items} />
+              <ActivityTimeline items={stream.items} navigate={navigate} />
               {stream.updatesAreDelayed ? (
                 // AC2 requires the fallback to be LABELLED. Silent polling
                 // would leave the planner believing they are seeing live
