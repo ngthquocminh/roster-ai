@@ -4,7 +4,7 @@ baseline_commit: 0932c1df76e953b1f26493d11c1ad7913bb5191e
 
 # Story 2.9: Clarify, Refuse, and Fail Safely
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -672,11 +672,11 @@ turns out to need a new route or a migration.
       `evidence/` and cannot run twice in a row (`deferred-work.md:107`). See
       `docs/GATE-A-RUNBOOK.md`; §3 requires `playwright.config.ts` to keep `reporter: "list"` as its
       committed default.
-- [ ] **Regression + Gate A**:
+- [x] **Regression + Gate A**:
   - [x] Re-derive every baseline on a clean tree — do **not** trust the numbers below.
   - [x] `uv run --frozen pytest` (backend), the `postgres`-marked suite, `npm test`, `tsc -b`,
         `oxlint`, `npm run build`, Playwright.
-  - [ ] Gate A re-run per AR28: `gate_a_passed: true`, `blocking: []`.
+  - [x] Gate A re-run per AR28: `gate_a_passed: true`, `blocking: []`.
 - [x] **Record the NFR28 numbers** per Gap 2: this story's contribution, the running dataset total,
       the per-capability counts, and the honest statement that the 50-case floor remains Gate B's to
       re-verify once Stories 3.10–3.12 and 4.5–4.6 have contributed. **Do not lower it here. Do not
@@ -866,7 +866,7 @@ same; assume it and measure on a clean tree before you start.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+GPT-5 (Codex)
 
 ### Debug Log References
 
@@ -882,8 +882,14 @@ same; assume it and measure on a clean tree before you start.
 - Task 9 plan and verification: passed the trusted route scenario id into both shared Chat error surfaces, linked Scenario Data only, retained durable timeline history and kept the composer live after rejection. RED proved all four error surfaces lacked the link; focused Chat/navigation suites passed 36 and full frontend regression passed 63 files / 383 tests.
 - Task 10 plan and verification: extended the Gate A-recognized accessibility contract with accessible clarification naming, live-region boundaries, and axe coverage for candidate/zero-candidate clarification plus all eight terminal reasons. RED proved the next step was nested inside the live region; focused accessibility/timeline suites passed 35 and full frontend regression passed 63 files / 395 tests. The optional Gate A registry change was intentionally not taken, so deferred-work line 202 remains open.
 - Task 11 pre-Gate verification: closed the visible-state/text ledger entries and made `argument_mismatch` observably distinct inside the evaluator without widening AR11. Cross-swapped oracle outcomes were RED before the discriminator and pass/fail correctly now. Root Alembic reported zero operations; all protected zero-diff fences were empty except the permitted grounding resolver extraction (`gate.py` + `resolvers.py`). Regression passed backend 850 / skipped 2 / deselected 7, PostgreSQL 45, frontend 63 files / 395 tests, TypeScript, oxlint (three inherited warnings), production build, and Playwright 48. NFR28 contribution is 6 cases; running total 17: demonstration 2, scheduling_compute 4, scheduling_inspect 11. The 50-case floor remains Gate B's to re-verify after Stories 3.10–3.12 and 4.5–4.6; it was neither lowered nor padded.
+- Gate A final verification: clean-tree JUnit captured backend 851 passed / 1 skipped / 7 live deselected, frontend 395 tests, and Playwright 48 tests. All eight registered readiness checks passed; `gate_a_passed: true`, `blocking: []`. The readiness report was refreshed in standalone commit `09d6544` after implementation commit `9225fcf`.
 
 ### Completion Notes List
+
+- Implemented explicit clarification, refusal, and eight-reason terminal outcomes across owned contracts, runtime dispatch, trusted resolution, persistence, API history, and Chat rendering.
+- Added policy/visible-state evaluation and six adversarial scheduling-inspect cases without expanding model authority; protected capability, permission, budget, and approval invariants remain application-owned.
+- Preserved durable conversation history and a live composer on recoverable failures while keeping trusted Scenario Data reachable from every Chat error surface.
+- Verified all story tasks, scope fences, accessibility contracts, database integration, code generation, browser journeys, and Gate A readiness. Story is ready for review.
 
 ### File List
 
@@ -936,6 +942,7 @@ same; assume it and measure on a clean tree before you start.
 - frontend/src/features/chat/Composer.tsx
 - frontend/src/features/chat/Composer.test.tsx
 - frontend/src/test/accessibility-contract.test.tsx
+- evidence/story-1.11/gate-a-readiness-report.json
 - _bmad-output/implementation-artifacts/2-9-clarify-refuse-and-fail-safely.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
@@ -944,3 +951,4 @@ same; assume it and measure on a clean tree before you start.
 | Date | Change |
 |---|---|
 | 2026-08-15 | Story created. Seven creation decisions recorded (the `pydantic-ai` output-tool naming measured against the installed 2.27.0 lock); two honest gaps raised (no authorization mechanism exists to drive AC2's "unauthorized"/"prohibited"; NFR28's 50-case floor cannot be re-verified before Epics 3–4 contribute); zero-migration established as a fence rather than an expectation; four `deferred-work.md` entries and three in-code comments naming this story routed for honest judgement. |
+| 2026-08-15 | Implemented and verified clarification, refusal, safe terminal failures, trusted Chat recovery navigation, adversarial evaluation cases, accessibility proof, ledger closures, and a green Gate A refresh. Status moved to review. |
