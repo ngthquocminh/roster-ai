@@ -793,8 +793,8 @@
           },
           "frontend/src/test/accessibility-contract.test.tsx": {
             "status": "passed",
-            "total": 8,
-            "passed": 8,
+            "total": 20,
+            "passed": 20,
             "skipped": 0,
             "failed": 0
           },
@@ -1023,21 +1023,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 812,
-      "run_started": "2026-08-15T15:53:09.022630+07:00",
-      "sha256": "4ee198a17330804326fdf62b2c936001f01c7e22c091565d9dca6dc4df9612c6"
+      "cases": 852,
+      "run_started": "2026-08-15T18:54:22.340193+07:00",
+      "sha256": "6d60f1a89f68852ef2b83fb1d35e0989696f36b75c8094e35487d9c48ebe0db9"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "cases": 378,
-      "run_started": "2026-08-15T08:55:18.156Z",
-      "sha256": "f276cbd6529476624ece5798cdb1b315b8b2608d5c672b7f9038381db991269b"
+      "cases": 395,
+      "run_started": "2026-08-15T11:55:24.310Z",
+      "sha256": "9c84bb33a5dd0c639e9e293f3aad169fc5a1505a8ac5d3e5237e777baecff62d"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 48,
-      "run_started": "2026-08-15T08:55:28.653Z",
-      "sha256": "7a05bd53cbeb6745cad384d5098edcbaab9f6de688ec580304ba40ca1e388278"
+      "run_started": "2026-08-15T11:57:55.900Z",
+      "sha256": "402bcf6d30da3cf746e5d9fa2591d9add335f23d9f550624914da9156bdd7d77"
     }
   },
   "version_bindings": {
@@ -1051,7 +1051,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "181d5117ebd243f1a3368acbe1256a66f0ebd3fb",
+      "git_commit": "9225fcfdd621720ffb24b6c0a673240adcc31442",
       "working_tree_dirty": false
     },
     "image": {
