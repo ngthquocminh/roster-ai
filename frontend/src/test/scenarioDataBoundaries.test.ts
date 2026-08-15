@@ -3,10 +3,17 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 
 const SCENARIO_DATA_ROOT = join(process.cwd(), "src/features/scenario-data");
+// `features/evidence` is composed INTO the Scenario Data surface
+// (ScenarioDataView renders EvidenceTargetPanel), so it renders on the surface
+// these invariants describe and must be swept with it. It lives outside
+// `features/scenario-data` deliberately — Scenario Data composes the evidence
+// panel, it does not own it — which is exactly why the sweep has to name it.
+const EVIDENCE_ROOT = join(process.cwd(), "src/features/evidence");
 
 function scenarioDataFiles(): string[] {
   return [
     ...sourceFiles(SCENARIO_DATA_ROOT).filter(path => !path.includes(".test.") && !path.endsWith("panelTestContract.tsx")),
+    ...sourceFiles(EVIDENCE_ROOT).filter(path => !path.includes(".test.")),
     join(process.cwd(), "src/routes/ScenarioData.tsx"),
   ];
 }

@@ -11,6 +11,10 @@ export default defineConfig({
   workers: 4,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
+  // Pinned to `list` on purpose — GATE-A-RUNBOOK.md §3 requires this committed
+  // default to stay put, and any JUnit reporter to be selected on the command
+  // line only. For Gate A on a Windows host, that is
+  // `e2e/support/streaming-junit-reporter.mjs` (see the runbook).
   reporter: "list",
   use: {
     // Must match the webServer URL below. The preview server binds 127.0.0.1 only, so navigating

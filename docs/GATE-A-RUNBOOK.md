@@ -181,6 +181,34 @@ the database blocks it rather than producing a false green. That is deliberate.
 `playwright.config.ts` pins `reporter: "list"` and that committed default must
 not change.
 
+### If Playwright's JUnit reporter will not exit (Windows)
+
+Playwright's own aggregating JUnit reporter completes every browser case on
+this Windows host but does not exit, so step 1's Playwright command hangs after
+the last test. Use the committed streaming reporter instead — it writes the XML
+after each finished case rather than once at teardown:
+
+```bash
+cd frontend
+PLAYWRIGHT_JUNIT_OUTPUT_FILE=../_bmad-output/test-artifacts/gate-a/playwright.xml \
+  npx playwright test --reporter=./e2e/support/streaming-junit-reporter.mjs
+# PowerShell:
+#   $env:PLAYWRIGHT_JUNIT_OUTPUT_FILE = "../_bmad-output/test-artifacts/gate-a/playwright.xml"
+#   npx playwright test --reporter=./e2e/support/streaming-junit-reporter.mjs
+```
+
+Note the different variable: the built-in reporter reads
+`PLAYWRIGHT_JUNIT_OUTPUT_NAME`, the streaming one reads
+`PLAYWRIGHT_JUNIT_OUTPUT_FILE`. It lives in the repository (not in the
+gitignored artifacts directory) precisely so a `playwright.xml` bound into
+`evidence/` can be re-derived by anyone.
+
+**Known limitation** — tracked in `deferred-work.md`: it has no `onEnd`
+finalisation and hard-codes `errors="0"`, so a run that dies midway produces a
+file that is accurate about the cases that finished and silent about the ones
+that never started. Cross-check the case count against a plain `list` run before
+binding the result.
+
 The JUnit XML is written to `_bmad-output/test-artifacts/gate-a/` and is
 gitignored: it is regenerable, noisy, and the report already carries the
 summarised result. It must never be written into `evidence/`.

@@ -14,7 +14,13 @@ export function useEvidenceRecord(scenarioId: string, target: EvidenceTarget | n
       target?.record,
       target?.version,
     ],
-    queryFn: () => resolveEvidenceRecord(scenarioId, target!),
+    queryFn: () => {
+      // `enabled` already gates this, but a non-null assertion made the query
+      // function's correctness depend on a neighbouring option rather than on
+      // anything the type system checks.
+      if (!target) throw new Error("useEvidenceRecord: no evidence target");
+      return resolveEvidenceRecord(scenarioId, target);
+    },
     enabled: Boolean(scenarioId && target),
     retry: false,
   });

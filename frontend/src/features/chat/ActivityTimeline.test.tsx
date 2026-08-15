@@ -123,41 +123,41 @@ describe("ActivityTimeline", () => {
       segmentIndex: 1,
       refIndex: 0,
     });
-    render(<ActivityTimeline items={[agentResponse]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[agentResponse]} />);
 
     expect(screen.getByText("45 minutes")).toBeInTheDocument();
     expect(screen.getByText("Evidence unavailable")).toBeInTheDocument();
   });
   it("deduplicates replayed activity by stable identity", () => {
-    render(<ActivityTimeline items={[item, item]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[item, item]} />);
 
     expect(screen.getAllByText("Check coverage")).toHaveLength(1);
   });
 
   it("reconstructs the same ordered activity identities across a reload", () => {
-    const { rerender } = render(<ActivityTimeline items={[item, second]} />);
+    const { rerender } = render(<ActivityTimeline navigate={vi.fn()} items={[item, second]} />);
     const first = renderedIds();
 
     // A reload re-delivers the same server page; a refetch may also re-deliver
     // an already-rendered item. Neither may change the rendered identities or
     // their order.
-    rerender(<ActivityTimeline items={[item, second]} />);
+    rerender(<ActivityTimeline navigate={vi.fn()} items={[item, second]} />);
     expect(renderedIds()).toEqual(first);
 
-    rerender(<ActivityTimeline items={[item, second, second]} />);
+    rerender(<ActivityTimeline navigate={vi.fn()} items={[item, second, second]} />);
     expect(renderedIds()).toEqual(first);
     expect(first).toEqual([item.activity_id, second.activity_id]);
   });
 
   it("renders the empty prompt without fabricating prior turns", () => {
-    render(<ActivityTimeline items={[]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[]} />);
 
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
     expect(screen.getByText(/Start a new conversation about this scenario/)).toBeInTheDocument();
   });
 
   it("renders supported evidence adjacent to its claim and failed claims distinctly", () => {
-    render(<ActivityTimeline items={[agentResponse]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[agentResponse]} />);
 
     expect(screen.getByLabelText("ShiftMind response")).toBeInTheDocument();
     const supported = screen.getByText("45 minutes").closest("[data-claim-state]");
@@ -179,7 +179,7 @@ describe("ActivityTimeline", () => {
   });
 
   it("deduplicates an agent response delivered by SSE and timeline refetch", () => {
-    render(<ActivityTimeline items={[agentResponse, agentResponse]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[agentResponse, agentResponse]} />);
     expect(screen.getAllByLabelText("ShiftMind response")).toHaveLength(1);
     expect(screen.getAllByText(/45 minutes/)).toHaveLength(1);
   });
@@ -187,7 +187,7 @@ describe("ActivityTimeline", () => {
   it("names the task and window a number belongs to", () => {
     // The gate forbids numerals in prose and a claim carries no prose of its
     // own, so without this the answer is exact and unattributed at once.
-    render(<ActivityTimeline items={[agentResponse]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[agentResponse]} />);
     expect(screen.getByText(/pick · outbound · 780–1020 min/)).toBeInTheDocument();
   });
 
@@ -209,7 +209,7 @@ describe("ActivityTimeline", () => {
         ],
       },
     };
-    render(<ActivityTimeline items={[floaty]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[floaty]} />);
 
     expect(screen.getByText(/90 units/)).toBeInTheDocument();
     expect(screen.queryByText(/90\.00000000000001/)).not.toBeInTheDocument();
@@ -229,7 +229,7 @@ describe("ActivityTimeline", () => {
         ],
       },
     };
-    render(<ActivityTimeline items={[tiny]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[tiny]} />);
 
     expect(screen.getByText(/0\.0001 units/)).toBeInTheDocument();
     expect(screen.queryByText(/^0 units/)).not.toBeInTheDocument();
@@ -253,7 +253,7 @@ describe("ActivityTimeline", () => {
         ],
       },
     };
-    render(<ActivityTimeline items={[emptySet]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[emptySet]} />);
 
     expect(screen.getByText(/No matching records/)).toHaveAttribute(
       "data-claim-state",
@@ -273,7 +273,7 @@ describe("ActivityTimeline", () => {
       ...agentResponse,
       response: { ...agentResponse.response, segments: [] },
     };
-    render(<ActivityTimeline items={[empty]} />);
+    render(<ActivityTimeline navigate={vi.fn()} items={[empty]} />);
 
     expect(screen.getByText(/No answer was saved for this turn/)).toHaveAttribute(
       "data-response-state",

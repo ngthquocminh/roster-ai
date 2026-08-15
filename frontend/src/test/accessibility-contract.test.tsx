@@ -201,7 +201,7 @@ it("gives a grounded response an author label and a keyboard-operable evidence c
     },
   };
 
-  render(<ActivityTimeline items={[response] as never} />);
+  render(<ActivityTimeline navigate={vi.fn()} items={[response] as never} />);
 
   // EXPERIENCE.md:85 -- the block is distinguishable by author/type label.
   expect(screen.getByLabelText("ShiftMind response")).toBeInTheDocument();

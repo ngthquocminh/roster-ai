@@ -2,7 +2,7 @@ import type { Timeline } from "@/api/conversations";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { EvidenceLink } from "@/components/primitives/EvidenceLink";
 import { toSearchParams } from "@/features/evidence/locator";
-import { isEvidenceUnavailable } from "@/features/evidence/availability";
+import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
 import {
   originElementId,
   rememberOrigin,
@@ -59,7 +59,7 @@ function ClaimSegment({
 }: Readonly<{
   claim: Claim;
   item: AgentResponse;
-  navigate?: NavigateFunction;
+  navigate: NavigateFunction;
   segmentIndex: number;
 }>) {
   if (claim.verdict === "failed") {
@@ -100,13 +100,16 @@ function ClaimSegment({
         };
         const activate = () => {
           rememberOrigin(origin);
-          navigate?.(
+          navigate(
             `/scenarios/${item.scenario_id}/data?${toSearchParams(reference)}`,
             { state: { evidenceOrigin: origin } },
           );
         };
+        // Keyed by ref POSITION, not by locator content: two refs can cite the
+        // same group/record/field for different windows, and a colliding key
+        // made React reconcile the very elements focus restoration targets.
         return (
-          <span className="inline-flex flex-wrap items-center gap-2" key={`${reference.group}:${reference.record_id}:${reference.field ?? reference.start_minute ?? ""}`}>
+          <span className="inline-flex flex-wrap items-center gap-2" key={`ref-${refIndex}`}>
           <EvidenceLink
             fieldOrRange={fieldOrRange(reference)}
             group={reference.group}
@@ -123,7 +126,7 @@ function ClaimSegment({
   );
 }
 
-function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navigate?: NavigateFunction }>) {
+function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navigate: NavigateFunction }>) {
   // An empty segment list means no visible answer was saved. It does NOT mean
   // the run failed: `terminal_status` returns `agent_completed` whenever a
   // grounded response exists, so a model that answers with zero segments
@@ -158,7 +161,14 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
   );
 }
 
-export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline["items"]; navigate?: NavigateFunction }>) {
+// `navigate` is REQUIRED: activation writes the origin to storage before it
+// navigates, so an omitted navigate left a live origin behind that the next
+// ChatView mount would consume and use to move focus after nothing happened.
+export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline["items"]; navigate: NavigateFunction }>) {
+  // The "Evidence unavailable" marker lives in an external mutable store; this
+  // subscribes ONCE per timeline (never inside the segment/ref loops, so the
+  // hook count cannot vary) and re-renders when any mark changes.
+  useEvidenceAvailability();
   // Deduplicate by activity identity, not array position (UX-DR6): a refetch
   // that re-delivers an already-rendered activity must not produce a second
   // card, and a reorder must not merge two distinct ones.

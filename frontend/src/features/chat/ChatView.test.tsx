@@ -31,6 +31,10 @@ const mockSend = useSendMessage as unknown as ReturnType<typeof vi.fn>;
 const mockCreate = createConversation as unknown as ReturnType<typeof vi.fn>;
 const mockExecute = executeTurn as unknown as ReturnType<typeof vi.fn>;
 const mockSendMessage = sendMessage as unknown as ReturnType<typeof vi.fn>;
+// The send mutation ChatView can actually reach. `sendMessage`/`executeTurn` are
+// only called from inside `useSendMessage`, which this file mocks wholesale, so
+// asserting on those two alone could never fail.
+let mockSendMutate: ReturnType<typeof vi.fn>;
 
 const SCENARIO = "33333333-3333-3333-3333-333333333333";
 const VERSION = "44444444-4444-4444-4444-444444444444";
@@ -86,7 +90,8 @@ beforeEach(() => {
   mockExecute.mockReset();
   mockSendMessage.mockReset();
   mockContext.mockReturnValue({ data: { scenario_version_id: VERSION } });
-  mockSend.mockReturnValue({ isPending: false, mutateAsync: vi.fn() });
+  mockSendMutate = vi.fn();
+  mockSend.mockReturnValue({ isPending: false, mutateAsync: mockSendMutate });
   mockConversations.mockReturnValue({
     data: { items: [conversation(NEWER), conversation(OLDER)], limit: 100, has_more: false },
     error: null,
@@ -166,14 +171,24 @@ describe("ChatView", () => {
     expect(evidence).toHaveAttribute("id", originElementId(origin));
     expect(router.state.location.pathname).toBe(`/scenarios/${SCENARIO}`);
     expect(router.state.location.search).toBe(`?conversation=${NEWER}`);
+    // AC1: returning does not resend, regenerate, or create. `mockSendMutate` is
+    // the mutation ChatView actually invokes; `mockCreate` is called directly by
+    // ChatView. (`sendMessage`/`executeTurn` live behind the mocked
+    // `useSendMessage`, so they are unreachable here by construction and are
+    // deliberately NOT asserted as if they were evidence.)
+    expect(mockSendMutate).not.toHaveBeenCalled();
     expect(mockCreate).not.toHaveBeenCalled();
-    expect(mockSendMessage).not.toHaveBeenCalled();
-    expect(mockExecute).not.toHaveBeenCalled();
 
+    // A second arrival must not re-steal focus: the origin is read-once. Drive a
+    // real effect re-run by switching conversations and back — navigating to the
+    // identical URL changes no dependency, so the effect would not run at all and
+    // the assertion would hold no matter what the implementation did.
     const newConversation = screen.getByRole("button", { name: "New conversation" });
     newConversation.focus();
+    await router.navigate(`/scenarios/${SCENARIO}?conversation=${OLDER}`);
     await router.navigate(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() => expect(router.state.location.search).toBe(`?conversation=${NEWER}`));
+    expect(screen.getByRole("button", { name: /Evidence: demand demand-1/ })).not.toHaveFocus();
     expect(newConversation).toHaveFocus();
   });
   it("restores the conversation named in the URL rather than the newest one", () => {

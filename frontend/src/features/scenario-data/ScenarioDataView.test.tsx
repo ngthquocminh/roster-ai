@@ -11,6 +11,7 @@ vi.mock("@/hooks/useEvidenceRecord", () => ({ useEvidenceRecord: vi.fn() }));
 
 import { useEvidenceRecord } from "@/hooks/useEvidenceRecord";
 import * as hooks from "@/hooks/useScenarioProjection";
+import { evidenceHighlights } from "@/test/evidenceHighlights";
 import { ScenarioDataView } from "./ScenarioDataView";
 
 const state = { data: undefined, isError: false, isPending: false, refetch: vi.fn() };
@@ -38,12 +39,39 @@ it("forces the cited group and composes the resolved target above its grid", asy
     data: { record_id: "d1", family: "outbound", task_id: "t1", area_id: null, start_minute: 0, end_minute: 30, amount: 1, unit: "volume" },
     isSuccess: true,
   } as never);
-  renderView("/data?group=demand&record=d1&version=11111111-1111-4111-8111-111111111111&field=amount");
+  const { container } = renderView("/data?group=demand&record=d1&version=11111111-1111-4111-8111-111111111111&field=amount");
 
   expect(screen.getByRole("tab", { name: "Demand" })).toHaveAttribute("aria-selected", "true");
-  const target = screen.getByRole("region", { name: /Evidence target: demand d1, amount/ });
+  const target = screen.getByRole("region", { name: /Evidence target: Demand d1, amount/ });
   await waitFor(() => expect(target).toHaveFocus());
   expect(target.compareDocumentPosition(screen.getByRole("tabpanel", { name: "Demand" }))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  // Decision 2's corollary, asserted where the panel and the grid actually
+  // coexist — a per-container count inside the panel's own test cannot see a
+  // second highlight rendered by the grid.
+  expect(evidenceHighlights(container)).toHaveLength(1);
+});
+
+it("keeps the workspace scenario and selected version when the citation names another version", async () => {
+  vi.mocked(useEvidenceRecord).mockReturnValue({
+    ...state, data: undefined, isError: true, isSuccess: false,
+    error: { code: "evidence_version_mismatch", status: 404 },
+  } as never);
+  render(
+    <MemoryRouter initialEntries={["/data?group=demand&record=d1&version=11111111-1111-4111-8111-111111111111"]}>
+      <ScenarioDataView scenarioId="scenario-a" selectedVersion="22222222-2222-4222-8222-222222222222" />
+      <Location />
+    </MemoryRouter>,
+  );
+
+  // Task 5: a locator whose version differs from the workspace context renders
+  // the mismatch WITHOUT retargeting the surface. The previous assertion drove
+  // the panel alone, where nothing could have changed a workspace.
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("Version mismatch");
+  expect(alert).toHaveTextContent("22222222-2222-4222-8222-222222222222");
+  expect(screen.getByTestId("location")).toHaveTextContent("version=11111111-1111-4111-8111-111111111111");
+  expect(screen.getByRole("tab", { name: "Demand" })).toHaveAttribute("aria-selected", "true");
+  expect(hooks.useScenarioOverview).not.toHaveBeenCalled();
 });
 
 it("renders the seven groups in fixed order and defaults to Overview", () => {

@@ -42,6 +42,9 @@
 
 generated: 2026-07-24
 last_updated: 2026-08-15
+# (2026-08-15: story 2-8 code-reviewed → 4 decisions resolved, 30 patches applied,
+#  2 items deferred to the ledger. Returned to in-progress: the remediation
+#  invalidated the Gate A evidence Task 8 requires, so a re-run is owed before done.)
 # (2026-08-11: story 2-4 created → ready-for-dev → implemented → review → done;
 #  story 2-5 created → ready-for-dev → done; story 2-6 created → ready-for-dev → done;
 #  2026-08-12: story 2-7 created → ready-for-dev → done;
@@ -980,7 +983,7 @@ development_status:
   2-5-inspect-scenario-facts-through-a-governed-capability: done
   2-6-add-and-remove-a-governed-capability-module: done
   2-7-ground-schedule-claims-in-exact-evidence: done
-  2-8-jump-to-evidence-and-return-to-the-claim: review
+  2-8-jump-to-evidence-and-return-to-the-claim: in-progress
   2-9-clarify-refuse-and-fail-safely: backlog
   epic-2-retrospective: optional
 

@@ -4,7 +4,7 @@ baseline_commit: fa18cf1f5e3e74c87fef4578a8867c4a0a9e11a0
 
 # Story 2.8: Jump to Evidence and Return to the Claim
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -457,6 +457,85 @@ Scenario Data must not import from the chat feature.
         `evidence/story-2.2/evaluation-harness-demonstration.json`.
   - [x] **No new golden cases.** NFR28's floor is per *capability*; this story adds no capability and
         no evaluator. `epics.md:1527` — never pad the dataset.
+
+---
+
+### Review Findings
+
+Code review 2026-08-15 (`fa18cf1..c4482a9`). Three parallel layers: Blind Hunter
+(adversarial, spec-blind), Edge Case Hunter (path enumeration), Acceptance Auditor
+(spec conformance). All four zero-line-diff fences verified clean; Decisions 1, 4, 5, 6
+and traps 2, 3, 5, 6, 7, 9, 10, 11 verified honoured.
+
+#### Decisions resolved (2026-08-15, with Minh)
+
+1. **AC3's accessibility proof is not bound to Gate A.** `src/test/evidence-accessibility.test.tsx` runs in Vitest but is absent from the hand-declared `test_files` list of the `accessibility_component_layer` check (`backend/scripts/gate_a_checks.py:373-374`), so Gate A cannot see it — a `GateACheck` only ingests files it declares. CI still catches regressions; the NFR29 binding AC3 invokes does not. **Resolved: leave the binding as-is and record it** (registering the file would breach the zero-line `backend/` fence for a registry line). The separate gap — no return-focus case in that file — became a patch.
+2. **The stale panel cannot satisfy both halves of Task 7.** Task 7 mandates `InlineAlert` *and* mandates reusing `ScenarioWorkspace.tsx:118-137` (`role="status"` on the message only, control outside). These conflict: `Alert` hard-codes `role="alert"` (`ui/alert.tsx:29`), so `descriptionRole="status"` nests a live region in an assertive one, which axe cannot detect. Review also found a defect neither the story nor the layers framed: the stale branch `return`s early and **discards `query.data` it already holds**, so the cited record vanishes on a failed background refetch. **Resolved: adopt the `ScenarioWorkspace` pattern**, keep rendering the record beneath the banner, and delete the `descriptionRole` prop.
+3. **Gate A's Playwright figure is not reproducible.** The bespoke reporter at `_bmad-output/test-artifacts/gate-a/streaming-junit-reporter.mjs` sits in a `.gitignore`d directory and is untracked; `playwright.config.ts:14` still declares `reporter: "list"`. The measurement itself is sound — `failures` is computed per case via `test.outcome()`, all three sha256 digests match, and the commit ordering follows `EVIDENCE-CONVENTION.md` — but nobody else can re-derive the XML. **Resolved: commit the reporter byte-identical** so the existing measurement becomes reproducible without a re-run. Its missing `onEnd` finalisation (a truncated run is indistinguishable from a complete one) was recorded rather than fixed.
+4. **The AR15 model-generated-URL guard proves a naming convention, not the invariant.** `evidenceNavigationBoundaries.test.ts` walks the AST correctly and carries sound anti-vacuity checks, but its assertion is a denylist of identifier spellings, so `navigate(claim.narrative)`, `navigate(seg.text)`, and — most simply — `const t = segment.text; navigate(t)` all pass. **Resolved: invert to an allowlist of shapes** — a `navigate()` target must be a template literal whose every interpolation is an approved helper call or an approved root identifier. Fails closed, so each new navigation source requires a deliberate human addition.
+
+#### Patches — high
+
+- [x] [Review][Patch] Any unclassified resolve failure renders nothing at all — no panel, no message, no way back [frontend/src/features/evidence/EvidenceTargetPanel.tsx:168]
+- [x] [Review][Patch] The stale branch is tested before the coded branches, so a hard `evidence_not_found` on a refetch shows "Stale — Refresh" while the timeline simultaneously marks the claim "Evidence unavailable" [frontend/src/features/evidence/EvidenceTargetPanel.tsx:120]
+- [x] [Review][Patch] **(Decision 2)** The stale branch `return`s early and discards `query.data` it already holds, so the cited record disappears on a failed background refetch. Rework to the `ScenarioWorkspace.tsx:118-137` pattern: banner above (`role="status"` on the message only, control outside), record still rendered beneath, and delete the `descriptionRole` prop from `InlineAlert`. Subsumes the "stale has no Return to claim" and "new primitive prop is untested" findings [frontend/src/features/evidence/EvidenceTargetPanel.tsx:120]
+
+#### Patches — medium
+
+- [x] [Review][Patch] **(Decision 1)** Add the missing return-focus case — AC3's second half is currently proven only in `ChatView.test.tsx` (where two assertions are unfalsifiable) and Playwright [frontend/src/test/evidence-accessibility.test.tsx]
+- [x] [Review][Patch] **(Decision 3)** Commit `streaming-junit-reporter.mjs` byte-identical to `frontend/e2e/support/`, reference it from `playwright.config.ts`, and point the Debug Log at it, so the existing Gate A Playwright XML becomes reproducible without a re-measure [frontend/playwright.config.ts:14]
+- [x] [Review][Patch] **(Decision 4)** Invert the AR15 guard from a denylist of identifier spellings to an allowlist of shapes: a `navigate()` target must be a template literal whose every interpolation is an approved helper call (`toSearchParams`, `encodeURIComponent`) or an approved root identifier; same rule for `href`/`to`/`src`. Keep the anti-vacuity checks [frontend/src/test/evidenceNavigationBoundaries.test.ts:31]
+- [x] [Review][Patch] `markEvidenceUnavailable` has no inverse, so a successful Retry leaves the false "Evidence unavailable" label for the session [frontend/src/features/evidence/availability.ts:7]
+- [x] [Review][Patch] `consumeOrigin()` deletes the restore token before the target is known to exist — including on the `conversationId !== selectedId` path, where the check happens after removal [frontend/src/features/chat/ChatView.tsx:70]
+- [x] [Review][Patch] The Return button navigates without `{ state }`, making sessionStorage the sole channel for the return leg; with storage disabled, focus restoration silently dies [frontend/src/features/evidence/EvidenceTargetPanel.tsx:97]
+- [x] [Review][Patch] `scenarioDataBoundaries.test.ts` does not sweep `features/evidence/`, which is now composed into the Scenario Data surface and is where the new button tree lives [frontend/src/test/scenarioDataBoundaries.test.ts:5]
+- [x] [Review][Patch] The "does not resend or regenerate" assertions mock `useSendMessage` wholesale, then assert the mocked `sendMessage`/`executeTurn` were not called — unfalsifiable [frontend/src/features/chat/ChatView.test.tsx:170]
+- [x] [Review][Patch] The "restores exactly once" assertion is vacuous: navigating to the identical URL changes no effect dependency, so the effect never re-runs [frontend/src/features/chat/ChatView.test.tsx:173]
+- [x] [Review][Patch] The focus-once key omits `field`/`start`/`end`, so a same-record re-target updates the accessible name without moving focus [frontend/src/features/evidence/EvidenceTargetPanel.tsx:82]
+- [x] [Review][Patch] `?start=&end=` coerces to a fabricated `0–0 minutes` window; `start > end` and `start` without `end` are accepted unvalidated [frontend/src/features/evidence/locator.ts:49]
+- [x] [Review][Patch] The golden field guard red-fails on a legitimately field-less ref — `EvidenceRefV1.field` is optional and `evaluators.py:112` encodes it as `""` [frontend/src/features/evidence/locator.test.ts:34]
+- [x] [Review][Patch] Task 5's required "does not change the workspace scenario or version" test renders the panel in a bare `MemoryRouter` with no workspace, so the "does not change" half is unasserted [frontend/src/features/evidence/EvidenceTargetPanel.test.tsx]
+- [x] [Review][Patch] The module-level `Set` is read during render with no subscription — non-reactive, and a concurrent-render hazard under `StrictMode` [frontend/src/features/chat/ActivityTimeline.tsx:118]
+- [x] [Review][Patch] Focus is dropped to `<body>` when the highlight unmounts on a background refetch failure; nothing moves focus to the replacing alert [frontend/src/features/evidence/EvidenceTargetPanel.tsx:87]
+- [x] [Review][Patch] "Return to claim" can land on a conversation outside the capped list; `selectedId` collapses to `""` and the origin lingers in sessionStorage to hijack a later visit [frontend/src/features/chat/ChatView.tsx:64]
+
+#### Patches — low
+
+- [x] [Review][Patch] The `EvidenceLink` union still permits `href` **and** `onActivate` together, which double-fires; only the neither-prop case was closed [frontend/src/components/primitives/EvidenceLink.tsx:12]
+- [x] [Review][Patch] A malformed `start`/`end` voids the entire target, so a resolvable citation vanishes with no message [frontend/src/features/evidence/locator.ts:65]
+- [x] [Review][Patch] `end_minute` is filtered out unconditionally, so a record with a non-numeric `start_minute` never shows its end value [frontend/src/features/evidence/EvidenceTargetPanel.tsx:46]
+- [x] [Review][Patch] Decision 2's corollary is asserted per-container; the one render where panel and grid coexist does not assert the highlight count [frontend/src/features/scenario-data/ScenarioDataView.test.tsx]
+- [x] [Review][Patch] The highlight-count assertions use `[class="…"]` exact-match against a `cn()`-composed class list — currently passing, but degrades silently to "zero found" [frontend/src/features/evidence/EvidenceTargetPanel.test.tsx:59]
+- [x] [Review][Patch] The golden alignment test has no non-zero guard, so emptying the goldens turns it into a green no-op [frontend/src/features/evidence/locator.test.ts:34]
+- [x] [Review][Patch] `navigate` is optional on `ActivityTimeline`, so activation without it writes an origin to sessionStorage and never navigates [frontend/src/features/chat/ActivityTimeline.tsx:101]
+- [x] [Review][Patch] Two refs on the same group/record/field collide on the React key; `originElementId` distinguishes them but the key does not [frontend/src/features/chat/ActivityTimeline.tsx:109]
+- [x] [Review][Patch] The machine slug is rendered as the heading and accessible name ("constraints-and-objectives") where the adjacent tab reads "Constraints and objectives" [frontend/src/features/evidence/EvidenceTargetPanel.tsx:85]
+- [x] [Review][Patch] Unchecked `useOutletContext` destructure, `target!` non-null assertion, and a `Record<string, unknown>` cast that discards the union `resolve.ts` was created to establish [frontend/src/routes/ScenarioData.tsx:7]
+- [x] [Review][Patch] `ChatView.tsx` changed beyond Task 8 fence 4's stated allowance (it gained `useNavigate` and threads `navigate` into the timeline — jump wiring, not restoration); the deviation is defensible but was not recorded [frontend/src/features/chat/ChatView.tsx:56]
+
+#### Deferred
+
+- [x] [Review][Defer] AC3's accessibility proof is not bound to Gate A's NFR29 registry [frontend/src/test/evidence-accessibility.test.tsx] — deferred: portfolio MVP scope. AC3 is still protected by CI; binding it into the Gate A registry is not where AI-engineering depth is judged, and is not worth breaching the zero-line `backend/` fence.
+- [x] [Review][Defer] The streaming JUnit reporter has no `onEnd` finalisation and hard-codes `errors="0"`, so a truncated run is indistinguishable from a complete one [frontend/e2e/support/streaming-junit-reporter.mjs] — deferred: the current measurement is corroborated by an independent `list`-reporter run and becomes reproducible once the reporter is committed; truncation detection protects future measurements and is not owed by this story.
+
+#### Dismissed (recorded so they are not re-raised)
+
+- Cross-checking the resolved record against `target.field` — Task 4 guard #2 deliberately settled this as "degrade to visible and stated"; the panel does name the field regardless of column visibility.
+- A second browser Back not restoring focus — read-once consumption is mandated by Decision 3 precisely so an unrelated later Chat visit cannot steal focus.
+- The origin capturing `item.conversation_id` rather than the URL's `?conversation=` — equal by construction, and the persisted source is more aligned with Decision 3 than the checked box's wording.
+- Two suspicions the layers raised and then killed themselves: tab-switching does **not** retarget the panel at the wrong group (`useGroupControls.changeGroup` replaces the whole query string, dropping `record`/`version`), and the `encodeURIComponent` round-trip in the Return handler is correct.
+
+#### Remediation applied (2026-08-15)
+
+All 30 patches applied. Verified after remediation:
+
+- **Task 8 fence 4 — deviation recorded, as the fence itself requires.** `ChatView.tsx` changed beyond the focus-restoration effect: it also gained `useNavigate()`/`useLocation()` and threads `navigate` into `<ActivityTimeline>`. That is Task 5 jump wiring, not restoration. It is unavoidable given `ActivityTimeline` is a pure component that must not call router hooks itself, but the fence said to keep `ChatView.tsx` to the restoration effect, so the deviation is stated here rather than left implicit.
+- **The other three fences still hold at zero lines**: `backend/`, `frontend/openapi.json` + `src/api/schema.d.ts`, and `features/scenario-data/groups/**` — re-verified with `git diff --stat HEAD` after every patch. `Composer.tsx` and `ConversationList.tsx` remain untouched.
+- **Two new files**: `frontend/e2e/support/streaming-junit-reporter.mjs` (committed byte-identical to the tool that produced the Gate A XML) and `frontend/src/test/evidenceHighlights.ts` (the class-token-based highlight query that replaces the brittle `[class="…"]` selector).
+- **`InlineAlert` returned to its pre-story shape** — the `descriptionRole` prop was removed rather than tested, because the stale state no longer uses `InlineAlert` at all.
+- **Post-remediation baselines**: frontend **63 files / 378 tests** (was 63 / 370), `tsc -b` clean, oxlint clean apart from the three pre-existing Fast Refresh warnings, Playwright **48 passed** in Chromium and Edge — and this run exited cleanly under the ordinary `list` reporter.
+
+> **Gate A evidence is now stale and is NOT refreshed by this review.** `evidence/story-1.11/gate-a-readiness-report.json` records the pre-remediation measurement (`git_commit: 660d1c2…`, frontend 370 tests). Decision 3 concluded no re-measure was owed, but that was decided before these patches existed. Per `docs/EVIDENCE-CONVENTION.md` the remediation must be committed first, then Gate A re-run on a clean tree, then the refreshed evidence committed separately (the two-commit dance in `deferred-work.md:107`). Do not hand-edit the report.
 
 ---
 

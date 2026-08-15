@@ -97,7 +97,7 @@ function Harness({ conversationId = CONVERSATION }: { conversationId?: string })
   return (
     <>
       {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
-      <ActivityTimeline items={stream.items} />
+      <ActivityTimeline navigate={vi.fn()} items={stream.items} />
       {stream.updatesAreDelayed ? (
         <p role="status">
           Live updates are unavailable. This conversation is refreshing on a delay.
@@ -386,7 +386,7 @@ describe("useConversationStream", () => {
       const stream = useConversationStream(CONVERSATION, {
         eventSourceConstructor: null,
       });
-      return <ActivityTimeline items={stream.items} />;
+      return <ActivityTimeline navigate={vi.fn()} items={stream.items} />;
     }
 
     render(<Bare />);

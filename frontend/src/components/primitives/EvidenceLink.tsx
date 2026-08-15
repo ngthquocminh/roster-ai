@@ -9,8 +9,11 @@ type EvidenceLinkBaseProps = Readonly<{
   className?: string;
 }>;
 
+// Exactly one activation mechanism, enforced at compile time in BOTH directions.
+// Neither prop leaves an inert focusable control; both props attach a handler to
+// a real anchor, so activating it runs the handler AND performs the navigation.
 type EvidenceLinkProps = EvidenceLinkBaseProps & (
-  | Readonly<{ href: string; onActivate?: () => void }>
+  | Readonly<{ href: string; onActivate?: never }>
   | Readonly<{ href?: never; onActivate: () => void }>
 );
 

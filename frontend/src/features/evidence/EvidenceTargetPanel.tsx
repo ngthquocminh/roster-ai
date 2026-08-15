@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 
 import { EvidenceHighlight } from "@/components/primitives/EvidenceHighlight";
@@ -10,9 +10,9 @@ import { useEvidenceRecord } from "@/hooks/useEvidenceRecord";
 import { formatMinuteWindow } from "@/lib/formatShiftWindow";
 import { getErrorCode } from "@/lib/errors";
 import { formatTimestamp } from "@/lib/formatTimestamp";
-import type { EvidenceTarget } from "./locator";
+import { EVIDENCE_GROUP_LABEL, type EvidenceTarget } from "./locator";
 import { rememberOrigin, type EvidenceOrigin } from "./origin";
-import { markEvidenceUnavailable } from "./availability";
+import { markEvidenceUnavailable, unmarkEvidenceUnavailable } from "./availability";
 
 function fieldLabel(key: string): string {
   return key.split("_").map((part, index) => {
@@ -42,24 +42,33 @@ function targetDetail(target: EvidenceTarget): string | undefined {
   return target.field ?? range;
 }
 
-function RecordFields({ record }: Readonly<{ record: Record<string, unknown> }>) {
-  const entries = Object.entries(record).filter(([key]) => key !== "end_minute");
+function RecordFields({ record }: Readonly<{ record: object }>) {
+  const entries = Object.entries(record);
+  const start = entries.find(([key]) => key === "start_minute")?.[1];
+  const end = entries.find(([key]) => key === "end_minute")?.[1];
+  // Only collapse the pair into one "Window" row when BOTH ends are numbers.
+  // Filtering `end_minute` unconditionally used to delete a present boundary
+  // value whenever `start_minute` was null — a silent omission on the one
+  // surface whose contract is "show the exact cited record, substitute nothing".
+  const hasWindow = typeof start === "number" && typeof end === "number";
   return (
     <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {entries.map(([key, value]) => {
-        const isWindow = key === "start_minute" && typeof value === "number" && typeof record.end_minute === "number";
-        const isIdentifier = key.endsWith("_id") && typeof value === "string";
-        return (
-          <div className="min-w-0" key={key}>
-            <dt className="text-xs text-muted-foreground">{isWindow ? "Window" : fieldLabel(key)}</dt>
-            <dd className="mt-1 break-words text-sm">
-              {isWindow ? formatMinuteWindow(value, record.end_minute as number) : isIdentifier ? (
-                <IdentifierCopyButton identifierType={fieldLabel(key)} value={value} />
-              ) : displayValue(value)}
-            </dd>
-          </div>
-        );
-      })}
+      {entries
+        .filter(([key]) => !(hasWindow && key === "end_minute"))
+        .map(([key, value]) => {
+          const isWindow = hasWindow && key === "start_minute";
+          const isIdentifier = key.endsWith("_id") && typeof value === "string";
+          return (
+            <div className="min-w-0" key={key}>
+              <dt className="text-xs text-muted-foreground">{isWindow ? "Window" : fieldLabel(key)}</dt>
+              <dd className="mt-1 break-words text-sm">
+                {isWindow ? formatMinuteWindow(start as number, end as number) : isIdentifier ? (
+                  <IdentifierCopyButton identifierType={fieldLabel(key)} value={value} />
+                ) : displayValue(value)}
+              </dd>
+            </div>
+          );
+        })}
     </dl>
   );
 }
@@ -77,29 +86,60 @@ export function EvidenceTargetPanel({
 }>) {
   const navigate = useNavigate();
   const query = useEvidenceRecord(scenarioId, target);
-  const highlightRef = useRef<HTMLDivElement>(null);
-  const focusedTarget = useRef<string | null>(null);
-  const targetKey = `${scenarioId}:${target.group}:${target.record}:${target.version}`;
+  const regionRef = useRef<HTMLDivElement>(null);
+  const focusedState = useRef<string | null>(null);
   const errorCode = getErrorCode(query.error);
   const detail = targetDetail(target);
-  const accessibleName = `Evidence target: ${target.group} ${target.record}${detail ? `, ${detail}` : ""}, fixture ${target.version}`;
+  const groupLabel = EVIDENCE_GROUP_LABEL[target.group];
+  const accessibleName = `Evidence target: ${groupLabel} ${target.record}${detail ? `, ${detail}` : ""}, cited version ${target.version}`;
 
-  useEffect(() => {
-    if (!query.isSuccess || !query.data || focusedTarget.current === targetKey) return;
-    focusedTarget.current = targetKey;
-    highlightRef.current?.focus();
-  }, [query.data, query.isSuccess, targetKey]);
+  // The key carries every part of the locator the region ANNOUNCES. Keying on
+  // group/record/version alone meant a re-target that only changed the field or
+  // window updated the accessible name without moving focus, so the announced
+  // target and the focused target diverged.
+  const targetKey = `${scenarioId}:${target.group}:${target.record}:${target.version}:${target.field ?? ""}:${target.start ?? ""}:${target.end ?? ""}`;
+  const settledState = query.isPending
+    ? null
+    : query.isError && !query.data
+      ? `error:${errorCode ?? "unclassified"}`
+      : query.isError
+        ? "stale"
+        : "record";
+  const focusKey = settledState ? `${targetKey}|${settledState}` : null;
 
+  // EXPERIENCE.md:137 — focus lands AFTER the row/window loads, never on an
+  // empty box. ScenarioWorkspace.tsx:26-30 documents why a second effect firing
+  // here interrupts a screen reader mid-announcement. The region ref is shared
+  // by the record and by every terminal exception state, so when an error
+  // replaces the highlight the focus follows the replacement instead of
+  // collapsing to <body>.
   useEffect(() => {
-    if (origin && errorCode === "evidence_not_found") markEvidenceUnavailable(origin);
-  }, [errorCode, origin]);
+    if (!focusKey || focusedState.current === focusKey) return;
+    const node = regionRef.current;
+    if (!node) return;
+    focusedState.current = focusKey;
+    node.focus();
+  }, [focusKey]);
+
+  // Derived at render time and never written back (Decision 6). The mark is
+  // reversible so a Retry that resolves does not leave the timeline asserting
+  // the opposite of this panel.
+  useEffect(() => {
+    if (!origin) return;
+    if (query.isError && errorCode === "evidence_not_found") markEvidenceUnavailable(origin);
+    else if (query.isSuccess) unmarkEvidenceUnavailable(origin);
+  }, [errorCode, origin, query.isError, query.isSuccess]);
 
   const returnControl = origin ? (
     <Button
       className="min-h-11"
       onClick={() => {
+        // Written to storage AND passed as history state: the Chat entry the
+        // planner lands on may predate the jump, and storage can be disabled.
         rememberOrigin(origin);
-        navigate(`/scenarios/${scenarioId}?conversation=${encodeURIComponent(origin.conversationId)}`);
+        navigate(`/scenarios/${scenarioId}?conversation=${encodeURIComponent(origin.conversationId)}`, {
+          state: { evidenceOrigin: origin },
+        });
       }}
       type="button"
       variant="outline"
@@ -107,6 +147,12 @@ export function EvidenceTargetPanel({
       Return to claim
     </Button>
   ) : null;
+
+  const retryControl = (
+    <Button className="min-h-11" onClick={() => { void query.refetch(); }} type="button" variant="outline">
+      Retry
+    </Button>
+  );
 
   if (query.isPending) {
     return (
@@ -117,63 +163,93 @@ export function EvidenceTargetPanel({
     );
   }
 
-  if (query.isError && query.data) {
-    return (
-      <InlineAlert
-        action={<Button className="min-h-11" onClick={() => { void query.refetch(); }} type="button" variant="outline">Refresh</Button>}
-        className="mt-4"
-        description={`Stale — last verified at ${formatTimestamp(new Date(query.dataUpdatedAt).toISOString())}`}
-        descriptionRole="status"
-        title="Stale evidence"
-      />
-    );
-  }
-
+  // Decision 5: branch on the RFC 7807 code, never the transport status — and
+  // branch on it BEFORE the stale check. A cached record plus a coded failure
+  // used to render "Stale — Refresh" (an action that can never succeed) while
+  // the timeline simultaneously marked the same claim "Evidence unavailable".
   if (query.isError && errorCode === "evidence_version_mismatch") {
     return (
-      <InlineAlert
-        action={returnControl}
-        className="mt-4"
-        description={`The cited version ${target.version} does not match the selected version ${selectedVersion ?? "unknown"}. No current or similar record was substituted.`}
-        title="Version mismatch"
-        variant="destructive"
-      />
+      <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
+        <InlineAlert
+          action={returnControl}
+          description={`The cited version ${target.version} does not match the selected version ${selectedVersion ?? "unknown"}. No current or similar record was substituted.`}
+          title="Version mismatch"
+          variant="destructive"
+        />
+      </div>
     );
   }
 
   if (query.isError && errorCode === "evidence_not_found") {
     return (
-      <InlineAlert
-        action={<div className="flex flex-wrap gap-3"><Button className="min-h-11" onClick={() => { void query.refetch(); }} type="button" variant="outline">Retry</Button>{returnControl}</div>}
-        className="mt-4"
-        description={`The locator ${target.group} ${target.record}${detail ? `, ${detail}` : ""} could not resolve in the exact cited version ${target.version}. No current or similar record was substituted.`}
-        title="Missing evidence"
-        variant="destructive"
-      />
+      <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
+        <InlineAlert
+          action={<div className="flex flex-wrap gap-3">{retryControl}{returnControl}</div>}
+          description={`The locator ${groupLabel} ${target.record}${detail ? `, ${detail}` : ""} could not resolve in the exact cited version ${target.version}. No current or similar record was substituted.`}
+          title="Missing evidence"
+          variant="destructive"
+        />
+      </div>
     );
   }
 
+  // Copy is byte-identical whether the record exists or not: it states no value
+  // and makes no claim about existence (AC2's non-disclosure clause).
   if (query.isError && (errorCode === "resource_not_found" || errorCode === "request_forbidden")) {
     return (
-      <InlineAlert
-        action={returnControl}
-        className="mt-4"
-        description="Evidence is not available to this session."
-        title="Unauthorized"
-        variant="destructive"
-      />
+      <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
+        <InlineAlert
+          action={returnControl}
+          description="Evidence is not available to this session."
+          title="Unauthorized"
+          variant="destructive"
+        />
+      </div>
     );
   }
 
-  if (!query.data) return null;
+  const record = query.data;
 
-  return (
-    <div className="mt-4">
-    <EvidenceHighlight aria-label={accessibleName} ref={highlightRef} role="region">
+  // Stale: an uncoded failure (transport, 5xx) arrived while a previously
+  // resolved record is still cached. ScenarioWorkspace.tsx:118-137 is the
+  // approved pattern — the message is the only live region, the control sits
+  // outside it, and THE RECORD KEEPS RENDERING. Replacing it with a banner
+  // discarded evidence the planner already had.
+  const staleBanner = query.isError && record ? (
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">
+      <span className="text-sm" role="status">
+        Stale — last verified at {formatTimestamp(new Date(query.dataUpdatedAt).toISOString())}
+      </span>
+      {/* Retry only: the record below is still rendered and carries its own
+          Return to claim, so repeating it here would duplicate the control. */}
+      {retryControl}
+    </div>
+  ) : null;
+
+  // Every remaining failure is terminal (`retry: false`), so it must still say
+  // something. Returning null left the planner on a force-switched tab with no
+  // panel, no message and no way back — indistinguishable from a broken link.
+  if (query.isError && !record) {
+    return (
+      <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
+        <InlineAlert
+          action={<div className="flex flex-wrap gap-3">{retryControl}{returnControl}</div>}
+          description={`The cited evidence could not be loaded${errorCode ? ` (${errorCode})` : ""}. No current or similar record was substituted.`}
+          title="Evidence unavailable"
+          variant="destructive"
+        />
+      </div>
+    );
+  }
+
+  if (!record) return null;
+
+  const highlight: ReactNode = (
+    <EvidenceHighlight aria-label={accessibleName} ref={regionRef} role="region">
       <p className="text-xs font-medium uppercase tracking-wide">Cited evidence</p>
       <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold">{target.group}</h3>
+          <h3 className="font-semibold">{groupLabel}</h3>
           <dl className="mt-2 grid gap-x-6 gap-y-2 sm:grid-cols-2">
             <div><dt className="text-xs text-muted-foreground">Targeted field</dt><dd className="text-sm">{detail ?? "Whole record"}</dd></div>
             <div><dt className="text-xs text-muted-foreground">Cited version</dt><dd className="break-all font-mono text-xs">{target.version}</dd></div>
@@ -181,8 +257,14 @@ export function EvidenceTargetPanel({
         </div>
         {returnControl}
       </div>
-      <RecordFields record={query.data as Record<string, unknown>} />
+      <RecordFields record={record} />
     </EvidenceHighlight>
+  );
+
+  return (
+    <div className="mt-4">
+      {staleBanner}
+      {highlight}
     </div>
   );
 }

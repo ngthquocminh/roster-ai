@@ -108,7 +108,9 @@ test("jumps to exact evidence and returns to the invoking link with keyboard onl
   await expectKeyboardFocus(evidence);
   await page.keyboard.press("Enter");
 
-  const target = page.getByRole("region", { name: new RegExp(`Evidence target: demand ${EVIDENCE_RECORD_ID}`) });
+  // The region names the group with its planner-facing label ("Demand"), the
+  // same string the tab uses — not the URL slug.
+  const target = page.getByRole("region", { name: new RegExp(`Evidence target: Demand ${EVIDENCE_RECORD_ID}`) });
   await expectKeyboardFocus(target);
   await expect(page).toHaveURL(new RegExp(`/scenarios/${SCENARIO_ID}/data\\?`));
   expect(new URL(page.url()).searchParams.get("record")).toBe(EVIDENCE_RECORD_ID);

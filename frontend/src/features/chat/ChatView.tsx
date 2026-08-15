@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useEffect, useRef } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { createConversation } from "@/api/conversations";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
@@ -8,7 +8,7 @@ import { ReconnectBanner } from "@/components/primitives/ReconnectBanner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { conversationsKey, useConversations } from "@/hooks/useConversations";
-import { consumeOrigin, originElementId } from "@/features/evidence/origin";
+import { forgetOrigin, originElementId, peekOrigin, type EvidenceOrigin } from "@/features/evidence/origin";
 import { useConversationStream } from "@/hooks/useConversationStream";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
 import { useSendMessage } from "@/hooks/useSendMessage";
@@ -54,6 +54,7 @@ function ErrorState({ error, onRetry }: Readonly<{ error: unknown; onRetry: () =
 export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
   const context = useScenarioContext(scenarioId);
   const conversations = useConversations(scenarioId);
   // Selection lives in the URL, not component state: switching workspace tabs
@@ -67,12 +68,31 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const stream = useConversationStream(selectedId);
   const timeline = stream.timeline;
 
+  // One restoration path, two entry points (Return to claim and browser Back).
+  // History state survives Back/Forward but the Chat entry the planner lands on
+  // may predate the jump, so sessionStorage mirrors it; either channel can be
+  // the only one available (storage disabled, or a pre-jump history entry).
+  const stateOrigin = (location.state as { evidenceOrigin?: EvidenceOrigin } | null)?.evidenceOrigin;
+  const restored = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!selectedId || timeline.isPending) return;
-    const origin = consumeOrigin();
-    if (!origin || origin.conversationId !== selectedId) return;
-    document.getElementById(originElementId(origin))?.focus();
-  }, [selectedId, timeline.isPending, stream.items]);
+    if (!selectedId || timeline.isPending || timeline.isError) return;
+    const stored = peekOrigin();
+    const origin = stored?.conversationId === selectedId
+      ? stored
+      : stateOrigin?.conversationId === selectedId ? stateOrigin : null;
+    if (!origin) return;
+    const elementId = originElementId(origin);
+    if (restored.current === elementId) return;
+    const node = document.getElementById(elementId);
+    // Spend the token ONLY once the target is actually present. An errored,
+    // empty, or window-truncated timeline renders no Evidence link, and
+    // consuming there lost the restoration permanently with no retry.
+    if (!node) return;
+    if (stored === origin) forgetOrigin();
+    restored.current = elementId;
+    node.focus();
+  }, [selectedId, stateOrigin, timeline.isError, timeline.isPending, stream.items]);
 
   const select = (id: string) => {
     const next = new URLSearchParams(searchParams);
