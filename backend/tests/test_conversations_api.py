@@ -28,7 +28,14 @@ from api.deps import (
     get_projection_reader,
 )
 from api.main import app
-from application.contracts.activity import AgentResponseActivityV1, PlannerMessageActivityV1
+from application.contracts.activity import (
+    AgentResponseActivityV1,
+    ClarificationActivityV1,
+    PlannerMessageActivityV1,
+    TerminalOutcomeActivityV1,
+)
+from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
+from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.agent_runtime import AgentRunOutcomeV1
 from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1, GroundedResponseV1
 from application.contracts.persisted_event import PersistedEventV1
@@ -162,13 +169,35 @@ class _Repository:
             prompt="Check coverage",
         )
 
-    def finish_agent_run(self, _connection, *, claimed, status, response, request_id):
+    def finish_agent_run(self, _connection, *, claimed, status, payload, request_id):
         self.claimed_statuses.append(status)
         activity_id = uuid4()
+        common = dict(
+            activity_id=activity_id,
+            conversation_id=claimed.conversation_id,
+            conversation_resource_version=3,
+            scenario_id=claimed.scenario_id,
+            scenario_version_id=claimed.scenario_version_id,
+            occurred_at=_NOW,
+        )
+        if isinstance(payload, GroundedResponseV1):
+            activity = AgentResponseActivityV1(
+                activity_type="agent_response", response=payload, **common
+            )
+        elif isinstance(payload, ResolvedClarificationV1):
+            activity = ClarificationActivityV1(
+                activity_type="clarification", clarification=payload, **common
+            )
+        elif isinstance(payload, TerminalOutcomeV1):
+            activity = TerminalOutcomeActivityV1(
+                activity_type="terminal_outcome", outcome=payload, **common
+            )
+        else:
+            raise AssertionError(type(payload))
         event = PersistedEventV1(
             stream_id=claimed.conversation_id,
             sequence=Decimal(2),
-            event_type="agent_response",
+            event_type=activity.activity_type,
             occurred_at=_NOW,
             resource_version=3,
             request_id=request_id,
@@ -176,16 +205,7 @@ class _Repository:
             agent_run_id=claimed.agent_run_id,
             site_id=claimed.site_id,
             actor_id=claimed.actor_id,
-            payload=AgentResponseActivityV1(
-                activity_id=activity_id,
-                activity_type="agent_response",
-                conversation_id=claimed.conversation_id,
-                conversation_resource_version=3,
-                scenario_id=claimed.scenario_id,
-                scenario_version_id=claimed.scenario_version_id,
-                occurred_at=_NOW,
-                response=response,
-            ),
+            payload=activity,
         )
         return ExecutedAgentRunV1(event, 3, status)
 
@@ -199,6 +219,28 @@ class _Runtime:
             answer=GroundedAnswerV1(
                 segments=(GroundedProseSegmentV1(text="Coverage checked."),)
             ),
+        )
+
+
+class _ClarifyingRuntime:
+    name = "test-clarification"
+
+    def run_turn(self, _request):
+        return AgentRunOutcomeV1(
+            clarification=ClarificationV1(question="Which time window?")
+        )
+
+
+class _RefusingRuntime:
+    name = "test-refusal"
+
+    def run_turn(self, _request):
+        return AgentRunOutcomeV1(
+            refusal=RefusalV1(
+                reason="capability_unavailable",
+                detail="That capability is unavailable.",
+                next_step="Review Scenario Data.",
+            )
         )
 
 
@@ -383,6 +425,28 @@ def test_execute_turn_is_conversation_scoped_and_persists_terminal_response(
     assert repository.claimed_statuses == ["agent_completed"]
 
 
+@pytest.mark.parametrize(
+    ("runtime", "activity_type"),
+    [(_ClarifyingRuntime(), "clarification"), (_RefusingRuntime(), "terminal_outcome")],
+)
+def test_execute_turn_persists_each_new_visible_activity_type(
+    conversation_client, runtime, activity_type: str
+) -> None:
+    client, repository, settings = conversation_client
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **_kwargs: runtime
+    )
+
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["activity"]["activity_type"] == activity_type
+    assert response.json()["agent_run_status"] == "agent_completed"
+
+
 def test_execute_turn_foreign_conversation_is_non_disclosing_404(
     conversation_client,
 ) -> None:
@@ -459,6 +523,25 @@ def test_a_gate_failure_still_reaches_a_terminal_status(conversation_client) -> 
 
     assert response.status_code == 200
     assert repository.claimed_statuses == ["agent_failed"]
+
+
+def test_actual_exception_classes_map_to_stable_owned_failure_reasons() -> None:
+    from application.use_cases.execute_turn import failed_outcome_for_exception
+    from application.contracts.capability_manifest import IncompleteManifestError
+    from application.grounding.gate import UncitedNumericProseError
+    from application.ports.agent_runtime import AgentRuntimeError
+
+    cases = (
+        (AgentRuntimeError("agent runtime provider call failed"), "provider_error"),
+        (AgentRuntimeError("agent runtime produced unusable output"), "invalid_output"),
+        (UncitedNumericProseError("uncited"), "invalid_output"),
+        (IncompleteManifestError("missing feature policy"), "capability_error"),
+        (ValueError("invalid runtime model"), "invalid_output"),
+    )
+    for exception, expected in cases:
+        outcome = failed_outcome_for_exception(exception)
+        assert outcome.status == "failed"
+        assert outcome.failure_reason == expected
 
 
 @pytest.mark.parametrize("text", ["   ", "\t\n", "　"])

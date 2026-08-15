@@ -29,6 +29,7 @@ from typing import Literal
 
 from application.contracts.grounding import GroundedAnswerV1
 from application.contracts.grounding import GroundedResponseV1
+from application.contracts.agent_status import AgentRunStatusV1
 
 SCHEMA_VERSION = "1"
 
@@ -39,13 +40,6 @@ SCHEMA_VERSION = "1"
 # carries no deadline field, so wall-clock expiry and budget exhaustion arrive as
 # two different exception types and the adapter maps them by type, never by
 # string-matching an error message.
-AgentRunStatusV1 = Literal[
-    "completed",    # the model produced a final answer
-    "suspended",    # a tool needs approval; the run is resumable
-    "timed_out",    # the application's wall-clock deadline elapsed
-    "failed",       # see AgentFailureReasonV1
-]
-
 AgentFailureReasonV1 = Literal[
     "budget_exhausted",   # token / request / tool-call ceiling hit
     "provider_error",     # provider or transport failure
@@ -203,6 +197,11 @@ class AgentTurnRequestV1:
     approvals: tuple[AgentApprovalDecisionV1, ...] = ()
 
 
+# Imported only after AgentRunStatusV1 exists: dialogue.TerminalOutcomeV1 uses
+# that owned vocabulary, while this result carries the two model-side variants.
+from application.contracts.dialogue import ClarificationV1, RefusalV1, ResolvedClarificationV1
+
+
 @dataclass(frozen=True)
 class AgentRunOutcomeV1:
     """The single result type crossing back over the port.
@@ -216,7 +215,11 @@ class AgentRunOutcomeV1:
     failure_reason: AgentFailureReasonV1 | CapabilityFailureReasonV1 | None = None
     # Planner-visible final content. None unless status == "completed".
     output_text: str | None = None
-    # Two fields, deliberately, though Task 5 declared only `answer`. They sit
+    # These fields deliberately sit on opposite sides of the trust boundary.
+    # Model-side `answer`, `clarification`, and `refusal` are UNTRUSTED and set
+    # in `backend/agent/`. Resolved persisted forms are written by the use case.
+    #
+    # Two grounding fields exist, though Task 5 declared only `answer`. They sit
     # on opposite sides of the trust boundary and collapsing them would erase it:
     #
     #   `answer`            UNTRUSTED. The model's structured output exactly as
@@ -232,6 +235,9 @@ class AgentRunOutcomeV1:
     # is why it fell outside that task's wording rather than contradicting it.
     answer: GroundedAnswerV1 | None = None
     grounded_response: GroundedResponseV1 | None = None
+    clarification: ClarificationV1 | None = None
+    resolved_clarification: ResolvedClarificationV1 | None = None
+    refusal: RefusalV1 | None = None
     turn: AgentTurnV1 = field(default_factory=AgentTurnV1)
     summary: str | None = None
     approval: AgentApprovalPendingV1 | None = None

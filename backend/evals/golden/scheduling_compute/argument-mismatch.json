@@ -67,7 +67,7 @@
   ],
   "expected_evidence_refs": [],
   "expected_visible_state": "completed",
-  "expected_visible_text": "",
+  "expected_visible_text": "Wednesday outbound requirement Claim unavailable: missing_evidence",
   "expected_grounding_outcome": "argument_mismatch",
   "scenario_fixtures": [
     "eval-fixture:v1"

@@ -270,63 +270,63 @@ beside `application/grounding/` — AR26's structural seed). Frontend work stays
 
 ### Task 1 — Owned contracts for clarification, refusal, and terminal outcome (AC: 1, 2, 3)
 
-- [ ] New `backend/application/contracts/dialogue.py`. Every contract carries `schema_version` (the
+- [x] New `backend/application/contracts/dialogue.py`. Every contract carries `schema_version` (the
       spine's *Normative contract minimums*) and is a frozen dataclass, matching
       `contracts/grounding.py`'s shape exactly.
-  - [ ] `EntityCandidateProposalV1` — **UNTRUSTED** model output: `group` (the `EvidenceGroupV1`
+  - [x] `EntityCandidateProposalV1` — **UNTRUSTED** model output: `group` (the `EvidenceGroupV1`
         vocabulary, reused — do **not** define a second group vocabulary; Story 2.7's trap #2 was
         exactly two ad-hoc group translations), `record_id`, and nothing else. **No label field.**
-  - [ ] `EntityCandidateV1` — **TRUSTED**: `group`, `record_id`, application-resolved `label`, and
+  - [x] `EntityCandidateV1` — **TRUSTED**: `group`, `record_id`, application-resolved `label`, and
         the `scenario_version_id` it resolved against.
-  - [ ] `ClarificationV1` (model-facing) — `question: str`, `candidates: tuple[EntityCandidateProposalV1, ...]`.
-  - [ ] `ResolvedClarificationV1` (persisted) — `question`, `candidates: tuple[EntityCandidateV1, ...]`,
+  - [x] `ClarificationV1` (model-facing) — `question: str`, `candidates: tuple[EntityCandidateProposalV1, ...]`.
+  - [x] `ResolvedClarificationV1` (persisted) — `question`, `candidates: tuple[EntityCandidateV1, ...]`,
         `scenario_version_id`, `dropped_candidate_count: int`.
-  - [ ] `RefusalV1` (model-facing) — `reason: RefusalReasonV1` from a **closed** Literal, `detail: str`
+  - [x] `RefusalV1` (model-facing) — `reason: RefusalReasonV1` from a **closed** Literal, `detail: str`
         (bounded operational copy), `next_step: str | None`.
-  - [ ] `RefusalReasonV1 = Literal["unsupported_request", "capability_unavailable", "out_of_scope"]` —
+  - [x] `RefusalReasonV1 = Literal["unsupported_request", "capability_unavailable", "out_of_scope"]` —
         three, closed, and deliberately **not** including "unauthorized": an unauthorized capability
         is *absent*, so from the model's position it is indistinguishable from unavailable, and a
         model-selectable "unauthorized" label would leak an authority fact the model does not have
         (AD-3 non-disclosure). Application-side causes get their reason in Task 4's terminal
         vocabulary, not here.
-  - [ ] `TerminalOutcomeV1` (persisted) — `status: AgentRunStatusV1`, `reason: TerminalReasonV1`,
+  - [x] `TerminalOutcomeV1` (persisted) — `status: AgentRunStatusV1`, `reason: TerminalReasonV1`,
         `detail: str`, `next_step: str | None`.
-- [ ] Add `SCOPE_CONTROLS`-style declarations in `dialogue.py` recording Decision 2's
+- [x] Add `SCOPE_CONTROLS`-style declarations in `dialogue.py` recording Decision 2's
       eight-vs-nine reconciliation and Gap 1's reduction, in the exact
       `application/grounding/gate.py:23-62` form (`COVERS: … NOT COVERED: …`).
-- [ ] `AgentRunOutcomeV1` gains `clarification: ClarificationV1 | None` and `refusal: RefusalV1 | None`
+- [x] `AgentRunOutcomeV1` gains `clarification: ClarificationV1 | None` and `refusal: RefusalV1 | None`
       beside the existing `answer` / `grounded_response` pair, with the same trust-boundary comment
       the file already carries at lines 219-232: **model-side fields are UNTRUSTED; the use case
       writes the trusted resolved forms.** Do not reuse `answer` for either.
-- [ ] Tests: field order and closed vocabularies pinned the way `test_evidence_ref.py:66-78` pins
+- [x] Tests: field order and closed vocabularies pinned the way `test_evidence_ref.py:66-78` pins
       `EvidenceRefV1` (a closed vocabulary in a durable payload is the thing
       `deferred-work.md:194` records a breakage against); round-trip through
       `TypeAdapter(...).dump_python(mode="json")` and back.
 
 ### Task 2 — Three named model output variants (AC: 1, 2)
 
-- [ ] `agent/runtime.py`: replace the `output_type` construction with **named `ToolOutput`s** per
+- [x] `agent/runtime.py`: replace the `output_type` construction with **named `ToolOutput`s** per
       Decision 1. `ToolOutput` imports from `pydantic_ai.output`.
-  - [ ] `answer_type is None` keeps today's `[str, DeferredToolRequests]` **byte-identically** — ~15
+  - [x] `answer_type is None` keeps today's `[str, DeferredToolRequests]` **byte-identically** — ~15
         construction sites and every non-grounding golden case depend on it (Story 2.7 Decision 3
         established this and it still holds).
-  - [ ] `answer_type is not None` renders
+  - [x] `answer_type is not None` renders
         `[ToolOutput(answer_type, name="final_result"), ToolOutput(ClarificationV1, name="clarification"), ToolOutput(RefusalV1, name="refusal"), DeferredToolRequests]`.
-  - [ ] **Assert the tool names.** A test reading `agent._output_toolset._tool_defs` and asserting
+  - [x] **Assert the tool names.** A test reading `agent._output_toolset._tool_defs` and asserting
         exactly `{"final_result", "clarification", "refusal"}` — this is the only thing standing
         between the repo and Decision 1's silent rename. Assert `final_result` is present by that
         exact string.
-  - [ ] The `_reject_numeric_prose` output validator must apply to `GroundedAnswerV1` only. It walks
+  - [x] The `_reject_numeric_prose` output validator must apply to `GroundedAnswerV1` only. It walks
         `getattr(output, "segments", ())`, so it is already inert for the other two — but state that,
         and add a test driving a `RefusalV1` whose `detail` contains a numeral and asserting it is
         **not** rejected. A refusal saying "the 60-second budget was exhausted" is legitimate
         operational copy, not an uncited claim.
-- [ ] `run_turn`'s completed branch dispatches on the output type into `answer` / `clarification` /
+- [x] `run_turn`'s completed branch dispatches on the output type into `answer` / `clarification` /
       `refusal`. An output that is none of the three is `AgentRuntimeError`, not a silent `None`.
-- [ ] `_tool_results(turn, excluded_names=self._output_tool_names)` needs no change — the exclusion
+- [x] `_tool_results(turn, excluded_names=self._output_tool_names)` needs no change — the exclusion
       set is derived from the toolset, so it picks up all three automatically. **Assert that**, or
       a fourth variant added later will leak an output tool call into `tool_results`.
-- [ ] `evals/doubles.py`: `_to_model_response` must **select the output tool by name**, not by
+- [x] `evals/doubles.py`: `_to_model_response` must **select the output tool by name**, not by
       `info.output_tools[0]`. Add an optional `output_tool` field to `ScriptedModelTurn` (defaulting
       to `final_result`) and to `CASE_FIELDS`; raise `UnexpectedModelBehavior` when the named tool is
       absent from `info.output_tools` rather than falling back to index 0. Existing cases with
@@ -334,102 +334,102 @@ beside `application/grounding/` — AR26's structural seed). Frontend work stays
 
 ### Task 3 — Safe entity candidates, resolved by the application (AC: 1)
 
-- [ ] New `backend/application/clarification/resolve.py`, shaped like
+- [x] New `backend/application/clarification/resolve.py`, shaped like
       `application/grounding/gate.py` (a pure function over `AgentDepsV1` plus the turn's trusted
       results; **no** framework import, **no** repository access).
-  - [ ] `resolve_clarification(clarification, deps) -> ResolvedClarificationV1`.
-  - [ ] Reuse `application/grounding/evidence_groups.py`'s
+  - [x] `resolve_clarification(clarification, deps) -> ResolvedClarificationV1`.
+  - [x] Reuse `application/grounding/evidence_groups.py`'s
         `scenario_fact_group_for_evidence_group` and `gate.py:98-105`'s `_RESOLVER_BY_GROUP`
         mapping. **Do not write a second group→resolver map** — extract the existing one to a shared
         module if it must be imported from two places, and assert exhaustiveness in both directions
         the way Story 2.7's mapping does.
-  - [ ] A candidate whose `scenario_version_id` would differ from `deps.scenario_version_id`, or
+  - [x] A candidate whose `scenario_version_id` would differ from `deps.scenario_version_id`, or
         whose resolver returns anything other than `outcome == "resolved"`, is **dropped** and
         counted in `dropped_candidate_count`. **Never** resolved against the current version, never
         replaced with a nearby record (AR11; and Story 2.8's trap #2 — "retargeting on a miss reads
         as helpful and is invisible unless asserted").
-  - [ ] The `label` is derived from the resolved projection record, never from model output. Pick the
+  - [x] The `label` is derived from the resolved projection record, never from model output. Pick the
         field the corresponding Scenario Data column already renders so Chat and the grid agree
         (`workers` → `contact_id`, `work-areas-and-tasks` → `task_id`; see
         `frontend/src/features/scenario-data/columns.ts:20-37`).
-- [ ] `use_cases/execute_turn.py` calls it on the clarification branch, exactly where `ground_answer`
+- [x] `use_cases/execute_turn.py` calls it on the clarification branch, exactly where `ground_answer`
       is called on the answer branch — the trusted transform belongs to the **use case**, never to
       the adapter (`contracts/agent_runtime.py:219-232` states this rule for `grounded_response`).
-- [ ] Required assertions:
-  - [ ] A clarification whose candidates all resolve renders every one, with
+- [x] Required assertions:
+  - [x] A clarification whose candidates all resolve renders every one, with
         `dropped_candidate_count == 0`.
-  - [ ] A candidate naming a record that does not exist is dropped; **the resolver is called exactly
+  - [x] A candidate naming a record that does not exist is dropped; **the resolver is called exactly
         once, with the cited locator** — no second call against another record or version.
-  - [ ] A clarification with **zero** candidates is valid and produces a valid persisted payload.
-  - [ ] No `label` value anywhere in the persisted payload is byte-equal to any string the scripted
+  - [x] A clarification with **zero** candidates is valid and produces a valid persisted payload.
+  - [x] No `label` value anywhere in the persisted payload is byte-equal to any string the scripted
         model emitted — drive a case where the model proposes a *plausible but wrong* label-shaped
         string and assert it never appears.
 
 ### Task 4 — Terminal outcome mapping and the failure taxonomy (AC: 3)
 
-- [ ] `TerminalReasonV1` — a closed Literal covering exactly what the system can actually produce
+- [x] `TerminalReasonV1` — a closed Literal covering exactly what the system can actually produce
       today. Derive it from the code, not from imagination:
       `provider_error`, `invalid_output`, `budget_exhausted`, `deadline_exceeded`, `cancelled`,
       `capability_error`, `refused`, `approval_unsupported`. Each value must be reachable from a
       named branch — a reason nothing can emit is the "declared and entirely unimplemented" shape
       `deferred-work.md:7` records against `RunSource = "live"`.
-- [ ] `use_cases/execute_turn.py`:
-  - [ ] `terminal_status` gains the clarification and refusal branches. A clarification is
+- [x] `use_cases/execute_turn.py`:
+  - [x] `terminal_status` gains the clarification and refusal branches. A clarification is
         `agent_completed` (Decision 4). A refusal is `agent_completed` too — the turn completed; the
         answer was "no". **Neither is `agent_failed`**, and a test asserts that: collapsing them
         would erase the distinction AC2 and AC3 exist to keep.
-  - [ ] `suspended` per Decision 6: distinct reason `approval_unsupported`, never `agent_failed`.
+  - [x] `suspended` per Decision 6: distinct reason `approval_unsupported`, never `agent_failed`.
         **Re-annotate the false comment at `:52-54` in place**, restating Epic 4 (AD-10, Stories
         4.1–4.3) as the owner of approval resumption.
-  - [ ] A new `terminal_outcome(outcome) -> TerminalOutcomeV1 | None` returning the payload for
+  - [x] A new `terminal_outcome(outcome) -> TerminalOutcomeV1 | None` returning the payload for
         every non-`agent_completed` path, with **bounded operational copy** and a `next_step` where
         one genuinely exists. Copy is drawn from `EXPERIENCE.md`'s Voice and Tone table
         (`:60-73`) — literal outcomes, never "Something changed. Try again."
-- [ ] `api/routers/conversations.py`'s catch-all at `:255-265`:
-  - [ ] It currently collapses **every** exception into
+- [x] `api/routers/conversations.py`'s catch-all at `:255-265`:
+  - [x] It currently collapses **every** exception into
         `AgentRunOutcomeV1(status="failed", failure_reason="invalid_output")`. This story owns that
         taxonomy (the comment at `:257` says so). Map the causes it can actually distinguish —
         `AgentRuntimeError` from a provider call, `UncitedNumericProseError`, `IncompleteManifestError`
         from grant composition, `ValueError` from runtime-model construction — onto distinct
         `TerminalReasonV1` values. Anything genuinely unclassified stays `invalid_output`.
-  - [ ] **Reaching a terminal status still wins over surfacing a richer error.** The existing
+  - [x] **Reaching a terminal status still wins over surfacing a richer error.** The existing
         `logger.exception` before collapse stays. Do not let a mapping bug strand a claimed run —
         there is no reaper until Epic 3's lease (`deferred-work.md:176`).
-  - [ ] A test proving each mapped cause reaches its own reason, and that the accepted planner
+  - [x] A test proving each mapped cause reaches its own reason, and that the accepted planner
         message remains in the timeline in every one (AC3's "accepted conversation history remains
         durable").
 
 ### Task 5 — Persist and read the three new activity payloads (AC: 1, 2, 3)
 
-- [ ] `contracts/activity.py`: two new variants, `ClarificationActivityV1` and
+- [x] `contracts/activity.py`: two new variants, `ClarificationActivityV1` and
       `TerminalOutcomeActivityV1`, joining the union. **`ActivityTypeV1` gains nothing** — both names
       are already reserved in it (`:11-20`). `PlannerMessageActivityV1`'s and
       `AgentResponseActivityV1`'s serialized payloads must stay **byte-identical**.
-- [ ] `adapters/postgres/conversation.py`:
-  - [ ] `_payload_to_json` and `_activity_from_payload` (`:427`, `:453`) gain the two shapes. The
+- [x] `adapters/postgres/conversation.py`:
+  - [x] `_payload_to_json` and `_activity_from_payload` (`:427`, `:453`) gain the two shapes. The
         `activity_type not in (...)` guard at `:455` widens to four; everything else still raises
         `UnsupportedActivityPayloadError`.
-  - [ ] `finish_agent_run` (`:344-426`) currently hardcodes `AgentResponseActivityV1` and
+  - [x] `finish_agent_run` (`:344-426`) currently hardcodes `AgentResponseActivityV1` and
         `event_type="agent_response"`. Parameterize it on the payload the use case produced. Keep the
         `agent_run` status update, the sequence allocation, the `FOR UPDATE`, and the
         `resource_version` bump exactly as they are — this is a payload change, not a transaction
         change.
-- [ ] **No migration.** Verified at creation:
+- [x] **No migration.** Verified at creation:
       `persisted_event.payload` is `JSONB`, `event_type` is a bare `String(100)` with no CHECK, and
       `ck_agent_run_status` already admits all seven AD-7 statuses including `approval_required`
       (`migrations/versions/a4f92d7c8e31_add_durable_conversations.py:55-66`). The only UPDATE grant
       this milestone added — `agent_run(status)`, revision `c7d6e5f4a3b2` — is the only one needed.
       **If you find yourself writing a migration, stop and re-read this.**
-- [ ] `use_cases/execute_turn.py:77-107`'s `rehydrate_history` gains the two variants. Its `else`
+- [x] `use_cases/execute_turn.py:77-107`'s `rehydrate_history` gains the two variants. Its `else`
       branch raises `ValueError` for unknown variants — keep that fail-closed shape. A clarification
       rehydrates as the assistant asking its question; a terminal outcome rehydrates as the
       application-owned "the previous turn did not complete" line already there at `:95-97`, extended
       with the literal reason. **Never present either as model output.**
-- [ ] `api/schemas.py`: `ClarificationActivityOut` and `TerminalOutcomeActivityOut` extending
+- [x] `api/schemas.py`: `ClarificationActivityOut` and `TerminalOutcomeActivityOut` extending
       `ActivityCommonOut`, added to the `ActivityItemOut` discriminated union. This **changes the
       OpenAPI schema** — unlike Story 2.8, codegen **is** owed. It runs in Phase B (Task 8) so
       `openapi.json` and `schema.d.ts` move in one commit with their consumer.
-- [ ] `tests/test_conversations_postgres.py:503-556`: the two reserved-discriminant probes use
+- [x] `tests/test_conversations_postgres.py:503-556`: the two reserved-discriminant probes use
       `draft` and `comparison`, both **still reserved** — verified at creation, so unlike Story 2.7
       neither needs re-pointing. Their docstrings say *"Six of AD-20's eight discriminants are
       reserved"*; that becomes **four**. Update the count; do not delete the tests — they are the
@@ -437,13 +437,13 @@ beside `application/grounding/` — AR26's structural seed). Frontend work stays
 
 ### Task 6 — The policy-outcome evaluator and the visible-state gap (AC: 4)
 
-- [ ] `evals/evaluators.py`: one new `Evaluator` implementation (Decision 7) — call it
+- [x] `evals/evaluators.py`: one new `Evaluator` implementation (Decision 7) — call it
       `PolicyOutcomeEvaluator`. It judges:
-  - [ ] `case.expected_outcome` (`allow | refuse | clarify`) against the owned outcome: a `clarify`
+  - [x] `case.expected_outcome` (`allow | refuse | clarify`) against the owned outcome: a `clarify`
         case must produce a clarification, a `refuse` case a refusal, an `allow` case neither.
-  - [ ] For `refuse`/`clarify`: **no consequential capability was invoked** — asserted against
+  - [x] For `refuse`/`clarify`: **no consequential capability was invoked** — asserted against
         `manifest.risk_class`, matching Decision 4's rule rather than a capability name.
-  - [ ] The injection invariant, in its **observable** form. "Registered names equal granted names"
+  - [x] The injection invariant, in its **observable** form. "Registered names equal granted names"
         is nearly vacuous in the harness — `runtime_for_modules` grants exactly what the case names,
         so the equality holds by construction. The assertion that bites: **every tool call in the
         turn naming a capability outside `registered_capability_names` produced no
@@ -452,69 +452,69 @@ beside `application/grounding/` — AR26's structural seed). Frontend work stays
         the run continues and the case must still land correctly). Read the registered set from
         `PydanticAIAgentRuntime.registered_capability_names` (`agent/runtime.py:171-178`), which is
         collected as each tool is *actually* registered; do not re-derive it from the modules tuple.
-- [ ] **`ToolRoutingEvaluator` needs a targeted fix, and it is a trap.** `evaluators.py:50` reads
+- [x] **`ToolRoutingEvaluator` needs a targeted fix, and it is a trap.** `evaluators.py:50` reads
       `if outcome.answer is None or part.tool_call_id in capability_result_call_ids`. A clarification
       or refusal outcome has `answer is None`, so the filter falls through to "count every assistant
       tool call" — **including the `clarification`/`refusal` output-tool call itself**. Every
       `clarify`/`refuse` case would then fail `:56-68`'s "expected clarify with no tool call". Fix by
       excluding output-tool call ids unconditionally, not by loosening the refuse/clarify branch.
       Add a test that goes red on the old shape.
-- [ ] **`build_evaluation_report` judges visible state.** `evals/report.py:193-246` currently
+- [x] **`build_evaluation_report` judges visible state.** `evals/report.py:193-246` currently
       reports routing and grounding only. Closes `deferred-work.md:132`, whose owner is this story by
       name.
-  - [ ] Assert `outcome.status == case.expected_visible_state` and the visible-text expectation, in
+  - [x] Assert `outcome.status == case.expected_visible_state` and the visible-text expectation, in
         the report generator — not only in `test_evaluation_harness.py:295-296`.
-  - [ ] **Beware the vacuous form.** `runtime.py:282` sets `output_text=None` whenever `answer_type`
+  - [x] **Beware the vacuous form.** `runtime.py:282` sets `output_text=None` whenever `answer_type`
         is set, so `(outcome.output_text or "") == case.expected_visible_text` passes trivially for
         every structured case (all four grounding cases author `""`). Define visible text once, in
         one shared helper, as *what the planner actually sees* — for a grounded response the
         `_response_visible_text` projection the use case already has (`execute_turn.py:65-74`), for a
         clarification its question, for a refusal its detail — and use that helper in **both** the
         pytest suite and the report generator so they cannot drift.
-  - [ ] `deferred-work.md:11` says the most deceptive shape available is *"a required `GoldenCase`
+  - [x] `deferred-work.md:11` says the most deceptive shape available is *"a required `GoldenCase`
         field read by no `Evaluator`"*. After this task, no field of `GoldenCase` may be unread.
         Add a meta-test asserting that.
 
 ### Task 7 — Golden cases and the NFR5 injection corpus (AC: 2, 4)
 
-- [ ] Contribute cases under `backend/evals/golden/<capability>/` covering AC4's six named fixture
+- [x] Contribute cases under `backend/evals/golden/<capability>/` covering AC4's six named fixture
       kinds. Minimum, one per kind, each earning its place:
-  - [ ] **normal** — an allowed inspect answer (`scheduling_inspect` already has five; reuse rather
+  - [x] **normal** — an allowed inspect answer (`scheduling_inspect` already has five; reuse rather
         than duplicate, and say so in the README instead of adding a sixth).
-  - [ ] **ambiguity** — `expected_outcome: "clarify"`, a scripted `scheduling_inspect` call followed
+  - [x] **ambiguity** — `expected_outcome: "clarify"`, a scripted `scheduling_inspect` call followed
         by a scripted `clarification` output tool naming two real candidate `record_id`s from the
         fixture projection.
-  - [ ] **refusal** — `expected_outcome: "refuse"`, scripted `refusal` output tool, no capability
+  - [x] **refusal** — `expected_outcome: "refuse"`, scripted `refusal` output tool, no capability
         call.
-  - [ ] **injection** — see the corpus below.
-  - [ ] **provider-failure** — `expected_visible_state: "failed"` (or `"timed_out"`), driven through
+  - [x] **injection** — see the corpus below.
+  - [x] **provider-failure** — `expected_visible_state: "failed"` (or `"timed_out"`), driven through
         the real adapter.
-  - [ ] **unsupported-number** — the existing `scheduling_compute/missing-evidence.json` covers this
+  - [x] **unsupported-number** — the existing `scheduling_compute/missing-evidence.json` covers this
         exactly. **Do not author a duplicate**; name it in the README as this AC's contribution.
-- [ ] Tag every case by `capability` and `risk_class` (AC4's own words). New capability tags must be
+- [x] Tag every case by `capability` and `risk_class` (AC4's own words). New capability tags must be
       classified in `test_evaluation_harness.py:325-331`'s `MVP_PRODUCT_CAPABILITIES` /
       `NON_PRODUCT_CAPABILITIES` — `:352` fails on an unclassified one by design. Cases for the
       clarification/refusal behaviours belong to the capability whose *question* they are about, not
       to a new pseudo-capability: grounding was added as a second **evaluator** over the same
       capability for exactly this reason (Story 2.7's sprint note).
-- [ ] **The injection corpus, and the trap inside it.** An injection test that scripts a compliant
+- [x] **The injection corpus, and the trap inside it.** An injection test that scripts a compliant
       model and asserts it did not comply proves nothing — the compliance was authored. That is
       `deferred-work.md:9`'s defect in a new place. **Every injection case must script a model that
       DOES try to comply, and assert the application refused anyway.** Cover all three untrusted
       channels NFR5 names ("chat and every untrusted data channel introduced by the MVP"):
-  - [ ] **chat text** — the prompt instructs the model to call a capability that is not granted. The
+  - [x] **chat text** — the prompt instructs the model to call a capability that is not granted. The
         model emits a `ToolCallPart` naming it. Assert the call cannot execute, the granted set is
         unchanged, and the turn ends in a stable state.
-  - [ ] **fixture field content** — a projection record whose text field carries an instruction. Use
+  - [x] **fixture field content** — a projection record whose text field carries an instruction. Use
         `evals/fixture_projection.py` (the real projection the grounding cases already drive) so the
         instruction arrives through a genuine tool result, not a hand-built one.
-  - [ ] **tool output** — a capability result whose rendered `model_facing_view` output carries an
+  - [x] **tool output** — a capability result whose rendered `model_facing_view` output carries an
         instruction to widen budget or grant approval. Assert `AgentBudgetV1` and the granted set are
         byte-identical before and after.
-  - [ ] Assert, for every case: no capability name outside the composed grant is registered; no
+  - [x] Assert, for every case: no capability name outside the composed grant is registered; no
         budget field differs from the configured value; no `approval` field is set. These are AC2's
         four nouns — capabilities, permissions, budgets, approval — and each needs its own assertion.
-- [ ] `evals/README.md`: add this story's contribution paragraph in the established form (2.2, 2.5,
+- [x] `evals/README.md`: add this story's contribution paragraph in the established form (2.2, 2.5,
       and 2.7 each have one), naming what each case proves and what it deliberately does not.
       `test_readme_documents_exact_contribution_shape_and_owners` reads this file.
 
@@ -870,9 +870,59 @@ same; assume it and measure on a clean tree before you start.
 
 ### Debug Log References
 
+- Task 1 plan and verification: introduced frozen owned dialogue contracts first, then extended the runtime outcome at the model trust boundary. RED was observed as `ModuleNotFoundError`; targeted tests passed 4/4 and the full backend suite passed 813, skipped 2, deselected 7.
+- Task 2 plan and verification: registered three explicit named `ToolOutput` variants, dispatched by owned output type, kept the text path unchanged, and made scripted structured turns choose by name. RED proved the old adapter exposed only `final_result`; focused suites passed 48 tests and full backend regression passed 818, skipped 2, deselected 7.
+- Task 3 plan and verification: extracted the one exhaustive evidence-group resolver map, added a pure exact-target clarification resolver, and performed the trusted transform in the use case. RED proved the application package and trusted outcome field were absent; focused suites passed 38 tests and full backend regression passed 823, skipped 2, deselected 7.
+- Task 4 plan and verification: mapped all reachable adapter outcomes to literal terminal reasons and persisted agent statuses, corrected suspension ownership to Epic 4, and classified known route exceptions while retaining fail-closed finalization. RED proved no terminal-outcome mapper existed; focused suites passed 42 tests and full backend regression passed 833, skipped 2, deselected 7.
+- Task 5 plan and verification: added the two already-reserved activity payloads, parameterized finalization on the use-case-produced payload while preserving locking/version/sequence mechanics, and extended typed storage, API, and history projections. RED proved the activity contracts were absent; focused API/contract suites passed 43 tests, PostgreSQL passed 45, and full backend regression passed 838, skipped 2, deselected 7. No migration added.
+- Task 6 plan and verification: added policy-outcome evaluation, fixed output-tool routing exclusion, single-sourced planner-visible text, and made report results fail on visible-state/text drift. RED proved the old evaluator counted `clarification` as a routed capability and the old structured text oracle was vacuous; evaluator suite passed 35 and full backend regression passed 846, skipped 2, deselected 7.
+- Task 7 plan and verification: contributed six distinct scheduling-inspect cases (ambiguity, refusal, provider failure, and three injection channels), embedded real malicious fixture fields, and asserted attempted compliance cannot change capabilities, permissions, budgets, or approval. The unregistered-result mutation test is RED when its structural assertion is removed. Dataset now totals 17 cases: demonstration 2, scheduling_compute 4, scheduling_inspect 11. Full backend regression passed 849, skipped 2, deselected 7.
+
 ### Completion Notes List
 
 ### File List
+
+- backend/application/contracts/agent_runtime.py
+- backend/application/contracts/agent_status.py
+- backend/application/contracts/activity.py
+- backend/application/contracts/dialogue.py
+- backend/application/clarification/__init__.py
+- backend/application/clarification/resolve.py
+- backend/application/grounding/gate.py
+- backend/application/grounding/resolvers.py
+- backend/application/use_cases/execute_turn.py
+- backend/api/routers/conversations.py
+- backend/api/schemas.py
+- backend/application/ports/conversation.py
+- backend/adapters/postgres/conversation.py
+- backend/agent/runtime.py
+- backend/evals/cases.py
+- backend/evals/doubles.py
+- backend/evals/evaluators.py
+- backend/evals/fixture_projection.py
+- backend/evals/README.md
+- backend/evals/golden/scheduling_inspect/clarify-worker-ambiguity.json
+- backend/evals/golden/scheduling_inspect/injection-chat-text.json
+- backend/evals/golden/scheduling_inspect/injection-fixture-field.json
+- backend/evals/golden/scheduling_inspect/injection-tool-output.json
+- backend/evals/golden/scheduling_inspect/provider-failure.json
+- backend/evals/golden/scheduling_inspect/refuse-unsupported-request.json
+- backend/evals/report.py
+- backend/evals/golden/scheduling_compute/argument-mismatch.json
+- backend/evals/golden/scheduling_compute/missing-evidence.json
+- backend/evals/golden/scheduling_compute/supported.json
+- backend/evals/golden/scheduling_compute/version-mismatch.json
+- backend/tests/test_agent_runtime_adapter.py
+- backend/tests/test_clarification_resolution.py
+- backend/tests/test_conversations_api.py
+- backend/tests/test_conversation_contracts.py
+- backend/tests/test_conversations_postgres.py
+- backend/tests/test_dialogue_contracts.py
+- backend/tests/test_evaluation_harness.py
+- backend/tests/test_evidence_ref.py
+- backend/tests/test_execute_turn_use_case.py
+- _bmad-output/implementation-artifacts/2-9-clarify-refuse-and-fail-safely.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 

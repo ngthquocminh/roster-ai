@@ -11,7 +11,14 @@ import pytest
 from application.contracts.activity import (
     ActivityTypeV1,
     AgentResponseActivityV1,
+    ClarificationActivityV1,
     PlannerMessageActivityV1,
+    TerminalOutcomeActivityV1,
+)
+from application.contracts.dialogue import (
+    EntityCandidateV1,
+    ResolvedClarificationV1,
+    TerminalOutcomeV1,
 )
 from application.contracts.grounding import (
     ClaimArgumentsV1,
@@ -141,3 +148,68 @@ def test_agent_response_activity_carries_a_discriminated_grounded_response() -> 
     assert transport.activity_type == "agent_response"
     assert transport.sequence == "2"
     assert transport.response.claims[0].value == 60
+
+
+@pytest.mark.parametrize("kind", ["clarification", "terminal_outcome"])
+def test_new_activity_payloads_round_trip_through_storage_and_transport(kind: str) -> None:
+    now = datetime.now(timezone.utc)
+    version_id = uuid4()
+    common = dict(
+        activity_id=uuid4(),
+        conversation_id=uuid4(),
+        conversation_resource_version=3,
+        scenario_id=uuid4(),
+        scenario_version_id=version_id,
+        occurred_at=now,
+    )
+    if kind == "clarification":
+        activity = ClarificationActivityV1(
+            activity_type="clarification",
+            clarification=ResolvedClarificationV1(
+                question="Which worker?",
+                candidates=(
+                    EntityCandidateV1(
+                        group="workers",
+                        record_id="worker-1",
+                        label="CONTACT-9",
+                        scenario_version_id=version_id,
+                    ),
+                ),
+                scenario_version_id=version_id,
+            ),
+            **common,
+        )
+    else:
+        activity = TerminalOutcomeActivityV1(
+            activity_type="terminal_outcome",
+            outcome=TerminalOutcomeV1(
+                status="failed",
+                reason="provider_error",
+                detail="The provider failed before the turn completed.",
+                next_step="Retry the request.",
+            ),
+            **common,
+        )
+
+    restored = _activity_from_payload(_payload_to_json(activity))
+    event = PersistedEventV1(
+        stream_id=activity.conversation_id,
+        sequence=Decimal("3"),
+        event_type=kind,
+        occurred_at=now,
+        resource_version=3,
+        request_id=uuid4(),
+        conversation_id=activity.conversation_id,
+        agent_run_id=uuid4(),
+        site_id=uuid4(),
+        actor_id=uuid4(),
+        payload=restored,
+    )
+
+    transport = _activity(event)
+    assert transport.activity_type == kind
+    assert transport.sequence == "3"
+    if kind == "clarification":
+        assert transport.clarification.candidates[0].label == "CONTACT-9"
+    else:
+        assert transport.outcome.reason == "provider_error"

@@ -1,0 +1,35 @@
+{
+  "case_id": "scheduling-inspect-clarify-worker-ambiguity",
+  "case_version": "1",
+  "capability": "scheduling_inspect",
+  "risk_class": "inspect",
+  "prompt": "Show me the worker; the name is ambiguous.",
+  "scripted_turns": [
+    {
+      "tool_name": "scheduling_inspect",
+      "arguments": {"request": {"group": "workers", "sort": "contact_id"}},
+      "tool_call_id": "inspect-ambiguous-workers"
+    },
+    {
+      "output_tool": "clarification",
+      "response_data": {
+        "question": "Which worker did you mean?",
+        "candidates": [
+          {"group": "workers", "record_id": "w1"},
+          {"group": "workers", "record_id": "w2"}
+        ]
+      }
+    }
+  ],
+  "expected_outcome": "clarify",
+  "expected_tool_calls": [
+    {
+      "tool_name": "scheduling_inspect",
+      "arguments": {"request": {"group": "workers", "sort": "contact_id"}}
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "Which worker did you mean?",
+  "scenario_fixtures": ["eval-fixture:v1"]
+}

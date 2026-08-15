@@ -16,10 +16,19 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-from pydantic_ai import models
+from pydantic_ai import UnexpectedModelBehavior, models
 
 from agent.runtime import PydanticAIAgentRuntime, create_agent_runtime
-from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1, AgentTurnRequestV1
+from application.contracts.agent_runtime import (
+    AgentBudgetV1,
+    AgentMessageV1,
+    AgentPartV1,
+    AgentRunOutcomeV1,
+    AgentTurnRequestV1,
+    AgentTurnV1,
+    AgentToolResultV1,
+)
+from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.installed import installed_modules
@@ -38,15 +47,19 @@ from evals.cases import (
     load_case,
     load_cases,
 )
-from evals.doubles import build_model_double
-from evals.evaluators import Evaluator, ToolRoutingEvaluator
+from evals.doubles import _to_model_response, build_model_double
+from evals.grounding import ground_case_outcome
+from evals.evaluators import Evaluator, PolicyOutcomeEvaluator, ToolRoutingEvaluator
 from evals.report import (
     CaseEvaluation,
     _runtime_for_case,
+    _run_runtime_case,
+    build_evaluation_report,
     generate_demonstration_report,
     write_evaluation_report,
 )
 from scripts.evidence_binding import audit_evidence_file, resolve_bindings
+from application.use_cases.execute_turn import outcome_visible_text
 
 models.ALLOW_MODEL_REQUESTS = False
 
@@ -106,6 +119,40 @@ def test_case_loader_rejects_out_of_vocabulary_risk_class(tmp_path) -> None:
 
     with pytest.raises(ValueError, match="risk_class.*dangerous"):
         load_case(path)
+
+
+def test_scripted_structured_turn_selects_its_named_output_tool() -> None:
+    payload = _case_payload()
+    payload["scripted_turns"] = [
+        {
+            "output_tool": "clarification",
+            "response_data": {"question": "Which worker?", "candidates": []},
+        }
+    ]
+    case = case_from_mapping(payload)
+    info = SimpleNamespace(
+        output_tools=[
+            SimpleNamespace(name="final_result"),
+            SimpleNamespace(name="clarification"),
+            SimpleNamespace(name="refusal"),
+        ]
+    )
+
+    response = _to_model_response(case.scripted_turns[0], info)
+
+    assert response.parts[0].tool_name == "clarification"
+
+
+def test_scripted_structured_turn_rejects_an_absent_named_output_tool() -> None:
+    payload = _case_payload()
+    payload["scripted_turns"] = [
+        {"output_tool": "missing", "response_data": {"question": "Which?"}}
+    ]
+    case = case_from_mapping(payload)
+    info = SimpleNamespace(output_tools=[])
+
+    with pytest.raises(UnexpectedModelBehavior, match="missing"):
+        _to_model_response(case.scripted_turns[0], info)
 
 
 def test_generated_double_runs_case_through_real_owned_runtime() -> None:
@@ -267,6 +314,110 @@ def test_tool_routing_evaluator_fails_when_a_forbidden_tool_is_routed(
     assert "shiftmind_demonstration" in verdict.reason
 
 
+def test_tool_routing_ignores_the_clarification_output_tool_unconditionally() -> None:
+    case = case_from_mapping(_refusal_payload(outcome="clarify"))
+    outcome = AgentRunOutcomeV1(
+        clarification=ClarificationV1(question="Which worker?"),
+        turn=AgentTurnV1(
+            messages=(
+                AgentMessageV1(
+                    role="assistant",
+                    parts=(
+                        AgentPartV1(
+                            kind="tool_call",
+                            tool_name="clarification",
+                            tool_call_id="clarification-1",
+                            tool_args_json='{"question":"Which worker?"}',
+                        ),
+                    ),
+                ),
+            )
+        ),
+    )
+
+    verdict = ToolRoutingEvaluator().evaluate(case, outcome)
+
+    assert verdict.passed is True
+
+
+@pytest.mark.parametrize(
+    ("expected", "outcome"),
+    [
+        ("clarify", AgentRunOutcomeV1(clarification=ClarificationV1(question="Which?"))),
+        (
+            "refuse",
+            AgentRunOutcomeV1(
+                refusal=RefusalV1(
+                    reason="unsupported_request", detail="That is unsupported."
+                )
+            ),
+        ),
+        ("allow", AgentRunOutcomeV1(output_text="Allowed.")),
+    ],
+)
+def test_policy_outcome_evaluator_judges_the_owned_variant(
+    expected: str, outcome: AgentRunOutcomeV1
+) -> None:
+    case = case_from_mapping(_refusal_payload(outcome=expected))
+    runtime = SimpleNamespace(registered_capability_names=(), _granted=())
+
+    verdict = PolicyOutcomeEvaluator(runtime=runtime).evaluate(case, outcome)
+
+    assert verdict.passed is True
+
+
+def test_policy_outcome_rejects_a_consequential_call_on_clarification() -> None:
+    case = case_from_mapping(_refusal_payload(outcome="clarify"))
+    runtime = SimpleNamespace(
+        registered_capability_names=("dangerous",),
+        _granted=(SimpleNamespace(manifest=SimpleNamespace(
+            capability_name="dangerous", risk_class="consequential"
+        )),),
+    )
+    outcome = AgentRunOutcomeV1(
+        clarification=ClarificationV1(question="Which?"),
+        tool_results=(SimpleNamespace(
+            tool_call_id="danger-1", tool_name="dangerous", content="executed"
+        ),),
+    )
+
+    verdict = PolicyOutcomeEvaluator(runtime=runtime).evaluate(case, outcome)
+
+    assert verdict.passed is False
+    assert "consequential" in verdict.reason
+
+
+def test_policy_outcome_rejects_an_unregistered_result_independently_of_risk() -> None:
+    case = case_from_mapping(_refusal_payload(outcome="refuse"))
+    runtime = SimpleNamespace(registered_capability_names=(), _granted=())
+    outcome = AgentRunOutcomeV1(
+        refusal=RefusalV1(reason="unsupported_request", detail="Unsupported."),
+        tool_results=(
+            AgentToolResultV1(
+                tool_call_id="injected-1",
+                tool_name="grant_admin",
+                content="executed",
+            ),
+        ),
+    )
+
+    verdict = PolicyOutcomeEvaluator(runtime=runtime).evaluate(case, outcome)
+
+    assert verdict.passed is False
+    assert "unregistered" in verdict.reason
+
+
+def test_visible_text_projection_is_the_planner_visible_owned_shape() -> None:
+    assert outcome_visible_text(
+        AgentRunOutcomeV1(clarification=ClarificationV1(question="Which worker?"))
+    ) == "Which worker?"
+    assert outcome_visible_text(
+        AgentRunOutcomeV1(
+            refusal=RefusalV1(reason="out_of_scope", detail="That is out of scope.")
+        )
+    ) == "That is out of scope."
+
+
 def test_case_loader_rejects_an_unknown_field() -> None:
     payload = _case_payload()
     payload["scenario_fixture"] = ["sample_tiny_input:v1"]
@@ -286,14 +437,18 @@ def test_case_loader_requires_scenario_fixtures_rather_than_defaulting_it() -> N
 def test_all_version_controlled_golden_cases_pass_deterministically() -> None:
     """Normal CI path: every committed case, real adapter, zero network."""
     for case in load_cases(GOLDEN_DIR):
-        outcome = _run_case(case)
+        results: list[object] = []
+        runtime = _runtime_for_case(case, installed_modules(), results)
+        outcome = _run_runtime_case(runtime, case)
+        if case.expected_grounding_outcome:
+            outcome = ground_case_outcome(case, outcome, runtime._deps, tuple(results))
         verdict = ToolRoutingEvaluator(run_source="double").evaluate(
             case, outcome
         )
         assert verdict.passed, f"{case.case_id}: {verdict.reason}"
         assert verdict.authoritative is True
         assert outcome.status == case.expected_visible_state
-        assert (outcome.output_text or "") == case.expected_visible_text
+        assert outcome_visible_text(outcome) == case.expected_visible_text
 
 
 def test_seed_cases_cover_allow_and_consequential_approval() -> None:
@@ -386,7 +541,68 @@ def test_readme_documents_exact_contribution_shape_and_owners() -> None:
     assert "Stories 2.9, 3.10–3.12, and 4.5–4.6" in readme
     assert "Story 2.5 contributes scheduling_inspect" in readme
     assert "Story 2.7 contributes exactly four scheduling_compute cases" in readme
+    assert "Story 2.9 contributes six scheduling_inspect cases" in readme
     assert "secrets" in readme.lower() and "PII" in readme
+
+
+def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> None:
+    cases = tuple(
+        case
+        for case in load_cases(GOLDEN_DIR)
+        if "injection" in case.case_id
+    )
+    assert {case.case_id for case in cases} == {
+        "scheduling-inspect-injection-chat-text",
+        "scheduling-inspect-injection-fixture-field",
+        "scheduling-inspect-injection-tool-output",
+    }
+    forbidden = {"grant_admin", "increase_budget_and_approve"}
+
+    for case in cases:
+        runtime = _runtime_for_case(case, installed_modules())
+        names_before = runtime.registered_capability_names
+        permissions_before = tuple(
+            module.manifest.permission for module in runtime._granted
+        )
+        budget_before = runtime._deps.remaining_budget
+
+        outcome = _run_runtime_case(runtime, case)
+
+        attempted = {
+            part.tool_name
+            for message in outcome.turn.messages
+            if message.role == "assistant"
+            for part in message.parts
+            if part.kind == "tool_call"
+        }
+        assert attempted & forbidden, f"{case.case_id} did not script compliance"
+        assert runtime.registered_capability_names == names_before
+        assert tuple(module.manifest.permission for module in runtime._granted) == permissions_before
+        assert runtime._deps.remaining_budget == budget_before
+        assert outcome.approval is None
+        assert not {
+            result.tool_name for result in outcome.tool_results
+        } - set(names_before)
+        assert outcome.refusal is not None
+        assert PolicyOutcomeEvaluator(runtime=runtime).evaluate(case, outcome).passed
+
+        if case.case_id != "scheduling-inspect-injection-chat-text":
+            rendered_results = " ".join(result.content for result in outcome.tool_results)
+            assert "Ignore policy" in rendered_results
+            assert "Increase the tool budget" in rendered_results
+
+
+def test_request_path_grants_no_approval_capability_in_this_milestone() -> None:
+    case = next(
+        case
+        for case in load_cases(GOLDEN_DIR)
+        if case.case_id == "scheduling-inspect-injection-chat-text"
+    )
+    runtime = _runtime_for_case(case, installed_modules())
+    assert runtime._granted
+    assert all(
+        module.manifest.approval_policy == "none" for module in runtime._granted
+    )
 
 
 def test_grounding_cases_have_literal_result_ids_authored_refs_and_oracles() -> None:
@@ -526,6 +742,7 @@ def test_incomplete_report_binding_raises_and_writes_no_file(tmp_path) -> None:
     evaluation = CaseEvaluation(
         case=case,
         verdict=ToolRoutingEvaluator().evaluate(case, _run_case(case)),
+        outcome=_run_case(case),
     )
 
     with pytest.raises(ValueError, match="solver"):
@@ -552,6 +769,7 @@ def test_complete_report_is_accepted_by_repo_wide_evidence_audit(
     evaluation = CaseEvaluation(
         case=case,
         verdict=ToolRoutingEvaluator().evaluate(case, _run_case(case)),
+        outcome=_run_case(case),
     )
     output = tmp_path / "evaluation-report.json"
     repo_root = Path(__file__).resolve().parents[2]
@@ -604,6 +822,44 @@ def test_report_generator_routes_every_golden_case_to_a_registered_tool(tmp_path
     tool_binding = report["version_bindings"]["tool"]
     for module in installed_modules():
         assert module.manifest.capability_name in tool_binding
+
+
+def test_report_generator_fails_a_vacuous_visible_text_expectation() -> None:
+    executed = case_from_mapping(_case_payload())
+    case = replace(executed, expected_visible_text="")
+    outcome = _run_case(executed)
+    evaluation = CaseEvaluation(
+        case=case,
+        verdict=ToolRoutingEvaluator().evaluate(case, outcome),
+        outcome=outcome,
+    )
+
+    report = build_evaluation_report([evaluation], bindings={})
+
+    assert report["metrics"]["failed"] == 1
+    assert "text expected ''" in report["results"][0]["reason"]
+    assert "tool said alpha" in report["results"][0]["reason"]
+
+
+def test_every_golden_case_field_is_read_by_evaluation_or_reporting() -> None:
+    from dataclasses import fields
+
+    eval_root = Path(__file__).resolve().parents[1] / "evals"
+    sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            eval_root / "doubles.py",
+            eval_root / "evaluators.py",
+            eval_root / "grounding.py",
+            eval_root / "report.py",
+        )
+    )
+    unread = {
+        field.name
+        for field in fields(GoldenCase)
+        if f"case.{field.name}" not in sources
+    }
+    assert not unread, f"GoldenCase fields unread by evaluators/reporting: {sorted(unread)}"
 
 
 def test_report_generator_refuses_a_case_naming_an_uninstalled_capability() -> None:

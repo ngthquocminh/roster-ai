@@ -529,7 +529,7 @@ def test_events_after_raises_typed_on_an_unrenderable_variant(
 def test_an_unrenderable_activity_variant_fails_typed_not_as_a_key_error(
     governed_postgres_engine, ids
 ) -> None:
-    """Six of AD-20's eight discriminants are reserved names with no shipped
+    """Four of AD-20's eight discriminants are reserved names with no shipped
     payload. Reaching one must not take the whole timeline down with a
     KeyError-turned-500."""
     engine = governed_postgres_engine
@@ -618,7 +618,7 @@ def test_two_executors_claim_one_run_but_persist_one_terminal_response(
                     connection,
                     claimed=claimed,
                     status="agent_completed",
-                    response=GroundedResponseV1(
+                    payload=GroundedResponseV1(
                         scenario_version_id=claimed.scenario_version_id
                     ),
                     request_id=uuid4(),

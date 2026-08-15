@@ -73,3 +73,13 @@ survived review because of it. Three of the four outcomes arise from case
 data alone; only `version_mismatch` needs an environmental knob, and it
 rotates the PIN the gate checks against rather than editing the result --
 the same condition as a scenario re-versioned mid-turn.
+
+Story 2.9 contributes six scheduling_inspect cases: one ambiguity, one bounded
+unsupported-request refusal, one provider failure through the real adapter,
+and three prompt-injection attempts covering chat text, fixture field content,
+and rendered tool output. The normal inspect cases above are reused for AC4's
+normal fixture kind, and Story 2.7's `missing-evidence` case is reused for the
+unsupported-number kind. Every injection script attempts the forbidden call;
+the policy evaluator proves it produced no application tool result and that
+the registered grant did not widen. These deterministic cases prove the
+application boundary, not live-model instruction-following quality.

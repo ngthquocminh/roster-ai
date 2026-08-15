@@ -30,6 +30,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models import infer_model
+from pydantic_ai.output import ToolOutput
 
 from agent.translate import summarize, to_framework_messages, to_owned_turn
 from application.contracts.agent_runtime import (
@@ -45,6 +46,7 @@ from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.grounding.gate import numeric_prose_violation
 from agent.capability_tools import render_capabilities
 
@@ -109,7 +111,12 @@ class PydanticAIAgentRuntime:
         output_type = (
             [str, DeferredToolRequests]
             if answer_type is None
-            else [answer_type, DeferredToolRequests]
+            else [
+                ToolOutput(answer_type, name="final_result"),
+                ToolOutput(ClarificationV1, name="clarification"),
+                ToolOutput(RefusalV1, name="refusal"),
+                DeferredToolRequests,
+            ]
         )
         self._agent: Agent = Agent(
             deps_type=AgentDepsV1 | None,
@@ -137,6 +144,11 @@ class PydanticAIAgentRuntime:
             # bypassing the validator cannot bypass the invariant.
             @self._agent.output_validator
             def _reject_numeric_prose(output: object) -> object:
+                # Clarification and refusal are distinct structured outputs. A
+                # numeral in bounded refusal copy is operational context, not
+                # an uncited grounded claim.
+                if not isinstance(output, GroundedAnswerV1):
+                    return output
                 for segment in getattr(output, "segments", ()) or ():
                     text = getattr(segment, "text", None)
                     if text is None:
@@ -277,6 +289,13 @@ class PydanticAIAgentRuntime:
                 ),
             )
 
+        if self._answer_type is not None and not isinstance(
+            result.output, (GroundedAnswerV1, ClarificationV1, RefusalV1)
+        ):
+            raise AgentRuntimeError(
+                f"unrecognized structured output {type(result.output).__name__}"
+            )
+
         return AgentRunOutcomeV1(
             status="completed",
             output_text=(str(result.output) if self._answer_type is None else None),
@@ -285,6 +304,10 @@ class PydanticAIAgentRuntime:
                 if isinstance(result.output, GroundedAnswerV1)
                 else None
             ),
+            clarification=(
+                result.output if isinstance(result.output, ClarificationV1) else None
+            ),
+            refusal=(result.output if isinstance(result.output, RefusalV1) else None),
             turn=turn,
             summary=summary,
             tool_results=_tool_results(turn, excluded_names=self._output_tool_names),

@@ -11,7 +11,7 @@ message class to check a result, the seam would have failed.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -37,6 +37,7 @@ from application.contracts.agent_runtime import (
     AgentBudgetV1,
     AgentTurnRequestV1,
 )
+from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
 from application.ports.agent_runtime import AgentRuntime, AgentRuntimeError
 
@@ -268,9 +269,12 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
         "status": "completed",
         "failure_reason": None,
         "output_text": "tool said alpha",
-        # The two fields the seam added stay absent on the default path.
+        # Structured model-side variants stay absent on the default text path.
         "answer": None,
         "grounded_response": None,
+        "clarification": None,
+        "resolved_clarification": None,
+        "refusal": None,
         "turn": {
             "schema_version": "1",
             "messages": [
@@ -370,11 +374,79 @@ def test_strict_answer_rejects_unstructured_prose_with_preserved_cause() -> None
     assert isinstance(exc_info.value.__cause__, UnexpectedModelBehavior)
 
 
-def test_output_tool_name_is_derived_not_hardcoded_in_the_owned_adapter() -> None:
-    source = (Path(__file__).resolve().parents[1] / "agent/runtime.py").read_text(
-        encoding="utf-8"
-    )
-    assert "final_result" not in source
+def test_structured_output_tools_keep_the_three_exact_stable_names() -> None:
+    runtime = _runtime(model=FunctionModel(lambda _messages, _info: ModelResponse()), answer_type=GroundedAnswerV1)
+    assert runtime._agent._output_toolset is not None
+    assert {
+        definition.name
+        for definition in runtime._agent._output_toolset._tool_defs
+    } == {"final_result", "clarification", "refusal"}
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "payload", "field"),
+    [
+        (
+            "clarification",
+            ClarificationV1(question="Which worker?"),
+            "clarification",
+        ),
+        (
+            "refusal",
+            RefusalV1(
+                reason="capability_unavailable",
+                detail="The 60-second budget is unavailable.",
+                next_step="Review Scenario Data.",
+            ),
+            "refusal",
+        ),
+    ],
+)
+def test_dialogue_outputs_dispatch_without_leaking_output_tools_as_results(
+    tool_name: str,
+    payload: ClarificationV1 | RefusalV1,
+    field: str,
+) -> None:
+    def structured(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        assert tool_name in {tool.name for tool in info.output_tools}
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=tool_name,
+                    args=json.dumps(asdict(payload)),
+                    tool_call_id=f"{tool_name}-1",
+                )
+            ]
+        )
+
+    outcome = _runtime(
+        model=FunctionModel(structured), answer_type=GroundedAnswerV1
+    ).run_turn(AgentTurnRequestV1(prompt="respond structurally"))
+
+    assert getattr(outcome, field) == payload
+    assert outcome.answer is None
+    assert outcome.tool_results == ()
+
+
+def test_unrecognized_structured_output_fails_owned_instead_of_returning_empty() -> None:
+    @dataclass(frozen=True)
+    class OtherOutput:
+        value: str = ""
+
+    def structured(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=info.output_tools[0].name,
+                    args="{}",
+                    tool_call_id="other-1",
+                )
+            ]
+        )
+
+    runtime = _runtime(model=FunctionModel(structured), answer_type=OtherOutput)
+    with pytest.raises(AgentRuntimeError, match="unrecognized structured output"):
+        runtime.run_turn(AgentTurnRequestV1(prompt="respond structurally"))
 
 
 def test_owned_turn_round_trips_and_resumes() -> None:

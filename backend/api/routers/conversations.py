@@ -52,13 +52,17 @@ from application.ports.conversation import ConversationRepository, ConversationV
 from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
-from application.use_cases.execute_turn import execute_turn, terminal_status, visible_response
+from application.use_cases.execute_turn import (
+    activity_payload,
+    execute_turn,
+    failed_outcome_for_exception,
+    terminal_status,
+)
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import enabled_feature_policy
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_VERSION
-from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1
+from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.grounding import GroundedAnswerV1
-from application.ports.agent_runtime import AgentRuntimeError
 from application.ports.scenario_projection import ScenarioProjectionReader
 from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
 from datetime import datetime, timezone
@@ -83,6 +87,7 @@ _STREAM_RESPONSES = {
     **_PROBLEM_RESPONSES,
     500: {"model": ProblemDetailsV1},
 }
+
 
 # Polling rather than LISTEN/NOTIFY. `LISTEN` needs a dedicated connection held
 # open for the life of the subscription — the exact resource profile
@@ -252,17 +257,15 @@ async def execute_agent_turn(
             calculation_results=raw_results,
             history=claimed.history,
         )
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         # Reaching a terminal status is what keeps the accepted conversation
-        # durable (AC3), so it wins over surfacing a richer error here; Story 2.9
-        # owns the failure taxonomy. But swallowing the cause entirely made a
-        # gate fault, a provider auth failure and a genuine model refusal
-        # indistinguishable after the fact, so the exception is logged with its
-        # traceback before it is collapsed.
+        # durable (AC3), so it wins over surfacing a richer error here. Known
+        # causes map to owned terminal reasons below; only genuinely unknown
+        # exceptions retain the fail-closed invalid_output fallback.
         logger.exception(
             "execute_agent_turn failed; finalizing run %s as terminal", agent_run_id
         )
-        outcome = AgentRunOutcomeV1(status="failed", failure_reason="invalid_output")
+        outcome = failed_outcome_for_exception(exc)
 
     def _finish():
         with open_site_context(session.site_id) as connection:
@@ -270,7 +273,7 @@ async def execute_agent_turn(
                 connection,
                 claimed=claimed,
                 status=terminal_status(outcome),
-                response=visible_response(outcome, deps),
+                payload=activity_payload(outcome, deps),
                 request_id=deps.request_id,
             )
 

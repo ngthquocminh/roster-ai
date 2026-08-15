@@ -48,6 +48,8 @@ class ScriptedModelTurn:
     tool_call_id: str | None = None
     response_text: str | None = None
     response_data: dict[str, object] | None = None
+    output_tool: str = "final_result"
+    response_error: Literal["provider_error"] | None = None
 
 
 @dataclass(frozen=True)
@@ -105,6 +107,13 @@ CASE_FIELDS: frozenset[str] = frozenset(
         "expected_visible_text",
         "scenario_fixtures",
         "expected_grounding_outcome",
+    }
+)
+
+SCRIPTED_TURN_FIELDS: frozenset[str] = frozenset(
+    {
+        "tool_name", "arguments", "tool_call_id", "response_text",
+        "response_data", "output_tool", "response_error",
     }
 )
 
@@ -189,6 +198,9 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
 
 def _scripted_turn(value: object, label: str) -> ScriptedModelTurn:
     raw = _mapping(value, label)
+    unknown = sorted(set(raw) - SCRIPTED_TURN_FIELDS)
+    if unknown:
+        raise ValueError(f"{label} has unknown field(s) {', '.join(unknown)}")
     tool_name = _optional_string(raw.get("tool_name"), f"{label}.tool_name")
     response_text = _optional_string(
         raw.get("response_text"), f"{label}.response_text", allow_empty=True
@@ -198,12 +210,29 @@ def _scripted_turn(value: object, label: str) -> ScriptedModelTurn:
         None if response_data_raw is None
         else dict(_mapping(response_data_raw, f"{label}.response_data"))
     )
-    if sum(value is not None for value in (tool_name, response_text, response_data)) != 1:
+    response_error = _optional_string(
+        raw.get("response_error"), f"{label}.response_error"
+    )
+    if response_error not in (None, "provider_error"):
+        raise ValueError(f"{label}.response_error {response_error!r} is invalid")
+    output_tool = _optional_string(raw.get("output_tool"), f"{label}.output_tool")
+    if sum(
+        value is not None
+        for value in (tool_name, response_text, response_data, response_error)
+    ) != 1:
         raise ValueError(
-            f"{label} must declare exactly one of tool_name, response_text, or response_data"
+            f"{label} must declare exactly one of tool_name, response_text, "
+            "response_data, or response_error"
         )
+    if response_error is not None:
+        return ScriptedModelTurn(response_error="provider_error")
     if response_data is not None:
-        return ScriptedModelTurn(response_data=response_data)
+        return ScriptedModelTurn(
+            response_data=response_data,
+            output_tool=output_tool or "final_result",
+        )
+    if output_tool is not None:
+        raise ValueError(f"{label}.output_tool requires response_data")
     if tool_name is None:
         return ScriptedModelTurn(response_text=response_text)
     return ScriptedModelTurn(
@@ -255,6 +284,7 @@ __all__ = [
     "GROUNDING_ORACLES",
     "GroundingOracle",
     "RiskClass",
+    "SCRIPTED_TURN_FIELDS",
     "ScriptedModelTurn",
     "VisibleState",
     "case_from_mapping",

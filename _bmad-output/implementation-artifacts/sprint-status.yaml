@@ -1118,7 +1118,7 @@ development_status:
   2-6-add-and-remove-a-governed-capability-module: done
   2-7-ground-schedule-claims-in-exact-evidence: done
   2-8-jump-to-evidence-and-return-to-the-claim: done
-  2-9-clarify-refuse-and-fail-safely: ready-for-dev
+  2-9-clarify-refuse-and-fail-safely: in-progress
   epic-2-retrospective: optional
 
   # Epic 3: Governed and Recoverable Schedule Repair
