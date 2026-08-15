@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
-from typing import Literal, Protocol
+from dataclasses import asdict, dataclass
+from typing import Literal, Mapping, Protocol
 
 from application.contracts.agent_runtime import AgentRunOutcomeV1
 from application.contracts.evidence_ref import EvidenceRefV1
@@ -125,6 +125,24 @@ def stable_evidence_ref(reference: EvidenceRefV1) -> str:
     )
 
 
+def _matches_originating_compute_call(case: GoldenCase, claim: object) -> bool:
+    """Discriminate an unknown result id from a claim that changed its inputs."""
+    metric = getattr(claim, "metric", None)
+    arguments = getattr(claim, "arguments", None)
+    if arguments is None:
+        return False
+    actual_arguments = asdict(arguments)
+    for expected in case.expected_tool_calls:
+        if expected.tool_name != "scheduling_compute":
+            continue
+        request = expected.arguments.get("request")
+        if not isinstance(request, Mapping):
+            continue
+        if request.get("metric") == metric and request.get("arguments") == actual_arguments:
+            return True
+    return False
+
+
 @dataclass(frozen=True)
 class GroundingEvaluator:
     """Judge exact evidence IDs and the authored per-case grounding oracle."""
@@ -156,6 +174,26 @@ class GroundingEvaluator:
                 f"oracle differed: expected {expected_failure}, actual {actual_failures}",
                 self.run_source,
             )
+        # AR11 deliberately exposes only `missing_evidence` for both an unknown
+        # result id and a claim that changed the originating metric/arguments.
+        # Keep that persisted vocabulary closed, but make the evaluation oracle
+        # observe the input relation so its two golden cases are not duplicates.
+        if case.expected_grounding_outcome in {"missing_evidence", "argument_mismatch"}:
+            has_argument_mismatch = any(
+                not _matches_originating_compute_call(case, claim)
+                for claim in response.claims
+            )
+            expected_argument_mismatch = (
+                case.expected_grounding_outcome == "argument_mismatch"
+            )
+            if has_argument_mismatch != expected_argument_mismatch:
+                return EvalVerdict(
+                    False,
+                    "grounding input relation differed: expected "
+                    f"argument_mismatch={expected_argument_mismatch}, "
+                    f"actual={has_argument_mismatch}",
+                    self.run_source,
+                )
         # Compared on EVERY branch, not only the supported one. On a failure
         # branch the expectation is empty, and asserting that emptiness is what
         # proves AR11's non-retargeting rule: a failed claim must not emit a
@@ -197,7 +235,6 @@ class PolicyOutcomeEvaluator:
                 f"policy outcome differed: expected {case.expected_outcome}, actual {actual}",
                 self.run_source,
             )
-
         registered = frozenset(
             getattr(self.runtime, "registered_capability_names", ())
         )

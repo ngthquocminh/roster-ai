@@ -1,6 +1,8 @@
 import type { Timeline } from "@/api/conversations";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { EvidenceLink } from "@/components/primitives/EvidenceLink";
+import { InlineAlert } from "@/components/primitives/InlineAlert";
+import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { toSearchParams } from "@/features/evidence/locator";
 import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
 import {
@@ -12,6 +14,8 @@ import type { NavigateFunction } from "react-router";
 
 type Activity = Timeline["items"][number];
 type AgentResponse = Extract<Activity, { activity_type: "agent_response" }>;
+type Clarification = Extract<Activity, { activity_type: "clarification" }>;
+type TerminalOutcome = Extract<Activity, { activity_type: "terminal_outcome" }>;
 type Claim = Extract<AgentResponse["response"]["segments"][number], { kind: "claim" }>;
 
 // UX-DR8 asks the link to name the exact field AND range. Returning the field
@@ -133,8 +137,8 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
   // completes successfully and lands here too. The activity payload carries no
   // run status, so this cannot tell the two apart -- and asserting "did not
   // complete" in destructive styling was therefore wrong for the completed case.
-  // Stay neutral and factual; Story 2.9 owns the failure taxonomy and the
-  // visible states that distinguish them.
+  // Stay neutral and factual. New failures persist as terminal_outcome; this
+  // branch remains only for historical agent_response rows with no segments.
   if (!item.response.segments.length) {
     return (
       <div aria-label="ShiftMind response" className="space-y-2">
@@ -159,6 +163,86 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
       </p>
     </div>
   );
+}
+
+function Clarification({ item }: Readonly<{ item: Clarification }>) {
+  const dropped = item.clarification.dropped_candidate_count;
+  return (
+    <section aria-label="Clarification" className="space-y-2">
+      <StatusBadge status="Clarification" />
+      <p className="text-sm whitespace-pre-wrap">{item.clarification.question}</p>
+      {item.clarification.candidates.length ? (
+        <ul className="list-disc space-y-1 pl-5 text-sm">
+          {item.clarification.candidates.map((candidate) => (
+            <li key={`${candidate.group}:${candidate.record_id}`}>
+              {candidate.label} · {candidate.group} · {candidate.record_id}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {dropped > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {dropped} {dropped === 1 ? "candidate" : "candidates"} could not be resolved.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function terminalLabel(reason: TerminalOutcome["outcome"]["reason"]): string {
+  return {
+    provider_error: "Provider failure",
+    invalid_output: "Invalid output",
+    budget_exhausted: "Budget exhausted",
+    deadline_exceeded: "Timed out",
+    cancelled: "Cancelled",
+    capability_error: "Capability failure",
+    refused: "Refusal",
+    approval_unsupported: "Approval required",
+  }[reason];
+}
+
+function TerminalOutcome({ item }: Readonly<{ item: TerminalOutcome }>) {
+  const label = terminalLabel(item.outcome.reason);
+  return (
+    <div className="space-y-2">
+      <div aria-label={label} role="status">
+        <InlineAlert
+          description={`${item.outcome.reason}: ${item.outcome.detail}`}
+          title={label}
+          variant={item.outcome.reason === "refused" ? "default" : "destructive"}
+        />
+      </div>
+      {item.outcome.next_step ? (
+        <p className="text-sm text-muted-foreground">{item.outcome.next_step}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function ActivityContent({
+  item,
+  navigate,
+}: Readonly<{ item: Activity; navigate: NavigateFunction }>) {
+  switch (item.activity_type) {
+    case "planner_message":
+      return (
+        <div aria-label="Planner message">
+          <p className="text-xs font-medium text-muted-foreground">You</p>
+          <p className="text-sm whitespace-pre-wrap">{item.text}</p>
+        </div>
+      );
+    case "agent_response":
+      return <AgentResponse item={item} navigate={navigate} />;
+    case "clarification":
+      return <Clarification item={item} />;
+    case "terminal_outcome":
+      return <TerminalOutcome item={item} />;
+    default: {
+      const exhaustive: never = item;
+      return exhaustive;
+    }
+  }
 }
 
 // `navigate` is REQUIRED: activation writes the origin to storage before it
@@ -186,14 +270,7 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
           data-activity-id={item.activity_id}
           key={item.activity_id}
         >
-          {item.activity_type === "planner_message" ? (
-            <div aria-label="Planner message">
-              <p className="text-xs font-medium text-muted-foreground">You</p>
-              <p className="text-sm whitespace-pre-wrap">{item.text}</p>
-            </div>
-          ) : (
-            <AgentResponse item={item} navigate={navigate} />
-          )}
+          <ActivityContent item={item} navigate={navigate} />
         </li>
       ))}
     </ol>

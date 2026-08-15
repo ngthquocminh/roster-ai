@@ -92,6 +92,42 @@ const agentResponse = {
   },
 };
 
+const clarification = {
+  ...item,
+  activity_id: "99999999-9999-9999-9999-999999999999",
+  activity_type: "clarification" as const,
+  sequence: "3",
+  clarification: {
+    schema_version: "1",
+    question: "Which worker did you mean?",
+    scenario_version_id: item.scenario_version_id,
+    dropped_candidate_count: 1,
+    candidates: [
+      {
+        schema_version: "1",
+        group: "workers" as const,
+        record_id: "w1",
+        label: "CONTACT-9",
+        scenario_version_id: item.scenario_version_id,
+      },
+    ],
+  },
+};
+
+const refusal = {
+  ...item,
+  activity_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  activity_type: "terminal_outcome" as const,
+  sequence: "4",
+  outcome: {
+    schema_version: "1",
+    status: "completed" as const,
+    reason: "refused" as const,
+    detail: "That capability is not available.",
+    next_step: "Review Scenario Data.",
+  },
+};
+
 function renderedIds() {
   return screen
     .getAllByRole("listitem")
@@ -268,7 +304,7 @@ describe("ActivityTimeline", () => {
     // answers with zero segments completes successfully and renders here too.
     // The activity payload carries no run status, so claiming "did not
     // complete" in destructive styling was wrong for the completed case.
-    // Story 2.9 owns the taxonomy that can tell them apart.
+    // New failures use terminal_outcome; this branch remains for historical rows.
     const empty = {
       ...agentResponse,
       response: { ...agentResponse.response, segments: [] },
@@ -279,5 +315,54 @@ describe("ActivityTimeline", () => {
       "data-response-state",
       "empty",
     );
+  });
+
+  it("renders a clarification with trusted candidates and dropped-count disclosure", () => {
+    render(<ActivityTimeline navigate={vi.fn()} items={[clarification]} />);
+
+    expect(screen.getByText("Clarification")).toBeInTheDocument();
+    expect(screen.getByText("Which worker did you mean?")).toBeInTheDocument();
+    expect(screen.getByText(/CONTACT-9/)).toHaveTextContent("workers");
+    expect(screen.getByText(/1 candidate could not be resolved/)).toBeInTheDocument();
+  });
+
+  it("renders a refusal as a literal terminal outcome with its safe next step", () => {
+    render(<ActivityTimeline navigate={vi.fn()} items={[refusal]} />);
+
+    expect(screen.getByText("Refusal")).toBeInTheDocument();
+    expect(screen.getByText(/refused: That capability is not available/)).toBeInTheDocument();
+    expect(screen.getByText("Review Scenario Data.")).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toMatch(/gradient|animate-pulse|glow/i);
+  });
+
+  it("renders every terminal reason with pairwise-distinct literal output", () => {
+    const reasons = [
+      "provider_error",
+      "invalid_output",
+      "budget_exhausted",
+      "deadline_exceeded",
+      "cancelled",
+      "capability_error",
+      "refused",
+      "approval_unsupported",
+    ] as const;
+    const terminalItems = reasons.map((reason, index) => ({
+      ...refusal,
+      activity_id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index).padStart(12, "0")}`,
+      sequence: String(index + 4),
+      outcome: {
+        ...refusal.outcome,
+        status: reason === "refused" ? "completed" as const : "failed" as const,
+        reason,
+        detail: `detail-${reason}`,
+      },
+    }));
+
+    render(<ActivityTimeline navigate={vi.fn()} items={terminalItems} />);
+
+    const outputs = reasons.map((reason) =>
+      screen.getByText(`${reason}: detail-${reason}`).closest("[role='status']")?.textContent,
+    );
+    expect(new Set(outputs).size).toBe(reasons.length);
   });
 });

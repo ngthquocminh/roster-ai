@@ -545,79 +545,79 @@ turns out to need a new route or a migration.
 
 ### Task 8 — Codegen and timeline rendering (AC: 1, 2, 3)
 
-- [ ] `npm run codegen` — `frontend/openapi.json` and `frontend/src/api/schema.d.ts` both move. They
+- [x] `npm run codegen` — `frontend/openapi.json` and `frontend/src/api/schema.d.ts` both move. They
       are **generated**: do not hand-edit either, and do not derive frontend types any way other than
       `paths[…]` / `components[…]` (`src/api/scenarioProjection.ts:5-17` is the convention).
-- [ ] `features/chat/ActivityTimeline.tsx` renders the two new discriminants beside
+- [x] `features/chat/ActivityTimeline.tsx` renders the two new discriminants beside
       `planner_message` and `agent_response`. Keep the existing `activity_type` switch shape; the
       union is discriminated, so `tsc --noEmit` fails on an unhandled variant — that is the intended
       guard.
-  - [ ] **Clarification** — type label distinct from "ShiftMind" (AC1's *"the timeline … identifies
+  - [x] **Clarification** — type label distinct from "ShiftMind" (AC1's *"the timeline … identifies
         it as a clarification"*, `EXPERIENCE.md:85`'s *"by author/type label"*). Question as text;
         candidates as a plain list naming group, record, and the application-supplied label. When
         `dropped_candidate_count > 0`, say so literally — a silently shortened list is the
         `EXPERIENCE.md:112` "report missing merely because it was not rendered" failure.
-  - [ ] **Terminal outcome** — the literal reason and the safe next step. `EXPERIENCE.md`'s Voice and
+  - [x] **Terminal outcome** — the literal reason and the safe next step. `EXPERIENCE.md`'s Voice and
         Tone table is normative here: *"Use literal outcomes: completed, infeasible, timed out,
         cancelled, failed, rejected, expired"* / *"Don't: Collapse distinct outcomes into 'Done' or
         'Error'"*. Refusal renders with its own label, distinct from a provider failure.
-  - [ ] Reuse `InlineAlert` / `StatusBadge` from `components/primitives/` (UX-DR23's shared
+  - [x] Reuse `InlineAlert` / `StatusBadge` from `components/primitives/` (UX-DR23's shared
         patterns). Do **not** hand-roll a panel; Story 2.3's review already corrected Chat for
         exactly that.
-  - [ ] **Do not change** `ClaimSegment`, `fieldOrRange`, `claimSubject`, `formatClaimValue`, the
+  - [x] **Do not change** `ClaimSegment`, `fieldOrRange`, `claimSubject`, `formatClaimValue`, the
         empty-claim state, the failed-claim state, or the evidence jump wiring. Those are Story 2.7
         and 2.8 outcomes with tests behind them.
-  - [ ] The `!item.response.segments.length` branch at `:138-147` says *"Story 2.9 owns the failure
+  - [x] The `!item.response.segments.length` branch at `:138-147` says *"Story 2.9 owns the failure
         taxonomy and the visible states that distinguish them."* With a real terminal-outcome
         variant, an empty `agent_response` should no longer be how a failure reaches the timeline.
         Keep the branch (old rows exist) but correct the comment to describe what it now is: a
         historical shape, not the failure path.
-- [ ] UX-DR32: no pulsing, flashing, gradient, or glow treatment on any of it; no colour-only state
+- [x] UX-DR32: no pulsing, flashing, gradient, or glow treatment on any of it; no colour-only state
       communication — every state carries text.
 
 ### Task 9 — Chat error state keeps Scenario Data reachable (AC: 3)
 
-- [ ] AC3's second half. `ChatView.tsx`'s `ErrorState` (`:31-52`) and `Composer`'s failure alert
+- [x] AC3's second half. `ChatView.tsx`'s `ErrorState` (`:31-52`) and `Composer`'s failure alert
       (`Composer.tsx:63-69`) currently offer Retry and nothing else.
-  - [ ] Every Chat error state gains an active link to Scenario Data for the **same** scenario —
+  - [x] Every Chat error state gains an active link to Scenario Data for the **same** scenario —
         `/scenarios/${scenarioId}/data`. `EXPERIENCE.md:123`: Chat's error state *"links to Scenario
         Data, Runs/manual optimization, and saved Results"*.
-  - [ ] Runs and Results are **placeholder routes** (`WorkspaceTabPlaceholder`; the Results tab is an
+  - [x] Runs and Results are **placeholder routes** (`WorkspaceTabPlaceholder`; the Results tab is an
         `aria-disabled` span — verified at creation and recorded by Story 2.8's own honest gap). Link
         Scenario Data only. Do **not** build or link a Runs/Results affordance; that pre-empts
         Epic 3. Record the reduction in the `NOT COVERED:` form.
-  - [ ] Durable history stays visible during the error state — AC3's *"accepted conversation history
+  - [x] Durable history stays visible during the error state — AC3's *"accepted conversation history
         remains durable"* is a rendering property here as well as a persistence one.
-- [ ] **Scope fence — do not disable the composer.** Composer-disabling outage mode is **FR8**, owned
+- [x] **Scope fence — do not disable the composer.** Composer-disabling outage mode is **FR8**, owned
       wholly by **Story 3.9** (`epics.md:1059-1070`, FR Coverage Map `:275`). A failed turn is not a
       model outage, and treating it as one would both pre-empt 3.9 and make a transient failure look
       permanent. This story's error state is recoverable: the draft is retained
       (`Composer.tsx:36-43`, already correct) and Retry stays live.
-- [ ] Required assertions:
-  - [ ] Each terminal reason renders **distinctly** — drive them all and compare rendered output
+- [x] Required assertions:
+  - [x] Each terminal reason renders **distinctly** — drive them all and compare rendered output
         pairwise, the way Story 2.8's four exception panels are asserted.
-  - [ ] A failed turn leaves the accepted planner message visible in the timeline.
-  - [ ] The Scenario Data link carries the scenario id from the route/context, never from anything
+  - [x] A failed turn leaves the accepted planner message visible in the timeline.
+  - [x] The Scenario Data link carries the scenario id from the route/context, never from anything
         model-produced. `frontend/src/test/evidenceNavigationBoundaries.test.ts`'s allowlist-of-shapes
         guard (Story 2.8 review Decision 4) already sweeps `features/chat/` — extend its approved
         roots rather than adding a second guard.
 
 ### Task 10 — Accessibility proof (AC: 1, 3)
 
-- [ ] Extend `frontend/src/test/accessibility-contract.test.tsx` — **that file specifically**, not a
+- [x] Extend `frontend/src/test/accessibility-contract.test.tsx` — **that file specifically**, not a
       new sibling. `deferred-work.md:202` records that Story 2.8's sibling
       (`evidence-accessibility.test.tsx`) sits outside the `accessibility_component_layer` Gate A
       check's hand-declared `test_files` list, so its assertions are invisible to the NFR29 registry.
       Adding to the already-declared file avoids repeating that.
-  - [ ] AC1's *"assistive technology identify it as a clarification"* — the clarification block has
+  - [x] AC1's *"assistive technology identify it as a clarification"* — the clarification block has
         an accessible name/role that names it as a clarification, asserted through the accessible
         name, not a CSS class.
-  - [ ] Terminal outcomes announce as durable state changes (UX-DR27's live regions; `role="status"`
+  - [x] Terminal outcomes announce as durable state changes (UX-DR27's live regions; `role="status"`
         on the message only, control outside — `ScenarioWorkspace.tsx:118-137` is the in-repo
         pattern and Story 2.8's review Decision 2 recorded why `role="alert"` nesting is wrong).
-  - [ ] axe clean on: clarification with candidates, clarification with zero candidates, refusal,
+  - [x] axe clean on: clarification with candidates, clarification with zero candidates, refusal,
         and each terminal reason.
-- [ ] **Optional, only if it costs nothing:** while editing `gate_a_checks.py` is *not* warranted by
+- [x] **Optional, only if it costs nothing:** while editing `gate_a_checks.py` is *not* warranted by
       any AC here, if Phase C gives you a legitimate reason to touch that file, add
       `evidence-accessibility.test.tsx` to `accessibility_component_layer` and close
       `deferred-work.md:202`. If not, leave the item open and untouched — its owner is "the next
@@ -625,27 +625,27 @@ turns out to need a new route or a migration.
 
 ### Task 11 — Fences, ledger, regression, Gate A (AC: 3, 4)
 
-- [ ] **Zero-line-diff fences** — verify each with `git diff --stat` and record the result:
-  - [ ] `backend/migrations/**` — **no migration** (Task 5). `alembic check` from the **repository
+- [x] **Zero-line-diff fences** — verify each with `git diff --stat` and record the result:
+  - [x] `backend/migrations/**` — **no migration** (Task 5). `alembic check` from the **repository
         root** (`deferred-work.md:132-143` — from `backend/` it fails with a misleading
         `script_location` error) expecting zero operations and zero migration files.
-  - [ ] `backend/services/**`, `backend/domain/**`, `backend/engine/**`, `backend/llm/**`,
+  - [x] `backend/services/**`, `backend/domain/**`, `backend/engine/**`, `backend/llm/**`,
         `backend/ingest/**`, `backend/store/**`, `backend/adapters/postgres/scenario_projection.py`,
         `application/ports/scenario_catalogue.py`, `adapters/postgres/scenario_catalogue.py`.
-  - [ ] `backend/tests/test_gate_a_mutation_audit.py` — AR28 forbids weakening an earlier gate.
-  - [ ] `backend/application/grounding/**` **except** whatever Task 3's shared group→resolver
+  - [x] `backend/tests/test_gate_a_mutation_audit.py` — AR28 forbids weakening an earlier gate.
+  - [x] `backend/application/grounding/**` **except** whatever Task 3's shared group→resolver
         extraction genuinely requires. If that extraction touches `gate.py`, keep it to the move.
-  - [ ] `frontend/src/features/scenario-data/**` and `frontend/src/features/evidence/**` — Story 2.8's
+  - [x] `frontend/src/features/scenario-data/**` and `frontend/src/features/evidence/**` — Story 2.8's
         surfaces are untouched by this story.
-  - [ ] `evidence/story-2.2/evaluation-harness-demonstration.json` — **do not regenerate it.**
-- [ ] **Ledger** (`_bmad-output/implementation-artifacts/deferred-work.md`). Four entries name this
+  - [x] `evidence/story-2.2/evaluation-harness-demonstration.json` — **do not regenerate it.**
+- [x] **Ledger** (`_bmad-output/implementation-artifacts/deferred-work.md`). Four entries name this
       story; judge each honestly and annotate in place rather than deleting (Story 2.4/2.5
       precedent):
-  - [ ] `:11` — *"after Story 2.9 closes the visible-state half, whoever finds `expected_visible_text`
+  - [x] `:11` — *"after Story 2.9 closes the visible-state half, whoever finds `expected_visible_text`
         still unread by any evaluator"*. Task 6 closes it. Record the closure with the mechanism.
-  - [ ] `:130-132` — the refusal/injection evaluator fence (**spent** by Task 6, as designed) and the
+  - [x] `:130-132` — the refusal/injection evaluator fence (**spent** by Task 6, as designed) and the
         surviving visible-state half (**closed** by Task 6). Close the entry.
-  - [ ] `:192` — `argument_mismatch` is not observably distinct; owner *"most likely Story 2.9 …
+  - [x] `:192` — `argument_mismatch` is not observably distinct; owner *"most likely Story 2.9 …
         either give the mismatch its own cause or give the evaluator a discriminator beyond the
         failure label"*. **Recommended: the discriminator, not a new cause.** AR11
         (`epics.md:157`) names exactly three evidence failures and `GroundingFailureV1` is a
@@ -653,31 +653,31 @@ turns out to need a new route or a migration.
         cited and originating arguments are both available to `GroundingEvaluator`. If you take the
         discriminator, close it; if you judge otherwise, re-annotate with the reasoning and leave it
         open.
-  - [ ] `:202` — Gate A registry attribution for `evidence-accessibility.test.tsx`. Its owner is *"the
+  - [x] `:202` — Gate A registry attribution for `evidence-accessibility.test.tsx`. Its owner is *"the
         next story that already has a legitimate reason to touch `gate_a_checks.py`"*. This story
         does not. **Leave it open and untouched** unless Task 10's optional clause applies.
-  - [ ] Deliberately **not** touched: `:7`, `:9` (live-model evaluation path — Gate B's, and NFR26
+  - [x] Deliberately **not** touched: `:7`, `:9` (live-model evaluation path — Gate B's, and NFR26
         keeps live providers out of normal CI), `:16`, `:17`, `:18`, `:26`, `:116`, `:176`–`:188`,
         and the `ScenarioCatalogueReader` AD-1 leak at `:147-164`. **`ALLOWED_LEAKS` stays
         untouched.**
-- [ ] **Code comments naming this story** — three, all reachable now. Correct each in place:
-  - [ ] `application/use_cases/execute_turn.py:52-54` — Decision 6's false premise.
-  - [ ] `api/routers/conversations.py:257` — the taxonomy now exists; restate what the catch-all
+- [x] **Code comments naming this story** — three, all reachable now. Correct each in place:
+  - [x] `application/use_cases/execute_turn.py:52-54` — Decision 6's false premise.
+  - [x] `api/routers/conversations.py:257` — the taxonomy now exists; restate what the catch-all
         still collapses and why.
-  - [ ] `frontend/src/features/chat/ActivityTimeline.tsx:136` and its test at
+  - [x] `frontend/src/features/chat/ActivityTimeline.tsx:136` and its test at
         `ActivityTimeline.test.tsx:271` — Task 8's correction.
-- [ ] **No evidence file is owed.** No AC here carries a measured threshold, and NFR35's four rows
+- [x] **No evidence file is owed.** No AC here carries a measured threshold, and NFR35's four rows
       belong to Stories 1.4, 1.5, 2.4 and 3.5 (`requirements-inventory.md`, AD-26). Gate A must still
       be re-run per AR28 — expect the two-commit dance, because the readiness gate dirties
       `evidence/` and cannot run twice in a row (`deferred-work.md:107`). See
       `docs/GATE-A-RUNBOOK.md`; §3 requires `playwright.config.ts` to keep `reporter: "list"` as its
       committed default.
 - [ ] **Regression + Gate A**:
-  - [ ] Re-derive every baseline on a clean tree — do **not** trust the numbers below.
-  - [ ] `uv run --frozen pytest` (backend), the `postgres`-marked suite, `npm test`, `tsc -b`,
+  - [x] Re-derive every baseline on a clean tree — do **not** trust the numbers below.
+  - [x] `uv run --frozen pytest` (backend), the `postgres`-marked suite, `npm test`, `tsc -b`,
         `oxlint`, `npm run build`, Playwright.
   - [ ] Gate A re-run per AR28: `gate_a_passed: true`, `blocking: []`.
-- [ ] **Record the NFR28 numbers** per Gap 2: this story's contribution, the running dataset total,
+- [x] **Record the NFR28 numbers** per Gap 2: this story's contribution, the running dataset total,
       the per-capability counts, and the honest statement that the 50-case floor remains Gate B's to
       re-verify once Stories 3.10–3.12 and 4.5–4.6 have contributed. **Do not lower it here. Do not
       pad toward it.**
@@ -877,6 +877,11 @@ same; assume it and measure on a clean tree before you start.
 - Task 5 plan and verification: added the two already-reserved activity payloads, parameterized finalization on the use-case-produced payload while preserving locking/version/sequence mechanics, and extended typed storage, API, and history projections. RED proved the activity contracts were absent; focused API/contract suites passed 43 tests, PostgreSQL passed 45, and full backend regression passed 838, skipped 2, deselected 7. No migration added.
 - Task 6 plan and verification: added policy-outcome evaluation, fixed output-tool routing exclusion, single-sourced planner-visible text, and made report results fail on visible-state/text drift. RED proved the old evaluator counted `clarification` as a routed capability and the old structured text oracle was vacuous; evaluator suite passed 35 and full backend regression passed 846, skipped 2, deselected 7.
 - Task 7 plan and verification: contributed six distinct scheduling-inspect cases (ambiguity, refusal, provider failure, and three injection channels), embedded real malicious fixture fields, and asserted attempted compliance cannot change capabilities, permissions, budgets, or approval. The unregistered-result mutation test is RED when its structural assertion is removed. Dataset now totals 17 cases: demonstration 2, scheduling_compute 4, scheduling_inspect 11. Full backend regression passed 849, skipped 2, deselected 7.
+- Phase A checkpoint: committed as `12b1ea3`; backend 849 passed / 2 skipped / 7 deselected, golden cases 17 (demonstration 2, scheduling_compute 4, scheduling_inspect 11), routing and injection mutations observed RED, frontend diff zero lines.
+- Task 8 plan and verification: regenerated OpenAPI/types and replaced the binary timeline render with an exhaustive four-variant switch. Clarifications use trusted candidate labels with literal dropped counts; terminal outcomes use shared StatusBadge/InlineAlert patterns and reason-specific text. RED showed both new discriminants fell into AgentResponse and crashed; focused timeline passed 14, TypeScript passed, and full frontend regression passed 63 files / 380 tests.
+- Task 9 plan and verification: passed the trusted route scenario id into both shared Chat error surfaces, linked Scenario Data only, retained durable timeline history and kept the composer live after rejection. RED proved all four error surfaces lacked the link; focused Chat/navigation suites passed 36 and full frontend regression passed 63 files / 383 tests.
+- Task 10 plan and verification: extended the Gate A-recognized accessibility contract with accessible clarification naming, live-region boundaries, and axe coverage for candidate/zero-candidate clarification plus all eight terminal reasons. RED proved the next step was nested inside the live region; focused accessibility/timeline suites passed 35 and full frontend regression passed 63 files / 395 tests. The optional Gate A registry change was intentionally not taken, so deferred-work line 202 remains open.
+- Task 11 pre-Gate verification: closed the visible-state/text ledger entries and made `argument_mismatch` observably distinct inside the evaluator without widening AR11. Cross-swapped oracle outcomes were RED before the discriminator and pass/fail correctly now. Root Alembic reported zero operations; all protected zero-diff fences were empty except the permitted grounding resolver extraction (`gate.py` + `resolvers.py`). Regression passed backend 850 / skipped 2 / deselected 7, PostgreSQL 45, frontend 63 files / 395 tests, TypeScript, oxlint (three inherited warnings), production build, and Playwright 48. NFR28 contribution is 6 cases; running total 17: demonstration 2, scheduling_compute 4, scheduling_inspect 11. The 50-case floor remains Gate B's to re-verify after Stories 3.10–3.12 and 4.5–4.6; it was neither lowered nor padded.
 
 ### Completion Notes List
 
@@ -899,6 +904,7 @@ same; assume it and measure on a clean tree before you start.
 - backend/evals/cases.py
 - backend/evals/doubles.py
 - backend/evals/evaluators.py
+- _bmad-output/implementation-artifacts/deferred-work.md
 - backend/evals/fixture_projection.py
 - backend/evals/README.md
 - backend/evals/golden/scheduling_inspect/clarify-worker-ambiguity.json
@@ -921,6 +927,15 @@ same; assume it and measure on a clean tree before you start.
 - backend/tests/test_evaluation_harness.py
 - backend/tests/test_evidence_ref.py
 - backend/tests/test_execute_turn_use_case.py
+- frontend/openapi.json
+- frontend/src/api/schema.d.ts
+- frontend/src/features/chat/ActivityTimeline.tsx
+- frontend/src/features/chat/ActivityTimeline.test.tsx
+- frontend/src/features/chat/ChatView.tsx
+- frontend/src/features/chat/ChatView.test.tsx
+- frontend/src/features/chat/Composer.tsx
+- frontend/src/features/chat/Composer.test.tsx
+- frontend/src/test/accessibility-contract.test.tsx
 - _bmad-output/implementation-artifacts/2-9-clarify-refuse-and-fail-safely.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 

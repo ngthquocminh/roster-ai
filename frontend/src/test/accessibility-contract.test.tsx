@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import { axe } from "jest-axe";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -20,6 +21,14 @@ import { ScenarioDataView } from "@/features/scenario-data/ScenarioDataView";
 import { ScenarioVersionContext } from "@/features/scenario-workspace/ScenarioVersionContext";
 import { WorkspaceTabs } from "@/features/scenario-workspace/WorkspaceTabs";
 import * as hooks from "@/hooks/useScenarioProjection";
+
+async function expectAxeClean(container: HTMLElement) {
+  const results = await axe(container, {
+    runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] },
+    rules: { "color-contrast": { enabled: false }, "target-size": { enabled: true } },
+  });
+  expect(results.violations).toEqual([]);
+}
 
 type Contract = Readonly<{
   fixture: { fixture_id: string; version: string };
@@ -215,4 +224,112 @@ it("gives a grounded response an author label and a keyboard-operable evidence c
   // than by matching a utility class.
   await userEvent.tab();
   expect(evidence).toHaveFocus();
+});
+
+const dialogueBase = {
+  schema_version: "1",
+  activity_id: "55555555-5555-4555-8555-555555555555",
+  conversation_id: "22222222-2222-4222-8222-222222222222",
+  conversation_resource_version: 3,
+  scenario_id: scenarioId,
+  scenario_version_id: "44444444-4444-4444-8444-444444444444",
+  occurred_at: "2026-08-15T00:00:00Z",
+  sequence: "2",
+};
+
+it("identifies clarification by accessible role and name", async () => {
+  const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
+  const clarification = {
+    ...dialogueBase,
+    activity_type: "clarification" as const,
+    clarification: {
+      schema_version: "1",
+      question: "Which worker did you mean?",
+      scenario_version_id: dialogueBase.scenario_version_id,
+      dropped_candidate_count: 0,
+      candidates: [],
+    },
+  };
+
+  render(<ActivityTimeline navigate={vi.fn()} items={[clarification] as never} />);
+
+  expect(screen.getByRole("region", { name: "Clarification" })).toBeInTheDocument();
+});
+
+it("announces only terminal state while keeping its next step outside the live region", async () => {
+  const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
+  const outcome = {
+    ...dialogueBase,
+    activity_type: "terminal_outcome" as const,
+    outcome: {
+      schema_version: "1",
+      status: "failed" as const,
+      reason: "provider_error" as const,
+      detail: "The provider did not complete this turn.",
+      next_step: "Try again or review Scenario Data.",
+    },
+  };
+
+  render(<ActivityTimeline navigate={vi.fn()} items={[outcome] as never} />);
+
+  const status = screen.getByRole("status", { name: "Provider failure" });
+  expect(within(status).queryByText(outcome.outcome.next_step)).not.toBeInTheDocument();
+  expect(screen.getByText(outcome.outcome.next_step)).toBeInTheDocument();
+});
+
+it.each([
+  ["clarification with candidates", {
+    ...dialogueBase,
+    activity_type: "clarification" as const,
+    clarification: {
+      schema_version: "1",
+      question: "Which worker did you mean?",
+      scenario_version_id: dialogueBase.scenario_version_id,
+      dropped_candidate_count: 1,
+      candidates: [{
+        schema_version: "1",
+        group: "workers" as const,
+        record_id: "worker-1",
+        label: "CONTACT-9",
+        scenario_version_id: dialogueBase.scenario_version_id,
+      }],
+    },
+  }],
+  ["clarification without candidates", {
+    ...dialogueBase,
+    activity_type: "clarification" as const,
+    clarification: {
+      schema_version: "1",
+      question: "Which record did you mean?",
+      scenario_version_id: dialogueBase.scenario_version_id,
+      dropped_candidate_count: 2,
+      candidates: [],
+    },
+  }],
+  ...([
+    "provider_error",
+    "invalid_output",
+    "budget_exhausted",
+    "deadline_exceeded",
+    "cancelled",
+    "capability_error",
+    "refused",
+    "approval_unsupported",
+  ] as const).map((reason, index) => [reason === "refused" ? "refusal" : reason, {
+    ...dialogueBase,
+    activity_id: `77777777-7777-4777-8777-${String(index).padStart(12, "0")}`,
+    activity_type: "terminal_outcome" as const,
+    outcome: {
+      schema_version: "1",
+      status: reason === "refused" ? "completed" as const : "failed" as const,
+      reason,
+      detail: `Literal detail for ${reason}.`,
+      next_step: "Review Scenario Data.",
+    },
+  }] as const),
+])("is axe clean for %s", async (_name, activity) => {
+  const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
+  const { container } = render(<ActivityTimeline navigate={vi.fn()} items={[activity] as never} />);
+
+  await expectAxeClean(container);
 });

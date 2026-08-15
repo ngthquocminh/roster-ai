@@ -49,7 +49,12 @@ from evals.cases import (
 )
 from evals.doubles import _to_model_response, build_model_double
 from evals.grounding import ground_case_outcome
-from evals.evaluators import Evaluator, PolicyOutcomeEvaluator, ToolRoutingEvaluator
+from evals.evaluators import (
+    Evaluator,
+    GroundingEvaluator,
+    PolicyOutcomeEvaluator,
+    ToolRoutingEvaluator,
+)
 from evals.report import (
     CaseEvaluation,
     _runtime_for_case,
@@ -638,6 +643,29 @@ def test_grounding_cases_have_literal_result_ids_authored_refs_and_oracles() -> 
         assert len(claim["result_id"]) == 64
         if outcome != "missing_evidence":
             assert claim["result_id"] == expected_id, outcome
+
+
+def test_grounding_evaluator_distinguishes_argument_mismatch_from_missing_result() -> None:
+    cases = {
+        case.expected_grounding_outcome: case
+        for case in load_cases(GOLDEN_DIR)
+        if case.capability == "scheduling_compute"
+    }
+
+    def grounded(case: GoldenCase) -> AgentRunOutcomeV1:
+        results: list[object] = []
+        runtime = _runtime_for_case(case, installed_modules(), results)
+        outcome = _run_runtime_case(runtime, case)
+        return ground_case_outcome(case, outcome, runtime._deps, tuple(results))
+
+    mismatch = grounded(cases["argument_mismatch"])
+    missing = grounded(cases["missing_evidence"])
+    evaluator = GroundingEvaluator()
+
+    assert evaluator.evaluate(cases["argument_mismatch"], mismatch).passed is True
+    assert evaluator.evaluate(cases["missing_evidence"], missing).passed is True
+    assert evaluator.evaluate(cases["argument_mismatch"], missing).passed is False
+    assert evaluator.evaluate(cases["missing_evidence"], mismatch).passed is False
 
 
 def test_live_verdict_is_non_authoritative_by_data_shape() -> None:

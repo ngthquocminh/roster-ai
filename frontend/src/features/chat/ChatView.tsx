@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { createConversation } from "@/api/conversations";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
@@ -28,17 +28,28 @@ function runStatusLabel(status: string): string {
   return status === "agent_queued" ? `Agent run accepted — ${bare}` : `Agent run ${bare}`;
 }
 
-function ErrorState({ error, onRetry }: Readonly<{ error: unknown; onRetry: () => void }>) {
+function ErrorState({
+  error,
+  onRetry,
+  scenarioId,
+}: Readonly<{ error: unknown; onRetry: () => void; scenarioId: string }>) {
   const status = getErrorStatus(error);
   const isTerminal = status !== undefined && TERMINAL_STATUSES.has(status);
   return (
     <InlineAlert
       action={
-        isTerminal ? undefined : (
-          <Button className="min-h-11" onClick={onRetry} type="button" variant="outline">
-            Retry
-          </Button>
-        )
+        <div className="flex flex-wrap items-center gap-3">
+          {isTerminal ? null : (
+            <Button className="min-h-11" onClick={onRetry} type="button" variant="outline">
+              Retry
+            </Button>
+          )}
+          {/* NOT COVERED: Runs and Results remain Epic 3 placeholder routes.
+              Scenario Data is the only active recovery destination in this story. */}
+          <Link className="font-medium underline underline-offset-3" to={`/scenarios/${scenarioId}/data`}>
+            Open Scenario Data
+          </Link>
+        </div>
       }
       description={
         isTerminal
@@ -140,13 +151,13 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
       </div>
 
       {start.isError ? (
-        <ErrorState error={start.error} onRetry={() => start.reset()} />
+        <ErrorState error={start.error} onRetry={() => start.reset()} scenarioId={scenarioId} />
       ) : null}
 
       {conversations.isPending ? (
         <Skeleton aria-label="Loading conversations" className="h-11 w-full" role="status" />
       ) : conversations.isError ? (
-        <ErrorState error={conversations.error} onRetry={() => void conversations.refetch()} />
+        <ErrorState error={conversations.error} onRetry={() => void conversations.refetch()} scenarioId={scenarioId} />
       ) : (
         <ConversationList
           conversations={items}
@@ -169,7 +180,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
               ))}
             </div>
           ) : timeline.isError ? (
-            <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} />
+            <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} scenarioId={scenarioId} />
           ) : (
             <>
               {/* Only rendered once something has actually gone wrong; a
@@ -201,6 +212,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
           <Composer
             isPending={mutation.isPending}
             onSend={(text) => mutation.mutateAsync({ text })}
+            scenarioId={scenarioId}
           />
         </div>
       ) : (

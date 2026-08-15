@@ -615,7 +615,7 @@ export interface components {
         /** AcceptedTurnOut */
         AcceptedTurnOut: {
             /** Activity */
-            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"];
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
             /** Resource Version */
             resource_version: number;
             /** Agent Run Status */
@@ -782,6 +782,46 @@ export interface components {
             start_minute?: number | null;
             /** End Minute */
             end_minute?: number | null;
+        };
+        /** ClarificationActivityOut */
+        ClarificationActivityOut: {
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Conversation Resource Version */
+            conversation_resource_version: number;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            activity_type: "clarification";
+            clarification: components["schemas"]["ResolvedClarificationV1"];
         };
         /** ConstraintPageOut */
         ConstraintPageOut: {
@@ -951,6 +991,35 @@ export interface components {
             /** Matching Count */
             matching_count: number;
         };
+        /**
+         * EntityCandidateV1
+         * @description TRUSTED candidate resolved against the governed scenario projection.
+         */
+        EntityCandidateV1: {
+            /**
+             * Group
+             * @default workers
+             * @enum {string}
+             */
+            group: "work-areas-and-tasks" | "workers" | "demand" | "baseline-assignments" | "locks" | "constraints-and-objectives";
+            /**
+             * Record Id
+             * @default
+             */
+            record_id: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Scenario Version Id */
+            scenario_version_id?: string | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
         /** EvidenceRefV1 */
         EvidenceRefV1: {
             /**
@@ -990,7 +1059,7 @@ export interface components {
         /** ExecutedTurnOut */
         ExecutedTurnOut: {
             /** Activity */
-            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"];
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
             /** Resource Version */
             resource_version: number;
             /** Agent Run Status */
@@ -1292,6 +1361,34 @@ export interface components {
             /** Error */
             error: string;
         };
+        /**
+         * ResolvedClarificationV1
+         * @description Persistable clarification whose candidate labels are application-owned.
+         */
+        ResolvedClarificationV1: {
+            /**
+             * Question
+             * @default
+             */
+            question: string;
+            /**
+             * Candidates
+             * @default []
+             */
+            candidates: components["schemas"]["EntityCandidateV1"][];
+            /** Scenario Version Id */
+            scenario_version_id?: string | null;
+            /**
+             * Dropped Candidate Count
+             * @default 0
+             */
+            dropped_candidate_count: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
         /** RunOut */
         RunOut: {
             /** Id */
@@ -1489,6 +1586,76 @@ export interface components {
             /** Unit Type Id */
             unit_type_id: string | null;
         };
+        /** TerminalOutcomeActivityOut */
+        TerminalOutcomeActivityOut: {
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Conversation Resource Version */
+            conversation_resource_version: number;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            activity_type: "terminal_outcome";
+            outcome: components["schemas"]["TerminalOutcomeV1"];
+        };
+        /**
+         * TerminalOutcomeV1
+         * @description Persistable literal terminal state for a completed or failed turn.
+         */
+        TerminalOutcomeV1: {
+            /**
+             * Status
+             * @default failed
+             * @enum {string}
+             */
+            status: "completed" | "suspended" | "timed_out" | "failed";
+            /**
+             * Reason
+             * @default invalid_output
+             * @enum {string}
+             */
+            reason: "provider_error" | "invalid_output" | "budget_exhausted" | "deadline_exceeded" | "cancelled" | "capability_error" | "refused" | "approval_unsupported";
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /** Next Step */
+            next_step?: string | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
         /** TimelineOut */
         TimelineOut: {
             /**
@@ -1501,7 +1668,7 @@ export interface components {
             /** Latest Agent Run Status */
             latest_agent_run_status: string | null;
             /** Items */
-            items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"])[];
+            items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"])[];
             /** Limit */
             limit: number;
             /** Has More */
