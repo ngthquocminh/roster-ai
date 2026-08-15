@@ -4,7 +4,7 @@ baseline_commit: fa18cf1f5e3e74c87fef4578a8867c4a0a9e11a0
 
 # Story 2.8: Jump to Evidence and Return to the Claim
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -223,7 +223,7 @@ Same posture Story 2.5 took for the audit/evidence declaration and Story 2.7 too
 - [x] **Task 5** — Wire the jump (AC: 1)
 - [x] **Task 6** — Return to claim and browser Back (AC: 1, 3)
 - [x] **Task 7** — The four exception states (AC: 2)
-- [ ] **Task 8** — Accessibility proof, fences, ledger, Gate A (AC: 3)
+- [x] **Task 8** — Accessibility proof, fences, ledger, Gate A (AC: 3)
 
 New feature home: **`frontend/src/features/evidence/`** (AR26's `frontend/src/features` structural
 seed). It is deliberately *not* `features/scenario-data/`, whose whole directory is swept by
@@ -398,64 +398,64 @@ Scenario Data must not import from the chat feature.
 
 ### Task 8 — Accessibility proof, fences, ledger, Gate A (AC: 3)
 
-- [ ] **jsdom / axe proof** — extend `src/test/accessibility-contract.test.tsx` or add a sibling in
+- [x] **jsdom / axe proof** — extend `src/test/accessibility-contract.test.tsx` or add a sibling in
       the same directory (Epic 1's established suite):
-  - [ ] Focus moves to the evidence target on jump, and only after the record resolves.
-  - [ ] Focus returns to the invoking Evidence link on return.
-  - [ ] The target's accessible name contains group, record, field/range, and version.
-  - [ ] Exactly one `EVIDENCE_HIGHLIGHT_CLASS` element exists.
-  - [ ] axe clean on the target state and on all four exception states.
-- [ ] **Playwright browser proof** — jsdom cannot verify a real focus ring, which is why Epic 1's
+  - [x] Focus moves to the evidence target on jump, and only after the record resolves.
+  - [x] Focus returns to the invoking Evidence link on return.
+  - [x] The target's accessible name contains group, record, field/range, and version.
+  - [x] Exactly one `EVIDENCE_HIGHLIGHT_CLASS` element exists.
+  - [x] axe clean on the target state and on all four exception states.
+- [x] **Playwright browser proof** — jsdom cannot verify a real focus ring, which is why Epic 1's
       `e2e/keyboard-journey.spec.ts` exists and uses `expectKeyboardFocus`. Add a keyboard-only
       jump-and-return journey:
-  - [ ] Extend `e2e/support/apiStubs.ts` with **GET-only** stubs: the conversation list, the
+  - [x] Extend `e2e/support/apiStubs.ts` with **GET-only** stubs: the conversation list, the
         conversation timeline (containing one `agent_response` with one supported claim and one
         `EvidenceRefV1`), and the six resolve paths. The stub's non-GET 405 guard
         (`apiStubs.ts:105`) is deliberate — **do not relax it.** Enter the journey by deep-linking
         `/scenarios/:id?conversation=<id>`; nothing in the journey needs to create anything.
-  - [ ] The SSE endpoint has no stub, so the stream degrades to the labelled-polling banner. That is
+  - [x] The SSE endpoint has no stub, so the stream degrades to the labelled-polling banner. That is
         acceptable and the journey must not depend on the stream either way.
-  - [ ] Tab to the Evidence link → `expectKeyboardFocus` → Enter → target focused with a real ring →
+  - [x] Tab to the Evidence link → `expectKeyboardFocus` → Enter → target focused with a real ring →
         Tab to *Return to claim* → Enter → the Evidence link is focused again.
-- [ ] **Model-generated-URL guard** (AC3, AR15): a source-level test asserting no navigation target,
+- [x] **Model-generated-URL guard** (AC3, AR15): a source-level test asserting no navigation target,
       `href`, or DOM attribute under `features/chat/` or `features/evidence/` derives from prose
       segment text or any other free-text model output. Read the modules' own source — Story 2.7's
       second review found a guard that *"watched a helper and left the tautology re-addable"*, so
       point it at the files that actually navigate.
-- [ ] **Zero-line-diff fences** — verify each with `git diff --stat` and record the result:
-  - [ ] **All of `backend/`.** This story has no backend change (Decision 1 + Decision 4). If you
+- [x] **Zero-line-diff fences** — verify each with `git diff --stat` and record the result:
+  - [x] **All of `backend/`.** This story has no backend change (Decision 1 + Decision 4). If you
         find yourself editing a Python file, stop and re-read those two decisions.
-  - [ ] `frontend/openapi.json` and `frontend/src/api/schema.d.ts` — no contract moved, so **no
+  - [x] `frontend/openapi.json` and `frontend/src/api/schema.d.ts` — no contract moved, so **no
         codegen run**. A regenerated-but-identical file still shows a diff if formatting drifts.
-  - [ ] `frontend/src/features/scenario-data/groups/**` — the six panels are untouched.
-  - [ ] `frontend/src/features/chat/{ChatView,Composer,ConversationList}.tsx` — only
+  - [x] `frontend/src/features/scenario-data/groups/**` — the six panels are untouched.
+  - [x] `frontend/src/features/chat/{ChatView,Composer,ConversationList}.tsx` — only
         `ActivityTimeline.tsx` changes in that directory, plus whatever Task 6's focus restoration
         genuinely requires in `ChatView.tsx`. If `ChatView.tsx` must change, keep it to the
         restoration effect.
-- [ ] **Ledger** (`_bmad-output/implementation-artifacts/deferred-work.md`) — three Story 1.6 review
+- [x] **Ledger** (`_bmad-output/implementation-artifacts/deferred-work.md`) — three Story 1.6 review
       items name this story by name. Judge each honestly; annotate in place rather than deleting,
       following the Story 2.4/2.5 precedent for a false premise:
-  - [ ] `:78` (inert `EvidenceLink` with neither prop) — **closed** by Task 2's discriminated union.
-  - [ ] `:76` (no contrast test for `EvidenceLink` on `evidence-surface`) — its trigger is *"once
+  - [x] `:78` (inert `EvidenceLink` with neither prop) — **closed** by Task 2's discriminated union.
+  - [x] `:76` (no contrast test for `EvidenceLink` on `evidence-surface`) — its trigger is *"once
         Story 2.8 actually composes `EvidenceLink` inside `EvidenceHighlight`"*. Under Decision 2
         the highlight contains the record and a *Return to claim* button, **not** an `EvidenceLink`.
         If that holds in your implementation, re-annotate with the corrected premise and restate the
         owner. If you do compose one inside, add the contrast test and close it.
-  - [ ] `:81` (no truncation handling for long locator labels — *"Story 2.8's dense grid is where
+  - [x] `:81` (no truncation handling for long locator labels — *"Story 2.8's dense grid is where
         this becomes visible"*) — under Decision 2 the link lives in Chat's reading column and the
         target is a record region, so the dense-grid premise is false. Re-annotate and restate;
         do **not** close it silently and do **not** add truncation nothing asks for.
-- [ ] **Regression + Gate A**:
-  - [ ] Re-derive every baseline on a clean tree — do **not** trust the numbers in Dev Notes.
-  - [ ] `alembic check` from the **repository root** (`deferred-work.md:132-143`) — expect zero
+- [x] **Regression + Gate A**:
+  - [x] Re-derive every baseline on a clean tree — do **not** trust the numbers in Dev Notes.
+  - [x] `alembic check` from the **repository root** (`deferred-work.md:132-143`) — expect zero
         operations and zero migration files.
-  - [ ] Gate A re-run per AR28. Expect the two-commit dance: the readiness gate cannot run twice in
+  - [x] Gate A re-run per AR28. Expect the two-commit dance: the readiness gate cannot run twice in
         a row because it dirties `evidence/` (`deferred-work.md:107`). See `docs/GATE-A-RUNBOOK.md`.
-  - [ ] **No evidence file is owed.** No AC here carries a measured threshold, and NFR35's four rows
+  - [x] **No evidence file is owed.** No AC here carries a measured threshold, and NFR35's four rows
         belong to Stories 1.4, 1.5, 2.4 and 3.5 — 1.5's row already measured *evidence-target
         resolution* against these very endpoints. Do **not** regenerate
         `evidence/story-2.2/evaluation-harness-demonstration.json`.
-  - [ ] **No new golden cases.** NFR28's floor is per *capability*; this story adds no capability and
+  - [x] **No new golden cases.** NFR28's floor is per *capability*; this story adds no capability and
         no evaluator. `epics.md:1527` — never pad the dataset.
 
 ---
@@ -642,7 +642,12 @@ tests; assume the same and measure on a clean tree before you start.
 
 ### Agent Model Used
 
+OpenAI Codex (GPT-5)
+
 ### Debug Log References
+
+- 2026-08-15: Playwright's aggregating JUnit reporter completed browser cases but did not exit on this Windows host. A streaming test-artifact reporter recorded each completed case before teardown; the resulting post-commit XML contains all 48 cases across Chromium and Edge with zero failures, skips, or errors. The normal Playwright list reporter independently completed all 48 cases successfully.
+- 2026-08-15: Gate A report regenerated from post-commit pytest, Vitest, and Playwright XML; all AR28, NFR29, and AC2 checks passed with `blocking: []`.
 
 ### Implementation Plan
 
@@ -658,6 +663,8 @@ tests; assume the same and measure on a clean tree before you start.
 - Task 5: Wired jump activation exclusively from persisted activity/ref data, preserved scenario and selected workspace version, and proved a mismatched citation renders the mismatch panel without retargeting. Full frontend regression is green (61 files / 352 tests).
 - Task 6: Added one read-once post-timeline focus restoration path shared by explicit return and browser Back. Proved exact scenario/conversation restoration, exact-link focus, no second focus steal, and zero create/send/execute calls; full frontend regression is green (61 files / 354 tests).
 - Task 7: Added four RFC-7807-code-driven InlineAlert states, exact no-retarget assertions, and a non-persisted lost-evidence marker. The marker survives the SPA jump→return trip and intentionally does not survive reload; no persisted activity is mutated. Full frontend regression is green (61 files / 363 tests), TypeScript and lint pass (three pre-existing Fast Refresh warnings remain).
+- Task 8: Added five-state jsdom/axe coverage, a keyboard-only Chat→evidence→claim browser journey in Chromium and Edge, and a TypeScript-AST guard against model-derived navigation. Verified the zero-diff backend/schema/group-panel fences, reconciled all three Story 1.6 ledger entries, and reran Gate A successfully. Final baselines: backend 811 passed / 1 skipped / 7 deselected; PostgreSQL 45 passed; frontend 63 files / 370 tests; Playwright 48 passed; typecheck, lint, build, Alembic check, and Gate A all green.
+- Scope reductions remain explicit: Results navigation is not covered because no Results locator can currently be produced, and version mismatch does not offer “Open cited version” because only one governed scenario version exists. The session-scoped “Evidence unavailable” mark survives SPA jump→return and intentionally does not survive reload.
 
 ### File List
 
@@ -671,6 +678,7 @@ tests; assume the same and measure on a clean tree before you start.
 - frontend/src/features/chat/ActivityTimeline.test.tsx
 - frontend/src/features/chat/ActivityTimeline.tsx
 - frontend/src/features/chat/ChatView.tsx
+- frontend/src/features/chat/ChatView.test.tsx
 - frontend/src/api/scenarioProjection.test.ts
 - frontend/src/api/scenarioProjection.ts
 - frontend/src/features/evidence/resolve.test.ts
@@ -687,9 +695,18 @@ tests; assume the same and measure on a clean tree before you start.
 - frontend/src/components/primitives/InlineAlert.tsx
 - frontend/src/features/evidence/availability.ts
 - frontend/src/lib/errors.test.ts
+- frontend/src/test/evidence-accessibility.test.tsx
+- frontend/src/test/evidenceNavigationBoundaries.test.ts
+- frontend/e2e/keyboard-journey.spec.ts
+- frontend/e2e/support/apiStubs.ts
+- _bmad-output/implementation-artifacts/2-8-jump-to-evidence-and-return-to-the-claim.md
+- _bmad-output/implementation-artifacts/deferred-work.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- evidence/story-1.11/gate-a-readiness-report.json
 
 ## Change Log
 
 | Date | Change |
 |---|---|
 | 2026-08-15 | Story created. Six creation decisions recorded; one honest gap raised (AC1's Results half is unreachable — `producing_run_version` is always `None` and Results is a placeholder route); zero-line `backend/` diff established as a fence rather than an expectation; three `deferred-work.md` items that name this story routed for honest judgement. |
+| 2026-08-15 | Implemented exact evidence jump/return, focus restoration, safe exception panels, accessibility and navigation guards, ledger reconciliation, and a green Gate A rerun; moved story to review. |
