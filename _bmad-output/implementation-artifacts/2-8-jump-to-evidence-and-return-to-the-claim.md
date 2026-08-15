@@ -4,7 +4,7 @@ baseline_commit: fa18cf1f5e3e74c87fef4578a8867c4a0a9e11a0
 
 # Story 2.8: Jump to Evidence and Return to the Claim
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -535,7 +535,9 @@ All 30 patches applied. Verified after remediation:
 - **`InlineAlert` returned to its pre-story shape** — the `descriptionRole` prop was removed rather than tested, because the stale state no longer uses `InlineAlert` at all.
 - **Post-remediation baselines**: frontend **63 files / 378 tests** (was 63 / 370), `tsc -b` clean, oxlint clean apart from the three pre-existing Fast Refresh warnings, Playwright **48 passed** in Chromium and Edge — and this run exited cleanly under the ordinary `list` reporter.
 
-> **Gate A evidence is now stale and is NOT refreshed by this review.** `evidence/story-1.11/gate-a-readiness-report.json` records the pre-remediation measurement (`git_commit: 660d1c2…`, frontend 370 tests). Decision 3 concluded no re-measure was owed, but that was decided before these patches existed. Per `docs/EVIDENCE-CONVENTION.md` the remediation must be committed first, then Gate A re-run on a clean tree, then the refreshed evidence committed separately (the two-commit dance in `deferred-work.md:107`). Do not hand-edit the report.
+**Gate A was re-run, because the remediation invalidated the measurement.** Decision 3 concluded no re-measure was owed, but that was decided before these patches existed. The two-commit dance was performed as `docs/EVIDENCE-CONVENTION.md` requires: remediation committed at `181d511`, all three suites run on a clean tree, report generated, evidence committed on its own at `c085058`. Result: `gate_a_passed: true`, `blocking: []`, all eight checks passing. Recorded counts moved with the code — vitest 370 → 378, pytest 812, Playwright 48 unchanged.
+
+One correction to Decision 3's patch, found while executing the runbook: `GATE-A-RUNBOOK.md` §3 requires `playwright.config.ts` to keep `reporter: "list"` as its committed default and any JUnit reporter to be selected on the command line only. The original patch made the config switch reporters on an env var, which violated that. The config is back to `reporter: "list"`, and the runbook now documents the streaming reporter as the Windows-host command-line alternative — including its different env var (`PLAYWRIGHT_JUNIT_OUTPUT_FILE`, not `…_NAME`) and its `onEnd` limitation, with the instruction to cross-check the case count against a plain `list` run before binding. That cross-check was performed for this run: 48/0 from both.
 
 ---
 
