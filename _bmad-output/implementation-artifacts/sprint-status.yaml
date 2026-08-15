@@ -44,7 +44,107 @@ generated: 2026-07-24
 last_updated: 2026-08-15
 # (2026-08-11: story 2-4 created → ready-for-dev → implemented → review → done;
 #  story 2-5 created → ready-for-dev → done; story 2-6 created → ready-for-dev → done;
-#  2026-08-12: story 2-7 created → ready-for-dev)
+#  2026-08-12: story 2-7 created → ready-for-dev → done;
+#  2026-08-15: story 2-8 created → ready-for-dev)
+
+# NOTE (2026-08-15): Story 2-8 created and moved to ready-for-dev. It is the LAST planner-visible
+# piece of FR-7 and the FIRST story in the repository with a mandated ZERO-LINE `backend/` diff —
+# no migration, no route, no contract move, no dependency, no codegen. Everything it needs already
+# exists and is unused: Story 1.5's SIX exact-target resolve endpoints (built for this story by name
+# and having ZERO frontend consumers today), Story 1.6's `EvidenceHighlight` primitive and four
+# evidence design tokens (rendered only in `components/primitives/fixtures.tsx`), Story 1.8's
+# `useColumnVisibility` field-reveal (already reads `?field=`), and Story 2.7's persisted
+# `EvidenceRefV1` locators plus the deliberately inert `EvidenceLink.onActivate` seam
+# (`ActivityTimeline.tsx:83` names 2.8 in its own comment).
+#
+# SCOPE IS THE POST-CORRECT-COURSE ONE: three ACs, not four. `sprint-change-proposal-2026-08-09-
+# epics-2-5.md:132` merged AC1+AC2 into one jump-and-return criterion and DROPPED the
+# "ordinary user filters preserved separately for restoration" clause and the zoom/reduced-motion
+# matrix; it EXPLICITLY PRESERVED the model-generated-URL (AR15) and non-disclosure (UX-DR20)
+# invariants, which are now AC3 and AC2.
+#
+# SIX DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) THE TARGET IS RESOLVED, NEVER PAGED TO. Story 1.5's own header states the consuming UI is
+#     "Story 2.8's acceptance boundary"; AR4 and UX-DR24 both name bounded windows AND exact-target
+#     lookup as two mechanisms. Building a "locate the record's page" path needs an endpoint that
+#     does not exist and would inherit deferred-work.md:59's UNPINNED PAGINATION CURSOR — accepted
+#     as a known limitation for browsing, indefensible on the one surface whose purpose is
+#     exactness. This decision is what makes the zero-line backend diff true.
+# (2) THE TARGET RENDERS AS ONE FOCUSED RECORD REGION ABOVE THE GRID, NOT A HIGHLIGHTED ROW. The
+#     cited record is usually NOT on the current page — that is the point of resolving it — and
+#     "highlight it only when it happens to be rendered" is exactly the failure EXPERIENCE.md:112
+#     forbids. VERIFIED AT CREATION: two of the six groups (`workers`, `work-areas-and-tasks`)
+#     render NO `record_id` column at all, so a row highlight there cannot name the cited record.
+#     UX-DR34 permits the treatment on "row/cell/RECORD". Exactly one highlight — asserted.
+# (3) THE ORIGIN IS APP-OWNED HISTORY + SESSION STATE; THE TARGET IS IN THE URL. Target
+#     (group/record/version/field) goes in search params because UX-DR24 and EXPERIENCE.md:140
+#     make the evidence target Back/Forward-restorable, and `ScenarioDataView` ALREADY reads
+#     `?group=` and `?field=`. Origin (conversation/activity/segment/ref) goes in react-router
+#     `state` plus ONE read-once sessionStorage slot — the mirror exists because AC1 names browser
+#     BACK as an equal path and a Back navigation lands on the Chat history entry whose own state
+#     predates the jump. AC3's AR15 invariant is satisfied STRUCTURALLY: every part of both halves
+#     is read from the typed `EvidenceRefV1` the gate persisted, and a source-level guard asserts no
+#     navigation target derives from prose-segment text.
+# (4) CLAIM IDENTITY IS (activity_id, segment index, ref index). NO `claim_id` IS ADDED.
+#     `GroundedClaimV1` has none, and `result_id` is content-addressed and deliberately NOT unique
+#     per claim (ActivityTimeline.tsx:119 already keys on `result_id`+index). Adding one would break
+#     deserialization of every already-persisted `agent_response` row with no compat alias — the
+#     exact failure deferred-work.md:194 records against 2.7's own `MetricV1` rename.
+#     `ActivityCommonOut` already ships activity_id/conversation_id/scenario_id/scenario_version_id,
+#     so the origin key needs NOTHING new on the wire.
+# (5) EXCEPTION STATES BRANCH ON THE RFC 7807 `code`, NOT THE STATUS. Story 1.5 already returns
+#     three discriminable outcomes; `resource_not_found`/403 is the unauthorized path. NON-DISCLOSURE
+#     IS ALREADY CORRECT AND MUST NOT BE "FIXED": `evidence_not_found` is reachable only by a caller
+#     already authorized for that scenario, so collapsing it into the unauthorized response would
+#     destroy a distinction UX-DR20 requires and protect nothing. Version mismatch offers NO "Open
+#     cited version" — EXPERIENCE.md:167 makes it conditional and exactly one governed
+#     `scenario_version` exists per scenario, so the control could not work.
+# (6) "EVIDENCE UNAVAILABLE" IS DERIVED AT RENDER TIME AND NEVER WRITTEN BACK. `persisted_event` is
+#     an immutable audit record, the only UPDATE grant this milestone added is `agent_run(status)`
+#     (revision c7d6e5f4a3b2), and inventing one here would be an Epic 4 audit decision taken by a
+#     rendering story. Session-scoped marking; the reduction is stated, not dressed up as durable.
+#
+# ONE HONEST GAP IS RAISED RATHER THAN PAPERED OVER: AC1 says "opens the cited Scenario Data OR
+# RESULTS version/group", but VERIFIED AT CREATION `ScenarioResults.tsx` is a
+# `WorkspaceTabPlaceholder`, the Results workspace tab is a non-interactive aria-disabled span, and
+# `EvidenceRefV1.producing_run_version` is ALWAYS None — so no locator this repository can produce
+# names a Results target. Required posture: build the Scenario Data destination only, do NOT build a
+# Results region or a placeholder route (that pre-empts Epic 3), and do NOT hard-code "data" as the
+# sole destination — derive it from `EvidenceRefV1.group`, whose six values are byte-identical to
+# the six Scenario Data tab slugs AND to the resolve URL segments (compared directly at creation).
+# Record the reduction in the SCOPE_CONTROLS "NOT COVERED" form. Same posture as 2.5's audit/evidence
+# declaration and 2.7's `producing_run_version`.
+#
+# ELEVEN TRAPS flagged, the quietest first: SILENTLY IGNORING A `field` THAT IS NOT A COLUMN KEY —
+# `useColumnVisibility.ts:37-38` looks it up and on a miss `revealedColumn` is simply `undefined`,
+# so the link promised to reveal a field and nothing happens, with no error and no red test (the
+# three fields calculators can emit today — `qualifications`, `amount`, `task_id` — are all real
+# column keys BY COINCIDENCE, and Task 4 ships two guards to make it true by construction);
+# retargeting on a miss (AR11, invisible unless asserted, and this is the first story that CAN do
+# it); putting the origin in the URL because it is simpler (fails AC3 structurally while the jump
+# and return both still work); and focusing the target BEFORE the record resolves, which loses the
+# announcement — `ScenarioWorkspace.tsx:26-30` documents that exact regression from a prior story.
+#
+# LEDGER: three Story 1.6 review items name this story BY NAME and are routed for honest judgement
+# rather than assumed — deferred-work.md:78 (inert `EvidenceLink` with neither prop) is CLOSED by
+# making the activation props a discriminated union; :76 (no contrast test for `EvidenceLink` on
+# `evidence-surface`) and :81 (no truncation handling, "Story 2.8's dense grid is where this becomes
+# visible") both have premises that Decision 2 makes FALSE — re-annotate in place and restate the
+# owner, per the Story 2.4/2.5 precedent, do not close silently and do not add truncation nothing
+# asks for.
+#
+# NO EVIDENCE FILE IS OWED (no AC carries a measured threshold; NFR35's four rows belong to 1.4,
+# 1.5, 2.4 and 3.5 — and 1.5's row already measured evidence-target resolution against these very
+# endpoints). NO NEW GOLDEN CASES (no new capability, no new evaluator; epics.md:1527 — never pad).
+# Gate A must still be re-run per AR28 — expect the two-commit dance (deferred-work.md:107).
+# `alembic check` from the REPOSITORY ROOT, expecting zero operations and zero migration files.
+# ZERO-LINE DIFF FENCES: ALL of `backend/`, `frontend/openapi.json`, `frontend/src/api/schema.d.ts`
+# (no codegen run), `frontend/src/features/scenario-data/groups/**`, and
+# `frontend/src/features/chat/{ChatView,Composer,ConversationList}.tsx` apart from whatever Task 6's
+# focus restoration genuinely requires in ChatView. BASELINES at 6e19ef3 per 2.7's completion notes:
+# backend 810 passed / 2 skipped / 7 deselected, postgres 45, frontend 56 files / 332 tests,
+# Playwright 46, alembic zero diff — RE-DERIVE THEM, do not trust them; Story 2.7 found its own
+# inherited baseline stale by 100+ tests.
 
 # NOTE (2026-08-12): Story 2-7 created and moved to ready-for-dev.
 #
@@ -880,7 +980,7 @@ development_status:
   2-5-inspect-scenario-facts-through-a-governed-capability: done
   2-6-add-and-remove-a-governed-capability-module: done
   2-7-ground-schedule-claims-in-exact-evidence: done
-  2-8-jump-to-evidence-and-return-to-the-claim: backlog
+  2-8-jump-to-evidence-and-return-to-the-claim: ready-for-dev
   2-9-clarify-refuse-and-fail-safely: backlog
   epic-2-retrospective: optional
 
