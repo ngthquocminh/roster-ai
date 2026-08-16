@@ -343,24 +343,35 @@ jobs:
         run: npm run build
 
       - name: Unit tests
+        # The JSON reporter is what the assertion reads; `default` is kept so a
+        # human reading the job log still sees per-file results. Counting from
+        # the terminal summary row was tried first and is not a contract — it
+        # went missing on the runner while being present locally, which cost a
+        # round trip and proved nothing about the tests.
         run: |
           set -o pipefail
-          npm test 2>&1 | tee ../frontend-vitest.log
+          npm test -- \
+            --reporter=default \
+            --reporter=json \
+            --outputFile.json=../frontend-vitest.json \
+            2>&1 | tee ../frontend-vitest.log
 
       - name: Assert unit test baseline
         working-directory: .
         run: |
           python3 .github/scripts/assert_counts.py \
-            --runner vitest --log frontend-vitest.log \
+            --runner vitest --log frontend-vitest.json \
             --label "frontend vitest" \
             --min-passed 400 --max-skipped 0
 
-      - name: Upload vitest log
+      - name: Upload vitest report
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-vitest-log
-          path: frontend-vitest.log
+          name: frontend-vitest-report
+          path: |
+            frontend-vitest.log
+            frontend-vitest.json
           retention-days: 30
 
   # ---------------------------------------------------------------------------
@@ -406,21 +417,30 @@ jobs:
         run: npx playwright install --with-deps chromium msedge
 
       - name: Run E2E suite
-        # `npm run test:e2e` builds first, then runs Playwright; its webServer
+        # `npm run test:e2e` is `npm run build && playwright test`; the two are
+        # split here so the JSON reporter can be selected without relying on npm
+        # forwarding `--` args across a chained script. Playwright's webServer
         # block starts `vite preview` on 127.0.0.1:4173 itself.
+        #
+        # Reporters are selected on the COMMAND LINE only. playwright.config.ts
+        # pins `reporter: "list"` and its comment requires that committed
+        # default to stay put — see GATE-A-RUNBOOK.md §3.
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ github.workspace }}/playwright.json
         run: |
           set -o pipefail
-          npm run test:e2e 2>&1 | tee ../playwright.log
+          npm run build
+          npx playwright test --reporter=list,json 2>&1 | tee ../playwright.log
 
       - name: Assert E2E baseline
         working-directory: .
         # 48 = 24 specs x {chromium, msedge}. A browser that fails to launch
         # reports far fewer tests rather than failing them, so the floor is the
-        # guard. The script also rejects any run reporting `flaky`, which
-        # playwright.config.ts's `retries: 2` under CI would otherwise let pass.
+        # guard. `stats.flaky` fails the gate too, which is what makes
+        # playwright.config.ts's `retries: 2` safe to keep here.
         run: |
           python3 .github/scripts/assert_counts.py \
-            --runner playwright --log playwright.log \
+            --runner playwright --log playwright.json \
             --label "playwright e2e" \
             --min-passed 48 --max-skipped 0
 
@@ -431,6 +451,7 @@ jobs:
           name: playwright-artifacts
           path: |
             playwright.log
+            playwright.json
             frontend/test-results/
           retention-days: 30
 

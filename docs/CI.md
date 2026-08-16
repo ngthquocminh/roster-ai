@@ -40,9 +40,9 @@ stop matching and the job fails before any test runs.
 
 ## Assertion contract
 
-Every suite pipes its output through
+Every suite is checked by
 [`.github/scripts/assert_counts.py`](../.github/scripts/assert_counts.py),
-which parses the runner's own summary line and enforces:
+which enforces:
 
 - **a floor on passes** — so adding tests never reddens CI, but a suite that
   silently stopped collecting does;
@@ -55,6 +55,29 @@ which parses the runner's own summary line and enforces:
 Raise a floor when a suite grows and you want the new tests protected. Never
 raise a skip ceiling to make a red build green — that is the exact move these
 assertions exist to prevent.
+
+### Where the counts come from
+
+| Runner | Source | Why |
+|---|---|---|
+| Vitest | `--reporter=json --outputFile.json=…` | `numPassedTests` / `numPendingTests` |
+| Playwright | `--reporter=list,json`, `PLAYWRIGHT_JSON_OUTPUT_NAME` | `stats.expected` / `.unexpected` / `.flaky` / `.skipped` |
+| pytest | terminal summary line | `deselected` appears nowhere else — not in JUnit XML |
+
+The JS runners were originally scraped from their terminal summary. That is
+presentation, not a contract: the Vitest `Tests …` row was present locally and
+absent on the runner, which cost a full CI round trip to discover and proved
+nothing about the tests. The script still *accepts* console text — it sniffs the
+file and falls back — so a local invocation without a JSON reporter keeps
+working, and both paths strip ANSI colour first.
+
+Reporters are selected on the **command line only**. `playwright.config.ts` pins
+`reporter: "list"` and GATE-A-RUNBOOK.md §3 requires that committed default to
+stay put.
+
+When a report cannot be parsed the script prints the last 40 non-blank lines of
+the file it was given, so the next such failure is diagnosable from the job log
+alone rather than by downloading an artifact.
 
 ## Environment traps
 
