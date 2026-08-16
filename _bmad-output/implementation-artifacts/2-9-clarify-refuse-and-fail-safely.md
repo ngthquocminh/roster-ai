@@ -4,7 +4,7 @@ baseline_commit: 0932c1df76e953b1f26493d11c1ad7913bb5191e
 
 # Story 2.9: Clarify, Refuse, and Fail Safely
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

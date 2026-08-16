@@ -1,5 +1,5 @@
 # generated: 2026-07-24
-# last_updated: 2026-08-15
+# last_updated: 2026-08-16
 # project: ShiftMind
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-15
+last_updated: 2026-08-16
 
 # NOTE (2026-08-15): Story 2-9 created and moved to ready-for-dev. It is the LAST story of Epic 2,
 # the SOLE owner of NFR5 (prompt-injection coverage — VERIFIED BY EXHAUSTIVE SEARCH AT CREATION that
@@ -1118,7 +1118,7 @@ development_status:
   2-6-add-and-remove-a-governed-capability-module: done
   2-7-ground-schedule-claims-in-exact-evidence: done
   2-8-jump-to-evidence-and-return-to-the-claim: done
-  2-9-clarify-refuse-and-fail-safely: review
+  2-9-clarify-refuse-and-fail-safely: done
   epic-2-retrospective: optional
 
   # Epic 3: Governed and Recoverable Schedule Repair
