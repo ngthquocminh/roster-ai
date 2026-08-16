@@ -51,11 +51,48 @@ class AgentResponseActivityV1:
     schema_version: str = SCHEMA_VERSION
 
 
-from application.contracts.grounding import GroundedResponseV1
+@dataclass(frozen=True)
+class ClarificationActivityV1:
+    """Application-resolved clarification persisted as its reserved AD-20 type."""
 
-ActivityItemV1 = PlannerMessageActivityV1 | AgentResponseActivityV1
+    activity_id: UUID
+    activity_type: Literal["clarification"]
+    conversation_id: UUID
+    conversation_resource_version: int
+    scenario_id: UUID
+    scenario_version_id: UUID
+    occurred_at: datetime
+    clarification: "ResolvedClarificationV1"
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
+class TerminalOutcomeActivityV1:
+    """Literal non-answer state, including reason-discriminated refusal."""
+
+    activity_id: UUID
+    activity_type: Literal["terminal_outcome"]
+    conversation_id: UUID
+    conversation_resource_version: int
+    scenario_id: UUID
+    scenario_version_id: UUID
+    occurred_at: datetime
+    outcome: "TerminalOutcomeV1"
+    schema_version: str = SCHEMA_VERSION
+
+
+from application.contracts.grounding import GroundedResponseV1
+from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
+
+ActivityItemV1 = (
+    PlannerMessageActivityV1
+    | AgentResponseActivityV1
+    | ClarificationActivityV1
+    | TerminalOutcomeActivityV1
+)
 
 __all__ = [
     "ActivityItemV1", "ActivityTypeV1", "AgentResponseActivityV1",
-    "PlannerMessageActivityV1", "SCHEMA_VERSION",
+    "ClarificationActivityV1", "PlannerMessageActivityV1", "SCHEMA_VERSION",
+    "TerminalOutcomeActivityV1",
 ]

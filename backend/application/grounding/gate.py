@@ -17,7 +17,7 @@ from application.contracts.grounding import (
     GroundingUnitV1,
     MetricV1,
 )
-from application.grounding.evidence_groups import scenario_fact_group_for_evidence_group
+from application.grounding.resolvers import resolver_name_for_evidence_group
 
 
 SCOPE_CONTROLS: Mapping[str, str] = {
@@ -95,16 +95,6 @@ class TrustedCalculationResultV1(Protocol):
     consumed_row_count: int
 
 
-_RESOLVER_BY_GROUP = {
-    "tasks": "resolve_task",
-    "workers": "resolve_worker",
-    "demand": "resolve_demand_interval",
-    "assignments": "resolve_assignment",
-    "locks": "resolve_lock",
-    "constraints": "resolve_constraint",
-}
-
-
 def _failed(
     proposal: ClaimProposalV1, failure: GroundingFailureV1
 ) -> GroundedClaimV1:
@@ -122,8 +112,7 @@ def _locator_failure(
 ) -> GroundingFailureV1 | None:
     if reference.scenario_version_id != deps.scenario_version_id:
         return "version_mismatch"
-    group = scenario_fact_group_for_evidence_group(reference.group)
-    resolver_name = _RESOLVER_BY_GROUP[group]
+    resolver_name = resolver_name_for_evidence_group(reference.group)
     resolution = getattr(deps.projection_reader, resolver_name)(
         deps.connection,
         deps.scenario_id,

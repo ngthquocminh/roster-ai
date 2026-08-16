@@ -18,8 +18,12 @@ from adapters.postgres.schema import (
 from application.contracts.activity import (
     ActivityItemV1,
     AgentResponseActivityV1,
+    ClarificationActivityV1,
     PlannerMessageActivityV1,
+    TerminalOutcomeActivityV1,
 )
+from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
+from application.contracts.grounding import GroundedResponseV1
 from application.contracts.persisted_event import PersistedEventV1
 from application.ports.conversation import (
     AcceptedTurnV1,
@@ -347,7 +351,7 @@ class PostgresConversationRepository:
         *,
         claimed: ClaimedAgentRunV1,
         status: str,
-        response,
+        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1,
         request_id: UUID,
     ) -> ExecutedAgentRunV1:
         conv = connection.execute(
@@ -372,20 +376,32 @@ class PostgresConversationRepository:
                 func.coalesce(func.max(persisted_event.c.sequence), Decimal(0)) + 1
             ).where(persisted_event.c.stream_id == claimed.conversation_id)
         ).scalar_one()
-        payload = AgentResponseActivityV1(
+        common = dict(
             activity_id=activity_id,
-            activity_type="agent_response",
             conversation_id=claimed.conversation_id,
             conversation_resource_version=new_version,
             scenario_id=claimed.scenario_id,
             scenario_version_id=claimed.scenario_version_id,
             occurred_at=occurred_at,
-            response=response,
         )
+        if isinstance(payload, GroundedResponseV1):
+            activity = AgentResponseActivityV1(
+                activity_type="agent_response", response=payload, **common
+            )
+        elif isinstance(payload, ResolvedClarificationV1):
+            activity = ClarificationActivityV1(
+                activity_type="clarification", clarification=payload, **common
+            )
+        elif isinstance(payload, TerminalOutcomeV1):
+            activity = TerminalOutcomeActivityV1(
+                activity_type="terminal_outcome", outcome=payload, **common
+            )
+        else:
+            raise TypeError(f"unsupported terminal activity payload {type(payload).__name__}")
         event = PersistedEventV1(
             stream_id=claimed.conversation_id,
             sequence=sequence,
-            event_type="agent_response",
+            event_type=activity.activity_type,
             occurred_at=occurred_at,
             resource_version=new_version,
             request_id=request_id,
@@ -393,7 +409,7 @@ class PostgresConversationRepository:
             agent_run_id=claimed.agent_run_id,
             site_id=claimed.site_id,
             actor_id=claimed.actor_id,
-            payload=payload,
+            payload=activity,
         )
         connection.execute(
             update(agent_run)
@@ -413,7 +429,7 @@ class PostgresConversationRepository:
                 agent_run_id=event.agent_run_id,
                 actor_id=event.actor_id,
                 occurred_at=event.occurred_at,
-                payload=_payload_to_json(payload),
+                payload=_payload_to_json(activity),
             )
         )
         connection.execute(
@@ -442,17 +458,23 @@ def _payload_to_json(activity: ActivityItemV1) -> dict:
             "text": activity.text,
         }
     from pydantic import TypeAdapter
-    return {
-        **common,
-        "response": TypeAdapter(type(activity.response)).dump_python(
-            activity.response, mode="json"
-        ),
-    }
+    if isinstance(activity, AgentResponseActivityV1):
+        key, value = "response", activity.response
+    elif isinstance(activity, ClarificationActivityV1):
+        key, value = "clarification", activity.clarification
+    else:
+        key, value = "outcome", activity.outcome
+    return {**common, key: TypeAdapter(type(value)).dump_python(value, mode="json")}
 
 
 def _activity_from_payload(value: dict) -> ActivityItemV1:
     activity_type = value.get("activity_type")
-    if activity_type not in (_PLANNER_MESSAGE, "agent_response"):
+    if activity_type not in (
+        _PLANNER_MESSAGE,
+        "agent_response",
+        "clarification",
+        "terminal_outcome",
+    ):
         raise UnsupportedActivityPayloadError(
             f"activity_type {activity_type!r} has no payload shape in this reader"
         )
@@ -475,10 +497,21 @@ def _activity_from_payload(value: dict) -> ActivityItemV1:
             text=value["text"],
         )
     from pydantic import TypeAdapter
-    from application.contracts.grounding import GroundedResponseV1
-    return AgentResponseActivityV1(
+    if activity_type == "agent_response":
+        return AgentResponseActivityV1(
+            **common,
+            response=TypeAdapter(GroundedResponseV1).validate_python(value["response"]),
+        )
+    if activity_type == "clarification":
+        return ClarificationActivityV1(
+            **common,
+            clarification=TypeAdapter(ResolvedClarificationV1).validate_python(
+                value["clarification"]
+            ),
+        )
+    return TerminalOutcomeActivityV1(
         **common,
-        response=TypeAdapter(GroundedResponseV1).validate_python(value["response"]),
+        outcome=TypeAdapter(TerminalOutcomeV1).validate_python(value["outcome"]),
     )
 
 

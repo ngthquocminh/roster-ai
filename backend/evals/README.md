@@ -73,3 +73,52 @@ survived review because of it. Three of the four outcomes arise from case
 data alone; only `version_mismatch` needs an environmental knob, and it
 rotates the PIN the gate checks against rather than editing the result --
 the same condition as a scenario re-versioned mid-turn.
+
+Story 2.9 contributes six scheduling_inspect cases: one ambiguity, one bounded
+unsupported-request refusal, one provider failure through the real adapter,
+and three prompt-injection attempts. The normal inspect cases above are reused
+for AC4's normal fixture kind, and Story 2.7's `missing-evidence` case is reused
+for the unsupported-number kind.
+
+**NFR5 coverage is organised by untrusted SOURCE, not by transport.** This MVP
+introduces exactly two sources of untrusted content: the planner's own chat
+text, and scenario/fixture data. Every installed capability's
+`model_facing_view` renders either scenario rows or application-authored copy,
+so "rendered tool output" is the *transport* by which scenario data reaches the
+model rather than a third source — an earlier revision of this paragraph
+claimed three channels and was wrong. The three cases therefore cover:
+
+- **chat text** — `injection-chat-text`, where the prompt itself instructs the
+  model to call an ungranted capability;
+- **scenario data → capability grant** — `injection-fixture-field`, where a
+  worker row's `name` carries the instruction;
+- **scenario data → budget and approval** — `injection-tool-output`, where a
+  different row attempts to widen the budget and set approval.
+
+The last two share a source deliberately: they attack *different* AC2 nouns
+(capabilities versus budget/approval), which is what earns each its place.
+
+`NOT COVERED:` a capability whose model-facing output carries text from any
+other source — a live provider, an external integration, or prose the
+capability generates itself. No such capability exists in this milestone.
+`test_every_capability_meets_the_nfr28_four_case_floor` fails on an
+unclassified capability and asks for its untrusted source, so a new one cannot
+be added without answering this.
+
+Every injection script attempts the forbidden call — compliance is scripted and
+refusal is asserted, never the reverse. The routing evaluator counts the
+attempt (it appears in `expected_tool_calls`), and the policy evaluator proves
+it produced no application tool result. The authority assertions compare
+against expectations recomputed from `installed_modules()` and the configured
+budget, not against a snapshot of the runtime under test — a snapshot compares
+an immutable attribute with itself and cannot fail.
+
+**NFR28 note.** Four of these cases carry `risk_class: "prohibited"`, which is a
+*dataset tag describing the case*, not a claim about `scheduling_inspect`'s
+manifest (that is `inspect`). The tag puts them under NFR28's 100% routing rule,
+where adversarial cases belong. It also counts them in
+`consequential_prohibited_case_count`, so that number is **not** evidence toward
+NFR28's ≥10 consequential/prohibited floor by capability risk: no consequential
+capability exists yet. Gate B re-verifies the floor once Stories 3.10–3.12 and
+4.5–4.6 have contributed. These deterministic cases prove the application
+boundary, not live-model instruction-following quality.

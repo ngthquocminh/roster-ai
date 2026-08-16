@@ -2961,6 +2961,12 @@
               },
               {
                 "$ref": "#/components/schemas/AgentResponseActivityOut"
+              },
+              {
+                "$ref": "#/components/schemas/ClarificationActivityOut"
+              },
+              {
+                "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             ],
             "title": "Activity",
@@ -2968,7 +2974,9 @@
               "propertyName": "activity_type",
               "mapping": {
                 "agent_response": "#/components/schemas/AgentResponseActivityOut",
-                "planner_message": "#/components/schemas/PlannerMessageActivityOut"
+                "clarification": "#/components/schemas/ClarificationActivityOut",
+                "planner_message": "#/components/schemas/PlannerMessageActivityOut",
+                "terminal_outcome": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             }
           },
@@ -3322,6 +3330,69 @@
         "type": "object",
         "title": "ClaimArgumentsV1",
         "description": "Canonical metric arguments shared by a call and the claim citing it."
+      },
+      "ClarificationActivityOut": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "activity_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Activity Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "conversation_resource_version": {
+            "type": "integer",
+            "title": "Conversation Resource Version"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "activity_type": {
+            "type": "string",
+            "const": "clarification",
+            "title": "Activity Type"
+          },
+          "clarification": {
+            "$ref": "#/components/schemas/ResolvedClarificationV1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema_version",
+          "activity_id",
+          "conversation_id",
+          "conversation_resource_version",
+          "scenario_id",
+          "scenario_version_id",
+          "occurred_at",
+          "sequence",
+          "activity_type",
+          "clarification"
+        ],
+        "title": "ClarificationActivityOut"
       },
       "ConstraintPageOut": {
         "properties": {
@@ -3695,6 +3766,53 @@
         ],
         "title": "DemandIntervalPageOut"
       },
+      "EntityCandidateV1": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "enum": [
+              "work-areas-and-tasks",
+              "workers",
+              "demand",
+              "baseline-assignments",
+              "locks",
+              "constraints-and-objectives"
+            ],
+            "title": "Group",
+            "default": "workers"
+          },
+          "record_id": {
+            "type": "string",
+            "title": "Record Id",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "EntityCandidateV1",
+        "description": "TRUSTED candidate resolved against the governed scenario projection."
+      },
       "EvidenceRefV1": {
         "properties": {
           "scenario_version_id": {
@@ -3813,6 +3931,12 @@
               },
               {
                 "$ref": "#/components/schemas/AgentResponseActivityOut"
+              },
+              {
+                "$ref": "#/components/schemas/ClarificationActivityOut"
+              },
+              {
+                "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             ],
             "title": "Activity",
@@ -3820,7 +3944,9 @@
               "propertyName": "activity_type",
               "mapping": {
                 "agent_response": "#/components/schemas/AgentResponseActivityOut",
-                "planner_message": "#/components/schemas/PlannerMessageActivityOut"
+                "clarification": "#/components/schemas/ClarificationActivityOut",
+                "planner_message": "#/components/schemas/PlannerMessageActivityOut",
+                "terminal_outcome": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             }
           },
@@ -4439,6 +4565,48 @@
         ],
         "title": "RejectedConstraint"
       },
+      "ResolvedClarificationV1": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question",
+            "default": ""
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/EntityCandidateV1"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "default": []
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "dropped_candidate_count": {
+            "type": "integer",
+            "title": "Dropped Candidate Count",
+            "default": 0
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "ResolvedClarificationV1",
+        "description": "Persistable clarification whose candidate labels are application-owned."
+      },
       "RunOut": {
         "properties": {
           "id": {
@@ -4885,6 +5053,138 @@
         ],
         "title": "TaskProjectionOut"
       },
+      "TerminalOutcomeActivityOut": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "activity_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Activity Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "conversation_resource_version": {
+            "type": "integer",
+            "title": "Conversation Resource Version"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "activity_type": {
+            "type": "string",
+            "const": "terminal_outcome",
+            "title": "Activity Type"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/TerminalOutcomeV1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema_version",
+          "activity_id",
+          "conversation_id",
+          "conversation_resource_version",
+          "scenario_id",
+          "scenario_version_id",
+          "occurred_at",
+          "sequence",
+          "activity_type",
+          "outcome"
+        ],
+        "title": "TerminalOutcomeActivityOut"
+      },
+      "TerminalOutcomeV1": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "completed",
+              "suspended",
+              "timed_out",
+              "failed"
+            ],
+            "title": "Status",
+            "default": "failed"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "provider_error",
+              "invalid_output",
+              "budget_exhausted",
+              "deadline_exceeded",
+              "capability_error",
+              "refused",
+              "approval_unsupported"
+            ],
+            "title": "Reason",
+            "default": "invalid_output"
+          },
+          "refusal_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unsupported_request",
+                  "capability_unavailable",
+                  "out_of_scope"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Reason"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          },
+          "next_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "TerminalOutcomeV1",
+        "description": "Persistable literal terminal state for a completed or failed turn."
+      },
       "TimelineOut": {
         "properties": {
           "conversation_id": {
@@ -4915,13 +5215,21 @@
                 },
                 {
                   "$ref": "#/components/schemas/AgentResponseActivityOut"
+                },
+                {
+                  "$ref": "#/components/schemas/ClarificationActivityOut"
+                },
+                {
+                  "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
                 }
               ],
               "discriminator": {
                 "propertyName": "activity_type",
                 "mapping": {
                   "agent_response": "#/components/schemas/AgentResponseActivityOut",
-                  "planner_message": "#/components/schemas/PlannerMessageActivityOut"
+                  "clarification": "#/components/schemas/ClarificationActivityOut",
+                  "planner_message": "#/components/schemas/PlannerMessageActivityOut",
+                  "terminal_outcome": "#/components/schemas/TerminalOutcomeActivityOut"
                 }
               }
             },

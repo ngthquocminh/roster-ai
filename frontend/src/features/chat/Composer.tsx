@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "react-router";
 
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { Button } from "@/components/ui/button";
@@ -16,7 +17,12 @@ import { Button } from "@/components/ui/button";
 export function Composer({
   onSend,
   isPending,
-}: Readonly<{ onSend: (text: string) => Promise<unknown>; isPending: boolean }>) {
+  scenarioId,
+}: Readonly<{
+  onSend: (text: string) => Promise<unknown>;
+  isPending: boolean;
+  scenarioId: string;
+}>) {
   const [draft, setDraft] = useState("");
   const [failed, setFailed] = useState(false);
   // `isPending` arrives a render late, so held or double-tapped Ctrl+Enter can
@@ -62,6 +68,11 @@ export function Composer({
       />
       {failed ? (
         <InlineAlert
+          action={
+            <Link className="font-medium underline underline-offset-3" to={`/scenarios/${scenarioId}/data`}>
+              Open Scenario Data
+            </Link>
+          }
           description="Your draft is still here — try sending again."
           title="Message could not be sent"
           variant="destructive"

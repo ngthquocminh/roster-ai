@@ -26,6 +26,12 @@ GUARDED = (
 SWEPT_PACKAGES = (
     BACKEND_ROOT / "application/use_cases",
     BACKEND_ROOT / "application/capabilities",
+    # Story 2.9's new application packages. This list must grow with the layer
+    # it guards -- a sweep whose file list stops growing quietly becomes a claim
+    # about coverage it no longer has (this module's own stated rule).
+    BACKEND_ROOT / "application/clarification",
+    BACKEND_ROOT / "application/grounding",
+    BACKEND_ROOT / "application/contracts",
 )
 
 # Known, ticketed AD-1 violations outside this guard's coverage. Tracked in

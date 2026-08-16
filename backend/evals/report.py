@@ -13,7 +13,7 @@ from agent.runtime import PydanticAIAgentRuntime
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import installed_modules
 from application.capabilities.module import CapabilityModuleV1
-from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
+from application.contracts.agent_runtime import AgentBudgetV1, AgentRunOutcomeV1, AgentTurnRequestV1
 from application.contracts.grounding import GroundedAnswerV1
 from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 
@@ -24,8 +24,14 @@ EVAL_TAG_TO_CAPABILITY = {"demonstration": "shiftmind_demonstration"}
 from evals.cases import GoldenCase
 from evals.cases import load_cases
 from evals.doubles import build_model_double
-from evals.evaluators import EvalVerdict, GroundingEvaluator, ToolRoutingEvaluator
+from evals.evaluators import (
+    EvalVerdict,
+    GroundingEvaluator,
+    PolicyOutcomeEvaluator,
+    ToolRoutingEvaluator,
+)
 from evals.grounding import ground_case_outcome
+from application.use_cases.execute_turn import failed_outcome_for_exception, outcome_visible_text
 from scripts.evidence_binding import REPO_ROOT, resolve_bindings
 
 
@@ -33,6 +39,7 @@ from scripts.evidence_binding import REPO_ROOT, resolve_bindings
 class CaseEvaluation:
     case: GoldenCase
     verdict: EvalVerdict
+    outcome: AgentRunOutcomeV1
 
 
 @dataclass(frozen=True)
@@ -99,7 +106,7 @@ def generate_demonstration_report(
     for case in cases:
         results: list[object] = []
         runtime = _runtime_for_case(case, granted_modules, results)
-        outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
+        outcome = _run_runtime_case(runtime, case)
         routing = ToolRoutingEvaluator(run_source="double").evaluate(case, outcome)
         if case.expected_grounding_outcome:
             outcome = ground_case_outcome(
@@ -113,7 +120,15 @@ def generate_demonstration_report(
             )
         else:
             verdict = routing
-        evaluations.append(CaseEvaluation(case=case, verdict=verdict))
+        policy = PolicyOutcomeEvaluator(runtime=runtime, run_source="double").evaluate(
+            case, outcome
+        )
+        verdict = EvalVerdict(
+            passed=verdict.passed and policy.passed,
+            reason=f"{verdict.reason}; policy: {policy.reason}",
+            run_source="double",
+        )
+        evaluations.append(CaseEvaluation(case=case, verdict=verdict, outcome=outcome))
     return write_evaluation_report(
         output_path,
         evaluations=evaluations,
@@ -166,7 +181,12 @@ def runtime_for_modules(
     """
     return PydanticAIAgentRuntime(
         model=build_model_double(case), capabilities=modules, deps=_report_deps(sink),
-        answer_type=(GroundedAnswerV1 if case.expected_grounding_outcome else None),
+        answer_type=(
+            GroundedAnswerV1
+            if case.expected_grounding_outcome
+            or case.expected_outcome in {"clarify", "refuse"}
+            else None
+        ),
     )
 
 
@@ -190,17 +210,31 @@ def _runtime_for_case(
     return runtime_for_modules(case, selected, sink)
 
 
+def _run_runtime_case(
+    runtime: PydanticAIAgentRuntime, case: GoldenCase
+) -> AgentRunOutcomeV1:
+    try:
+        return runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
+    except Exception as exc:  # the production route has the same finalization rule
+        return failed_outcome_for_exception(exc)
+
+
 def build_evaluation_report(
     evaluations: Sequence[CaseEvaluation], *, bindings: Mapping[str, object]
 ) -> dict[str, object]:
     authoritative = tuple(item for item in evaluations if item.verdict.authoritative)
-    passed = sum(item.verdict.passed for item in authoritative)
+    judged = tuple((item, *_visible_judgement(item)) for item in authoritative)
+    passed = sum(passed for _item, passed, _reason in judged)
     protected = tuple(
         item
         for item in authoritative
         if item.case.risk_class in ("consequential", "prohibited")
     )
-    protected_passed = sum(item.verdict.passed for item in protected)
+    protected_passed = sum(
+        passed
+        for item, passed, _reason in judged
+        if item.case.risk_class in ("consequential", "prohibited")
+    )
 
     return {
         "report_type": "evaluation-harness-demonstration",
@@ -235,15 +269,29 @@ def build_evaluation_report(
                 "case_version": item.case.case_version,
                 "capability": item.case.capability,
                 "risk_class": item.case.risk_class,
-                "passed": item.verdict.passed,
-                "reason": item.verdict.reason,
+                "passed": item.verdict.passed and visible_passed,
+                "reason": f"{item.verdict.reason}; visible: {visible_reason}",
                 "run_source": item.verdict.run_source,
                 "authoritative": item.verdict.authoritative,
             }
             for item in evaluations
+            for visible_passed, visible_reason in [_visible_judgement(item)]
         ],
         "version_bindings": dict(bindings),
     }
+
+
+def _visible_judgement(item: CaseEvaluation) -> tuple[bool, str]:
+    actual_text = outcome_visible_text(item.outcome)
+    state_matches = item.outcome.status == item.case.expected_visible_state
+    text_matches = actual_text == item.case.expected_visible_text
+    return (
+        item.verdict.passed and state_matches and text_matches,
+        (
+            f"state expected {item.case.expected_visible_state}, actual {item.outcome.status}; "
+            f"text expected {item.case.expected_visible_text!r}, actual {actual_text!r}"
+        ),
+    )
 
 
 def _scenario_specs(evaluations: Sequence[CaseEvaluation]) -> tuple[_ScenarioSpec, ...]:

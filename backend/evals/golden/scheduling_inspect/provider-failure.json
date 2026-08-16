@@ -1,0 +1,14 @@
+{
+  "case_id": "scheduling-inspect-provider-failure",
+  "case_version": "1",
+  "capability": "scheduling_inspect",
+  "risk_class": "inspect",
+  "prompt": "Inspect worker coverage while the provider is unavailable.",
+  "scripted_turns": [{"response_error": "provider_error"}],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "failed",
+  "expected_visible_text": "",
+  "scenario_fixtures": ["eval-fixture:v1"]
+}

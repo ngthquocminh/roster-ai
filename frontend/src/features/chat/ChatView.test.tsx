@@ -235,6 +235,27 @@ describe("ChatView", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers no recovery link on a 404, where it would be a second dead end", () => {
+    mockTimeline.mockReturnValue({
+      data: undefined,
+      error: { status: 404 },
+      isError: true,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    // Retry is already suppressed on a terminal status; the Scenario Data link
+    // must be too. If this scenario's conversation is not visible, sending the
+    // planner to that scenario's data offers a recovery path that is not one.
+    expect(screen.getByRole("alert")).toHaveTextContent("Conversation not found");
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open Scenario Data" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("surfaces a timeline failure as an alert, not as an empty conversation", () => {
     mockTimeline.mockReturnValue({
       data: undefined,
@@ -247,6 +268,10 @@ describe("ChatView", () => {
     renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
 
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load this content.");
+    expect(screen.getByRole("link", { name: "Open Scenario Data" })).toHaveAttribute(
+      "href",
+      `/scenarios/${SCENARIO}/data`,
+    );
     expect(
       screen.queryByText(/Start a new conversation about this scenario/),
     ).not.toBeInTheDocument();
@@ -275,6 +300,60 @@ describe("ChatView", () => {
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load this content."),
     );
+    expect(screen.getByRole("link", { name: "Open Scenario Data" })).toHaveAttribute(
+      "href",
+      `/scenarios/${SCENARIO}/data`,
+    );
+  });
+
+  it("keeps Scenario Data reachable when conversation loading fails", () => {
+    mockConversations.mockReturnValue({
+      data: undefined,
+      error: { status: 503 },
+      isError: true,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    renderChat();
+
+    expect(screen.getByRole("link", { name: "Open Scenario Data" })).toHaveAttribute(
+      "href",
+      `/scenarios/${SCENARIO}/data`,
+    );
+  });
+
+  it("keeps the accepted planner message visible beside a failed terminal turn", () => {
+    const terminal = {
+      ...activity("99999999-9999-9999-9999-999999999999", "unused", "2"),
+      activity_type: "terminal_outcome" as const,
+      outcome: {
+        schema_version: "1",
+        status: "failed" as const,
+        reason: "provider_error" as const,
+        detail: "The provider did not complete this turn.",
+        next_step: "Try again.",
+      },
+    };
+    mockTimeline.mockReturnValue({
+      data: {
+        conversation_id: NEWER,
+        resource_version: 3,
+        latest_agent_run_status: "agent_failed",
+        items: [activity("11111111-1111-1111-1111-111111111111", "Check coverage", "1"), terminal],
+        limit: 200,
+        has_more: false,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByText("Check coverage")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Provider failure" })).toBeInTheDocument();
   });
 
   it("reports the queued run literally and never as activity", () => {

@@ -38,6 +38,22 @@ class AgentRuntimeError(RuntimeError):
     """
 
 
+class AgentProviderError(AgentRuntimeError):
+    """The provider or transport failed, as opposed to the model misbehaving.
+
+    A SUBCLASS so every existing `except AgentRuntimeError` still catches it.
+    It exists so the request path can classify a provider outage by TYPE:
+    `contracts/agent_runtime.py` states the rule -- "the adapter maps them by
+    type, never by string-matching an error message" -- and the previous
+    `"provider call failed" in str(exc)` test would have silently downgraded
+    every outage to `invalid_output` the day that literal was reworded.
+    """
+
+
+class AgentInvalidOutputError(AgentRuntimeError):
+    """The provider answered, but the output could not be used."""
+
+
 class AgentRuntime(Protocol):
     """Run one bounded agent turn and return an owned outcome.
 

@@ -92,6 +92,42 @@ const agentResponse = {
   },
 };
 
+const clarification = {
+  ...item,
+  activity_id: "99999999-9999-9999-9999-999999999999",
+  activity_type: "clarification" as const,
+  sequence: "3",
+  clarification: {
+    schema_version: "1",
+    question: "Which worker did you mean?",
+    scenario_version_id: item.scenario_version_id,
+    dropped_candidate_count: 1,
+    candidates: [
+      {
+        schema_version: "1",
+        group: "workers" as const,
+        record_id: "w1",
+        label: "CONTACT-9",
+        scenario_version_id: item.scenario_version_id,
+      },
+    ],
+  },
+};
+
+const refusal = {
+  ...item,
+  activity_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  activity_type: "terminal_outcome" as const,
+  sequence: "4",
+  outcome: {
+    schema_version: "1",
+    status: "completed" as const,
+    reason: "refused" as const,
+    detail: "That capability is not available.",
+    next_step: "Review Scenario Data.",
+  },
+};
+
 function renderedIds() {
   return screen
     .getAllByRole("listitem")
@@ -268,7 +304,7 @@ describe("ActivityTimeline", () => {
     // answers with zero segments completes successfully and renders here too.
     // The activity payload carries no run status, so claiming "did not
     // complete" in destructive styling was wrong for the completed case.
-    // Story 2.9 owns the taxonomy that can tell them apart.
+    // New failures use terminal_outcome; this branch remains for historical rows.
     const empty = {
       ...agentResponse,
       response: { ...agentResponse.response, segments: [] },
@@ -279,5 +315,131 @@ describe("ActivityTimeline", () => {
       "data-response-state",
       "empty",
     );
+  });
+
+  it("renders a clarification with trusted candidates and dropped-count disclosure", () => {
+    render(<ActivityTimeline navigate={vi.fn()} items={[clarification]} />);
+
+    expect(screen.getByText("Clarification")).toBeInTheDocument();
+    expect(screen.getByText("Which worker did you mean?")).toBeInTheDocument();
+    expect(screen.getByText(/CONTACT-9/)).toHaveTextContent("workers");
+    expect(screen.getByText(/1 candidate could not be resolved/)).toBeInTheDocument();
+  });
+
+  it("keeps the model's wording out of the application-resolved record list", () => {
+    // The question names two people who do not exist. The resolved list is the
+    // only part the application vouched for, so it must (a) be identifiable as
+    // such, and (b) contain nothing the model wrote.
+    const fabricated = ["Taylor Smith", "Jordan Lee"];
+    const withFabricatedNames = {
+      ...clarification,
+      clarification: {
+        ...clarification.clarification,
+        question: `Did you mean ${fabricated[0]} or ${fabricated[1]}?`,
+      },
+    };
+
+    render(<ActivityTimeline navigate={vi.fn()} items={[withFabricatedNames]} />);
+
+    const records = screen.getByRole("list", { name: "Records in Scenario Data" });
+    expect(records).toBeInTheDocument();
+    expect(records.textContent).toContain("CONTACT-9");
+    for (const name of fabricated) {
+      // Present in the question, absent from the verified list.
+      expect(screen.getByText(new RegExp(name))).toBeInTheDocument();
+      expect(records.textContent).not.toContain(name);
+    }
+  });
+
+  it("renders a refusal as a literal terminal outcome with its safe next step", () => {
+    render(<ActivityTimeline navigate={vi.fn()} items={[refusal]} />);
+
+    expect(screen.getByText("Refusal")).toBeInTheDocument();
+    // The human label, not the raw enum. A planner should never be shown the
+    // wire vocabulary, and `refusal_reason` is absent here so the shared
+    // "Refusal" fallback is what renders.
+    expect(screen.getByText(/Refusal: That capability is not available/)).toBeInTheDocument();
+    expect(screen.getByText("Review Scenario Data.")).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toMatch(/gradient|animate-pulse|glow/i);
+  });
+
+  it("renders every terminal reason with pairwise-distinct literal output", () => {
+    const reasons = [
+      "provider_error",
+      "invalid_output",
+      "budget_exhausted",
+      "deadline_exceeded",
+      "capability_error",
+      "refused",
+      "approval_unsupported",
+    ] as const;
+    // `detail` is IDENTICAL across every reason on purpose. The previous form
+    // interpolated the reason into the detail string and then asserted the
+    // rendered strings differed — so the fixture supplied the distinctness and
+    // the test would have passed even if `terminalLabel` collapsed all reasons
+    // to one label. Holding detail constant means only the component's own
+    // labelling can make these differ.
+    const terminalItems = reasons.map((reason, index) => ({
+      ...refusal,
+      activity_id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index).padStart(12, "0")}`,
+      sequence: String(index + 4),
+      outcome: {
+        ...refusal.outcome,
+        status: reason === "refused" ? "completed" as const : "failed" as const,
+        reason,
+        detail: "the same detail for every reason",
+      },
+    }));
+
+    render(<ActivityTimeline navigate={vi.fn()} items={terminalItems} />);
+
+    const rendered = terminalItems.map(
+      (item) =>
+        document
+          .querySelector(`[data-activity-id="${item.activity_id}"]`)
+          ?.textContent ?? "",
+    );
+    expect(new Set(rendered).size).toBe(reasons.length);
+  });
+
+  it("labels a refusal by its model-selected reason, not one shared label", () => {
+    const refusalReasons = [
+      "unsupported_request",
+      "capability_unavailable",
+      "out_of_scope",
+    ] as const;
+    const items = refusalReasons.map((refusal_reason, index) => ({
+      ...refusal,
+      activity_id: `bbbbbbbb-bbbb-4bbb-8bbb-${String(index).padStart(12, "0")}`,
+      sequence: String(index + 20),
+      outcome: {
+        ...refusal.outcome,
+        status: "completed" as const,
+        reason: "refused" as const,
+        refusal_reason,
+        detail: "the same detail for every reason",
+      },
+    }));
+
+    render(<ActivityTimeline navigate={vi.fn()} items={items} />);
+
+    expect(screen.getByText("Not supported")).toBeInTheDocument();
+    expect(screen.getByText("Capability unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Out of scope")).toBeInTheDocument();
+  });
+
+  it("renders an unknown activity type without unmounting the timeline", () => {
+    const unknown = {
+      ...refusal,
+      activity_id: "cccccccc-cccc-4ccc-8ccc-000000000000",
+      activity_type: "draft",
+    } as unknown as typeof item;
+
+    render(<ActivityTimeline navigate={vi.fn()} items={[item, unknown]} />);
+
+    // The known row survives — an unhandled discriminant must cost one row, not
+    // the whole conversation.
+    expect(screen.getByText(item.text)).toBeInTheDocument();
+    expect(screen.getByText(/needs a newer version/i)).toBeInTheDocument();
   });
 });

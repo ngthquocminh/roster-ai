@@ -1,5 +1,5 @@
 # generated: 2026-07-24
-# last_updated: 2026-08-14
+# last_updated: 2026-08-16
 # project: ShiftMind
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,145 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-15
+last_updated: 2026-08-16
+
+# NOTE (2026-08-15): Story 2-9 created and moved to ready-for-dev. It is the LAST story of Epic 2,
+# the SOLE owner of NFR5 (prompt-injection coverage — VERIFIED BY EXHAUSTIVE SEARCH AT CREATION that
+# the repository has ZERO injection tests, zero injection corpus, and zero injection fixture today;
+# every match for "inject" under backend/ is dependency injection or a deliberately injected test
+# failure), and the story Story 2.2 built the `GoldenCase` schema FOR BY NAME —
+# `expected_outcome: allow|refuse|clarify` and `expected_visible_state` have existed since 2.2 and
+# evals/README.md:10 says so ("Each case records the Story 2.9 fixture shape verbatim"). Four ACs,
+# scope confirmed UNCHANGED by both correct-course runs (sprint-change-proposal-2026-08-09-epics-2-5
+# .md:131 "2.1-2.7, 2.9 | KEEP as-is"; ...-2026-08-13.md:127 "2.9 | None").
+#
+# IT CARRIES NO MIGRATION AND NO NEW DEPENDENCY, both VERIFIED AT CREATION: `persisted_event.payload`
+# is JSONB, `event_type` is a bare String(100) with NO check constraint, `ck_agent_run_status` already
+# admits all seven AD-7 statuses INCLUDING `approval_required`, and the only UPDATE grant this
+# milestone added (`agent_run(status)`, revision c7d6e5f4a3b2) is the only one needed. pydantic-ai-slim
+# 2.27.0 is already a repository lock, so no AR19/AR27 ceremony applies. `ActivityTypeV1` ALREADY
+# RESERVES `clarification` and `terminal_outcome` — neither is a new discriminant. Codegen IS owed
+# (unlike 2.8): `ActivityItemOut` gains two union members.
+#
+# IT RUNS IN THREE PHASES WITH A REPORTING CHECKPOINT between A and B, the 2.7 pattern and for the
+# same reason — the phase boundary is placed where the only clean split WOULD be, so that decision can
+# be revisited with numbers instead of guessed before any code exists. PHASE A (Tasks 1-7: contracts,
+# adapter output variants, candidate resolution, terminal taxonomy, persistence, evaluator, cases)
+# satisfies AC4 IN FULL plus the server halves of AC1/AC2/AC3 with a ZERO-LINE `frontend/` diff.
+# PHASE B (Tasks 8-10: codegen, timeline rendering, Chat error state, accessibility). PHASE C
+# (Task 11: fences, ledger, regression, Gate A). The checkpoint is NOT an unconditional pause — it
+# must work in an unattended bmad-dev-auto/bmad-loop run, so the dev CONTINUES unless one of four
+# named conditions fires. Its load-bearing reports are PROOF THE ToolRoutingEvaluator FIX WAS OBSERVED
+# RED and PROOF AN INJECTION CASE WAS OBSERVED TO FAIL with its structural assertion removed.
+#
+# SEVEN DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) THE THREE MODEL OUTPUT VARIANTS ARE NAMED `ToolOutput`s; `final_result` KEEPS ITS NAME.
+#     MEASURED AGAINST THE INSTALLED pydantic-ai 2.27.0 LOCK: a bare list/union output type RENAMES
+#     the output tool `final_result` -> `final_result_GroundedAnswerV1` /
+#     `final_result_ClarificationV1` (AutoOutputSchema), whereas
+#     `ToolOutput(GroundedAnswerV1, name="final_result")` preserves the exact name and yields
+#     ToolOutputSchema with `allows_text=False`. THE RENAME IS THE TRAP: evals/doubles.py:58-67 builds
+#     a scripted structured response as `ToolCallPart(tool_name=info.output_tools[0].name)` —
+#     UNCONDITIONALLY THE FIRST TOOL — so the four frozen scheduling_compute cases would keep passing
+#     only by list ORDER, and a scripted clarification could never be produced at all.
+# (2) A REFUSAL IS A `terminal_outcome`, NOT A NINTH `ActivityTypeV1` DISCRIMINANT. A real divergence
+#     between normative artifacts, reconciled rather than resolved by whichever is read first: AD-14
+#     (ARCHITECTURE-SPINE.md:172, :331) names EIGHT and defines `terminal outcome = aggregate
+#     ref/status/REASON/evidence refs`; UX-DR6 (epics.md:188) names NINE, inserting "refusals".
+#     EXPERIENCE.md:85 asks the timeline to distinguish a refusal "by author/TYPE LABEL" — a label,
+#     which a reason-discriminated terminal outcome supplies. Widening AD-20's closed vocabulary buys
+#     no acceptance. Escalate rather than quietly adding a ninth.
+# (3) AUTHORITY REFUSAL IS PROVEN BY ABSENCE AND BY APPLICATION POLICY; THE MODEL'S REFUSAL IS
+#     PRESENTATION ONLY. All five AC2 causes already have mechanisms (ungranted -> tool ABSENT;
+#     prohibited -> uninstallable by validate_manifest; budget -> UsageLimitExceeded; injection -> no
+#     authority input is ever read from content; unsupported -> nothing granted serves it). This story
+#     builds NO new gate — it PROVES those five and ships the visible refusal. Registering a capability
+#     and letting the model decline inside it is the exact inversion AD-2 forbids and Story 2.5
+#     Decision 4 already rejected.
+# (4) A CLARIFICATION IS A COMPLETED TURN THAT INVOKED NO CONSEQUENTIAL CAPABILITY. Asserted against
+#     `manifest.risk_class` in {draft, compute, consequential}, NOT against a hardcoded capability
+#     name, so the guard stays true as Epic 3 adds capabilities. A clarification MAY have called
+#     scheduling_inspect first — that is a read and it is how Decision 5's candidates are obtained.
+# (5) ENTITY CANDIDATES ARE APPLICATION-RESOLVED, NEVER MODEL-AUTHORED STRINGS. AC1 says "SAFE entity
+#     candidates". The model proposes (group, record_id) citing rows its own inspect results returned;
+#     the application resolves each on the trusted path and supplies the label. An unresolvable
+#     candidate is DROPPED, COUNTED and ASSERTED — never retargeted to the current version or a nearby
+#     record (AR11). Candidates are OPTIONAL: ambiguity about time, scope or intent has no entity to
+#     cite, and requiring one would force the model to invent one.
+# (6) `suspended` STOPS BEING REPORTED AS `agent_failed`; APPROVAL EXECUTION STAYS EPIC 4's.
+#     execute_turn.py:52-54 claims "Approval execution is deliberately owned by Story 2.9" — JUDGED
+#     FALSE AT CREATION: approval is AD-10/FR17-19, owned by Stories 4.1-4.3, and no AC here mentions
+#     resuming a suspension. But the mapping IS this story's defect: collapsing a suspension into
+#     `agent_failed` is exactly the "Collapse distinct outcomes into 'Done' or 'Error'" EXPERIENCE.md's
+#     Voice and Tone table forbids. Settled: assert it unreachable (`demonstration` is the only
+#     exact_action module and `demonstration_enabled` defaults False), give it its own terminal reason
+#     if it arrives anyway, and RE-ANNOTATE the false comment in place per the 2.4/2.5 precedent.
+# (7) ONE EVALUATOR SHIPS, SPENDING THE FENCE deferred-work.md:130 RESERVED BY NAME for this story
+#     ("The remaining fence is Story 2.9's, for refusal/injection"). Separately the REPORT GENERATOR
+#     gains visible-state judgement, closing :132 whose owner is this story by name.
+#
+# TWO HONEST GAPS ARE RAISED RATHER THAN PAPERED OVER. (a) AC2's "unauthorized" and "prohibited" have
+# NO authorization mechanism to drive them: `membership` has no role column, PLANNER_ROLE is a module
+# constant, and validate_manifest makes a `prohibited` capability one that CANNOT EXIST rather than one
+# that refuses. Required posture: drive unauthorized through the REAL mechanism (feature-policy flag
+# off -> module absent from the grant) and prohibited as a REGISTRATION refusal; do NOT fabricate a
+# role table or a policy service; record the reduction in the SCOPE_CONTROLS "NOT COVERED" form. Same
+# posture as Story 2.5's own gap, and deferred-work.md:26 already owns it. (b) NFR28's 50-case floor
+# CANNOT be re-verified here — three of its five named contributors (3.10-3.12, 4.5-4.6) are in Epics
+# 3 and 4 and have contributed nothing. The dataset holds ELEVEN cases at creation (demonstration 2,
+# scheduling_inspect 5, scheduling_compute 4). Record the contribution and the running total; do NOT
+# lower the threshold (Gate B's call, with all five contributions present) and do NOT pad
+# (epics.md:1527, explicitly).
+#
+# TWELVE TRAPS flagged, the quietest first: the output-tool rename (Decision 1, measured); the
+# ToolRoutingEvaluator counting the clarification/refusal OUTPUT tool call as a routed capability call
+# — evaluators.py:50's `outcome.answer is None` branch includes EVERY assistant tool call and a
+# clarification outcome has `answer is None`, so every clarify/refuse case fails at :56-68 and the
+# tempting fix LOOSENS the branch that carries NFR28's 100% protected-class rule; AN INJECTION CORPUS
+# THAT TESTS ITS OWN FIXTURE (scripting a model that declines and asserting it declined proves the case
+# file, not the system — deferred-work.md:9 records that exact defect against the routing percentage;
+# SCRIPT COMPLIANCE, ASSERT REFUSAL); model-authored candidate labels; refusal as a model authority
+# decision; retargeting an unresolvable candidate; and a VACUOUS expected_visible_text assertion —
+# runtime.py:282 sets `output_text=None` for every structured case, so `(output_text or "") == ""`
+# passes trivially and would close deferred-work.md:132 ON PAPER ONLY.
+#
+# LEDGER: FOUR entries name this story. :11 and :130-132 are CLOSED by Task 6 (the visible-state half
+# and the reserved refusal/injection evaluator fence). :192 (`argument_mismatch` not observably
+# distinct) is routed with a RECOMMENDATION — take the evaluator DISCRIMINATOR, not a new
+# GroundingFailureV1 cause, because AR11 names exactly three and it is a persisted contract Literal
+# (:194 records that breakage). :202 (Gate A accessibility attribution) is DELIBERATELY LEFT OPEN AND
+# UNTOUCHED: its owner is "the next story that already has a legitimate reason to touch
+# gate_a_checks.py" and this story has none — manufacturing one is worse than waiting. Deliberately
+# NOT touched: :7, :9 (the live-model path — Gate B's), :16, :17, :18, :26, :116, :176-:188, and the
+# ScenarioCatalogueReader AD-1 leak at :147-164. `ALLOWED_LEAKS` stays untouched.
+#
+# THREE IN-CODE COMMENTS NAME THIS STORY and are all reachable now: execute_turn.py:52 (Decision 6's
+# false premise), conversations.py:257 (the failure taxonomy), ActivityTimeline.tsx:136 plus its test
+# at ActivityTimeline.test.tsx:271. Correct each in place.
+#
+# SCOPE FENCE WORTH STATING TWICE: DO NOT DISABLE THE COMPOSER on an error. Composer-disabling outage
+# mode is FR8, owned WHOLLY by STORY 3.9 (epics.md:1059-1070; FR Coverage Map :275 assigns FR8 to
+# Epic 3). A failed turn is not a model outage. AC3's "Scenario Data remains reachable" is a LINK, not
+# a mode — and Runs/Results are still placeholder routes, so link Scenario Data only.
+#
+# NO EVIDENCE FILE IS OWED (no AC carries a measured threshold; NFR35's four rows belong to 1.4, 1.5,
+# 2.4 and 3.5). Gate A must still be re-run per AR28 — expect the two-commit dance
+# (deferred-work.md:107). `alembic check` from the REPOSITORY ROOT (:132-143), expecting zero
+# operations AND ZERO MIGRATION FILES. ZERO-LINE DIFF FENCES: `backend/migrations/**`,
+# `backend/services/**`, `backend/domain/**`, `backend/engine/**`, `backend/llm/**`,
+# `backend/ingest/**`, `backend/store/**`, `adapters/postgres/scenario_projection.py`,
+# `application/ports/scenario_catalogue.py`, `adapters/postgres/scenario_catalogue.py`,
+# `test_gate_a_mutation_audit.py`, `frontend/src/features/scenario-data/**` and
+# `frontend/src/features/evidence/**`. Do NOT regenerate
+# evidence/story-2.2/evaluation-harness-demonstration.json. BASELINES at 0932c1d per 2.8's
+# post-remediation notes: backend 812, postgres 45, frontend 63 files / 378 tests, Playwright 48,
+# alembic zero diff, gate_a_passed true — RE-DERIVE THEM, do not trust them; both 2.7 and 2.8 found
+# their inherited baselines stale.
+
+# (2026-08-16: epic-1 and epic-2 moved in-progress → done. All 11 Epic 1 stories and all 9
+#  Epic 2 stories were already `done`; the epic-level transition is manual per this file's own
+#  status definitions and had simply never been taken. No story status changed. Both
+#  retrospectives remain `optional` and unrun.)
 # (2026-08-15: story 2-8 code-reviewed → 4 decisions resolved, 30 patches applied,
 #  2 items deferred to the ledger. Remediation committed at 181d511, Gate A re-run
 #  on a clean tree at c085058 → gate_a_passed: true, blocking: []. Story → done.)
@@ -960,7 +1098,7 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   # Epic 1: Inspectable Single-Site Scenario Workspace
-  epic-1: in-progress
+  epic-1: done
   1-1-establish-governed-fixture-history: done
   1-2-sign-in-to-the-seeded-site-safely: done
   1-3-choose-an-immutable-fixture: done
@@ -972,10 +1110,10 @@ development_status:
   1-9-prove-viewer-parity-and-mutation-denial: done
   1-10-prove-scenario-data-accessibility-and-responsiveness: done
   1-11-confirm-gate-a-readiness: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: Grounded Conversational Investigation
-  epic-2: in-progress
+  epic-2: done
   2-1-establish-the-owned-agent-runtime-boundary: done
   2-2-establish-the-deterministic-evaluation-harness: done
   2-3-create-and-revisit-durable-conversations: done
@@ -984,8 +1122,8 @@ development_status:
   2-6-add-and-remove-a-governed-capability-module: done
   2-7-ground-schedule-claims-in-exact-evidence: done
   2-8-jump-to-evidence-and-return-to-the-claim: done
-  2-9-clarify-refuse-and-fail-safely: backlog
-  epic-2-retrospective: optional
+  2-9-clarify-refuse-and-fail-safely: done
+  epic-2-retrospective: done
 
   # Epic 3: Governed and Recoverable Schedule Repair
   epic-3: backlog
@@ -1029,3 +1167,35 @@ development_status:
   6-4-prove-hosted-invariants-parity-and-mutation-denial: backlog
   6-5-provide-backups-and-a-tested-rollback-path: backlog
   epic-6-retrospective: optional
+
+# Committed during the combined Epic 1 + Epic 2 retrospective (2026-08-16).
+# Full record: _bmad-output/implementation-artifacts/epic-1-2-retro-2026-08-16.md
+action_items:
+  - epic: "1-2"
+    action: "Write docs/DOMAIN-MODEL.md — the normative demand family/unit dimensional model (outbound/inbound = volume, indirect = headcount; what assignments can and cannot be scoped by; which questions are answerable from demand vs from assignments). Five of Story 2.7's nine decision-grade review findings trace to this rule being unwritten."
+    owner: "Minh"
+    status: open
+  - epic: "1-2"
+    action: "Red-then-green is the standing evidence standard from Story 3.1 onward: any story shipping a guard, conformance suite, or architecture test must demonstrate it observed failing with its structural assertion removed (the Story 2.9 standard). 19 Epic 2 findings were guards that could not go red."
+    owner: "Dev / review"
+    status: open
+  - epic: "1-2"
+    action: "Story creation adds a 'facts this story depends on' pass, distinct from its decisions pass — name the domain rules the story relies on and confirm each is written down somewhere citable, before writing decisions."
+    owner: "Story creation"
+    status: open
+  - epic: "1-2"
+    action: "Name the two cancellations apart before Story 3.4 is created — ScheduleRun cancellation (3.4) is NOT AgentRun cancellation, which still has no producer and no owner. Cite deferred-work.md:210."
+    owner: "Story creation"
+    status: open
+  - epic: "1-2"
+    action: "PREP: stand up .github/workflows CI — backend pytest (network-disabled default), postgres-marked suite, frontend npm test, typecheck, lint, build, Playwright, alembic check, test_evidence_convention.py. Flagged in the 1.11 and 2.2 reviews; still open."
+    owner: "Minh"
+    status: open
+  - epic: "1-2"
+    action: "PREP: make Gate A re-runnable — a --force/stash-aware flow so gate_a_readiness.main() can run twice without DirtyTreeError, retiring the two-commit dance. See deferred-work.md:107."
+    owner: "Minh"
+    status: open
+  - epic: "1-2"
+    action: "PREP: close the evidence-expiry hole — require a recorded commit to touch a path the check actually depends on (candidate: a subject_paths field on GateACheck). See deferred-work.md:103; note the audit-rule redesign increases this risk."
+    owner: "Minh"
+    status: open

@@ -8,6 +8,7 @@ from uuid import UUID
 
 from application.contracts.persisted_event import PersistedEventV1
 from application.contracts.grounding import GroundedResponseV1
+from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.activity import ActivityItemV1
 
 
@@ -161,6 +162,6 @@ class ConversationRepository(Protocol):
         *,
         claimed: ClaimedAgentRunV1,
         status: str,
-        response: GroundedResponseV1,
+        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1,
         request_id: UUID,
     ) -> ExecutedAgentRunV1: ...

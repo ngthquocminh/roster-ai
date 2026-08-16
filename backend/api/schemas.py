@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 from application.contracts.grounding import GroundedResponseV1
+from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 
 
 class ScenarioCreate(BaseModel):
@@ -145,8 +146,21 @@ class AgentResponseActivityOut(ActivityCommonOut):
     response: GroundedResponseV1
 
 
+class ClarificationActivityOut(ActivityCommonOut):
+    activity_type: Literal["clarification"]
+    clarification: ResolvedClarificationV1
+
+
+class TerminalOutcomeActivityOut(ActivityCommonOut):
+    activity_type: Literal["terminal_outcome"]
+    outcome: TerminalOutcomeV1
+
+
 ActivityItemOut = Annotated[
-    PlannerMessageActivityOut | AgentResponseActivityOut,
+    PlannerMessageActivityOut
+    | AgentResponseActivityOut
+    | ClarificationActivityOut
+    | TerminalOutcomeActivityOut,
     Field(discriminator="activity_type"),
 ]
 

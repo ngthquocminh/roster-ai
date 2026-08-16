@@ -30,6 +30,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models import infer_model
+from pydantic_ai.output import ToolOutput
 
 from agent.translate import summarize, to_framework_messages, to_owned_turn
 from application.contracts.agent_runtime import (
@@ -40,13 +41,32 @@ from application.contracts.agent_runtime import (
     AgentToolResultV1,
     AgentTurnRequestV1,
 )
-from application.ports.agent_runtime import AgentRuntimeError
+from application.ports.agent_runtime import (
+    AgentInvalidOutputError,
+    AgentProviderError,
+    AgentRuntimeError,
+)
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.grounding.gate import numeric_prose_violation
 from agent.capability_tools import render_capabilities
+
+# The three named structured-output tools, declared ONCE here where the
+# `ToolOutput`s are actually constructed. Evaluation imports these rather than
+# re-declaring them: a hardcoded copy diverges silently the day a fourth variant
+# is registered, and the divergence surfaces as every refuse/clarify case
+# failing on an "unexpected tool call" that is really the output tool.
+# `ANSWER_OUTPUT_TOOL` is byte-identical to the pre-Story-2.9 name -- ~15
+# construction sites and every non-grounding golden case depend on that string.
+ANSWER_OUTPUT_TOOL = "final_result"
+CLARIFICATION_OUTPUT_TOOL = "clarification"
+REFUSAL_OUTPUT_TOOL = "refusal"
+OUTPUT_TOOL_NAMES = frozenset(
+    {ANSWER_OUTPUT_TOOL, CLARIFICATION_OUTPUT_TOOL, REFUSAL_OUTPUT_TOOL}
+)
 
 
 @dataclass(frozen=True)
@@ -109,7 +129,12 @@ class PydanticAIAgentRuntime:
         output_type = (
             [str, DeferredToolRequests]
             if answer_type is None
-            else [answer_type, DeferredToolRequests]
+            else [
+                ToolOutput(answer_type, name=ANSWER_OUTPUT_TOOL),
+                ToolOutput(ClarificationV1, name=CLARIFICATION_OUTPUT_TOOL),
+                ToolOutput(RefusalV1, name=REFUSAL_OUTPUT_TOOL),
+                DeferredToolRequests,
+            ]
         )
         self._agent: Agent = Agent(
             deps_type=AgentDepsV1 | None,
@@ -137,6 +162,11 @@ class PydanticAIAgentRuntime:
             # bypassing the validator cannot bypass the invariant.
             @self._agent.output_validator
             def _reject_numeric_prose(output: object) -> object:
+                # Clarification and refusal are distinct structured outputs. A
+                # numeral in bounded refusal copy is operational context, not
+                # an uncited grounded claim.
+                if not isinstance(output, GroundedAnswerV1):
+                    return output
                 for segment in getattr(output, "segments", ()) or ():
                     text = getattr(segment, "text", None)
                     if text is None:
@@ -217,12 +247,17 @@ class PydanticAIAgentRuntime:
             return AgentRunOutcomeV1(
                 status="failed",
                 failure_reason="budget_exhausted",
+                failure_source="agent",
                 summary=str(exc)[:200],
             )
         except UnexpectedModelBehavior as exc:
-            raise AgentRuntimeError("agent runtime produced unusable output") from exc
+            raise AgentInvalidOutputError(
+                "agent runtime produced unusable output"
+            ) from exc
         except ModelHTTPError as exc:
-            raise AgentRuntimeError("agent runtime provider call failed") from exc
+            # Typed, not text-tagged: the request path classifies this by class,
+            # so rewording the message can never reclassify a provider outage.
+            raise AgentProviderError("agent runtime provider call failed") from exc
         except AgentRunError as exc:
             # Framework-level catch-all. Still an owned type, cause preserved —
             # never a bare `except Exception` that swallows the cause.
@@ -244,6 +279,12 @@ class PydanticAIAgentRuntime:
             return AgentRunOutcomeV1(
                 status="failed",
                 failure_reason=exc.code,
+                # Tagged at the raise site so the use case never has to guess
+                # from the string. A manifest may declare a code spelled exactly
+                # like an agent-level reason -- an installed module already
+                # declares one -- and without this tag such a failure was
+                # rendered to the planner as an agent budget exhaustion.
+                failure_source="capability",
                 summary=str(exc)[:200],
             )
         except Exception as exc:  # noqa: BLE001
@@ -277,6 +318,13 @@ class PydanticAIAgentRuntime:
                 ),
             )
 
+        if self._answer_type is not None and not isinstance(
+            result.output, (GroundedAnswerV1, ClarificationV1, RefusalV1)
+        ):
+            raise AgentRuntimeError(
+                f"unrecognized structured output {type(result.output).__name__}"
+            )
+
         return AgentRunOutcomeV1(
             status="completed",
             output_text=(str(result.output) if self._answer_type is None else None),
@@ -285,6 +333,10 @@ class PydanticAIAgentRuntime:
                 if isinstance(result.output, GroundedAnswerV1)
                 else None
             ),
+            clarification=(
+                result.output if isinstance(result.output, ClarificationV1) else None
+            ),
+            refusal=(result.output if isinstance(result.output, RefusalV1) else None),
             turn=turn,
             summary=summary,
             tool_results=_tool_results(turn, excluded_names=self._output_tool_names),

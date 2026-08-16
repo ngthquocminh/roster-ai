@@ -8,7 +8,12 @@ import pytest
 
 from agent.translate import to_framework_messages
 from application.capabilities.deps import AgentDepsV1
-from application.contracts.activity import AgentResponseActivityV1, PlannerMessageActivityV1
+from application.contracts.activity import (
+    AgentResponseActivityV1,
+    ClarificationActivityV1,
+    PlannerMessageActivityV1,
+    TerminalOutcomeActivityV1,
+)
 from application.contracts.agent_runtime import (
     AgentBudgetV1,
     AgentMessageRoleV1,
@@ -24,7 +29,15 @@ from application.contracts.grounding import (
     GroundedProseSegmentV1,
     GroundedResponseV1,
 )
-from application.use_cases.execute_turn import execute_turn
+from application.contracts.dialogue import ClarificationV1, EntityCandidateProposalV1
+from application.contracts.dialogue import RefusalV1, ResolvedClarificationV1, TerminalOutcomeV1
+from application.contracts.scenario_projection import WorkerV1
+from application.use_cases.execute_turn import (
+    execute_turn,
+    rehydrate_history,
+    terminal_outcome,
+    terminal_status,
+)
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
 
@@ -109,6 +122,230 @@ def test_rehydrated_history_is_capped_at_one_hundred_activities() -> None:
     execute_turn(runtime, deps, prompt="now", calculation_results=[], history=activities)
     assert len(runtime.request.history.messages) == 100
     assert runtime.request.history.messages[0].parts[0].text == "m20"
+
+
+def test_execute_turn_resolves_clarification_at_the_use_case_boundary() -> None:
+    deps = _deps()
+    worker = WorkerV1(
+        "worker-record", "CONTACT-9", "Taylor", "casual", "1", "EBA", 8.0, (), ()
+    )
+
+    class Reader:
+        def resolve_worker(self, _connection, scenario_id, version_id, record_id):
+            assert (scenario_id, version_id, record_id) == (
+                deps.scenario_id,
+                deps.scenario_version_id,
+                "worker-record",
+            )
+            return type(
+                "Resolution",
+                (),
+                {
+                    "outcome": "resolved",
+                    "current_scenario_version_id": deps.scenario_version_id,
+                    "item": worker,
+                },
+            )()
+
+    deps = AgentDepsV1(**{**deps.__dict__, "projection_reader": Reader()})
+
+    class ClarifyingRuntime:
+        name = "clarifying"
+
+        def run_turn(self, _request):
+            return AgentRunOutcomeV1(
+                clarification=ClarificationV1(
+                    question="Which worker?",
+                    candidates=(
+                        EntityCandidateProposalV1(
+                            group="workers", record_id="worker-record"
+                        ),
+                    ),
+                )
+            )
+
+    outcome = execute_turn(
+        ClarifyingRuntime(), deps, prompt="Move Taylor", calculation_results=[]
+    )
+
+    assert outcome.clarification is not None
+    assert outcome.resolved_clarification is not None
+    assert outcome.resolved_clarification.candidates[0].label == "Taylor (CONTACT-9)"
+
+
+@pytest.mark.parametrize(
+    ("outcome", "status", "reason"),
+    [
+        (AgentRunOutcomeV1(status="timed_out"), "agent_timed_out", "deadline_exceeded"),
+        (
+            AgentRunOutcomeV1(status="failed", failure_reason="budget_exhausted"),
+            "agent_failed",
+            "budget_exhausted",
+        ),
+        (
+            AgentRunOutcomeV1(status="failed", failure_reason="provider_error"),
+            "agent_failed",
+            "provider_error",
+        ),
+        (
+            AgentRunOutcomeV1(status="failed", failure_reason="invalid_output"),
+            "agent_failed",
+            "invalid_output",
+        ),
+        (
+            AgentRunOutcomeV1(
+                status="failed",
+                failure_reason="tool_declared_error",
+                failure_source="capability",
+            ),
+            "agent_failed",
+            "capability_error",
+        ),
+        # A manifest code spelled exactly like an agent-level reason. The
+        # source tag -- not the string -- decides, so this must NOT render as
+        # "The configured agent budget was exhausted".
+        (
+            AgentRunOutcomeV1(
+                status="failed",
+                failure_reason="budget_exhausted",
+                failure_source="capability",
+            ),
+            "agent_failed",
+            "capability_error",
+        ),
+        # A suspension is terminal here: it lands on AD-7's own
+        # `approval_required --> agent_cancelled: rejected or expired` edge
+        # rather than parking the row in a waiting state nothing can leave.
+        (
+            AgentRunOutcomeV1(status="suspended"),
+            "agent_cancelled",
+            "approval_unsupported",
+        ),
+        (
+            AgentRunOutcomeV1(
+                refusal=RefusalV1(
+                    reason="unsupported_request",
+                    detail="That request is not supported.",
+                    next_step="Review Scenario Data.",
+                )
+            ),
+            "agent_completed",
+            "refused",
+        ),
+    ],
+)
+def test_terminal_taxonomy_keeps_every_reachable_reason_distinct(
+    outcome: AgentRunOutcomeV1, status: str, reason: str
+) -> None:
+    assert terminal_status(outcome) == status
+    terminal = terminal_outcome(outcome)
+    assert terminal is not None
+    assert terminal.reason == reason
+    assert terminal.detail
+    assert len(terminal.detail) <= 200
+
+
+# Values `AgentFailureReasonV1` declares that NO branch in `backend/agent/`
+# emits today. Each needs an owner, not merely a mention: a declared-but-
+# unemittable reason is the "declared and entirely unimplemented" shape
+# `deferred-work.md:7` records.
+UNEMITTED_AGENT_FAILURE_REASONS = {
+    "cancelled": (
+        "AgentRun cancellation has AD-7 edges (`agent_queued`/`agent_running` "
+        "--> `agent_cancelled`) but no assigned story. Story 3.4 is ScheduleRun "
+        "cancellation, not AgentRun. Whoever makes the adapter emit this must "
+        "add the TerminalReasonV1 value and its named branch in the same change."
+    ),
+}
+
+
+def test_every_emittable_failure_reason_has_a_terminal_mapping() -> None:
+    """The executable form of Task 4's "each value must be reachable" rule.
+
+    Bidirectional on purpose. If a reason becomes emittable it must gain a
+    terminal mapping in the same change, or it silently renders as
+    `capability_error`. If a reason stops being emittable, the exemption
+    registry must say so with an owner rather than leaving dead vocabulary.
+    """
+    from pathlib import Path
+    from typing import get_args
+
+    from application.contracts.agent_runtime import AgentFailureReasonV1
+    from application.contracts.dialogue import TerminalReasonV1
+    from application.use_cases.execute_turn import _AGENT_TERMINAL_COPY
+
+    # Both producers: the adapter sets some reasons directly, and the use case
+    # sets others when translating a typed exception from the request path.
+    # Scanning only one of the two would report a live reason as unemittable.
+    backend = Path(__file__).resolve().parents[1]
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            *sorted((backend / "agent").glob("*.py")),
+            backend / "application" / "use_cases" / "execute_turn.py",
+        )
+    )
+
+    emittable = {
+        reason
+        for reason in get_args(AgentFailureReasonV1)
+        if f'failure_reason="{reason}"' in source
+    }
+    unemitted = set(get_args(AgentFailureReasonV1)) - emittable
+
+    assert unemitted == set(UNEMITTED_AGENT_FAILURE_REASONS), (
+        "A failure reason changed emittability. Update the exemption registry "
+        "and the terminal taxonomy together — an unmapped emittable reason "
+        "renders as `capability_error` and misreports the cause to the planner."
+    )
+    unmapped = emittable - set(_AGENT_TERMINAL_COPY)
+    assert not unmapped, f"emittable with no terminal mapping: {sorted(unmapped)}"
+    # Nothing exempted may still be in the rendered vocabulary.
+    assert not set(UNEMITTED_AGENT_FAILURE_REASONS) & set(get_args(TerminalReasonV1))
+
+
+def test_clarification_is_completed_without_becoming_a_terminal_failure() -> None:
+    outcome = AgentRunOutcomeV1(
+        clarification=ClarificationV1(question="Which worker?")
+    )
+    assert terminal_status(outcome) == "agent_completed"
+    assert terminal_outcome(outcome) is None
+
+
+def test_new_activity_variants_rehydrate_as_application_owned_assistant_text() -> None:
+    deps = _deps()
+    common = dict(
+        conversation_id=deps.conversation_id,
+        conversation_resource_version=2,
+        scenario_id=deps.scenario_id,
+        scenario_version_id=deps.scenario_version_id,
+        occurred_at=NOW,
+    )
+    clarification = ClarificationActivityV1(
+        activity_id=UUID(int=30),
+        activity_type="clarification",
+        clarification=ResolvedClarificationV1(
+            question="Which worker?", scenario_version_id=deps.scenario_version_id
+        ),
+        **common,
+    )
+    terminal = TerminalOutcomeActivityV1(
+        activity_id=UUID(int=31),
+        activity_type="terminal_outcome",
+        outcome=TerminalOutcomeV1(
+            status="failed",
+            reason="provider_error",
+            detail="The provider failed.",
+        ),
+        **common,
+    )
+
+    history = rehydrate_history((clarification, terminal))
+
+    assert [message.parts[0].text for message in history.messages] == [
+        "Which worker?",
+        "The previous turn did not complete: provider_error.",
+    ]
 
 
 @pytest.mark.parametrize(

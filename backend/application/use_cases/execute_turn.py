@@ -10,11 +10,21 @@ from application.contracts.agent_runtime import (
     AgentTurnRequestV1,
     AgentTurnV1,
 )
-from application.contracts.activity import AgentResponseActivityV1, ActivityItemV1, PlannerMessageActivityV1
+from application.contracts.activity import (
+    ActivityItemV1,
+    AgentResponseActivityV1,
+    ClarificationActivityV1,
+    PlannerMessageActivityV1,
+    TerminalOutcomeActivityV1,
+)
+from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.grounding import GroundedClaimV1, GroundedProseSegmentV1, GroundedResponseV1
-from application.grounding.gate import ground_answer
+from application.grounding.gate import UncitedNumericProseError, ground_answer
+from application.clarification.resolve import resolve_clarification
 from application.ports.agent_runtime import AgentRuntime
+from application.ports.agent_runtime import AgentProviderError, AgentRuntimeError
 from application.capabilities.deps import AgentDepsV1
+from application.contracts.capability_manifest import IncompleteManifestError
 
 
 def execute_turn(
@@ -29,7 +39,14 @@ def execute_turn(
     outcome = runtime.run_turn(
         AgentTurnRequestV1(prompt=prompt, history=rehydrate_history(history))
     )
-    if outcome.status != "completed" or outcome.answer is None:
+    if outcome.status != "completed":
+        return outcome
+    if outcome.clarification is not None:
+        return replace(
+            outcome,
+            resolved_clarification=resolve_clarification(outcome.clarification, deps),
+        )
+    if outcome.answer is None:
         return outcome
     by_id = {
         value.result_id: value
@@ -43,16 +60,169 @@ def execute_turn(
 
 
 def terminal_status(outcome: AgentRunOutcomeV1) -> str:
-    if outcome.status == "completed" and outcome.grounded_response is None:
+    if outcome.status == "completed":
+        if any(
+            value is not None
+            for value in (
+                outcome.grounded_response,
+                outcome.clarification,
+                outcome.resolved_clarification,
+                outcome.refusal,
+            )
+        ):
+            return "agent_completed"
         return "agent_failed"
     return {
-        "completed": "agent_completed",
         "timed_out": "agent_timed_out",
         "failed": "agent_failed",
-        # Approval execution is deliberately owned by Story 2.9. Until then a
-        # suspension cannot be resumed through this request path.
-        "suspended": "agent_failed",
+        # STOPGAP, and deliberately not `approval_required`. AD-7 makes
+        # `approval_required` a WAITING state with outgoing edges
+        # (`--> agent_running: decision recorded`, `--> agent_cancelled:
+        # rejected or expired`), but this function is the FINALISATION path:
+        # nothing in this milestone touches the row again, `claim_queued_run`
+        # only claims `agent_queued`, and `outcome.approval.pending_calls` is
+        # not persisted anywhere -- so the run would sit forever waiting on a
+        # decision that cannot be recorded. AD-7's own "rejected or expired"
+        # edge lands on `agent_cancelled`, which is terminal and truthful. The
+        # distinct reason is NOT lost: `terminal_outcome()` still reports
+        # `approval_unsupported` with its own planner-visible label.
+        # Decision 6 forbade `agent_failed`; it did not require this status.
+        # Epic 4 (AD-10, Stories 4.1-4.3) owns approval resumption and must
+        # restore the `approval_required` mapping together with a persisted
+        # pending-call payload. `test_request_path_grants_no_approval_capability_
+        # in_this_milestone` fails the moment an approval-policy capability
+        # becomes reachable, which is what reopens this decision.
+        "suspended": "agent_cancelled",
     }[outcome.status]
+
+
+# Agent-level failure reasons this use case can render as literal planner copy.
+# `cancelled` is deliberately ABSENT: no branch in `backend/agent/` emits it, and
+# Story 3.4 owns `ScheduleRun` cancellation, not `AgentRun` -- so it had no
+# producer and no owner. `test_every_emittable_failure_reason_has_a_terminal_
+# mapping` fails if one ever appears, forcing the reason and its branch to land
+# together rather than silently rendering as `capability_error`.
+_AGENT_TERMINAL_COPY: dict[str, str] = {
+    "provider_error": "The provider failed before the turn completed.",
+    "invalid_output": "The model returned an invalid response.",
+    "budget_exhausted": "The configured agent budget was exhausted.",
+}
+_CAPABILITY_TERMINAL_COPY = (
+    "A governed capability failed without executing an unsupported action."
+)
+
+# Bound on untrusted model copy crossing into a persisted payload. Applied to
+# BOTH `detail` and `next_step`: bounding one and not the other left arbitrary
+# model prose unbounded on the refusal path, which is the only path whose copy
+# is model-authored at all.
+_MODEL_COPY_LIMIT = 200
+
+
+def _bounded(text: str | None) -> str | None:
+    return text if text is None else text[:_MODEL_COPY_LIMIT]
+
+
+def terminal_outcome(outcome: AgentRunOutcomeV1) -> TerminalOutcomeV1 | None:
+    """Map every non-answer terminal path to literal bounded planner copy."""
+    if outcome.status == "completed":
+        if outcome.refusal is not None:
+            return TerminalOutcomeV1(
+                status="completed",
+                reason="refused",
+                # The model's own closed-vocabulary reason is carried through so
+                # the three values are observable. Without this the planner saw
+                # one "Refusal" label for all three, which is exactly the
+                # "collapse distinct outcomes" EXPERIENCE.md forbids, and made
+                # Task 1's AD-3 argument for excluding "unauthorized" moot --
+                # there is nothing to leak if nothing is rendered.
+                refusal_reason=outcome.refusal.reason,
+                detail=_bounded(outcome.refusal.detail) or "",
+                next_step=_bounded(outcome.refusal.next_step),
+            )
+        if outcome.clarification is not None or outcome.resolved_clarification is not None:
+            return None
+        if outcome.grounded_response is not None:
+            return None
+        return TerminalOutcomeV1(
+            # `terminal_status()` finalises this same outcome as `agent_failed`
+            # -- a completed adapter call that produced nothing usable is a
+            # failure to the planner. Reporting "completed" here contradicted
+            # the row written in the same transaction.
+            status="failed",
+            reason="invalid_output",
+            detail="The turn completed without a usable response.",
+            next_step="Retry the request or review Scenario Data.",
+        )
+    if outcome.status == "timed_out":
+        return TerminalOutcomeV1(
+            status="timed_out",
+            reason="deadline_exceeded",
+            detail="The turn timed out before it completed.",
+            next_step="Retry the request or review Scenario Data.",
+        )
+    if outcome.status == "suspended":
+        return TerminalOutcomeV1(
+            # `status` is the ADAPTER vocabulary (`AgentRunStatusV1`), not AD-7's
+            # run vocabulary, so "suspended" here and `agent_cancelled` on the
+            # row are not a contradiction: the adapter did suspend, and the
+            # application recorded that as a terminal cancellation because the
+            # suspension cannot be resumed. The planner-visible label comes from
+            # `reason`, which names the real cause.
+            status="suspended",
+            reason="approval_unsupported",
+            detail="The turn requires approval that this workflow cannot resume yet.",
+            next_step="Review the requested action; approval execution arrives in Epic 4.",
+        )
+
+    # Discriminate by SOURCE, never by matching the reason string.
+    # `CapabilityFailureReasonV1` is an open `str` and each module declares its
+    # own codes, so a manifest code can be spelled identically to an agent-level
+    # reason -- `demonstration.py` already declares `budget_exhausted` and
+    # `approval_required`. A string test therefore reported "The configured
+    # agent budget was exhausted" when a capability had merely hit its own
+    # internal limit. `failure_source` is set by whichever layer raised.
+    if outcome.failure_source == "capability":
+        return TerminalOutcomeV1(
+            status="failed",
+            reason="capability_error",
+            detail=_CAPABILITY_TERMINAL_COPY,
+            next_step="Retry the request or review Scenario Data.",
+        )
+    reason = outcome.failure_reason or "invalid_output"
+    terminal_reason = reason if reason in _AGENT_TERMINAL_COPY else "invalid_output"
+    return TerminalOutcomeV1(
+        status="failed",
+        reason=terminal_reason,
+        detail=_AGENT_TERMINAL_COPY[terminal_reason],
+        next_step="Retry the request or review Scenario Data.",
+    )
+
+
+def failed_outcome_for_exception(exc: Exception) -> AgentRunOutcomeV1:
+    """Map known request-path failures by TYPE, never by error-message text.
+
+    `contracts/agent_runtime.py` states the rule for this exact distinction:
+    "the adapter maps them by type, never by string-matching an error message."
+    An earlier revision tested `"provider call failed" in str(exc)`, so renaming
+    that literal in `agent/runtime.py` would have silently reclassified every
+    provider outage as `invalid_output` while its test -- which built the string
+    itself -- stayed green.
+    """
+    if isinstance(exc, IncompleteManifestError):
+        return AgentRunOutcomeV1(
+            status="failed", failure_reason="capability_error", failure_source="capability"
+        )
+    if isinstance(exc, AgentProviderError):
+        return AgentRunOutcomeV1(
+            status="failed", failure_reason="provider_error", failure_source="agent"
+        )
+    # `UncitedNumericProseError` is a `ValueError` subclass, and an unclassified
+    # exception is no better understood than a malformed output, so both land on
+    # the same honest reason rather than on separate branches that pretend to
+    # distinguish them.
+    return AgentRunOutcomeV1(
+        status="failed", failure_reason="invalid_output", failure_source="agent"
+    )
 
 
 def visible_response(outcome: AgentRunOutcomeV1, deps: AgentDepsV1) -> GroundedResponseV1:
@@ -60,6 +230,17 @@ def visible_response(outcome: AgentRunOutcomeV1, deps: AgentDepsV1) -> GroundedR
         scenario_version_id=deps.scenario_version_id,
         segments=(),
     )
+
+
+def activity_payload(
+    outcome: AgentRunOutcomeV1, deps: AgentDepsV1
+) -> GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1:
+    if outcome.resolved_clarification is not None:
+        return outcome.resolved_clarification
+    terminal = terminal_outcome(outcome)
+    if terminal is not None:
+        return terminal
+    return visible_response(outcome, deps)
 
 
 def _response_visible_text(response: GroundedResponseV1) -> str:
@@ -72,6 +253,19 @@ def _response_visible_text(response: GroundedResponseV1) -> str:
         elif isinstance(segment, GroundedClaimV1):
             parts.append(f"Claim unavailable: {segment.failure}")
     return " ".join(part.strip() for part in parts if part.strip())
+
+
+def outcome_visible_text(outcome: AgentRunOutcomeV1) -> str:
+    """Single planner-visible text projection shared by runtime and evaluation."""
+    if outcome.grounded_response is not None:
+        return _response_visible_text(outcome.grounded_response)
+    if outcome.resolved_clarification is not None:
+        return outcome.resolved_clarification.question
+    if outcome.clarification is not None:
+        return outcome.clarification.question
+    if outcome.refusal is not None:
+        return outcome.refusal.detail
+    return outcome.output_text or ""
 
 
 def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
@@ -95,6 +289,11 @@ def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
             text = _response_visible_text(activity.response) or (
                 "The previous turn did not complete."
             )
+        elif isinstance(activity, ClarificationActivityV1):
+            role, text = "assistant", activity.clarification.question
+        elif isinstance(activity, TerminalOutcomeActivityV1):
+            role = "assistant"
+            text = f"The previous turn did not complete: {activity.outcome.reason}."
         else:  # defensive for future ActivityItemV1 variants
             raise ValueError(f"unsupported history activity {type(activity).__name__}")
         if text:
@@ -107,4 +306,13 @@ def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
     return AgentTurnV1(messages=tuple(messages))
 
 
-__all__ = ["execute_turn", "rehydrate_history", "terminal_status", "visible_response"]
+__all__ = [
+    "execute_turn",
+    "failed_outcome_for_exception",
+    "activity_payload",
+    "rehydrate_history",
+    "outcome_visible_text",
+    "terminal_outcome",
+    "terminal_status",
+    "visible_response",
+]

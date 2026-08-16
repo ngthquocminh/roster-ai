@@ -24,6 +24,7 @@ from application.grounding.evidence_groups import (
     evidence_group_for_scenario_fact_group,
     scenario_fact_group_for_evidence_group,
 )
+from application.grounding.resolvers import RESOLVER_BY_SCENARIO_FACT_GROUP
 from application.contracts.scenario_projection import TaskV1
 from adapters.postgres.scenario_projection import (
     PostgresScenarioProjectionReader,
@@ -108,6 +109,15 @@ def test_evidence_and_projection_group_mapping_is_exhaustive_both_ways() -> None
 
     assert set(EVIDENCE_GROUP_BY_SCENARIO_FACT_GROUP) == scenario_groups - {"overview"}
     assert set(EVIDENCE_GROUP_BY_SCENARIO_FACT_GROUP.values()) == evidence_groups
+    assert set(RESOLVER_BY_SCENARIO_FACT_GROUP) == scenario_groups - {"overview"}
+    assert set(RESOLVER_BY_SCENARIO_FACT_GROUP.values()) == {
+        "resolve_task",
+        "resolve_worker",
+        "resolve_demand_interval",
+        "resolve_assignment",
+        "resolve_lock",
+        "resolve_constraint",
+    }
     assert evidence_group_for_scenario_fact_group("overview") is None
 
     for scenario_group, evidence_group in EVIDENCE_GROUP_BY_SCENARIO_FACT_GROUP.items():

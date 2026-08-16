@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic_ai import UnexpectedModelBehavior, models
+from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior, models
 from pydantic_ai.messages import (
     ModelMessage,
     ModelResponse,
@@ -42,6 +42,8 @@ def build_model_double(case: GoldenCase) -> FunctionModel:
 
 
 def _to_model_response(turn: ScriptedModelTurn, info: AgentInfo) -> ModelResponse:
+    if turn.response_error == "provider_error":
+        raise ModelHTTPError(status_code=503, model_name="double", body="overloaded")
     if turn.tool_name is not None:
         if turn.arguments is None or turn.tool_call_id is None:
             raise UnexpectedModelBehavior("scripted tool call is incomplete")
@@ -55,12 +57,21 @@ def _to_model_response(turn: ScriptedModelTurn, info: AgentInfo) -> ModelRespons
             ]
         )
     if turn.response_text is None:
-        if turn.response_data is None or not info.output_tools:
+        if turn.response_data is None:
             raise UnexpectedModelBehavior("scripted structured response is incomplete")
+        output_tool = next(
+            (tool for tool in info.output_tools if tool.name == turn.output_tool),
+            None,
+        )
+        if output_tool is None:
+            raise UnexpectedModelBehavior(
+                f"scripted output tool {turn.output_tool!r} is absent; available tools: "
+                f"{', '.join(tool.name for tool in info.output_tools) or '(none)'}"
+            )
         return ModelResponse(
             parts=[
                 ToolCallPart(
-                    tool_name=info.output_tools[0].name,
+                    tool_name=output_tool.name,
                     args=json.dumps(turn.response_data, sort_keys=True),
                     tool_call_id="scripted-final-answer",
                 )
