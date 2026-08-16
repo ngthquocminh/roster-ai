@@ -1110,7 +1110,7 @@ development_status:
   1-9-prove-viewer-parity-and-mutation-denial: done
   1-10-prove-scenario-data-accessibility-and-responsiveness: done
   1-11-confirm-gate-a-readiness: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: Grounded Conversational Investigation
   epic-2: done
@@ -1123,7 +1123,7 @@ development_status:
   2-7-ground-schedule-claims-in-exact-evidence: done
   2-8-jump-to-evidence-and-return-to-the-claim: done
   2-9-clarify-refuse-and-fail-safely: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # Epic 3: Governed and Recoverable Schedule Repair
   epic-3: backlog
@@ -1167,3 +1167,35 @@ development_status:
   6-4-prove-hosted-invariants-parity-and-mutation-denial: backlog
   6-5-provide-backups-and-a-tested-rollback-path: backlog
   epic-6-retrospective: optional
+
+# Committed during the combined Epic 1 + Epic 2 retrospective (2026-08-16).
+# Full record: _bmad-output/implementation-artifacts/epic-1-2-retro-2026-08-16.md
+action_items:
+  - epic: "1-2"
+    action: "Write docs/DOMAIN-MODEL.md — the normative demand family/unit dimensional model (outbound/inbound = volume, indirect = headcount; what assignments can and cannot be scoped by; which questions are answerable from demand vs from assignments). Five of Story 2.7's nine decision-grade review findings trace to this rule being unwritten."
+    owner: "Minh"
+    status: open
+  - epic: "1-2"
+    action: "Red-then-green is the standing evidence standard from Story 3.1 onward: any story shipping a guard, conformance suite, or architecture test must demonstrate it observed failing with its structural assertion removed (the Story 2.9 standard). 19 Epic 2 findings were guards that could not go red."
+    owner: "Dev / review"
+    status: open
+  - epic: "1-2"
+    action: "Story creation adds a 'facts this story depends on' pass, distinct from its decisions pass — name the domain rules the story relies on and confirm each is written down somewhere citable, before writing decisions."
+    owner: "Story creation"
+    status: open
+  - epic: "1-2"
+    action: "Name the two cancellations apart before Story 3.4 is created — ScheduleRun cancellation (3.4) is NOT AgentRun cancellation, which still has no producer and no owner. Cite deferred-work.md:210."
+    owner: "Story creation"
+    status: open
+  - epic: "1-2"
+    action: "PREP: stand up .github/workflows CI — backend pytest (network-disabled default), postgres-marked suite, frontend npm test, typecheck, lint, build, Playwright, alembic check, test_evidence_convention.py. Flagged in the 1.11 and 2.2 reviews; still open."
+    owner: "Minh"
+    status: open
+  - epic: "1-2"
+    action: "PREP: make Gate A re-runnable — a --force/stash-aware flow so gate_a_readiness.main() can run twice without DirtyTreeError, retiring the two-commit dance. See deferred-work.md:107."
+    owner: "Minh"
+    status: open
+  - epic: "1-2"
+    action: "PREP: close the evidence-expiry hole — require a recorded commit to touch a path the check actually depends on (candidate: a subject_paths field on GateACheck). See deferred-work.md:103; note the audit-rule redesign increases this risk."
+    owner: "Minh"
+    status: open
