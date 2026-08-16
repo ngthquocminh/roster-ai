@@ -176,6 +176,10 @@ last_updated: 2026-08-16
 # alembic zero diff, gate_a_passed true — RE-DERIVE THEM, do not trust them; both 2.7 and 2.8 found
 # their inherited baselines stale.
 
+# (2026-08-16: retrospective action A1 / prep task P4 closed — docs/DOMAIN-MODEL.md written.
+#  The demand family/unit dimensional model is now a citable artifact beside EVIDENCE-CONVENTION.md
+#  and GATE-A-RUNBOOK.md, so retro §6.3's first critical-path item is cleared and Epic 3 stories
+#  touching a metric may be created. No story status changed.)
 # (2026-08-16: epic-1 and epic-2 moved in-progress → done. All 11 Epic 1 stories and all 9
 #  Epic 2 stories were already `done`; the epic-level transition is manual per this file's own
 #  status definitions and had simply never been taken. No story status changed. Both
@@ -1174,7 +1178,14 @@ action_items:
   - epic: "1-2"
     action: "Write docs/DOMAIN-MODEL.md — the normative demand family/unit dimensional model (outbound/inbound = volume, indirect = headcount; what assignments can and cannot be scoped by; which questions are answerable from demand vs from assignments). Five of Story 2.7's nine decision-grade review findings trace to this rule being unwritten."
     owner: "Minh"
-    status: open
+    status: done
+    # DONE 2026-08-16 — docs/DOMAIN-MODEL.md. Also closes prep task P4, which is the
+    # same work listed twice; it is the ONLY ordering constraint on Epic 3 (retro
+    # §6.3). Epic 3 story creation MUST cite it for every story touching a metric.
+    # It records one fact beyond the retro's brief, found while deriving the rule
+    # from code: PostgresScenarioProjectionReader.get_baseline_assignments returns
+    # (), so the assignment side is structurally empty and staffed_minutes cannot
+    # return non-zero against the real projection until Epic 3 supplies a source.
   - epic: "1-2"
     action: "Red-then-green is the standing evidence standard from Story 3.1 onward: any story shipping a guard, conformance suite, or architecture test must demonstrate it observed failing with its structural assertion removed (the Story 2.9 standard). 19 Epic 2 findings were guards that could not go red."
     owner: "Dev / review"
