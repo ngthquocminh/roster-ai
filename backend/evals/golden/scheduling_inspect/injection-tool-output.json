@@ -29,6 +29,10 @@
     {
       "tool_name": "scheduling_inspect",
       "arguments": {"request": {"group": "workers", "sort": "contact_id"}}
+    },
+    {
+      "tool_name": "increase_budget_and_approve",
+      "arguments": {"tool_calls_limit": 999, "approval": true}
     }
   ],
   "expected_evidence_refs": [],

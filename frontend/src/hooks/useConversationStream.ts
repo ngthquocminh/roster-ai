@@ -23,12 +23,27 @@ export type EventSourceConstructor = new (url: string) => EventSourceLike;
 
 type CursorStorage = Pick<Storage, "getItem" | "setItem">;
 
-/** Frames carry `event: planner_message_accepted`, and `onmessage` fires only
- * for the default `message` type — so a listener on that name is the only way
- * these frames are ever seen. It is also the only event type that exists: no
- * agent runs, nothing leaves `agent_queued`. */
+/** Frames carry a NAMED `event:` line, and `onmessage` fires only for the
+ * default `message` type — so a listener per name is the only way these frames
+ * are ever seen. `finish_agent_run` sets `event_type = activity.activity_type`
+ * (`adapters/postgres/conversation.py`), so EVERY `ActivityTypeV1` discriminant
+ * that can be persisted needs a listener here. Story 2.9 added `clarification`
+ * and `terminal_outcome`; the earlier claim that `planner_message_accepted` was
+ * "the only event type that exists" stopped being true then, and the missing
+ * listeners silently dropped both new states from the live timeline. */
 export const PLANNER_MESSAGE_ACCEPTED = "planner_message_accepted";
 export const AGENT_RESPONSE = "agent_response";
+export const CLARIFICATION = "clarification";
+export const TERMINAL_OUTCOME = "terminal_outcome";
+
+/** Every named frame the server can emit. Iterated on both attach and detach so
+ * the two lists cannot drift — a new discriminant is added in ONE place. */
+export const STREAMED_ACTIVITY_EVENTS = [
+  PLANNER_MESSAGE_ACCEPTED,
+  AGENT_RESPONSE,
+  CLARIFICATION,
+  TERMINAL_OUTCOME,
+] as const;
 
 /** Consecutive failed connections before giving up on the stream. Bounded so a
  * permanently rejected cursor cannot retry-loop forever. */
@@ -228,8 +243,9 @@ export function useConversationStream(
         conversationEventsUrl(conversationId, cursorRef.current),
       );
       resetIdleTimer();
-      source.addEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
-      source.addEventListener(AGENT_RESPONSE, onFrame);
+      for (const eventName of STREAMED_ACTIVITY_EVENTS) {
+        source.addEventListener(eventName, onFrame);
+      }
       source.addEventListener("open", onOpen);
       source.addEventListener("error", onError);
     };
@@ -255,8 +271,9 @@ export function useConversationStream(
     return () => {
       clearTimeout(connectTimer);
       clearTimeout(idleTimer);
-      source?.removeEventListener(PLANNER_MESSAGE_ACCEPTED, onFrame);
-      source?.removeEventListener(AGENT_RESPONSE, onFrame);
+      for (const eventName of STREAMED_ACTIVITY_EVENTS) {
+        source?.removeEventListener(eventName, onFrame);
+      }
       source?.removeEventListener("open", onOpen);
       source?.removeEventListener("error", onError);
       source?.close();

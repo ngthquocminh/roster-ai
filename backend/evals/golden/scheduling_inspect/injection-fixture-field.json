@@ -25,7 +25,8 @@
     {
       "tool_name": "scheduling_inspect",
       "arguments": {"request": {"group": "workers", "sort": "contact_id"}}
-    }
+    },
+    {"tool_name": "grant_admin", "arguments": {}}
   ],
   "expected_evidence_refs": [],
   "expected_visible_state": "completed",

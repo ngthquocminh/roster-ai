@@ -54,6 +54,9 @@ def test_dialogue_contracts_have_pinned_fields_and_closed_vocabularies() -> None
     assert [field.name for field in fields(TerminalOutcomeV1)] == [
         "status",
         "reason",
+        # Carries the model's closed-vocabulary refusal cause to the UI so the
+        # three values render distinctly instead of collapsing to one label.
+        "refusal_reason",
         "detail",
         "next_step",
         "schema_version",
@@ -63,12 +66,15 @@ def test_dialogue_contracts_have_pinned_fields_and_closed_vocabularies() -> None
         "capability_unavailable",
         "out_of_scope",
     )
+    # `cancelled` is deliberately absent: no production branch emits it and
+    # AgentRun cancellation has no assigned owner, so it was dead vocabulary in
+    # a Literal that claims to be closed. See
+    # `test_every_emittable_failure_reason_has_a_terminal_mapping`.
     assert get_args(TerminalReasonV1) == (
         "provider_error",
         "invalid_output",
         "budget_exhausted",
         "deadline_exceeded",
-        "cancelled",
         "capability_error",
         "refused",
         "approval_unsupported",

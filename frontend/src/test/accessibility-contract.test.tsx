@@ -256,6 +256,37 @@ it("identifies clarification by accessible role and name", async () => {
   expect(screen.getByRole("region", { name: "Clarification" })).toBeInTheDocument();
 });
 
+it("names the application-resolved record list distinctly from the question", async () => {
+  const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
+  const clarification = {
+    ...dialogueBase,
+    activity_type: "clarification" as const,
+    clarification: {
+      schema_version: "1",
+      question: "Which worker did you mean?",
+      scenario_version_id: dialogueBase.scenario_version_id,
+      dropped_candidate_count: 0,
+      candidates: [
+        {
+          schema_version: "1",
+          group: "workers" as const,
+          record_id: "w1",
+          label: "Taylor (CONTACT-9)",
+          scenario_version_id: dialogueBase.scenario_version_id,
+        },
+      ],
+    },
+  };
+
+  render(<ActivityTimeline navigate={vi.fn()} items={[clarification] as never} />);
+
+  // Assistive technology gets the same trust boundary a sighted reader does:
+  // the verified rows are a named list, separate from the model's own wording.
+  expect(
+    screen.getByRole("list", { name: "Records in Scenario Data" }),
+  ).toBeInTheDocument();
+});
+
 it("announces only terminal state while keeping its next step outside the live region", async () => {
   const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
   const outcome = {

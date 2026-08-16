@@ -268,6 +268,9 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
         "schema_version": "1",
         "status": "completed",
         "failure_reason": None,
+        # None on every success path; set at the raise site so the request path
+        # can tell an agent-level reason from an identically-spelled manifest code.
+        "failure_source": None,
         "output_text": "tool said alpha",
         # Structured model-side variants stay absent on the default text path.
         "answer": None,

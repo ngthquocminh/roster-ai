@@ -197,8 +197,11 @@ class AgentTurnRequestV1:
     approvals: tuple[AgentApprovalDecisionV1, ...] = ()
 
 
-# Imported only after AgentRunStatusV1 exists: dialogue.TerminalOutcomeV1 uses
-# that owned vocabulary, while this result carries the two model-side variants.
+# Mid-file only to keep the module's reading order (vocabularies first, then the
+# DTOs that use them). There is NO import cycle to break: `AgentRunStatusV1` was
+# extracted to `contracts/agent_status.py`, which both this module and
+# `dialogue` import at the top. An earlier comment here claimed the cycle as the
+# reason, which stopped being true in the same change that removed it.
 from application.contracts.dialogue import ClarificationV1, RefusalV1, ResolvedClarificationV1
 
 
@@ -213,6 +216,14 @@ class AgentRunOutcomeV1:
     schema_version: str = SCHEMA_VERSION
     status: AgentRunStatusV1 = "completed"
     failure_reason: AgentFailureReasonV1 | CapabilityFailureReasonV1 | None = None
+    # WHICH LAYER produced `failure_reason`. Required because
+    # `CapabilityFailureReasonV1` is an open `str`: a module may declare a code
+    # spelled exactly like an `AgentFailureReasonV1` member, and `demonstration`
+    # already declares `budget_exhausted`. Without this tag the request path had
+    # to compare strings, and a capability hitting its own internal limit was
+    # reported to the planner as "The configured agent budget was exhausted".
+    # Set at the raise site; `None` only for outcomes that did not fail.
+    failure_source: Literal["agent", "capability"] | None = None
     # Planner-visible final content. None unless status == "completed".
     output_text: str | None = None
     # These fields deliberately sit on opposite sides of the trust boundary.

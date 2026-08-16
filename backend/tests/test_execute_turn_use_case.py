@@ -170,7 +170,7 @@ def test_execute_turn_resolves_clarification_at_the_use_case_boundary() -> None:
 
     assert outcome.clarification is not None
     assert outcome.resolved_clarification is not None
-    assert outcome.resolved_clarification.candidates[0].label == "CONTACT-9"
+    assert outcome.resolved_clarification.candidates[0].label == "Taylor (CONTACT-9)"
 
 
 @pytest.mark.parametrize(
@@ -193,18 +193,32 @@ def test_execute_turn_resolves_clarification_at_the_use_case_boundary() -> None:
             "invalid_output",
         ),
         (
-            AgentRunOutcomeV1(status="failed", failure_reason="cancelled"),
-            "agent_cancelled",
-            "cancelled",
-        ),
-        (
-            AgentRunOutcomeV1(status="failed", failure_reason="tool_declared_error"),
+            AgentRunOutcomeV1(
+                status="failed",
+                failure_reason="tool_declared_error",
+                failure_source="capability",
+            ),
             "agent_failed",
             "capability_error",
         ),
+        # A manifest code spelled exactly like an agent-level reason. The
+        # source tag -- not the string -- decides, so this must NOT render as
+        # "The configured agent budget was exhausted".
+        (
+            AgentRunOutcomeV1(
+                status="failed",
+                failure_reason="budget_exhausted",
+                failure_source="capability",
+            ),
+            "agent_failed",
+            "capability_error",
+        ),
+        # A suspension is terminal here: it lands on AD-7's own
+        # `approval_required --> agent_cancelled: rejected or expired` edge
+        # rather than parking the row in a waiting state nothing can leave.
         (
             AgentRunOutcomeV1(status="suspended"),
-            "approval_required",
+            "agent_cancelled",
             "approval_unsupported",
         ),
         (
@@ -229,6 +243,65 @@ def test_terminal_taxonomy_keeps_every_reachable_reason_distinct(
     assert terminal.reason == reason
     assert terminal.detail
     assert len(terminal.detail) <= 200
+
+
+# Values `AgentFailureReasonV1` declares that NO branch in `backend/agent/`
+# emits today. Each needs an owner, not merely a mention: a declared-but-
+# unemittable reason is the "declared and entirely unimplemented" shape
+# `deferred-work.md:7` records.
+UNEMITTED_AGENT_FAILURE_REASONS = {
+    "cancelled": (
+        "AgentRun cancellation has AD-7 edges (`agent_queued`/`agent_running` "
+        "--> `agent_cancelled`) but no assigned story. Story 3.4 is ScheduleRun "
+        "cancellation, not AgentRun. Whoever makes the adapter emit this must "
+        "add the TerminalReasonV1 value and its named branch in the same change."
+    ),
+}
+
+
+def test_every_emittable_failure_reason_has_a_terminal_mapping() -> None:
+    """The executable form of Task 4's "each value must be reachable" rule.
+
+    Bidirectional on purpose. If a reason becomes emittable it must gain a
+    terminal mapping in the same change, or it silently renders as
+    `capability_error`. If a reason stops being emittable, the exemption
+    registry must say so with an owner rather than leaving dead vocabulary.
+    """
+    from pathlib import Path
+    from typing import get_args
+
+    from application.contracts.agent_runtime import AgentFailureReasonV1
+    from application.contracts.dialogue import TerminalReasonV1
+    from application.use_cases.execute_turn import _AGENT_TERMINAL_COPY
+
+    # Both producers: the adapter sets some reasons directly, and the use case
+    # sets others when translating a typed exception from the request path.
+    # Scanning only one of the two would report a live reason as unemittable.
+    backend = Path(__file__).resolve().parents[1]
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            *sorted((backend / "agent").glob("*.py")),
+            backend / "application" / "use_cases" / "execute_turn.py",
+        )
+    )
+
+    emittable = {
+        reason
+        for reason in get_args(AgentFailureReasonV1)
+        if f'failure_reason="{reason}"' in source
+    }
+    unemitted = set(get_args(AgentFailureReasonV1)) - emittable
+
+    assert unemitted == set(UNEMITTED_AGENT_FAILURE_REASONS), (
+        "A failure reason changed emittability. Update the exemption registry "
+        "and the terminal taxonomy together — an unmapped emittable reason "
+        "renders as `capability_error` and misreports the cause to the planner."
+    )
+    unmapped = emittable - set(_AGENT_TERMINAL_COPY)
+    assert not unmapped, f"emittable with no terminal mapping: {sorted(unmapped)}"
+    # Nothing exempted may still be in the rendered vocabulary.
+    assert not set(UNEMITTED_AGENT_FAILURE_REASONS) & set(get_args(TerminalReasonV1))
 
 
 def test_clarification_is_completed_without_becoming_a_terminal_failure() -> None:

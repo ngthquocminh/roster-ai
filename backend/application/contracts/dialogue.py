@@ -15,12 +15,19 @@ RefusalReasonV1 = Literal[
     "capability_unavailable",
     "out_of_scope",
 ]
+# Every value here is reachable from a NAMED branch in `use_cases/execute_turn.py`
+# (Task 4: "derive it from the code, not from imagination"). `cancelled` was
+# removed after review: no branch in `backend/agent/` ever sets
+# `failure_reason="cancelled"`, and Story 3.4 owns `ScheduleRun` cancellation,
+# not `AgentRun` -- so it had neither a producer nor an owner, and its only
+# reachable path would have been a manifest code COLLIDING with it.
+# `test_every_emittable_failure_reason_has_a_terminal_mapping` fails the moment
+# a producer appears, so the value and its branch land together.
 TerminalReasonV1 = Literal[
     "provider_error",
     "invalid_output",
     "budget_exhausted",
     "deadline_exceeded",
-    "cancelled",
     "capability_error",
     "refused",
     "approval_unsupported",
@@ -100,6 +107,13 @@ class TerminalOutcomeV1:
 
     status: AgentRunStatusV1 = "failed"
     reason: TerminalReasonV1 = "invalid_output"
+    # Set only when `reason == "refused"`. Carries the model's closed-vocabulary
+    # self-reported cause through to the UI so the three refusal kinds render
+    # distinctly instead of collapsing into one "Refusal" label. Safe to render
+    # because the vocabulary is CLOSED -- the model selects, the application
+    # supplies the wording -- which is the same shape Decision 5 used to keep
+    # entity labels application-owned.
+    refusal_reason: RefusalReasonV1 | None = None
     detail: str = ""
     next_step: str | None = None
     schema_version: str = SCHEMA_VERSION

@@ -1642,7 +1642,9 @@ export interface components {
              * @default invalid_output
              * @enum {string}
              */
-            reason: "provider_error" | "invalid_output" | "budget_exhausted" | "deadline_exceeded" | "cancelled" | "capability_error" | "refused" | "approval_unsupported";
+            reason: "provider_error" | "invalid_output" | "budget_exhausted" | "deadline_exceeded" | "capability_error" | "refused" | "approval_unsupported";
+            /** Refusal Reason */
+            refusal_reason?: ("unsupported_request" | "capability_unavailable" | "out_of_scope") | null;
             /**
              * Detail
              * @default

@@ -78,7 +78,13 @@ def test_resolves_all_candidates_with_application_owned_grid_labels() -> None:
 
     resolved = resolve_clarification(clarification, _deps(reader, version_id))
 
-    assert [candidate.label for candidate in resolved.candidates] == ["TASK-7", "CONTACT-9"]
+    # Name AND identifier: both are `essential: true` columns in the Scenario
+    # Data grid, and the name is the half a planner can actually compare against
+    # the model's own wording in the clarification question.
+    assert [candidate.label for candidate in resolved.candidates] == [
+        "Pick (TASK-7)",
+        "Taylor (CONTACT-9)",
+    ]
     assert resolved.scenario_version_id == version_id
     assert resolved.dropped_candidate_count == 0
 
@@ -112,6 +118,44 @@ def test_missing_candidate_is_dropped_after_exactly_one_cited_lookup() -> None:
         candidate.label == "plausible-wrong-label"
         for candidate in resolved.candidates
     )
+
+
+def test_no_persisted_label_is_byte_equal_to_anything_the_model_supplied() -> None:
+    """Task 3's required assertion, driven through a candidate that RESOLVES.
+
+    The sibling above iterates a tuple it asserted empty three lines earlier, so
+    it cannot fail whatever the resolver does. The real risk is a resolved
+    candidate carrying model wording, which needs a resolving candidate to test.
+    """
+    version_id = uuid4()
+    worker = WorkerV1(
+        "worker-record", "CONTACT-9", "Taylor", "casual", "1", "EBA", 8.0, (), ()
+    )
+    reader = RecordingProjectionReader(
+        {
+            ("resolve_worker", "worker-record"): SimpleNamespace(
+                outcome="resolved", current_scenario_version_id=version_id, item=worker
+            )
+        }
+    )
+    # Everything below is model-authored: a label-shaped string in the question
+    # and a plausible display name the model would like rendered.
+    model_supplied = ("Jordan Lee", "Taylor Smith", "The night-shift picker")
+    clarification = ClarificationV1(
+        question=f"Did you mean {model_supplied[0]} or {model_supplied[1]}?",
+        candidates=(
+            EntityCandidateProposalV1(group="workers", record_id="worker-record"),
+        ),
+    )
+
+    resolved = resolve_clarification(clarification, _deps(reader, version_id))
+
+    assert len(resolved.candidates) == 1
+    label = resolved.candidates[0].label
+    assert label == "Taylor (CONTACT-9)"
+    for supplied in model_supplied:
+        assert supplied not in label
+        assert label != supplied
 
 
 def test_zero_candidates_is_a_valid_persistable_clarification() -> None:

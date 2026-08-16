@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 import type { Timeline } from "@/api/conversations";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { EvidenceLink } from "@/components/primitives/EvidenceLink";
@@ -167,18 +169,35 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
 
 function Clarification({ item }: Readonly<{ item: Clarification }>) {
   const dropped = item.clarification.dropped_candidate_count;
+  const recordsHeadingId = useId();
   return (
     <section aria-label="Clarification" className="space-y-2">
       <StatusBadge status="Clarification" />
+      {/* The question is the assistant's own wording and is deliberately NOT
+          grounded — clarification is exempt from `_reject_numeric_prose`, so it
+          may name entities or numbers the application never verified. Every row
+          under the heading below IS application-resolved against the governed
+          projection (Decision 5: the model proposes `(group, record_id)` and can
+          never supply a label). Naming the list is what lets a planner tell the
+          two apart; the resolved `label` carries the record's real name, so a
+          fabricated name in the question has something to be checked against. */}
       <p className="text-sm whitespace-pre-wrap">{item.clarification.question}</p>
       {item.clarification.candidates.length ? (
-        <ul className="list-disc space-y-1 pl-5 text-sm">
-          {item.clarification.candidates.map((candidate) => (
-            <li key={`${candidate.group}:${candidate.record_id}`}>
-              {candidate.label} · {candidate.group} · {candidate.record_id}
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="text-xs font-medium text-muted-foreground" id={recordsHeadingId}>
+            Records in Scenario Data
+          </p>
+          <ul
+            aria-labelledby={recordsHeadingId}
+            className="list-disc space-y-1 pl-5 text-sm"
+          >
+            {item.clarification.candidates.map((candidate) => (
+              <li key={`${candidate.group}:${candidate.record_id}`}>
+                {candidate.label} · {candidate.group} · {candidate.record_id}
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
       {dropped > 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -189,26 +208,52 @@ function Clarification({ item }: Readonly<{ item: Clarification }>) {
   );
 }
 
-function terminalLabel(reason: TerminalOutcome["outcome"]["reason"]): string {
-  return {
-    provider_error: "Provider failure",
-    invalid_output: "Invalid output",
-    budget_exhausted: "Budget exhausted",
-    deadline_exceeded: "Timed out",
-    cancelled: "Cancelled",
-    capability_error: "Capability failure",
-    refused: "Refusal",
-    approval_unsupported: "Approval required",
-  }[reason];
+const TERMINAL_LABELS: Record<string, string> = {
+  provider_error: "Provider failure",
+  invalid_output: "Invalid output",
+  budget_exhausted: "Budget exhausted",
+  deadline_exceeded: "Timed out",
+  capability_error: "Capability failure",
+  refused: "Refusal",
+  approval_unsupported: "Approval required",
+};
+
+/** The model's own closed-vocabulary refusal cause. Rendering it keeps three
+ * genuinely different answers from collapsing into one "Refusal" label, which
+ * is the outcome-collapsing EXPERIENCE.md's Voice and Tone table forbids. Safe
+ * because the vocabulary is closed: the model selects, these strings are ours. */
+const REFUSAL_LABELS: Record<string, string> = {
+  unsupported_request: "Not supported",
+  capability_unavailable: "Capability unavailable",
+  out_of_scope: "Out of scope",
+};
+
+function terminalLabel(item: TerminalOutcome["outcome"]): string {
+  if (item.reason === "refused" && item.refusal_reason) {
+    return REFUSAL_LABELS[item.refusal_reason] ?? "Refusal";
+  }
+  // Falls back rather than returning undefined. An unmapped reason previously
+  // left `aria-label={undefined}`, so the live region lost its accessible name
+  // and the alert rendered an empty title — the failure mode of an older bundle
+  // meeting a newer backend.
+  return TERMINAL_LABELS[item.reason] ?? "Turn ended";
 }
 
-function TerminalOutcome({ item }: Readonly<{ item: TerminalOutcome }>) {
-  const label = terminalLabel(item.outcome.reason);
+function TerminalOutcome({
+  item,
+  isLatest,
+}: Readonly<{ item: TerminalOutcome; isLatest: boolean }>) {
+  const label = terminalLabel(item.outcome);
   return (
     <div className="space-y-2">
-      <div aria-label={label} role="status">
+      {/* `role="status"` announces on mount, so making EVERY historical terminal
+          outcome a live region replayed the whole failure history to a screen
+          reader on load and on every refetch. Only the newest one announces;
+          the rest keep the same accessible name as plain content. The next step
+          stays outside the region (ScenarioWorkspace's pattern). */}
+      <div aria-label={label} role={isLatest ? "status" : undefined}>
         <InlineAlert
-          description={`${item.outcome.reason}: ${item.outcome.detail}`}
+          description={`${label}: ${item.outcome.detail}`}
           title={label}
           variant={item.outcome.reason === "refused" ? "default" : "destructive"}
         />
@@ -223,7 +268,8 @@ function TerminalOutcome({ item }: Readonly<{ item: TerminalOutcome }>) {
 function ActivityContent({
   item,
   navigate,
-}: Readonly<{ item: Activity; navigate: NavigateFunction }>) {
+  isLatest = false,
+}: Readonly<{ item: Activity; navigate: NavigateFunction; isLatest?: boolean }>) {
   switch (item.activity_type) {
     case "planner_message":
       return (
@@ -237,10 +283,21 @@ function ActivityContent({
     case "clarification":
       return <Clarification item={item} />;
     case "terminal_outcome":
-      return <TerminalOutcome item={item} />;
+      return <TerminalOutcome isLatest={isLatest} item={item} />;
     default: {
+      // `tsc` still proves exhaustiveness at build time via this assignment.
+      // At RUNTIME the previous form returned the activity object itself as a
+      // React child, which throws and unmounts the entire timeline — so an
+      // older bundle meeting a newer backend lost every message rather than one
+      // row. AD-20 reserves eight discriminants; four are not implemented yet.
       const exhaustive: never = item;
-      return exhaustive;
+      void exhaustive;
+      return (
+        <p className="text-sm text-muted-foreground">
+          This entry needs a newer version of the app to display. Reload to
+          update.
+        </p>
+      );
     }
   }
 }
@@ -264,13 +321,17 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
   }
   return (
     <ol aria-label="Conversation activity" className="space-y-3">
-      {unique.map((item) => (
+      {unique.map((item, index) => (
         <li
           className="rounded-lg border bg-card p-3"
           data-activity-id={item.activity_id}
           key={item.activity_id}
         >
-          <ActivityContent item={item} navigate={navigate} />
+          <ActivityContent
+            isLatest={index === unique.length - 1}
+            item={item}
+            navigate={navigate}
+          />
         </li>
       ))}
     </ol>

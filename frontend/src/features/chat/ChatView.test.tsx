@@ -235,6 +235,27 @@ describe("ChatView", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers no recovery link on a 404, where it would be a second dead end", () => {
+    mockTimeline.mockReturnValue({
+      data: undefined,
+      error: { status: 404 },
+      isError: true,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    // Retry is already suppressed on a terminal status; the Scenario Data link
+    // must be too. If this scenario's conversation is not visible, sending the
+    // planner to that scenario's data offers a recovery path that is not one.
+    expect(screen.getByRole("alert")).toHaveTextContent("Conversation not found");
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Open Scenario Data" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("surfaces a timeline failure as an alert, not as an empty conversation", () => {
     mockTimeline.mockReturnValue({
       data: undefined,

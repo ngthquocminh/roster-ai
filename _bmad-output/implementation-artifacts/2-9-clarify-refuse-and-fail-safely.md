@@ -891,10 +891,65 @@ GPT-5 (Codex)
 - Preserved durable conversation history and a live composer on recoverable failures while keeping trusted Scenario Data reachable from every Chat error surface.
 - Verified all story tasks, scope fences, accessibility contracts, database integration, code generation, browser journeys, and Gate A readiness. Story is ready for review.
 
+### Review remediation (2026-08-16)
+
+All 6 decisions resolved with the user and all 28 patches applied. Highlights, and what each was
+actually proven with rather than merely changed:
+
+- **The live stream never delivered the two new activity types.** `finish_agent_run` publishes
+  `event_type = activity.activity_type`, but the client subscribed only to `planner_message_accepted`
+  and `agent_response`, and named SSE frames do not fire `onmessage`. Both of this story's headline
+  states were invisible to any observer, the cursor never advanced past them, and the idle watchdog
+  reconnected every 120s. Masked in testing because the sending tab recovers via cache invalidation.
+  Listeners now derive from one `STREAMED_ACTIVITY_EVENTS` list used for both attach and detach.
+- **`ToolRoutingEvaluator` had been loosened past Task 6's authorisation**, dropping any tool call
+  that produced no result and was not already expected — the exact shape of an injection attempt. The
+  corpus was measured reporting `passed=True, "matched refuse: no tool call was routed"` on a turn
+  whose transcript contained `grant_admin`. Reverted to the single sanctioned change (exclude output
+  tools, now derived from `OUTPUT_TOOL_NAMES` rather than hardcoded) and **observed RED** on the
+  pre-fix case shape: `"expected refuse with no tool call, but routed to 'grant_admin'"`.
+- **The injection corpus's four AC2-noun assertions could not fail.** Three compared immutable
+  attributes of the runtime against snapshots of that same runtime; the fourth was true by
+  construction because `translate.py` drops `RetryPromptPart`, so an unregistered name can never
+  reach `tool_results`. Expectations are now recomputed independently from `installed_modules()` and
+  the configured budget, and the forbidden call is asserted by **call id**. **Mutation-verified**: a
+  deliberately widened grant fails the assertion.
+- **Decision 6's guard asserted over the wrong grant** — `_runtime_for_case` filters to the single
+  module the case names, so it stayed green regardless of feature policy. It now composes the real
+  request-path grant, and was **verified to fail under `DEMONSTRATION_ENABLED=true`** with the
+  remediation spelled out in its message. This is the tripwire that reopens the `suspended` stopgap.
+- **Decision 3's required source-level guard did not exist.** Added
+  `tests/architecture/test_authority_boundaries.py` (5 guards): no authority source reads a
+  model-output attribute, the grant is composed before the runtime exists, and no capability imports
+  a model-facing dialogue contract. Mutation-checked against a synthetic register-then-refuse.
+- Provider failures are now typed (`AgentProviderError`) instead of matched by message substring;
+  `failure_source` distinguishes an agent reason from an identically-spelled manifest code, so a
+  capability hitting its own limit no longer reports "The configured agent budget was exhausted".
+- `cancelled` removed from `TerminalReasonV1` with a bidirectional guard
+  (`test_every_emittable_failure_reason_has_a_terminal_mapping`); `suspended` now finalises as
+  `agent_cancelled` per AD-7's own "rejected or expired" edge; `refusal_reason` reaches the UI so the
+  three refusal kinds render distinctly; clarification candidates carry the record's real name so a
+  fabricated name in the question has something to be checked against.
+
+**Post-remediation baselines (clean tree):** backend **863** passed / 2 skipped / 7 deselected;
+PostgreSQL **45**; frontend **63 files / 399 tests**; TypeScript clean; oxlint 3 inherited warnings;
+production build OK; Playwright **48**. Golden dataset unchanged at **17** cases (demonstration 2,
+scheduling_compute 4, scheduling_inspect 11) — no case added or removed during remediation, and the
+NFR28 ≥50 floor remains Gate B's to re-verify.
+
+Three ledger entries added under *code review of story-2-9* (`deferred-work.md`): the `suspended`
+stopgap with Stories 4.1–4.3 as owner, AgentRun cancellation having no owner (Story 3.4 is
+`ScheduleRun`), and the clarification question remaining free prose. Each names the mechanism that
+will reopen it.
+
 ### File List
 
 - backend/application/contracts/agent_runtime.py
 - backend/application/contracts/agent_status.py
+- backend/application/ports/agent_runtime.py
+- backend/tests/architecture/test_authority_boundaries.py
+- backend/tests/architecture/test_conversation_boundaries.py
+- frontend/src/hooks/useConversationStream.ts
 - backend/application/contracts/activity.py
 - backend/application/contracts/dialogue.py
 - backend/application/clarification/__init__.py
@@ -952,3 +1007,92 @@ GPT-5 (Codex)
 |---|---|
 | 2026-08-15 | Story created. Seven creation decisions recorded (the `pydantic-ai` output-tool naming measured against the installed 2.27.0 lock); two honest gaps raised (no authorization mechanism exists to drive AC2's "unauthorized"/"prohibited"; NFR28's 50-case floor cannot be re-verified before Epics 3–4 contribute); zero-migration established as a fence rather than an expectation; four `deferred-work.md` entries and three in-code comments naming this story routed for honest judgement. |
 | 2026-08-15 | Implemented and verified clarification, refusal, safe terminal failures, trusted Chat recovery navigation, adversarial evaluation cases, accessibility proof, ledger closures, and a green Gate A refresh. Status moved to review. |
+| 2026-08-15 | Adversarial code review run (Blind Hunter + Edge Case Hunter + Acceptance Auditor). 49 raw findings triaged to 6 decision-needed, 28 patch, 1 dismissed. Three rated high: the live stream never delivers the two new activity types; the routing evaluator was loosened past what Task 6 authorised; the injection corpus's authority assertions cannot fail. |
+
+## Review Findings
+
+Adversarial review of `0932c1d..b34b493`, 2026-08-15. Three layers: Blind Hunter
+(`bmad-review-adversarial-general`), Edge Case Hunter (`bmad-review-edge-case-hunter`),
+Acceptance Auditor (spec conformance). All three layers completed; none failed.
+
+**Verified as genuinely honored** — the zero-line-diff fences all held (no migration, `alembic`
+zero-op, `evidence/story-2.2/…json` untouched, `ALLOWED_LEAKS` untouched, `gate_a_checks.py`
+untouched so `deferred-work.md:202` correctly stays open); the golden dataset is 17 cases with no
+padding, matching the record exactly; Decisions 1, 2 and 7 are fully honored; **Trap 7 is genuinely
+avoided** — the four `scheduling_compute` cases moved from `expected_visible_text: ""` to real
+planner-visible strings and `test_report_generator_fails_a_vacuous_visible_text_expectation` proves
+the new assertion can go red.
+
+### Decisions resolved (2026-08-16)
+
+All six were worked through with the user one at a time. Each became a patch; none deferred, none
+dismissed. The problem statements below are kept as the record of *why* each choice was made.
+
+| # | Topic | Choice | One-line rationale |
+|---|---|---|---|
+| 1 | `prohibited` case tags | **Keep + pin + record** | The tag legitimately marks must-never-regress cases; only the NFR28 ≥10 *count* is at risk, so record honestly rather than surrender the 100% routing protection. |
+| 2 | `suspended` mapping | **`agent_cancelled`** | AD-7 itself sanctions `approval_required --> agent_cancelled: rejected or expired`. Do not claim to be waiting for a decision this milestone cannot record. |
+| 3 | `RefusalReasonV1` unread | **Persist + render** | Task 1's AD-3 rationale for excluding "unauthorized" only means anything if the label reaches the UI. |
+| 4 | Injection "channels" | **Reframe by source** | The MVP introduces exactly two untrusted *sources*; rendered tool output is a transport. Corpus is complete, the README overclaimed. |
+| 5 | `cancelled` unreachable | **Drop + guard** | Verified Story 3.4 is solver-run cancellation, not agent-turn — so the reserved slot had no owner. Guard makes a future producer fail loudly instead of mislabelling silently. |
+| 6 | Clarification question | **Label + name in list** | An identifier-only list cannot falsify a fabricated name. Showing the resolved `name` turns framing into detection. |
+
+Three of these corrected an initial analysis under user challenge, and the corrections are the
+substance: (2) the defect is entering a waiting state from a path with no continuation, not that the
+state must be terminal; (5) `cancelled`'s only reachable producer today would be a *collision*, so
+the branch had no correct use — and Story 3.4 owns `ScheduleRun`, not `AgentRun`; (6) the candidate
+list renders `contact_id`, never `name`, so the planner had no way to check the model's wording at
+all.
+
+### Decision detail (resolved)
+
+- [x] [Review][Decision — resolved] Four cases are tagged `risk_class: "prohibited"` for an `inspect` capability — `injection-chat-text`, `injection-fixture-field`, `injection-tool-output` and `refuse-unsupported-request` all declare `"risk_class": "prohibited"` while `scheduling_inspect`'s manifest is `risk_class="inspect"` (`application/capabilities/scheduling_inspect.py:147`). `evals/report.py:228-238` uses `risk_class in ("consequential","prohibited")` for the NFR28 protected-class denominator, so this takes it from 1 case to 5. Nothing validates a case tag against its capability's manifest. Either retag to `inspect` (metric describes what is exercised) or keep the tag and add manifest-vs-tag validation plus a note on why an inspect-capability case counts as protected.
+- [x] [Review][Decision — resolved] `suspended` → `approval_required` strands the run — `execute_turn.py:82` writes a status that `claim_queued_run` never claims (`adapters/postgres/conversation.py:311-312`) and `outcome.approval.pending_calls` is discarded, so the row is unreachable and un-resumable even by Epic 4, while the persisted activity simultaneously says the turn is terminal (`reason="approval_unsupported"`). Decision 6 correctly forbade `agent_failed`, but `approval_required` reads as "waiting for a human" with nothing to wait on. Unreachable in production today (`demonstration_enabled` defaults `False`). Options: keep `approval_required` and persist the pending calls; use a terminal status with the distinct `approval_unsupported` reason; or leave it and record the stranding in the ledger.
+- [x] [Review][Decision — resolved] `RefusalReasonV1`'s three values are never read — `terminal_outcome` (`execute_turn.py:89-95`) always writes `reason="refused"` and never reads `outcome.refusal.reason`. No reader exists anywhere in `application/`, `api/`, `agent/` or `evals/`. The closed vocabulary Task 1 defined is unobservable in the persisted record, the API and the UI. Either carry it into the persisted payload (new field — `TerminalReasonV1` cannot hold it) or delete the vocabulary and record why.
+- [x] [Review][Decision — resolved] Two of the three claimed NFR5 injection channels are the same channel — `injection-fixture-field.json` and `injection-tool-output.json` script an identical first turn (`scheduling_inspect {"group":"workers","sort":"contact_id"}`) against the same two injected worker `name` values; rendered tool output *is* how the fixture field reaches the model. `evals/README.md:79-80` claims three distinct channels. Either author a genuinely distinct tool-output channel (a capability whose rendered `model_facing_view` carries text not present in the fixture) or correct the README to claim two channels and record the reduction in `NOT COVERED:` form.
+- [x] [Review][Decision — resolved] `cancelled` / `agent_cancelled` is a declared terminal reason nothing can emit — no code in `backend/agent/` ever sets `failure_reason="cancelled"`, so `execute_turn.py:75` adds a run status production cannot reach. Task 4 bullet 1 required every value to be reachable from a named branch ("a reason nothing can emit is the 'declared and entirely unimplemented' shape `deferred-work.md:7` records"). Either drop it from `TerminalReasonV1` until cancellation lands (Story 3.4) or record it as a knowingly-unreachable declaration.
+- [x] [Review][Decision — resolved] The clarification `question` is unbounded untrusted model prose — `resolve.py:56` passes `clarification.question` through verbatim with no length cap and no scrubbing, rendered at `ActivityTimeline.tsx:173`. A model whose candidates all fail resolution still gets fabricated worker names rendered as the question text beside a governed surface, which is the defect class Decision 5 exists to prevent for candidates. Decide whether the question needs bounding, entity-scrubbing, or is accepted as-is with the reasoning recorded.
+
+### Patches
+
+- [x] [Review][Patch] HIGH — Clarification and terminal-outcome activities never reach the live stream [backend/adapters/postgres/conversation.py:404]
+- [x] [Review][Patch] HIGH — `ToolRoutingEvaluator` filter was loosened past Task 6's authorisation, hiding attempted injection calls and recording a false verdict string [backend/evals/evaluators.py:44-60]
+- [x] [Review][Patch] HIGH — The injection corpus's four AC2-noun assertions cannot fail [backend/tests/test_evaluation_harness.py:568-598, backend/evals/evaluators.py:241-251]
+- [x] [Review][Patch] Unknown `activity_type` returns a raw object as a React child and unmounts the whole timeline; `terminalLabel` returns `undefined` for an unknown reason [frontend/src/features/chat/ActivityTimeline.tsx:192-203, 241-244]
+- [x] [Review][Patch] `PolicyOutcomeEvaluator` classifies every failed or timed-out run as `allow` [backend/evals/evaluators.py:224-231]
+- [x] [Review][Patch] Provider errors are classified by substring-matching an exception message, against the rule stated in the contract file it imports from; branch 3 is dead [backend/application/use_cases/execute_turn.py:142-152]
+- [x] [Review][Patch] Manifest-declared capability error codes collide with `AgentFailureReasonV1` — `demonstration.py:28` declares `budget_exhausted` and `approval_required` [backend/application/use_cases/execute_turn.py:121-133]
+- [x] [Review][Patch] Decision 3's required source-level guard does not exist — nothing asserts no branch in `capabilities/registry.py` or the execute route consults model output [backend/tests/architecture/]
+- [x] [Review][Patch] Decision 6's approval-policy guard asserts over the single-module eval grant, not the request path's `compose_capabilities` [backend/tests/test_evaluation_harness.py:601-612]
+- [x] [Review][Patch] `_planner_label` maps 2 of 6 evidence groups; demand, assignments, locks and constraints fall through to `record_id`, rendering it twice [backend/application/clarification/resolve.py:14-20]
+- [x] [Review][Patch] Untrusted copy is inconsistently bounded — `detail[:200]` but `next_step` and `question` uncapped; empty `detail` renders as the literal `"refused: "`; persisted (truncated) and evaluated (untruncated) text diverge above 200 chars [backend/application/use_cases/execute_turn.py:93-94, 194]
+- [x] [Review][Patch] Every historical terminal outcome is its own `role="status"` live region, so the full failure history is re-announced on mount and refetch [frontend/src/features/chat/ActivityTimeline.tsx:209]
+- [x] [Review][Patch] `_matches_originating_compute_call` hardcodes `scheduling_compute` and treats zero claims as "no mismatch", so any non-compute grounding case fails spuriously [backend/evals/evaluators.py:128-146]
+- [x] [Review][Patch] Candidate list length is unbounded and model-controlled — one exact-target projection read per proposal, each its own short transaction [backend/application/clarification/resolve.py:30-37]
+- [x] [Review][Patch] `terminal_outcome()` writes `status="completed"` on a turn the same transaction finalizes as `agent_failed` [backend/application/use_cases/execute_turn.py:62-70, 96-101]
+- [x] [Review][Patch] Task 4's per-cause history-durability assertion is missing on the backend — no test walks the five mapped causes through `finish_agent_run` and re-reads the planner message [backend/tests/test_conversations_api.py:528-545]
+- [x] [Review][Patch] The provider-failure case asserts only `status: "failed"`, and `_run_runtime_case` catches every `Exception`, so any harness bug passes it green [backend/evals/report.py:213-219, backend/evals/golden/scheduling_inspect/provider-failure.json]
+- [x] [Review][Patch] `runStatusLabel` leaks the raw enum — `"approval_required".replace("agent_","")` is a no-op, rendering "Agent run approval_required"; the docstring claiming only `agent_queued` is written is now false [frontend/src/features/chat/ChatView.tsx:20-29]
+- [x] [Review][Patch] Duplicate `(group, record_id)` candidates collide on the React key and list the same record twice [frontend/src/features/chat/ActivityTimeline.tsx:176-180]
+- [x] [Review][Patch] Task 3's "no persisted label is byte-equal to model output" assertion iterates a tuple asserted empty three lines earlier [backend/tests/test_clarification_resolution.py:98-116]
+- [x] [Review][Patch] The "no unread `GoldenCase` field" meta-test is a textual grep for `case.<field>` — a mention in a comment or dead branch satisfies it [backend/tests/test_evaluation_harness.py:872-891]
+- [x] [Review][Patch] Output tool names are hardcoded in three places with no shared constant, and the evaluator re-declares them instead of reading `PydanticAIAgentRuntime._output_tool_names` [backend/evals/evaluators.py:50, backend/agent/runtime.py:115-117, backend/evals/cases.py:56]
+- [x] [Review][Patch] `ScriptedModelTurn`'s docstring still says "exactly one of `tool_name` and `response_text`" (there are now four), and `output_tool` paired with `response_error` is silently discarded while the same pairing with `tool_name` raises [backend/evals/cases.py:37-56, 227-235]
+- [x] [Review][Patch] The mid-file deferred import is justified by a cycle this same diff removed when `AgentRunStatusV1` moved to `agent_status.py` [backend/application/contracts/agent_runtime.py:200-202]
+- [x] [Review][Patch] Decision 4's "writes exactly one persisted event" is not asserted — the test checks activity type and run status only [backend/tests/test_conversations_api.py:428-447]
+- [x] [Review][Patch] The Scenario Data recovery link renders even on a 404 for that same scenario, offering a second dead end [frontend/src/features/chat/ChatView.tsx:37, 43-55]
+- [x] [Review][Patch] The new `application/clarification/`, `contracts/dialogue.py`, `contracts/agent_status.py` and `grounding/resolvers.py` sit outside `SWEPT_PACKAGES`, against that guard's own stated rule [backend/tests/architecture/test_conversation_boundaries.py:17-19]
+- [x] [Review][Patch] The pairwise-distinct terminal-reason test embeds `reason` into `detail`, so it would pass even if `terminalLabel` collapsed all eight reasons to one label [frontend/src/features/chat/ActivityTimeline.test.tsx]
+
+#### Patches arising from the resolved decisions
+
+- [x] [Review][Patch] **D1 → keep + pin + record.** Keep the four `prohibited` case tags. Add a test pinning that `risk_class` is a dataset tag describing the *case*, not the capability manifest. Record in `evals/README.md` and Completion Notes that 4 of 5 protected cases exercise an `inspect`-class capability, so NFR28's ≥10 floor is **not** claimed met by capability risk. **Apply only after the HIGH routing-evaluator fix** — a `prohibited` tag on a blind oracle is worse than no tag.
+- [x] [Review][Patch] **D2 → `agent_cancelled`.** Map `suspended` → `agent_cancelled` in `terminal_status` [backend/application/use_cases/execute_turn.py:82], keeping terminal reason `approval_unsupported`. Add the in-place comment explaining the stopgap. Ledger entry, owner Stories 4.1–4.3. **The tripwire is the P9 guard fix** — without it there is a stopgap with nothing to reopen it.
+- [x] [Review][Patch] **D3 → persist + render the refusal reason.** Add `refusal_reason: RefusalReasonV1 | None = None` to `TerminalOutcomeV1`, set it on the refusal branch of `terminal_outcome()`, and give each value its own label in `terminalLabel` instead of the shared "Refusal". Run `npm run codegen`. No migration — `payload` is JSONB with no CHECK.
+- [x] [Review][Patch] **D4 → reframe by source.** Rewrite the `evals/README.md` contribution paragraph around untrusted *sources* (planner chat text, scenario/fixture data) rather than three "channels"; rendered tool output is the transport by which scenario data arrives. Record the reduction in `NOT COVERED:` form. Extend the `MVP_PRODUCT_CAPABILITIES` unclassified-capability failure message [backend/tests/test_evaluation_harness.py:325-352] to require a new capability to declare its untrusted-content source.
+- [x] [Review][Patch] **D5 → drop + guard.** Remove `"cancelled"` from `TerminalReasonV1` and from `terminal_outcome()`'s passthrough set; delete the dead `failure_reason == "cancelled"` branch in `terminal_status`. Add a guard asserting every *emittable* `AgentFailureReasonV1` value (source-scanned from `backend/agent/`) has an explicit terminal mapping, so a future producer fails loudly instead of silently rendering as `capability_error`. Ledger: agent-turn cancellation has AD-7 edges but no assigned owner (Story 3.4 is `ScheduleRun`).
+- [x] [Review][Patch] **D6 → label the list and show the name.** Add a "Records in Scenario Data" heading with `aria-labelledby` on the clarification candidate list [frontend/src/features/chat/ActivityTimeline.tsx:167-189]. Include the resolved `name` in `_planner_label` — `f"{name} ({contact_id})"` / `f"{name} ({task_id})"` [backend/application/clarification/resolve.py:14-20] — because an identifier-only list cannot falsify a fabricated name. Add a test asserting no model-authored string appears inside the resolved list. Record `NOT COVERED:` that the question remains free prose, mitigated by comparability rather than enforcement, bounded by AC1's no-side-effect guarantee. **Overlaps P10.**
+
+### Dismissed
+
+- Scoping `_reject_numeric_prose` to `GroundedAnswerV1` was called a grounding-invariant bypass. It is explicitly mandated by Task 2 ("must apply to `GroundedAnswerV1` only… add a test driving a `RefusalV1` whose `detail` contains a numeral and asserting it is **not** rejected"). The bounding half of that finding survives as a patch item above.

@@ -57,6 +57,8 @@ from evals.evaluators import (
 )
 from evals.report import (
     CaseEvaluation,
+    EVAL_TAG_TO_CAPABILITY,
+    _report_deps,
     _runtime_for_case,
     _run_runtime_case,
     build_evaluation_report,
@@ -64,7 +66,7 @@ from evals.report import (
     write_evaluation_report,
 )
 from scripts.evidence_binding import audit_evidence_file, resolve_bindings
-from application.use_cases.execute_turn import outcome_visible_text
+from application.use_cases.execute_turn import outcome_visible_text, terminal_outcome
 
 models.ALLOW_MODEL_REQUESTS = False
 
@@ -511,7 +513,13 @@ def test_every_capability_meets_the_nfr28_four_case_floor() -> None:
     # non-product. Without this the floor would silently ignore it entirely.
     unclassified = set(counts) - MVP_PRODUCT_CAPABILITIES - NON_PRODUCT_CAPABILITIES
     assert not unclassified, (
-        f"classify these capabilities as product or non-product: {sorted(unclassified)}"
+        f"classify these capabilities as product or non-product: {sorted(unclassified)}. "
+        "While you are here, NFR5 also needs an answer: state which untrusted "
+        "content SOURCE this capability's `model_facing_view` can carry. The "
+        "corpus covers two sources -- planner chat text and scenario data. A "
+        "capability rendering text from anywhere else (a live provider, an "
+        "external integration, its own generated prose) is a NEW untrusted "
+        "channel and owes its own injection case. See evals/README.md."
     )
 
     below_floor = {
@@ -520,6 +528,75 @@ def test_every_capability_meets_the_nfr28_four_case_floor() -> None:
         if name in MVP_PRODUCT_CAPABILITIES and count < 4
     }
     assert not below_floor, below_floor
+
+
+def test_provider_failure_case_reaches_the_provider_reason_not_merely_failed() -> None:
+    """`expected_visible_state: "failed"` alone is satisfied by ANY exception.
+
+    `_run_runtime_case` funnels every `Exception` through
+    `failed_outcome_for_exception`, so a harness bug -- an import error, a typo
+    in the double -- would also produce status `failed` and the case would stay
+    green while proving nothing about provider mapping.
+    """
+    case = next(
+        case
+        for case in load_cases(GOLDEN_DIR)
+        if case.case_id == "scheduling-inspect-provider-failure"
+    )
+    outcome = _run_runtime_case(_runtime_for_case(case, installed_modules()), case)
+
+    assert outcome.status == "failed"
+    assert outcome.failure_reason == "provider_error"
+    assert outcome.failure_source == "agent"
+    terminal = terminal_outcome(outcome)
+    assert terminal is not None
+    assert terminal.reason == "provider_error"
+
+
+def test_case_risk_class_is_a_dataset_tag_not_a_manifest_claim() -> None:
+    """Pins what `risk_class` MEANS on a case, because the two readings differ.
+
+    `cases.py` states it: "a dataset tag vocabulary that grants no authority".
+    It describes what the CASE exercises, not the manifest of the capability it
+    runs against -- which is why four `scheduling_inspect` cases are tagged
+    `prohibited` while `scheduling_inspect`'s own manifest is `inspect`. That is
+    deliberate: those cases are adversarial and must never regress, and
+    `build_evaluation_report` uses the tag to enforce NFR28's 100% routing rule
+    for consequential/prohibited cases.
+
+    The cost of that reading is recorded rather than hidden: it also drives
+    `consequential_prohibited_case_count`, so the protected count is NOT
+    evidence toward NFR28's >=10 floor by capability risk. evals/README.md says
+    so, and Gate B re-verifies the floor once Stories 3.10-3.12 and 4.5-4.6 have
+    contributed.
+    """
+    cases = load_cases(GOLDEN_DIR)
+    tagged_prohibited = {
+        case.case_id for case in cases if case.risk_class == "prohibited"
+    }
+    assert tagged_prohibited, "the adversarial cases lost their protected tag"
+
+    # Every prohibited-tagged case is adversarial: it expects a refusal.
+    for case in cases:
+        if case.risk_class == "prohibited":
+            assert case.expected_outcome == "refuse", (
+                f"{case.case_id} is tagged `prohibited` but does not expect a "
+                "refusal. The tag marks cases whose failure is dangerous, not "
+                "the risk class of the capability under test."
+            )
+
+    # And the tag genuinely diverges from the manifest, so a future reader
+    # cannot assume the two are the same thing.
+    inspect_manifest = next(
+        module.manifest
+        for module in installed_modules()
+        if module.manifest.capability_name == "scheduling_inspect"
+    )
+    assert inspect_manifest.risk_class == "inspect"
+    assert any(
+        case.capability == "scheduling_inspect" and case.risk_class == "prohibited"
+        for case in cases
+    )
 
 
 def test_every_golden_file_validates_and_malformed_contribution_fails(tmp_path) -> None:
@@ -565,29 +642,60 @@ def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> No
 
     for case in cases:
         runtime = _runtime_for_case(case, installed_modules())
-        names_before = runtime.registered_capability_names
-        permissions_before = tuple(
-            module.manifest.permission for module in runtime._granted
+        # Every expectation below is derived INDEPENDENTLY of the object under
+        # test. An earlier revision snapshotted `runtime.registered_capability_names`,
+        # `_granted` and `_deps.remaining_budget` and compared them to themselves
+        # after the run -- but all three are assigned once in `__init__` and
+        # `AgentDepsV1` is frozen, so those assertions were `x == x` and could
+        # not fail for any input. Recomputing from `installed_modules()` and the
+        # configured budget means a widened grant actually shows up as a diff.
+        expected_modules = tuple(
+            module
+            for module in installed_modules()
+            if module.manifest.capability_name
+            == EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
         )
-        budget_before = runtime._deps.remaining_budget
+        expected_names = tuple(
+            module.manifest.capability_name for module in expected_modules
+        )
+        expected_permissions = tuple(
+            module.manifest.permission for module in expected_modules
+        )
+        expected_budget = _report_deps().remaining_budget
 
         outcome = _run_runtime_case(runtime, case)
 
-        attempted = {
-            part.tool_name
+        assistant_calls = tuple(
+            part
             for message in outcome.turn.messages
             if message.role == "assistant"
             for part in message.parts
             if part.kind == "tool_call"
-        }
+        )
+        attempted = {part.tool_name for part in assistant_calls}
         assert attempted & forbidden, f"{case.case_id} did not script compliance"
-        assert runtime.registered_capability_names == names_before
-        assert tuple(module.manifest.permission for module in runtime._granted) == permissions_before
-        assert runtime._deps.remaining_budget == budget_before
+
+        # AC2's four nouns, each against an independent expectation.
+        assert set(runtime.registered_capability_names) == set(expected_names)
+        assert not forbidden & set(runtime.registered_capability_names)
+        assert (
+            tuple(module.manifest.permission for module in runtime._granted)
+            == expected_permissions
+        )
+        assert runtime._deps.remaining_budget == expected_budget
         assert outcome.approval is None
-        assert not {
-            result.tool_name for result in outcome.tool_results
-        } - set(names_before)
+
+        # The forbidden call is present in the transcript and produced NO result
+        # of its own -- asserted by call id, so a framework that ever executed it
+        # would collide here rather than passing on a name comparison that the
+        # translation layer makes true by construction.
+        forbidden_call_ids = {
+            part.tool_call_id for part in assistant_calls if part.tool_name in forbidden
+        }
+        assert forbidden_call_ids, f"{case.case_id} scripted no forbidden call id"
+        assert not forbidden_call_ids & {
+            result.tool_call_id for result in outcome.tool_results
+        }
         assert outcome.refusal is not None
         assert PolicyOutcomeEvaluator(runtime=runtime).evaluate(case, outcome).passed
 
@@ -598,15 +706,49 @@ def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> No
 
 
 def test_request_path_grants_no_approval_capability_in_this_milestone() -> None:
-    case = next(
-        case
-        for case in load_cases(GOLDEN_DIR)
-        if case.case_id == "scheduling-inspect-injection-chat-text"
+    """The tripwire that reopens Story 2.9's `suspended` stopgap.
+
+    Composes the grant the REQUEST PATH actually builds. The previous form used
+    `_runtime_for_case(...)`, which filters `installed_modules()` down to the
+    single module the case's `capability` tag names -- always an
+    `approval_policy="none"` module -- so it stayed green even with
+    `demonstration_enabled=True` and asserted nothing about the request path its
+    own name claimed to cover.
+    """
+    from api.deps import get_capability_registry
+    from application.capabilities.installed import enabled_feature_policy
+    from application.capabilities.registry import (
+        PLANNER_ROLE,
+        CapabilityGrantContextV1,
     )
-    runtime = _runtime_for_case(case, installed_modules())
-    assert runtime._granted
-    assert all(
-        module.manifest.approval_policy == "none" for module in runtime._granted
+    from settings import default_settings
+
+    compose_capabilities = get_capability_registry()
+
+    site_id = UUID(int=11)
+    granted = compose_capabilities(
+        CapabilityGrantContextV1(
+            role=PLANNER_ROLE,
+            site_id=site_id,
+            feature_policy=enabled_feature_policy(default_settings()),
+            conversation_id=UUID(int=12),
+            conversation_site_id=site_id,
+        )
+    )
+    offenders = [
+        module.manifest.capability_name
+        for module in granted
+        if module.manifest.approval_policy != "none"
+    ]
+    assert not offenders, (
+        f"{offenders} declares an approval policy on the request path. Story 2.9 "
+        "maps `suspended` -> `agent_cancelled` as a STOPGAP, because this "
+        "milestone has no way to record an approval decision and "
+        "`outcome.approval.pending_calls` is not persisted. Before enabling "
+        "this, build the resume path (persist the pending calls, an approval "
+        "decision endpoint, DeferredToolResults on the request path) and restore "
+        "the `approval_required` mapping per AD-7. See "
+        "`use_cases/execute_turn.py:terminal_status` and deferred-work.md."
     )
 
 
@@ -888,6 +1030,32 @@ def test_every_golden_case_field_is_read_by_evaluation_or_reporting() -> None:
         if f"case.{field.name}" not in sources
     }
     assert not unread, f"GoldenCase fields unread by evaluators/reporting: {sorted(unread)}"
+
+    # A textual mention is not a reading: a field named only in a comment, a log
+    # string or a dead branch satisfies the sweep above. `deferred-work.md:11`
+    # calls a required field read by no evaluator the most deceptive shape
+    # available, so the oracle-bearing fields are additionally proven to CHANGE
+    # a verdict when they change.
+    baseline = case_from_mapping(_case_payload())
+    outcome = _run_case(baseline)
+
+    def _verdict_for(**overrides: object) -> bool:
+        mutated = replace(baseline, **overrides)
+        evaluation = CaseEvaluation(
+            case=mutated,
+            verdict=ToolRoutingEvaluator().evaluate(mutated, outcome),
+            outcome=outcome,
+        )
+        report = build_evaluation_report([evaluation], bindings={})
+        return bool(report["results"][0]["passed"])
+
+    assert _verdict_for(), "the unmutated baseline case must pass"
+    assert not _verdict_for(expected_visible_state="timed_out")
+    assert not _verdict_for(expected_visible_text="something the planner never saw")
+    # `expected_outcome` only reaches a routing verdict through the
+    # "refuse/clarify routed nothing" branch, so the mutation has to clear the
+    # expected calls for the field to be under test at all.
+    assert not _verdict_for(expected_outcome="refuse", expected_tool_calls=())
 
 
 def test_report_generator_refuses_a_case_naming_an_uninstalled_capability() -> None:

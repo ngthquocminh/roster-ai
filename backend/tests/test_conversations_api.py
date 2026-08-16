@@ -445,6 +445,10 @@ def test_execute_turn_persists_each_new_visible_activity_type(
     assert response.status_code == 200
     assert response.json()["activity"]["activity_type"] == activity_type
     assert response.json()["agent_run_status"] == "agent_completed"
+    # Decision 4 item 1: a clarification turn writes EXACTLY ONE persisted
+    # event. Asserting the activity type alone left the count unchecked, and a
+    # turn that finalised twice would have looked identical in the response.
+    assert len(repository.claimed_statuses) == 1
 
 
 def test_execute_turn_foreign_conversation_is_non_disclosing_404(
@@ -529,19 +533,108 @@ def test_actual_exception_classes_map_to_stable_owned_failure_reasons() -> None:
     from application.use_cases.execute_turn import failed_outcome_for_exception
     from application.contracts.capability_manifest import IncompleteManifestError
     from application.grounding.gate import UncitedNumericProseError
-    from application.ports.agent_runtime import AgentRuntimeError
+    from application.ports.agent_runtime import (
+        AgentInvalidOutputError,
+        AgentProviderError,
+        AgentRuntimeError,
+    )
 
     cases = (
-        (AgentRuntimeError("agent runtime provider call failed"), "provider_error"),
-        (AgentRuntimeError("agent runtime produced unusable output"), "invalid_output"),
-        (UncitedNumericProseError("uncited"), "invalid_output"),
-        (IncompleteManifestError("missing feature policy"), "capability_error"),
-        (ValueError("invalid runtime model"), "invalid_output"),
+        (AgentProviderError("anything at all"), "provider_error", "agent"),
+        (AgentInvalidOutputError("anything at all"), "invalid_output", "agent"),
+        (AgentRuntimeError("framework catch-all"), "invalid_output", "agent"),
+        (UncitedNumericProseError("uncited"), "invalid_output", "agent"),
+        (IncompleteManifestError("missing feature policy"), "capability_error", "capability"),
+        (ValueError("invalid runtime model"), "invalid_output", "agent"),
     )
-    for exception, expected in cases:
+    for exception, expected, source in cases:
         outcome = failed_outcome_for_exception(exception)
         assert outcome.status == "failed"
         assert outcome.failure_reason == expected
+        assert outcome.failure_source == source
+
+    # Classification is by TYPE. The previous form matched
+    # `"provider call failed" in str(exc)` and built that string itself, so
+    # rewording the adapter's message would have downgraded every provider
+    # outage to `invalid_output` while this test stayed green.
+    assert (
+        failed_outcome_for_exception(AgentProviderError("")).failure_reason
+        == "provider_error"
+    )
+    assert (
+        failed_outcome_for_exception(
+            AgentRuntimeError("agent runtime provider call failed")
+        ).failure_reason
+        == "invalid_output"
+    )
+
+
+@pytest.mark.parametrize(
+    ("exception", "reason"),
+    [
+        ("provider", "provider_error"),
+        ("invalid_output", "invalid_output"),
+        ("capability", "capability_error"),
+        ("unclassified", "invalid_output"),
+    ],
+)
+def test_every_mapped_failure_cause_keeps_the_planner_message_durable(
+    conversation_client, exception: str, reason: str
+) -> None:
+    """AC3: "accepted conversation history remains durable" -- per cause.
+
+    Task 4 asked for a test proving each mapped cause reaches its own reason
+    AND that the accepted planner message survives it. The reason half was
+    covered by a pure function-level mapping test with no timeline in it; this
+    is the durability half, driven through the real route.
+    """
+    from application.contracts.capability_manifest import IncompleteManifestError
+    from application.ports.agent_runtime import (
+        AgentInvalidOutputError,
+        AgentProviderError,
+        AgentRuntimeError,
+    )
+
+    raised = {
+        "provider": AgentProviderError("provider down"),
+        "invalid_output": AgentInvalidOutputError("unusable"),
+        "capability": IncompleteManifestError("missing feature policy"),
+        "unclassified": AgentRuntimeError("something else"),
+    }[exception]
+
+    client, repository, settings = conversation_client
+
+    class _RaisingRuntime:
+        def run_turn(self, _request):
+            raise raised
+
+        @property
+        def name(self) -> str:
+            return "raising"
+
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **_kwargs: _RaisingRuntime()
+    )
+
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["activity"]["outcome"]["reason"] == reason
+    # The run reached a terminal status rather than being stranded, and the
+    # planner's accepted message is still in the timeline afterwards.
+    assert repository.claimed_statuses == ["agent_failed"]
+    timeline = client.get(
+        f"/api/v1/conversations/{repository.conversation_id}/timeline",
+        headers=_headers(settings),
+    )
+    assert timeline.status_code == 200
+    assert any(
+        activity["activity_type"] == "planner_message"
+        for activity in timeline.json()["items"]
+    )
 
 
 @pytest.mark.parametrize("text", ["   ", "\t\n", "　"])

@@ -17,15 +17,29 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { Composer } from "./Composer";
 import { ConversationList } from "./ConversationList";
 
-/** Only `agent_queued` is ever written in this slice, but the CHECK constraint
- * admits all seven AD-7 statuses and Epic 3 will write them. Rendering
+/** The CHECK constraint admits all seven AD-7 statuses, and this slice now
+ * writes several of them: `agent_completed`, `agent_failed`, `agent_timed_out`
+ * and `agent_cancelled` all reach a finished run. Rendering
  * "Agent run accepted — failed" would assert acceptance over a terminal
  * failure, so the accepted phrasing is scoped to the one status that means it.
  * Literal persisted state only: no typing indicator, no ellipsis, no ETA
- * (UX-DR5). */
+ * (UX-DR5).
+ *
+ * Mapped explicitly rather than derived by stripping an `agent_` prefix:
+ * `approval_required` carries no such prefix, so the strip was a no-op and the
+ * planner was shown the raw wire value "Agent run approval_required". */
+const RUN_STATUS_WORDS: Record<string, string> = {
+  agent_queued: "accepted — queued",
+  agent_running: "running",
+  agent_completed: "completed",
+  agent_failed: "failed",
+  agent_timed_out: "timed out",
+  agent_cancelled: "cancelled",
+  approval_required: "waiting for approval",
+};
+
 function runStatusLabel(status: string): string {
-  const bare = status.replace("agent_", "");
-  return status === "agent_queued" ? `Agent run accepted — ${bare}` : `Agent run ${bare}`;
+  return `Agent run ${RUN_STATUS_WORDS[status] ?? status.replace(/_/g, " ")}`;
 }
 
 function ErrorState({
@@ -45,10 +59,15 @@ function ErrorState({
             </Button>
           )}
           {/* NOT COVERED: Runs and Results remain Epic 3 placeholder routes.
-              Scenario Data is the only active recovery destination in this story. */}
-          <Link className="font-medium underline underline-offset-3" to={`/scenarios/${scenarioId}/data`}>
-            Open Scenario Data
-          </Link>
+              Scenario Data is the only active recovery destination in this story.
+              Suppressed on a 404 for the same reason Retry is: if the scenario
+              or conversation is not visible, this link leads to a second dead
+              end, which reads as a working recovery path and is not one. */}
+          {isTerminal ? null : (
+            <Link className="font-medium underline underline-offset-3" to={`/scenarios/${scenarioId}/data`}>
+              Open Scenario Data
+            </Link>
+          )}
         </div>
       }
       description={

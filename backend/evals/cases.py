@@ -39,8 +39,12 @@ GROUNDING_ORACLES: tuple[GroundingOracle, ...] = (
 class ScriptedModelTurn:
     """One deterministic response emitted by the generated model double.
 
-    Exactly one of ``tool_name`` and ``response_text`` is present. Tool-call
-    arguments retain their JSON object shape so future cases remain data-only.
+    Exactly one of ``tool_name``, ``response_text``, ``response_data`` and
+    ``response_error`` is present -- four discriminants since Story 2.9, not the
+    two this docstring used to name. ``output_tool`` is a MODIFIER of
+    ``response_data`` (which named structured output tool to answer through) and
+    is rejected with any other discriminant. Tool-call arguments retain their
+    JSON object shape so future cases remain data-only.
     """
 
     tool_name: str | None = None
@@ -224,6 +228,12 @@ def _scripted_turn(value: object, label: str) -> ScriptedModelTurn:
             f"{label} must declare exactly one of tool_name, response_text, "
             "response_data, or response_error"
         )
+    # Checked BEFORE the `response_error` early return. Previously that return
+    # ran first, so `{"response_error": ..., "output_tool": ...}` silently
+    # discarded `output_tool` while the same pairing with `tool_name` raised --
+    # two different behaviours for one authoring mistake.
+    if output_tool is not None and response_data is None:
+        raise ValueError(f"{label}.output_tool requires response_data")
     if response_error is not None:
         return ScriptedModelTurn(response_error="provider_error")
     if response_data is not None:
@@ -231,8 +241,6 @@ def _scripted_turn(value: object, label: str) -> ScriptedModelTurn:
             response_data=response_data,
             output_tool=output_tool or "final_result",
         )
-    if output_tool is not None:
-        raise ValueError(f"{label}.output_tool requires response_data")
     if tool_name is None:
         return ScriptedModelTurn(response_text=response_text)
     return ScriptedModelTurn(

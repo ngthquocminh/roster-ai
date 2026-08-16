@@ -5136,13 +5136,28 @@
               "invalid_output",
               "budget_exhausted",
               "deadline_exceeded",
-              "cancelled",
               "capability_error",
               "refused",
               "approval_unsupported"
             ],
             "title": "Reason",
             "default": "invalid_output"
+          },
+          "refusal_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "unsupported_request",
+                  "capability_unavailable",
+                  "out_of_scope"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refusal Reason"
           },
           "detail": {
             "type": "string",
