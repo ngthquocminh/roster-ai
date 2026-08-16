@@ -4,7 +4,7 @@ milestone: v0.4
 milestone_name: Frontend
 status: Awaiting next milestone
 stopped_at: Phase 04 UI-SPEC approved
-last_updated: "2026-07-20T17:28:42.197Z"
+last_updated: "2026-08-16T10:28:13.980Z"
 last_activity: 2026-07-21
 last_activity_desc: "Completed quick task 260721-0to: hide backend diagnostics from frontend error surfaces"
 current_phase: 04
@@ -143,6 +143,7 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 | 260715-vel | Retired `docs/` as a planning tracker and split it by lifecycle, closing the drift left by adopting GSD mid-project (phases 1–2 were hand-documented; `docs/` unmaintained since Phase 3). Deleted `docs/PLAN.md` (superseded by `.planning/`; its 5 deferred follow-ups migrated to `todos/pending/` in a84ddec first, so zero loss). Fixed `docs/API.md` — it was missing the entire LLM layer and is about to be the contract v0.4's frontend is written against; added `POST /constraints` + `GET /runs/{id}/insights` + `LLM_PROVIDER`, verified against source (caught that insights fails **502** not 503, and the not-ready case is a deliberate **200 `ready:false`** not 409). Trimmed `design.md` to the durable "why", fixing two inverted claims (provider diagram said "Claude now; Gemini later" — reality is stub-default + Gemini + OpenRouter, Claude never built; deploy said Render — reality is AWS) and folding in the shipped LLM-layer design as §4. Archived phase-1/2 docs via `git mv` (history intact); froze `vision.md` in place as the permanent origin snapshot (1-line diff); added `docs/README.md` stating the one-owner-per-audience boundary so the drift can't silently recur. Fixed PROJECT.md's false `docs/decisions/` ADR claim (no ADR system created). Docs-only — `git diff -- backend/` empty | 2026-07-15 | 0729b21 | [260715-vel-retire-docs-as-planning-tracker-split-by](./quick/260715-vel-retire-docs-as-planning-tracker-split-by/) |
 | 10 | Ignore project-local Codex GSD tooling and stop tracking machine-local hooks and research caches | 2026-07-20 | — | — |
 | 260721-0to | Prevent backend errors and development commands such as uv run uvicorn api.main:app --reload from being displayed in the frontend, and inspect related UI error paths for similar leaks | 2026-07-21 | d4638e2 | [260721-0to-prevent-backend-errors-and-development-c](./quick/260721-0to-prevent-backend-errors-and-development-c/) |
+| 12 | Close epic-1 and epic-2 status in BMAD sprint-status.yaml (all 20 stories already done; manual epic-level transition had never been taken) | 2026-08-16 | 3d9a2fa | — |
 
 ### Roadmap Evolution
 
