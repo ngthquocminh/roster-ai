@@ -81,9 +81,10 @@ alone rather than by downloading an artifact.
 
 ## Environment traps
 
-Five things about this repo are load-bearing for CI and non-obvious. Each is
-commented at its use site in `ci.yml`; they are collected here because four of
-the five produce a *misleading* symptom.
+Six things about this repo are load-bearing for CI and non-obvious. Each is
+commented at its use site in `ci.yml`; they are collected here because five of
+the six produce a *misleading* symptom — a green build that proved nothing, an
+error naming the wrong cause, or both.
 
 ### 1. `alembic` must be invoked from the repository root
 
@@ -148,7 +149,41 @@ The service credentials mirror `docker-compose.yml` exactly, which is what
 `backend/settings.py` defaults to, so no `ROSTERAI_*_DATABASE_URL` override is
 needed.
 
-### 5. Playwright needs the Edge channel installed
+### 5. The frontend build needs `VITE_API_BASE_URL`
+
+`frontend/src/lib/env.ts` throws at **module load** if `VITE_API_BASE_URL` is
+unset — deliberately, so a built bundle can never silently default to
+`localhost:8000`. `frontend/.env` is gitignored, so CI has to supply the value.
+
+The symptom is badly misleading. `npm run build` **succeeds**, because the throw
+happens in the browser and not during the build, so the `frontend` job stays
+green. Only the E2E job fails, and it fails with:
+
+```
+expect(locator).toBeVisible() failed
+Locator: getByRole('heading', { name: 'Fixture catalogue', level: 1 })
+Error: element(s) not found
+```
+
+which reads as a broken selector or a timing problem. It is neither: the bundle
+threw on load, so the page rendered nothing and *every* spec dies on its first
+assertion.
+
+`vite.config.ts` already pins this variable for Vitest (`test.env`) and
+documents the same hazard in a comment. The CI jobs are the missing half of that
+rule — everything Vitest does not cover.
+
+The value only needs to be a well-formed origin: `e2e/support/apiStubs.ts`
+intercepts `**/api/v1/**`, which matches any host, so no request reaches a
+network. The jobs use `http://127.0.0.1:4173` — `playwright.config.ts`'s own
+`baseURL`, which keeps calls same-origin and matches `.env.example`'s stated
+intent that the API origin *is* the SPA's origin.
+
+> **Related gap, not fixed here:** a fresh clone cannot run `npm run test:e2e`
+> without first creating `frontend/.env`. The E2E suite depends on an untracked
+> file. CI no longer does, but local reproducibility still does.
+
+### 6. Playwright needs the Edge channel installed
 
 `playwright.config.ts` declares two projects: `chromium` and `msedge`
 (`channel: "msedge"`). The 48-test baseline is 24 specs across both. GitHub's
@@ -212,5 +247,6 @@ assertions in `assert_counts.py` cover.
 | Evidence tests fail on `is not an ancestor of HEAD` | shallow checkout — trap 3 |
 | `backend` job reports ~46 skipped | PostgreSQL service did not come up — trap 4 |
 | `backend-postgres` reports `45 skipped` and the assert fails | same as above, made attributable |
-| `Executable doesn't exist ... msedge` | Edge channel not installed — trap 5 |
+| Every E2E spec fails `toBeVisible` with `element(s) not found` | `VITE_API_BASE_URL` unset, so the bundle threw on load and the page is empty — trap 5, **not** a selector problem |
+| `Executable doesn't exist ... msedge` | Edge channel not installed — trap 6 |
 | Assert fails with `only N passed, expected at least M` | tests were removed (lower the floor deliberately) or the runner crashed mid-run |

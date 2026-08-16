@@ -316,6 +316,14 @@ jobs:
     name: Frontend (lint, types, build, vitest)
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # src/lib/env.ts throws at MODULE LOAD if this is unset — deliberately, so
+      # a built bundle can never silently default to a wrong origin. `.env` is
+      # gitignored, so CI has to supply it or the bundle throws in the browser.
+      # vite.config.ts pins the same variable for vitest (test.env) and
+      # documents the identical hazard; this is the missing half of that rule,
+      # for everything vitest does not cover.
+      VITE_API_BASE_URL: http://127.0.0.1:4173
     defaults:
       run:
         working-directory: frontend
@@ -381,6 +389,18 @@ jobs:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Without this the bundle throws on load, the page renders nothing, and
+      # every spec fails on its first toBeVisible() with "element(s) not found"
+      # — a failure that looks like a broken selector and is really a missing
+      # build-time variable. See src/lib/env.ts.
+      #
+      # The value only has to be a well-formed origin: e2e/support/apiStubs.ts
+      # intercepts `**/api/v1/**`, which matches any host, so no request reaches
+      # a network. 127.0.0.1:4173 is playwright.config.ts's own baseURL, which
+      # keeps calls same-origin and matches .env.example's stated intent that
+      # the API origin IS the SPA's origin.
+      VITE_API_BASE_URL: http://127.0.0.1:4173
     defaults:
       run:
         working-directory: frontend
@@ -465,6 +485,9 @@ jobs:
     timeout-minutes: 90
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: e2e
+    env:
+      # Same reason as the e2e job — this job builds and serves the bundle too.
+      VITE_API_BASE_URL: http://127.0.0.1:4173
     defaults:
       run:
         working-directory: frontend
