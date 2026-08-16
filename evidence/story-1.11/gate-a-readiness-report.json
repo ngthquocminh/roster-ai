@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-08-15",
+  "measurement_date": "2026-08-16",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -793,8 +793,8 @@
           },
           "frontend/src/test/accessibility-contract.test.tsx": {
             "status": "passed",
-            "total": 20,
-            "passed": 20,
+            "total": 21,
+            "passed": 21,
             "skipped": 0,
             "failed": 0
           },
@@ -1023,21 +1023,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 852,
-      "run_started": "2026-08-15T18:54:22.340193+07:00",
-      "sha256": "6d60f1a89f68852ef2b83fb1d35e0989696f36b75c8094e35487d9c48ebe0db9"
+      "cases": 865,
+      "run_started": "2026-08-16T16:01:30.582669+07:00",
+      "sha256": "2727317099a2de79e85f6baecf09b79271f1f943078f08147133dba96b14d1a6"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "cases": 395,
-      "run_started": "2026-08-15T11:55:24.310Z",
-      "sha256": "9c84bb33a5dd0c639e9e293f3aad169fc5a1505a8ac5d3e5237e777baecff62d"
+      "cases": 400,
+      "run_started": "2026-08-16T09:03:23.335Z",
+      "sha256": "139a4dfe14cd4e8f907eb9a0121fd3efdbb91fbb2ed1bfd91497ac1471c48d0c"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 48,
-      "run_started": "2026-08-15T11:57:55.900Z",
-      "sha256": "402bcf6d30da3cf746e5d9fa2591d9add335f23d9f550624914da9156bdd7d77"
+      "run_started": "2026-08-16T09:03:33.281Z",
+      "sha256": "29795e07484b09b4e970ac96e8c754f6988d6432b2d06d5feee7391fc3dff05f"
     }
   },
   "version_bindings": {
@@ -1051,7 +1051,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "9225fcfdd621720ffb24b6c0a673240adcc31442",
+      "git_commit": "7cca36831883ad12933e618d62a6888a5958777a",
       "working_tree_dirty": false
     },
     "image": {
