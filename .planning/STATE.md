@@ -4,7 +4,7 @@ milestone: v0.4
 milestone_name: Frontend
 status: Awaiting next milestone
 stopped_at: Phase 04 UI-SPEC approved
-last_updated: "2026-08-16T10:28:13.980Z"
+last_updated: "2026-08-16T11:49:57.029Z"
 last_activity: 2026-07-21
 last_activity_desc: "Completed quick task 260721-0to: hide backend diagnostics from frontend error surfaces"
 current_phase: 04
@@ -144,6 +144,7 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 | 10 | Ignore project-local Codex GSD tooling and stop tracking machine-local hooks and research caches | 2026-07-20 | — | — |
 | 260721-0to | Prevent backend errors and development commands such as uv run uvicorn api.main:app --reload from being displayed in the frontend, and inspect related UI error paths for similar leaks | 2026-07-21 | d4638e2 | [260721-0to-prevent-backend-errors-and-development-c](./quick/260721-0to-prevent-backend-errors-and-development-c/) |
 | 12 | Close epic-1 and epic-2 status in BMAD sprint-status.yaml (all 20 stories already done; manual epic-level transition had never been taken) | 2026-08-16 | 3d9a2fa | — |
+| 13 | Write `docs/DOMAIN-MODEL.md` — the normative demand family/unit dimensional model (outbound/inbound = volume, indirect = headcount; assignments carry worker identity but no family; which planner questions route to demand vs to assignments; why required-in-minutes is indirect-only). Derived from code, not inferred: `_normalize_demand`, `MetricV1`'s deliberate-absence note, and the grounding calculators' family-meaningfulness check. Closes retro action A1 / prep task P4 — the only ordering constraint on Epic 3 story creation. Docs + BMAD artifacts only; `git diff -- backend/ frontend/` empty | 2026-08-16 | beb7073 | — |
 
 ### Roadmap Evolution
 
