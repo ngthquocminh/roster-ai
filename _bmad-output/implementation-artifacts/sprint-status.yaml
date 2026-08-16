@@ -1181,7 +1181,14 @@ action_items:
     status: done
     # DONE 2026-08-16 — docs/DOMAIN-MODEL.md. Also closes prep task P4, which is the
     # same work listed twice; it is the ONLY ordering constraint on Epic 3 (retro
-    # §6.3). Epic 3 story creation MUST cite it for every story touching a metric.
+    # §6.3). The "Epic 3 story creation cites it" half is carried by CONTEXT, not by
+    # a reminder: the doc loads as a persistent fact on activation of
+    # bmad-create-story, bmad-dev-story and bmad-code-review (_bmad/custom/*.toml),
+    # and is stated in .claude/CLAUDE.md. A test asserting the story TEXT cites the
+    # doc was built and then dropped on purpose — it enforces a proxy (a story can
+    # cite the doc and still get the rule wrong), and the rule's real enforcement is
+    # already in code and already fails closed: _check_family_is_meaningful and
+    # calculate_metric's CalculationDimensionError.
     # It records one fact beyond the retro's brief, found while deriving the rule
     # from code: PostgresScenarioProjectionReader.get_baseline_assignments returns
     # (), so the assignment side is structurally empty and staffed_minutes cannot
@@ -1194,6 +1201,11 @@ action_items:
     action: "Story creation adds a 'facts this story depends on' pass, distinct from its decisions pass — name the domain rules the story relies on and confirm each is written down somewhere citable, before writing decisions."
     owner: "Story creation"
     status: open
+    # 2026-08-16 — MECHANISM SHIPPED, item stays open. The pass is now a persistent
+    # fact loaded on every bmad-create-story activation (_bmad/custom/bmad-create-
+    # story.toml). Its "done when" is "present in every Epic 3 creation note", which
+    # only the first Epic 3 stories can demonstrate — so this closes when they do,
+    # not now.
   - epic: "1-2"
     action: "Name the two cancellations apart before Story 3.4 is created — ScheduleRun cancellation (3.4) is NOT AgentRun cancellation, which still has no producer and no owner. Cite deferred-work.md:210."
     owner: "Story creation"

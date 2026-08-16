@@ -1,0 +1,17 @@
+# Team overrides for bmad-code-review. Committed — applies to every developer.
+# Arrays append to the base list in
+# `.claude/skills/bmad-code-review/customize.toml`.
+
+[workflow]
+
+# Review is where the demand family/unit rule actually cost this project: five
+# of Story 2.7's nine decision-grade findings were that one rule, raised after
+# the code was written (epic-1-2-retro-2026-08-16.md §3.2). The reviewer holds
+# the rule from activation so a dimensional error is caught as a deviation from
+# a written contract rather than adjudicated from scratch mid-review.
+
+persistent_facts = [
+  "file:{project-root}/docs/DOMAIN-MODEL.md",
+  "docs/DOMAIN-MODEL.md is normative for demand families, units, and assignments. A finding about a metric's dimension cites the doc's rule; it does not re-derive it. If the code and the doc disagree, that disagreement IS the finding — say which one is wrong.",
+  "Never report 'that planner question is invalid' for a headcount or staffing question about outbound/inbound work. It is valid and is answered from assignments, which are family-agnostic. Only required-demand-in-minutes is unanswerable for those families.",
+]

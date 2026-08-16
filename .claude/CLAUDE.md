@@ -42,6 +42,18 @@ without ever touching curl or raw JSON.
 re-solved schedule that honors it (as a soft constraint) plus a readable
 explanation of what changed — without touching solver code or JSON.
 
+### Metrics and demand — read before touching one
+
+`docs/DOMAIN-MODEL.md` is the **normative** demand family/unit dimensional
+model: `outbound`/`inbound` demand is measured in **volume**, `indirect` in
+**headcount**; assignments carry worker identity but **no family**. Cite it —
+never re-derive the rule from adapter code. That re-derivation produced five of
+Story 2.7's nine decision-grade review findings, and it is the single most
+expensive pattern of Epics 1–2. A headcount question about outbound/inbound work
+is **valid** and is answered from assignments, not demand; do not guard by
+family. Loaded automatically into `bmad-create-story`, `bmad-dev-story` and
+`bmad-code-review` via `_bmad/custom/*.toml`.
+
 ### Evidence files — read before writing one
 
 Any story producing an `evidence/**/*.json` file MUST follow
