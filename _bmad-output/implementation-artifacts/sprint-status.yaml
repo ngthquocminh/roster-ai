@@ -176,6 +176,10 @@ last_updated: 2026-08-16
 # alembic zero diff, gate_a_passed true — RE-DERIVE THEM, do not trust them; both 2.7 and 2.8 found
 # their inherited baselines stale.
 
+# (2026-08-16: epic-1 and epic-2 moved in-progress → done. All 11 Epic 1 stories and all 9
+#  Epic 2 stories were already `done`; the epic-level transition is manual per this file's own
+#  status definitions and had simply never been taken. No story status changed. Both
+#  retrospectives remain `optional` and unrun.)
 # (2026-08-15: story 2-8 code-reviewed → 4 decisions resolved, 30 patches applied,
 #  2 items deferred to the ledger. Remediation committed at 181d511, Gate A re-run
 #  on a clean tree at c085058 → gate_a_passed: true, blocking: []. Story → done.)
@@ -1094,7 +1098,7 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   # Epic 1: Inspectable Single-Site Scenario Workspace
-  epic-1: in-progress
+  epic-1: done
   1-1-establish-governed-fixture-history: done
   1-2-sign-in-to-the-seeded-site-safely: done
   1-3-choose-an-immutable-fixture: done
@@ -1109,7 +1113,7 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Grounded Conversational Investigation
-  epic-2: in-progress
+  epic-2: done
   2-1-establish-the-owned-agent-runtime-boundary: done
   2-2-establish-the-deterministic-evaluation-harness: done
   2-3-create-and-revisit-durable-conversations: done
