@@ -106,7 +106,21 @@ def _fixture_entries() -> list[dict[str, str]]:
 def _evidence_result(
     check: GateACheck, *, repo_root: Path
 ) -> tuple[str, bool, str]:
-    """Return ``(result, bound, detail)`` for an evidence-backed check."""
+    """Return ``(result, bound, detail)`` for an evidence-backed check.
+
+    This reads a PAST measurement and returns it as a PRESENT verdict. That is a
+    category error, accepted deliberately for the four checks whose measurement a
+    shared CI runner cannot reproduce — it is NOT a sign that evidence files need
+    an expiry mechanism. Evidence is a historical record: "at commit X, this
+    measurement produced this result", true forever and reproduced by checking out
+    X. See :func:`evidence_binding.audit_evidence_file`'s docstring for why its
+    rules are monotone by design, and `deferred-work.md:103` for the re-framing
+    (the ledger's original "evidence has no expiry" heading states the problem
+    wrongly).
+
+    Sixteen of the twenty registry checks take fresh JUnit XML instead and do not
+    come through here.
+    """
     path = repo_root / str(check.evidence_path)
     if not path.is_file():
         return "missing", False, f"evidence file not found: {check.evidence_path}"
