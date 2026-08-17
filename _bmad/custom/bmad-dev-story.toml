@@ -1,0 +1,15 @@
+# Team overrides for bmad-dev-story. Committed — applies to every developer.
+# Arrays append to the base list in
+# `.claude/skills/bmad-dev-story/customize.toml`.
+
+[workflow]
+
+# The dev session is the one that writes the multiplication. Story 2.7 shipped
+# `volume` rows multiplied into "minutes" — a wrong number wearing a valid
+# evidence locator — and it was caught at review, not at implementation
+# (epic-1-2-retro-2026-08-16.md §3.2).
+
+persistent_facts = [
+  "file:{project-root}/docs/DOMAIN-MODEL.md",
+  "docs/DOMAIN-MODEL.md is normative. outbound/inbound demand is measured in volume, indirect in headcount, and the two are never multiplied together or reported under one unit. Assignments carry worker identity but no family, so no metric reading assignments may accept a family argument.",
+]

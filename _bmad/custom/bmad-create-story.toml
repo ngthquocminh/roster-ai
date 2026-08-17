@@ -1,0 +1,30 @@
+# Team overrides for bmad-create-story. Committed — applies to every developer.
+# Merge rules: scalars override, arrays (persistent_facts, activation_steps_*)
+# APPEND to the base list in `.claude/skills/bmad-create-story/customize.toml`.
+
+[workflow]
+
+# Retrospective action A1 (epic-1-2-retro-2026-08-16.md §6.1). The demand
+# family/unit dimensional model was stable, true, and written down nowhere, so
+# five of Story 2.7's nine decision-grade review findings were the same rule
+# re-derived wrongly from adapter code and adjudicated after implementation.
+#
+# Loading it here is the mechanism, not a reminder: `persistent_facts` is read
+# during activation, before any story work begins, so the rule cannot be missed
+# by a story that did not think to look for it.
+#
+# Deliberately NOT backed by a test asserting the story text cites the doc. That
+# would enforce a proxy — a story can cite the doc and still get the rule wrong —
+# and the rule's real enforcement already exists in code, where it fails closed:
+# `_check_family_is_meaningful` refuses a family argument on a metric that reads
+# assignments, and `calculate_metric` raises `CalculationDimensionError` rather
+# than returning a zero when the demand unit does not match the metric.
+#
+# Retro action A3 ("a facts this story depends on pass, distinct from the
+# decisions pass") is the literal fact below.
+
+persistent_facts = [
+  "file:{project-root}/docs/DOMAIN-MODEL.md",
+  "Any story touching a metric, demand row, or assignment MUST cite docs/DOMAIN-MODEL.md in its context or facts section, and MUST NOT re-derive the family/unit rule from adapter code.",
+  "Before writing a story's decisions, run a 'facts this story depends on' pass: name the domain rules the story relies on and confirm each is written down somewhere citable. A rule that exists only in someone's head becomes a decision-grade review finding after implementation, which is the most expensive place to resolve it.",
+]

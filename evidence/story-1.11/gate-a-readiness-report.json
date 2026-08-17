@@ -21,8 +21,8 @@
   ],
   "contract_digests": {
     "algorithm": "sha256",
-    "sample_tiny_input": "e12de5fea95938afb8dc66e70bd6207b766cd4ea521a9f7a43cd3ad2541dd692",
-    "sample_tiny_input_more_tm": "a70dd166258bc860d6dce34767285acb8a6ca88686851de36ecc36a060cc1736"
+    "sample_tiny_input": "77da9cadedd6535b255306cb0acad2ed5eed2ec80045b392ec58a2dfcab0890e",
+    "sample_tiny_input_more_tm": "2d9212ffb453b01a2e9c7266a5c1d5194085a40ece03fdb132db86b1eb8a340c"
   },
   "contributing_checks": [
     {

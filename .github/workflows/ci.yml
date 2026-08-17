@@ -1,0 +1,573 @@
+# ShiftMind CI — wires the existing, already-green suites into GitHub Actions.
+#
+# This workflow does not scaffold or configure any test framework; every command
+# below is one a developer already runs locally. What CI adds is (a) that they
+# run at all, and (b) that a green exit code actually means the tests executed
+# — see `.github/scripts/assert_counts.py` for why exit 0 is not enough here.
+#
+# Recorded baselines, measured on faf22eb (2026-08-16) with PostgreSQL up:
+#   backend default    864 passed,  1 skipped, 7 deselected
+#   backend -m postgres 45 passed,  0 skipped
+#   evidence convention 48 passed,  0 skipped
+#   frontend vitest    400 passed  (63 files)
+#   playwright          48 passed  (7 files x chromium/msedge)
+# Pass counts are enforced as floors and skip counts as ceilings, so adding
+# tests never reddens CI while a silently-skipped suite always does.
+#
+# Deliberately NOT run: `pytest -m live`. NFR26 keeps live-provider calls out of
+# normal CI; the `default-suite-excludes-live-tests` step below proves the
+# `-m "not live"` default is still in force rather than assuming it.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly E2E burn-in, Sundays 02:00 UTC.
+    - cron: "0 2 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Matches docker-compose.yml, which is what backend/settings.py defaults to
+  # (`postgresql+psycopg://rosterai:rosterai@localhost:5432/rosterai`). Keeping
+  # them identical means no ROSTERAI_*_DATABASE_URL override is needed in CI.
+  POSTGRES_DB: rosterai
+  POSTGRES_USER: rosterai
+  POSTGRES_PASSWORD: rosterai
+  # backend/pyproject.toml declares requires-python >=3.10,<3.13.
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend: the default, network-disabled suite plus the evidence-convention
+  # sweep run as its own attributable step.
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      # 45 @pytest.mark.postgres tests live inside the DEFAULT suite. Without
+      # this service they do not fail — conftest.py calls pytest.skip() and the
+      # run stays green while 45 integration tests quietly evaporate. The
+      # max-skipped ceiling below is what turns that back into a red build.
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: rosterai
+          POSTGRES_USER: rosterai
+          POSTGRES_PASSWORD: rosterai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rosterai -d rosterai"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # REQUIRED, not a nicety. test_evidence_convention.py resolves every
+          # evidence file's recorded commit with
+          # `git merge-base --is-ancestor <commit> HEAD`
+          # (backend/scripts/evidence_binding.py:640). Under the default
+          # shallow clone those objects are absent and the ancestry assertions
+          # fail on a perfectly healthy tree.
+          fetch-depth: 0
+
+      - name: Verify git is usable
+        # deferred-work.md (story-1.11 review): `requires_git` SILENTLY SKIPS
+        # test_every_recorded_commit_is_a_real_ancestor_that_touched_code and
+        # test_evidence_file_is_fully_bound when git is unavailable, so a
+        # git-less image sweeps the whole evidence tree green having proved
+        # nothing. Fail loudly and early instead of discovering it as a skip.
+        run: |
+          git --version
+          git rev-parse --git-dir
+          git rev-parse HEAD
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Sync dependencies
+        working-directory: backend
+        run: uv sync --frozen --all-groups
+
+      - name: Create runtime state directory
+        # backend/settings.py defaults db_path and maintenance_flag_path under
+        # backend/var/, which is gitignored and therefore absent on a fresh
+        # checkout.
+        run: mkdir -p backend/var
+
+      - name: Assert the default suite still excludes live-provider tests
+        working-directory: backend
+        # NFR26. If someone drops `addopts = -m "not live"` from
+        # pyproject.toml, the default run stops deselecting anything while the
+        # live-marked set stays non-empty — that mismatch is the signal.
+        run: |
+          set -euo pipefail
+          live=$(uv run --frozen pytest -m live --collect-only -q 2>/dev/null \
+            | grep -oE '^[0-9]+/[0-9]+ tests collected' | cut -d/ -f1)
+          deselected=$(uv run --frozen pytest --collect-only -q 2>/dev/null \
+            | grep -oE '\([0-9]+ deselected\)' | grep -oE '[0-9]+' || echo 0)
+          echo "live-marked tests: ${live:-0} | deselected by default: $deselected"
+          if [ "${live:-0}" -eq 0 ]; then
+            echo "::error::no @pytest.mark.live tests found — the NFR26 guard has nothing to protect"
+            exit 1
+          fi
+          if [ "$deselected" -ne "${live:-0}" ]; then
+            echo "::error::default run deselects $deselected of ${live:-0} live-marked tests; the -m \"not live\" default is not in force"
+            exit 1
+          fi
+
+      - name: Evidence convention sweep
+        working-directory: backend
+        # Run standalone before the full suite purely for attribution: inside
+        # the 864-test run a git/ancestry problem shows up as an anonymous skip
+        # count, here it names itself.
+        run: |
+          set -o pipefail
+          uv run --frozen pytest tests/test_evidence_convention.py -q -rs \
+            2>&1 | tee ../evidence-convention.log
+
+      - name: Assert evidence convention proved something
+        run: |
+          python3 .github/scripts/assert_counts.py \
+            --runner pytest --log evidence-convention.log \
+            --label "evidence convention" \
+            --min-passed 48 --max-skipped 0
+
+      - name: Run default suite
+        working-directory: backend
+        # GEMINI_API_KEY / OPENROUTER_API_KEY are deliberately absent — not set
+        # to "", genuinely unset. settings.py reads llm_api_key straight from
+        # os.environ.get("GEMINI_API_KEY"), and its contract is None-for-stub;
+        # an empty string would be a different value. With neither present,
+        # llm/base.py::create_provider resolves the keyless `stub` provider and
+        # adapters/oidc/fake.py the local OIDC double. See
+        # docs/CI-SECRETS-CHECKLIST.md: normal CI holds no live credential.
+        run: |
+          set -o pipefail
+          uv run --frozen pytest -q -rs 2>&1 | tee ../backend-default.log
+
+      - name: Assert default suite baseline
+        # 864 passed / 1 skipped / 7 deselected. The single permitted skip is
+        # the unconditional one at tests/test_scheduling_inspect.py:324 ("tasks
+        # is a projection group the inspect capability does not expose"); it
+        # does not depend on the environment. Anything above that ceiling means
+        # git or PostgreSQL went missing.
+        run: |
+          python3 .github/scripts/assert_counts.py \
+            --runner pytest --log backend-default.log \
+            --label "backend default suite" \
+            --min-passed 864 --max-skipped 1 --min-deselected 7
+
+      - name: Upload backend logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-logs
+          path: |
+            backend-default.log
+            evidence-convention.log
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL integration suite, run explicitly so a service outage is
+  # attributable rather than buried in the default run's skip count.
+  # ---------------------------------------------------------------------------
+  backend-postgres:
+    name: Backend (PostgreSQL integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: rosterai
+          POSTGRES_USER: rosterai
+          POSTGRES_PASSWORD: rosterai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rosterai -d rosterai"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Sync dependencies
+        working-directory: backend
+        run: uv sync --frozen --all-groups
+
+      - name: Create runtime state directory
+        run: mkdir -p backend/var
+
+      - name: Run PostgreSQL suite
+        working-directory: backend
+        run: |
+          set -o pipefail
+          uv run --frozen pytest -m postgres -q -rs 2>&1 | tee ../backend-postgres.log
+
+      - name: Assert PostgreSQL suite baseline
+        # max-skipped 0 is the entire point of this job. conftest.py's
+        # _temporary_postgres_database bounds its admin connection to 3s and
+        # then calls pytest.skip("PostgreSQL integration service is not
+        # available") — so an unreachable service yields "45 skipped" and
+        # exit 0. Only the ceiling catches it.
+        run: |
+          python3 .github/scripts/assert_counts.py \
+            --runner pytest --log backend-postgres.log \
+            --label "backend postgres suite" \
+            --min-passed 45 --max-skipped 0
+
+      - name: Upload PostgreSQL logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-postgres-log
+          path: backend-postgres.log
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Alembic drift gate.
+  # ---------------------------------------------------------------------------
+  migrations:
+    name: Migrations (alembic check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      # alembic.ini leaves sqlalchemy.url empty; backend/migrations/env.py fills
+      # it from default_settings().provisioning_database_url, so `alembic check`
+      # needs a real database to compare the models against.
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: rosterai
+          POSTGRES_USER: rosterai
+          POSTGRES_PASSWORD: rosterai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rosterai -d rosterai"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Check for un-migrated model drift
+        # WORKING DIRECTORY IS LOAD-BEARING — run from the repository root, and
+        # note the absence of `working-directory: backend`.
+        #
+        # alembic.ini lives at the repo root and sets
+        # `script_location = %(here)s/backend/migrations`. Invoked from
+        # backend/ (pytest's cwd, and the obvious place to stand) alembic finds
+        # no alembic.ini and dies with
+        #   FAILED: No 'script_location' key found in configuration.
+        # which reads like a missing config but is purely a cwd mistake. That
+        # misreading cost a story: see the "CORRECTED 2026-08-10" entry in
+        # _bmad-output/implementation-artifacts/deferred-work.md, where a
+        # temporary alembic.ini was synthesized to work around it.
+        run: |
+          set -euo pipefail
+          uv run --project backend alembic upgrade head
+          uv run --project backend alembic check
+
+  # ---------------------------------------------------------------------------
+  # Frontend: lint, types, build, unit tests.
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend (lint, types, build, vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # src/lib/env.ts throws at MODULE LOAD if this is unset — deliberately, so
+      # a built bundle can never silently default to a wrong origin. `.env` is
+      # gitignored, so CI has to supply it or the bundle throws in the browser.
+      # vite.config.ts pins the same variable for vitest (test.env) and
+      # documents the identical hazard; this is the missing half of that rule,
+      # for everything vitest does not cover.
+      VITE_API_BASE_URL: http://127.0.0.1:4173
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Unit tests
+        # The JSON reporter is what the assertion reads; `default` is kept so a
+        # human reading the job log still sees per-file results. Counting from
+        # the terminal summary row was tried first and is not a contract — it
+        # went missing on the runner while being present locally, which cost a
+        # round trip and proved nothing about the tests.
+        run: |
+          set -o pipefail
+          npm test -- \
+            --reporter=default \
+            --reporter=json \
+            --outputFile.json=../frontend-vitest.json \
+            2>&1 | tee ../frontend-vitest.log
+
+      - name: Assert unit test baseline
+        working-directory: .
+        run: |
+          python3 .github/scripts/assert_counts.py \
+            --runner vitest --log frontend-vitest.json \
+            --label "frontend vitest" \
+            --min-passed 400 --max-skipped 0
+
+      - name: Upload vitest report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-vitest-report
+          path: |
+            frontend-vitest.log
+            frontend-vitest.json
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Playwright E2E across both configured browser projects.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Without this the bundle throws on load, the page renders nothing, and
+      # every spec fails on its first toBeVisible() with "element(s) not found"
+      # — a failure that looks like a broken selector and is really a missing
+      # build-time variable. See src/lib/env.ts.
+      #
+      # The value only has to be a well-formed origin: e2e/support/apiStubs.ts
+      # intercepts `**/api/v1/**`, which matches any host, so no request reaches
+      # a network. 127.0.0.1:4173 is playwright.config.ts's own baseURL, which
+      # keeps calls same-origin and matches .env.example's stated intent that
+      # the API origin IS the SPA's origin.
+      VITE_API_BASE_URL: http://127.0.0.1:4173
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          # Only covers the downloaded Chromium build. The `msedge` channel is
+          # installed to a system location by apt and is re-installed below on
+          # every run regardless of this cache.
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-playwright-
+
+      - name: Install browsers
+        # BOTH channels are required. playwright.config.ts declares a `msedge`
+        # project with `channel: "msedge"`, which is half of the 48 tests;
+        # ubuntu-latest ships no Edge, so omitting it fails 24 tests with
+        # "Executable doesn't exist". `playwright install msedge` is supported
+        # on Linux and pulls the stable Edge package.
+        run: npx playwright install --with-deps chromium msedge
+
+      - name: Run E2E suite
+        # `npm run test:e2e` is `npm run build && playwright test`; the two are
+        # split here so the JSON reporter can be selected without relying on npm
+        # forwarding `--` args across a chained script. Playwright's webServer
+        # block starts `vite preview` on 127.0.0.1:4173 itself.
+        #
+        # Reporters are selected on the COMMAND LINE only. playwright.config.ts
+        # pins `reporter: "list"` and its comment requires that committed
+        # default to stay put — see GATE-A-RUNBOOK.md §3.
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ github.workspace }}/playwright.json
+        run: |
+          set -o pipefail
+          npm run build
+          npx playwright test --reporter=list,json 2>&1 | tee ../playwright.log
+
+      - name: Assert E2E baseline
+        working-directory: .
+        # 48 = 24 specs x {chromium, msedge}. A browser that fails to launch
+        # reports far fewer tests rather than failing them, so the floor is the
+        # guard. `stats.flaky` fails the gate too, which is what makes
+        # playwright.config.ts's `retries: 2` safe to keep here.
+        run: |
+          python3 .github/scripts/assert_counts.py \
+            --runner playwright --log playwright.json \
+            --label "playwright e2e" \
+            --min-passed 48 --max-skipped 0
+
+      - name: Upload E2E artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright.log
+            playwright.json
+            frontend/test-results/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Burn-in: flake detection. Scheduled/manual only — ten builds plus ten full
+  # E2E passes is too heavy for every PR.
+  # ---------------------------------------------------------------------------
+  burn-in:
+    name: E2E burn-in (flake detection)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: e2e
+    env:
+      # Same reason as the e2e job — this job builds and serves the bundle too.
+      VITE_API_BASE_URL: http://127.0.0.1:4173
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium msedge
+
+      - name: Build once
+        run: npm run build
+
+      - name: Burn-in loop
+        # `--retries=0` overrides playwright.config.ts's `retries: 2` under CI.
+        # Retries exist to keep the PR gate usable; they also mask exactly the
+        # intermittency this job is looking for, so burn-in opts out.
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 10); do
+            echo "::group::burn-in iteration $i/10"
+            npx playwright test --retries=0
+            echo "::endgroup::"
+          done
+          echo "burn-in complete — 10 consecutive clean runs"
+
+      - name: Upload burn-in failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: burn-in-artifacts
+          path: frontend/test-results/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # Roll-up so branch protection has one status to require.
+  # ---------------------------------------------------------------------------
+  summary:
+    name: CI summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [backend, backend-postgres, migrations, frontend, e2e]
+
+    steps:
+      - name: Report
+        env:
+          BACKEND: ${{ needs.backend.result }}
+          POSTGRES: ${{ needs.backend-postgres.result }}
+          MIGRATIONS: ${{ needs.migrations.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## CI summary"
+            echo ""
+            echo "| Gate | Result | Baseline |"
+            echo "|---|---|---|"
+            echo "| Backend default suite | $BACKEND | >=864 passed, <=1 skipped, >=7 deselected |"
+            echo "| PostgreSQL integration | $POSTGRES | >=45 passed, 0 skipped |"
+            echo "| alembic check | $MIGRATIONS | no new upgrade operations |"
+            echo "| Frontend lint/types/build/unit | $FRONTEND | >=400 passed, 0 skipped |"
+            echo "| Playwright E2E | $E2E | >=48 passed, 0 skipped, 0 flaky |"
+            echo ""
+            echo "Live-provider tests (\`pytest -m live\`) are excluded by design — NFR26."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for result in "$BACKEND" "$POSTGRES" "$MIGRATIONS" "$FRONTEND" "$E2E"; do
+            if [ "$result" != "success" ]; then
+              echo "::error::at least one required gate did not succeed"
+              exit 1
+            fi
+          done

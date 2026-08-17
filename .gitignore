@@ -84,6 +84,14 @@ _bmad/config.user.toml
 # Generated GSD research cache
 .planning/research/.cache/
 
+# Machine-readable test reports written at the repository root by the CI jobs
+# in .github/workflows/ci.yml (and by anyone mirroring them locally per
+# docs/CI.md). Regenerable, and leaving them untracked matters: a dirty tree
+# makes backend/tests/test_evidence_binding.py skip its binding-realism check,
+# which the CI skip ceiling then reports as a failure.
+/frontend-vitest.json
+/playwright.json
+
 # JUnit XML consumed by the Gate A readiness report. Regenerable from the test
 # suites, noisy in diffs, and the report itself carries the summarized result —
 # so it is deliberately NOT committed. It must never be written into evidence/.

@@ -1,0 +1,48 @@
+# Line endings are part of this repository's contract, not a local preference.
+#
+# `backend/scripts/evidence_binding.py::contract_digests` takes a sha256 of the
+# RAW BYTES of each file in `data/contract/`, and evidence files under
+# `evidence/` record that digest as a permanent binding. Without the rules
+# below, `core.autocrlf=true` (the Windows default, and set globally on at
+# least one dev machine) rewrites those files to CRLF on checkout, so the
+# digest pins the platform rather than the artifact.
+#
+# That is not hypothetical. Stories 1.9, 1.10 and 1.11 all recorded the CRLF
+# digest of a Windows working copy — bytes that have never existed in the
+# repository — and the divergence stayed invisible until the first Linux CI run
+# computed the LF digest instead. `_dataset_file_digest` (evidence_binding.py)
+# already documents the same hazard and worked around it by normalizing before
+# hashing; these rules fix the cause instead, so a raw-byte digest finally means
+# what its docstring says.
+#
+# `text eol=lf` rather than `-text` on the digest-bound paths on purpose:
+# `-text` would stop git normalizing on COMMIT as well, letting an editor that
+# writes CRLF put CRLF into the blob and move the digest again. `text eol=lf`
+# pins LF in both directions.
+
+# Default: normalize every detected text file to LF in the repository and check
+# it out as LF everywhere, Windows included.
+* text=auto eol=lf
+
+# Digest-bound artifacts. Same rule as above, stated explicitly so it survives
+# any future narrowing of the default and so the reason is greppable from here.
+data/contract/**  text eol=lf
+data/*.json       text eol=lf
+evidence/**/*.json text eol=lf
+
+# Shell scripts and CI config are executed by Linux runners; a CR would break
+# the shebang line and produce `bad interpreter` / `unexpected token` errors.
+*.sh                    text eol=lf
+.github/**/*.yml        text eol=lf
+.github/**/*.py         text eol=lf
+
+# True binaries: never touch these bytes.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.pdf   binary
+*.zip   binary
+*.db    binary

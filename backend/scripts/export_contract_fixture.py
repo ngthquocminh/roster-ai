@@ -95,10 +95,19 @@ def export_contract_fixtures(
         payload = json.loads(fixture.path.read_text(encoding="utf-8"))
         contract = build_contract_fixture(fixture, payload)
         output_path = output_directory / f"{fixture.fixture_id}.projection-v1.json"
+        # newline="\n" is load-bearing. Without it write_text() uses
+        # newline=None, which rewrites every \n to os.linesep — CRLF on
+        # Windows. These artifacts are pinned by a raw-byte sha256
+        # (`evidence_binding.contract_digests`) and compared byte-for-byte
+        # against the committed copy by
+        # tests/test_export_contract_fixture.py, so a platform-dependent
+        # line ending makes the digest pin the operating system rather than
+        # the artifact. See .gitattributes for the other half of this rule.
         output_path.write_text(
             json.dumps(contract, indent=2, ensure_ascii=False, default=_json_default)
             + "\n",
             encoding="utf-8",
+            newline="\n",
         )
         written.append(output_path)
     return tuple(written)
