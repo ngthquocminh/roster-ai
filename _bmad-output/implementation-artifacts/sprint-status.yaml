@@ -1219,6 +1219,19 @@ action_items:
     owner: "Minh"
     status: open
   - epic: "1-2"
-    action: "PREP: close the evidence-expiry hole — require a recorded commit to touch a path the check actually depends on (candidate: a subject_paths field on GateACheck). See deferred-work.md:103; note the audit-rule redesign increases this risk."
+    action: "Gate A reads stored evidence as a present-tense verdict in 4 of its 20 checks. Priority: turn 1.9 (parity / mutation-denial) into live CI tests and drop evidence_path from that check — before Story 3.1 merges, because 3.1 writes into the very invariant it gates. See deferred-work.md:103 (re-framed 2026-08-17)."
     owner: "Minh"
     status: open
+    # RE-FRAMED 2026-08-17. This is NOT an "evidence expiry" problem, as the earlier
+    # wording claimed. Evidence is a historical record — "at commit X, measurement Y
+    # produced result Z" — true forever, reproduced by checking out X. The monotone
+    # rule set in audit_evidence_file() is correct by design; Story 1.11 already fixed
+    # the defect of conflating "generated correctly?" with "still valid now?", and
+    # demanding expiry would recreate it. The defect is a CATEGORY ERROR AT THE
+    # CONSUMPTION SITE: gate_a_readiness._evidence_result() returns a past measurement
+    # as a present verdict.
+    # Scope is 4/20 checks, and the risk inside those four is not uniform. 1.4/1.5 are
+    # low — the 2s threshold is asserted inside the postgres-marked test that CI runs
+    # every push, and re-measurement is scripted. 1.9 is the real gap. Do NOT build
+    # subject_paths machinery across all 20 checks. Runs alongside Epic 3, does not
+    # gate it.

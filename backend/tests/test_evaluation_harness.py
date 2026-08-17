@@ -953,7 +953,7 @@ def test_complete_report_is_accepted_by_repo_wide_evidence_audit(
 
     monkeypatch.setattr(
         "scripts.evidence_binding.resolve_code_binding",
-        lambda repo_root, allow_dirty=False: (
+        lambda repo_root, allow_dirty=False, ignore_paths=frozenset(): (
             {"git_commit": code_commit, "working_tree_dirty": False},
             False,
         ),

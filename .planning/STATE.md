@@ -5,8 +5,8 @@ milestone_name: Frontend
 status: Awaiting next milestone
 stopped_at: Phase 04 UI-SPEC approved
 last_updated: "2026-08-16T11:49:57.029Z"
-last_activity: 2026-07-21
-last_activity_desc: "Completed quick task 260721-0to: hide backend diagnostics from frontend error surfaces"
+last_activity: 2026-08-17
+last_activity_desc: "Completed quick task 260817-wn9: cleared the last two Epic 3 prep items (P2 Gate A re-runnable; P3 re-framed off the critical path)"
 current_phase: 04
 current_phase_name: results-insights
 progress:
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-07-15)
 Phase: Milestone v0.4 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-07-21 — Completed quick task 260721-0to: hide backend diagnostics from frontend error surfaces
+Last activity: 2026-08-17 — Completed quick task 260817-wn9: cleared the last two Epic 3 prep items (P2 Gate A re-runnable; P3 re-framed off the critical path)
 
 ## Performance Metrics
 
@@ -145,6 +145,7 @@ tracker was retired in favour of `.planning/`. These were its Phase 1/2
 | 260721-0to | Prevent backend errors and development commands such as uv run uvicorn api.main:app --reload from being displayed in the frontend, and inspect related UI error paths for similar leaks | 2026-07-21 | d4638e2 | [260721-0to-prevent-backend-errors-and-development-c](./quick/260721-0to-prevent-backend-errors-and-development-c/) |
 | 12 | Close epic-1 and epic-2 status in BMAD sprint-status.yaml (all 20 stories already done; manual epic-level transition had never been taken) | 2026-08-16 | 3d9a2fa | — |
 | 13 | Write `docs/DOMAIN-MODEL.md` — the normative demand family/unit dimensional model (outbound/inbound = volume, indirect = headcount; assignments carry worker identity but no family; which planner questions route to demand vs to assignments; why required-in-minutes is indirect-only). Derived from code, not inferred: `_normalize_demand`, `MetricV1`'s deliberate-absence note, and the grounding calculators' family-meaningfulness check. Closes retro action A1 / prep task P4 — the only ordering constraint on Epic 3 story creation. Docs + BMAD artifacts only; `git diff -- backend/ frontend/` empty | 2026-08-16 | beb7073 | — |
+| 260817-wn9 | Cleared the last two Epic 3 prep items. **P2:** `gate_a_readiness.main()` writes `evidence/gate-a-readiness.json`, so the tree it dirtied made the next `resolve_bindings()` raise `DirtyTreeError` before doing any work — the tool soiling its own precondition, and the origin of the two-commit dance. `working_tree_status()` now takes `ignore_paths`, forwarded through `resolve_code_binding()`/`resolve_bindings()`, and `main()` exempts its `--output` plus the `.tmp` staging sibling; a stray uncommitted `.py` still refuses (no separate guard needed — the filter provides it), and an exercised exemption records `binding_scope` so it is auditable. Found by test, not by reading: plain `git status --porcelain` collapses an untracked directory into one `evidence/` entry so exact-path exemptions never matched — fixed with `--untracked-files=all`. Red-then-green per retro A2: widening the filter yields `DID NOT RAISE DirtyTreeError`. Verified twice against the real repo (both runs bind `8139866`, dirty=False) and confirmed refusing a real uncommitted `backend/settings.py`. **P3:** re-framed, not implemented — "evidence files have no expiry" states the problem wrongly and had been copied into three artifacts. Evidence is a historical record, monotone is correct by design, and the defect is a category error at the consumption site (`_evidence_result()` returns a past measurement as a present verdict) scoped to 4/20 checks. 1.4/1.5 are low risk (2s threshold asserted inside a postgres-marked test CI runs every push); 1.9 is the real gap because Story 3.1 writes into the invariant it gates. P3 leaves the Epic 3 critical path. Backend 866 passed, 2 skipped | 2026-08-17 | 8139866 | [260817-wn9-ghi-note-p3-va-sua-p2](./quick/260817-wn9-ghi-note-p3-va-sua-p2/) |
 
 ### Roadmap Evolution
 

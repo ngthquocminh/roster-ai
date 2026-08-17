@@ -195,6 +195,98 @@ def test_allow_dirty_escape_hatch_records_its_own_use(tmp_path):
     assert bindings["code"]["working_tree_dirty"] is True
 
 
+def _init_repo_with_commit(tmp_path):
+    """A git repo with one committed file and a clean tree."""
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "tracked.txt").write_text("a", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"],
+        cwd=tmp_path,
+        check=True,
+    )
+
+
+def test_own_output_file_is_exempt_so_the_gate_can_run_twice(tmp_path):
+    """The generator's own output must not lock it out of its next run.
+
+    `gate_a_readiness.main()` writes `evidence/gate-a-readiness.json`, which
+    dirtied the tree and made run 2 of 2 die on DirtyTreeError before doing any
+    work. Exempting that one path removes the two-commit dance without weakening
+    anything: no source change is uncommitted, so the recorded commit still
+    reproduces the measurement.
+    """
+    _init_repo_with_commit(tmp_path)
+    output = tmp_path / "evidence" / "gate-a-readiness.json"
+    output.parent.mkdir(parents=True)
+    output.write_text("{}", encoding="utf-8")
+
+    bindings = resolve_bindings(
+        _DECLARED,
+        repo_root=tmp_path,
+        ignore_paths=frozenset({str(output)}),
+        migrations_dir=REPO_ROOT / "backend" / "migrations" / "versions",
+        contract_dir=REPO_ROOT / "data" / "contract",
+    )
+
+    assert bindings["code"]["working_tree_dirty"] is False
+    assert "binding_override" not in bindings
+    # The exemption is recorded, not silent.
+    assert "evidence/gate-a-readiness.json" in bindings["binding_scope"]
+
+
+def test_exempting_the_output_file_still_refuses_an_uncommitted_source_change(
+    tmp_path,
+):
+    """The exemption is scoped to the named path and nothing else.
+
+    Red-then-green: widen the filter in `working_tree_status()` so it drops every
+    path instead of only the exempted ones and this test fails — which is the
+    proof that the guard still bites. Without it the exemption would be a blanket
+    `--allow-dirty` wearing a narrower name.
+    """
+    _init_repo_with_commit(tmp_path)
+    output = tmp_path / "evidence" / "gate-a-readiness.json"
+    output.parent.mkdir(parents=True)
+    output.write_text("{}", encoding="utf-8")
+    # A real source change, uncommitted, beside the exempted output.
+    (tmp_path / "tracked.txt").write_text("b", encoding="utf-8")
+
+    # `migrations_dir`/`contract_dir` point at the real repo so that a widened
+    # filter fails HERE, on the missing refusal, rather than tripping over an
+    # unrelated MigrationGraphError further downstream. The red must name the
+    # thing that broke.
+    with pytest.raises(DirtyTreeError) as excinfo:
+        resolve_bindings(
+            _DECLARED,
+            repo_root=tmp_path,
+            ignore_paths=frozenset({str(output)}),
+            migrations_dir=REPO_ROOT / "backend" / "migrations" / "versions",
+            contract_dir=REPO_ROOT / "data" / "contract",
+        )
+
+    message = str(excinfo.value)
+    assert "tracked.txt" in message
+    # The exempted path must not be listed as an offender.
+    assert "gate-a-readiness.json" not in message
+
+
+def test_offering_an_exemption_on_a_clean_tree_records_nothing(tmp_path):
+    """Offering an exemption and needing one are different things."""
+    _init_repo_with_commit(tmp_path)
+
+    bindings = resolve_bindings(
+        _DECLARED,
+        repo_root=tmp_path,
+        ignore_paths=frozenset({str(tmp_path / "evidence" / "gate-a-readiness.json")}),
+        migrations_dir=REPO_ROOT / "backend" / "migrations" / "versions",
+        contract_dir=REPO_ROOT / "data" / "contract",
+    )
+
+    assert bindings["code"]["working_tree_dirty"] is False
+    assert "binding_scope" not in bindings
+
+
 def test_clean_tree_emits_no_binding_override(tmp_path):
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     (tmp_path / "tracked.txt").write_text("a", encoding="utf-8")
