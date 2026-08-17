@@ -63,6 +63,16 @@ DECLARED_BINDING_KEYS: tuple[str, ...] = tuple(
 
 _ALLOW_DIRTY_NOTE = "--allow-dirty; tree was dirty at generation"
 
+#: Recorded when the dirty-tree check exempted a caller's own output file. Not
+#: an override: no code was uncommitted, so the recorded commit still
+#: reproduces the measurement. It is written down so the exemption is auditable
+#: rather than invisible.
+_OUTPUT_EXEMPT_NOTE = (
+    "output path(s) exempted from the dirty-tree check: {paths}. "
+    "No source change was uncommitted; the recorded commit reproduces this "
+    "measurement."
+)
+
 # There is no container registry, no image build pipeline and no `.github/` in
 # this repository. AD-17/AD-24's immutable-digest requirement is Epic 5 work
 # (Stories 5.5-5.7). Fabricating a digest here would be a false binding, so the
@@ -127,16 +137,64 @@ def commit_date(commit: str, repo_root: Path = REPO_ROOT) -> str:
     return _git(repo_root, "show", "-s", "--format=%cI", commit)
 
 
-def working_tree_status(repo_root: Path = REPO_ROOT) -> tuple[bool, tuple[str, ...]]:
+def _normalize_repo_path(path: str | Path, repo_root: Path = REPO_ROOT) -> str:
+    """Render ``path`` the way ``git status --porcelain`` reports it.
+
+    Porcelain prints repo-relative, forward-slashed paths. Callers hand us
+    absolute `Path`s (``--output`` resolves to one), so both sides have to be
+    reduced to the same shape before a set membership test means anything.
+    """
+    candidate = Path(path)
+    if candidate.is_absolute():
+        try:
+            candidate = candidate.resolve().relative_to(Path(repo_root).resolve())
+        except ValueError:
+            # Outside the repository: it can never match a porcelain entry, so
+            # returning the absolute form simply never matches. Not an error —
+            # an `--output` written outside the tree does not dirty the tree.
+            return candidate.as_posix()
+    return candidate.as_posix()
+
+
+def working_tree_status(
+    repo_root: Path = REPO_ROOT,
+    *,
+    ignore_paths: frozenset[str] = frozenset(),
+) -> tuple[bool, tuple[str, ...]]:
     """Return ``(dirty, offending_paths)`` for ``repo_root``.
 
     Untracked (``??``) entries count as dirty: an untracked file is state the
     recorded commit cannot describe, so a measurement taken beside one is no
     more reproducible than one taken on a modified tracked file.
+
+    ``ignore_paths`` exempts specific repo-relative paths from the verdict. It
+    exists for exactly one shape of caller: a generator whose own output file
+    is what dirties the tree. `gate_a_readiness.main()` writes
+    `evidence/gate-a-readiness.json`, which meant the second consecutive run
+    died on :class:`DirtyTreeError` before doing any work — the tool soiling
+    the very precondition it demands, and the origin of the two-commit dance.
+
+    The distinction the exemption draws is between *dirty because code is
+    uncommitted* — which must still refuse, because the recorded commit cannot
+    reproduce the measurement — and *dirty because of the output file this
+    command is about to overwrite*, which changes nothing about whether the
+    recorded commit describes the code that was measured.
+
+    Note there is no separate "only the output file may be dirty" guard: the
+    filter provides it. Exempt entries are dropped, and anything else still
+    standing keeps ``dirty`` true, so a stray edited `.py` refuses exactly as
+    before.
     """
-    porcelain = _git_raw(repo_root, "status", "--porcelain")
+    # `--untracked-files=all` is required, not cosmetic. Plain `--porcelain`
+    # collapses a wholly-untracked directory into a single `evidence/` entry, so
+    # an exemption naming `evidence/gate-a-readiness.json` would never match it
+    # and the first run against a fresh checkout would refuse. Expanding to one
+    # entry per file also keeps the exemption honest: exempting one file inside
+    # an untracked directory must not clear its siblings.
+    porcelain = _git_raw(repo_root, "status", "--porcelain", "--untracked-files=all")
     if not porcelain.strip():
         return False, ()
+    ignored = {_normalize_repo_path(entry, repo_root) for entry in ignore_paths}
     paths: list[str] = []
     for line in porcelain.splitlines():
         if not line.strip():
@@ -146,18 +204,23 @@ def working_tree_status(repo_root: Path = REPO_ROOT) -> tuple[bool, tuple[str, .
         entry = line[2:].strip().strip('"')
         for part in entry.split(" -> "):
             part = part.strip().strip('"')
-            if part:
+            if part and _normalize_repo_path(part, repo_root) not in ignored:
                 paths.append(part)
-    return True, tuple(paths)
+    return bool(paths), tuple(paths)
 
 
 def resolve_code_binding(
     repo_root: Path = REPO_ROOT,
     *,
     allow_dirty: bool = False,
+    ignore_paths: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, Any], bool]:
-    """Return the ``code`` binding plus whether the dirty escape hatch was used."""
-    dirty, paths = working_tree_status(repo_root)
+    """Return the ``code`` binding plus whether the dirty escape hatch was used.
+
+    ``ignore_paths`` is forwarded to :func:`working_tree_status`; see its
+    docstring for what the exemption means and why it is safe.
+    """
+    dirty, paths = working_tree_status(repo_root, ignore_paths=ignore_paths)
     if dirty and not allow_dirty:
         listed = "\n  ".join(paths)
         raise DirtyTreeError(
@@ -331,6 +394,26 @@ def _fixture_specs() -> Sequence[Any]:
     return default_fixtures()
 
 
+def _exercised_exemptions(
+    repo_root: Path, ignore_paths: frozenset[str]
+) -> tuple[str, ...]:
+    """Which ``ignore_paths`` entries are actually dirty right now.
+
+    Offering an exemption and needing one are different things, and only the
+    second belongs in the artifact. Costs one extra `git status` and only when
+    a caller passes a non-empty set.
+    """
+    if not ignore_paths:
+        return ()
+    _, dirty_paths = working_tree_status(repo_root)
+    ignored = {_normalize_repo_path(entry, repo_root) for entry in ignore_paths}
+    return tuple(
+        path
+        for path in dirty_paths
+        if _normalize_repo_path(path, repo_root) in ignored
+    )
+
+
 def resolve_bindings(
     declared: Mapping[str, Any],
     *,
@@ -342,6 +425,7 @@ def resolve_bindings(
     code_extra: Mapping[str, Any] | None = None,
     code_binding: Mapping[str, Any] | None = None,
     allow_dirty: bool = False,
+    ignore_paths: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Build a complete NFR27 ``version_bindings`` block.
 
@@ -354,6 +438,13 @@ def resolve_bindings(
     dataset and scenario both derive from the governed fixtures. Evaluation
     callers pass committed golden JSON files, which derives an independent
     dataset binding while ``fixtures`` continues to describe scenario data.
+
+    ``ignore_paths`` exempts a caller's own output file from the dirty-tree
+    refusal (see :func:`working_tree_status`). When an exemption is actually
+    exercised — the path was dirty and was dropped — the resulting block records
+    a ``binding_scope`` naming it, so the exemption is visible in the artifact
+    rather than silent. ``working_tree_dirty`` stays ``false``, which is the
+    honest answer: the recorded commit still reproduces the measurement.
     """
     missing = [key for key in DECLARED_BINDING_KEYS if key not in declared]
     if missing:
@@ -387,8 +478,16 @@ def resolve_bindings(
                 "Reusing it would launder that, so it is refused."
             )
         code, used_override = dict(code_binding), False
+        exempted: tuple[str, ...] = ()
     else:
-        code, used_override = resolve_code_binding(repo_root, allow_dirty=allow_dirty)
+        # Resolve which exempted paths were genuinely dirty BEFORE the filtered
+        # call decides the verdict, so `binding_scope` reports an exemption that
+        # was actually exercised rather than one merely offered. A caller that
+        # passes `ignore_paths` on a clean tree records nothing.
+        exempted = _exercised_exemptions(repo_root, ignore_paths)
+        code, used_override = resolve_code_binding(
+            repo_root, allow_dirty=allow_dirty, ignore_paths=ignore_paths
+        )
     if code_extra:
         clashes = [key for key in code_extra if key in code]
         if clashes:
@@ -438,6 +537,11 @@ def resolve_bindings(
 
     if used_override:
         bindings["binding_override"] = _ALLOW_DIRTY_NOTE
+
+    if exempted:
+        bindings["binding_scope"] = _OUTPUT_EXEMPT_NOTE.format(
+            paths=", ".join(sorted(exempted))
+        )
 
     return bindings
 

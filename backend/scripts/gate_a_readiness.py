@@ -302,6 +302,7 @@ def build_report(
     strict_missing: bool = False,
     measurement_date: str | None = None,
     bindings: dict[str, Any] | None = None,
+    ignore_paths: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Evaluate every registry check and compose the readiness report.
 
@@ -311,13 +312,22 @@ def build_report(
     set must be resolved *before* the first file is written. Callers that
     regenerate only this report should leave it unset and let the clean-tree
     check run here.
+
+    ``ignore_paths`` is this report's own output file (and its `.tmp` staging
+    sibling), forwarded to `resolve_bindings()`. Writing the report dirties the
+    tree, so without the exemption a second consecutive run refused before
+    doing any work — the two-commit dance. Only that file is exempted; a stray
+    uncommitted source change still refuses.
     """
     validate_registry()
     reports = list(runner_reports)
 
     if bindings is None:
         bindings = resolve_bindings(
-            _DECLARED_BINDINGS, repo_root=repo_root, allow_dirty=allow_dirty
+            _DECLARED_BINDINGS,
+            repo_root=repo_root,
+            allow_dirty=allow_dirty,
+            ignore_paths=ignore_paths,
         )
     else:
         # A caller-supplied block bypasses `resolve_bindings()`, and with it the
@@ -591,6 +601,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         parse_junit(args.playwright_xml, runner="playwright"),
     ]
 
+    # This command's own output is what dirties the tree, so exempt it — both
+    # the final path and the `.tmp` staging sibling written just below. Without
+    # this, run 2 of 2 dies on DirtyTreeError before doing any work; with it, an
+    # uncommitted source change still refuses exactly as before.
+    output_exemptions = frozenset(
+        {
+            str(args.output),
+            str(args.output.with_suffix(args.output.suffix + ".tmp")),
+        }
+    )
+
     bindings = None
     if args.code_from:
         donor = json.loads(args.code_from.read_text(encoding="utf-8"))
@@ -599,6 +620,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _DECLARED_BINDINGS,
             repo_root=REPO_ROOT,
             code_binding=donor_code,
+            ignore_paths=output_exemptions,
         )
 
     report = build_report(
@@ -606,6 +628,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         allow_dirty=args.allow_dirty,
         strict_missing=not args.allow_missing,
         bindings=bindings,
+        ignore_paths=output_exemptions,
     )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
