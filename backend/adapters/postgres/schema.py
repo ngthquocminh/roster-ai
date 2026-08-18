@@ -386,10 +386,14 @@ command_idempotency = Table(
     "command_idempotency", metadata, _id_column(), _site_id_column(),
     Column("actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
     Column("operation", String(100), nullable=False),
+    Column("idempotency_key", String(40), nullable=False),
     Column("body_hash", String(64), nullable=False),
     Column("response_payload", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
-    UniqueConstraint("site_id", "actor_id", "operation", "body_hash", name="uq_command_idempotency_request"),
+    # AD-8: one effect per (actor, site, operation, key). The body hash stays
+    # out of the key so that reusing a key with a different body collides here
+    # instead of inserting a second, indistinguishable row.
+    UniqueConstraint("site_id", "actor_id", "operation", "idempotency_key", name="uq_command_idempotency_request"),
     UniqueConstraint("id", "site_id", name="uq_command_idempotency_id_site"),
     CheckConstraint("body_hash ~ '^[0-9a-f]{64}$'", name="ck_command_idempotency_body_hash"),
 )

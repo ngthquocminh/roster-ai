@@ -42,6 +42,7 @@ class ProposalRepository(Protocol):
         site_id: UUID,
         actor_id: UUID,
         operation: str,
+        idempotency_key: str,
     ) -> IdempotentResultV1 | None: ...
 
     def append_revision(
@@ -52,6 +53,7 @@ class ProposalRepository(Protocol):
         site_id: UUID,
         version_ordinal: int,
         operation: str,
+        idempotency_key: str,
         body_hash: str,
         actor_id: UUID,
         response_payload: dict,
@@ -64,6 +66,7 @@ class ProposalRepository(Protocol):
         proposal: ProposalV1,
         site_id: UUID,
         operation: str,
+        idempotency_key: str,
         body_hash: str,
         actor_id: UUID,
         response_payload: dict,

@@ -44,7 +44,11 @@
       "tool_call_id": "draft-1"
     },
     {
-      "response_text": "Draft request validated."
+      "output_tool": "draft",
+      "response_data": {
+        "draft_id": "7b1914413d38ac0e26624aaf515a14fb6725a7cb78e036955e2f4ad40e3959a6",
+        "schema_version": "1"
+      }
     }
   ],
   "expected_outcome": "allow",
@@ -89,7 +93,7 @@
   ],
   "expected_evidence_refs": [],
   "expected_visible_state": "completed",
-  "expected_visible_text": "Draft request validated.",
+  "expected_visible_text": "2 reversible constraints; preserved 0 existing locks; no baseline change.",
   "scenario_fixtures": [
     "eval-fixture:v1"
   ]

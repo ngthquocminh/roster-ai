@@ -1094,6 +1094,48 @@ export interface components {
             consequence_summary: string;
         };
         /**
+         * DraftConstraintProposalV1
+         * @description UNTRUSTED model input containing identifiers and typed arguments only.
+         */
+        DraftConstraintProposalV1: {
+            /**
+             * Kind
+             * @default set_min_workers_per_task
+             * @enum {string}
+             */
+            kind: "set_min_workers_per_task" | "scale_demand" | "lock_worker_shift" | "exclude_worker_from_task" | "set_max_hours";
+            /**
+             * Group
+             * @default work-areas-and-tasks
+             * @enum {string}
+             */
+            group: "work-areas-and-tasks" | "workers" | "demand" | "baseline-assignments" | "locks" | "constraints-and-objectives";
+            /**
+             * Record Id
+             * @default
+             */
+            record_id: string;
+            /** Related Group */
+            related_group?: ("work-areas-and-tasks" | "workers" | "demand" | "baseline-assignments" | "locks" | "constraints-and-objectives") | null;
+            /** Related Record Id */
+            related_record_id?: string | null;
+            /** N */
+            n?: number | null;
+            /** Factor */
+            factor?: number | null;
+            /** Max Hours */
+            max_hours?: number | null;
+            /** Start Minute */
+            start_minute?: number | null;
+            /** End Minute */
+            end_minute?: number | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
+        /**
          * DraftConstraintV1
          * @description TRUSTED, resolved and validated reversible solver input.
          */
@@ -1562,7 +1604,7 @@ export interface components {
         /** ProposalRevisionIn */
         ProposalRevisionIn: {
             /** Constraints */
-            constraints: components["schemas"]["DraftConstraintV1"][];
+            constraints: components["schemas"]["DraftConstraintProposalV1"][];
             /** Expected Resource Version */
             expected_resource_version: number;
         };
@@ -3802,6 +3844,15 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
         };
     };
     revise_api_v1_proposals__proposal_id__revisions_post: {
@@ -3875,6 +3926,15 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
         };
     };
     reject_api_v1_proposals__proposal_id__rejection_post: {
@@ -3941,6 +4001,15 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

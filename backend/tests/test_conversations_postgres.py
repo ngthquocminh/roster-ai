@@ -17,7 +17,8 @@ from adapters.postgres.conversation import (
     UnsupportedActivityPayloadError,
 )
 from adapters.postgres.proposal import PostgresProposalRepository
-from application.contracts.proposal import DraftConstraintV1, ProposalV1, ResolvedEntityV1
+from application.contracts.proposal import DraftConstraintProposalV1, ProposalV1
+from application.contracts.scenario_projection import TaskV1
 from application.contracts.grounding import GroundedResponseV1
 from adapters.postgres.schema import (
     agent_run,
@@ -41,6 +42,7 @@ from application.use_cases.manage_proposal import (
     RejectedProposalError,
     StaleProposalError,
     StaleResourceVersionError,
+    ProposalCommandError,
     reject_proposal,
     revise_proposal,
 )
@@ -749,26 +751,48 @@ def _draft_for_commands(engine, ids):
     return value
 
 
-def _revision_constraint(version_id, n=2):
-    return DraftConstraintV1(
+def _revision_constraint(n=2):
+    """The UNTRUSTED wire shape a browser posts.
+
+    No `resolved_entities`, no `label`, no `description` - a client cannot
+    supply any of them, and the application composes all three from the pinned
+    projection. Passing the trusted `DraftConstraintV1` here would exercise a
+    path the API no longer exposes.
+    """
+    return DraftConstraintProposalV1(
         kind="set_min_workers_per_task",
-        resolved_entities=(
-            ResolvedEntityV1(
-                group="work-areas-and-tasks", record_id="task:pick",
-                label="PICK", scenario_version_id=version_id,
-            ),
-        ),
+        group="work-areas-and-tasks",
+        record_id="task:pick",
         n=n,
-        description=f"Require {n} workers for PICK.",
     )
 
 
 class _CurrentProjection:
+    """Resolves exactly one task, so revision resolution runs for real."""
+
     def __init__(self, version_id):
         self.version_id = version_id
 
     def get_overview(self, _connection, _scenario_id):
-        return SimpleNamespace(scenario_version_id=self.version_id)
+        return SimpleNamespace(
+            scenario_version_id=self.version_id, horizon_minutes=10080
+        )
+
+    def resolve_task(self, _connection, _scenario_id, scenario_version_id, record_id):
+        if record_id != "task:pick":
+            return SimpleNamespace(
+                outcome="not_found", item=None,
+                current_scenario_version_id=scenario_version_id,
+            )
+        return SimpleNamespace(
+            outcome="resolved",
+            current_scenario_version_id=scenario_version_id,
+            item=TaskV1(
+                record_id="task:pick", task_id="PICK-1", name="Pick",
+                function="outbound", area_id="A1", area_name="Pick Face",
+                unit_type_id=None,
+            ),
+        )
 
 
 def test_revision_replay_does_not_append_a_second_version(
@@ -780,17 +804,17 @@ def test_revision_replay_does_not_append_a_second_version(
     projection = _CurrentProjection(ids["v2"])
     kwargs = dict(
         proposal_id=original.proposal_id, site_id=ids["site"], actor_id=ids["actor"],
-        constraints=(_revision_constraint(ids["v2"]),), expected_resource_version=1,
+        constraints=(_revision_constraint(),), expected_resource_version=1,
         idempotency_key="revision-replay",
     )
     with _site_context(engine, ids["site"]) as connection:
         first = revise_proposal(repository, projection, connection, **kwargs)
-    replay_kwargs = {**kwargs, "expected_resource_version": 2}
     with _site_context(engine, ids["site"]) as connection:
-        replay = revise_proposal(repository, projection, connection, **replay_kwargs)
+        replay = revise_proposal(repository, projection, connection, **kwargs)
 
     assert first is not None
     assert replay is not None
+    assert replay.proposal.proposal_version_id == first.proposal.proposal_version_id
     with engine.connect() as admin:
         assert admin.execute(
             select(func.count()).select_from(proposal_version).where(
@@ -800,7 +824,116 @@ def test_revision_replay_does_not_append_a_second_version(
         ).scalar_one() == 1
         assert admin.execute(
             select(func.count()).select_from(command_idempotency).where(
-                command_idempotency.c.operation.like("revision:%:revision-replay")
+                command_idempotency.c.operation == f"revision:{original.proposal_id}",
+                command_idempotency.c.idempotency_key == "revision-replay",
+            )
+        ).scalar_one() == 1
+
+
+def test_replaying_a_key_against_another_expected_version_conflicts(
+    governed_postgres_engine, ids
+) -> None:
+    """AD-8 scopes the key to the expected resource version too.
+
+    Reusing one key while claiming a different expected version is a
+    semantically different command, so it must conflict rather than hand back
+    the first command's stored result. Before this was fixed the second call
+    returned 200 carrying the first call's payload.
+    """
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    kwargs = dict(
+        proposal_id=original.proposal_id, site_id=ids["site"], actor_id=ids["actor"],
+        constraints=(_revision_constraint(),), expected_resource_version=1,
+        idempotency_key="version-scoped",
+    )
+    with _site_context(engine, ids["site"]) as connection:
+        revise_proposal(repository, projection, connection, **kwargs)
+    with pytest.raises(IdempotencyKeyConflictError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection,
+                **{**kwargs, "expected_resource_version": 2},
+            )
+
+
+def test_a_revision_cannot_smuggle_client_authored_content(
+    governed_postgres_engine, ids
+) -> None:
+    """Every persisted label and description is application-composed.
+
+    The wire contract carries identifiers and numbers only, and the stored
+    version's description is rebuilt from the resolved task, so it cannot
+    disagree with the argument beside it.
+    """
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    with _site_context(engine, ids["site"]) as connection:
+        revised = revise_proposal(
+            repository, projection, connection, proposal_id=original.proposal_id,
+            site_id=ids["site"], actor_id=ids["actor"],
+            constraints=(_revision_constraint(n=7),),
+            expected_resource_version=1, idempotency_key="composed",
+        )
+    assert revised is not None
+    constraint = revised.proposal.constraints[0]
+    assert constraint.n == 7
+    assert constraint.description == "Keep at least 7 workers on Pick (PICK-1)."
+    assert constraint.resolved_entities[0].label == "Pick (PICK-1)"
+    assert constraint.resolved_entities[0].scenario_version_id == ids["v2"]
+
+
+def test_a_revision_naming_an_unresolvable_record_is_refused(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    with pytest.raises(ProposalCommandError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection, proposal_id=original.proposal_id,
+                site_id=ids["site"], actor_id=ids["actor"],
+                constraints=(
+                    DraftConstraintProposalV1(
+                        kind="set_min_workers_per_task",
+                        group="work-areas-and-tasks", record_id="task:ghost", n=1,
+                    ),
+                ),
+                expected_resource_version=1, idempotency_key="ghost",
+            )
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.proposal_id == original.proposal_id
+            )
+        ).scalar_one() == 1
+
+
+def test_a_revision_with_an_out_of_range_argument_is_refused(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    with pytest.raises(ProposalCommandError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection, proposal_id=original.proposal_id,
+                site_id=ids["site"], actor_id=ids["actor"],
+                constraints=(_revision_constraint(n=-5),),
+                expected_resource_version=1, idempotency_key="negative",
+            )
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.proposal_id == original.proposal_id
             )
         ).scalar_one() == 1
 
@@ -819,13 +952,13 @@ def test_same_idempotency_key_with_another_body_conflicts_without_applying(
     with _site_context(engine, ids["site"]) as connection:
         revise_proposal(
             repository, projection, connection,
-            constraints=(_revision_constraint(ids["v2"], 2),), **common,
+            constraints=(_revision_constraint(n=2),), **common,
         )
     with pytest.raises(IdempotencyKeyConflictError):
         with _site_context(engine, ids["site"]) as connection:
             revise_proposal(
                 repository, projection, connection,
-                constraints=(_revision_constraint(ids["v2"], 3),), **common,
+                constraints=(_revision_constraint(n=3),), **common,
             )
     with engine.connect() as admin:
         assert admin.execute(
@@ -855,7 +988,7 @@ def test_reject_is_terminal_and_replay_safe(governed_postgres_engine, ids) -> No
             revise_proposal(
                 repository, projection, connection, proposal_id=original.proposal_id,
                 site_id=ids["site"], actor_id=ids["actor"],
-                constraints=(_revision_constraint(ids["v2"]),),
+                constraints=(_revision_constraint(),),
                 expected_resource_version=2, idempotency_key="revise-rejected",
             )
 
@@ -886,13 +1019,27 @@ def test_commands_refuse_stale_resource_and_stale_scenario_without_rows(
             connection, proposal=stale_draft, site_id=ids["site"],
             conversation_id=stale_original.id, actor_id=ids["actor"],
         )
+    # Revising a stale proposal is refused: it would silently rebase (AD-9).
     with pytest.raises(StaleProposalError):
         with _site_context(engine, ids["site"]) as connection:
-            reject_proposal(
+            revise_proposal(
                 repository, projection, connection, proposal_id=stale_draft.proposal_id,
                 site_id=ids["site"], actor_id=ids["actor"],
-                expected_resource_version=1, idempotency_key="stale-scenario",
+                constraints=(_revision_constraint(),),
+                expected_resource_version=1, idempotency_key="stale-scenario-revise",
             )
+    # Rejecting it is not. Rejection changes no baseline and is the only
+    # terminal path a stale draft has; refusing it would strand the aggregate
+    # `active` forever after a scenario reimport.
+    with _site_context(engine, ids["site"]) as connection:
+        closed = reject_proposal(
+            repository, projection, connection, proposal_id=stale_draft.proposal_id,
+            site_id=ids["site"], actor_id=ids["actor"],
+            expected_resource_version=1, idempotency_key="stale-scenario-reject",
+        )
+    assert closed is not None
+    assert closed.proposal.state == "rejected"
+    assert closed.stale is True
 
 
 def test_two_executors_claim_one_run_but_persist_one_terminal_response(

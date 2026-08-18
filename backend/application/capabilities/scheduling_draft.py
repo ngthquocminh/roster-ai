@@ -1,24 +1,29 @@
 """Governed validation and resolution of reversible scheduling drafts."""
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
+from datetime import timedelta
 from typing import Mapping
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID, uuid4
 
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
-from application.clarification.resolve import planner_label
-from application.contracts.canonical import contract_digest
 from application.contracts.capability_manifest import CapabilityError, CapabilityManifestV1
-from application.contracts.evidence_ref import EvidenceGroupV1
 from application.contracts.proposal import (
     DraftConstraintProposalV1,
     DraftConstraintV1,
     ProposalV1,
-    ResolvedEntityV1,
 )
-from application.contracts.scenario_projection import LockV1, WorkerV1
-from application.grounding.resolvers import resolver_name_for_evidence_group
+from application.contracts.scenario_projection import LockV1
+from application.drafting.resolve import (
+    HARD_MAX_HOURS_PER_WEEK,
+    DraftConstraintError,
+    DraftResolutionContextV1,
+    consequence_summary,
+    derive_draft_id,
+    resolve_constraints,
+    unique_entities,
+)
 from application.ports.scenario_projection import GroupQueryV1
 
 SCHEMA_VERSION = "1"
@@ -31,7 +36,6 @@ EVALUATION_FIXTURES = (
     "evals/golden/scheduling_draft/stale-version.json",
 )
 MAX_PRESERVED_LOCKS = 200
-HARD_MAX_HOURS_PER_WEEK = 56.0
 
 SCOPE_CONTROLS: Mapping[str, str] = {
     "site:trusted_dependencies": (
@@ -50,8 +54,30 @@ SCOPE_CONTROLS: Mapping[str, str] = {
     ),
     "validation:before_solver": (
         "COVERS exact entity resolution, closed kinds, combinations, and numeric bounds at "
-        "draft time. NOT COVERED: execution ordering relative to a governed solver, which does "
-        "not exist until Story 3.2 and inherits this refusal contract."
+        "draft time, applied identically to model tool calls and to the HTTP revise command "
+        "through application/drafting/resolve.py. NOT COVERED: execution ordering relative to "
+        "a governed solver, which does not exist until Story 3.2 and inherits this refusal "
+        "contract."
+    ),
+    "hours:flat_upper_bound": (
+        "COVERS a flat upper sanity bound of 56 weekly hours on set_max_hours. NOT COVERED: "
+        "per-employment-type caps. config/constants.py:DEFAULT_MAX_HOURS_PER_WEEK is a solver "
+        "FALLBACK consulted only when a type has no configured cap, and no per-worker ceiling "
+        "is reachable from the draft path — WorkerV1.contracted_hours is contractual, not a "
+        "cap. Recorded at review 2026-08-18 per docs/DOMAIN-MODEL.md section 5 item 7; the "
+        "real per-type cap arrives with the solver at Story 3.2."
+    ),
+    "identity:content_addressed_citation_only": (
+        "AUTHORITATIVE. draft_id is content-addressed so a golden case can cite it, and two "
+        "identical drafts legitimately share one. NOT COVERED: durable row identity — "
+        "proposal_id and proposal_version_id are freshly minted per draft, because a "
+        "content-addressed primary key turns a repeated request into a write conflict."
+    ),
+    "authz:site_scoped_shared_drafting": (
+        "COVERS site scoping through RLS and the server-owned site pin. NOT COVERED: per-actor "
+        "ownership of a proposal. Any planner in a site may revise or reject any draft in that "
+        "site; created_by_actor_id is an audit trail, not an authorization check. Accepted as "
+        "the MVP posture at review 2026-08-18."
     ),
     "metrics:none": (
         "AUTHORITATIVE. The capability composes descriptions and a consequence summary but "
@@ -82,6 +108,12 @@ class InvalidQueryError(SchedulingDraftError):
 
 class DraftFailedError(SchedulingDraftError):
     code = "draft_failed"
+
+
+class DraftTimeoutError(SchedulingDraftError):
+    """Retryable: the budget was exceeded, not the request malformed."""
+
+    code = "invalid_query"
 
 
 class BudgetExhaustedError(SchedulingDraftError):
@@ -126,198 +158,32 @@ def _model_view(result: SchedulingDraftResultV1) -> SchedulingDraftModelViewV1:
     return SchedulingDraftModelViewV1(draft_id=result.result_id)
 
 
-def _primitive_constraint(value: DraftConstraintV1) -> dict[str, object]:
-    payload = asdict(value)
-    for entity in payload["resolved_entities"]:
-        entity["scenario_version_id"] = str(entity["scenario_version_id"])
-    payload["resolved_entities"] = list(payload["resolved_entities"])
-    return payload
-
-
-def _primitive_lock(value: LockV1) -> dict[str, object]:
-    return asdict(value)
-
-
-def derive_draft_id(
-    scenario_version_id: UUID,
-    constraints: tuple[DraftConstraintV1, ...],
-    preserved_locks: tuple[LockV1, ...],
-) -> str:
-    """Return a stable citation over the immutable version and trusted inputs."""
-    return contract_digest(
-        {
-            "scenario_version_id": str(scenario_version_id),
-            "constraints": [_primitive_constraint(value) for value in constraints],
-            "preserved_locks": [_primitive_lock(value) for value in preserved_locks],
-        }
-    )[2]
-
-
-def _resolve_entity(
-    deps: AgentDepsV1,
-    group: EvidenceGroupV1,
-    record_id: str,
-) -> tuple[ResolvedEntityV1, object]:
-    resolver_name = resolver_name_for_evidence_group(group)
-    resolution = getattr(deps.projection_reader, resolver_name)(
-        deps.connection,
-        deps.scenario_id,
-        deps.scenario_version_id,
-        record_id,
-    )
-    if (
-        resolution is None
-        or resolution.outcome != "resolved"
-        or resolution.item is None
-        or resolution.current_scenario_version_id != deps.scenario_version_id
-        or resolution.item.record_id != record_id
-    ):
-        raise InvalidQueryError(f"{group} entity {record_id!r} is missing or not resolvable")
-    return (
-        ResolvedEntityV1(
-            group=group,
-            record_id=record_id,
-            label=planner_label(resolution.item),
-            scenario_version_id=deps.scenario_version_id,
-        ),
-        resolution.item,
+def _context(deps: AgentDepsV1) -> DraftResolutionContextV1:
+    return DraftResolutionContextV1(
+        projection_reader=deps.projection_reader,
+        connection=deps.connection,
+        scenario_id=deps.scenario_id,
+        scenario_version_id=deps.scenario_version_id,
     )
 
 
-def _require_primary(
-    deps: AgentDepsV1,
-    proposal: DraftConstraintProposalV1,
-    expected_group: EvidenceGroupV1,
-) -> tuple[ResolvedEntityV1, object]:
-    if proposal.group != expected_group:
-        raise InvalidQueryError(
-            f"{proposal.kind} requires group {expected_group!r}, got {proposal.group!r}"
-        )
-    return _resolve_entity(deps, proposal.group, proposal.record_id)
-
-
-def _resolve_constraint(
-    deps: AgentDepsV1,
-    proposal: DraftConstraintProposalV1,
-    horizon_minutes: int,
-) -> DraftConstraintV1:
-    numeric = {
-        "n": proposal.n,
-        "factor": proposal.factor,
-        "max_hours": proposal.max_hours,
-        "start_minute": proposal.start_minute,
-        "end_minute": proposal.end_minute,
-    }
-
-    def require_only(*allowed: str) -> None:
-        unexpected = sorted(
-            name for name, value in numeric.items()
-            if value is not None and name not in allowed
-        )
-        if unexpected:
-            raise InvalidQueryError(
-                f"{proposal.kind} does not accept arguments {unexpected}"
-            )
-
-    if proposal.kind == "set_min_workers_per_task":
-        require_only("n")
-        task, _ = _require_primary(deps, proposal, "work-areas-and-tasks")
-        if proposal.n is None or proposal.n <= 0:
-            raise InvalidQueryError("n must be greater than 0")
-        return DraftConstraintV1(
-            kind=proposal.kind,
-            resolved_entities=(task,),
-            n=proposal.n,
-            description=f"Keep at least {proposal.n} workers on {task.label}.",
-        )
-    if proposal.kind == "scale_demand":
-        require_only("factor")
-        task, _ = _require_primary(deps, proposal, "work-areas-and-tasks")
-        if proposal.factor is None or proposal.factor <= 0:
-            raise InvalidQueryError("factor must be greater than 0")
-        return DraftConstraintV1(
-            kind=proposal.kind,
-            resolved_entities=(task,),
-            factor=proposal.factor,
-            description=f"Scale demand for {task.label} by {proposal.factor}.",
-        )
-    if proposal.kind == "lock_worker_shift":
-        require_only("start_minute", "end_minute")
-        worker, _ = _require_primary(deps, proposal, "workers")
-        if (
-            proposal.start_minute is None
-            or proposal.end_minute is None
-            or proposal.start_minute < 0
-            or proposal.end_minute <= proposal.start_minute
-            or proposal.end_minute > horizon_minutes
-        ):
-            raise InvalidQueryError(
-                "start_minute must be non-negative and end_minute must be greater than start_minute"
-                f" and no greater than the horizon bound {horizon_minutes}"
-            )
-        return DraftConstraintV1(
-            kind=proposal.kind,
-            resolved_entities=(worker,),
-            start_minute=proposal.start_minute,
-            end_minute=proposal.end_minute,
-            description=(
-                f"Keep {worker.label} on the half-open window "
-                f"[{proposal.start_minute}, {proposal.end_minute})."
-            ),
-        )
-    if proposal.kind == "exclude_worker_from_task":
-        require_only()
-        worker, _ = _require_primary(deps, proposal, "workers")
-        if (
-            proposal.related_group != "work-areas-and-tasks"
-            or not proposal.related_record_id
-        ):
-            raise InvalidQueryError(
-                "exclude_worker_from_task requires a related work-areas-and-tasks record"
-            )
-        task, _ = _resolve_entity(
-            deps, proposal.related_group, proposal.related_record_id
-        )
-        return DraftConstraintV1(
-            kind=proposal.kind,
-            resolved_entities=(worker, task),
-            description=f"Keep {worker.label} off {task.label}.",
-        )
-    if proposal.kind == "set_max_hours":
-        require_only("max_hours")
-        worker, raw_worker = _require_primary(deps, proposal, "workers")
-        if proposal.max_hours is None or proposal.max_hours <= 0:
-            raise InvalidQueryError("max_hours must be greater than 0")
-        if proposal.max_hours > HARD_MAX_HOURS_PER_WEEK:
-            employment_type = (
-                raw_worker.employment_type if isinstance(raw_worker, WorkerV1) else "worker"
-            )
-            raise InvalidQueryError(
-                f"max_hours for {employment_type} must not exceed the hard cap "
-                f"of {HARD_MAX_HOURS_PER_WEEK:g}"
-            )
-        return DraftConstraintV1(
-            kind=proposal.kind,
-            resolved_entities=(worker,),
-            max_hours=proposal.max_hours,
-            description=f"Cap {worker.label} at {proposal.max_hours:g} hours per week.",
-        )
-    raise InvalidQueryError(f"unsupported draft constraint kind {proposal.kind!r}")
-
-
-def _preserved_locks(deps: AgentDepsV1) -> tuple[LockV1, ...]:
+def _preserved_locks(deps: AgentDepsV1, deadline, on_timeout) -> tuple[LockV1, ...]:
+    """Drain the lock supply under a bound, checking the deadline each page."""
     locks: list[LockV1] = []
     cursor = 0
     while True:
+        if deps.clock() > deadline:
+            on_timeout()
         remaining = MAX_PRESERVED_LOCKS - len(locks)
         if remaining <= 0:
             raise DraftFailedError(
                 f"locks exceed the bounded preservation limit of {MAX_PRESERVED_LOCKS}"
             )
+        limit = min(50, remaining)
         page = deps.projection_reader.get_locks(
             deps.connection,
             deps.scenario_id,
-            GroupQueryV1(cursor=cursor, limit=min(50, remaining)),
+            GroupQueryV1(cursor=cursor, limit=limit),
         )
         if page is None:
             raise ScenarioNotFoundError("scenario is unavailable while reading locks")
@@ -325,6 +191,12 @@ def _preserved_locks(deps: AgentDepsV1) -> tuple[LockV1, ...]:
             raise SiteMismatchError("lock page does not belong to the trusted site")
         if page.scenario_version_id != deps.scenario_version_id:
             raise VersionMismatchError("lock page does not match the selected scenario version")
+        if len(page.items) > limit:
+            # An over-long page would drive `remaining` negative on the next
+            # iteration and land on the ceiling error for the wrong reason.
+            raise DraftFailedError(
+                f"lock page returned {len(page.items)} records for a limit of {limit}"
+            )
         locks.extend(page.items)
         if page.next_cursor is None:
             return tuple(locks)
@@ -377,6 +249,13 @@ def scheduling_draft(
         )
 
     started_at = deps.clock()
+    deadline = started_at + timedelta(seconds=resolved_manifest.timeout_seconds)
+
+    def _timed_out() -> None:
+        raise DraftTimeoutError(
+            f"draft validation exceeded the {resolved_manifest.timeout_seconds}s budget"
+        )
+
     overview = deps.projection_reader.get_overview(deps.connection, deps.scenario_id)
     if overview is None:
         raise ScenarioNotFoundError("scenario is unavailable")
@@ -385,44 +264,36 @@ def scheduling_draft(
     if overview.scenario_version_id != deps.scenario_version_id:
         raise VersionMismatchError("scenario version changed before draft validation")
 
-    constraints = tuple(
-        _resolve_constraint(deps, value, overview.horizon_minutes)
-        for value in request.constraints
-    )
-    locks = _preserved_locks(deps)
-    elapsed = (deps.clock() - started_at).total_seconds()
-    if elapsed > resolved_manifest.timeout_seconds:
-        raise DraftFailedError(
-            f"draft validation exceeded the {resolved_manifest.timeout_seconds}s budget"
+    try:
+        constraints = resolve_constraints(
+            _context(deps),
+            request.constraints,
+            overview.horizon_minutes,
+            deadline=deadline,
+            clock=deps.clock,
+            on_timeout=_timed_out,
         )
+    except DraftConstraintError as exc:
+        # Retryable by design: the model can correct itself inside the run.
+        raise InvalidQueryError(str(exc)) from exc
+    locks = _preserved_locks(deps, deadline, _timed_out)
+    if deps.clock() > deadline:
+        _timed_out()
 
     result_id = derive_draft_id(deps.scenario_version_id, constraints, locks)
-    entities: list[ResolvedEntityV1] = []
-    seen: set[tuple[EvidenceGroupV1, str]] = set()
-    for constraint in constraints:
-        for entity in constraint.resolved_entities:
-            locator = (entity.group, entity.record_id)
-            if locator not in seen:
-                seen.add(locator)
-                entities.append(entity)
-    proposal_id = uuid5(NAMESPACE_URL, f"shiftmind:proposal:{result_id}")
-    proposal_version_id = uuid5(
-        NAMESPACE_URL, f"shiftmind:proposal-version:{result_id}:1"
-    )
+    # Durable identity is NOT the citation. A content-addressed primary key
+    # makes a legitimately repeated draft a write conflict that aborts the
+    # finalisation transaction and strands the agent run.
     proposal = ProposalV1(
-        proposal_id=proposal_id,
-        proposal_version_id=proposal_version_id,
+        proposal_id=uuid4(),
+        proposal_version_id=uuid4(),
         scenario_id=deps.scenario_id,
         scenario_version_id=deps.scenario_version_id,
         expected_baseline_schedule_version=overview.baseline_schedule_version,
-        resolved_entities=tuple(entities),
+        resolved_entities=unique_entities(constraints),
         constraints=constraints,
         preserved_locks=locks,
-        consequence_summary=(
-            f"{len(constraints)} reversible constraint"
-            f"{'s' if len(constraints) != 1 else ''}; preserved {len(locks)} existing "
-            f"lock{'s' if len(locks) != 1 else ''}; no baseline change."
-        ),
+        consequence_summary=consequence_summary(constraints, locks),
         canonical_hash=result_id,
     )
     return SchedulingDraftResultV1(result_id=result_id, proposal=proposal)
@@ -442,8 +313,9 @@ def scheduling_draft_module() -> CapabilityModuleV1:
 
 
 __all__ = [
-    "CAPABILITY_NAME", "ERROR_CODES", "EVALUATION_FIXTURES", "SCHEDULING_DRAFT_POLICY",
-    "SCOPE_CONTROLS", "BudgetExhaustedError", "DraftFailedError", "InvalidQueryError",
+    "CAPABILITY_NAME", "ERROR_CODES", "EVALUATION_FIXTURES", "HARD_MAX_HOURS_PER_WEEK",
+    "MAX_PRESERVED_LOCKS", "SCHEDULING_DRAFT_POLICY", "SCOPE_CONTROLS",
+    "BudgetExhaustedError", "DraftFailedError", "DraftTimeoutError", "InvalidQueryError",
     "ScenarioNotFoundError", "SchedulingDraftError", "SchedulingDraftModelViewV1",
     "SchedulingDraftRequestV1", "SchedulingDraftResultV1", "SiteMismatchError",
     "VersionMismatchError", "derive_draft_id", "scheduling_draft",

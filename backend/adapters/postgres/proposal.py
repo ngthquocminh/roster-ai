@@ -64,9 +64,12 @@ class PostgresProposalRepository:
     def get_current(
         self, connection: Connection, *, proposal_id: UUID, for_update: bool = False
     ) -> ProposalRecordV1 | None:
+        # OUTER join: an inner join folds "no such proposal" together with
+        # "this proposal has no current version", and the second is a broken
+        # invariant the caller must be able to tell apart from a 404.
         statement = (
             select(proposal_table, proposal_version.c.version_ordinal, proposal_version.c.payload)
-            .join(
+            .outerjoin(
                 proposal_version,
                 (proposal_version.c.id == proposal_table.c.current_version_id)
                 & (proposal_version.c.site_id == proposal_table.c.site_id),
@@ -78,6 +81,10 @@ class PostgresProposalRepository:
         row = connection.execute(statement).one_or_none()
         if row is None:
             return None
+        if row.payload is None:
+            raise RuntimeError(
+                f"proposal {proposal_id} has no current version row; the aggregate is inconsistent"
+            )
         value = TypeAdapter(ProposalV1).validate_python(row.payload)
         value = ProposalV1(
             **{
@@ -95,15 +102,18 @@ class PostgresProposalRepository:
         site_id: UUID,
         actor_id: UUID,
         operation: str,
+        idempotency_key: str,
     ) -> IdempotentResultV1 | None:
+        # Matches uq_command_idempotency_request exactly, so at most one row can
+        # satisfy it and the read needs no ordering to be deterministic.
         row = connection.execute(
             select(command_idempotency.c.body_hash, command_idempotency.c.response_payload)
             .where(
                 command_idempotency.c.site_id == site_id,
                 command_idempotency.c.actor_id == actor_id,
                 command_idempotency.c.operation == operation,
+                command_idempotency.c.idempotency_key == idempotency_key,
             )
-            .limit(1)
         ).one_or_none()
         return None if row is None else IdempotentResultV1(row.body_hash, row.response_payload)
 
@@ -115,6 +125,7 @@ class PostgresProposalRepository:
         site_id: UUID,
         version_ordinal: int,
         operation: str,
+        idempotency_key: str,
         body_hash: str,
         actor_id: UUID,
         response_payload: dict,
@@ -142,7 +153,8 @@ class PostgresProposalRepository:
         )
         self._store_idempotent_result(
             connection, site_id=site_id, actor_id=actor_id, operation=operation,
-            body_hash=body_hash, response_payload=response_payload,
+            idempotency_key=idempotency_key, body_hash=body_hash,
+            response_payload=response_payload,
         )
 
     def reject(
@@ -152,6 +164,7 @@ class PostgresProposalRepository:
         proposal: ProposalV1,
         site_id: UUID,
         operation: str,
+        idempotency_key: str,
         body_hash: str,
         actor_id: UUID,
         response_payload: dict,
@@ -164,7 +177,8 @@ class PostgresProposalRepository:
         )
         self._store_idempotent_result(
             connection, site_id=site_id, actor_id=actor_id, operation=operation,
-            body_hash=body_hash, response_payload=response_payload,
+            idempotency_key=idempotency_key, body_hash=body_hash,
+            response_payload=response_payload,
         )
 
     @staticmethod
@@ -174,6 +188,7 @@ class PostgresProposalRepository:
         site_id: UUID,
         actor_id: UUID,
         operation: str,
+        idempotency_key: str,
         body_hash: str,
         response_payload: dict,
     ) -> None:
@@ -182,6 +197,7 @@ class PostgresProposalRepository:
                 site_id=site_id,
                 actor_id=actor_id,
                 operation=operation,
+                idempotency_key=idempotency_key,
                 body_hash=body_hash,
                 response_payload=response_payload,
             ).on_conflict_do_nothing(constraint="uq_command_idempotency_request")

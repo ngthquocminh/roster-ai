@@ -70,6 +70,7 @@ def upgrade() -> None:
         "command_idempotency", *_common(),
         sa.Column("actor_id", UUID, nullable=False),
         sa.Column("operation", sa.String(100), nullable=False),
+        sa.Column("idempotency_key", sa.String(40), nullable=False),
         sa.Column("body_hash", sa.String(64), nullable=False),
         sa.Column("response_payload", postgresql.JSONB(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
@@ -77,7 +78,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["site_id"], ["site.id"], ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["actor_id"], ["app_user.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("site_id", "actor_id", "operation", "body_hash", name="uq_command_idempotency_request"),
+        # AD-8: one effect per (actor, site, operation, key). The body hash is
+        # deliberately NOT in the key — if it were, the same key with a
+        # different body would be a legal second row and the constraint could
+        # never fire on the case it exists to catch.
+        sa.UniqueConstraint("site_id", "actor_id", "operation", "idempotency_key", name="uq_command_idempotency_request"),
         sa.UniqueConstraint("id", "site_id", name="uq_command_idempotency_id_site"),
     )
     for table in ("proposal", "proposal_version", "command_idempotency"):

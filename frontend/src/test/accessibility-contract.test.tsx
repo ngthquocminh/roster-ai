@@ -361,7 +361,48 @@ it("makes the Draft card and its discontinuous commands independently identifiab
   const reject = screen.getByRole("button", { name: "Reject proposal" });
   expect(revise).not.toHaveAccessibleName(reject.textContent ?? "");
   expect(revise.parentElement).not.toBe(reject.parentElement);
+  // Structural, not merely visual: the rule between the two commands has to be
+  // reportable. An aria-hidden div left the discontinuity claim resting on two
+  // sibling divs, and EXPERIENCE.md makes automated coverage the only proof.
+  expect(within(region).getByRole("separator")).toBeInTheDocument();
   await expectAxeClean(container);
+});
+
+it("keeps the Draft commands discontinuous from Send itself (UX-DR35)", async () => {
+  mockProposal();
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { Composer } = await import("@/features/chat/Composer");
+
+  // Both tests named for this discontinuity previously compared revise against
+  // REJECT and never rendered a Send control at all, so the property the AC
+  // actually names -- that a draft command is not continuous with Send -- was
+  // never asserted against Send.
+  render(
+    <>
+      <Composer
+        isPending={false}
+        onSend={async () => undefined}
+        scenarioId={accessibleProposal.scenario_id}
+      />
+      <DraftCard proposalId={accessibleProposal.proposal_id} />
+    </>,
+  );
+
+  const send = screen.getByRole("button", { name: /^send$/i });
+  const revise = screen.getByRole("button", { name: "Revise proposal" });
+  const reject = screen.getByRole("button", { name: "Reject proposal" });
+  const region = screen.getByRole("region", { name: "Draft proposal" });
+
+  for (const command of [revise, reject]) {
+    expect(command).not.toBe(send);
+    expect(command).not.toHaveAccessibleName(send.textContent ?? "");
+    // The draft commands live inside the Draft region; Send does not. Being in
+    // separate containers is what makes them non-continuous controls rather
+    // than a single command strip.
+    expect(region).toContainElement(command);
+    expect(region).not.toContainElement(send);
+    expect(command.parentElement).not.toBe(send.parentElement);
+  }
 });
 
 it("announces stale Draft state and explains why revision is disabled", async () => {
@@ -376,7 +417,11 @@ it("announces stale Draft state and explains why revision is disabled", async ()
   expect(revise).toBeDisabled();
   expect(revise).toHaveAccessibleDescription(/scenario version changed/i);
   expect(screen.getByRole("button", { name: "Refresh proposal" })).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "Reject proposal" })).not.toBeInTheDocument();
+  // The described, disabled control must be the real submit control, not a
+  // screen-reader-only decoy standing in for one that was never rendered.
+  expect(revise.className).not.toMatch(/sr-only/);
+  // Rejection stays available while stale: it changes no baseline.
+  expect(screen.getByRole("button", { name: "Reject proposal" })).toBeEnabled();
 });
 
 it.each([

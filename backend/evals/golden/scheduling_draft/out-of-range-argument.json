@@ -31,10 +31,15 @@
       "tool_call_id": "draft-1"
     },
     {
-      "response_text": "The weekly cap is outside the allowed range."
+      "output_tool": "refusal",
+      "response_data": {
+        "reason": "unsupported_request",
+        "detail": "That constraint argument is outside the range a draft accepts.",
+        "next_step": "Choose a value inside the bound named in the refusal and try again."
+      }
     }
   ],
-  "expected_outcome": "allow",
+  "expected_outcome": "refuse",
   "expected_tool_calls": [
     {
       "tool_name": "scheduling_draft",
@@ -63,7 +68,7 @@
   ],
   "expected_evidence_refs": [],
   "expected_visible_state": "completed",
-  "expected_visible_text": "The weekly cap is outside the allowed range.",
+  "expected_visible_text": "That constraint argument is outside the range a draft accepts.",
   "scenario_fixtures": [
     "eval-fixture:v1"
   ]

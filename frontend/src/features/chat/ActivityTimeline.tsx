@@ -18,7 +18,6 @@ import type { NavigateFunction } from "react-router";
 type Activity = Timeline["items"][number];
 type AgentResponse = Extract<Activity, { activity_type: "agent_response" }>;
 type Clarification = Extract<Activity, { activity_type: "clarification" }>;
-type Draft = Extract<Activity, { activity_type: "draft" }>;
 type TerminalOutcome = Extract<Activity, { activity_type: "terminal_outcome" }>;
 type Claim = Extract<AgentResponse["response"]["segments"][number], { kind: "claim" }>;
 
@@ -285,7 +284,15 @@ function ActivityContent({
     case "clarification":
       return <Clarification item={item} />;
     case "draft":
-      return <DraftCard proposalId={(item as Draft).proposal_id} />;
+      // No cast: narrowing the discriminated union is exactly what the
+      // `const exhaustive: never` guard below exists to keep honest, and
+      // `as Draft` disabled that check for this branch alone.
+      return (
+        <DraftCard
+          consequenceSummary={item.consequence_summary}
+          proposalId={item.proposal_id}
+        />
+      );
     case "terminal_outcome":
       return <TerminalOutcome isLatest={isLatest} item={item} />;
     default: {

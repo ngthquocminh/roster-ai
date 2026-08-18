@@ -48,6 +48,7 @@ from evals.cases import (
     load_cases,
 )
 from evals.doubles import _to_model_response, build_model_double
+from application.use_cases.execute_turn import resolve_draft_citation
 from evals.grounding import ground_case_outcome
 from evals.evaluators import (
     Evaluator,
@@ -447,6 +448,18 @@ def test_all_version_controlled_golden_cases_pass_deterministically() -> None:
         results: list[object] = []
         runtime = _runtime_for_case(case, installed_modules(), results)
         outcome = _run_runtime_case(runtime, case)
+        # A draft case cites a trusted result rather than authoring one. Binding
+        # that citation is what turns `expected_visible_text` into a check on
+        # the APPLICATION-composed consequence summary instead of on model prose.
+        if outcome.draft is not None:
+            outcome = resolve_draft_citation(
+                outcome,
+                {
+                    value.result_id: value
+                    for value in results
+                    if isinstance(getattr(value, "result_id", None), str)
+                },
+            )
         if case.expected_grounding_outcome:
             outcome = ground_case_outcome(case, outcome, runtime._deps, tuple(results))
         verdict = ToolRoutingEvaluator(run_source="double").evaluate(

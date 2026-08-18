@@ -7,10 +7,17 @@ from pydantic import TypeAdapter
 
 from application.contracts.canonical import contract_digest
 from application.contracts.proposal import (
-    DraftConstraintV1,
+    DraftConstraintProposalV1,
     ProposalV1,
     ProposalViewV1,
-    ResolvedEntityV1,
+)
+from application.drafting.resolve import (
+    DraftConstraintError,
+    DraftResolutionContextV1,
+    consequence_summary,
+    derive_draft_id,
+    resolve_constraints,
+    unique_entities,
 )
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_projection import ScenarioProjectionReader
@@ -39,12 +46,26 @@ class RejectedProposalError(ProposalCommandError):
     pass
 
 
+class ProjectionUnavailableError(ProposalCommandError):
+    """The proposal row is readable but its scenario projection is not.
+
+    Distinct from "no such proposal": the planner should be told the scenario
+    could not be read, not that their draft has ceased to exist.
+    """
+
+
 def _view(proposal: ProposalV1, current_version_id: UUID) -> ProposalViewV1:
     return ProposalViewV1(
         proposal=proposal,
         current_scenario_version_id=current_version_id,
         stale=proposal.scenario_version_id != current_version_id,
     )
+
+
+def _max_constraints() -> int:
+    from settings import default_settings
+
+    return default_settings().scheduling_draft_max_constraints
 
 
 def get_proposal(
@@ -59,32 +80,66 @@ def get_proposal(
         return None
     overview = projection_reader.get_overview(connection, record.proposal.scenario_id)
     if overview is None:
-        return None
+        raise ProjectionUnavailableError(
+            "the proposal's scenario projection could not be read"
+        )
     return _view(record.proposal, overview.scenario_version_id)
 
 
-def _operation(proposal_id: UUID, command: str, idempotency_key: str) -> str:
-    return f"{command}:{proposal_id}:{idempotency_key}"
+def _operation(proposal_id: UUID, command: str) -> str:
+    """The operation is what the command *does* — never who asked for it.
+
+    Folding the idempotency key in here would make `command_idempotency.operation`
+    unique per request, so the table's `(site_id, actor_id, operation,
+    idempotency_key)` constraint could never fire on the case it exists for: one
+    key reused with a different body.
+    """
+    return f"{command}:{proposal_id}"
 
 
 def _body_hash(expected_resource_version: int, value: object | None = None) -> str:
-    # The expected version is the concurrency guard, not the semantic command
-    # body. A retry may refresh that guard while retaining the same effect key.
-    payload: dict[str, object] = {}
+    """AD-8: actor, site, operation, canonical body hash **plus expected version**.
+
+    Resolved at review 2026-08-18. The expected version is part of the command's
+    identity, not merely a concurrency guard: replaying one key against a
+    different expected version is a semantically different command and must
+    conflict rather than return the first command's stored result.
+    """
+    payload: dict[str, object] = {"expected_resource_version": expected_resource_version}
     if value is not None:
-        payload["constraints"] = TypeAdapter(type(value)).dump_python(value, mode="json")
+        payload["constraints"] = TypeAdapter(tuple[DraftConstraintProposalV1, ...]).dump_python(
+            tuple(value), mode="json"
+        )
     return contract_digest(payload)[2]
 
 
-def _replay_or_conflict(repository, connection, *, site_id, actor_id, operation, body_hash):
+def _replay_or_conflict(
+    repository,
+    connection,
+    *,
+    site_id,
+    actor_id,
+    operation,
+    idempotency_key,
+    body_hash,
+    current_version_id: UUID,
+):
     stored = repository.get_idempotent_result(
-        connection, site_id=site_id, actor_id=actor_id, operation=operation
+        connection,
+        site_id=site_id,
+        actor_id=actor_id,
+        operation=operation,
+        idempotency_key=idempotency_key,
     )
     if stored is None:
         return None
     if stored.body_hash != body_hash:
         raise IdempotencyKeyConflictError("idempotency key was already used with another body")
-    return TypeAdapter(ProposalViewV1).validate_python(stored.response_payload)
+    replayed = TypeAdapter(ProposalViewV1).validate_python(stored.response_payload)
+    # Recompute drift against the CURRENT projection rather than replaying the
+    # `stale` flag captured at first execution (AD-14: cached data is never
+    # authority). A replay after a scenario reimport must still read as stale.
+    return _view(replayed.proposal, current_version_id)
 
 
 def _current_for_command(repository, projection_reader, connection, proposal_id):
@@ -92,6 +147,10 @@ def _current_for_command(repository, projection_reader, connection, proposal_id)
     if record is None or record.proposal.scenario_id is None:
         return None, None
     overview = projection_reader.get_overview(connection, record.proposal.scenario_id)
+    if overview is None:
+        raise ProjectionUnavailableError(
+            "the proposal's scenario projection could not be read"
+        )
     return record, overview
 
 
@@ -103,13 +162,24 @@ def revise_proposal(
     proposal_id: UUID,
     site_id: UUID,
     actor_id: UUID,
-    constraints: tuple[DraftConstraintV1, ...],
+    constraints: tuple[DraftConstraintProposalV1, ...],
     expected_resource_version: int,
     idempotency_key: str,
 ) -> ProposalViewV1 | None:
-    if not 1 <= len(constraints) <= 10:
-        raise ProposalCommandError("a revision requires between one and ten constraints")
-    operation = _operation(proposal_id, "revision", idempotency_key)
+    """Resolve an UNTRUSTED revision and append an immutable version.
+
+    `constraints` arrives from a browser and is exactly as untrusted as a model
+    tool call, so it goes through the same resolver the draft capability uses
+    (`application/drafting/resolve.py`). Nothing the client sends — labels,
+    descriptions, resolved entities — is persisted; all of it is recomposed
+    from the pinned projection.
+    """
+    limit = _max_constraints()
+    if not 1 <= len(constraints) <= limit:
+        raise ProposalCommandError(
+            f"a revision requires between one and {limit} constraints"
+        )
+    operation = _operation(proposal_id, "revision")
     body_hash = _body_hash(expected_resource_version, constraints)
     record, overview = _current_for_command(
         repository, projection_reader, connection, proposal_id
@@ -118,7 +188,8 @@ def revise_proposal(
         return None
     replay = _replay_or_conflict(
         repository, connection, site_id=site_id, actor_id=actor_id,
-        operation=operation, body_hash=body_hash,
+        operation=operation, idempotency_key=idempotency_key, body_hash=body_hash,
+        current_version_id=overview.scenario_version_id,
     )
     if replay is not None:
         return replay
@@ -129,42 +200,28 @@ def revise_proposal(
         raise RejectedProposalError("a rejected proposal cannot be revised")
     if expected_resource_version != current.resource_version:
         raise StaleResourceVersionError(expected_resource_version, current.resource_version)
-    for constraint in constraints:
-        if any(
-            entity.scenario_version_id != current.scenario_version_id
-            for entity in constraint.resolved_entities
-        ):
-            raise ProposalCommandError("revision entities must match the proposal scenario version")
-    entities: list[ResolvedEntityV1] = []
-    seen: set[tuple[str, str]] = set()
-    for constraint in constraints:
-        for entity in constraint.resolved_entities:
-            key = (entity.group, entity.record_id)
-            if key not in seen:
-                seen.add(key)
-                entities.append(entity)
-    digest = contract_digest(
-        {
-            "scenario_version_id": str(current.scenario_version_id),
-            "constraints": TypeAdapter(type(constraints)).dump_python(constraints, mode="json"),
-            "preserved_locks": TypeAdapter(type(current.preserved_locks)).dump_python(
-                current.preserved_locks, mode="json"
-            ),
-        }
-    )[2]
+
+    context = DraftResolutionContextV1(
+        projection_reader=projection_reader,
+        connection=connection,
+        scenario_id=current.scenario_id,
+        scenario_version_id=current.scenario_version_id,
+    )
+    try:
+        resolved = resolve_constraints(context, constraints, overview.horizon_minutes)
+    except DraftConstraintError as exc:
+        raise ProposalCommandError(str(exc)) from exc
+
     revised = ProposalV1(
         **{
             **current.__dict__,
             "proposal_version_id": uuid4(),
-            "resolved_entities": tuple(entities),
-            "constraints": constraints,
-            "consequence_summary": (
-                f"{len(constraints)} reversible constraint"
-                f"{'s' if len(constraints) != 1 else ''}; preserved "
-                f"{len(current.preserved_locks)} existing lock"
-                f"{'s' if len(current.preserved_locks) != 1 else ''}; no baseline change."
+            "resolved_entities": unique_entities(resolved),
+            "constraints": resolved,
+            "consequence_summary": consequence_summary(resolved, current.preserved_locks),
+            "canonical_hash": derive_draft_id(
+                current.scenario_version_id, resolved, current.preserved_locks
             ),
-            "canonical_hash": digest,
             "resource_version": current.resource_version + 1,
         }
     )
@@ -175,6 +232,7 @@ def revise_proposal(
         site_id=site_id,
         version_ordinal=record.version_ordinal + 1,
         operation=operation,
+        idempotency_key=idempotency_key,
         body_hash=body_hash,
         actor_id=actor_id,
         response_payload=TypeAdapter(ProposalViewV1).dump_python(result, mode="json"),
@@ -193,7 +251,14 @@ def reject_proposal(
     expected_resource_version: int,
     idempotency_key: str,
 ) -> ProposalViewV1 | None:
-    operation = _operation(proposal_id, "rejection", idempotency_key)
+    """Close a proposal out. Permitted while stale, deliberately.
+
+    Rejection is not a rebase and changes no baseline — it is the one action
+    that is unconditionally safe on a stale draft. Refusing it would leave a
+    scenario reimport able to strand a proposal `active` with no terminal path,
+    which is the opposite of what AC3's "terminal rejection" asks for.
+    """
+    operation = _operation(proposal_id, "rejection")
     body_hash = _body_hash(expected_resource_version)
     record, overview = _current_for_command(
         repository, projection_reader, connection, proposal_id
@@ -202,13 +267,12 @@ def reject_proposal(
         return None
     replay = _replay_or_conflict(
         repository, connection, site_id=site_id, actor_id=actor_id,
-        operation=operation, body_hash=body_hash,
+        operation=operation, idempotency_key=idempotency_key, body_hash=body_hash,
+        current_version_id=overview.scenario_version_id,
     )
     if replay is not None:
         return replay
     current = record.proposal
-    if current.scenario_version_id != overview.scenario_version_id:
-        raise StaleProposalError("proposal is stale against the governed scenario version")
     if current.state == "rejected":
         raise RejectedProposalError("proposal is already rejected")
     if expected_resource_version != current.resource_version:
@@ -222,6 +286,7 @@ def reject_proposal(
         proposal=rejected,
         site_id=site_id,
         operation=operation,
+        idempotency_key=idempotency_key,
         body_hash=body_hash,
         actor_id=actor_id,
         response_payload=TypeAdapter(ProposalViewV1).dump_python(result, mode="json"),
@@ -230,7 +295,7 @@ def reject_proposal(
 
 
 __all__ = [
-    "IdempotencyKeyConflictError", "ProposalCommandError", "RejectedProposalError",
-    "StaleProposalError", "StaleResourceVersionError", "get_proposal",
-    "reject_proposal", "revise_proposal",
+    "IdempotencyKeyConflictError", "ProjectionUnavailableError", "ProposalCommandError",
+    "RejectedProposalError", "StaleProposalError", "StaleResourceVersionError",
+    "get_proposal", "reject_proposal", "revise_proposal",
 ]

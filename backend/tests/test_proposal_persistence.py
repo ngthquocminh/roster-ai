@@ -8,6 +8,7 @@ from sqlalchemy import CheckConstraint, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 
 from adapters.postgres.schema import metadata
+from application.contracts.activity import DraftReferenceV1
 from application.contracts.proposal import ProposalV1
 from application.ports.conversation import ClaimedAgentRunV1
 from application.use_cases.finalize_agent_run import finalize_agent_run
@@ -42,7 +43,11 @@ def test_proposal_metadata_has_governed_aggregate_tables() -> None:
         if isinstance(item, UniqueConstraint)
     }
     assert ("proposal_id", "version_ordinal") in version_uniques
-    assert ("site_id", "actor_id", "operation", "body_hash") in idempotency_uniques
+    # AD-8: one effect per (actor, site, operation, key). The body hash stays
+    # OUT of the key so a reused key with a different body collides here rather
+    # than inserting a second, indistinguishable row.
+    assert ("site_id", "actor_id", "operation", "idempotency_key") in idempotency_uniques
+    assert ("site_id", "actor_id", "operation", "body_hash") not in idempotency_uniques
     assert any("state IN ('active','rejected')" in str(item.sqltext) for item in proposal.constraints if isinstance(item, CheckConstraint))
 
 
@@ -97,7 +102,14 @@ def test_draft_finalization_composes_both_repositories_on_one_connection() -> No
     class Conversations:
         def finish_agent_run(self, used_connection, **kwargs):
             calls.append(("conversation", used_connection))
-            assert kwargs["payload"] is proposal
+            # AD-22: the repository receives the Conversation-owned reference,
+            # never the Scheduling aggregate's ProposalV1. The adapter must not
+            # have to read another owner's contract to build its activity.
+            handed = kwargs["payload"]
+            assert isinstance(handed, DraftReferenceV1)
+            assert handed.proposal_id == proposal.proposal_id
+            assert handed.proposal_version_id == proposal.proposal_version_id
+            assert handed.consequence_summary == proposal.consequence_summary
             return "completed"
 
     result = finalize_agent_run(
@@ -109,7 +121,10 @@ def test_draft_finalization_composes_both_repositories_on_one_connection() -> No
     )
 
     assert result == "completed"
-    assert calls == [("proposal", connection), ("conversation", connection)]
+    # The conversation write comes FIRST: it holds the still-claimable guard, so
+    # a duplicate finalisation raises AgentRunNotQueuedError instead of failing
+    # on a proposal-side constraint and masking the real cause.
+    assert calls == [("conversation", connection), ("proposal", connection)]
 
 
 def test_proposal_routes_do_not_widen_the_scenario_command_surface() -> None:
@@ -117,28 +132,101 @@ def test_proposal_routes_do_not_widen_the_scenario_command_surface() -> None:
     assert set(paths["/api/v1/proposals/{proposal_id}"]) >= {"get"}
     assert set(paths["/api/v1/proposals/{proposal_id}/revisions"]) >= {"post"}
     assert set(paths["/api/v1/proposals/{proposal_id}/rejection"]) >= {"post"}
-    assert all(
-        "post" not in operations
+    # Mirrors test_gate_a_mutation_audit.py's invariant, which is that scenario
+    # paths expose ONLY reads. Asserting merely that "post" is absent would let a
+    # future patch/put/delete through in silence.
+    method_keys = {"get", "put", "post", "delete", "patch", "head", "options", "trace"}
+    scenario_methods = {
+        method
         for path, operations in paths.items()
         if path.startswith("/api/v1/scenarios")
-    )
+        for method in operations
+        if method in method_keys
+    }
+    assert scenario_methods <= {"get"}, scenario_methods
+
+
+#: Every file that can emit SQL on a proposal command path. An import-block
+#: assertion over one of them would pass against a raw
+#: `connection.execute(text("UPDATE scenario ..."))`, so the scan below reads
+#: the statements themselves and covers the whole path.
+PROPOSAL_COMMAND_SOURCES = (
+    Path("adapters") / "postgres" / "proposal.py",
+    Path("application") / "use_cases" / "manage_proposal.py",
+    Path("application") / "use_cases" / "finalize_agent_run.py",
+    Path("api") / "routers" / "proposals.py",
+)
+
+#: Tables a proposal command may write. `scenario` and `scenario_version` are
+#: absent by design: a draft never changes the baseline (AC3).
+WRITABLE_TABLES = {"proposal", "proposal_version", "command_idempotency"}
+
+FORBIDDEN_TABLES = {"scenario", "scenario_version", "fixture_lineage", "evidence_reference"}
+
+
+def _sql_literals(tree: ast.AST) -> list[str]:
+    return [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    ]
 
 
 def test_proposal_commands_cannot_mutate_the_nonexistent_baseline_pointer() -> None:
-    """Until Story 4.3 adds a baseline pointer, imported schema tables prove scope.
+    """No proposal command's SQL touches a scenario table.
 
-    This deliberately stands in for a pointer assertion that cannot yet exist;
-    Story 4.3 must replace it with a direct unchanged-pointer proof.
+    Until Story 4.3 adds a real baseline pointer this stands in for a direct
+    unchanged-pointer proof, but it stands in by reading the SQL rather than the
+    import block: it sees raw `text()` statements, and it covers the use case,
+    the orchestrator and the router as well as the adapter.
     """
-    path = BACKEND_ROOT / "adapters" / "postgres" / "proposal.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    imported_schema_names = {
-        alias.asname or alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and node.module == "adapters.postgres.schema"
-        for alias in node.names
-    }
-    assert imported_schema_names == {
-        "proposal_table", "proposal_version", "command_idempotency"
-    }
+    offenders: dict[str, list[str]] = {}
+    for relative in PROPOSAL_COMMAND_SOURCES:
+        path = BACKEND_ROOT / relative
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        found = []
+        for literal in _sql_literals(tree):
+            lowered = " ".join(literal.lower().split())
+            if not any(
+                verb in lowered for verb in ("insert into", "update ", "delete from")
+            ):
+                continue
+            if any(table in lowered for table in FORBIDDEN_TABLES):
+                found.append(literal)
+        # SQLAlchemy Core call sites: insert()/update()/delete() must name only
+        # the three tables this aggregate owns.
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            if node.func.id not in {"insert", "update", "delete", "postgres_insert"}:
+                continue
+            for argument in node.args:
+                name = (
+                    argument.id if isinstance(argument, ast.Name)
+                    else getattr(argument, "attr", None)
+                )
+                if name is None:
+                    continue
+                normalized = name.removesuffix("_table")
+                if normalized not in WRITABLE_TABLES:
+                    found.append(f"{node.func.id}({name})")
+        if found:
+            offenders[relative.as_posix()] = found
+    assert not offenders, offenders
+
+
+def test_the_baseline_scan_would_catch_a_raw_scenario_mutation() -> None:
+    """Self-redness: the guard above must be able to go red.
+
+    A scan that cannot fail is the failure mode this story spends a page
+    warning about, so prove the detector on a synthetic offender.
+    """
+    tree = ast.parse(
+        'connection.execute(text("UPDATE scenario_version SET is_current = false"))'
+    )
+    literals = _sql_literals(tree)
+    assert any(
+        "update " in literal.lower()
+        and any(table in literal.lower() for table in FORBIDDEN_TABLES)
+        for literal in literals
+    )

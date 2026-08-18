@@ -9,8 +9,7 @@ from uuid import UUID
 from application.contracts.persisted_event import PersistedEventV1
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
-from application.contracts.activity import ActivityItemV1
-from application.contracts.proposal import ProposalV1
+from application.contracts.activity import ActivityItemV1, DraftReferenceV1
 
 
 @dataclass(frozen=True)
@@ -163,6 +162,6 @@ class ConversationRepository(Protocol):
         *,
         claimed: ClaimedAgentRunV1,
         status: str,
-        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1 | ProposalV1,
+        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1 | DraftReferenceV1,
         request_id: UUID,
     ) -> ExecutedAgentRunV1: ...

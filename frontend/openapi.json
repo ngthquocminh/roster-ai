@@ -3028,6 +3028,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -3132,6 +3142,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -3236,6 +3256,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -4136,6 +4166,133 @@
           "consequence_summary"
         ],
         "title": "DraftActivityOut"
+      },
+      "DraftConstraintProposalV1": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "set_min_workers_per_task",
+              "scale_demand",
+              "lock_worker_shift",
+              "exclude_worker_from_task",
+              "set_max_hours"
+            ],
+            "title": "Kind",
+            "default": "set_min_workers_per_task"
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "work-areas-and-tasks",
+              "workers",
+              "demand",
+              "baseline-assignments",
+              "locks",
+              "constraints-and-objectives"
+            ],
+            "title": "Group",
+            "default": "work-areas-and-tasks"
+          },
+          "record_id": {
+            "type": "string",
+            "title": "Record Id",
+            "default": ""
+          },
+          "related_group": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "work-areas-and-tasks",
+                  "workers",
+                  "demand",
+                  "baseline-assignments",
+                  "locks",
+                  "constraints-and-objectives"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Group"
+          },
+          "related_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Record Id"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factor"
+          },
+          "max_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Hours"
+          },
+          "start_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Minute"
+          },
+          "end_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Minute"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "DraftConstraintProposalV1",
+        "description": "UNTRUSTED model input containing identifiers and typed arguments only."
       },
       "DraftConstraintV1": {
         "properties": {
@@ -5165,10 +5322,10 @@
         "properties": {
           "constraints": {
             "items": {
-              "$ref": "#/components/schemas/DraftConstraintV1"
+              "$ref": "#/components/schemas/DraftConstraintProposalV1"
             },
             "type": "array",
-            "maxItems": 10,
+            "maxItems": 100,
             "minItems": 1,
             "title": "Constraints"
           },

@@ -30,6 +30,32 @@ from application.capabilities.scheduling_draft import SchedulingDraftResultV1
 from application.contracts.proposal import ProposalV1
 
 
+def resolve_draft_citation(
+    outcome: AgentRunOutcomeV1, trusted_by_id: dict[str, object]
+) -> AgentRunOutcomeV1:
+    """Bind the model's `draft_id` citation to a trusted capability result.
+
+    The model never authors a proposal; it cites one. Everything downstream
+    renders from `resolved_draft`, which comes from the tool-result sink, so a
+    citation naming no captured result is invalid output rather than a draft.
+
+    Extracted from `execute_turn` so the golden dataset can drive this exact
+    binding instead of a copy of it -- `evals/report.py` calls it for any case
+    whose run produced a draft citation.
+    """
+    if outcome.draft is None:
+        return outcome
+    trusted = trusted_by_id.get(outcome.draft.draft_id)
+    if not isinstance(trusted, SchedulingDraftResultV1):
+        return replace(
+            outcome,
+            status="failed",
+            failure_reason="invalid_output",
+            failure_source="agent",
+        )
+    return replace(outcome, resolved_draft=trusted.proposal)
+
+
 def execute_turn(
     runtime: AgentRuntime,
     deps: AgentDepsV1,
@@ -55,15 +81,7 @@ def execute_turn(
         if isinstance(getattr(value, "result_id", None), str)
     }
     if outcome.draft is not None:
-        trusted = by_id.get(outcome.draft.draft_id)
-        if not isinstance(trusted, SchedulingDraftResultV1):
-            return replace(
-                outcome,
-                status="failed",
-                failure_reason="invalid_output",
-                failure_source="agent",
-            )
-        return replace(outcome, resolved_draft=trusted.proposal)
+        return resolve_draft_citation(outcome, by_id)
     if outcome.answer is None:
         return outcome
     return replace(
@@ -329,6 +347,7 @@ def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
 
 
 __all__ = [
+    "resolve_draft_citation",
     "execute_turn",
     "failed_outcome_for_exception",
     "activity_payload",

@@ -20,12 +20,12 @@ from application.contracts.activity import (
     AgentResponseActivityV1,
     ClarificationActivityV1,
     DraftActivityV1,
+    DraftReferenceV1,
     PlannerMessageActivityV1,
     TerminalOutcomeActivityV1,
 )
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.grounding import GroundedResponseV1
-from application.contracts.proposal import ProposalV1
 from application.contracts.persisted_event import PersistedEventV1
 from application.ports.conversation import (
     AcceptedTurnV1,
@@ -353,7 +353,7 @@ class PostgresConversationRepository:
         *,
         claimed: ClaimedAgentRunV1,
         status: str,
-        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1 | ProposalV1,
+        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1 | DraftReferenceV1,
         request_id: UUID,
     ) -> ExecutedAgentRunV1:
         conv = connection.execute(
@@ -394,9 +394,7 @@ class PostgresConversationRepository:
             activity = ClarificationActivityV1(
                 activity_type="clarification", clarification=payload, **common
             )
-        elif isinstance(payload, ProposalV1):
-            if payload.proposal_id is None or payload.proposal_version_id is None:
-                raise ValueError("a trusted proposal must carry durable identifiers")
+        elif isinstance(payload, DraftReferenceV1):
             activity = DraftActivityV1(
                 activity_type="draft",
                 proposal_id=payload.proposal_id,

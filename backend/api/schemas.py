@@ -8,7 +8,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
-from application.contracts.proposal import DraftConstraintV1, ResolvedEntityV1
+from application.contracts.proposal import (
+    DraftConstraintProposalV1,
+    DraftConstraintV1,
+    ResolvedEntityV1,
+)
 from application.contracts.scenario_projection import LockV1
 
 
@@ -204,7 +208,16 @@ class TimelineOut(BaseModel):
 
 
 class ProposalRevisionIn(BaseModel):
-    constraints: list[DraftConstraintV1] = Field(min_length=1, max_length=10)
+    # The UNTRUSTED shape, deliberately. `DraftConstraintV1` is the trusted,
+    # resolved contract; binding it to a request body would let a client post
+    # its own `resolved_entities`, `label` and `description` straight into an
+    # immutable proposal version. The application re-resolves every identifier
+    # and recomposes every description through
+    # `application/drafting/resolve.py` — the same path the model-facing
+    # capability uses. The upper bound is enforced in the use case against
+    # `scheduling_draft_max_constraints`; the generous cap here only stops an
+    # unbounded body from being parsed at all.
+    constraints: list[DraftConstraintProposalV1] = Field(min_length=1, max_length=100)
     expected_resource_version: int = Field(ge=1)
 
 

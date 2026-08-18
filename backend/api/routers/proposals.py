@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header
+from fastapi.responses import JSONResponse
 from sqlalchemy import Connection
 
 from api.deps import get_projection_reader, get_proposal_repository, get_session, get_site_context
@@ -16,6 +17,7 @@ from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.session import ResolvedSession
 from application.use_cases.manage_proposal import (
     IdempotencyKeyConflictError,
+    ProjectionUnavailableError,
     ProposalCommandError,
     RejectedProposalError,
     StaleProposalError,
@@ -29,11 +31,15 @@ router = APIRouter(prefix="/proposals", tags=["proposals"])
 _PROBLEMS = {
     401: {"model": ProblemDetailsV1}, 403: {"model": ProblemDetailsV1},
     404: {"model": ProblemDetailsV1}, 409: {"model": ProblemDetailsV1},
-    422: {"model": ProblemDetailsV1},
+    422: {"model": ProblemDetailsV1}, 503: {"model": ProblemDetailsV1},
 }
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=40)]
 
-
+# `response_model=ProposalOut` describes the 200 body; `responses=_PROBLEMS`
+# describes every error body. The return annotations are omitted deliberately:
+# these handlers return either a ProposalOut or a JSONResponse problem, and
+# annotating them `-> ProposalOut` while returning a JSONResponse was a lie the
+# type checker could not see and the generated client inherited.
 def _out(value: ProposalViewV1) -> ProposalOut:
     proposal = value.proposal
     if (
@@ -50,7 +56,14 @@ def _out(value: ProposalViewV1) -> ProposalOut:
     )
 
 
-def _command_problem(exc: ProposalCommandError):
+def _not_found() -> JSONResponse:
+    return problem_response(
+        status=404, code="proposal_not_found", title="Proposal not found",
+        detail="No proposal with that identifier is visible in this site.",
+    )
+
+
+def _command_problem(exc: ProposalCommandError) -> JSONResponse:
     if isinstance(exc, IdempotencyKeyConflictError):
         return problem_response(
             status=409, code="idempotency_key_conflict", title="Idempotency key conflict",
@@ -71,9 +84,15 @@ def _command_problem(exc: ProposalCommandError):
             status=409, code="proposal_rejected", title="Proposal is rejected",
             detail="The rejected proposal cannot accept this command.",
         )
+    if isinstance(exc, ProjectionUnavailableError):
+        return problem_response(
+            status=503, code="scenario_projection_unavailable",
+            title="Scenario projection unavailable",
+            detail="The proposal exists but its scenario could not be read. Try again shortly.",
+        )
     return problem_response(
         status=422, code="invalid_proposal_command", title="Invalid proposal command",
-        detail="The proposal command could not be validated.",
+        detail=str(exc) or "The proposal command could not be validated.",
     )
 
 
@@ -83,10 +102,13 @@ def read_proposal(
     connection: Connection = Depends(get_site_context),
     repository: ProposalRepository = Depends(get_proposal_repository),
     projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
-) -> ProposalOut:
-    value = get_proposal(repository, projection_reader, connection, proposal_id=proposal_id)
+):
+    try:
+        value = get_proposal(repository, projection_reader, connection, proposal_id=proposal_id)
+    except ProposalCommandError as exc:
+        return _command_problem(exc)
     if value is None:
-        raise HTTPException(status_code=404)
+        return _not_found()
     return _out(value)
 
 
@@ -99,7 +121,7 @@ def revise(
     session: ResolvedSession = Depends(get_session),
     repository: ProposalRepository = Depends(get_proposal_repository),
     projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
-) -> ProposalOut:
+):
     try:
         value = revise_proposal(
             repository, projection_reader, connection, proposal_id=proposal_id,
@@ -111,7 +133,7 @@ def revise(
     except ProposalCommandError as exc:
         return _command_problem(exc)
     if value is None:
-        raise HTTPException(status_code=404)
+        return _not_found()
     return _out(value)
 
 
@@ -124,7 +146,7 @@ def reject(
     session: ResolvedSession = Depends(get_session),
     repository: ProposalRepository = Depends(get_proposal_repository),
     projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
-) -> ProposalOut:
+):
     try:
         value = reject_proposal(
             repository, projection_reader, connection, proposal_id=proposal_id,
@@ -135,5 +157,5 @@ def reject(
     except ProposalCommandError as exc:
         return _command_problem(exc)
     if value is None:
-        raise HTTPException(status_code=404)
+        return _not_found()
     return _out(value)

@@ -67,6 +67,23 @@ class ClarificationActivityV1:
 
 
 @dataclass(frozen=True)
+class DraftReferenceV1:
+    """A Conversation-owned pointer at a Scheduling-owned proposal.
+
+    AD-22 permits only an application orchestrator to cross aggregate owners, so
+    the conversation adapter must not read `ProposalV1` to decide what a draft
+    activity contains. `finalize_agent_run` performs that translation and hands
+    the repository this reference instead — the same three fields
+    `DraftActivityV1` persists, in a contract the Conversation side owns.
+    """
+
+    proposal_id: UUID
+    proposal_version_id: UUID
+    consequence_summary: str
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
 class DraftActivityV1:
     """Reference to the current proposal plus application-composed summary."""
 
