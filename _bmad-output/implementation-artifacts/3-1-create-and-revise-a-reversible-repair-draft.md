@@ -4,7 +4,7 @@ baseline_commit: 2b48b7287427befd38f4e34992fc17ce972fbf28
 
 # Story 3.1: Create and Revise a Reversible Repair Draft
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -721,7 +721,7 @@ need a route Phase A did not build.
       `baseline_schedule_version` is `None` at both producers, and `get_locks` has no supply at all.
 - [x] **No evidence file is owed.** No AC carries a measured threshold, and NFR35's four rows belong
       to Stories 1.4, 1.5, 2.4 and 3.5 (AD-26).
-- [ ] Re-run Gate A per AR28. **The two-commit dance is retired** as of commit `8139866`:
+- [x] Re-run Gate A per AR28. **The two-commit dance is retired** as of commit `8139866`:
       `gate_a_readiness.main()` now exempts its own output from the dirty-tree check. Follow
       `docs/GATE-A-RUNBOOK.md` §3 as written and expect `gate_a_passed: true`, `blocking: []`.
       Do not tune the registry or soften a result to reach `true`.
@@ -960,6 +960,7 @@ GPT-5 Codex
 - Task 10 RED proof: removing the card's accessible name made the mandated contract fail to find `region` named `Draft proposal`.
 - Task 10 GREEN: 43 focused accessibility/Draft/timeline tests passed, including axe, distinct command, stale live-region, and disabled-description assertions.
 - Task 11 pre-Gate regression: every zero-line fence passed; backend default 906 passed / 2 skipped / 7 deselected, PostgreSQL 51 passed, evidence convention 48 passed; frontend lint/typecheck/build passed, Vitest 404 passed / 64 files, Playwright 48 passed; `alembic check` reported no new operations.
+- Task 11 Gate A: fresh bound artifacts recorded pytest 907 passed / 1 skipped / 7 deselected, Vitest 404 passed, and Playwright 48 passed / 0 failed / 0 errors / 0 skipped; readiness returned `gate_a_passed: true`, `blocking: []`.
 
 ### Completion Notes List
 
@@ -975,6 +976,7 @@ GPT-5 Codex
 - Task 9: Regenerated OpenAPI/types and added generated-contract proposal wrappers, thin query/mutation hooks, an editable review card, explicit stale behavior, and a typed timeline branch. The missing `Separator` primitive assumed by the story was added in the existing shadcn-compatible component shape.
 - Task 10: Extended the Gate-A-visible accessibility contract with named-region, literal-status, command-discontinuity, live-region, disabled-explanation, and axe proofs; added no Playwright spec.
 - Task 11 (pre-Gate): Verified every scope fence, completed the full regression matrix, re-annotated the ledger without closing an item, recorded both Gap 1 corrections, and confirmed no story-specific evidence file is owed.
+- Task 11 (Gate A): Regenerated the repository-wide readiness report from fresh post-commit JUnit inputs; all AR28, NFR29, and measurement-integrity checks passed with no blocker.
 
 ### File List
 
@@ -1039,6 +1041,7 @@ GPT-5 Codex
 - _bmad-output/implementation-artifacts/3-1-create-and-revise-a-reversible-repair-draft.md (modified)
 - _bmad-output/implementation-artifacts/deferred-work.md (modified)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (modified)
+- evidence/story-1.11/gate-a-readiness-report.json (regenerated per AR28; not story-specific evidence)
 
 ## Change Log
 
@@ -1056,3 +1059,4 @@ GPT-5 Codex
 | 2026-08-18 | Implemented Task 9: generated proposal client surface and reviewable Draft card. |
 | 2026-08-18 | Implemented Task 10: automated Draft accessibility and command-discontinuity proof. |
 | 2026-08-18 | Completed Task 11 pre-Gate closure: hard fences, ledger corrections, full regression, Playwright, and migration drift check. |
+| 2026-08-18 | Completed Task 11 and moved to review after Gate A passed with no blocking checks. |
