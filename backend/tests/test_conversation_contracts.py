@@ -12,6 +12,7 @@ from application.contracts.activity import (
     ActivityTypeV1,
     AgentResponseActivityV1,
     ClarificationActivityV1,
+    DraftActivityV1,
     PlannerMessageActivityV1,
     TerminalOutcomeActivityV1,
 )
@@ -213,3 +214,27 @@ def test_new_activity_payloads_round_trip_through_storage_and_transport(kind: st
         assert transport.clarification.candidates[0].label == "CONTACT-9"
     else:
         assert transport.outcome.reason == "provider_error"
+
+
+def test_draft_activity_round_trips_through_storage_without_embedding_proposal() -> None:
+    activity = DraftActivityV1(
+        activity_id=uuid4(),
+        activity_type="draft",
+        conversation_id=uuid4(),
+        conversation_resource_version=4,
+        scenario_id=uuid4(),
+        scenario_version_id=uuid4(),
+        occurred_at=datetime.now(timezone.utc),
+        proposal_id=uuid4(),
+        proposal_version_id=uuid4(),
+        consequence_summary="Adds one worker to task PICK during the outbound window.",
+    )
+
+    raw = _payload_to_json(activity)
+    restored = _activity_from_payload(raw)
+
+    assert restored == activity
+    assert raw["activity_type"] == "draft"
+    assert raw["proposal_id"] == str(activity.proposal_id)
+    assert raw["proposal_version_id"] == str(activity.proposal_version_id)
+    assert "constraints" not in raw

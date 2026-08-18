@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
+from application.contracts.proposal import DraftConstraintV1, ProposalV1
 
 
 class ScenarioCreate(BaseModel):
@@ -151,6 +152,13 @@ class ClarificationActivityOut(ActivityCommonOut):
     clarification: ResolvedClarificationV1
 
 
+class DraftActivityOut(ActivityCommonOut):
+    activity_type: Literal["draft"]
+    proposal_id: UUID
+    proposal_version_id: UUID
+    consequence_summary: str
+
+
 class TerminalOutcomeActivityOut(ActivityCommonOut):
     activity_type: Literal["terminal_outcome"]
     outcome: TerminalOutcomeV1
@@ -160,6 +168,7 @@ ActivityItemOut = Annotated[
     PlannerMessageActivityOut
     | AgentResponseActivityOut
     | ClarificationActivityOut
+    | DraftActivityOut
     | TerminalOutcomeActivityOut,
     Field(discriminator="activity_type"),
 ]
@@ -191,6 +200,35 @@ class TimelineOut(BaseModel):
     # older ones exist beyond it. Without it a full page is indistinguishable
     # from an exactly-`limit`-length stream.
     has_more: bool
+
+
+class ProposalRevisionIn(BaseModel):
+    constraints: list[DraftConstraintV1] = Field(min_length=1, max_length=10)
+    expected_resource_version: int = Field(ge=1)
+
+
+class ProposalRejectionIn(BaseModel):
+    expected_resource_version: int = Field(ge=1)
+
+
+class ProposalOut(BaseModel):
+    proposal_id: UUID
+    proposal_version_id: UUID
+    scenario_id: UUID
+    scenario_version_id: UUID
+    current_scenario_version_id: UUID
+    expected_baseline_schedule_version: str | None
+    resolved_entities: list
+    constraints: list[DraftConstraintV1]
+    preserved_locks: list
+    consequence_summary: str
+    canonical_hash: str
+    canonical_hash_algorithm: str
+    canonical_hash_schema_version: str
+    state: Literal["active", "rejected"]
+    resource_version: int
+    stale: bool
+    schema_version: str
 
 
 class AuthSessionOut(BaseModel):

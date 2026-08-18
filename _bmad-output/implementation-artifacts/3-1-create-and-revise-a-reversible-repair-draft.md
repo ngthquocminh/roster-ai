@@ -363,20 +363,20 @@ tested.
 
 ### Task 1 — Re-home the RFC 8785 canonicalizer (AC: 1, 3)
 
-- [ ] Move `canonicalize_json` from `backend/adapters/postgres/canonical_json.py` to
+- [x] Move `canonicalize_json` from `backend/adapters/postgres/canonical_json.py` to
       `backend/application/contracts/canonical.py`, unchanged. It is already pure (stdlib +
       `decimal` only) and complete (surrogate rejection, JCS number form, UTF-16 key ordering).
-- [ ] Add `contract_digest(value) -> tuple[str, str, str]` returning
+- [x] Add `contract_digest(value) -> tuple[str, str, str]` returning
       `(algorithm, schema_version, hex_digest)` = `("sha256", "rfc8785-v1", ...)`. Those two literals
       already exist as CHECK constraints on `scenario_version`
       (`schema.py:134-141`); reuse the strings, do not coin new ones.
-- [ ] Update the only two importers — measured, not estimated:
+- [x] Update the only two importers — measured, not estimated:
       `adapters/postgres/fixture_history.py:14` and `backend/tests/test_fixture_history_import.py:12`.
-- [ ] **Why this is required rather than tidy:** the draft capability computes `ProposalV1`'s
+- [x] **Why this is required rather than tidy:** the draft capability computes `ProposalV1`'s
       canonical hash, and `test_handler_module_has_no_adapter_or_framework_import` forbids a handler
       module from importing `adapters`. A third hand-rolled canonicalizer is what AD-20 exists to
       prevent.
-- [ ] `scheduling_compute.py` keeps a **zero-line diff**. Its `derive_result_id` carries a
+- [x] `scheduling_compute.py` keeps a **zero-line diff**. Its `derive_result_id` carries a
       deliberately restricted float-free JCS variant and every `result_id` in the four frozen
       `scheduling_compute` golden cases is pinned to it. Add one test asserting the two agree on the
       float-free shapes `derive_result_id` accepts, so a future story can collapse them safely, and
@@ -384,77 +384,77 @@ tested.
 
 ### Task 2 — `ProposalV1` and the draft contracts (AC: 1, 2, 3, 4)
 
-- [ ] `application/contracts/proposal.py`, framework-free, frozen dataclasses, every one carrying
+- [x] `application/contracts/proposal.py`, framework-free, frozen dataclasses, every one carrying
       `schema_version` (AD-20 *Normative contract minimums*).
-- [ ] `DraftConstraintKindV1` — closed `Literal` with the five names from Decision 3. Docstring
+- [x] `DraftConstraintKindV1` — closed `Literal` with the five names from Decision 3. Docstring
       states it is a closed vocabulary persisted inside `persisted_event.payload` and
       `proposal_version`, so a change is a contract change (mirror
       `grounding.py:18-40`'s "NOTE on what is deliberately ABSENT" style).
-- [ ] `DraftConstraintProposalV1` — **UNTRUSTED** model input: `kind`, `group`, `record_id`(s), and
+- [x] `DraftConstraintProposalV1` — **UNTRUSTED** model input: `kind`, `group`, `record_id`(s), and
       the kind's typed arguments. No label, no prose, no version.
-- [ ] `ResolvedEntityV1` — **TRUSTED**: `group`, `record_id`, `label`, `scenario_version_id`. Reuse
+- [x] `ResolvedEntityV1` — **TRUSTED**: `group`, `record_id`, `label`, `scenario_version_id`. Reuse
       `application/clarification/resolve.py`'s `_planner_label` shape so Chat and Scenario Data agree
       on how a record is named; extract it to a shared helper rather than copying it.
-- [ ] `DraftConstraintV1` — **TRUSTED**: kind, resolved entities, validated arguments, and an
+- [x] `DraftConstraintV1` — **TRUSTED**: kind, resolved entities, validated arguments, and an
       application-composed `description` (the `parsed_constraint` idea from
       `services/constraint_service.py:250, 296, ...`, re-authored not imported).
-- [ ] `ProposalV1` — AD-20's required shape exactly: `proposal_id`, `proposal_version_id`,
+- [x] `ProposalV1` — AD-20's required shape exactly: `proposal_id`, `proposal_version_id`,
       `scenario_id`, `scenario_version_id`, `expected_baseline_schedule_version`,
       `resolved_entities`, `constraints`, `preserved_locks`, `consequence_summary`,
       `canonical_hash` (+ algorithm and schema version), `state`, `resource_version`.
-- [ ] `ProposalStateV1 = Literal["active", "rejected"]`. Two states, not five: nothing in this story
+- [x] `ProposalStateV1 = Literal["active", "rejected"]`. Two states, not five: nothing in this story
       supersedes or expires a proposal, and a value with no producer is the declared-but-unsupplied
       shape retro §3.3 names.
-- [ ] **Staleness is derived at read time and never written back.** It is a comparison between the
+- [x] **Staleness is derived at read time and never written back.** It is a comparison between the
       proposal's pinned `scenario_version_id` and the currently-resolved one, so persisting it would
       immediately be able to disagree with the truth. This is Story 2.8 Decision 6's shape
       ("'Evidence unavailable' is derived at render time and never written back") and it is why
       `ProposalStateV1` has no `stale` member.
-- [ ] `DraftProposalV1` — the **UNTRUSTED** model output variant. Exactly `draft_id` +
+- [x] `DraftProposalV1` — the **UNTRUSTED** model output variant. Exactly `draft_id` +
       `schema_version` (Decision 2).
-- [ ] Contract fixture + field-order test in the shape of
+- [x] Contract fixture + field-order test in the shape of
       `tests/test_evidence_ref.py::test_evidence_ref_v1_has_the_normative_frozen_transport_free_shape`
       (line 63), which asserts `[field.name for field in fields(reference)]` against a literal list.
       Story 3.2 freezes this contract into a `RunSnapshotV1`; pin the order now.
 
 ### Task 3 — The `scheduling_draft` capability (AC: 1)
 
-- [ ] `application/capabilities/scheduling_draft.py`, in `scheduling_compute.py`'s exact shape:
+- [x] `application/capabilities/scheduling_draft.py`, in `scheduling_compute.py`'s exact shape:
       module-level `CAPABILITY_NAME`, `SCHEDULING_DRAFT_POLICY`, `EVALUATION_FIXTURES`,
       `SCOPE_CONTROLS`, typed error classes with `code`, `ERROR_CODES`, a manifest factory with a
       **deferred** `from settings import default_settings` inside it, and a module factory.
-- [ ] Manifest: `risk_class="draft"`, `approval_policy="none"`, `permission="scenario:draft"`,
+- [x] Manifest: `risk_class="draft"`, `approval_policy="none"`, `permission="scenario:draft"`,
       `scope="current_site/current_scenario_version"`, non-empty `audit_mapping` and
       `evidence_mapping`, `version_semantics` naming the immutable pin,
       `idempotency_semantics` naming the canonical-hash addressing.
       `budget_limit` / `timeout_seconds` from new settings.
-- [ ] **`declared_codes == set(manifest.errors)` is an EQUALITY**
+- [x] **`declared_codes == set(manifest.errors)` is an EQUALITY**
       (`tests/test_capability_conformance.py:118-124`). Every `SchedulingDraftError` subclass in the
       module must appear in `errors`, and every declared code must have a class.
-- [ ] `retryable_error_codes` covers `invalid_query` only — Gap 2's correction path. A timeout is
+- [x] `retryable_error_codes` covers `invalid_query` only — Gap 2's correction path. A timeout is
       non-retryable (Story 2.7 Task 8's precedent: re-issuing burns the budget it protects).
-- [ ] Resolve every proposed entity through the trusted exact-target resolvers
+- [x] Resolve every proposed entity through the trusted exact-target resolvers
       (`resolver_name_for_evidence_group`, as `resolve_clarification` does). **A miss is a refusal,
       never a retarget** (AR11). Bound the proposed constraint tuple by an application constant, as
       `MAX_CANDIDATES = 10` bounds candidates — model output must not decide how many projection
       reads a request performs.
-- [ ] Read the pinned version's locks and carry them as `preserved_locks`. Read
+- [x] Read the pinned version's locks and carry them as `preserved_locks`. Read
       `ScenarioOverviewV1` for `expected_baseline_schedule_version`.
-- [ ] Compose `consequence_summary` from the validated constraints **in the application**. It must
+- [x] Compose `consequence_summary` from the validated constraints **in the application**. It must
       contain **no computed metric** — a handler that computes coverage has become an ungoverned
       calculator `scheduling_compute` must later recompute against (Story 2.5's trap list;
       `docs/DOMAIN-MODEL.md` §5).
-- [ ] `model_facing_view` returns `SchedulingDraftModelViewV1(draft_id=...)` and nothing else.
+- [x] `model_facing_view` returns `SchedulingDraftModelViewV1(draft_id=...)` and nothing else.
       `test_every_installed_module_declares_a_model_facing_view` and
       `test_scheduling_compute_never_hands_the_model_its_computed_value` are the precedent; add the
       sibling assertion for this module.
-- [ ] `draft_id` is content-addressed over `(scenario_version_id, canonical constraints, canonical
+- [x] `draft_id` is content-addressed over `(scenario_version_id, canonical constraints, canonical
       preserved locks)` using Task 1's canonicalizer. **Load-bearing:** golden cases drive an
       authored `ScriptedModelTurn`, so a scripted turn must be able to cite a `draft_id` written into
       the case file. A per-call UUID would make every draft case unwritable
       (`sprint-change-proposal-2026-08-13.md` §5.3 records this for `result_id`).
-- [ ] Register in `application/capabilities/installed.py` `_INSTALLED_FACTORIES` — one line.
-- [ ] `settings.py`: add `scheduling_draft_enabled: bool = True`, `scheduling_draft_timeout_seconds`,
+- [x] Register in `application/capabilities/installed.py` `_INSTALLED_FACTORIES` — one line.
+- [x] `settings.py`: add `scheduling_draft_enabled: bool = True`, `scheduling_draft_timeout_seconds`,
       `scheduling_draft_max_constraints`. **Three sites each** — dataclass field, the `_flag`/parse
       block (~lines 233-256), and the constructor kwargs (~lines 283-289). A policy with no setting
       makes `enabled_feature_policy` raise (`installed.py:63-68`), which is the intended fail-closed
@@ -462,50 +462,50 @@ tested.
 
 ### Task 4 — Fourth output variant and the untrusted→trusted seam (AC: 1)
 
-- [ ] `agent/runtime.py`: add `DRAFT_OUTPUT_TOOL = "draft"`, add
+- [x] `agent/runtime.py`: add `DRAFT_OUTPUT_TOOL = "draft"`, add
       `ToolOutput(DraftProposalV1, name=DRAFT_OUTPUT_TOOL)` to the `answer_type is not None` list,
       and **add the name to `OUTPUT_TOOL_NAMES`**.
-- [ ] **This is the quietest trap in Task 4.** `ToolRoutingEvaluator` counts every assistant tool
+- [x] **This is the quietest trap in Task 4.** `ToolRoutingEvaluator` counts every assistant tool
       call whose name is *not* in `output_tool_names` as a routed capability call
       (`evals/evaluators.py:44, 61`). Omit the name and every draft case fails on an "unexpected tool
       call" that is really the output tool — and the tempting fix loosens the branch carrying NFR28's
       100% consequential/prohibited rule. `runtime.py:57-61`'s own comment warns of exactly this
       ("a hardcoded copy diverges silently the day a fourth variant is registered").
-- [ ] `_reject_numeric_prose` already returns early for any output that is not a `GroundedAnswerV1`
+- [x] `_reject_numeric_prose` already returns early for any output that is not a `GroundedAnswerV1`
       (`runtime.py:168-169`), so a draft output needs no change there — confirm, do not modify.
-- [ ] `AgentRunOutcomeV1` gains the trust-boundary **pair**, mirroring
+- [x] `AgentRunOutcomeV1` gains the trust-boundary **pair**, mirroring
       `clarification`/`resolved_clarification` exactly: `draft: DraftProposalV1 | None` (UNTRUSTED,
       set in `backend/agent/`) and `resolved_draft: ProposalV1 | None` (TRUSTED, set by the use
       case). Document which side of the boundary each sits on, in the style of the existing
       `answer`/`grounded_response` comment block (`agent_runtime.py:229-248`).
-- [ ] `run_turn` sets `draft=` when `isinstance(result.output, DraftProposalV1)`, beside the existing
+- [x] `run_turn` sets `draft=` when `isinstance(result.output, DraftProposalV1)`, beside the existing
       clarification and refusal branches (`runtime.py:336-339`).
 
 ### Task 5 — Use-case wiring: four functions that each fail differently if missed (AC: 1, 2)
 
-- [ ] `execute_turn`: when `outcome.draft is not None`, bind the cited `draft_id` to the trusted
+- [x] `execute_turn`: when `outcome.draft is not None`, bind the cited `draft_id` to the trusted
       `SchedulingDraftResultV1` captured in `calculation_results`. A cited `draft_id` with no matching
       trusted result is a **failure**, not a rendered draft.
-- [ ] **The existing lookup will not find it.** `execute_turn.py:51-55` builds `by_id` by filtering
+- [x] **The existing lookup will not find it.** `execute_turn.py:51-55` builds `by_id` by filtering
       the sink on `isinstance(getattr(value, "result_id", None), str)` — a result exposing only
       `draft_id` is silently absent, and the symptom is "the model cited a draft that does not
       exist" on a turn where the capability succeeded. Resolve it deliberately, not by accident:
       name the trusted result's identifier field **`result_id`** (matching the sink's existing
       contract and `TrustedCalculationResultV1`'s convention) and let `DraftProposalV1.draft_id`
       be the model-facing name for the same value. Assert the round trip in a test.
-- [ ] `terminal_status`: add the resolved draft to the `any(value is not None for value in (...))`
+- [x] `terminal_status`: add the resolved draft to the `any(value is not None for value in (...))`
       tuple (`execute_turn.py:64-72`). **Miss this and a successful draft turn is finalised
       `agent_failed`** — it fails as a wrong status beside a rendered draft, not as an exception.
-- [ ] `terminal_outcome`: return `None` for a draft turn, as it does for a clarification and a
+- [x] `terminal_outcome`: return `None` for a draft turn, as it does for a clarification and a
       grounded response (`execute_turn.py:142-145`). Miss this and the payload becomes a
       `TerminalOutcomeV1` and the draft is silently discarded.
-- [ ] `activity_payload`: add the draft branch **before** the terminal branch.
-- [ ] `outcome_visible_text`: add a draft branch returning the application-composed
+- [x] `activity_payload`: add the draft branch **before** the terminal branch.
+- [x] `outcome_visible_text`: add a draft branch returning the application-composed
       `consequence_summary`. **Miss this and every draft golden case's `expected_visible_text`
       assertion is vacuous** — `runtime.py` sets `output_text=None` for every structured case, so
       `(output_text or "") == ""` passes trivially. That is the exact defect
       `deferred-work.md:132-136` recorded and Story 2.9 closed; do not reopen it.
-- [ ] **`rehydrate_history`: add a `DraftActivityV1` branch** (`execute_turn.py:271-306`). Its
+- [x] **`rehydrate_history`: add a `DraftActivityV1` branch** (`execute_turn.py:271-306`). Its
       `else` raises `ValueError("unsupported history activity ...")`, so **without this branch every
       subsequent turn in a conversation that contains a draft fails** — and no test written for
       *this* story's happy path goes red, because that path creates one draft in a fresh
@@ -513,103 +513,103 @@ tested.
 
 ### Task 6 — Persist the proposal and the draft activity (AC: 1, 3, 4)
 
-- [ ] One Alembic migration adding `proposal`, `proposal_version`, `command_idempotency` with the
+- [x] One Alembic migration adding `proposal`, `proposal_version`, `command_idempotency` with the
       RLS, index, composite-uniqueness and grant pattern from Decision 5. Mirror `a4f92d7c8e31`
       line for line.
-- [ ] `proposal`: `id`, `site_id`, `scenario_id`, `scenario_version_id`, `conversation_id`,
+- [x] `proposal`: `id`, `site_id`, `scenario_id`, `scenario_version_id`, `conversation_id`,
       `created_by_actor_id`, `state`, `current_version_id`, `resource_version`, `created_at`.
       Composite FKs `(scenario_id, site_id)`, `(scenario_version_id, site_id)`,
       `(conversation_id, site_id)` — the cross-aggregate composite-FK pattern `conversation` already
       uses (`a4f92d7c8e31:37-38`). `CHECK (state IN ('active','rejected'))`.
-- [ ] `proposal_version`: `id`, `site_id`, `proposal_id`, `version_ordinal`, `payload` JSONB,
+- [x] `proposal_version`: `id`, `site_id`, `proposal_id`, `version_ordinal`, `payload` JSONB,
       `canonical_hash`, `checksum_algorithm`, `checksum_schema_version`, `created_at`, with
       `UNIQUE (proposal_id, version_ordinal)` and the digest/algorithm CHECK constraints copied from
       `scenario_version` (`schema.py:134-145`).
-- [ ] `command_idempotency`: `id`, `site_id`, `actor_id`, `operation`, `body_hash`,
+- [x] `command_idempotency`: `id`, `site_id`, `actor_id`, `operation`, `body_hash`,
       `response_payload` JSONB, `created_at`, `UNIQUE (site_id, actor_id, operation, body_hash)`.
-- [ ] Add the tables to `adapters/postgres/schema.py`.
-- [ ] `application/ports/proposal.py` — a new port in `ports/scenario_projection.py`'s shape:
+- [x] Add the tables to `adapters/postgres/schema.py`.
+- [x] `application/ports/proposal.py` — a new port in `ports/scenario_projection.py`'s shape:
       `connection: Any`, **never** `sqlalchemy.Connection`. `ports/scenario_catalogue.py` is the
       repo's one open AD-1 violation and `deferred-work.md:151-168` names copying it as the mistake
       to avoid. Add the new module to `test_conversation_boundaries.py`'s `GUARDED` tuple — that
       file's own rule is that a guard whose list stops growing becomes a false coverage claim.
-- [ ] `adapters/postgres/proposal.py` implementing it.
-- [ ] `DraftActivityV1` in `application/contracts/activity.py` — the reserved `draft` discriminant
+- [x] `adapters/postgres/proposal.py` implementing it.
+- [x] `DraftActivityV1` in `application/contracts/activity.py` — the reserved `draft` discriminant
       (`activity.py:11-20`), carrying `proposal_id`, `proposal_version_id`, `consequence_summary`
       (Decision 6). Add it to the `ActivityItemV1` union.
-- [ ] `adapters/postgres/conversation.py`: `_payload_to_json` gains the draft branch,
+- [x] `adapters/postgres/conversation.py`: `_payload_to_json` gains the draft branch,
       `_activity_from_payload`'s allow-list gains `"draft"` and its constructor branch,
       `finish_agent_run`'s payload union and its `else: raise TypeError` (line 399-400) gain the
       draft type. `planner_message`'s serialized payload must stay **byte-identical**.
-- [ ] `finish_agent_run` writes the proposal, its first version, the activity event and the agent-run
+- [x] `finish_agent_run` writes the proposal, its first version, the activity event and the agent-run
       transition in **one** transaction (Decision 1's `create-draft` bundle).
-- [ ] **Do not delete or re-point `test_conversations_postgres.py`'s unrenderable-variant probe.**
+- [x] **Do not delete or re-point `test_conversations_postgres.py`'s unrenderable-variant probe.**
       Story 2.7 re-pointed it from `agent_response` to a still-reserved discriminant when that
       variant landed; if it now names `draft`, re-point it again at a reserved one. It is the only
       proof an unknown payload fails typed rather than as a 500 mid-timeline.
 
 ### Task 7 — Revise, reject, and the first idempotency key (AC: 3, 4)
 
-- [ ] `api/routers/proposals.py`, mounted `app.include_router(proposals.router, prefix="/api/v1")`
+- [x] `api/routers/proposals.py`, mounted `app.include_router(proposals.router, prefix="/api/v1")`
       with `prefix="/proposals"`.
-- [ ] `GET /api/v1/proposals/{proposal_id}` — current state, current version, resolved entities,
+- [x] `GET /api/v1/proposals/{proposal_id}` — current state, current version, resolved entities,
       constraints, preserved locks, expected versions, `state`, and a computed `stale` flag with the
       expected and current scenario version named (AC4, Decision 7).
-- [ ] `POST /api/v1/proposals/{proposal_id}/revisions` — body carries the revised constraint set,
+- [x] `POST /api/v1/proposals/{proposal_id}/revisions` — body carries the revised constraint set,
       `expected_resource_version`, and an `Idempotency-Key` header. Persists a new
       `proposal_version` and bumps `resource_version`.
-- [ ] `POST /api/v1/proposals/{proposal_id}/rejection` — same envelope; moves `state` to `rejected`
+- [x] `POST /api/v1/proposals/{proposal_id}/rejection` — same envelope; moves `state` to `rejected`
       once.
-- [ ] Idempotency, all inside the command transaction: canonical body hash via Task 1's
+- [x] Idempotency, all inside the command transaction: canonical body hash via Task 1's
       canonicalizer → look up `(site_id, actor_id, operation, body_hash)` → on hit return the stored
       response **unchanged**; on miss with a matching `expected_resource_version`, apply and store;
       on a **same key with a different body hash** return a stable conflict problem
       (`409`, code `idempotency_key_conflict`) and apply nothing; on a version mismatch return
       `409 stale_resource_version` naming expected and current.
-- [ ] **Prove replay does not double-apply against the database**, not against a mock: two
+- [x] **Prove replay does not double-apply against the database**, not against a mock: two
       sequential requests with the same key must leave exactly one new `proposal_version` row.
       A test that asserts the response bodies match would pass with no idempotency at all.
-- [ ] A revise or reject on a **stale** proposal is refused and applies nothing (AC4). A revise on a
+- [x] A revise or reject on a **stale** proposal is refused and applies nothing (AC4). A revise on a
       `rejected` proposal is refused. Both assert the row count is unchanged.
-- [ ] Assert the baseline is untouched — AC3's second clause. With no baseline pointer to move
+- [x] Assert the baseline is untouched — AC3's second clause. With no baseline pointer to move
       (Gap 1), the honest assertion is structural: no proposal command's SQL touches `scenario`,
       `scenario_version`, or any table outside the three this migration adds. Add an architecture
       test over `adapters/postgres/proposal.py` in the shape of
       `test_gate_a_postgres_read_adapters_contain_no_mutating_sql_literals`. Say in the test's
       docstring that it stands in for a pointer that does not exist yet, so Story 4.3 replaces rather
       than duplicates it.
-- [ ] `test_gate_a_mutation_audit.py` shows a **zero-line diff**. Add a companion assertion in the
+- [x] `test_gate_a_mutation_audit.py` shows a **zero-line diff**. Add a companion assertion in the
       new suite that no `/api/v1/scenarios` path gained a method — the mount decision made
       structural, so a later refactor that moves the router cannot pass silently.
 
 ### Task 8 — Evaluator cases and the NFR28/NFR5 answers (AC: 1)
 
-- [ ] Golden cases are **owed mechanically**, not optionally: `validate_manifest` requires non-empty
+- [x] Golden cases are **owed mechanically**, not optionally: `validate_manifest` requires non-empty
       `evaluation_fixtures` (`capability_manifest.py:107-108`) and
       `test_installed_module_conforms` asserts every named fixture is a real file on disk
       (`test_capability_conformance.py:116`).
-- [ ] Ship **exactly four** under `backend/evals/golden/scheduling_draft/`, tagged
+- [x] Ship **exactly four** under `backend/evals/golden/scheduling_draft/`, tagged
       `capability="scheduling_draft"`, `risk_class="draft"` (already in `RiskClassV1`):
       valid multi-constraint draft; unresolvable entity; out-of-range argument; stale expected
       version. Four exactly — `epics.md:1527` forbids padding, and NFR28's floor is four per allowed
       product capability.
-- [ ] Add `"scheduling_draft"` to `MVP_PRODUCT_CAPABILITIES`
+- [x] Add `"scheduling_draft"` to `MVP_PRODUCT_CAPABILITIES`
       (`tests/test_evaluation_harness.py:487`). PRD §4.8 item 2 — "create or revise a reversible
       schedule-change draft" — makes it a product capability, not an exemption.
       `test_every_capability_meets_the_nfr28_four_case_floor` is designed to fail on an unclassified
       capability; classifying it is the intended path.
-- [ ] **Answer the NFR5 question that test's own assertion message demands** (lines 517-522): which
+- [x] **Answer the NFR5 question that test's own assertion message demands** (lines 517-522): which
       untrusted content source can this capability's `model_facing_view` carry? **None new** — the
       view carries `draft_id` and nothing else, every label is application-composed from the
       governed projection (Decision 2), and the two covered sources (planner chat text, scenario
       data) are unchanged. **No new injection case is owed.** State this in the story's Completion
       Notes; an unstated answer reads as an unexamined one.
-- [ ] **No new evaluator.** Story 2.9 spent the last reserved evaluator fence
+- [x] **No new evaluator.** Story 2.9 spent the last reserved evaluator fence
       (`deferred-work.md:129-136`). `ToolRoutingEvaluator` and `PolicyOutcomeEvaluator` cover these
       four cases once Task 4's `OUTPUT_TOOL_NAMES` entry and Task 5's `outcome_visible_text` branch
       are in place. If a case appears to need a new evaluator, that is a signal one of those two
       wiring steps is missing.
-- [ ] Do **not** regenerate `evidence/story-2.2/evaluation-harness-demonstration.json`.
+- [x] Do **not** regenerate `evidence/story-2.2/evaluation-harness-demonstration.json`.
 
 ### ⛳ Checkpoint — commit Phase A and report six numbers
 
@@ -925,14 +925,110 @@ this story's changes.
 
 ### Agent Model Used
 
+GPT-5 Codex
+
+### Implementation Plan
+
+- Execute each story task in order using red-green-refactor, with a focused test gate and full regression before marking it complete.
+- Preserve the application/adapter boundary, immutable contract shapes, governed version pins, and zero-line scope fences named by the story.
+- Complete Phase A, record the required non-vacuous red proofs and checkpoint measurements, then continue through frontend delivery and Gate A.
+
 ### Debug Log References
+
+- Task 1 RED: focused collection failed because `application.contracts.canonical` did not exist.
+- Task 1 GREEN: 57 focused tests passed; full backend regression passed (868 passed, 2 skipped, 7 deselected).
+- Task 2 RED: proposal contract tests failed to import the not-yet-created shared label and proposal contracts.
+- Task 2 GREEN: 8 focused tests passed; full backend regression passed (871 passed, 2 skipped, 7 deselected).
+- Task 3 RED: capability tests initially failed because the module did not exist; after registration, the policy-setting test failed on the deliberately absent `scheduling_draft_enabled` supplier before that setting was added.
+- Task 3 GREEN: 71 focused capability/settings/conformance/boundary tests passed; full backend regression passed (889 passed, 2 skipped, 7 deselected).
+- Task 4 RED: adapter tests proved the `draft` output tool and outcome fields were absent and that the unchanged text-path snapshot had no draft fields.
+- Task 4 GREEN: 67 focused adapter/contract/evaluation tests passed; full backend regression passed (891 passed, 2 skipped, 7 deselected).
+- Task 5 RED: execute-turn tests failed to import the new draft activity and had no trusted-result binding, terminal, visible-text, or rehydration branches.
+- Task 5 GREEN: 25 focused use-case/conversation-contract tests passed; full backend regression passed (894 passed, 2 skipped, 7 deselected).
+- Task 6 RED: draft serialization, proposal metadata, and migration tests failed at the absent persistence seams.
+- Task 6 GREEN: 66 focused contract/schema/architecture/PostgreSQL tests passed (1 skipped); full backend regression passed (900 passed, 2 skipped, 7 deselected).
+- Task 7 RED: PostgreSQL command tests initially failed while resolving the deliberately minimal fixture projection, proving the new command paths were exercised before the current-version seam was isolated.
+- Task 7 GREEN: 72 focused proposal/API/schema/architecture tests passed; full backend regression passed (906 passed, 2 skipped, 7 deselected).
+- Task 8 GREEN: 45 focused evaluator/conformance tests passed; dataset is exactly 21 cases with exactly 4 scheduling-draft cases; full backend regression passed (906 passed, 2 skipped, 7 deselected).
+- Phase A checkpoint: 906 passed / 2 skipped / 7 deselected versus the archived `2b48b72` baseline of 867 executable passes / 1 skipped / 7 deselected (+39 passes, +1 intentional skip). The archive's 14 evidence-binding failures were solely caused by its synthetic one-commit Git history.
+- Phase A checkpoint: `alembic check` reported `No new upgrade operations detected.` with exactly one new migration; `frontend/` had a zero-line diff.
+- Phase A checkpoint: golden dataset total 21 — demonstration 2, scheduling_compute 4, scheduling_draft 4, scheduling_inspect 11.
+- Phase A mutation proof: removing the draft-history branch raised exactly `ValueError: unsupported history activity DraftActivityV1`; restoring it returned the focused test to green.
+- Phase A mutation proof: removing the command-idempotency lookup made the database replay assertion fail with 2 new revision rows versus 1 expected; restoring it returned the focused test to green.
 
 ### Completion Notes List
 
+- Task 1: Re-homed the complete RFC 8785 canonicalizer under application contracts, added governed SHA-256 digest metadata, updated the two measured importers, and proved compatibility with the deliberately retained float-free scheduling-compute identifier path.
+- Task 2: Added frozen, framework-free proposal contracts with pinned field order and closed vocabularies, a round-trip JSON fixture, derived-only staleness, and a shared application-owned planner label.
+- Task 3: Added the governed draft capability with exact entity resolution, bounded validation, real lock preservation, truthful baseline-version handling, content-addressed identifiers, model-minimal projection, static installation, feature-policy settings, and retryable invalid-query failures.
+- Task 4: Added the fourth named `draft` output tool, kept it excluded from capability routing results, and carried model citations separately from trusted resolved proposals.
+- Task 5: Bound draft citations only to same-turn trusted capability results, failed closed on unmatched citations, finalized valid drafts as completed, projected non-vacuous visible text, and rehydrated later turns from draft activities.
+- Task 6: Added governed proposal/version/idempotency storage, a framework-free proposal port and adapter, application-owned atomic finalization, draft activity persistence, RLS/grants, and commit/rollback integration proofs.
+- Task 7: Added current proposal reads, immutable revisions, terminal rejection, derived staleness, optimistic concurrency, transactional canonical-body idempotency, stable conflicts, and structural baseline/scenario mutation fences.
+- Task 8: Shipped exactly four scheduling-draft goldens, including a valid multi-constraint draft, and classified the capability under the NFR28 product floor. NFR5 adds no injection case: the model-facing view carries only `draft_id`; application-composed labels never enter it, so the untrusted sources remain planner chat text and scenario data.
+- Phase A checkpoint completed without an abort condition: both paging/idempotency red proofs were observed, the original no-baseline/no-lock-supply gaps remain truthful, and the required proposal route was delivered within Phase A.
+
 ### File List
+
+- backend/application/contracts/canonical.py (new)
+- backend/adapters/postgres/canonical_json.py (deleted)
+- backend/adapters/postgres/fixture_history.py (modified)
+- backend/tests/test_fixture_history_import.py (modified)
+- backend/tests/test_scheduling_compute.py (modified)
+- backend/application/contracts/proposal.py (new)
+- backend/application/clarification/resolve.py (modified)
+- backend/tests/test_proposal_contracts.py (new)
+- backend/tests/fixtures/proposal-v1.json (new)
+- backend/application/capabilities/scheduling_draft.py (new)
+- backend/application/capabilities/installed.py (modified)
+- backend/settings.py (modified)
+- backend/tests/test_scheduling_draft.py (new)
+- backend/tests/test_settings.py (modified)
+- backend/tests/test_capability_conformance.py (modified)
+- backend/tests/architecture/test_execute_turn_boundaries.py (modified)
+- backend/evals/golden/scheduling_draft/valid.json (new)
+- backend/evals/golden/scheduling_draft/unresolvable-entity.json (new)
+- backend/evals/golden/scheduling_draft/out-of-range-argument.json (new)
+- backend/evals/golden/scheduling_draft/stale-version.json (new)
+- backend/tests/test_evaluation_harness.py (modified)
+- backend/agent/runtime.py (modified)
+- backend/application/contracts/agent_runtime.py (modified)
+- backend/tests/test_agent_runtime_adapter.py (modified)
+- backend/application/contracts/activity.py (modified)
+- backend/application/use_cases/execute_turn.py (modified)
+- backend/tests/test_execute_turn_use_case.py (modified)
+- backend/application/ports/proposal.py (new)
+- backend/application/use_cases/finalize_agent_run.py (new)
+- backend/application/use_cases/manage_proposal.py (new)
+- backend/adapters/postgres/proposal.py (new)
+- backend/migrations/versions/e9f0a1b2c3d4_add_reversible_proposals.py (new)
+- backend/application/ports/conversation.py (modified)
+- backend/adapters/postgres/conversation.py (modified)
+- backend/adapters/postgres/schema.py (modified)
+- backend/api/deps.py (modified)
+- backend/api/routers/conversations.py (modified)
+- backend/api/routers/proposals.py (new)
+- backend/api/schemas.py (modified)
+- backend/api/main.py (modified)
+- backend/tests/test_conversation_contracts.py (modified)
+- backend/tests/test_conversations_postgres.py (modified)
+- backend/tests/test_postgres_schema.py (modified)
+- backend/tests/test_proposal_persistence.py (new)
+- backend/tests/test_evidence_binding.py (modified)
+- backend/tests/architecture/test_conversation_boundaries.py (modified)
+- _bmad-output/implementation-artifacts/3-1-create-and-revise-a-reversible-repair-draft.md (modified)
+- _bmad-output/implementation-artifacts/sprint-status.yaml (modified)
 
 ## Change Log
 
 | Date | Change |
 |---|---|
 | 2026-08-18 | Story created. Seven decisions and two honest gaps recorded; ledger routed (closes nothing, re-annotates `:172-176`, corrects the retro's Story 3.1 premise and two Story 2.7 premises). |
+| 2026-08-18 | Implemented Task 1: application-owned RFC 8785 canonicalization and governed contract digests. |
+| 2026-08-18 | Implemented Task 2: frozen reversible-proposal contract family and transport fixture. |
+| 2026-08-18 | Implemented Task 3: governed scheduling-draft capability and policy wiring. |
+| 2026-08-18 | Implemented Task 4: named draft output and untrusted/trusted outcome seam. |
+| 2026-08-18 | Implemented Task 5: trusted draft binding, terminal wiring, visibility, and history rehydration. |
+| 2026-08-18 | Implemented Task 6: governed proposal persistence and atomic draft finalization. |
+| 2026-08-18 | Implemented Task 7: proposal reads, idempotent revisions, and terminal rejection. |
+| 2026-08-18 | Implemented Task 8: four-case scheduling-draft evaluator coverage and NFR5/NFR28 classification. |

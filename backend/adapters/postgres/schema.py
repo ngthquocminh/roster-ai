@@ -339,6 +339,68 @@ Index("ix_message_conversation_id", message.c.conversation_id)
 Index("ix_agent_run_conversation_created", agent_run.c.conversation_id, agent_run.c.created_at)
 Index("ix_persisted_event_conversation_id", persisted_event.c.conversation_id)
 
+proposal = Table(
+    "proposal", metadata, _id_column(), _site_id_column(),
+    Column("scenario_id", UUID(as_uuid=True), nullable=False),
+    Column("scenario_version_id", UUID(as_uuid=True), nullable=False),
+    Column("conversation_id", UUID(as_uuid=True), nullable=False),
+    Column("created_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
+    Column("state", String(20), nullable=False, server_default=text("'active'")),
+    Column("current_version_id", UUID(as_uuid=True), nullable=True),
+    Column("resource_version", BigInteger, nullable=False, server_default=text("1")),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    ForeignKeyConstraint(["scenario_id", "site_id"], ["scenario.id", "scenario.site_id"], name="fk_proposal_scenario_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["scenario_version_id", "site_id"], ["scenario_version.id", "scenario_version.site_id"], name="fk_proposal_scenario_version_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_proposal_conversation_site", ondelete="RESTRICT"),
+    UniqueConstraint("id", "site_id", name="uq_proposal_id_site"),
+    CheckConstraint("state IN ('active','rejected')", name="ck_proposal_state"),
+)
+
+proposal_version = Table(
+    "proposal_version", metadata, _id_column(), _site_id_column(),
+    Column("proposal_id", UUID(as_uuid=True), nullable=False),
+    Column("version_ordinal", BigInteger, nullable=False),
+    Column("payload", JSONB, nullable=False),
+    Column("canonical_hash", String(64), nullable=False),
+    Column("checksum_algorithm", String(20), nullable=False, server_default=text("'sha256'")),
+    Column("checksum_schema_version", String(40), nullable=False, server_default=text("'rfc8785-v1'")),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    ForeignKeyConstraint(["proposal_id", "site_id"], ["proposal.id", "proposal.site_id"], name="fk_proposal_version_proposal_site", ondelete="RESTRICT"),
+    UniqueConstraint("proposal_id", "version_ordinal", name="uq_proposal_version_ordinal"),
+    UniqueConstraint("id", "site_id", name="uq_proposal_version_id_site"),
+    CheckConstraint("checksum_algorithm = 'sha256'", name="ck_proposal_version_checksum_algorithm"),
+    CheckConstraint("checksum_schema_version = 'rfc8785-v1'", name="ck_proposal_version_checksum_schema_version"),
+    CheckConstraint("canonical_hash ~ '^[0-9a-f]{64}$'", name="ck_proposal_version_canonical_hash"),
+)
+proposal.append_constraint(
+    ForeignKeyConstraint(
+        ["current_version_id", "site_id"],
+        ["proposal_version.id", "proposal_version.site_id"],
+        name="fk_proposal_current_version_site",
+        ondelete="RESTRICT",
+        use_alter=True,
+    )
+)
+
+command_idempotency = Table(
+    "command_idempotency", metadata, _id_column(), _site_id_column(),
+    Column("actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
+    Column("operation", String(100), nullable=False),
+    Column("body_hash", String(64), nullable=False),
+    Column("response_payload", JSONB, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    UniqueConstraint("site_id", "actor_id", "operation", "body_hash", name="uq_command_idempotency_request"),
+    UniqueConstraint("id", "site_id", name="uq_command_idempotency_id_site"),
+    CheckConstraint("body_hash ~ '^[0-9a-f]{64}$'", name="ck_command_idempotency_body_hash"),
+)
+
+Index("ix_proposal_site_id", proposal.c.site_id)
+Index("ix_proposal_version_site_id", proposal_version.c.site_id)
+Index("ix_command_idempotency_site_id", command_idempotency.c.site_id)
+Index("ix_proposal_conversation_id", proposal.c.conversation_id)
+Index("ix_proposal_version_proposal_id", proposal_version.c.proposal_id)
+Index("ix_command_idempotency_actor_operation", command_idempotency.c.actor_id, command_idempotency.c.operation)
+
 login_handshake = Table(
     "login_handshake",
     metadata,

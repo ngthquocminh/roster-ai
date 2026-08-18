@@ -28,7 +28,7 @@ MAX_CANDIDATES = 10
 # against the other without leaving Chat. Every group therefore renders the
 # columns `scenario-data/columns.ts` marks `essential: true`, so the two
 # surfaces agree and the model's wording is comparable against real rows.
-def _planner_label(item: object) -> str:
+def planner_label(item: object) -> str:
     """Render the identifying essential columns the Scenario Data grid shows."""
     if isinstance(item, TaskV1):
         return f"{item.name} ({item.task_id})"
@@ -88,7 +88,7 @@ def resolve_clarification(
             EntityCandidateV1(
                 group=proposal.group,
                 record_id=proposal.record_id,
-                label=_planner_label(resolution.item),
+                label=planner_label(resolution.item),
                 scenario_version_id=deps.scenario_version_id,
             )
         )
@@ -101,4 +101,4 @@ def resolve_clarification(
     )
 
 
-__all__ = ["resolve_clarification"]
+__all__ = ["planner_label", "resolve_clarification"]

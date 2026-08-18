@@ -92,12 +92,14 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
     all_on = replace_dataclass(
         settings,
         scheduling_compute_enabled=True,
+        scheduling_draft_enabled=True,
         scheduling_inspect_enabled=True,
         demonstration_enabled=True,
     )
     all_off = replace_dataclass(
         settings,
         scheduling_compute_enabled=False,
+        scheduling_draft_enabled=False,
         scheduling_inspect_enabled=False,
         demonstration_enabled=False,
     )
@@ -126,6 +128,8 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
     # And the discriminating case: turning exactly one off removes exactly it.
     compute_off = replace_dataclass(all_on, scheduling_compute_enabled=False)
     assert _granted(compute_off) == every_name - {"scheduling_compute"}
+    draft_off = replace_dataclass(all_on, scheduling_draft_enabled=False)
+    assert _granted(draft_off) == every_name - {"scheduling_draft"}
 
 
 def test_the_consequential_demonstration_module_is_off_by_default() -> None:

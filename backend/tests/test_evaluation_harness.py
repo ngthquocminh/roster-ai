@@ -484,7 +484,11 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
 # six-capability MVP catalogue). Capabilities present in the dataset that are not
 # product capabilities are exempt — but the exemption is declared here with its
 # reason, never inferred from a name at the point of use.
-MVP_PRODUCT_CAPABILITIES = {"scheduling_compute", "scheduling_inspect"}
+MVP_PRODUCT_CAPABILITIES = {
+    "scheduling_compute",
+    "scheduling_draft",
+    "scheduling_inspect",
+}
 NON_PRODUCT_CAPABILITIES = {
     # A harness-proof module, not a product capability: Story 2.2 seeded exactly
     # two schema cases and epics.md:1527 forbids padding a dataset to clear a

@@ -14,6 +14,7 @@ from application.contracts.activity import (
     ActivityItemV1,
     AgentResponseActivityV1,
     ClarificationActivityV1,
+    DraftActivityV1,
     PlannerMessageActivityV1,
     TerminalOutcomeActivityV1,
 )
@@ -25,6 +26,8 @@ from application.ports.agent_runtime import AgentRuntime
 from application.ports.agent_runtime import AgentProviderError, AgentRuntimeError
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.capability_manifest import IncompleteManifestError
+from application.capabilities.scheduling_draft import SchedulingDraftResultV1
+from application.contracts.proposal import ProposalV1
 
 
 def execute_turn(
@@ -46,13 +49,23 @@ def execute_turn(
             outcome,
             resolved_clarification=resolve_clarification(outcome.clarification, deps),
         )
-    if outcome.answer is None:
-        return outcome
     by_id = {
         value.result_id: value
         for value in calculation_results
         if isinstance(getattr(value, "result_id", None), str)
     }
+    if outcome.draft is not None:
+        trusted = by_id.get(outcome.draft.draft_id)
+        if not isinstance(trusted, SchedulingDraftResultV1):
+            return replace(
+                outcome,
+                status="failed",
+                failure_reason="invalid_output",
+                failure_source="agent",
+            )
+        return replace(outcome, resolved_draft=trusted.proposal)
+    if outcome.answer is None:
+        return outcome
     return replace(
         outcome,
         grounded_response=ground_answer(outcome.answer, deps, by_id),
@@ -68,6 +81,7 @@ def terminal_status(outcome: AgentRunOutcomeV1) -> str:
                 outcome.clarification,
                 outcome.resolved_clarification,
                 outcome.refusal,
+                outcome.resolved_draft,
             )
         ):
             return "agent_completed"
@@ -142,6 +156,8 @@ def terminal_outcome(outcome: AgentRunOutcomeV1) -> TerminalOutcomeV1 | None:
         if outcome.clarification is not None or outcome.resolved_clarification is not None:
             return None
         if outcome.grounded_response is not None:
+            return None
+        if outcome.resolved_draft is not None:
             return None
         return TerminalOutcomeV1(
             # `terminal_status()` finalises this same outcome as `agent_failed`
@@ -234,9 +250,11 @@ def visible_response(outcome: AgentRunOutcomeV1, deps: AgentDepsV1) -> GroundedR
 
 def activity_payload(
     outcome: AgentRunOutcomeV1, deps: AgentDepsV1
-) -> GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1:
+) -> GroundedResponseV1 | ResolvedClarificationV1 | ProposalV1 | TerminalOutcomeV1:
     if outcome.resolved_clarification is not None:
         return outcome.resolved_clarification
+    if outcome.resolved_draft is not None:
+        return outcome.resolved_draft
     terminal = terminal_outcome(outcome)
     if terminal is not None:
         return terminal
@@ -265,6 +283,8 @@ def outcome_visible_text(outcome: AgentRunOutcomeV1) -> str:
         return outcome.clarification.question
     if outcome.refusal is not None:
         return outcome.refusal.detail
+    if outcome.resolved_draft is not None:
+        return outcome.resolved_draft.consequence_summary
     return outcome.output_text or ""
 
 
@@ -291,6 +311,8 @@ def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
             )
         elif isinstance(activity, ClarificationActivityV1):
             role, text = "assistant", activity.clarification.question
+        elif isinstance(activity, DraftActivityV1):
+            role, text = "assistant", activity.consequence_summary
         elif isinstance(activity, TerminalOutcomeActivityV1):
             role = "assistant"
             text = f"The previous turn did not complete: {activity.outcome.reason}."

@@ -42,3 +42,13 @@ def test_an_unset_feature_flag_takes_its_declared_default(monkeypatch) -> None:
     settings = default_settings()
     assert settings.scheduling_compute_enabled is True
     assert settings.demonstration_enabled is False
+
+
+def test_scheduling_draft_settings_are_operator_owned_and_enabled_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("SCHEDULING_DRAFT_ENABLED", raising=False)
+    monkeypatch.setenv("SCHEDULING_DRAFT_TIMEOUT_SECONDS", "7.5")
+    monkeypatch.setenv("SCHEDULING_DRAFT_MAX_CONSTRAINTS", "6")
+    settings = default_settings()
+    assert settings.scheduling_draft_enabled is True
+    assert settings.scheduling_draft_timeout_seconds == 7.5
+    assert settings.scheduling_draft_max_constraints == 6

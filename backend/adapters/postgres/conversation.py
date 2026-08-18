@@ -19,11 +19,13 @@ from application.contracts.activity import (
     ActivityItemV1,
     AgentResponseActivityV1,
     ClarificationActivityV1,
+    DraftActivityV1,
     PlannerMessageActivityV1,
     TerminalOutcomeActivityV1,
 )
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.grounding import GroundedResponseV1
+from application.contracts.proposal import ProposalV1
 from application.contracts.persisted_event import PersistedEventV1
 from application.ports.conversation import (
     AcceptedTurnV1,
@@ -351,7 +353,7 @@ class PostgresConversationRepository:
         *,
         claimed: ClaimedAgentRunV1,
         status: str,
-        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1,
+        payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1 | ProposalV1,
         request_id: UUID,
     ) -> ExecutedAgentRunV1:
         conv = connection.execute(
@@ -391,6 +393,16 @@ class PostgresConversationRepository:
         elif isinstance(payload, ResolvedClarificationV1):
             activity = ClarificationActivityV1(
                 activity_type="clarification", clarification=payload, **common
+            )
+        elif isinstance(payload, ProposalV1):
+            if payload.proposal_id is None or payload.proposal_version_id is None:
+                raise ValueError("a trusted proposal must carry durable identifiers")
+            activity = DraftActivityV1(
+                activity_type="draft",
+                proposal_id=payload.proposal_id,
+                proposal_version_id=payload.proposal_version_id,
+                consequence_summary=payload.consequence_summary,
+                **common,
             )
         elif isinstance(payload, TerminalOutcomeV1):
             activity = TerminalOutcomeActivityV1(
@@ -457,6 +469,13 @@ def _payload_to_json(activity: ActivityItemV1) -> dict:
             "message_id": str(activity.message_id),
             "text": activity.text,
         }
+    if isinstance(activity, DraftActivityV1):
+        return {
+            **common,
+            "proposal_id": str(activity.proposal_id),
+            "proposal_version_id": str(activity.proposal_version_id),
+            "consequence_summary": activity.consequence_summary,
+        }
     from pydantic import TypeAdapter
     if isinstance(activity, AgentResponseActivityV1):
         key, value = "response", activity.response
@@ -473,6 +492,7 @@ def _activity_from_payload(value: dict) -> ActivityItemV1:
         _PLANNER_MESSAGE,
         "agent_response",
         "clarification",
+        "draft",
         "terminal_outcome",
     ):
         raise UnsupportedActivityPayloadError(
@@ -508,6 +528,13 @@ def _activity_from_payload(value: dict) -> ActivityItemV1:
             clarification=TypeAdapter(ResolvedClarificationV1).validate_python(
                 value["clarification"]
             ),
+        )
+    if activity_type == "draft":
+        return DraftActivityV1(
+            **common,
+            proposal_id=UUID(value["proposal_id"]),
+            proposal_version_id=UUID(value["proposal_version_id"]),
+            consequence_summary=value["consequence_summary"],
         )
     return TerminalOutcomeActivityV1(
         **common,

@@ -15,6 +15,7 @@ from application.capabilities.scheduling_compute import (
     scheduling_compute_manifest,
 )
 from application.contracts.agent_runtime import AgentBudgetV1
+from application.contracts.canonical import contract_digest
 from application.contracts.grounding import ClaimArgumentsV1
 from application.contracts.scenario_projection import (
     AssignmentV1,
@@ -365,6 +366,23 @@ def test_result_id_is_canonical_stable_and_argument_sensitive() -> None:
         VERSION,
     )
     assert first != derive_result_id("required_headcount_minutes", args, VERSION)
+
+
+def test_restricted_result_id_matches_the_shared_canonicalizer() -> None:
+    args = ClaimArgumentsV1(task_id="pick", start_minute=0, end_minute=60)
+    payload = {
+        "arguments": {
+            "schema_version": "1",
+            "task_id": "pick",
+            "family": None,
+            "start_minute": 0,
+            "end_minute": 60,
+        },
+        "metric": "staffed_minutes",
+        "scenario_version_id": str(VERSION),
+    }
+
+    assert derive_result_id("staffed_minutes", args, VERSION) == contract_digest(payload)[2]
 
 
 def test_capability_delegates_and_is_installed_as_inspect() -> None:

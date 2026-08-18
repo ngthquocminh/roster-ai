@@ -9,7 +9,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import func, select
 
-from adapters.postgres.canonical_json import canonicalize_json
+from application.contracts.canonical import canonicalize_json, contract_digest
 from adapters.postgres.fixture_history import (
     FixtureVersionConflictError,
     PostgresFixtureHistoryAdapter,
@@ -112,6 +112,14 @@ def test_rfc8785_rejects_lone_surrogates() -> None:
 def test_rfc8785_rejects_integers_that_would_silently_lose_precision() -> None:
     with pytest.raises(ValueError, match="lose precision"):
         canonicalize_json(2**53 + 1)
+
+
+def test_contract_digest_declares_the_governed_rfc8785_shape() -> None:
+    assert contract_digest({"b": 2, "a": 1}) == (
+        "sha256",
+        "rfc8785-v1",
+        "43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777",
+    )
 
 
 @pytest.fixture(scope="module")

@@ -1,0 +1,96 @@
+{
+  "case_id": "draft-valid-multi",
+  "case_version": "1",
+  "capability": "scheduling_draft",
+  "risk_class": "draft",
+  "prompt": "Create a reversible draft to cap Alex's weekly hours.",
+  "scripted_turns": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 40,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            },
+            {
+              "kind": "lock_worker_shift",
+              "group": "workers",
+              "record_id": "w2",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": null,
+              "start_minute": 2880,
+              "end_minute": 3360,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      },
+      "tool_call_id": "draft-1"
+    },
+    {
+      "response_text": "Draft request validated."
+    }
+  ],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 40,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            },
+            {
+              "kind": "lock_worker_shift",
+              "group": "workers",
+              "record_id": "w2",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": null,
+              "start_minute": 2880,
+              "end_minute": 3360,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      }
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "Draft request validated.",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ]
+}

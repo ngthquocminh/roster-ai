@@ -67,6 +67,23 @@ class ClarificationActivityV1:
 
 
 @dataclass(frozen=True)
+class DraftActivityV1:
+    """Reference to the current proposal plus application-composed summary."""
+
+    activity_id: UUID
+    activity_type: Literal["draft"]
+    conversation_id: UUID
+    conversation_resource_version: int
+    scenario_id: UUID
+    scenario_version_id: UUID
+    occurred_at: datetime
+    proposal_id: UUID
+    proposal_version_id: UUID
+    consequence_summary: str
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
 class TerminalOutcomeActivityV1:
     """Literal non-answer state, including reason-discriminated refusal."""
 
@@ -88,11 +105,12 @@ ActivityItemV1 = (
     PlannerMessageActivityV1
     | AgentResponseActivityV1
     | ClarificationActivityV1
+    | DraftActivityV1
     | TerminalOutcomeActivityV1
 )
 
 __all__ = [
     "ActivityItemV1", "ActivityTypeV1", "AgentResponseActivityV1",
-    "ClarificationActivityV1", "PlannerMessageActivityV1", "SCHEMA_VERSION",
+    "ClarificationActivityV1", "DraftActivityV1", "PlannerMessageActivityV1", "SCHEMA_VERSION",
     "TerminalOutcomeActivityV1",
 ]
