@@ -41,7 +41,168 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-16
+last_updated: 2026-08-18
+
+# NOTE (2026-08-18): Story 3-1 created and moved to ready-for-dev; epic-3 backlog -> in-progress.
+# It is the FIRST story of Epic 3 and the reversible-draft boundary (FR9/FR10). It is also the first
+# story in the repository to create a SCHEDULING-aggregate table, to implement AD-8/AR8 HTTP command
+# idempotency (VERIFIED BY EXHAUSTIVE GREP: `Idempotency-Key` and `idempotency_key` appear NOWHERE
+# in backend/; the only "idempotency" hits are CapabilityManifestV1.idempotency_semantics declaration
+# strings), to mount a mutating route OUTSIDE /api/v1/conversations, and to ship a `draft` risk-class
+# capability. Scope: one migration (three tables), one router, one capability, one structured-output
+# variant, one activity discriminant, NO new dependency, NO evidence file.
+#
+# SEVEN DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) THE CAPABILITY VALIDATES AND RESOLVES; THE APPLICATION PERSISTS. A handler cannot write by
+#     construction: AgentDepsV1 carries a projection reader, clock, budget and tool_result_sink and
+#     NO writer; the request path sets `connection=None` (conversations.py:214); and
+#     test_handler_module_has_no_adapter_or_framework_import forbids a handler importing `adapters`
+#     at all. So the trusted result travels the tool_result_sink path Story 2.7 built and the
+#     conversation orchestrator writes the proposal inside finish_agent_run's single transaction.
+#     That composes a NEW atomic bundle absent from AD-22's fixed list — recorded explicitly as
+#     `create-draft = proposal + version + activity event + agent-run transition`, composed by an
+#     application orchestrator, which AD-22 permits and which repositories/adapters may not widen.
+# (2) THE MODEL CITES A DRAFT; IT NEVER AUTHORS ONE. A fourth named ToolOutput (`draft`) carrying
+#     `DraftProposalV1` with EXACTLY ONE FIELD, `draft_id`. Everything the card renders comes from
+#     the trusted capability result. This is AD-11's `produce` branch applied to drafts and Story
+#     2.9 Decision 5 applied to entities. Letting the model author the proposal and validating it
+#     in a gate recreates precisely the manufactured-failure mode the 2026-08-13 correct-course
+#     removed.
+# (3) THE CONSTRAINT VOCABULARY IS THE FIVE CP-SAT ALREADY APPLIES, RE-DECLARED IN
+#     application/contracts. MEASURED, not chosen: engine/cpsat/builder.py:346-404 implements
+#     set_min_workers_per_task, lock_worker_shift, exclude_worker_from_task, set_max_hours as soft
+#     penalty terms plus scale_demand in _aggregate_demand. Any other vocabulary yields a ProposalV1
+#     Story 3.2 cannot execute. TWO CONSEQUENCES: the identity bridge is FREE and measured —
+#     TaskV1.record_id == str(task_id) and WorkerV1.record_id == str(contact_id)
+#     (scenario_projection.py:140,230) — so the builder's args are byte-identical to the evidence
+#     group record_ids; and `day: int` does NOT enter the governed contract (AD-20 fixes integer-
+#     minute half-open offsets; only the solver adapter converts). DO NOT import
+#     services/constraint_service.py or domain/overrides.py: both directories have held mandated
+#     zero-line diffs through all of Epic 2, and the legacy validator's fuzzy _resolve_task/
+#     _resolve_member human-token matching IS the model-authored-identity inversion AD-2 forbids.
+# (4) REVISE AND REJECT ARE EXPLICIT HTTP COMMANDS ON A NEW /api/v1/proposals ROUTER, CARRYING THE
+#     REPOSITORY'S FIRST IDEMPOTENCY KEY. Not /api/v1/scenarios: test_gate_a_mutation_audit.py:24-34
+#     asserts every such path exposes only `get` and AR28 forbids weakening it — that constraint
+#     decides the mount. Not /api/v1/conversations: AD-22 gives `proposal` to Scheduling. BOTH
+#     COMMANDS ARE POST — api/main.py:254 allows only GET and POST through CORS, so a PATCH/DELETE
+#     passes same-origin and fails in a deployed topology. Idempotency is scoped to exactly these
+#     two operations; a generic middleware for FR12/16/18/19 would fix a shape none of Stories 3.6,
+#     3.4 or 4.1-4.3 has specified yet. This does NOT contradict Story 2.7 Decision 1, which
+#     declined a key because ITS OWN AC named none; AC3 here names one explicitly.
+# (5) REJECTION IS A TERMINAL STATE, REVISION IS A NEW IMMUTABLE VERSION, AND IMMUTABILITY IS
+#     ENFORCED BY GRANT. proposal_version gets SELECT+INSERT only with UPDATE/DELETE revoked;
+#     `proposal` gets one narrow three-column UPDATE grant, the c7d6e5f4a3b2 pattern. Immutable by
+#     grant, not by convention.
+# (6) THE DRAFT ACTIVITY IS A REFERENCE, AND THE CARD READS CURRENT PROPOSAL STATE. AD-20 fixes it
+#     ("draft = proposal ref/summary", ARCHITECTURE-SPINE.md:331). Inlining the proposal is the
+#     obvious implementation and is wrong for a mechanical reason: persisted_event is immutable, so
+#     a revised proposal would leave the timeline rendering the superseded draft forever. THIS ALSO
+#     REMOVES A STRUCTURAL BLOCKER: persisted_event.agent_run_id is NOT NULL with an FK and
+#     ck_persisted_event_stream_is_conversation pins the stream, so a planner-initiated revise —
+#     which has no agent run — could not emit an event without widening a column Epic 4 owns. Under
+#     this decision it does not need to.
+# (7) STALENESS IS DRIVEN BY THE SCENARIO VERSION, BECAUSE NO BASELINE SCHEDULE VERSION EXISTS. It
+#     is DERIVED at read time and never written back (Story 2.8 Decision 6's shape), which is why
+#     ProposalStateV1 has no `stale` member. Importing a second scenario_version makes a pinned
+#     proposal stale TODAY, because every projection read re-resolves "latest version"
+#     (deferred-work.md:59) — that is the test path.
+#
+# TWO HONEST GAPS ARE RAISED RATHER THAN PAPERED OVER.
+# (a) THERE IS NO BASELINE SCHEDULE VERSION, NO LOCK SUPPLY, AND NO BASELINE ASSIGNMENT SUPPLY.
+#     MEASURED: scenario_projection.py:556 returns literal None and scenario_catalogue.py:116-118
+#     selects literal(None) for baseline_schedule_version — there is no such column and no
+#     schedule_version table; get_locks calls _apply_query((), ...) — a HARDCODED EMPTY TUPLE, not
+#     merely an empty fixture; get_baseline_assignments returns (). Both committed contract fixtures
+#     record baseline_schedule_version null, lock_count 0, baseline_assignment_count 0 (real data
+#     exists for tasks 6, workers 10/22, demand 1547, constraints 14). A CORRECTION IS RECORDED:
+#     Story 2.7's creation note claims baseline_schedule_version "IS populated from
+#     ScenarioOverviewV1" — the overview carries the FIELD; its value is None at both producers, so
+#     every EvidenceRefV1 ever persisted has it None. Required posture: declare and populate the
+#     field honestly (None today); keep preserved_locks a real field but DO NOT write a test
+#     asserting "locks were preserved" against a supply of zero — that is retro §3.1's dominant
+#     failure mode — prove the mechanism against a seeded reader that DOES return locks, following
+#     evals/fixture_projection.py; DO NOT edit a committed contract fixture (FR22/AR4, digests are
+#     Gate A bound); DO NOT build a schedule_version table or baseline pointer (Stories 3.2, 4.3).
+# (b) "FAIL BEFORE SOLVER EXECUTION" HAS NO SOLVER TO BE BEFORE. No RunSnapshotV1, no
+#     ScheduleVersionV1, and backend/engine/ is reachable only from the legacy SQLite run_service.
+#     The clause is satisfied VACUOUSLY today. Required posture: make validation a real tested
+#     refusal at draft time (unresolvable entity or out-of-vocabulary kind and out-of-range argument
+#     both -> retryable invalid_query, the MetricDimensionMismatchError precedent) and record in
+#     SCOPE_CONTROLS that Story 3.2 inherits the clause.
+#
+# FOURTEEN TRAPS flagged, the quietest first: REHYDRATE_HISTORY'S `else: raise ValueError`
+# (execute_turn.py:297) — a conversation containing a draft breaks EVERY LATER TURN in it, and no
+# test written for this story's happy path goes red because that path creates one draft in a fresh
+# conversation; a VACUOUS "locks preserved" assertion against a hardcoded empty supply; a VACUOUS
+# expected_visible_text (output_text is None for every structured case, so `(output_text or "") == ""`
+# passes trivially unless outcome_visible_text gains a draft branch — exactly deferred-work.md:132's
+# defect, closed by 2.9, do not reopen it on paper); a fourth output tool MISSING FROM
+# OUTPUT_TOOL_NAMES, which makes ToolRoutingEvaluator count it as a routed capability call and whose
+# tempting fix loosens the branch carrying NFR28's 100% rule (runtime.py:57-61 warns of exactly this);
+# test_a_disabled_capability_is_absent_from_the_composed_grant going red because it hardcodes three
+# *_enabled flags (the fix is to add the fourth, never to weaken the AD-2 absence proof);
+# terminal_status missing the resolved draft, which finalises a successful draft turn as agent_failed;
+# a THIRD RFC 8785 implementation; declared_codes == set(manifest.errors) being an EQUALITY; and a
+# trusted draft result the sink's `by_id` filter cannot see because it exposes draft_id rather than
+# result_id (execute_turn.py:51-55).
+#
+# TASK 1 RE-HOMES THE RFC 8785 CANONICALIZER from adapters/postgres/canonical_json.py to
+# application/contracts/canonical.py. Required, not tidy: the capability computes ProposalV1's
+# canonical hash and handlers may not import `adapters`. MEASURED COST: exactly two import lines
+# (fixture_history.py:14, test_fixture_history_import.py:12). scheduling_compute.py keeps a
+# ZERO-LINE diff — its derive_result_id carries a deliberately restricted float-free variant and
+# every result_id in the four frozen scheduling_compute cases is pinned to it.
+#
+# LEDGER: THIS STORY CLOSES NOTHING, stated explicitly so nobody closes something opportunistically.
+# Every Epic 3 item the retro lists belongs later: :16, :39, :180 -> Story 3.3; :200, :202 -> 3.2/3.8
+# once the solver supplies a per-worker rate; :190 -> only a story amending GROUP_QUERY_TABLES;
+# :206, :208, :214, :216 -> untouched. It RE-ANNOTATES :172-176 (UX-DR35) WITHOUT CLOSING IT: the
+# retro assigns it here, but the entry's own owner condition is "the first story to ship a Run
+# optimization or Approve control on the Chat surface" and AC2 FORBIDS this story from shipping
+# either — so 3.1 discharges the half it can (revise/reject discontinuous from Send, with an
+# automated assertion) and the owner is restated as STORY 3.6. It also CORRECTS the retro's premise
+# at :106-107 that "3.1 writes into the invariant 1.9 gates": Story 1.9's invariant is about FIXTURE
+# SOURCE DATA and no scenario/scenario_version row is touched here (Story 2.3 already added a
+# governed write path without disturbing it). What 3.1 actually does is add the first mutating route
+# outside /api/v1/conversations, which is why Task 7 ships structural assertions instead.
+# ALLOWED_LEAKS in both architecture guards stays untouched.
+#
+# GOLDEN CASES ARE OWED MECHANICALLY: validate_manifest requires non-empty evaluation_fixtures and
+# test_installed_module_conforms asserts every named fixture is a real file on disk. Ship EXACTLY
+# FOUR tagged capability="scheduling_draft", risk_class="draft" (already in RiskClassV1), add
+# "scheduling_draft" to MVP_PRODUCT_CAPABILITIES (PRD §4.8 item 2 makes it a product capability), and
+# ANSWER THE NFR5 QUESTION that test's own assertion message demands: no new untrusted content
+# source — the model view carries draft_id alone and every label is application-composed — so NO new
+# injection case is owed, and that must be STATED. Dataset 17 -> 21. NFR28's 50-case floor is NOT
+# re-verifiable here (three of five contributors are in Epics 3-4 and have contributed nothing): do
+# not lower it and do not pad (epics.md:1527). NO NEW EVALUATOR — Story 2.9 spent the last reserved
+# fence; if a case seems to need one, a wiring step above is missing.
+#
+# THREE PHASES WITH A REPORTING CHECKPOINT between A and B, the 2.7/2.9 pattern. PHASE A (Tasks 1-8)
+# satisfies AC1 and AC3's server half with a ZERO-LINE frontend/ diff. The checkpoint is NOT an
+# unconditional pause (it must work in an unattended bmad-dev-auto/bmad-loop run) and its
+# load-bearing reports are PROOF THE rehydrate_history BRANCH WAS OBSERVED RED and PROOF THE
+# IDEMPOTENCY REPLAY TEST FAILED ON A ROW COUNT OF 2, not on a mismatched response body. RETRO ACTION
+# A2 IS IN FORCE FROM THIS STORY: every new guard must be observed failing with its structural
+# assertion removed, recorded in Completion Notes.
+#
+# NO EVIDENCE FILE IS OWED (no AC carries a measured threshold; NFR35's four rows belong to 1.4, 1.5,
+# 2.4 and 3.5 per AD-26). Gate A must still be re-run per AR28 — and THE TWO-COMMIT DANCE IS RETIRED
+# as of commit 8139866, which exempts gate_a_readiness's own output from the dirty-tree check (prep
+# task P2 cleared; P1 cleared by .github/workflows/ci.yml in PR #3). `alembic check` FROM THE
+# REPOSITORY ROOT (deferred-work.md:138-147), expecting zero operations and exactly one new migration
+# file. ZERO-LINE DIFF FENCES: backend/domain/**, backend/engine/**, backend/llm/**,
+# backend/ingest/**, backend/store/**, backend/services/**, agent/translate.py,
+# capabilities/scheduling_compute.py, capabilities/scheduling_inspect.py, application/grounding/**,
+# adapters/postgres/scenario_projection.py, adapters/postgres/scenario_catalogue.py,
+# application/ports/scenario_catalogue.py, test_gate_a_mutation_audit.py, scripts/gate_a_checks.py,
+# data/contract/**, evidence/story-2.2/**, frontend/src/features/scenario-data/**,
+# frontend/src/features/evidence/**, frontend/e2e/**, and Composer/ConversationList.tsx.
+# BASELINES: CI records 864 passed / 1 skipped / 7 deselected at faf22eb, postgres 45, evidence
+# convention 48, frontend 400 / 63 files, Playwright 48 / 7 files; 876 collected at 2b48b72. Note
+# 8139866's message records 866 passed / 2 SKIPPED locally, which exceeds CI's --max-skipped 1
+# ceiling — RE-DERIVE THE REAL NUMBERS before attributing any CI failure to this story. Both 2.7 and
+# 2.8 found their inherited baselines stale.
 
 # NOTE (2026-08-15): Story 2-9 created and moved to ready-for-dev. It is the LAST story of Epic 2,
 # the SOLE owner of NFR5 (prompt-injection coverage — VERIFIED BY EXHAUSTIVE SEARCH AT CREATION that
@@ -1130,8 +1291,8 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Governed and Recoverable Schedule Repair
-  epic-3: backlog
-  3-1-create-and-revise-a-reversible-repair-draft: backlog
+  epic-3: in-progress
+  3-1-create-and-revise-a-reversible-repair-draft: ready-for-dev
   3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: backlog
   3-3-lease-solver-jobs-with-fencing: backlog
   3-4-provide-the-safe-cancellation-command: backlog
