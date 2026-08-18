@@ -16,11 +16,17 @@ vi.mock("@/hooks/useScenarioProjection", () => ({
   useLocks: vi.fn(),
   useConstraintsAndObjectives: vi.fn(),
 }));
+vi.mock("@/hooks/useProposal");
+vi.mock("@/hooks/useReviseProposal");
+vi.mock("@/hooks/useRejectProposal");
 
 import { ScenarioDataView } from "@/features/scenario-data/ScenarioDataView";
 import { ScenarioVersionContext } from "@/features/scenario-workspace/ScenarioVersionContext";
 import { WorkspaceTabs } from "@/features/scenario-workspace/WorkspaceTabs";
 import * as hooks from "@/hooks/useScenarioProjection";
+import * as proposalHooks from "@/hooks/useProposal";
+import * as reviseHooks from "@/hooks/useReviseProposal";
+import * as rejectHooks from "@/hooks/useRejectProposal";
 
 async function expectAxeClean(container: HTMLElement) {
   const results = await axe(container, {
@@ -77,6 +83,42 @@ beforeEach(() => {
     },
   } as never);
 });
+
+const accessibleProposal = {
+  proposal_id: "11111111-1111-4111-8111-111111111111",
+  proposal_version_id: "22222222-2222-4222-8222-222222222222",
+  scenario_id: scenarioId,
+  scenario_version_id: "44444444-4444-4444-8444-444444444444",
+  current_scenario_version_id: "44444444-4444-4444-8444-444444444444",
+  expected_baseline_schedule_version: null,
+  resolved_entities: [{
+    group: "workers" as const, record_id: "worker-1", label: "CONTACT-9",
+    scenario_version_id: "44444444-4444-4444-8444-444444444444", schema_version: "1",
+  }],
+  constraints: [{
+    kind: "set_max_hours" as const,
+    resolved_entities: [], max_hours: 40,
+    description: "Cap CONTACT-9 at 40 hours per week.", schema_version: "1",
+  }],
+  preserved_locks: [],
+  consequence_summary: "One reversible constraint; no baseline change.",
+  canonical_hash: "a".repeat(64), canonical_hash_algorithm: "sha256",
+  canonical_hash_schema_version: "rfc8785-v1", state: "active" as const,
+  resource_version: 1, stale: false, schema_version: "1",
+};
+
+function mockProposal(stale = false) {
+  vi.mocked(proposalHooks.useProposal).mockReturnValue({
+    data: stale ? {
+      ...accessibleProposal,
+      stale: true,
+      current_scenario_version_id: "55555555-5555-4555-8555-555555555555",
+    } : accessibleProposal,
+    isPending: false, isError: false, error: null, refetch: vi.fn(),
+  } as never);
+  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
+  vi.mocked(rejectHooks.useRejectProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
+}
 
 it("preserves heading hierarchy and keyboard reading order through Scenario Data controls", async () => {
   const user = userEvent.setup();
@@ -306,6 +348,35 @@ it("announces only terminal state while keeping its next step outside the live r
   const status = screen.getByRole("status", { name: "Provider failure" });
   expect(within(status).queryByText(outcome.outcome.next_step)).not.toBeInTheDocument();
   expect(screen.getByText(outcome.outcome.next_step)).toBeInTheDocument();
+});
+
+it("makes the Draft card and its discontinuous commands independently identifiable", async () => {
+  mockProposal();
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  const region = screen.getByRole("region", { name: "Draft proposal" });
+  expect(region).toHaveTextContent("Draft — no baseline change");
+  const revise = screen.getByRole("button", { name: "Revise proposal" });
+  const reject = screen.getByRole("button", { name: "Reject proposal" });
+  expect(revise).not.toHaveAccessibleName(reject.textContent ?? "");
+  expect(revise.parentElement).not.toBe(reject.parentElement);
+  await expectAxeClean(container);
+});
+
+it("announces stale Draft state and explains why revision is disabled", async () => {
+  mockProposal(true);
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  expect(screen.getByRole("status", { name: "Draft is stale" })).toHaveTextContent(
+    "The scenario version changed",
+  );
+  const revise = screen.getByRole("button", { name: "Revise proposal" });
+  expect(revise).toBeDisabled();
+  expect(revise).toHaveAccessibleDescription(/scenario version changed/i);
+  expect(screen.getByRole("button", { name: "Refresh proposal" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Reject proposal" })).not.toBeInTheDocument();
 });
 
 it.each([

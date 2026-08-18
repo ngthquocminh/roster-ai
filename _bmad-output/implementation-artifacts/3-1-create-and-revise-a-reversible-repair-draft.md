@@ -4,7 +4,7 @@ baseline_commit: 2b48b7287427befd38f4e34992fc17ce972fbf28
 
 # Story 3.1: Create and Revise a Reversible Repair Draft
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -639,69 +639,69 @@ need a route Phase A did not build.
 
 ### Task 9 — Codegen and the Draft card (AC: 2, 4)
 
-- [ ] `npm run codegen` from `frontend/` (`codegen:export` then `codegen:types`). Codegen **is**
+- [x] `npm run codegen` from `frontend/` (`codegen:export` then `codegen:types`). Codegen **is**
       owed: `ActivityItemOut` gains a union member and three proposal routes appear.
       `frontend/openapi.json` and `frontend/src/api/schema.d.ts` are both expected to change.
-- [ ] `api/schemas.py`: `DraftActivityOut(ActivityCommonOut)` with
+- [x] `api/schemas.py`: `DraftActivityOut(ActivityCommonOut)` with
       `activity_type: Literal["draft"]`, added to the `ActivityItemOut` discriminated union
       (`schemas.py:159-165`), plus the proposal request/response models.
-- [ ] `frontend/src/api/proposals.ts` — thin typed wrappers over the single `openapi-fetch` client,
+- [x] `frontend/src/api/proposals.ts` — thin typed wrappers over the single `openapi-fetch` client,
       types derived from `paths[...]`. No hand-authored interfaces.
-- [ ] `frontend/src/hooks/useProposal.ts`, `useReviseProposal.ts`, `useRejectProposal.ts` — thin
+- [x] `frontend/src/hooks/useProposal.ts`, `useReviseProposal.ts`, `useRejectProposal.ts` — thin
       TanStack Query wrappers; business logic stays in the component.
-- [ ] `frontend/src/features/chat/DraftCard.tsx`. **Name the domain concept `proposal` in code**:
+- [x] `frontend/src/features/chat/DraftCard.tsx`. **Name the domain concept `proposal` in code**:
       `Composer.tsx:26` already uses `draft` for unsent message text, and two meanings for one word
       inside one feature directory is a real defect source.
-- [ ] The card renders, per AC2 and UX-DR9: resolved entities, constraints/objectives with their
+- [x] The card renders, per AC2 and UX-DR9: resolved entities, constraints/objectives with their
       application-composed descriptions, preserved locks, expected scenario and baseline versions,
       consequence summary, and the literal text label **"Draft — no baseline change"** above the
       parameters (`DESIGN.md:128`). Identifiers use the `{typography.identifier}` monospace style.
-- [ ] Inherit shadcn `Card`, `Input`, `Select`, `Button`, `Separator` — all present under
+- [x] Inherit shadcn `Card`, `Input`, `Select`, `Button`, `Separator` — all present under
       `components/ui/`. Introduce no new palette (UX-DR33) and no glow, gradient or pulse (UX-DR32).
-- [ ] `ActivityTimeline.tsx`: add the `case "draft":` branch. The `default` branch's
+- [x] `ActivityTimeline.tsx`: add the `case "draft":` branch. The `default` branch's
       `const exhaustive: never = item` keeps `tsc` proving exhaustiveness; its runtime fallback copy
       stays (`ActivityTimeline.tsx:287-301`).
-- [ ] Revise and reject are **separately labelled, separately reachable, `min-h-11` controls**,
+- [x] Revise and reject are **separately labelled, separately reachable, `min-h-11` controls**,
       visually and structurally discontinuous from Send (AC2, UX-DR35). Ship an automated assertion
       of the discontinuity — `EXPERIENCE.md:196` makes automated coverage the only accepted proof
       here.
-- [ ] **Ship no Run optimization control and no disabled placeholder for one.** AC2 says so
+- [x] **Ship no Run optimization control and no disabled placeholder for one.** AC2 says so
       explicitly, and Story 2.3 Task 9 set the same precedent. Story 3.6 introduces the control and
       its command together.
-- [ ] Stale state (AC4): the card names expected and current versions, disables revise, offers only
+- [x] Stale state (AC4): the card names expected and current versions, disables revise, offers only
       currently-valid actions, and **never silently refetches into a rebased draft**. Follow
       `EXPERIENCE.md:123`'s "Scenario/baseline drift marks affected Draft/Approval request stale and
       disables consequential actions".
 
 ### Task 10 — Accessibility proof (AC: 2, 4)
 
-- [ ] Extend `frontend/src/test/accessibility-contract.test.tsx` — **not** a sibling file.
+- [x] Extend `frontend/src/test/accessibility-contract.test.tsx` — **not** a sibling file.
       `deferred-work.md:206` records that Story 2.8's sibling
       (`evidence-accessibility.test.tsx`) sits outside the `accessibility_component_layer` Gate A
       check's hand-written file list, so its assertions are protected by CI but invisible to Gate A.
       Do not create a second orphan.
-- [ ] Assert: the Draft card is a named region; the "Draft — no baseline change" label is real text,
+- [x] Assert: the Draft card is a named region; the "Draft — no baseline change" label is real text,
       not a colour or an icon; revise and reject have distinct accessible names; the stale state is
       announced through the existing polite live-region pattern; a disabled control carries an
       accessible explanation. Status meaning must never depend on colour alone (UX-DR32, NFR18).
-- [ ] **Add no new Playwright spec.** Story 3.12 owns the end-to-end repair journey, and a new spec
+- [x] **Add no new Playwright spec.** Story 3.12 owns the end-to-end repair journey, and a new spec
       inside a Gate A check trips `deferred-work.md:208`'s reporter-truncation item, whose owner is
       "the first story that adds a new Playwright spec to a Gate A check".
 
 ### Task 11 — Fences, ledger, regression, Gate A (AC: 1, 2, 3, 4)
 
-- [ ] Verify every zero-line fence in *Project Structure Notes* with `git diff --stat`.
-- [ ] Full regression: backend default, `pytest -m postgres`, `pytest tests/test_evidence_convention.py`,
+- [x] Verify every zero-line fence in *Project Structure Notes* with `git diff --stat`.
+- [x] Full regression: backend default, `pytest -m postgres`, `pytest tests/test_evidence_convention.py`,
       `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npx playwright test`,
       `alembic check` from the repository root.
-- [ ] **Ledger routing. This story CLOSES nothing** — stated explicitly so nobody closes something
+- [x] **Ledger routing. This story CLOSES nothing** — stated explicitly so nobody closes something
       opportunistically. Every Epic 3 item the retro lists belongs to a later story: `:16`
       (`remaining_budget`), `:39` (retention job), `:180` (stranded run) → Story 3.3; `:202`
       (`shortfall_minutes`), `:200` (headcount metric) → Story 3.2/3.8 once the solver supplies a
       per-worker rate; `:190` (overlap filter keys) → only a story amending `GROUP_QUERY_TABLES`,
       which this is not; `:206`, `:208` → untouched per Tasks 10; `:214`, `:216` → untouched.
       `ALLOWED_LEAKS` in both architecture guards stays untouched.
-- [ ] **RE-ANNOTATE `deferred-work.md:172-176` (UX-DR35 Send discontinuity) without closing it.**
+- [x] **RE-ANNOTATE `deferred-work.md:172-176` (UX-DR35 Send discontinuity) without closing it.**
       The retro assigns it to Story 3.1 because "its AC ships revise/reject beside Send"
       (`epic-1-2-retro-2026-08-16.md` §5.1). Judged at creation: **the entry's own stated owner
       condition is "the first story to ship a Run optimization or Approve control on the Chat
@@ -709,7 +709,7 @@ need a route Phase A did not build.
       it can — revise/reject are discontinuous from Send, with an automated assertion (Task 9) — and
       the entry stays **open** with its owner restated as **Story 3.6**. Annotate in place; this is
       the Story 2.4/2.5/2.8 precedent for a false ledger premise.
-- [ ] **Correct the retro's Story 3.1 premise, in `deferred-work.md:106-107`.** It states that Story
+- [x] **Correct the retro's Story 3.1 premise, in `deferred-work.md:106-107`.** It states that Story
       1.9's parity/mutation-denial invariant "gates the mutation-denial invariant that Story 3.1
       writes into". Judged FALSE at creation: Story 1.9's invariant is about **fixture source data**
       (FR22/FR24) — no `scenario` or `scenario_version` row is touched here, and Story 2.3 already
@@ -717,9 +717,9 @@ need a route Phase A did not build.
       first mutating route outside `/api/v1/conversations`, which is why Task 7's structural
       assertions exist. Record the correction and leave the P3 work where the retro finally put it:
       **alongside** Epic 3, not gating this story.
-- [ ] Add the two Story 2.7 corrections from Gap 1 to the ledger:
+- [x] Add the two Story 2.7 corrections from Gap 1 to the ledger:
       `baseline_schedule_version` is `None` at both producers, and `get_locks` has no supply at all.
-- [ ] **No evidence file is owed.** No AC carries a measured threshold, and NFR35's four rows belong
+- [x] **No evidence file is owed.** No AC carries a measured threshold, and NFR35's four rows belong
       to Stories 1.4, 1.5, 2.4 and 3.5 (AD-26).
 - [ ] Re-run Gate A per AR28. **The two-commit dance is retired** as of commit `8139866`:
       `gate_a_readiness.main()` now exempts its own output from the dirty-tree check. Follow
@@ -955,6 +955,11 @@ GPT-5 Codex
 - Phase A checkpoint: golden dataset total 21 — demonstration 2, scheduling_compute 4, scheduling_draft 4, scheduling_inspect 11.
 - Phase A mutation proof: removing the draft-history branch raised exactly `ValueError: unsupported history activity DraftActivityV1`; restoring it returned the focused test to green.
 - Phase A mutation proof: removing the command-idempotency lookup made the database replay assertion fail with 2 new revision rows versus 1 expected; restoring it returned the focused test to green.
+- Task 9 RED: the Draft-card component suite failed to resolve the not-yet-created `DraftCard` module.
+- Task 9 GREEN: 20 focused Draft/timeline tests passed; full frontend regression passed (404 tests / 64 files), typecheck and build passed, and lint reported only the three pre-existing Fast Refresh warnings.
+- Task 10 RED proof: removing the card's accessible name made the mandated contract fail to find `region` named `Draft proposal`.
+- Task 10 GREEN: 43 focused accessibility/Draft/timeline tests passed, including axe, distinct command, stale live-region, and disabled-description assertions.
+- Task 11 pre-Gate regression: every zero-line fence passed; backend default 906 passed / 2 skipped / 7 deselected, PostgreSQL 51 passed, evidence convention 48 passed; frontend lint/typecheck/build passed, Vitest 404 passed / 64 files, Playwright 48 passed; `alembic check` reported no new operations.
 
 ### Completion Notes List
 
@@ -967,6 +972,9 @@ GPT-5 Codex
 - Task 7: Added current proposal reads, immutable revisions, terminal rejection, derived staleness, optimistic concurrency, transactional canonical-body idempotency, stable conflicts, and structural baseline/scenario mutation fences.
 - Task 8: Shipped exactly four scheduling-draft goldens, including a valid multi-constraint draft, and classified the capability under the NFR28 product floor. NFR5 adds no injection case: the model-facing view carries only `draft_id`; application-composed labels never enter it, so the untrusted sources remain planner chat text and scenario data.
 - Phase A checkpoint completed without an abort condition: both paging/idempotency red proofs were observed, the original no-baseline/no-lock-supply gaps remain truthful, and the required proposal route was delivered within Phase A.
+- Task 9: Regenerated OpenAPI/types and added generated-contract proposal wrappers, thin query/mutation hooks, an editable review card, explicit stale behavior, and a typed timeline branch. The missing `Separator` primitive assumed by the story was added in the existing shadcn-compatible component shape.
+- Task 10: Extended the Gate-A-visible accessibility contract with named-region, literal-status, command-discontinuity, live-region, disabled-explanation, and axe proofs; added no Playwright spec.
+- Task 11 (pre-Gate): Verified every scope fence, completed the full regression matrix, re-annotated the ledger without closing an item, recorded both Gap 1 corrections, and confirmed no story-specific evidence file is owed.
 
 ### File List
 
@@ -1016,7 +1024,20 @@ GPT-5 Codex
 - backend/tests/test_proposal_persistence.py (new)
 - backend/tests/test_evidence_binding.py (modified)
 - backend/tests/architecture/test_conversation_boundaries.py (modified)
+- frontend/openapi.json (generated)
+- frontend/src/api/schema.d.ts (generated)
+- frontend/src/api/proposals.ts (new)
+- frontend/src/hooks/useProposal.ts (new)
+- frontend/src/hooks/useReviseProposal.ts (new)
+- frontend/src/hooks/useRejectProposal.ts (new)
+- frontend/src/components/ui/separator.tsx (new)
+- frontend/src/features/chat/DraftCard.tsx (new)
+- frontend/src/features/chat/DraftCard.test.tsx (new)
+- frontend/src/features/chat/ActivityTimeline.tsx (modified)
+- frontend/src/features/chat/ActivityTimeline.test.tsx (modified)
+- frontend/src/test/accessibility-contract.test.tsx (modified)
 - _bmad-output/implementation-artifacts/3-1-create-and-revise-a-reversible-repair-draft.md (modified)
+- _bmad-output/implementation-artifacts/deferred-work.md (modified)
 - _bmad-output/implementation-artifacts/sprint-status.yaml (modified)
 
 ## Change Log
@@ -1032,3 +1053,6 @@ GPT-5 Codex
 | 2026-08-18 | Implemented Task 6: governed proposal persistence and atomic draft finalization. |
 | 2026-08-18 | Implemented Task 7: proposal reads, idempotent revisions, and terminal rejection. |
 | 2026-08-18 | Implemented Task 8: four-case scheduling-draft evaluator coverage and NFR5/NFR28 classification. |
+| 2026-08-18 | Implemented Task 9: generated proposal client surface and reviewable Draft card. |
+| 2026-08-18 | Implemented Task 10: automated Draft accessibility and command-discontinuity proof. |
+| 2026-08-18 | Completed Task 11 pre-Gate closure: hard fences, ledger corrections, full regression, Playwright, and migration drift check. |

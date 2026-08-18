@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/primitives/EmptyState";
 import { EvidenceLink } from "@/components/primitives/EvidenceLink";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
+import { DraftCard } from "./DraftCard";
 import { toSearchParams } from "@/features/evidence/locator";
 import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
 import {
@@ -17,6 +18,7 @@ import type { NavigateFunction } from "react-router";
 type Activity = Timeline["items"][number];
 type AgentResponse = Extract<Activity, { activity_type: "agent_response" }>;
 type Clarification = Extract<Activity, { activity_type: "clarification" }>;
+type Draft = Extract<Activity, { activity_type: "draft" }>;
 type TerminalOutcome = Extract<Activity, { activity_type: "terminal_outcome" }>;
 type Claim = Extract<AgentResponse["response"]["segments"][number], { kind: "claim" }>;
 
@@ -282,6 +284,8 @@ function ActivityContent({
       return <AgentResponse item={item} navigate={navigate} />;
     case "clarification":
       return <Clarification item={item} />;
+    case "draft":
+      return <DraftCard proposalId={(item as Draft).proposal_id} />;
     case "terminal_outcome":
       return <TerminalOutcome isLatest={isLatest} item={item} />;
     default: {

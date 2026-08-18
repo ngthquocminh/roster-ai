@@ -8,7 +8,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
-from application.contracts.proposal import DraftConstraintV1, ProposalV1
+from application.contracts.proposal import DraftConstraintV1, ResolvedEntityV1
+from application.contracts.scenario_projection import LockV1
 
 
 class ScenarioCreate(BaseModel):
@@ -218,9 +219,9 @@ class ProposalOut(BaseModel):
     scenario_version_id: UUID
     current_scenario_version_id: UUID
     expected_baseline_schedule_version: str | None
-    resolved_entities: list
+    resolved_entities: list[ResolvedEntityV1]
     constraints: list[DraftConstraintV1]
-    preserved_locks: list
+    preserved_locks: list[LockV1]
     consequence_summary: str
     canonical_hash: str
     canonical_hash_algorithm: str
