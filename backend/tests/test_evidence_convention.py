@@ -282,3 +282,31 @@ def test_contract_drift_is_reported_but_does_not_unbind(tmp_path):
     assert not any("contract" in v for v in violations), (
         "a changed contract artifact must not unbind the evidence"
     )
+
+
+def test_story_1_9_evidence_keeps_mechanism_separate_from_live_flag_state():
+    """Re-homed from `test_gate_a_mutation_audit.py` on 2026-08-18.
+
+    That file's third test asserted these strings, and `regenerate_evidence.py`
+    names it as the guard that keeps its rewrites honest. The test was removed
+    because it was being used for something it could not do — standing in for a
+    live mutation-denial proof (see `docs/GATE-A-RUNBOOK.md`). The assertions
+    themselves were never the problem, and they protect something real: the
+    2026-08-06 decision that Story 1.9 proved the legacy-route *mechanism* but
+    deliberately did NOT verify the flag's *live state*, which is an
+    operational fact owned by the release runbook. Collapsing those two would
+    let a regenerated file claim a verification nobody performed.
+    """
+    path = (
+        REPO_ROOT
+        / "evidence"
+        / "story-1.9"
+        / "gate-a-viewer-parity-and-mutation-denial.json"
+    )
+    results = json.loads(path.read_text(encoding="utf-8"))["results"]
+
+    assert results["legacy_route_mechanism"] == "proven (isolated settings)"
+    assert results["legacy_route_live_flag_state"] == (
+        "not verified by this story — operational fact, "
+        "owned by Story 1.11 / release runbook"
+    )

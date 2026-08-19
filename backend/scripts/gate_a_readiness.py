@@ -109,8 +109,8 @@ def _evidence_result(
     """Return ``(result, bound, detail)`` for an evidence-backed check.
 
     This reads a PAST measurement and returns it as a PRESENT verdict. That is a
-    category error, accepted deliberately for the four checks whose measurement a
-    shared CI runner cannot reproduce — it is NOT a sign that evidence files need
+    category error, accepted deliberately for the three checks whose measurement
+    a shared CI runner cannot reproduce — it is NOT a sign that evidence files need
     an expiry mechanism. Evidence is a historical record: "at commit X, this
     measurement produced this result", true forever and reproduced by checking out
     X. See :func:`evidence_binding.audit_evidence_file`'s docstring for why its
@@ -118,8 +118,9 @@ def _evidence_result(
     (the ledger's original "evidence has no expiry" heading states the problem
     wrongly).
 
-    Sixteen of the twenty registry checks take fresh JUnit XML instead and do not
-    come through here.
+    Seventeen of the twenty registry checks take fresh JUnit XML instead and do
+    not come through here. It was sixteen of twenty until 2026-08-18, when Story
+    1.9's `viewer_parity_evidence` was replaced by the live `api_parity` check.
     """
     path = repo_root / str(check.evidence_path)
     if not path.is_file():

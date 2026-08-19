@@ -17,6 +17,76 @@ Floor). Accessibility is proven by the automated `accessibility_component_layer`
 and `accessibility_browser_layer` checks below; there is no manual pass in
 this runbook.
 
+### What "read-only" means once drafts are writable (stated 2026-08-18)
+
+Gate A's read-only invariant has always been about **what may change**, never
+about the count of HTTP verbs on the app. Stated positively:
+
+> **No write path mutates governed scenario data or the operational baseline
+> pointer.** The `scenario`, `scenario_version` and fixture-history rows a
+> Gate A viewer reads are immutable after import; the baseline pointer and
+> schedule version move only through an explicit, out-of-band operation that
+> does not exist yet.
+
+A proposal is **new state, not a mutation of the scenario it cites**. Story 3.1
+persists `ProposalV1` into its own SCHEDULING-aggregate tables and writes
+nothing to `scenario` or `scenario_version`; the draft cites a
+`scenario_version_id` and goes stale when a newer one appears, which is the
+opposite of mutating it. So "the API grew a POST" is not, on its own, a Gate A
+regression — and a guard phrased as "no POST anywhere" would report one.
+
+Approved write paths, each with the reason it does not touch governed data:
+
+| Path | Why it is allowed |
+|------|-------------------|
+| `POST /api/v1/auth/logout` | Session lifecycle. Touches identity storage only. |
+| `POST /api/v1/conversations` | Story 2.3 conversation aggregate. |
+| `POST /api/v1/conversations/{id}/messages` | Appends a turn. The turn *reads* the pinned projection and never writes it. |
+| `POST /api/v1/conversations/{id}/agent-runs/{id}/execute` | Advances an agent run; writes run state and, through `finalize_agent_run`, the proposal aggregate. |
+| `POST /api/v1/proposals/{id}/revisions` | Appends a new proposal version. Governed scenario rows untouched; the cited `scenario_version_id` is a foreign key, not a target. |
+| `POST /api/v1/proposals/{id}/rejection` | Terminal transition on the proposal aggregate only. |
+
+That table is a human record. The mechanical half is
+`test_gate_a_write_surface_is_exactly_the_approved_paths`, which derives the
+live list from the OpenAPI document and compares it against its own literal —
+so a new write route turns that test red. The test does **not** read this table,
+so keeping the two in step is a review responsibility: when you add the route to
+the test's literal, add a row here with its reason.
+
+Every route in that table is authenticated and CSRF-guarded — that part is
+enforced centrally by `enforce_versioned_session_and_csrf` for the whole
+`/api/v1` surface, and asserted per-route by the parametrized denial tests.
+**Site scoping is not uniform**, and the differences are deliberate:
+
+- `auth/logout` resolves no session dependency and no site context. It acts on
+  the session cookie itself; there is no site-scoped row to protect.
+- `agent-runs/{id}/execute` uses `get_site_context_opener`, not
+  `get_site_context`, because it opens the RLS-scoped connection inside the
+  background run rather than per-request.
+- The two proposal write routes use `get_site_context` directly, which is what
+  `test_proposal_write_routes_resolve_site_context_and_session` asserts.
+
+### Legacy SQLite write routes are NOT part of that surface
+
+`POST /scenarios`, `POST /scenarios/{id}/runs` and `POST /constraints` still
+exist outside `/api/v1`. They are unauthenticated and site-unaware, and are held
+offline by `refuse_legacy_routes_during_gate_a` — a **filesystem-flag** check, not
+an authorization check. It fails closed on error, but an environment where the
+flag path is simply absent serves them. That is an operational fact about a
+deployment, not a property of the code, which is why it is section 2's live-flag
+procedure and not a test. Do not read the `/api/v1` write-surface test as a
+statement about these three.
+
+Proposals are **created** inside the conversation turn (`finalize_agent_run`),
+not by an HTTP create route — there is deliberately no `POST /api/v1/proposals`.
+
+Authentication and CSRF are the property to re-assert when a future story adds a
+write path — not the absence of writes.
+
+Note there is **no application-level "viewer" role**. Authorization is session +
+site membership + row-level security; `role` in this codebase means a PostgreSQL
+role (see `backend/tests/test_identity_role_boundaries.py`).
+
 ---
 
 ## 1. The one-way cutover

@@ -191,12 +191,45 @@ def test_every_registered_evidence_file_exists_on_disk():
     assert not missing, f"registered evidence files that do not exist: {missing}"
 
 
-def test_registered_evidence_files_are_the_four_known_ones():
+def test_api_parity_binds_a_test_that_still_exists():
+    """File-granularity binding cannot notice a deleted test; this can.
+
+    `api_parity` declares `test_postgres_integration.py`, which holds ~50 cases.
+    `file_outcomes()` rolls up per file and `declared_pytest_cases()` recovers
+    expectations from that same source, so deleting the one test that actually
+    proves API parity removes the expectation along with the proof — the file
+    still passes and the check still reports green over nothing.
+
+    That is precisely the failure the 2026-08-18 swap was meant to end, so the
+    binding is pinned by name here until the check can bind a node id.
+    """
+    from scripts.junit_ingest import declared_pytest_cases
+
+    check = next(c for c in GATE_A_CHECKS if c.check == "api_parity")
+    assert check.test_files == ("backend/tests/test_postgres_integration.py",)
+
+    declared = declared_pytest_cases(REPO_ROOT / check.test_files[0])
+    assert (
+        "test_gate_a_projection_api_matches_every_contract_record_for_both_fixtures"
+        in declared
+    ), "api_parity's proving test is gone; the check now proves nothing"
+
+
+def test_registered_evidence_files_are_the_three_known_ones():
+    """A stored `passed` flag answering a present-tense question is a category
+    error the registry tolerates only where a shared CI runner cannot reproduce
+    the measurement. Keep that set small and named, so growth is deliberate.
+
+    It shrank from four to three on 2026-08-18: Story 1.9's
+    `viewer_parity_evidence` was replaced by `api_parity`, a live pytest check
+    (see `gate_a_checks.py`). The 1.9 evidence file still exists and is still a
+    true record of its commit — it is simply no longer a verdict about today.
+    Adding a fourth is a decision, not a detail.
+    """
     declared = {c.evidence_path for c in GATE_A_CHECKS if c.evidence_path}
     assert declared == {
         "evidence/story-1.4/nfr35-scenario-data-load.json",
         "evidence/story-1.5/nfr35-evidence-target-resolution.json",
-        "evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json",
         "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
     }
 
