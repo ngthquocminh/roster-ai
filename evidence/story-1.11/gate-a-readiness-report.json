@@ -1037,21 +1037,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 945,
-      "run_started": "2026-08-19T16:56:43.488997+07:00",
-      "sha256": "8d96bb3485f1ac8616d78411dd6e1eaeda48c5a0940b89c7b5ca79713f7c081e"
+      "cases": 998,
+      "run_started": "2026-08-19T23:25:27.821467+07:00",
+      "sha256": "9534505601c7dc097dfdd8ea5f33aa3b4eef87094edf4cac1db98e00ee721b99"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 410,
-      "run_started": "2026-08-19T09:59:27.255Z",
-      "sha256": "17512a01bf718b2038c215e38633fae7b29720049f357e87cd06c0129b824331"
+      "run_started": "2026-08-19T16:29:48.452Z",
+      "sha256": "b62399db8bb0bbf7b32b3b85789a3e4322bf1618169614567b677be37be768b5"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 48,
-      "run_started": "2026-08-19T09:57:59.717Z",
-      "sha256": "5c68ea16559c704f10d8dbc8be2f6efb97fbffb9ce3ceeff62fc6de5400b2fcf"
+      "run_started": "2026-08-19T16:30:07.964Z",
+      "sha256": "e17215847a559c9bfa35f8f3c54b14d39210cac56ff7aa1cad0bca0f3687b1e2"
     }
   },
   "version_bindings": {
@@ -1065,7 +1065,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "986f4b080c456c12bf44e333d00d2181e3673863",
+      "git_commit": "6c95b9da0ec39de3f9c0d1e311bcebee946dba0e",
       "working_tree_dirty": false
     },
     "image": {
@@ -1073,7 +1073,7 @@
       "web": "local source tree",
       "database": "postgres:18"
     },
-    "schema_version": "e9f0a1b2c3d4"
+    "schema_version": "f1a2b3c4d5e6"
   },
   "blocking": [],
   "gate_a_passed": true,
