@@ -152,6 +152,30 @@ Five findings were recorded as deferred rather than fixed; see
 KEEP: the derive-from-OpenAPI discovery, the positive control, and the practice
 of red-checking each new guard by mutating production code and reverting.
 
+**2026-08-19 — the two follow-ups closed (`986f4b0`, `ec3d59d`).**
+Both items left open at presentation are done.
+
+*Runbook record made enforceable.* The approved-write-path list was a comment:
+adding a route turned the write-surface test red, and appending one tuple to
+that test's own literal turned it green again with the record left stale.
+`test_runbook_records_every_versioned_write_path` now reads the file. It matches
+on path shape rather than parameter names and scans the document rather than
+parsing the table, so `{id}` vs `{proposal_id}` is fine and reformatting does
+not break it. Verified by four mutations: new route → red; patch only the Python
+literal → still red (the reviewer's exact scenario); reformat the table to a
+bullet list → green; delete a documented entry → red. The runbook prose claiming
+"the test does not read this table" was true when written and is now false, so
+it was rewritten.
+
+*Readiness report re-measured.* The stored report recorded `viewer_parity_evidence`
+— a check that no longer exists. Regenerated through runbook §3 on a clean tree
+at `986f4b0` with Docker PostgreSQL 18 up: pytest 945 / vitest 410 / playwright 48
+cases, zero failures, `gate_a_passed: true`, `blocking[]` empty, evidence-backed
+checks 3. Playwright's count was cross-checked against `--list` before binding,
+per the runbook's warning that the streaming reporter hard-codes `errors="0"`.
+Not hand-edited — an evidence file answering a present-tense question with a dead
+check list is the same category error this whole item removed.
+
 ## Design Notes
 
 **Why the negative tests do NOT fill `viewer_parity_evidence`'s slot.** The
