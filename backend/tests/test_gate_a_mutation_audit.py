@@ -487,3 +487,57 @@ def test_openapi_document_hides_no_write_route() -> None:
                 )
 
     assert walked == documented
+
+
+_RUNBOOK = BACKEND_ROOT.parent / "docs" / "GATE-A-RUNBOOK.md"
+
+
+def _normalised(method: str, path: str) -> str:
+    """Compare routes by shape, ignoring what the path parameters are called.
+
+    The runbook writes `/proposals/{id}/revisions` for readability; OpenAPI
+    emits `/proposals/{proposal_id}/revisions`. Those are the same route, and a
+    guard that demanded identical parameter names would be enforcing prose
+    style rather than coverage.
+    """
+    shape = re.sub(r"\{[^}]*\}", "{}", path)
+    return f"{method} {shape}"
+
+
+def test_runbook_records_every_versioned_write_path() -> None:
+    """Every live write route must appear in `docs/GATE-A-RUNBOOK.md`.
+
+    The approved-write-path list carries the reason each route does not touch
+    governed scenario data or the baseline pointer. Without this test that list
+    is a comment: a developer adding a write route turns
+    `test_gate_a_write_surface_is_exactly_the_approved_paths` red, fixes it by
+    appending one tuple to that test's literal, and the record silently stops
+    being complete.
+
+    Scope, stated honestly: this asserts the path was WRITTEN DOWN, not that
+    the reason beside it is any good. It scans the whole document for path
+    mentions rather than parsing a table, so reformatting — to a list, or with
+    different columns — does not break it. Grading the justification is a
+    reviewer's job; getting the author into the file is this test's job.
+
+    The reverse direction is deliberately not asserted: the runbook also names
+    `POST /api/v1/proposals` in order to say it does NOT exist, and a route
+    documented as absent must not be mistaken for a stale entry.
+    """
+    text = _RUNBOOK.read_text(encoding="utf-8")
+    documented = {
+        _normalised(match.group(1), match.group(2))
+        for match in re.finditer(
+            r"\b(POST|PUT|PATCH|DELETE)\s+`?(/api/v1/[^\s`|]*)", text
+        )
+    }
+
+    live = {_normalised(method, path) for method, path in _versioned_write_routes()}
+    missing = sorted(live - documented)
+
+    assert not missing, (
+        "write routes missing from docs/GATE-A-RUNBOOK.md: "
+        + ", ".join(missing)
+        + " — add an entry recording why each does not touch governed scenario "
+        "data or the operational baseline pointer"
+    )

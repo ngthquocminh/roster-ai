@@ -46,12 +46,18 @@ Approved write paths, each with the reason it does not touch governed data:
 | `POST /api/v1/proposals/{id}/revisions` | Appends a new proposal version. Governed scenario rows untouched; the cited `scenario_version_id` is a foreign key, not a target. |
 | `POST /api/v1/proposals/{id}/rejection` | Terminal transition on the proposal aggregate only. |
 
-That table is a human record. The mechanical half is
-`test_gate_a_write_surface_is_exactly_the_approved_paths`, which derives the
-live list from the OpenAPI document and compares it against its own literal —
-so a new write route turns that test red. The test does **not** read this table,
-so keeping the two in step is a review responsibility: when you add the route to
-the test's literal, add a row here with its reason.
+That table is enforced, in two independent steps. A new write route turns
+`test_gate_a_write_surface_is_exactly_the_approved_paths` red, because it
+derives the live list from the OpenAPI document and compares it against its own
+literal. Appending a tuple to that literal is **not** enough to get back to
+green: `test_runbook_records_every_versioned_write_path` then reads this file
+and fails until the route is recorded here too.
+
+It matches on path shape, not parameter names, and scans the whole document
+rather than parsing the table — so `{id}` versus `{proposal_id}` is fine, and
+reformatting this table into a list will not break it. What it cannot check is
+whether the reason you write beside a path is a good one. That is a reviewer's
+job; the test only guarantees you had to come here and write something.
 
 Every route in that table is authenticated and CSRF-guarded — that part is
 enforced centrally by `enforce_versioned_session_and_csrf` for the whole
