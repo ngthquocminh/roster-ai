@@ -102,6 +102,9 @@ class AssignmentV1:
     shift_id: str | None
     start_minute: int
     end_minute: int
+    qualification_refs: tuple[QualificationRefV1, ...] = ()
+    source: str = "baseline"
+    lock_ref: str | None = None
 
 
 @dataclass(frozen=True)

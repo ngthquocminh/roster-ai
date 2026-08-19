@@ -8,6 +8,7 @@ select an LLM provider/model, without touching code.
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -83,6 +84,14 @@ class Settings:
     scheduling_compute_timeout_seconds: float = 5.0
     scheduling_draft_timeout_seconds: float = 5.0
     scheduling_draft_max_constraints: int = 10
+    # Governed solver ceilings (Story 3.2, AD-7). These are application-owned
+    # inputs frozen into RunSnapshotV1; neither a model nor a caller chooses
+    # them. Single-worker + deterministic time is the reproducible default.
+    solver_engine_name: str = "cpsat"
+    solver_seed: int = 42
+    solver_num_search_workers: int = 1
+    solver_max_deterministic_time: float = 30.0
+    solver_wall_time_limit_seconds: float = 30.0
     # AD-2 feature policy. `compose_granted_capabilities` refuses any module
     # whose `required_feature_policy` is absent here, so this is the supplier
     # that gate has always expected. It must NEVER be derived from the
@@ -174,6 +183,33 @@ def _optional_float(raw: str | None, fallback: float | None) -> float | None:
         return fallback
 
 
+def _positive_int(name: str, raw: str | None, fallback: int) -> int:
+    try:
+        value = fallback if raw is None else int(raw)
+    except ValueError as exc:
+        raise InvalidFlagError(f"{name} must be a positive integer") from exc
+    if value <= 0:
+        raise InvalidFlagError(f"{name} must be a positive integer")
+    return value
+
+
+def _positive_float(name: str, raw: str | None, fallback: float) -> float:
+    try:
+        value = fallback if raw is None else float(raw)
+    except ValueError as exc:
+        raise InvalidFlagError(f"{name} must be a positive finite number") from exc
+    if not math.isfinite(value) or value <= 0:
+        raise InvalidFlagError(f"{name} must be a positive finite number")
+    return value
+
+
+def _nonempty(name: str, raw: str | None, fallback: str) -> str:
+    value = fallback if raw is None else raw.strip()
+    if not value:
+        raise InvalidFlagError(f"{name} must not be empty")
+    return value
+
+
 def default_settings() -> Settings:
     """Read settings fresh each call so env overrides apply at request time."""
     db_path = os.environ.get("ROSTERAI_DB", str(_BACKEND_DIR / "var" / "rosterai.db"))
@@ -254,6 +290,27 @@ def default_settings() -> Settings:
     scheduling_draft_max_constraints = (
         _optional_int(os.environ.get("SCHEDULING_DRAFT_MAX_CONSTRAINTS"), 10) or 10
     )
+    solver_engine_name = _nonempty(
+        "SOLVER_ENGINE_NAME", os.environ.get("SOLVER_ENGINE_NAME"), "cpsat"
+    )
+    solver_seed = _positive_int(
+        "SOLVER_SEED", os.environ.get("SOLVER_SEED"), 42
+    )
+    solver_num_search_workers = _positive_int(
+        "SOLVER_NUM_SEARCH_WORKERS",
+        os.environ.get("SOLVER_NUM_SEARCH_WORKERS"),
+        1,
+    )
+    solver_max_deterministic_time = _positive_float(
+        "SOLVER_MAX_DETERMINISTIC_TIME",
+        os.environ.get("SOLVER_MAX_DETERMINISTIC_TIME"),
+        30.0,
+    )
+    solver_wall_time_limit_seconds = _positive_float(
+        "SOLVER_WALL_TIME_LIMIT_SECONDS",
+        os.environ.get("SOLVER_WALL_TIME_LIMIT_SECONDS"),
+        30.0,
+    )
     scheduling_compute_enabled = _flag(
         "SCHEDULING_COMPUTE_ENABLED",
         os.environ.get("SCHEDULING_COMPUTE_ENABLED"), True
@@ -300,6 +357,11 @@ def default_settings() -> Settings:
         scheduling_compute_timeout_seconds=scheduling_compute_timeout_seconds,
         scheduling_draft_timeout_seconds=scheduling_draft_timeout_seconds,
         scheduling_draft_max_constraints=scheduling_draft_max_constraints,
+        solver_engine_name=solver_engine_name,
+        solver_seed=solver_seed,
+        solver_num_search_workers=solver_num_search_workers,
+        solver_max_deterministic_time=solver_max_deterministic_time,
+        solver_wall_time_limit_seconds=solver_wall_time_limit_seconds,
         scheduling_compute_enabled=scheduling_compute_enabled,
         scheduling_draft_enabled=scheduling_draft_enabled,
         scheduling_inspect_enabled=scheduling_inspect_enabled,

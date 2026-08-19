@@ -28,6 +28,10 @@ EXPECTED_TABLES = {
     "proposal",
     "proposal_version",
     "command_idempotency",
+    "run_snapshot",
+    "schedule_run",
+    "schedule_version",
+    "schedule_assignment",
 }
 SITE_OWNED_TABLES = {
     "scenario",
@@ -42,6 +46,10 @@ SITE_OWNED_TABLES = {
     "proposal",
     "proposal_version",
     "command_idempotency",
+    "run_snapshot",
+    "schedule_run",
+    "schedule_version",
+    "schedule_assignment",
 }
 
 

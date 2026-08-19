@@ -414,66 +414,66 @@ Agent Record.
 
 #### Task 1 — Extend `AssignmentV1`; add the four new contracts (AC: 1, 2, 3)
 
-- [ ] `application/contracts/scenario_projection.py`: add `qualification_refs`, `source`, `lock_ref`
+- [x] `application/contracts/scenario_projection.py`: add `qualification_refs`, `source`, `lock_ref`
       to `AssignmentV1`, **all defaulted** (Gap 3). Update the field-order test that covers it.
-- [ ] New `application/contracts/run_snapshot.py` — `RunSnapshotV1` and `GovernedSolverConfigV1`,
+- [x] New `application/contracts/run_snapshot.py` — `RunSnapshotV1` and `GovernedSolverConfigV1`,
       every AD-20 field present (Facts table row). `component_versions` is a
       `tuple[tuple[str, str], ...]` capturing at minimum `ortools`, `application`, and the
       `contract schema_version` — sorted, so the canonical hash is stable.
-- [ ] New `application/contracts/schedule_version.py` — `ScheduleVersionV1`, `MetricSetV1`,
+- [x] New `application/contracts/schedule_version.py` — `ScheduleVersionV1`, `MetricSetV1`,
       `ConstraintResultV1`, `SolverOutcomeV1`, `ScheduleRunStatusV1`.
-- [ ] `ScheduleRunStatusV1` is a closed `Literal` of exactly AD-7's **eight** `ScheduleRun` states —
+- [x] `ScheduleRunStatusV1` is a closed `Literal` of exactly AD-7's **eight** `ScheduleRun` states —
       `solver_queued`, `solver_running`, `cancellation_requested`, `solver_completed`,
       `solver_infeasible`, `solver_timed_out`, `solver_cancelled`, `solver_failed` (five of which are
       terminal). Do **not** reuse `AgentRunStatusV1` and do not borrow a name from it; AD-7 says the
       stored status types are never merged, and `agent_run`'s own CHECK
       (`schema.py:306`) is a separate vocabulary.
-- [ ] **Unlike `ProposalV1`, the required shape is enforced at construction.** `deferred-work.md:231`
+- [x] **Unlike `ProposalV1`, the required shape is enforced at construction.** `deferred-work.md:231`
       names Story 3.2 as this item's owner precisely because a snapshot freezes a proposal: a
       `__post_init__` raises if any AD-20-required field is absent. Discharge the ledger entry.
-- [ ] Contract digests use `application/contracts/canonical.py :: contract_digest` — the **one**
+- [x] Contract digests use `application/contracts/canonical.py :: contract_digest` — the **one**
       canonicalizer. Do not add a second pre-canonicalization shape (Story 3.1's review found two
       that agreed only by luck).
 
 #### Task 2 — Migration: four tables (AC: 1, 3, 4)
 
-- [ ] `run_snapshot`, `schedule_run`, `schedule_version`, `schedule_assignment`. Copy the RLS /
+- [x] `run_snapshot`, `schedule_run`, `schedule_version`, `schedule_assignment`. Copy the RLS /
       FORCE RLS / policy / composite-uniqueness / grant-then-revoke shape from
       `migrations/versions/a4f92d7c8e31_add_durable_conversations.py`; copy the digest/algorithm
       CHECK shape from `schema.py:134-145`.
-- [ ] `schedule_run.status` CHECK over the closed vocabulary from Task 1.
-- [ ] **The AC4 database guarantee:** `CHECK (candidate_schedule_version_id IS NULL OR status =
+- [x] `schedule_run.status` CHECK over the closed vocabulary from Task 1.
+- [x] **The AC4 database guarantee:** `CHECK (candidate_schedule_version_id IS NULL OR status =
       'solver_completed')`. Application code may be wrong; this cannot be.
-- [ ] `run_snapshot` and `schedule_version` receive **INSERT and SELECT grants only** — no UPDATE, no
+- [x] `run_snapshot` and `schedule_version` receive **INSERT and SELECT grants only** — no UPDATE, no
       DELETE for any runtime role (AD-9 immutability, AC1's "cannot alter after acceptance").
       `schedule_run` receives a narrow UPDATE grant on `status`, `reason`,
       `candidate_schedule_version_id`, `finished_at` only — copy
       `c7d6e5f4a3b2_grant_agent_run_status_update.py`.
-- [ ] `alembic check` must report zero operations. **Run it from the repository root** —
+- [x] `alembic check` must report zero operations. **Run it from the repository root** —
       `alembic.ini` is checked in at the root with `script_location = %(here)s/backend/migrations`
       (`deferred-work.md:138-147`).
 
 #### Task 3 — `create_run_snapshot` use case + repository (AC: 1)
 
-- [ ] `application/ports/schedule_run.py` — `ScheduleRunRepository` Protocol with `connection: Any`
+- [x] `application/ports/schedule_run.py` — `ScheduleRunRepository` Protocol with `connection: Any`
       (never the vendor type; copy `application/ports/scenario_projection.py:104`).
-- [ ] `adapters/postgres/schedule_run.py` — the implementation.
-- [ ] `application/use_cases/create_run_snapshot.py`: load the persisted `ProposalV1`; **fail closed**
+- [x] `adapters/postgres/schedule_run.py` — the implementation.
+- [x] `application/use_cases/create_run_snapshot.py`: load the persisted `ProposalV1`; **fail closed**
       if the proposal is `rejected`, or if its `scenario_version_id` differs from the scenario's
       current version (AD-9, no silent rebase); build `RunSnapshotV1`; compute its canonical hash;
       insert `run_snapshot` + `schedule_run(status='solver_queued')` in **one** transaction.
-- [ ] Input evidence refs: one `EvidenceRefV1` per resolved entity and per preserved lock on the
+- [x] Input evidence refs: one `EvidenceRefV1` per resolved entity and per preserved lock on the
       proposal, each carrying the scenario version + digest. `producing_run_version` stays `None`
       on *input* refs — they predate the run.
-- [ ] Solver config values come from `settings.py` (Task 4), never from a caller argument that a
+- [x] Solver config values come from `settings.py` (Task 4), never from a caller argument that a
       later story could route model output into.
 
 #### Task 4 — Settings: positive application-owned solver ceilings (AC: 1, 4)
 
-- [ ] Add `solver_engine_name`, `solver_seed`, `solver_num_search_workers`,
+- [x] Add `solver_engine_name`, `solver_seed`, `solver_num_search_workers`,
       `solver_max_deterministic_time`, `solver_wall_time_limit_seconds` to `Settings`, following the
       existing `scheduling_*` field conventions and their comment style.
-- [ ] All must be **positive** (NFR16 / AD-7). A non-positive or unparseable value raises at process
+- [x] All must be **positive** (NFR16 / AD-7). A non-positive or unparseable value raises at process
       start, matching `settings.py`'s existing `InvalidFlagError` posture — it must never silently
       fall back, because a zero ceiling is an unbounded solve wearing a configured number.
 
@@ -803,10 +803,70 @@ creation. Establish real pass numbers before attributing any failure to this sto
 
 ### Implementation Plan
 
+- Follow the story's three phases in task order with red-green-refactor gates; keep the solver and
+  persistence boundaries transport-free and preserve every mandated zero-line diff.
+- Freeze governed inputs as identity + checksum contracts, then persist them before introducing the
+  engine adapter; independently validate assignments and recompute candidate numbers before finalization.
+
 ### Debug Log References
+
+- 2026-08-19 Task 1 RED: `tests/test_run_snapshot_contracts.py` failed collection because the new
+  contract modules did not exist. GREEN: targeted projection/contract regression 113 passed, 1 skipped.
+- 2026-08-19 Task 1 full regression: 957 collected; 948 passed, 2 skipped, 7 deselected.
+- 2026-08-19 Task 2 RED: metadata/migration tests failed on all four absent tables and migration.
+  GREEN: fresh-database upgrade/downgrade plus Alembic `command.check` passed; live PostgreSQL
+  grants and candidate/status CHECK passed. Full regression: 953 passed, 2 skipped, 7 deselected;
+  PostgreSQL suite: 57 passed.
+- 2026-08-19 Task 3 RED: `test_create_run_snapshot.py` failed collection before the use case existed.
+  GREEN: 4 focused tests passed; full regression 957 passed, 2 skipped, 7 deselected. Exact stale
+  refusal code: `stale_proposal`; exact rejected refusal code: `rejected_proposal`.
+- 2026-08-19 Task 4 RED: 6 settings tests failed before the five governed solver settings existed.
+  GREEN: 21 focused settings/snapshot tests passed; full regression 963 passed, 2 skipped, 7 deselected.
+- 2026-08-19 Phase A checkpoint: backend 972 collected / 963 passed / 2 skipped / 7 deselected;
+  PostgreSQL 57 collected / 57 passed; clean throwaway `alembic check` reported no operations;
+  grants were run_snapshot=`SELECT,INSERT`, schedule_version=`SELECT,INSERT`,
+  schedule_assignment=`SELECT,INSERT`, schedule_run=`SELECT,INSERT` plus column-scoped UPDATE on
+  status/reason/candidate_schedule_version_id/finished_at; AC4 CHECK rejected the invalid row with
+  `ck_schedule_run_candidate_completed`; required-field guard raised `snapshot_id is required`;
+  stale proposal refused before write with code `stale_proposal`.
 
 ### Completion Notes List
 
+- Task 1: Extended `AssignmentV1` additively with defaulted solver qualification/source/lock
+  provenance; added immutable governed snapshot/config and schedule-output contracts; enforced the
+  exact eight-state AD-7 vocabulary, UTC accepted time, sorted component versions, one RFC 8785
+  canonical digest path, and a required-field construction guard.
+- Task 2: Added the four-table schedule-run aggregate with site-scoped composite foreign keys,
+  forced RLS, immutable snapshot/version/assignment grants, a four-column run-transition grant,
+  closed status/feasible-status vocabularies, and a database-level prohibition on candidates for
+  non-completed runs. A clean throwaway database reports zero Alembic operations.
+- Task 3: Added the transport-free repository port, PostgreSQL atomic snapshot/run writer, and
+  `create_run_snapshot` use case. It row-locks persisted proposal authority, refuses rejected or
+  stale scenario/baseline inputs before any write, derives settings-owned solver config, freezes
+  component versions and trusted evidence locators, and inserts the snapshot plus queued run on one
+  caller-owned transaction connection.
+- Task 4: Added application-owned `cpsat`/seed/single-worker/deterministic-time/wall-time settings.
+  Every value is parsed strictly and must be non-empty, positive, and finite; malformed or zero
+  values raise `InvalidFlagError` at settings construction instead of falling back.
+
 ### File List
+
+- backend/application/contracts/run_snapshot.py
+- backend/application/contracts/scenario_projection.py
+- backend/application/contracts/schedule_version.py
+- backend/tests/test_run_snapshot_contracts.py
+- backend/tests/test_scenario_projection.py
+- backend/adapters/postgres/schema.py
+- backend/migrations/versions/f1a2b3c4d5e6_add_schedule_run_aggregate.py
+- backend/tests/test_evidence_binding.py
+- backend/tests/test_postgres_schema.py
+- backend/tests/test_schedule_run_persistence.py
+- backend/adapters/postgres/schedule_run.py
+- backend/application/ports/schedule_run.py
+- backend/application/use_cases/create_run_snapshot.py
+- backend/tests/test_create_run_snapshot.py
+- backend/settings.py
+- backend/tests/test_settings.py
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
