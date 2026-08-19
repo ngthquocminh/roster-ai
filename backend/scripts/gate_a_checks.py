@@ -329,14 +329,26 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
             "frontend/src/features/scenario-data/ScenarioDataParity.test.tsx",
         ),
     ),
+    # Replaced `viewer_parity_evidence` on 2026-08-18. That check read the
+    # `passed` field of `evidence/story-1.9/gate-a-viewer-parity-and-mutation-
+    # denial.json` as a PRESENT-TENSE verdict, and its only guard asserted
+    # string literals inside the same file — circular. The evidence file is
+    # untouched and still on disk; it remains a true record of commit
+    # `e2ecdb6`, just no longer consulted about today.
+    #
+    # Of the four things that file claimed, three already had live checks
+    # (`viewer_parity`, `backend_mutation_denial`, `frontend_mutation_denial`).
+    # `api_parity` was the one that did not, and the test proving it was
+    # already written — it simply was not registered.
     GateACheck(
-        check="viewer_parity_evidence",
+        check="api_parity",
         story="1.9",
         invariant="parity_tests",
-        description="Recorded parity and mutation-denial evidence.",
-        evidence_path=(
-            "evidence/story-1.9/gate-a-viewer-parity-and-mutation-denial.json"
+        description=(
+            "Live projection API parity against the pinned contract fixtures."
         ),
+        runner="pytest",
+        test_files=("backend/tests/test_postgres_integration.py",),
     ),
     GateACheck(
         check="backend_mutation_denial",
