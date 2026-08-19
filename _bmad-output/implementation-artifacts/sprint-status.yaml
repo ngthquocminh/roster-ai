@@ -1391,7 +1391,7 @@ development_status:
   # Epic 3: Governed and Recoverable Schedule Repair
   epic-3: in-progress
   3-1-create-and-revise-a-reversible-repair-draft: done
-  3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: in-progress
+  3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: review
   3-3-lease-solver-jobs-with-fencing: backlog
   3-4-provide-the-safe-cancellation-command: backlog
   3-5-persist-literal-run-state-and-replay-progress: backlog

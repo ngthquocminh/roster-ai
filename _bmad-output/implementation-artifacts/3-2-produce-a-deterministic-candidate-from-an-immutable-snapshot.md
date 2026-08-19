@@ -4,7 +4,7 @@ baseline_commit: 37371d3e146f99d0af5b6cb5c782cfc98c3e9de9
 
 # Story 3.2: Produce a Deterministic Candidate from an Immutable Snapshot [Technical Enabler]
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -579,7 +579,7 @@ Report, from a real run, before writing the adapter:
       `RunSnapshotV1`); update `:185` (`baseline_schedule_version` — aggregate now exists, pointer
       still Epic 4's); update `:211` (`shortfall_minutes` — condition 1 now satisfied, conditions 2–4
       still open); add the `MinimumHoursBetweenShifts` divergence from Gap 2b.
-- [ ] Gate A re-run: `gate_a_passed: true`, `blocking: []`.
+- [x] Gate A re-run: `gate_a_passed: true`, `blocking: []`.
 - [x] Verify the mandated zero-line diffs with `git diff --stat` (list in Project Structure Notes).
 
 ---
@@ -854,6 +854,11 @@ Codex (GPT-5)
   `adapters/postgres/scenario_projection.py`; the final test records those exact AD-25 allowlists
   while rejecting any new governed importer. GREEN: 4 architecture cases passed. Pre-Gate full
   regression: 996 passed, 2 skipped, 7 deselected; PostgreSQL: 57 passed.
+- 2026-08-19 final clean-tree verification: backend 997 passed / 1 expected skip / 7 live-provider
+  deselected; evidence convention 49 passed; PostgreSQL 57 passed; Vitest 410 passed; Playwright
+  48 passed across Chromium and Edge; frontend lint, typecheck, and production build passed. The
+  regenerated Gate A report binds commit `6c95b9d`, records all eight checks passed,
+  `gate_a_passed: true`, and `blocking: []`.
 
 ### Completion Notes List
 
@@ -895,7 +900,7 @@ Codex (GPT-5)
   facts; verified every mandated path remains a zero-line diff. Candidate evidence now names its
   producing schedule version, and candidate metrics reproduce from assignments plus frozen source
   facts. Golden evaluation data remains unchanged at 21 cases because this story adds no model-facing
-  capability.
+  capability. Gate A remains green with no blocking checks.
 
 ### File List
 
@@ -928,6 +933,11 @@ Codex (GPT-5)
 - backend/tests/test_finalize_schedule_run.py
 - backend/tests/architecture/test_solver_boundaries.py
 - _bmad-output/implementation-artifacts/deferred-work.md
+- evidence/story-1.11/gate-a-readiness-report.json
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
+
+- 2026-08-19: Implemented Story 3.2's immutable governed run snapshot, deterministic CP-SAT adapter,
+  independent candidate validation/metrics, atomic terminal persistence, architecture fences, and
+  Gate A evidence refresh; moved story to review.
