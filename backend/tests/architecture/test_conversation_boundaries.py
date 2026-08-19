@@ -18,6 +18,7 @@ GUARDED = (
     # becomes a claim about coverage it no longer has.
     BACKEND_ROOT / "application/contracts/stream_cursor.py",
     BACKEND_ROOT / "application/ports/conversation.py",
+    BACKEND_ROOT / "application/ports/proposal.py",
 )
 
 # Swept whole, not enumerated: Story 2.5's capability package will grow (2.6

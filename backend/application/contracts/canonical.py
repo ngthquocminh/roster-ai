@@ -1,10 +1,21 @@
-"""RFC 8785 JSON Canonicalization Scheme (JCS) serialization."""
+"""RFC 8785 canonical JSON and governed contract digests.
+
+``scheduling_compute.derive_result_id`` deliberately retains a smaller,
+float-free implementation because its four frozen golden cases pin those
+identifiers.  The two implementations are tested to agree on that restricted
+shape; callers needing general RFC 8785 support use this module.
+"""
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from decimal import Decimal
 from typing import Any
+
+
+CHECKSUM_ALGORITHM = "sha256"
+CHECKSUM_SCHEMA_VERSION = "rfc8785-v1"
 
 
 def _quote_string(value: str) -> str:
@@ -93,3 +104,17 @@ def _serialize(value: Any) -> str:
 def canonicalize_json(value: Any) -> bytes:
     """Return the RFC 8785 canonical UTF-8 representation of ``value``."""
     return _serialize(value).encode("utf-8")
+
+
+def contract_digest(value: Any) -> tuple[str, str, str]:
+    """Return the governed algorithm, schema, and digest for a contract value."""
+    digest = hashlib.sha256(canonicalize_json(value)).hexdigest()
+    return CHECKSUM_ALGORITHM, CHECKSUM_SCHEMA_VERSION, digest
+
+
+__all__ = [
+    "CHECKSUM_ALGORITHM",
+    "CHECKSUM_SCHEMA_VERSION",
+    "canonicalize_json",
+    "contract_digest",
+]

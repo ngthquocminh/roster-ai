@@ -8,6 +8,12 @@ from uuid import UUID
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
+from application.contracts.proposal import (
+    DraftConstraintProposalV1,
+    DraftConstraintV1,
+    ResolvedEntityV1,
+)
+from application.contracts.scenario_projection import LockV1
 
 
 class ScenarioCreate(BaseModel):
@@ -151,6 +157,13 @@ class ClarificationActivityOut(ActivityCommonOut):
     clarification: ResolvedClarificationV1
 
 
+class DraftActivityOut(ActivityCommonOut):
+    activity_type: Literal["draft"]
+    proposal_id: UUID
+    proposal_version_id: UUID
+    consequence_summary: str
+
+
 class TerminalOutcomeActivityOut(ActivityCommonOut):
     activity_type: Literal["terminal_outcome"]
     outcome: TerminalOutcomeV1
@@ -160,6 +173,7 @@ ActivityItemOut = Annotated[
     PlannerMessageActivityOut
     | AgentResponseActivityOut
     | ClarificationActivityOut
+    | DraftActivityOut
     | TerminalOutcomeActivityOut,
     Field(discriminator="activity_type"),
 ]
@@ -191,6 +205,44 @@ class TimelineOut(BaseModel):
     # older ones exist beyond it. Without it a full page is indistinguishable
     # from an exactly-`limit`-length stream.
     has_more: bool
+
+
+class ProposalRevisionIn(BaseModel):
+    # The UNTRUSTED shape, deliberately. `DraftConstraintV1` is the trusted,
+    # resolved contract; binding it to a request body would let a client post
+    # its own `resolved_entities`, `label` and `description` straight into an
+    # immutable proposal version. The application re-resolves every identifier
+    # and recomposes every description through
+    # `application/drafting/resolve.py` — the same path the model-facing
+    # capability uses. The upper bound is enforced in the use case against
+    # `scheduling_draft_max_constraints`; the generous cap here only stops an
+    # unbounded body from being parsed at all.
+    constraints: list[DraftConstraintProposalV1] = Field(min_length=1, max_length=100)
+    expected_resource_version: int = Field(ge=1)
+
+
+class ProposalRejectionIn(BaseModel):
+    expected_resource_version: int = Field(ge=1)
+
+
+class ProposalOut(BaseModel):
+    proposal_id: UUID
+    proposal_version_id: UUID
+    scenario_id: UUID
+    scenario_version_id: UUID
+    current_scenario_version_id: UUID
+    expected_baseline_schedule_version: str | None
+    resolved_entities: list[ResolvedEntityV1]
+    constraints: list[DraftConstraintV1]
+    preserved_locks: list[LockV1]
+    consequence_summary: str
+    canonical_hash: str
+    canonical_hash_algorithm: str
+    canonical_hash_schema_version: str
+    state: Literal["active", "rejected"]
+    resource_version: int
+    stale: bool
+    schema_version: str
 
 
 class AuthSessionOut(BaseModel):

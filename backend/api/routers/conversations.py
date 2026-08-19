@@ -24,6 +24,7 @@ from api.deps import (
     get_agent_runtime_factory,
     get_capability_registry,
     get_projection_reader,
+    get_proposal_repository,
     get_settings,
     get_session,
     get_site_context,
@@ -64,6 +65,8 @@ from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.grounding import GroundedAnswerV1
 from application.ports.scenario_projection import ScenarioProjectionReader
+from application.ports.proposal import ProposalRepository
+from application.use_cases.finalize_agent_run import finalize_agent_run
 from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -168,6 +171,7 @@ async def execute_agent_turn(
     agent_run_id: UUID,
     session: ResolvedSession = Depends(get_session),
     repository: ConversationRepository = Depends(get_conversation_repository),
+    proposal_repository: ProposalRepository = Depends(get_proposal_repository),
     open_site_context: SiteContextOpener = Depends(get_site_context_opener),
     compose_capabilities: CapabilityComposer = Depends(get_capability_registry),
     projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
@@ -269,7 +273,9 @@ async def execute_agent_turn(
 
     def _finish():
         with open_site_context(session.site_id) as connection:
-            return repository.finish_agent_run(
+            return finalize_agent_run(
+                repository,
+                proposal_repository,
                 connection,
                 claimed=claimed,
                 status=terminal_status(outcome),

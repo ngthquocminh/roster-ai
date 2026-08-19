@@ -25,6 +25,9 @@ EXPECTED_TABLES = {
     "message",
     "agent_run",
     "persisted_event",
+    "proposal",
+    "proposal_version",
+    "command_idempotency",
 }
 SITE_OWNED_TABLES = {
     "scenario",
@@ -36,6 +39,9 @@ SITE_OWNED_TABLES = {
     "message",
     "agent_run",
     "persisted_event",
+    "proposal",
+    "proposal_version",
+    "command_idempotency",
 }
 
 

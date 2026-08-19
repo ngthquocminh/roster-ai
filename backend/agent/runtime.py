@@ -51,10 +51,11 @@ from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV1
 from application.contracts.dialogue import ClarificationV1, RefusalV1
+from application.contracts.proposal import DraftProposalV1
 from application.grounding.gate import numeric_prose_violation
 from agent.capability_tools import render_capabilities
 
-# The three named structured-output tools, declared ONCE here where the
+# The four named structured-output tools, declared ONCE here where the
 # `ToolOutput`s are actually constructed. Evaluation imports these rather than
 # re-declaring them: a hardcoded copy diverges silently the day a fourth variant
 # is registered, and the divergence surfaces as every refuse/clarify case
@@ -64,8 +65,14 @@ from agent.capability_tools import render_capabilities
 ANSWER_OUTPUT_TOOL = "final_result"
 CLARIFICATION_OUTPUT_TOOL = "clarification"
 REFUSAL_OUTPUT_TOOL = "refusal"
+DRAFT_OUTPUT_TOOL = "draft"
 OUTPUT_TOOL_NAMES = frozenset(
-    {ANSWER_OUTPUT_TOOL, CLARIFICATION_OUTPUT_TOOL, REFUSAL_OUTPUT_TOOL}
+    {
+        ANSWER_OUTPUT_TOOL,
+        CLARIFICATION_OUTPUT_TOOL,
+        REFUSAL_OUTPUT_TOOL,
+        DRAFT_OUTPUT_TOOL,
+    }
 )
 
 
@@ -133,6 +140,7 @@ class PydanticAIAgentRuntime:
                 ToolOutput(answer_type, name=ANSWER_OUTPUT_TOOL),
                 ToolOutput(ClarificationV1, name=CLARIFICATION_OUTPUT_TOOL),
                 ToolOutput(RefusalV1, name=REFUSAL_OUTPUT_TOOL),
+                ToolOutput(DraftProposalV1, name=DRAFT_OUTPUT_TOOL),
                 DeferredToolRequests,
             ]
         )
@@ -319,7 +327,8 @@ class PydanticAIAgentRuntime:
             )
 
         if self._answer_type is not None and not isinstance(
-            result.output, (GroundedAnswerV1, ClarificationV1, RefusalV1)
+            result.output,
+            (GroundedAnswerV1, ClarificationV1, RefusalV1, DraftProposalV1),
         ):
             raise AgentRuntimeError(
                 f"unrecognized structured output {type(result.output).__name__}"
@@ -337,6 +346,9 @@ class PydanticAIAgentRuntime:
                 result.output if isinstance(result.output, ClarificationV1) else None
             ),
             refusal=(result.output if isinstance(result.output, RefusalV1) else None),
+            draft=(
+                result.output if isinstance(result.output, DraftProposalV1) else None
+            ),
             turn=turn,
             summary=summary,
             tool_results=_tool_results(turn, excluded_names=self._output_tool_names),

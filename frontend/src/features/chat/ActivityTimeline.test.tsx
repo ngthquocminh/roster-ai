@@ -432,7 +432,7 @@ describe("ActivityTimeline", () => {
     const unknown = {
       ...refusal,
       activity_id: "cccccccc-cccc-4ccc-8ccc-000000000000",
-      activity_type: "draft",
+      activity_type: "run_progress",
     } as unknown as typeof item;
 
     render(<ActivityTimeline navigate={vi.fn()} items={[item, unknown]} />);

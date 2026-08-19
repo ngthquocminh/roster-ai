@@ -1,0 +1,75 @@
+{
+  "case_id": "draft-out-of-range-argument",
+  "case_version": "1",
+  "capability": "scheduling_draft",
+  "risk_class": "draft",
+  "prompt": "Create a draft with an invalid weekly cap.",
+  "scripted_turns": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 57,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      },
+      "tool_call_id": "draft-1"
+    },
+    {
+      "output_tool": "refusal",
+      "response_data": {
+        "reason": "unsupported_request",
+        "detail": "That constraint argument is outside the range a draft accepts.",
+        "next_step": "Choose a value inside the bound named in the refusal and try again."
+      }
+    }
+  ],
+  "expected_outcome": "refuse",
+  "expected_tool_calls": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 57,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      }
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "That constraint argument is outside the range a draft accepts.",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ]
+}

@@ -11,7 +11,7 @@ from sqlalchemy import Engine, create_engine, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
-from adapters.postgres.canonical_json import canonicalize_json
+from application.contracts.canonical import canonicalize_json
 from adapters.postgres.schema import (
     fixture_lineage,
     organization,

@@ -30,6 +30,7 @@ from evals.evaluators import (
     PolicyOutcomeEvaluator,
     ToolRoutingEvaluator,
 )
+from application.use_cases.execute_turn import resolve_draft_citation
 from evals.grounding import ground_case_outcome
 from application.use_cases.execute_turn import failed_outcome_for_exception, outcome_visible_text
 from scripts.evidence_binding import REPO_ROOT, resolve_bindings
@@ -108,6 +109,19 @@ def generate_demonstration_report(
         runtime = _runtime_for_case(case, granted_modules, results)
         outcome = _run_runtime_case(runtime, case)
         routing = ToolRoutingEvaluator(run_source="double").evaluate(case, outcome)
+        # A draft case cites a trusted result rather than authoring one, so the
+        # dataset has to drive the same citation binding the request path uses.
+        # Without this the case would assert an empty visible text and prove
+        # nothing about DraftProposalV1 or outcome_visible_text's draft branch.
+        if outcome.draft is not None:
+            outcome = resolve_draft_citation(
+                outcome,
+                {
+                    value.result_id: value
+                    for value in results
+                    if isinstance(getattr(value, "result_id", None), str)
+                },
+            )
         if case.expected_grounding_outcome:
             outcome = ground_case_outcome(
                 case, outcome, runtime._deps, tuple(results)
@@ -181,13 +195,29 @@ def runtime_for_modules(
     """
     return PydanticAIAgentRuntime(
         model=build_model_double(case), capabilities=modules, deps=_report_deps(sink),
-        answer_type=(
-            GroundedAnswerV1
-            if case.expected_grounding_outcome
-            or case.expected_outcome in {"clarify", "refuse"}
-            else None
-        ),
+        answer_type=GroundedAnswerV1 if _needs_named_output_tools(case) else None,
     )
+
+
+def _needs_named_output_tools(case: GoldenCase) -> bool:
+    """Whether this case's agent must register the named `ToolOutput` variants.
+
+    Passing `answer_type=None` gives the runtime `[str, DeferredToolRequests]`
+    and therefore NO named output tools at all, so a case scripting one gets an
+    `UnexpectedModelBehavior` and a failed run rather than a readable verdict.
+
+    The last clause is what made the `draft` output tool reachable. Deriving the
+    need from `expected_outcome` alone covered `clarify` and `refuse` but never
+    `allow`, and a draft case is an ALLOW case that still selects a named output
+    tool -- so `DraftProposalV1`, `DRAFT_OUTPUT_TOOL` and execute_turn's citation
+    binding could not be exercised by any golden case that existed. Derived from
+    the script rather than re-declared, so a fifth variant needs no edit here.
+    """
+    if case.expected_grounding_outcome:
+        return True
+    if case.expected_outcome in {"clarify", "refuse"}:
+        return True
+    return any(turn.response_data is not None for turn in case.scripted_turns)
 
 
 def _runtime_for_case(

@@ -50,6 +50,10 @@ _PROBE_ARGS = {
         "metric": "qualified_worker_count",
         "arguments": {"task_id": "pick"},
     },
+    "scheduling_draft": {
+        "expected_scenario_version_id": str(UUID(int=1)),
+        "constraints": [],
+    },
     "scheduling_inspect": {"group": "overview"},
     "shiftmind_demonstration": {"label": "alpha", "repeat": 1},
 }
@@ -489,3 +493,22 @@ def test_scheduling_compute_never_hands_the_model_its_computed_value() -> None:
         and not isinstance(getattr(projected, field.name), bool)
         for field in dataclasses.fields(projected)
     )
+
+
+def test_scheduling_draft_never_hands_the_model_proposal_contents() -> None:
+    """The draft output is a citation; every planner-visible field is trusted."""
+    from application.capabilities.scheduling_draft import (
+        SchedulingDraftResultV1,
+        scheduling_draft_module,
+    )
+    from application.contracts.proposal import ProposalV1
+
+    result = SchedulingDraftResultV1(
+        result_id="c0ffee",
+        proposal=ProposalV1(consequence_summary="must remain on the trusted path"),
+    )
+    projected = scheduling_draft_module().model_facing_view(result)
+    rendered = json.dumps(dataclasses.asdict(projected))
+
+    assert rendered == '{"draft_id": "c0ffee", "schema_version": "1"}'
+    assert "must remain" not in rendered

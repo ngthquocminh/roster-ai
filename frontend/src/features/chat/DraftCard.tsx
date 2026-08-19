@@ -1,0 +1,261 @@
+import { useEffect, useId, useRef, useState } from "react";
+
+import {
+  toConstraintInput,
+  type ProposalConstraintInput,
+} from "@/api/proposals";
+import { InlineAlert } from "@/components/primitives/InlineAlert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { useProposal } from "@/hooks/useProposal";
+import { useRejectProposal } from "@/hooks/useRejectProposal";
+import { useReviseProposal } from "@/hooks/useReviseProposal";
+import { getErrorStatus } from "@/lib/errors";
+
+type NumericKey = "n" | "factor" | "max_hours" | "start_minute";
+
+const PARAMETER: Partial<
+  Record<ProposalConstraintInput["kind"], { key: NumericKey; label: string }>
+> = {
+  set_min_workers_per_task: { key: "n", label: "Minimum workers" },
+  scale_demand: { key: "factor", label: "Demand factor" },
+  lock_worker_shift: { key: "start_minute", label: "Start minute" },
+  set_max_hours: { key: "max_hours", label: "Maximum hours" },
+  // `exclude_worker_from_task` is absent on purpose: it carries no numeric
+  // argument. A placeholder entry here would be a lookup that must never be
+  // looked up, and the next editor removing its guard would bind an input to a
+  // key the kind rejects.
+};
+
+function Identifier({ children }: Readonly<{ children: string }>) {
+  return <code className="font-mono text-xs break-all">{children}</code>;
+}
+
+function commandMessage(error: unknown): string {
+  const status = getErrorStatus(error);
+  if (status === 409) {
+    return "This draft changed since you opened it. Refresh to see the current version, then try again.";
+  }
+  if (status === 422) {
+    return "That revision was refused: check the values and try again.";
+  }
+  if (status === 503) {
+    return "The scenario could not be read just now. Try again shortly.";
+  }
+  return "That command did not complete. Try again.";
+}
+
+export function DraftCard({
+  proposalId,
+  consequenceSummary,
+}: Readonly<{ proposalId: string; consequenceSummary?: string }>) {
+  const query = useProposal(proposalId);
+  const revision = useReviseProposal(proposalId);
+  const rejection = useRejectProposal(proposalId);
+  const staleDescriptionId = useId();
+  const [constraints, setConstraints] = useState<ProposalConstraintInput[]>([]);
+  const [selected, setSelected] = useState("0");
+  // Which server version the local edits were seeded from. Re-seeding on every
+  // `query.data` identity change discarded whatever the planner had typed the
+  // moment a background refetch landed (TanStack refetches on window focus by
+  // default), with no indication that it had happened.
+  const seededVersion = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!query.data) return;
+    if (seededVersion.current === query.data.proposal_version_id) return;
+    seededVersion.current = query.data.proposal_version_id;
+    setConstraints(query.data.constraints.map(toConstraintInput));
+    setSelected("0");
+  }, [query.data]);
+
+  // The persisted activity already carries the application-composed summary, so
+  // the immutable audit record can be shown immediately rather than replaced by
+  // a spinner until a network round trip completes. `DraftActivityV1` persists
+  // it precisely so the timeline can render a reference (Decision 6).
+  if (query.isPending) {
+    return (
+      <Card aria-label="Draft proposal" role="region">
+        <CardHeader>
+          <CardTitle>Draft — no baseline change</CardTitle>
+          {consequenceSummary ? (
+            <CardDescription>{consequenceSummary}</CardDescription>
+          ) : null}
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Loading draft proposal…</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  if (query.isError || !query.data) {
+    return (
+      <InlineAlert
+        action={<Button className="min-h-11" onClick={() => query.refetch()} variant="outline">Retry</Button>}
+        description={
+          getErrorStatus(query.error) === 503
+            ? "The proposal exists but its scenario could not be read."
+            : consequenceSummary
+              ? `The proposal could not be loaded. It recorded: ${consequenceSummary}`
+              : "The proposal could not be loaded."
+        }
+        title="Draft unavailable"
+        variant="destructive"
+      />
+    );
+  }
+
+  const proposal = query.data;
+  const rejected = proposal.state === "rejected";
+  const selectedIndex = Math.min(Number(selected), Math.max(constraints.length - 1, 0));
+  const current = constraints[selectedIndex];
+  const parameter = current ? PARAMETER[current.kind] : undefined;
+  const commandError = revision.error ?? rejection.error;
+  const updateNumber = (key: NumericKey | "end_minute", raw: string) => {
+    const value = raw === "" ? null : Number(raw);
+    setConstraints((existing) => existing.map((constraint, index) =>
+      index === selectedIndex ? { ...constraint, [key]: value } : constraint,
+    ));
+  };
+
+  return (
+    <Card aria-label="Draft proposal" role="region">
+      <CardHeader>
+        <CardTitle>Draft — no baseline change</CardTitle>
+        <CardDescription>{proposal.consequence_summary}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Both states can hold at once, so both are announced. Testing `stale`
+            first and returning made the rejected notice unreachable whenever a
+            scenario reimport followed a rejection. */}
+        {proposal.stale ? (
+          <div aria-label="Draft is stale" className="rounded-lg border border-destructive/40 p-3" role="status">
+            <p className="font-medium text-destructive">Draft is stale</p>
+            <p className="text-sm text-muted-foreground" id={staleDescriptionId}>
+              The scenario version changed. Refresh before revising this proposal.
+            </p>
+          </div>
+        ) : null}
+        {rejected ? (
+          <div aria-label="Draft is rejected" className="rounded-lg border p-3" role="status">
+            <p className="font-medium">This proposal was rejected.</p>
+            <p className="text-sm text-muted-foreground">
+              A rejected draft is final. Describe the change again to create a new one.
+            </p>
+          </div>
+        ) : null}
+
+        <dl className="grid gap-2 text-sm sm:grid-cols-2">
+          <div><dt className="text-muted-foreground">Expected scenario version</dt><dd><Identifier>{proposal.scenario_version_id}</Identifier></dd></div>
+          <div><dt className="text-muted-foreground">Current scenario version</dt><dd><Identifier>{proposal.current_scenario_version_id}</Identifier></dd></div>
+          <div><dt className="text-muted-foreground">Expected baseline version</dt><dd><Identifier>{proposal.expected_baseline_schedule_version ?? "No baseline version"}</Identifier></dd></div>
+          <div><dt className="text-muted-foreground">Proposal version</dt><dd><Identifier>{proposal.proposal_version_id}</Identifier></dd></div>
+        </dl>
+
+        <section aria-labelledby={`${staleDescriptionId}-entities`}>
+          <h3 className="text-sm font-medium" id={`${staleDescriptionId}-entities`}>Resolved entities</h3>
+          <ul className="mt-1 space-y-1 text-sm">
+            {proposal.resolved_entities.map((entity) => (
+              <li key={`${entity.group}:${entity.record_id}`}>
+                {entity.label} · <Identifier>{entity.record_id}</Identifier> · {entity.group}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section aria-labelledby={`${staleDescriptionId}-constraints`} className="space-y-2">
+          <h3 className="text-sm font-medium" id={`${staleDescriptionId}-constraints`}>Constraints and objectives</h3>
+          {/* Server-composed descriptions, always. The card never echoes a
+              description back on revision, so this text cannot drift from the
+              argument it describes. */}
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {proposal.constraints.map((constraint, index) => <li key={`${constraint.kind}-${index}`}>{constraint.description}</li>)}
+          </ul>
+          {constraints.length && !rejected ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">
+                <span>Constraint to revise</span>
+                <Select onValueChange={setSelected} value={String(selectedIndex)}>
+                  <SelectTrigger className="min-h-11 w-full" aria-label="Constraint to revise"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {proposal.constraints.map((constraint, index) => (
+                      <SelectItem key={`${constraint.kind}-${index}`} value={String(index)}>{constraint.description}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+              {current && parameter ? (
+                <label className="space-y-1 text-sm">
+                  <span>{parameter.label}</span>
+                  <Input
+                    aria-label={parameter.label}
+                    className="min-h-11"
+                    disabled={proposal.stale}
+                    min="0"
+                    onChange={(event) => updateNumber(parameter.key, event.target.value)}
+                    type="number"
+                    value={String(current[parameter.key] ?? "")}
+                  />
+                </label>
+              ) : null}
+              {current?.kind === "lock_worker_shift" ? (
+                <label className="space-y-1 text-sm">
+                  <span>End minute</span>
+                  <Input aria-label="End minute" className="min-h-11" disabled={proposal.stale} min="0" onChange={(event) => updateNumber("end_minute", event.target.value)} type="number" value={String(current.end_minute ?? "")} />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+
+        <section aria-labelledby={`${staleDescriptionId}-locks`}>
+          <h3 className="text-sm font-medium" id={`${staleDescriptionId}-locks`}>Preserved locks</h3>
+          {proposal.preserved_locks.length ? (
+            <ul className="mt-1 space-y-1 text-sm">{proposal.preserved_locks.map((lock) => <li key={lock.record_id}><Identifier>{lock.record_id}</Identifier> · {lock.scope} · {lock.target_ref}</li>)}</ul>
+          ) : <p className="text-sm text-muted-foreground">No existing locks.</p>}
+        </section>
+      </CardContent>
+      <CardFooter className="block space-y-3">
+        {commandError ? (
+          <InlineAlert
+            description={commandMessage(commandError)}
+            title="Command not applied"
+            variant="destructive"
+          />
+        ) : null}
+        {rejected ? null : (
+          <>
+            {/* Revise stays MOUNTED and disabled when stale, carrying the
+                explanation. Rendering a separate screen-reader-only button
+                instead left the real control unrendered and satisfied the
+                accessibility assertions against a decoy that could never be
+                enabled. */}
+            <div>
+              <Button
+                aria-describedby={proposal.stale ? staleDescriptionId : undefined}
+                className="min-h-11"
+                disabled={proposal.stale || revision.isPending}
+                onClick={() => revision.mutate({ constraints, expected_resource_version: proposal.resource_version })}
+                type="button"
+              >Revise proposal</Button>
+            </div>
+            <Separator />
+            {/* Reject is available while stale, deliberately: it changes no
+                baseline and is the only terminal path a stale draft has. */}
+            <div>
+              <Button className="min-h-11" disabled={rejection.isPending} onClick={() => rejection.mutate({ expected_resource_version: proposal.resource_version })} type="button" variant="destructive">Reject proposal</Button>
+            </div>
+            {proposal.stale ? (
+              <div>
+                <Button className="min-h-11" onClick={() => query.refetch()} type="button" variant="outline">Refresh proposal</Button>
+              </div>
+            ) : null}
+          </>
+        )}
+      </CardFooter>
+    </Card>
+  );
+}

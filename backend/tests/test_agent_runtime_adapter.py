@@ -39,6 +39,7 @@ from application.contracts.agent_runtime import (
 )
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
+from application.contracts.proposal import DraftProposalV1
 from application.ports.agent_runtime import AgentRuntime, AgentRuntimeError
 
 models.ALLOW_MODEL_REQUESTS = False
@@ -278,6 +279,8 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
         "clarification": None,
         "resolved_clarification": None,
         "refusal": None,
+        "draft": None,
+        "resolved_draft": None,
         "turn": {
             "schema_version": "1",
             "messages": [
@@ -377,13 +380,13 @@ def test_strict_answer_rejects_unstructured_prose_with_preserved_cause() -> None
     assert isinstance(exc_info.value.__cause__, UnexpectedModelBehavior)
 
 
-def test_structured_output_tools_keep_the_three_exact_stable_names() -> None:
+def test_structured_output_tools_keep_the_four_exact_stable_names() -> None:
     runtime = _runtime(model=FunctionModel(lambda _messages, _info: ModelResponse()), answer_type=GroundedAnswerV1)
     assert runtime._agent._output_toolset is not None
     assert {
         definition.name
         for definition in runtime._agent._output_toolset._tool_defs
-    } == {"final_result", "clarification", "refusal"}
+    } == {"final_result", "clarification", "refusal", "draft"}
 
 
 @pytest.mark.parametrize(
@@ -403,11 +406,16 @@ def test_structured_output_tools_keep_the_three_exact_stable_names() -> None:
             ),
             "refusal",
         ),
+        (
+            "draft",
+            DraftProposalV1(draft_id="draft-123"),
+            "draft",
+        ),
     ],
 )
 def test_dialogue_outputs_dispatch_without_leaking_output_tools_as_results(
     tool_name: str,
-    payload: ClarificationV1 | RefusalV1,
+    payload: ClarificationV1 | RefusalV1 | DraftProposalV1,
     field: str,
 ) -> None:
     def structured(_messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:

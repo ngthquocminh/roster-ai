@@ -67,6 +67,40 @@ class ClarificationActivityV1:
 
 
 @dataclass(frozen=True)
+class DraftReferenceV1:
+    """A Conversation-owned pointer at a Scheduling-owned proposal.
+
+    AD-22 permits only an application orchestrator to cross aggregate owners, so
+    the conversation adapter must not read `ProposalV1` to decide what a draft
+    activity contains. `finalize_agent_run` performs that translation and hands
+    the repository this reference instead — the same three fields
+    `DraftActivityV1` persists, in a contract the Conversation side owns.
+    """
+
+    proposal_id: UUID
+    proposal_version_id: UUID
+    consequence_summary: str
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
+class DraftActivityV1:
+    """Reference to the current proposal plus application-composed summary."""
+
+    activity_id: UUID
+    activity_type: Literal["draft"]
+    conversation_id: UUID
+    conversation_resource_version: int
+    scenario_id: UUID
+    scenario_version_id: UUID
+    occurred_at: datetime
+    proposal_id: UUID
+    proposal_version_id: UUID
+    consequence_summary: str
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
 class TerminalOutcomeActivityV1:
     """Literal non-answer state, including reason-discriminated refusal."""
 
@@ -88,11 +122,12 @@ ActivityItemV1 = (
     PlannerMessageActivityV1
     | AgentResponseActivityV1
     | ClarificationActivityV1
+    | DraftActivityV1
     | TerminalOutcomeActivityV1
 )
 
 __all__ = [
     "ActivityItemV1", "ActivityTypeV1", "AgentResponseActivityV1",
-    "ClarificationActivityV1", "PlannerMessageActivityV1", "SCHEMA_VERSION",
+    "ClarificationActivityV1", "DraftActivityV1", "PlannerMessageActivityV1", "SCHEMA_VERSION",
     "TerminalOutcomeActivityV1",
 ]

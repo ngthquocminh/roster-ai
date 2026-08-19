@@ -1,0 +1,75 @@
+{
+  "case_id": "draft-stale-version",
+  "case_version": "1",
+  "capability": "scheduling_draft",
+  "risk_class": "draft",
+  "prompt": "Create a draft against a stale scenario version.",
+  "scripted_turns": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000002",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 40,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      },
+      "tool_call_id": "draft-1"
+    },
+    {
+      "output_tool": "refusal",
+      "response_data": {
+        "reason": "unsupported_request",
+        "detail": "The scenario version changed, so the draft was not created.",
+        "next_step": "Refresh the scenario and describe the change again."
+      }
+    }
+  ],
+  "expected_outcome": "refuse",
+  "expected_tool_calls": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000002",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 40,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      }
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "The scenario version changed, so the draft was not created.",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ]
+}

@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/primitives/EmptyState";
 import { EvidenceLink } from "@/components/primitives/EvidenceLink";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
+import { DraftCard } from "./DraftCard";
 import { toSearchParams } from "@/features/evidence/locator";
 import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
 import {
@@ -282,6 +283,16 @@ function ActivityContent({
       return <AgentResponse item={item} navigate={navigate} />;
     case "clarification":
       return <Clarification item={item} />;
+    case "draft":
+      // No cast: narrowing the discriminated union is exactly what the
+      // `const exhaustive: never` guard below exists to keep honest, and
+      // `as Draft` disabled that check for this branch alone.
+      return (
+        <DraftCard
+          consequenceSummary={item.consequence_summary}
+          proposalId={item.proposal_id}
+        />
+      );
     case "terminal_outcome":
       return <TerminalOutcome isLatest={isLatest} item={item} />;
     default: {

@@ -2948,6 +2948,327 @@
           }
         }
       }
+    },
+    "/api/v1/proposals/{proposal_id}": {
+      "get": {
+        "tags": [
+          "proposals"
+        ],
+        "summary": "Read Proposal",
+        "operationId": "read_proposal_api_v1_proposals__proposal_id__get",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/proposals/{proposal_id}/revisions": {
+      "post": {
+        "tags": [
+          "proposals"
+        ],
+        "summary": "Revise",
+        "operationId": "revise_api_v1_proposals__proposal_id__revisions_post",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalRevisionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/proposals/{proposal_id}/rejection": {
+      "post": {
+        "tags": [
+          "proposals"
+        ],
+        "summary": "Reject",
+        "operationId": "reject_api_v1_proposals__proposal_id__rejection_post",
+        "parameters": [
+          {
+            "name": "proposal_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Proposal Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalRejectionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2966,6 +3287,9 @@
                 "$ref": "#/components/schemas/ClarificationActivityOut"
               },
               {
+                "$ref": "#/components/schemas/DraftActivityOut"
+              },
+              {
                 "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             ],
@@ -2975,6 +3299,7 @@
               "mapping": {
                 "agent_response": "#/components/schemas/AgentResponseActivityOut",
                 "clarification": "#/components/schemas/ClarificationActivityOut",
+                "draft": "#/components/schemas/DraftActivityOut",
                 "planner_message": "#/components/schemas/PlannerMessageActivityOut",
                 "terminal_outcome": "#/components/schemas/TerminalOutcomeActivityOut"
               }
@@ -3766,6 +4091,301 @@
         ],
         "title": "DemandIntervalPageOut"
       },
+      "DraftActivityOut": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "activity_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Activity Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "conversation_resource_version": {
+            "type": "integer",
+            "title": "Conversation Resource Version"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "activity_type": {
+            "type": "string",
+            "const": "draft",
+            "title": "Activity Type"
+          },
+          "proposal_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Id"
+          },
+          "proposal_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Version Id"
+          },
+          "consequence_summary": {
+            "type": "string",
+            "title": "Consequence Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema_version",
+          "activity_id",
+          "conversation_id",
+          "conversation_resource_version",
+          "scenario_id",
+          "scenario_version_id",
+          "occurred_at",
+          "sequence",
+          "activity_type",
+          "proposal_id",
+          "proposal_version_id",
+          "consequence_summary"
+        ],
+        "title": "DraftActivityOut"
+      },
+      "DraftConstraintProposalV1": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "set_min_workers_per_task",
+              "scale_demand",
+              "lock_worker_shift",
+              "exclude_worker_from_task",
+              "set_max_hours"
+            ],
+            "title": "Kind",
+            "default": "set_min_workers_per_task"
+          },
+          "group": {
+            "type": "string",
+            "enum": [
+              "work-areas-and-tasks",
+              "workers",
+              "demand",
+              "baseline-assignments",
+              "locks",
+              "constraints-and-objectives"
+            ],
+            "title": "Group",
+            "default": "work-areas-and-tasks"
+          },
+          "record_id": {
+            "type": "string",
+            "title": "Record Id",
+            "default": ""
+          },
+          "related_group": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "work-areas-and-tasks",
+                  "workers",
+                  "demand",
+                  "baseline-assignments",
+                  "locks",
+                  "constraints-and-objectives"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Group"
+          },
+          "related_record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Related Record Id"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factor"
+          },
+          "max_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Hours"
+          },
+          "start_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Minute"
+          },
+          "end_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Minute"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "DraftConstraintProposalV1",
+        "description": "UNTRUSTED model input containing identifiers and typed arguments only."
+      },
+      "DraftConstraintV1": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "set_min_workers_per_task",
+              "scale_demand",
+              "lock_worker_shift",
+              "exclude_worker_from_task",
+              "set_max_hours"
+            ],
+            "title": "Kind",
+            "default": "set_min_workers_per_task"
+          },
+          "resolved_entities": {
+            "items": {
+              "$ref": "#/components/schemas/ResolvedEntityV1"
+            },
+            "type": "array",
+            "title": "Resolved Entities",
+            "default": []
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "factor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Factor"
+          },
+          "max_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Hours"
+          },
+          "start_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Minute"
+          },
+          "end_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Minute"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "DraftConstraintV1",
+        "description": "TRUSTED, resolved and validated reversible solver input."
+      },
       "EntityCandidateV1": {
         "properties": {
           "group": {
@@ -3936,6 +4556,9 @@
                 "$ref": "#/components/schemas/ClarificationActivityOut"
               },
               {
+                "$ref": "#/components/schemas/DraftActivityOut"
+              },
+              {
                 "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             ],
@@ -3945,6 +4568,7 @@
               "mapping": {
                 "agent_response": "#/components/schemas/AgentResponseActivityOut",
                 "clarification": "#/components/schemas/ClarificationActivityOut",
+                "draft": "#/components/schemas/DraftActivityOut",
                 "planner_message": "#/components/schemas/PlannerMessageActivityOut",
                 "terminal_outcome": "#/components/schemas/TerminalOutcomeActivityOut"
               }
@@ -4376,6 +5000,39 @@
         ],
         "title": "LockPageOut"
       },
+      "LockV1": {
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "target_type": {
+            "type": "string",
+            "title": "Target Type"
+          },
+          "target_ref": {
+            "type": "string",
+            "title": "Target Ref"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "target_type",
+          "target_ref",
+          "scope",
+          "source"
+        ],
+        "title": "LockV1"
+      },
       "MessageCreateIn": {
         "properties": {
           "text": {
@@ -4529,6 +5186,162 @@
         ],
         "title": "ProblemDetailsV1"
       },
+      "ProposalOut": {
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Id"
+          },
+          "proposal_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Version Id"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "current_scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Current Scenario Version Id"
+          },
+          "expected_baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Baseline Schedule Version"
+          },
+          "resolved_entities": {
+            "items": {
+              "$ref": "#/components/schemas/ResolvedEntityV1"
+            },
+            "type": "array",
+            "title": "Resolved Entities"
+          },
+          "constraints": {
+            "items": {
+              "$ref": "#/components/schemas/DraftConstraintV1"
+            },
+            "type": "array",
+            "title": "Constraints"
+          },
+          "preserved_locks": {
+            "items": {
+              "$ref": "#/components/schemas/LockV1"
+            },
+            "type": "array",
+            "title": "Preserved Locks"
+          },
+          "consequence_summary": {
+            "type": "string",
+            "title": "Consequence Summary"
+          },
+          "canonical_hash": {
+            "type": "string",
+            "title": "Canonical Hash"
+          },
+          "canonical_hash_algorithm": {
+            "type": "string",
+            "title": "Canonical Hash Algorithm"
+          },
+          "canonical_hash_schema_version": {
+            "type": "string",
+            "title": "Canonical Hash Schema Version"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "rejected"
+            ],
+            "title": "State"
+          },
+          "resource_version": {
+            "type": "integer",
+            "title": "Resource Version"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "proposal_version_id",
+          "scenario_id",
+          "scenario_version_id",
+          "current_scenario_version_id",
+          "expected_baseline_schedule_version",
+          "resolved_entities",
+          "constraints",
+          "preserved_locks",
+          "consequence_summary",
+          "canonical_hash",
+          "canonical_hash_algorithm",
+          "canonical_hash_schema_version",
+          "state",
+          "resource_version",
+          "stale",
+          "schema_version"
+        ],
+        "title": "ProposalOut"
+      },
+      "ProposalRejectionIn": {
+        "properties": {
+          "expected_resource_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Resource Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_resource_version"
+        ],
+        "title": "ProposalRejectionIn"
+      },
+      "ProposalRevisionIn": {
+        "properties": {
+          "constraints": {
+            "items": {
+              "$ref": "#/components/schemas/DraftConstraintProposalV1"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Constraints"
+          },
+          "expected_resource_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Resource Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "constraints",
+          "expected_resource_version"
+        ],
+        "title": "ProposalRevisionIn"
+      },
       "QualificationRefOut": {
         "properties": {
           "task_id": {
@@ -4606,6 +5419,53 @@
         "type": "object",
         "title": "ResolvedClarificationV1",
         "description": "Persistable clarification whose candidate labels are application-owned."
+      },
+      "ResolvedEntityV1": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "enum": [
+              "work-areas-and-tasks",
+              "workers",
+              "demand",
+              "baseline-assignments",
+              "locks",
+              "constraints-and-objectives"
+            ],
+            "title": "Group",
+            "default": "work-areas-and-tasks"
+          },
+          "record_id": {
+            "type": "string",
+            "title": "Record Id",
+            "default": ""
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "ResolvedEntityV1",
+        "description": "TRUSTED projection identity with an application-composed label."
       },
       "RunOut": {
         "properties": {
@@ -5220,6 +6080,9 @@
                   "$ref": "#/components/schemas/ClarificationActivityOut"
                 },
                 {
+                  "$ref": "#/components/schemas/DraftActivityOut"
+                },
+                {
                   "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
                 }
               ],
@@ -5228,6 +6091,7 @@
                 "mapping": {
                   "agent_response": "#/components/schemas/AgentResponseActivityOut",
                   "clarification": "#/components/schemas/ClarificationActivityOut",
+                  "draft": "#/components/schemas/DraftActivityOut",
                   "planner_message": "#/components/schemas/PlannerMessageActivityOut",
                   "terminal_outcome": "#/components/schemas/TerminalOutcomeActivityOut"
                 }

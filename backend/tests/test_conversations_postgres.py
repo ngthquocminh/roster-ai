@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -15,6 +16,9 @@ from adapters.postgres.conversation import (
     PostgresConversationRepository,
     UnsupportedActivityPayloadError,
 )
+from adapters.postgres.proposal import PostgresProposalRepository
+from application.contracts.proposal import DraftConstraintProposalV1, ProposalV1
+from application.contracts.scenario_projection import TaskV1
 from application.contracts.grounding import GroundedResponseV1
 from adapters.postgres.schema import (
     agent_run,
@@ -24,11 +28,24 @@ from adapters.postgres.schema import (
     membership,
     organization,
     persisted_event,
+    proposal,
+    proposal_version,
+    command_idempotency,
     scenario,
     scenario_version,
     site,
 )
 from application.use_cases.accept_turn import accept_turn
+from application.use_cases.finalize_agent_run import finalize_agent_run
+from application.use_cases.manage_proposal import (
+    IdempotencyKeyConflictError,
+    RejectedProposalError,
+    StaleProposalError,
+    StaleResourceVersionError,
+    ProposalCommandError,
+    reject_proposal,
+    revise_proposal,
+)
 
 pytestmark = pytest.mark.postgres
 
@@ -518,7 +535,7 @@ def test_events_after_raises_typed_on_an_unrenderable_variant(
         admin.execute(
             persisted_event.update()
             .where(persisted_event.c.stream_id == created.id)
-            .values(payload={"activity_type": "draft", "schema_version": "1"})
+            .values(payload={"activity_type": "run_progress", "schema_version": "1"})
         )
 
     with pytest.raises(UnsupportedActivityPayloadError):
@@ -529,7 +546,7 @@ def test_events_after_raises_typed_on_an_unrenderable_variant(
 def test_an_unrenderable_activity_variant_fails_typed_not_as_a_key_error(
     governed_postgres_engine, ids
 ) -> None:
-    """Four of AD-20's eight discriminants are reserved names with no shipped
+    """Three of AD-20's eight discriminants are reserved names with no shipped
     payload. Reaching one must not take the whole timeline down with a
     KeyError-turned-500."""
     engine = governed_postgres_engine
@@ -584,6 +601,445 @@ def test_another_site_can_neither_read_nor_write_this_conversation(
             is None
         )
         assert repo.list_for_scenario(c, scenario_id=ids["scenario"]).items == ()
+
+
+def test_create_draft_bundle_is_committed_as_one_transaction(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    conversations = PostgresConversationRepository()
+    proposals = PostgresProposalRepository()
+    with _site_context(engine, ids["site"]) as connection:
+        accepted = accept_turn(
+            conversations,
+            connection,
+            conversation_id=created.id,
+            site_id=ids["site"],
+            actor_id=ids["actor"],
+            text="Draft a repair",
+        )
+    assert accepted is not None
+    with _site_context(engine, ids["site"]) as connection:
+        claimed = conversations.claim_queued_run(
+            connection,
+            conversation_id=created.id,
+            agent_run_id=accepted.event.agent_run_id,
+        )
+    assert claimed is not None
+    draft = ProposalV1(
+        proposal_id=uuid4(),
+        proposal_version_id=uuid4(),
+        scenario_id=claimed.scenario_id,
+        scenario_version_id=claimed.scenario_version_id,
+        consequence_summary="Preserves all existing locks.",
+        canonical_hash="c" * 64,
+    )
+
+    with _site_context(engine, ids["site"]) as connection:
+        completed = finalize_agent_run(
+            conversations,
+            proposals,
+            connection,
+            claimed=claimed,
+            status="agent_completed",
+            payload=draft,
+            request_id=uuid4(),
+        )
+
+    assert completed.event.payload.activity_type == "draft"
+    assert completed.event.payload.proposal_id == draft.proposal_id
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal).where(proposal.c.id == draft.proposal_id)
+        ).scalar_one() == 1
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.id == draft.proposal_version_id
+            )
+        ).scalar_one() == 1
+        assert admin.execute(
+            select(func.count()).select_from(persisted_event).where(
+                persisted_event.c.agent_run_id == claimed.agent_run_id,
+                persisted_event.c.event_type == "draft",
+            )
+        ).scalar_one() == 1
+
+
+def test_create_draft_bundle_rolls_back_proposal_when_event_write_fails(
+    governed_postgres_engine, ids, monkeypatch
+) -> None:
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    conversations = PostgresConversationRepository()
+    proposals = PostgresProposalRepository()
+    with _site_context(engine, ids["site"]) as connection:
+        accepted = accept_turn(
+            conversations, connection, conversation_id=created.id,
+            site_id=ids["site"], actor_id=ids["actor"], text="Draft then fail",
+        )
+    assert accepted is not None
+    with _site_context(engine, ids["site"]) as connection:
+        claimed = conversations.claim_queued_run(
+            connection, conversation_id=created.id,
+            agent_run_id=accepted.event.agent_run_id,
+        )
+    assert claimed is not None
+    draft = ProposalV1(
+        proposal_id=uuid4(), proposal_version_id=uuid4(),
+        scenario_id=claimed.scenario_id,
+        scenario_version_id=claimed.scenario_version_id,
+        consequence_summary="This transaction must roll back.",
+        canonical_hash="d" * 64,
+    )
+
+    def _explode(_activity):
+        raise RuntimeError("injected after proposal persistence")
+
+    monkeypatch.setattr(conversation_adapter, "_payload_to_json", _explode)
+    with pytest.raises(RuntimeError):
+        with _site_context(engine, ids["site"]) as connection:
+            finalize_agent_run(
+                conversations, proposals, connection,
+                claimed=claimed, status="agent_completed", payload=draft,
+                request_id=uuid4(),
+            )
+
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal).where(proposal.c.id == draft.proposal_id)
+        ).scalar_one() == 0
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.id == draft.proposal_version_id
+            )
+        ).scalar_one() == 0
+        assert admin.execute(
+            select(agent_run.c.status).where(agent_run.c.id == claimed.agent_run_id)
+        ).scalar_one() == "agent_running"
+
+
+def _draft_for_commands(engine, ids):
+    created = _create(engine, ids, "v2")
+    assert created is not None
+    conversations = PostgresConversationRepository()
+    proposals = PostgresProposalRepository()
+    with _site_context(engine, ids["site"]) as connection:
+        accepted = accept_turn(
+            conversations, connection, conversation_id=created.id,
+            site_id=ids["site"], actor_id=ids["actor"], text="Draft command fixture",
+        )
+    assert accepted is not None
+    with _site_context(engine, ids["site"]) as connection:
+        claimed = conversations.claim_queued_run(
+            connection, conversation_id=created.id,
+            agent_run_id=accepted.event.agent_run_id,
+        )
+    assert claimed is not None
+    value = ProposalV1(
+        proposal_id=uuid4(), proposal_version_id=uuid4(),
+        scenario_id=claimed.scenario_id, scenario_version_id=claimed.scenario_version_id,
+        canonical_hash="e" * 64, consequence_summary="One reversible constraint.",
+    )
+    with _site_context(engine, ids["site"]) as connection:
+        finalize_agent_run(
+            conversations, proposals, connection, claimed=claimed,
+            status="agent_completed", payload=value, request_id=uuid4(),
+        )
+    return value
+
+
+def _revision_constraint(n=2):
+    """The UNTRUSTED wire shape a browser posts.
+
+    No `resolved_entities`, no `label`, no `description` - a client cannot
+    supply any of them, and the application composes all three from the pinned
+    projection. Passing the trusted `DraftConstraintV1` here would exercise a
+    path the API no longer exposes.
+    """
+    return DraftConstraintProposalV1(
+        kind="set_min_workers_per_task",
+        group="work-areas-and-tasks",
+        record_id="task:pick",
+        n=n,
+    )
+
+
+class _CurrentProjection:
+    """Resolves exactly one task, so revision resolution runs for real."""
+
+    def __init__(self, version_id):
+        self.version_id = version_id
+
+    def get_overview(self, _connection, _scenario_id):
+        return SimpleNamespace(
+            scenario_version_id=self.version_id, horizon_minutes=10080
+        )
+
+    def resolve_task(self, _connection, _scenario_id, scenario_version_id, record_id):
+        if record_id != "task:pick":
+            return SimpleNamespace(
+                outcome="not_found", item=None,
+                current_scenario_version_id=scenario_version_id,
+            )
+        return SimpleNamespace(
+            outcome="resolved",
+            current_scenario_version_id=scenario_version_id,
+            item=TaskV1(
+                record_id="task:pick", task_id="PICK-1", name="Pick",
+                function="outbound", area_id="A1", area_name="Pick Face",
+                unit_type_id=None,
+            ),
+        )
+
+
+def test_revision_replay_does_not_append_a_second_version(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    kwargs = dict(
+        proposal_id=original.proposal_id, site_id=ids["site"], actor_id=ids["actor"],
+        constraints=(_revision_constraint(),), expected_resource_version=1,
+        idempotency_key="revision-replay",
+    )
+    with _site_context(engine, ids["site"]) as connection:
+        first = revise_proposal(repository, projection, connection, **kwargs)
+    with _site_context(engine, ids["site"]) as connection:
+        replay = revise_proposal(repository, projection, connection, **kwargs)
+
+    assert first is not None
+    assert replay is not None
+    assert replay.proposal.proposal_version_id == first.proposal.proposal_version_id
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.proposal_id == original.proposal_id,
+                proposal_version.c.version_ordinal > 1,
+            )
+        ).scalar_one() == 1
+        assert admin.execute(
+            select(func.count()).select_from(command_idempotency).where(
+                command_idempotency.c.operation == f"revision:{original.proposal_id}",
+                command_idempotency.c.idempotency_key == "revision-replay",
+            )
+        ).scalar_one() == 1
+
+
+def test_replaying_a_key_against_another_expected_version_conflicts(
+    governed_postgres_engine, ids
+) -> None:
+    """AD-8 scopes the key to the expected resource version too.
+
+    Reusing one key while claiming a different expected version is a
+    semantically different command, so it must conflict rather than hand back
+    the first command's stored result. Before this was fixed the second call
+    returned 200 carrying the first call's payload.
+    """
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    kwargs = dict(
+        proposal_id=original.proposal_id, site_id=ids["site"], actor_id=ids["actor"],
+        constraints=(_revision_constraint(),), expected_resource_version=1,
+        idempotency_key="version-scoped",
+    )
+    with _site_context(engine, ids["site"]) as connection:
+        revise_proposal(repository, projection, connection, **kwargs)
+    with pytest.raises(IdempotencyKeyConflictError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection,
+                **{**kwargs, "expected_resource_version": 2},
+            )
+
+
+def test_a_revision_cannot_smuggle_client_authored_content(
+    governed_postgres_engine, ids
+) -> None:
+    """Every persisted label and description is application-composed.
+
+    The wire contract carries identifiers and numbers only, and the stored
+    version's description is rebuilt from the resolved task, so it cannot
+    disagree with the argument beside it.
+    """
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    with _site_context(engine, ids["site"]) as connection:
+        revised = revise_proposal(
+            repository, projection, connection, proposal_id=original.proposal_id,
+            site_id=ids["site"], actor_id=ids["actor"],
+            constraints=(_revision_constraint(n=7),),
+            expected_resource_version=1, idempotency_key="composed",
+        )
+    assert revised is not None
+    constraint = revised.proposal.constraints[0]
+    assert constraint.n == 7
+    assert constraint.description == "Keep at least 7 workers on Pick (PICK-1)."
+    assert constraint.resolved_entities[0].label == "Pick (PICK-1)"
+    assert constraint.resolved_entities[0].scenario_version_id == ids["v2"]
+
+
+def test_a_revision_naming_an_unresolvable_record_is_refused(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    with pytest.raises(ProposalCommandError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection, proposal_id=original.proposal_id,
+                site_id=ids["site"], actor_id=ids["actor"],
+                constraints=(
+                    DraftConstraintProposalV1(
+                        kind="set_min_workers_per_task",
+                        group="work-areas-and-tasks", record_id="task:ghost", n=1,
+                    ),
+                ),
+                expected_resource_version=1, idempotency_key="ghost",
+            )
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.proposal_id == original.proposal_id
+            )
+        ).scalar_one() == 1
+
+
+def test_a_revision_with_an_out_of_range_argument_is_refused(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    with pytest.raises(ProposalCommandError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection, proposal_id=original.proposal_id,
+                site_id=ids["site"], actor_id=ids["actor"],
+                constraints=(_revision_constraint(n=-5),),
+                expected_resource_version=1, idempotency_key="negative",
+            )
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.proposal_id == original.proposal_id
+            )
+        ).scalar_one() == 1
+
+
+def test_same_idempotency_key_with_another_body_conflicts_without_applying(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    common = dict(
+        proposal_id=original.proposal_id, site_id=ids["site"], actor_id=ids["actor"],
+        expected_resource_version=1, idempotency_key="conflicting-body",
+    )
+    with _site_context(engine, ids["site"]) as connection:
+        revise_proposal(
+            repository, projection, connection,
+            constraints=(_revision_constraint(n=2),), **common,
+        )
+    with pytest.raises(IdempotencyKeyConflictError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection,
+                constraints=(_revision_constraint(n=3),), **common,
+            )
+    with engine.connect() as admin:
+        assert admin.execute(
+            select(func.count()).select_from(proposal_version).where(
+                proposal_version.c.proposal_id == original.proposal_id
+            )
+        ).scalar_one() == 2
+
+
+def test_reject_is_terminal_and_replay_safe(governed_postgres_engine, ids) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    kwargs = dict(
+        proposal_id=original.proposal_id, site_id=ids["site"], actor_id=ids["actor"],
+        expected_resource_version=1, idempotency_key="reject-once",
+    )
+    with _site_context(engine, ids["site"]) as connection:
+        first = reject_proposal(repository, projection, connection, **kwargs)
+    with _site_context(engine, ids["site"]) as connection:
+        replay = reject_proposal(repository, projection, connection, **kwargs)
+    assert first == replay
+    assert first is not None and first.proposal.state == "rejected"
+    with pytest.raises(RejectedProposalError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection, proposal_id=original.proposal_id,
+                site_id=ids["site"], actor_id=ids["actor"],
+                constraints=(_revision_constraint(),),
+                expected_resource_version=2, idempotency_key="revise-rejected",
+            )
+
+
+def test_commands_refuse_stale_resource_and_stale_scenario_without_rows(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    original = _draft_for_commands(engine, ids)
+    repository = PostgresProposalRepository()
+    projection = _CurrentProjection(ids["v2"])
+    with pytest.raises(StaleResourceVersionError):
+        with _site_context(engine, ids["site"]) as connection:
+            reject_proposal(
+                repository, projection, connection, proposal_id=original.proposal_id,
+                site_id=ids["site"], actor_id=ids["actor"],
+                expected_resource_version=99, idempotency_key="stale-resource",
+            )
+    stale_original = _create(engine, ids, "v1")
+    assert stale_original is not None
+    # A v1 proposal is stale because the governed projection resolves v2.
+    stale_draft = ProposalV1(
+        proposal_id=uuid4(), proposal_version_id=uuid4(), scenario_id=ids["scenario"],
+        scenario_version_id=ids["v1"], canonical_hash="f" * 64,
+    )
+    with _site_context(engine, ids["site"]) as connection:
+        repository.create_draft(
+            connection, proposal=stale_draft, site_id=ids["site"],
+            conversation_id=stale_original.id, actor_id=ids["actor"],
+        )
+    # Revising a stale proposal is refused: it would silently rebase (AD-9).
+    with pytest.raises(StaleProposalError):
+        with _site_context(engine, ids["site"]) as connection:
+            revise_proposal(
+                repository, projection, connection, proposal_id=stale_draft.proposal_id,
+                site_id=ids["site"], actor_id=ids["actor"],
+                constraints=(_revision_constraint(),),
+                expected_resource_version=1, idempotency_key="stale-scenario-revise",
+            )
+    # Rejecting it is not. Rejection changes no baseline and is the only
+    # terminal path a stale draft has; refusing it would strand the aggregate
+    # `active` forever after a scenario reimport.
+    with _site_context(engine, ids["site"]) as connection:
+        closed = reject_proposal(
+            repository, projection, connection, proposal_id=stale_draft.proposal_id,
+            site_id=ids["site"], actor_id=ids["actor"],
+            expected_resource_version=1, idempotency_key="stale-scenario-reject",
+        )
+    assert closed is not None
+    assert closed.proposal.state == "rejected"
+    assert closed.stale is True
 
 
 def test_two_executors_claim_one_run_but_persist_one_terminal_response(

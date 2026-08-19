@@ -1,0 +1,45 @@
+{
+  "proposal_id": "00000000-0000-0000-0000-000000000101",
+  "proposal_version_id": "00000000-0000-0000-0000-000000000102",
+  "scenario_id": "00000000-0000-0000-0000-000000000002",
+  "scenario_version_id": "00000000-0000-0000-0000-000000000003",
+  "expected_baseline_schedule_version": null,
+  "resolved_entities": [
+    {
+      "group": "work-areas-and-tasks",
+      "record_id": "task-1",
+      "label": "Picking (task-1)",
+      "scenario_version_id": "00000000-0000-0000-0000-000000000003",
+      "schema_version": "1"
+    }
+  ],
+  "constraints": [
+    {
+      "kind": "set_min_workers_per_task",
+      "resolved_entities": [
+        {
+          "group": "work-areas-and-tasks",
+          "record_id": "task-1",
+          "label": "Picking (task-1)",
+          "scenario_version_id": "00000000-0000-0000-0000-000000000003",
+          "schema_version": "1"
+        }
+      ],
+      "n": 2,
+      "factor": null,
+      "max_hours": null,
+      "start_minute": null,
+      "end_minute": null,
+      "description": "Keep at least 2 workers on Picking (task-1).",
+      "schema_version": "1"
+    }
+  ],
+  "preserved_locks": [],
+  "consequence_summary": "One reversible constraint; no baseline change.",
+  "canonical_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "canonical_hash_algorithm": "sha256",
+  "canonical_hash_schema_version": "rfc8785-v1",
+  "state": "active",
+  "resource_version": 1,
+  "schema_version": "1"
+}

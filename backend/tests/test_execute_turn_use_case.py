@@ -11,6 +11,7 @@ from application.capabilities.deps import AgentDepsV1
 from application.contracts.activity import (
     AgentResponseActivityV1,
     ClarificationActivityV1,
+    DraftActivityV1,
     PlannerMessageActivityV1,
     TerminalOutcomeActivityV1,
 )
@@ -32,8 +33,12 @@ from application.contracts.grounding import (
 from application.contracts.dialogue import ClarificationV1, EntityCandidateProposalV1
 from application.contracts.dialogue import RefusalV1, ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.scenario_projection import WorkerV1
+from application.capabilities.scheduling_draft import SchedulingDraftResultV1
+from application.contracts.proposal import DraftProposalV1, ProposalV1
 from application.use_cases.execute_turn import (
+    activity_payload,
     execute_turn,
+    outcome_visible_text,
     rehydrate_history,
     terminal_outcome,
     terminal_status,
@@ -171,6 +176,55 @@ def test_execute_turn_resolves_clarification_at_the_use_case_boundary() -> None:
     assert outcome.clarification is not None
     assert outcome.resolved_clarification is not None
     assert outcome.resolved_clarification.candidates[0].label == "Taylor (CONTACT-9)"
+
+
+def _proposal(deps: AgentDepsV1) -> ProposalV1:
+    return ProposalV1(
+        proposal_id=UUID(int=40), proposal_version_id=UUID(int=41),
+        scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+        consequence_summary="Two reversible constraints; no baseline change.",
+        canonical_hash="draft-123",
+    )
+
+
+def test_execute_turn_binds_a_model_draft_citation_to_this_turns_trusted_result() -> None:
+    deps = _deps()
+    proposal = _proposal(deps)
+
+    class DraftRuntime:
+        name = "draft"
+
+        def run_turn(self, _request):
+            return AgentRunOutcomeV1(draft=DraftProposalV1(draft_id="draft-123"))
+
+    outcome = execute_turn(
+        DraftRuntime(), deps, prompt="Draft it",
+        calculation_results=(SchedulingDraftResultV1("draft-123", proposal),),
+    )
+
+    assert outcome.resolved_draft is proposal
+    assert terminal_status(outcome) == "agent_completed"
+    assert terminal_outcome(outcome) is None
+    assert activity_payload(outcome, deps) is proposal
+    assert outcome_visible_text(outcome) == proposal.consequence_summary
+
+
+def test_a_draft_citation_without_a_trusted_result_fails_closed() -> None:
+    deps = _deps()
+
+    class DraftRuntime:
+        name = "draft"
+
+        def run_turn(self, _request):
+            return AgentRunOutcomeV1(draft=DraftProposalV1(draft_id="missing"))
+
+    outcome = execute_turn(
+        DraftRuntime(), deps, prompt="Draft it", calculation_results=(),
+    )
+
+    assert outcome.status == "failed"
+    assert outcome.failure_reason == "invalid_output"
+    assert outcome.resolved_draft is None
 
 
 @pytest.mark.parametrize(
@@ -339,13 +393,40 @@ def test_new_activity_variants_rehydrate_as_application_owned_assistant_text() -
         ),
         **common,
     )
+    draft = DraftActivityV1(
+        activity_id=UUID(int=32), activity_type="draft",
+        proposal_id=UUID(int=40), proposal_version_id=UUID(int=41),
+        consequence_summary="Two reversible constraints; no baseline change.",
+        **common,
+    )
 
-    history = rehydrate_history((clarification, terminal))
+    history = rehydrate_history((clarification, draft, terminal))
 
     assert [message.parts[0].text for message in history.messages] == [
         "Which worker?",
+        "Two reversible constraints; no baseline change.",
         "The previous turn did not complete: provider_error.",
     ]
+
+
+def test_a_second_turn_after_a_draft_rehydrates_without_losing_the_conversation() -> None:
+    deps = _deps()
+    draft = DraftActivityV1(
+        activity_id=UUID(int=50), activity_type="draft",
+        conversation_id=deps.conversation_id, conversation_resource_version=3,
+        scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+        occurred_at=NOW, proposal_id=UUID(int=51), proposal_version_id=UUID(int=52),
+        consequence_summary="One reversible constraint; no baseline change.",
+    )
+    runtime = _Runtime()
+
+    execute_turn(
+        runtime, deps, prompt="Now revise it", calculation_results=[], history=(draft,),
+    )
+
+    assert runtime.request.history.messages[0].parts[0].text == (
+        "One reversible constraint; no baseline change."
+    )
 
 
 @pytest.mark.parametrize(

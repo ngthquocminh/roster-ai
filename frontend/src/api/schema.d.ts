@@ -608,6 +608,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Proposal */
+        get: operations["read_proposal_api_v1_proposals__proposal_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proposals/{proposal_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revise */
+        post: operations["revise_api_v1_proposals__proposal_id__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/proposals/{proposal_id}/rejection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject */
+        post: operations["reject_api_v1_proposals__proposal_id__rejection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -615,7 +666,7 @@ export interface components {
         /** AcceptedTurnOut */
         AcceptedTurnOut: {
             /** Activity */
-            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
             /** Resource Version */
             resource_version: number;
             /** Agent Run Status */
@@ -991,6 +1042,136 @@ export interface components {
             /** Matching Count */
             matching_count: number;
         };
+        /** DraftActivityOut */
+        DraftActivityOut: {
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Conversation Resource Version */
+            conversation_resource_version: number;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            activity_type: "draft";
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /**
+             * Proposal Version Id
+             * Format: uuid
+             */
+            proposal_version_id: string;
+            /** Consequence Summary */
+            consequence_summary: string;
+        };
+        /**
+         * DraftConstraintProposalV1
+         * @description UNTRUSTED model input containing identifiers and typed arguments only.
+         */
+        DraftConstraintProposalV1: {
+            /**
+             * Kind
+             * @default set_min_workers_per_task
+             * @enum {string}
+             */
+            kind: "set_min_workers_per_task" | "scale_demand" | "lock_worker_shift" | "exclude_worker_from_task" | "set_max_hours";
+            /**
+             * Group
+             * @default work-areas-and-tasks
+             * @enum {string}
+             */
+            group: "work-areas-and-tasks" | "workers" | "demand" | "baseline-assignments" | "locks" | "constraints-and-objectives";
+            /**
+             * Record Id
+             * @default
+             */
+            record_id: string;
+            /** Related Group */
+            related_group?: ("work-areas-and-tasks" | "workers" | "demand" | "baseline-assignments" | "locks" | "constraints-and-objectives") | null;
+            /** Related Record Id */
+            related_record_id?: string | null;
+            /** N */
+            n?: number | null;
+            /** Factor */
+            factor?: number | null;
+            /** Max Hours */
+            max_hours?: number | null;
+            /** Start Minute */
+            start_minute?: number | null;
+            /** End Minute */
+            end_minute?: number | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
+        /**
+         * DraftConstraintV1
+         * @description TRUSTED, resolved and validated reversible solver input.
+         */
+        DraftConstraintV1: {
+            /**
+             * Kind
+             * @default set_min_workers_per_task
+             * @enum {string}
+             */
+            kind: "set_min_workers_per_task" | "scale_demand" | "lock_worker_shift" | "exclude_worker_from_task" | "set_max_hours";
+            /**
+             * Resolved Entities
+             * @default []
+             */
+            resolved_entities: components["schemas"]["ResolvedEntityV1"][];
+            /** N */
+            n?: number | null;
+            /** Factor */
+            factor?: number | null;
+            /** Max Hours */
+            max_hours?: number | null;
+            /** Start Minute */
+            start_minute?: number | null;
+            /** End Minute */
+            end_minute?: number | null;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
         /**
          * EntityCandidateV1
          * @description TRUSTED candidate resolved against the governed scenario projection.
@@ -1059,7 +1240,7 @@ export interface components {
         /** ExecutedTurnOut */
         ExecutedTurnOut: {
             /** Activity */
-            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
             /** Resource Version */
             resource_version: number;
             /** Agent Run Status */
@@ -1270,6 +1451,19 @@ export interface components {
             /** Matching Count */
             matching_count: number;
         };
+        /** LockV1 */
+        LockV1: {
+            /** Record Id */
+            record_id: string;
+            /** Target Type */
+            target_type: string;
+            /** Target Ref */
+            target_ref: string;
+            /** Scope */
+            scope: string;
+            /** Source */
+            source: string;
+        };
         /** MessageCreateIn */
         MessageCreateIn: {
             /** Text */
@@ -1347,6 +1541,73 @@ export interface components {
             /** Code */
             code: string;
         };
+        /** ProposalOut */
+        ProposalOut: {
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /**
+             * Proposal Version Id
+             * Format: uuid
+             */
+            proposal_version_id: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Current Scenario Version Id
+             * Format: uuid
+             */
+            current_scenario_version_id: string;
+            /** Expected Baseline Schedule Version */
+            expected_baseline_schedule_version: string | null;
+            /** Resolved Entities */
+            resolved_entities: components["schemas"]["ResolvedEntityV1"][];
+            /** Constraints */
+            constraints: components["schemas"]["DraftConstraintV1"][];
+            /** Preserved Locks */
+            preserved_locks: components["schemas"]["LockV1"][];
+            /** Consequence Summary */
+            consequence_summary: string;
+            /** Canonical Hash */
+            canonical_hash: string;
+            /** Canonical Hash Algorithm */
+            canonical_hash_algorithm: string;
+            /** Canonical Hash Schema Version */
+            canonical_hash_schema_version: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "rejected";
+            /** Resource Version */
+            resource_version: number;
+            /** Stale */
+            stale: boolean;
+            /** Schema Version */
+            schema_version: string;
+        };
+        /** ProposalRejectionIn */
+        ProposalRejectionIn: {
+            /** Expected Resource Version */
+            expected_resource_version: number;
+        };
+        /** ProposalRevisionIn */
+        ProposalRevisionIn: {
+            /** Constraints */
+            constraints: components["schemas"]["DraftConstraintProposalV1"][];
+            /** Expected Resource Version */
+            expected_resource_version: number;
+        };
         /** QualificationRefOut */
         QualificationRefOut: {
             /** Task Id */
@@ -1383,6 +1644,35 @@ export interface components {
              * @default 0
              */
             dropped_candidate_count: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
+        /**
+         * ResolvedEntityV1
+         * @description TRUSTED projection identity with an application-composed label.
+         */
+        ResolvedEntityV1: {
+            /**
+             * Group
+             * @default work-areas-and-tasks
+             * @enum {string}
+             */
+            group: "work-areas-and-tasks" | "workers" | "demand" | "baseline-assignments" | "locks" | "constraints-and-objectives";
+            /**
+             * Record Id
+             * @default
+             */
+            record_id: string;
+            /**
+             * Label
+             * @default
+             */
+            label: string;
+            /** Scenario Version Id */
+            scenario_version_id?: string | null;
             /**
              * Schema Version
              * @default 1
@@ -1670,7 +1960,7 @@ export interface components {
             /** Latest Agent Run Status */
             latest_agent_run_status: string | null;
             /** Items */
-            items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"])[];
+            items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"])[];
             /** Limit */
             limit: number;
             /** Has More */
@@ -3485,6 +3775,246 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    read_proposal_api_v1_proposals__proposal_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    revise_api_v1_proposals__proposal_id__revisions_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalRevisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    reject_api_v1_proposals__proposal_id__rejection_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalRejectionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
         };

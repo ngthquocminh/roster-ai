@@ -81,6 +81,8 @@ class Settings:
     # task-only pushdown leaves 218-295. 200 fails closed on five of six tasks.
     scheduling_compute_row_limit: int = 400
     scheduling_compute_timeout_seconds: float = 5.0
+    scheduling_draft_timeout_seconds: float = 5.0
+    scheduling_draft_max_constraints: int = 10
     # AD-2 feature policy. `compose_granted_capabilities` refuses any module
     # whose `required_feature_policy` is absent here, so this is the supplier
     # that gate has always expected. It must NEVER be derived from the
@@ -93,6 +95,7 @@ class Settings:
     # real planner turn. Story 2.6's proof is unaffected -- it stays installed
     # and grantable whenever this flag is on.
     scheduling_compute_enabled: bool = True
+    scheduling_draft_enabled: bool = True
     scheduling_inspect_enabled: bool = True
     demonstration_enabled: bool = False
 
@@ -244,9 +247,20 @@ def default_settings() -> Settings:
         _optional_float(os.environ.get("SCHEDULING_COMPUTE_TIMEOUT_SECONDS"), 5.0)
         or 5.0
     )
+    scheduling_draft_timeout_seconds = (
+        _optional_float(os.environ.get("SCHEDULING_DRAFT_TIMEOUT_SECONDS"), 5.0)
+        or 5.0
+    )
+    scheduling_draft_max_constraints = (
+        _optional_int(os.environ.get("SCHEDULING_DRAFT_MAX_CONSTRAINTS"), 10) or 10
+    )
     scheduling_compute_enabled = _flag(
         "SCHEDULING_COMPUTE_ENABLED",
         os.environ.get("SCHEDULING_COMPUTE_ENABLED"), True
+    )
+    scheduling_draft_enabled = _flag(
+        "SCHEDULING_DRAFT_ENABLED",
+        os.environ.get("SCHEDULING_DRAFT_ENABLED"), True
     )
     scheduling_inspect_enabled = _flag(
         "SCHEDULING_INSPECT_ENABLED",
@@ -284,7 +298,10 @@ def default_settings() -> Settings:
         scheduling_inspect_timeout_seconds=scheduling_inspect_timeout_seconds,
         scheduling_compute_row_limit=scheduling_compute_row_limit,
         scheduling_compute_timeout_seconds=scheduling_compute_timeout_seconds,
+        scheduling_draft_timeout_seconds=scheduling_draft_timeout_seconds,
+        scheduling_draft_max_constraints=scheduling_draft_max_constraints,
         scheduling_compute_enabled=scheduling_compute_enabled,
+        scheduling_draft_enabled=scheduling_draft_enabled,
         scheduling_inspect_enabled=scheduling_inspect_enabled,
         demonstration_enabled=demonstration_enabled,
     )

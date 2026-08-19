@@ -30,6 +30,7 @@ from typing import Literal
 from application.contracts.grounding import GroundedAnswerV1
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.agent_status import AgentRunStatusV1
+from application.contracts.proposal import DraftProposalV1, ProposalV1
 
 SCHEMA_VERSION = "1"
 
@@ -249,6 +250,12 @@ class AgentRunOutcomeV1:
     clarification: ClarificationV1 | None = None
     resolved_clarification: ResolvedClarificationV1 | None = None
     refusal: RefusalV1 | None = None
+    # Drafts mirror the grounding and clarification trust-boundary pairs:
+    # `draft` is the UNTRUSTED model citation set in `backend/agent/`;
+    # `resolved_draft` is the TRUSTED proposal bound by the use case from this
+    # turn's captured capability results. Only the latter may be persisted.
+    draft: DraftProposalV1 | None = None
+    resolved_draft: ProposalV1 | None = None
     turn: AgentTurnV1 = field(default_factory=AgentTurnV1)
     summary: str | None = None
     approval: AgentApprovalPendingV1 | None = None
