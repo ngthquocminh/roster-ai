@@ -494,93 +494,93 @@ Report, from a real run, before writing the adapter:
 
 #### Task 5 — `SchedulerPort`, `SolverInputSource`, and the governed adapter (AC: 2)
 
-- [ ] `application/ports/scheduler.py` — `SchedulerPort.solve(snapshot: RunSnapshotV1) ->
+- [x] `application/ports/scheduler.py` — `SchedulerPort.solve(snapshot: RunSnapshotV1) ->
       SolverOutcomeV1` and `SolverInputSource.load(scenario_version_id, expected_digest) -> Any`.
-- [ ] `adapters/postgres/solver_input.py` — implements `SolverInputSource`; re-reads
+- [x] `adapters/postgres/solver_input.py` — implements `SolverInputSource`; re-reads
       `scenario_version.payload`, **recomputes the RFC 8785 digest and compares** to the snapshot's,
       raising a distinct `SnapshotDigestMismatchError` on divergence (AD-11: missing, unauthorized
       and version-mismatched are distinct failures).
-- [ ] `engine/governed_adapter.py` — the translation boundary of Decision 2. Applies the five
+- [x] `engine/governed_adapter.py` — the translation boundary of Decision 2. Applies the five
       `DraftConstraintV1` kinds to `OverrideCall`s via `domain/overrides.py :: override_id`; converts
       minutes → hours **inbound** and hours → minutes **outbound**; wires `max_hours_per_week` from
       `Shift Constraint` (Gap 2b).
-- [ ] Minute↔hour conversion is one shared helper used by both directions, tested for round-trip
+- [x] Minute↔hour conversion is one shared helper used by both directions, tested for round-trip
       stability at the grid the fixture uses. A half-open `[start, end)` minute interval must survive
       `→ hours → back`; `builder.py` snaps starts to a 1.0h grid (`SHIFT_START_GRID_H`), so
       a naive `int(h * 60)` is not automatically safe.
 
 #### Task 6 — Measure the Decision 4 trade (AC: 2)
 
-- [ ] Solve `data/sample_tiny_input.json` under (a) `num_search_workers=8` + `max_time_in_seconds`
+- [x] Solve `data/sample_tiny_input.json` under (a) `num_search_workers=8` + `max_time_in_seconds`
       and (b) `num_search_workers=1` + `max_deterministic_time`. Report round-1 unmet hours, round-2
       cost, wall seconds, status, assignment count, scheduled members for each.
-- [ ] Run (b) **three times** and assert identical assignments; run (a) three times and record what
+- [x] Run (b) **three times** and assert identical assignments; run (a) three times and record what
       you observe. This is the evidence behind the story's title word "deterministic".
-- [ ] Record the outcome in `SCOPE_CONTROLS` under `solver:reproducibility` with the measured
+- [x] Record the outcome in `SCOPE_CONTROLS` under `solver:reproducibility` with the measured
       numbers, whichever way it lands.
 
 #### Task 7 — The wall-time trap (AC: 4)
 
-- [ ] `objective.py:solve_lexicographic` passes `time_limit_s` to **each** of two `Solve()` calls
+- [x] `objective.py:solve_lexicographic` passes `time_limit_s` to **each** of two `Solve()` calls
       (`:46-48` then `:63`), so total wall time is up to **2×** the configured limit. The governed
       ceiling must bound the **total**, or a "30 second" run takes 60 and `solver_timed_out` fires on
       a number nobody configured.
-- [ ] Implement in the governed adapter (budget the second round with the remaining time), **not** by
+- [x] Implement in the governed adapter (budget the second round with the remaining time), **not** by
       editing `objective.py` — that file is on the legacy path and five test modules depend on its
       current behaviour.
-- [ ] Test: a snapshot with a small ceiling finalizes `solver_timed_out` within the ceiling, not
+- [x] Test: a snapshot with a small ceiling finalizes `solver_timed_out` within the ceiling, not
       double it.
 
 ### Phase C — validation, terminal outcomes, and fences
 
 #### Task 8 — Hard-constraint validator and the candidate metrics calculator (AC: 3)
 
-- [ ] `application/scheduling/hard_constraints.py` — Decision 5's seven checks over `AssignmentV1[]`
+- [x] `application/scheduling/hard_constraints.py` — Decision 5's seven checks over `AssignmentV1[]`
       plus snapshot facts. **No CP-SAT object in scope.**
-- [ ] Seven corruption fixtures, one per check, each observed making its own check fail and only its
+- [x] Seven corruption fixtures, one per check, each observed making its own check fail and only its
       own (A2).
-- [ ] Preserved-lock check driven by a **seeded** lock supply (Gap 3).
-- [ ] `application/scheduling/candidate_metrics.py` — `MetricSetV1` and the soft
+- [x] Preserved-lock check driven by a **seeded** lock supply (Gap 3).
+- [x] `application/scheduling/candidate_metrics.py` — `MetricSetV1` and the soft
       `ConstraintResultV1[]` from assignments + frozen demand.
-- [ ] **`docs/DOMAIN-MODEL.md` §5's checklist applies to every number here.** Name the unit before
+- [x] **`docs/DOMAIN-MODEL.md` §5's checklist applies to every number here.** Name the unit before
       naming the metric. Coverage required/served minutes for `outbound`/`inbound` is a `volume`
       family converted through the **per-worker qualification rate** now available on
       `AssignmentV1.qualification_refs` — that conversion is legitimate *here* and nowhere else,
       because here the assignment supplies the "who". `indirect` is `headcount` and needs no
       conversion. Cite §1 and §4 in the module docstring.
-- [ ] The recomputation test: rebuild the full `MetricSetV1` from the persisted candidate + snapshot
+- [x] The recomputation test: rebuild the full `MetricSetV1` from the persisted candidate + snapshot
       alone and assert equality with the stored one.
 
 #### Task 9 — `finalize_schedule_run` and every terminal outcome (AC: 3, 4)
 
-- [ ] `application/use_cases/finalize_schedule_run.py` — the `complete-compute` bundle minus its
+- [x] `application/use_cases/finalize_schedule_run.py` — the `complete-compute` bundle minus its
       event (Decision 8). Compare-and-set from `solver_running`; candidate written **only** when
       status is `solver_completed` **and** the Task 8 validator passed.
-- [ ] Implement the status mapping in Dev Notes' table, including the two non-obvious cases: a
+- [x] Implement the status mapping in Dev Notes' table, including the two non-obvious cases: a
       round-2 `UNKNOWN` carrying a usable round-1 snapshot is `solver_timed_out` **with no candidate**
       (AC4 is explicit), and a structurally-always-feasible model means `solver_infeasible` is
       reachable only through Task 8's validator or a `MODEL_INVALID` return.
-- [ ] One test per terminal status asserting `schedule_version` row count is zero and the exact
+- [x] One test per terminal status asserting `schedule_version` row count is zero and the exact
       persisted `(status, reason)` pair.
-- [ ] `solver_cancelled` is representable and **persisted-only** here — nothing requests it until
+- [x] `solver_cancelled` is representable and **persisted-only** here — nothing requests it until
       Story 3.4. Record as `NOT COVERED` with 3.4 named; do not build a cancellation hook into
       `objective.py`.
 
 #### Task 10 — Fences, ledger, regression (AC: 1, 2, 3, 4)
 
-- [ ] `tests/architecture/test_solver_boundaries.py` — AC2's structural proof (see AC2 above), each
+- [x] `tests/architecture/test_solver_boundaries.py` — AC2's structural proof (see AC2 above), each
       assertion observed failing.
-- [ ] `SCOPE_CONTROLS` for the new modules, in Story 2.5's `COVERS` / `NOT COVERED` form, carrying at
+- [x] `SCOPE_CONTROLS` for the new modules, in Story 2.5's `COVERS` / `NOT COVERED` form, carrying at
       minimum: `inputs:solver_reads_raw_fixture`, `metrics:overtime_is_above_contracted_hours`,
       `solver:reproducibility`, `events:owned_by_story_3_5`, `cancellation:owned_by_story_3_4`,
       `baseline:pointer_owned_by_epic_4`, `locks:seeded_supply_only`,
       `constraints:min_gap_not_wired`.
-- [ ] `deferred-work.md`: discharge `:231` (`ProposalV1` required shape → now enforced on
+- [x] `deferred-work.md`: discharge `:231` (`ProposalV1` required shape → now enforced on
       `RunSnapshotV1`); update `:185` (`baseline_schedule_version` — aggregate now exists, pointer
       still Epic 4's); update `:211` (`shortfall_minutes` — condition 1 now satisfied, conditions 2–4
       still open); add the `MinimumHoursBetweenShifts` divergence from Gap 2b.
 - [ ] Gate A re-run: `gate_a_passed: true`, `blocking: []`.
-- [ ] Verify the mandated zero-line diffs with `git diff --stat` (list in Project Structure Notes).
+- [x] Verify the mandated zero-line diffs with `git diff --stat` (list in Project Structure Notes).
 
 ---
 
@@ -801,6 +801,8 @@ creation. Establish real pass numbers before attributing any failure to this sto
 
 ### Agent Model Used
 
+Codex (GPT-5)
+
 ### Implementation Plan
 
 - Follow the story's three phases in task order with red-green-refactor gates; keep the solver and
@@ -829,6 +831,29 @@ creation. Establish real pass numbers before attributing any failure to this sto
   status/reason/candidate_schedule_version_id/finished_at; AC4 CHECK rejected the invalid row with
   `ck_schedule_run_candidate_completed`; required-field guard raised `snapshot_id is required`;
   stale proposal refused before write with code `stale_proposal`.
+- 2026-08-19 Task 5 RED: governed adapter tests failed collection before the input source and engine
+  boundary existed. GREEN: 8 focused digest/conversion/override/cap tests passed; full regression
+  971 passed, 2 skipped, 7 deselected.
+- 2026-08-19 Task 6 measurement: deterministic 1-worker / max deterministic time 1.0 produced the
+  same 70 assignments and 10 members in 3/3 runs: 247.44352 unmet hours, round-2 objective 1118241,
+  wall 6.22/7.24/6.71s, status UNKNOWN after exhausting round 2. Eight-worker / 3.0s wall runs
+  produced two distinct assignment sets: 211.85190-211.85271 unmet hours, round-2
+  1173123-1201002, wall 3.51/3.08/3.08s, 76-78 assignments, 10 members, status UNKNOWN.
+- 2026-08-19 Task 7: 0.25s wall-budget test returned UNKNOWN within 0.40s, proving both rounds share
+  one decreasing ceiling. Full Tasks 6-7 regression: 973 passed, 2 skipped, 7 deselected.
+- 2026-08-19 Task 8 RED: candidate-validation tests failed collection before the independent
+  scheduling modules existed. GREEN: seven corruption cases each triggered its named structural
+  guard; a seeded non-empty lock triggered `preserved_lock`; volume/headcount/cost/overtime metrics
+  recomputed without solver variables. Full regression: 983 passed, 2 skipped, 7 deselected.
+- 2026-08-19 Task 9 RED: finalize and execute tests failed collection before their use cases existed.
+  GREEN: all five terminal statuses preserve exact reasons; only completed+validated inserts a
+  schedule version/assignment, validator failure and adapter failure insert none. Full regression:
+  992 passed, 2 skipped, 7 deselected.
+- 2026-08-19 Task 10 RED: the exhaustive AST boundary sweep first exposed the pre-existing legacy
+  importers `api/deps.py`, `api/routers/runs.py`, and Story 1.4's
+  `adapters/postgres/scenario_projection.py`; the final test records those exact AD-25 allowlists
+  while rejecting any new governed importer. GREEN: 4 architecture cases passed. Pre-Gate full
+  regression: 996 passed, 2 skipped, 7 deselected; PostgreSQL: 57 passed.
 
 ### Completion Notes List
 
@@ -848,6 +873,29 @@ creation. Establish real pass numbers before attributing any failure to this sto
 - Task 4: Added application-owned `cpsat`/seed/single-worker/deterministic-time/wall-time settings.
   Every value is parsed strictly and must be non-empty, positive, and finite; malformed or zero
   values raise `InvalidFlagError` at settings construction instead of falling back.
+- Task 5: Added solver-free application ports, a PostgreSQL raw-payload source that re-computes and
+  compares the frozen RFC 8785 digest, and the sole governed engine adapter. It translates all five
+  trusted constraints to existing soft overrides, wires per-employment-type weekly caps, preserves
+  arbitrary fixture-minute offsets through one conversion pair, and emits deterministic solver
+  assignment IDs with the qualification rate actually used.
+- Task 6: Replaced the governed path's legacy wall-clock-only solve with a local two-round CP-SAT
+  orchestrator that applies one single-worker deterministic budget. The short-ceiling measurement
+  confirms exact reproducibility and quantifies its quality trade against the non-deterministic
+  eight-worker portfolio; both outcomes are recorded in `SCOPE_CONTROLS`.
+- Task 7: The governed two-round solve subtracts elapsed wall time before round 2, so its configured
+  ceiling bounds the whole solve rather than each round independently. Legacy `objective.py` remains
+  unchanged.
+- Task 8: Added seven solver-independent hard checks plus seeded lock validation and a domain-model-
+  compliant calculator. Candidate numbers are recomputed from immutable minute-based facts and the
+  assigned worker's rate; overtime is assigned time above contracted hours and cost uses base wage.
+- Task 9: Added execute/finalize orchestration and atomic PostgreSQL candidate persistence. Literal
+  infeasible/timed-out/cancelled/failed reasons are retained with no candidate; feasible output is
+  independently validated and recomputed before one immutable candidate and its assignments exist.
+- Task 10: Added exhaustive import fences and explicit scope controls; reconciled all four deferred
+  facts; verified every mandated path remains a zero-line diff. Candidate evidence now names its
+  producing schedule version, and candidate metrics reproduce from assignments plus frozen source
+  facts. Golden evaluation data remains unchanged at 21 cases because this story adds no model-facing
+  capability.
 
 ### File List
 
@@ -867,6 +915,19 @@ creation. Establish real pass numbers before attributing any failure to this sto
 - backend/tests/test_create_run_snapshot.py
 - backend/settings.py
 - backend/tests/test_settings.py
+- backend/adapters/postgres/solver_input.py
+- backend/application/ports/scheduler.py
+- backend/engine/governed_adapter.py
+- backend/tests/test_governed_solver_adapter.py
+- backend/application/scheduling/__init__.py
+- backend/application/scheduling/candidate_metrics.py
+- backend/application/scheduling/hard_constraints.py
+- backend/application/use_cases/execute_schedule_run.py
+- backend/application/use_cases/finalize_schedule_run.py
+- backend/tests/test_candidate_validation.py
+- backend/tests/test_finalize_schedule_run.py
+- backend/tests/architecture/test_solver_boundaries.py
+- _bmad-output/implementation-artifacts/deferred-work.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log

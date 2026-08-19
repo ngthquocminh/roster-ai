@@ -7,7 +7,13 @@ from typing import Literal
 from uuid import UUID
 
 from application.contracts.evidence_ref import EvidenceRefV1
-from application.contracts.scenario_projection import AssignmentV1
+from application.contracts.scenario_projection import (
+    AssignmentV1,
+    AvailabilityWindowV1,
+    DemandIntervalV1,
+    QualificationRefV1,
+    TaskV1,
+)
 
 SCHEMA_VERSION = "1"
 
@@ -23,6 +29,42 @@ ScheduleRunStatusV1 = Literal[
 ]
 ConstraintClassV1 = Literal["hard", "soft"]
 SolverStatusV1 = Literal["OPTIMAL", "FEASIBLE", "INFEASIBLE", "MODEL_INVALID", "UNKNOWN"]
+
+
+@dataclass(frozen=True)
+class WorkerSchedulingFactV1:
+    worker_id: str
+    employment_type: str
+    contracted_hours: float
+    wage_per_hour: float
+    qualifications: tuple[QualificationRefV1, ...]
+    availability_windows: tuple[AvailabilityWindowV1, ...]
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
+class SelectedShiftFactV1:
+    shift_id: str
+    worker_id: str
+    window_id: str
+    window_kind: Literal["roster", "availability"]
+    start_minute: int
+    end_minute: int
+    effective_minutes: int
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
+class ValidationFactsV1:
+    horizon_minutes: int
+    workers: tuple[WorkerSchedulingFactV1, ...]
+    selected_shifts: tuple[SelectedShiftFactV1, ...]
+    max_hours_per_week: tuple[tuple[str, float], ...]
+    max_shifts_per_day: tuple[tuple[str, int], ...]
+    minimum_gap_minutes: int
+    tasks: tuple[TaskV1, ...] = ()
+    demand_intervals: tuple[DemandIntervalV1, ...] = ()
+    schema_version: str = SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
@@ -64,6 +106,9 @@ class SolverOutcomeV1:
     warnings: tuple[str, ...] = ()
     evidence_refs: tuple[EvidenceRefV1, ...] = ()
     round1_value: float | None = None
+    round2_value: float | None = None
+    wall_time_seconds: float = 0.0
+    validation_facts: ValidationFactsV1 | None = None
     reason: str | None = None
     schema_version: str = SCHEMA_VERSION
 
@@ -93,6 +138,9 @@ __all__ = [
     "MetricSetV1",
     "ScheduleRunStatusV1",
     "ScheduleVersionV1",
+    "SelectedShiftFactV1",
     "SolverOutcomeV1",
     "SolverStatusV1",
+    "ValidationFactsV1",
+    "WorkerSchedulingFactV1",
 ]
