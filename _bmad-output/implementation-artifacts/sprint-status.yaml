@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-18
+last_updated: 2026-08-19
 
 # NOTE (2026-08-18): Story 3-1 created and moved to ready-for-dev; epic-3 backlog -> in-progress.
 # It is the FIRST story of Epic 3 and the reversible-draft boundary (FR9/FR10). It is also the first
@@ -1261,6 +1261,104 @@ project_key: NOKEY
 tracking_system: file-system
 story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
+# NOTE (2026-08-19): Story 3-2 created and moved to ready-for-dev. It is Epic 3's deterministic-
+# candidate boundary (FR11/FR14, NFR11/NFR13/NFR14) and the FIRST story to reach backend/engine/ from
+# a governed path (VERIFIED BY EXHAUSTIVE GREP at 37371d3: the only non-test importers of engine.base
+# are api/deps.py:34, api/routers/runs.py:11, services/run_service.py:21, run.py:10 and
+# scripts/calibrate_penalties.py -- all legacy SQLite or CLI; nothing under application/** or
+# adapters/** imports engine at all), the first to create the ScheduleRun/ScheduleVersion aggregates,
+# the first to produce a non-null EvidenceRefV1.producing_run_version (the sole production producer,
+# calculators.py:243, hardcodes None), and the first to give baseline_schedule_version a real value
+# supply. Scope: one migration (four tables), four contracts, one port + engine adapter, two use
+# cases, NO new dependency, NO router, NO capability, NO evidence file, ZERO-LINE frontend diff.
+#
+# EIGHT DECISIONS WERE MADE AT CREATION and are recorded in the story:
+# (1) THE SNAPSHOT FREEZES AN IDENTITY PLUS A CHECKSUM, NOT A COPY. scenario_version is append-only
+#     with a CHECK-constrained digest, so identity + digest is already immutable; the solver adapter
+#     re-verifies the digest before building the model. Embedding the projection is impossible -- see
+#     gap (a).
+# (2) THE SOLVER ADAPTER READS THE RAW CHECKSUMMED FIXTURE PAYLOAD THROUGH A PORT, AND IS THE ONLY
+#     PLACE HOURS EXIST. application/** never sees SolveResult, SchedulingProblem, ScheduleRow or a
+#     float hour; engine/governed_adapter.py is the single translation boundary, asserted by a new
+#     tests/architecture/test_solver_boundaries.py.
+# (3) AC3'S "RECOMPUTABLE" IS AN APPLICATION CALCULATOR OVER THE FROZEN ASSIGNMENTS, NOT A RE-SOLVE.
+#     Computing metrics from builder.unmet_vol / builder.coverage_terms (what engine.py:63-110 does
+#     for the legacy path) makes the guard CIRCULAR -- the solver verifying itself -- which is retro
+#     3.1's dominant failure mode in its most expensive form.
+# (4) GOVERNED RUNS DEFAULT TO CP-SAT'S REPRODUCIBLE CONFIGURATION, AND THE TRADE IS MEASURED.
+#     VERIFIED AGAINST THE OR-TOOLS SOURCE: num_workers > 1 enters SolveCpModelParallel, a portfolio
+#     whose winner depends on thread timing, and max_time_in_seconds is wall-clock;
+#     max_deterministic_time (sat_parameters.proto field 67) and util/time_limit.h both document
+#     reproducibility as their purpose. Repo defaults today are num_workers=8 + max_time_in_seconds,
+#     so bit-identical re-solve is NOT currently claimable. Task 6 measures both and records numbers.
+# (5) HARD-CONSTRAINT VALIDATION IS AN INDEPENDENT RE-CHECK OVER THE ASSIGNMENTS AND IT GATES
+#     CANDIDATE CREATION. The seven structural invariants are enumerated with builder.py line
+#     anchors; each must be OBSERVED FAILING against a corrupted assignment set (A2).
+# (6) THE FIVE PROPOSAL CONSTRAINT KINDS ARE SOFT AND ConstraintResultV1.class SAYS SO. VERIFIED: all
+#     five are round-2 penalty terms with bounded slack (builder.py:334-417) and round 1 is locked
+#     first (objective.py:63-65), so an override can never make the solve infeasible. Do NOT promote
+#     one to a hard constraint.
+# (7) THIS STORY CREATES THE schedule_version AGGREGATE; STORY 4.3 STILL OWNS THE POINTER. A
+#     candidate here therefore has no baseline to be a candidate against -- that is Story 3.8's
+#     problem to raise, NOT this story's to pre-solve with a synthetic baseline row.
+# (8) STATUS IS PERSISTED HERE; EVENTS ARE NOT. STRUCTURALLY FORCED: persisted_event declares
+#     conversation_id and agent_run_id NOT NULL with FKs plus ck_persisted_event_stream_is_conversation
+#     (schema.py:309-329), and a schedule run has no conversation until 3.6 and no agent run at all.
+#     complete-compute's "+ event" clause is recorded NOT COVERED with Story 3.5 named.
+#
+# THREE HONEST GAPS ARE RAISED RATHER THAN PAPERED OVER.
+# (a) THE NORMALIZED PROJECTION CANNOT BUILD A SchedulingProblem. MEASURED: "ShiftTemplate",
+#     "Shift Schedule Template", "EBA Grade Rate" and "wage" appear NOWHERE under adapters/** or
+#     application/**; ScenarioProjectionV1 has no shift-template group and WorkerV1 carries no wage.
+#     SchedulingProblem requires templates and Member.wage_per_hour, which only ingest/input_adapter.py
+#     supplies from the raw fixture. Required posture: Decision 2's port over the raw checksummed
+#     payload. DO NOT extend ScenarioProjectionV1 -- that is Story 1.4's contract and data/contract/**
+#     digests are Gate A bound.
+# (b) MetricSetV1.overtime_minutes HAS NO SOURCE, AND THE FIXTURE'S PER-TYPE CAPS ARE VACUOUS.
+#     MEASURED: "overtime" appears once in backend/**, a comment in constants.py:82; the fixture's
+#     Overtime 1.5 / 2.0 rate types are ignored and cost is flat base-rate x hours. Define
+#     overtime_minutes as assigned effective minutes above WorkerV1.contracted_hours and record it --
+#     do not invent a solver concept and do not silently emit 0. SEPARATELY: Story 3.1's review
+#     resolution said "the real per-employment-type cap arrives with the solver at Story 3.2", but
+#     MEASURED on both committed fixtures the only employment types present are Full Time and Part
+#     Time and Shift Constraint gives BOTH Maximum Hours a Week = 56 -- identical to
+#     DEFAULT_MAX_HOURS_PER_WEEK. Wiring them changes nothing observable, so the proof must use a
+#     SEEDED problem with a differing cap. MinimumHoursBetweenShifts = 10 vs DEFAULT_MIN_GAP_HOURS =
+#     2.0 IS a real divergence and is explicitly OUT OF SCOPE -- recorded in the ledger, not wired.
+# (c) AssignmentV1 DOES NOT CARRY AD-20'S qualification refs OR lock/source refs. Add all three
+#     additively and defaulted. Populating qualification_refs from the solver is what finally makes
+#     docs/DOMAIN-MODEL.md section 4 condition 1 ("a per-worker rate from the solver") a real supply
+#     -- note it at deferred-work.md:211 WITHOUT reopening shortfall_minutes. lock_ref stays
+#     structurally None everywhere: get_locks still returns a hardcoded () at 37371d3, so
+#     preserved-lock validation is proved with a SEEDED reader, never against a supply of zero.
+#
+# TERMINAL STATUS MAPPING IS TABULATED IN THE STORY -- do not re-derive it. Two cases are easy to get
+# wrong: a round-2 UNKNOWN carrying a usable round-1 snapshot is solver_timed_out WITH NO CANDIDATE
+# (AC4 is explicit that a schedule arriving past the ceiling is still not promotable), and
+# solver_infeasible is NEAR-UNREACHABLE from the current model because every coverage constraint,
+# roster fill and override carries bounded slack (builder.py:263, :301, :311, :334-417) -- it is
+# proved with a seeded infeasible model and MUST NOT be used as the destination for validator
+# failure, which is solver_failed / hard_constraint_violated. AC4 IS ALSO A DATABASE GUARANTEE:
+# CHECK (candidate_schedule_version_id IS NULL OR status = 'solver_completed').
+#
+# NINE TRAPS flagged, the quietest first: a metrics calculator that reads the solver's own variables;
+# a hard-constraint validator that re-reads the CP-SAT model; asserting per-type caps against 56/56;
+# asserting "locks preserved" against a supply of zero; DOUBLE WALL TIME (objective.py passes
+# time_limit_s to EACH of two Solve() calls at :46-48 and :63, so a "30 second" run takes 60 -- bound
+# the total in the governed adapter, NOT by editing objective.py, which five test modules depend on);
+# non-deterministic multi-worker search silently invalidating the story's title; trying to emit a
+# persisted event; ProposalV1() constructing an empty proposal (every field defaulted,
+# proposal.py:76-95 -- RunSnapshotV1 enforces its shape at construction and discharges
+# deferred-work.md:231); minute<->hour rounding (builder.py snaps starts to a 1.0h grid and the
+# fixture carries a 20:04 shift start -- round-trip it, do not assume it).
+#
+# GOLDEN DATASET CONTRIBUTION IS ZERO AND THAT IS CORRECT -- the story ships no capability and no
+# model-facing surface, so a golden case would be a case about nothing. Total stays 21. Do not pad.
+#
+# BASELINES COLLECTED AT 37371d3: backend 945 collected (952 total, 7 deselected); -m postgres 55
+# collected (COLLECTED, NOT EXECUTED -- needs the local PostgreSQL service); evidence convention 49
+# collected; golden cases 21 files. Re-derive before attributing any failure to this story.
+
 development_status:
   # Epic 1: Inspectable Single-Site Scenario Workspace
   epic-1: done
@@ -1293,7 +1391,7 @@ development_status:
   # Epic 3: Governed and Recoverable Schedule Repair
   epic-3: in-progress
   3-1-create-and-revise-a-reversible-repair-draft: done
-  3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: backlog
+  3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: ready-for-dev
   3-3-lease-solver-jobs-with-fencing: backlog
   3-4-provide-the-safe-cancellation-command: backlog
   3-5-persist-literal-run-state-and-replay-progress: backlog
