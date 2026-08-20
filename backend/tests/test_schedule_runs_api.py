@@ -15,6 +15,10 @@ from api.deps import (
     get_site_context,
 )
 from api.main import app
+from application.ports.schedule_run import (
+    IdempotentScheduleRunResultV1,
+    ScheduleRunStateV1,
+)
 from application.ports.session import ResolvedSession
 from application.use_cases.cancel_schedule_run import (
     CancelScheduleRunError,
@@ -76,7 +80,7 @@ def test_cancellation_route_returns_the_replayed_semantic_result(
     test_client, settings, _ = client
     run_id = uuid4()
     result = ScheduleRunCancellationV1(
-        run_id, "cancellation_requested", "cancellation_requested", 4
+        run_id, "cancellation_requested", "cancellation_requested", 4, True
     )
     monkeypatch.setattr(
         "api.routers.schedule_runs.cancel_schedule_run", lambda *_a, **_k: result
@@ -93,6 +97,20 @@ def test_cancellation_route_returns_the_replayed_semantic_result(
     assert response.json()["status"] == "cancellation_requested"
     assert response.json()["resource_version"] == 4
     assert response.json()["cancellation_requested"] is True
+
+
+def test_cancellation_route_reports_the_flag_it_was_given_not_a_constant() -> None:
+    """Decision 4 permits a run with no job row, where the flag is genuinely false.
+
+    The field used to be a hard-coded `True`, so this assertion could not fail
+    and Story 3.7 would have rendered a constant as a distinct literal state.
+    """
+    assert (
+        ScheduleRunCancellationV1(
+            uuid4(), "solver_cancelled", "cancelled", 2
+        ).cancellation_requested
+        is False
+    )
 
 
 @pytest.mark.parametrize(
@@ -158,3 +176,84 @@ def test_cancellation_route_enforces_idempotency_header_bounds(client, key) -> N
 
     assert response.status_code == 422
     assert response.json()["code"] == "invalid_request"
+
+
+class _WiringRepository:
+    """Minimal repository that satisfies the REAL use case, not a monkeypatch.
+
+    Every other route test replaces `cancel_schedule_run` wholesale, so they
+    prove `_command_problem`'s isinstance ladder and nothing else -- a signature
+    mismatch between the router's call site and the use case's keyword-only
+    parameters would pass all of them.
+    """
+
+    def __init__(self) -> None:
+        self.stored = {}
+        self.flag = False
+
+    def get_run_state(self, _connection, *, run_id, site_id):
+        return ScheduleRunStateV1("solver_running", 3)
+
+    def get_idempotent_result(
+        self, _connection, *, site_id, actor_id, operation, idempotency_key
+    ):
+        return self.stored.get((site_id, actor_id, operation, idempotency_key))
+
+    def set_job_cancellation_requested(self, _connection, *, run_id, site_id):
+        self.flag = True
+
+    def get_job_cancellation_requested(self, _connection, *, run_id, site_id):
+        return self.flag
+
+    def request_cancellation(
+        self, _connection, *, run_id, site_id, expected_resource_version
+    ):
+        return None
+
+    def _store_idempotent_result(
+        self,
+        _connection,
+        *,
+        site_id,
+        actor_id,
+        operation,
+        idempotency_key,
+        body_hash,
+        response_payload,
+    ):
+        self.stored[(site_id, actor_id, operation, idempotency_key)] = (
+            IdempotentScheduleRunResultV1(body_hash, response_payload)
+        )
+
+
+def test_cancellation_route_drives_the_real_use_case(client) -> None:
+    """Exercise router -> use case -> repository without monkeypatching the seam."""
+    test_client, settings, _ = client
+    repository = _WiringRepository()
+    app.dependency_overrides[get_schedule_run_repository] = lambda: repository
+    run_id = uuid4()
+
+    response = test_client.post(
+        f"/api/v1/schedule-runs/{run_id}/cancellation",
+        json={"expected_resource_version": 3},
+        headers=_headers(settings, key="wiring-1"),
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schedule_run_id"] == str(run_id)
+    assert body["status"] == "cancellation_requested"
+    assert body["resource_version"] == 4
+    # Read back from the repository, not asserted by the router.
+    assert body["cancellation_requested"] is True
+    assert repository.flag is True
+
+    # A replay on the same key returns the stored result through the same wiring.
+    replay = test_client.post(
+        f"/api/v1/schedule-runs/{run_id}/cancellation",
+        json={"expected_resource_version": 3},
+        headers=_headers(settings, key="wiring-1"),
+    )
+    assert replay.status_code == 200
+    assert replay.json() == body
+    assert len(repository.stored) == 1

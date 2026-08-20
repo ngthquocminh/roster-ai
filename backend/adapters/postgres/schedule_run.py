@@ -23,7 +23,9 @@ from application.contracts.schedule_version import ScheduleRunStatusV1, Schedule
 from application.contracts.scenario_projection import QualificationRefV1
 from application.ports.schedule_run import (
     IdempotentScheduleRunResultV1,
+    IllegalTransitionError,
     RunNotCancellableError,
+    RunTransitionConflictError,
     ScheduleRunStateV1,
     StaleLeaseError,
 )
@@ -157,6 +159,22 @@ class PostgresScheduleRunRepository:
         )
 
     @staticmethod
+    def get_job_cancellation_requested(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> bool:
+        """Read the job's carrier flag. A run with no job row carries no request."""
+        value = connection.execute(
+            select(job_queue.c.cancellation_requested).where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+            )
+        ).scalar_one_or_none()
+        return bool(value)
+
+    @staticmethod
     def _has_current_epoch(run_id: UUID, site_id: UUID, fencing_epoch: int):
         # `status == 'leased'` and a positive epoch are load-bearing, not
         # decoration: a job is enqueued at fencing_epoch=0, so without them a
@@ -224,6 +242,7 @@ class PostgresScheduleRunRepository:
         site_id: UUID,
         fencing_epoch: int,
         expected_status: str,
+        target_status: str | None = None,
     ) -> None:
         current_epoch = connection.execute(
             select(job_queue.c.fencing_epoch).where(
@@ -235,7 +254,27 @@ class PostgresScheduleRunRepository:
             raise StaleLeaseError(
                 f"schedule run lease epoch {fencing_epoch} is stale; current is {current_epoch}"
             )
-        raise ValueError(f"schedule run is no longer {expected_status}")
+        # Both reads below run only on the failure path, so the happy path pays
+        # nothing. Naming the ACTUAL current status matters: the old message
+        # said "no longer <expected>" for a run that was never <expected>.
+        current_status = connection.execute(
+            select(schedule_run.c.status).where(
+                schedule_run.c.id == run_id,
+                schedule_run.c.site_id == site_id,
+            )
+        ).scalar_one_or_none()
+        if (current_status, target_status) == ("solver_running", "solver_cancelled"):
+            raise IllegalTransitionError(
+                "solver_running -> solver_cancelled is not an AD-7 ScheduleRun edge. "
+                "Cancelling running work must pass through cancellation_requested "
+                "(AD-6: cancellation is cooperative). A solver-reported 'cancelled' "
+                "outcome on a run nobody cancelled has no legal terminal edge -- see "
+                "finalize_schedule_run._terminal, which maps it without knowing the "
+                "current status. Root cause is owned by Story 3.5."
+            )
+        raise RunTransitionConflictError(
+            f"schedule run is {current_status}, expected {expected_status}"
+        )
 
     def mark_running(
         self,
@@ -245,6 +284,17 @@ class PostgresScheduleRunRepository:
         site_id: UUID,
         fencing_epoch: int,
     ) -> None:
+        # Transaction A now COMMITS this edge, so the fence must be claimed
+        # under a real row lock exactly as `finalize_run` does. The unlocked
+        # `_has_current_epoch` EXISTS can pass against an epoch a concurrent
+        # `lease_next_job` is superseding; before the split a later rollback
+        # suppressed the write, but a committed `solver_running` from a
+        # fenced-out worker is durable AND bumps `resource_version`, which
+        # silently invalidates an in-flight cancel holding the right version.
+        # Claiming job_queue BEFORE schedule_run also fixes the lock order.
+        self._claim_epoch(
+            connection, run_id=run_id, site_id=site_id, fencing_epoch=fencing_epoch
+        )
         result = connection.execute(
             update(schedule_run)
             .where(
@@ -265,6 +315,7 @@ class PostgresScheduleRunRepository:
                 site_id=site_id,
                 fencing_epoch=fencing_epoch,
                 expected_status="solver_queued",
+                target_status="solver_running",
             )
 
     def create_queued_run(
@@ -587,6 +638,7 @@ class PostgresScheduleRunRepository:
                 site_id=site_id,
                 fencing_epoch=fencing_epoch,
                 expected_status=" or ".join(expected_statuses),
+                target_status=status,
             )
 
 

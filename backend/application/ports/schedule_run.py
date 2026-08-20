@@ -31,6 +31,19 @@ class RunNotCancellableError(ValueError):
     """The schedule run no longer permits the requested cancellation edge."""
 
 
+class RunTransitionConflictError(ValueError):
+    """A compare-and-set lost: the row moved between the read and the UPDATE.
+
+    Distinct from `StaleLeaseError` (the fencing epoch moved) because the
+    caller's recourse differs: a lost transition is recoverable by re-reading
+    and re-dispatching, whereas a stale lease means this worker must stop.
+    """
+
+
+class IllegalTransitionError(ValueError):
+    """The attempted (from_status, to_status) pair is not an AD-7 edge."""
+
+
 class ScheduleRunRepository(Protocol):
     def get_run_state(
         self,
@@ -65,6 +78,14 @@ class ScheduleRunRepository(Protocol):
         run_id: UUID,
         site_id: UUID,
     ) -> None: ...
+
+    def get_job_cancellation_requested(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> bool: ...
 
     def mark_running(
         self,
@@ -163,7 +184,9 @@ class ScheduleRunRepository(Protocol):
 
 __all__ = [
     "IdempotentScheduleRunResultV1",
+    "IllegalTransitionError",
     "RunNotCancellableError",
+    "RunTransitionConflictError",
     "ScheduleRunRepository",
     "ScheduleRunStateV1",
     "StaleLeaseError",

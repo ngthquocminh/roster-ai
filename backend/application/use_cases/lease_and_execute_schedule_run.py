@@ -7,7 +7,10 @@ from uuid import UUID
 
 from application.contracts.schedule_version import ScheduleRunStatusV1
 from application.ports.scheduler import SchedulerPort
-from application.ports.schedule_run import ScheduleRunRepository
+from application.ports.schedule_run import (
+    RunTransitionConflictError,
+    ScheduleRunRepository,
+)
 from application.use_cases.execute_schedule_run import execute_schedule_run
 
 
@@ -85,42 +88,54 @@ def lease_and_execute_schedule_run(
         )
         if snapshot is None:
             raise ValueError("leased job references a missing run snapshot")
-        state = repository.get_run_state(
-            runtime_connection,
-            run_id=lease.schedule_run_id,
-            site_id=lease.site_id,
-        )
-        if state is None:
-            raise ValueError("leased job references a missing schedule run")
-        if state.status == "solver_queued":
-            repository.mark_running(
+        # The state read is unlocked, so a cancellation can commit between it
+        # and `mark_running`'s compare-and-set. Losing that CAS is recoverable:
+        # re-read once and route through the same branches. Raising instead
+        # would leave the job `leased` with no terminal status for a full lease
+        # period -- `JobStatusV1` has no failure member (deferred-work).
+        for attempt in (1, 2):
+            state = repository.get_run_state(
                 runtime_connection,
                 run_id=lease.schedule_run_id,
                 site_id=lease.site_id,
-                fencing_epoch=lease.fencing_epoch,
             )
-        elif state.status == "solver_running":
-            # A recovered attempt under the current fencing epoch resumes the
-            # already-visible run without replaying the queued->running edge.
-            pass
-        elif state.status == "cancellation_requested":
-            repository.finalize_run(
-                runtime_connection,
-                run_id=lease.schedule_run_id,
-                site_id=lease.site_id,
-                fencing_epoch=lease.fencing_epoch,
-                status="solver_cancelled",
-                reason="cancelled",
-                candidate=None,
-            )
-            repository.complete_job(
-                runtime_connection,
-                job_id=lease.job_id,
-                site_id=lease.site_id,
-                fencing_epoch=lease.fencing_epoch,
-            )
-            return _outcome(lease, "solver_cancelled")
-        else:
+            if state is None:
+                raise ValueError("leased job references a missing schedule run")
+            if state.status == "solver_queued":
+                try:
+                    repository.mark_running(
+                        runtime_connection,
+                        run_id=lease.schedule_run_id,
+                        site_id=lease.site_id,
+                        fencing_epoch=lease.fencing_epoch,
+                    )
+                except RunTransitionConflictError:
+                    if attempt == 1:
+                        continue
+                    raise
+                break
+            if state.status == "solver_running":
+                # A recovered attempt under the current fencing epoch resumes
+                # the already-visible run without replaying the queued->running
+                # edge.
+                break
+            if state.status == "cancellation_requested":
+                repository.finalize_run(
+                    runtime_connection,
+                    run_id=lease.schedule_run_id,
+                    site_id=lease.site_id,
+                    fencing_epoch=lease.fencing_epoch,
+                    status="solver_cancelled",
+                    reason="cancelled",
+                    candidate=None,
+                )
+                repository.complete_job(
+                    runtime_connection,
+                    job_id=lease.job_id,
+                    site_id=lease.site_id,
+                    fencing_epoch=lease.fencing_epoch,
+                )
+                return _outcome(lease, "solver_cancelled")
             repository.complete_job(
                 runtime_connection,
                 job_id=lease.job_id,
@@ -150,7 +165,7 @@ def lease_and_execute_schedule_run(
                 candidate=None,
             )
             status: ScheduleRunStatusV1 = "solver_cancelled"
-        else:
+        elif state.status == "solver_running":
             finalized = execute_schedule_run(
                 repository,
                 scheduler,
@@ -160,6 +175,13 @@ def lease_and_execute_schedule_run(
                 fencing_epoch=lease.fencing_epoch,
             )
             status = finalized.status
+        else:
+            # Already terminal: another worker finalized this run under a newer
+            # fencing epoch while our lease lapsed. Never re-solve -- FR16
+            # forbids duplicate work, and a full CP-SAT solve would burn before
+            # `_claim_epoch` rejected it. `complete_job` below fences us out.
+            # Checkpoint 1 carries the same branch.
+            status = state.status
         repository.complete_job(
             runtime_connection,
             job_id=lease.job_id,

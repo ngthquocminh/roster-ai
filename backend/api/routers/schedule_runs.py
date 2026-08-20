@@ -46,7 +46,7 @@ def _out(value: ScheduleRunCancellationV1) -> ScheduleRunOut:
         status=value.status,
         reason=value.reason,
         resource_version=value.resource_version,
-        cancellation_requested=True,
+        cancellation_requested=value.cancellation_requested,
     )
 
 

@@ -131,7 +131,12 @@ def test_existing_run_updates_bump_resource_version() -> None:
         candidate=None,
     )
 
-    mark = mark_connection.statements[0]
+    # `mark_running` and `finalize_run` both claim the job row first now, so
+    # select the schedule_run statement rather than trusting a position.
+    mark = next(
+        s for s in mark_connection.statements
+        if str(s).startswith("UPDATE schedule_run")
+    )
     finalize = finalize_connection.statements[-1]
     assert "resource_version" in mark._values
     assert "resource_version" in finalize._values
@@ -143,6 +148,9 @@ class _RunRepository:
         self.state = state
         self.idempotency = {}
         self.calls = []
+        # Decision 4: a run with no job row carries no cancellation request.
+        # The response must read this back, never assert it.
+        self.job_cancellation_requested = False
 
     def get_run_state(self, _connection, *, run_id, site_id):
         self.calls.append(("state", run_id, site_id))
@@ -165,6 +173,11 @@ class _RunRepository:
 
     def set_job_cancellation_requested(self, _connection, **values):
         self.calls.append(("flag", values))
+        self.job_cancellation_requested = True
+
+    def get_job_cancellation_requested(self, _connection, *, run_id, site_id):
+        self.calls.append(("read_flag", run_id, site_id))
+        return self.job_cancellation_requested
 
     def _store_idempotent_result(self, _connection, **values):
         key = (

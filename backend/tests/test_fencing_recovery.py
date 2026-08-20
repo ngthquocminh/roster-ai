@@ -26,6 +26,13 @@ class _Connection:
     def execute(self, statement):
         self.statements.append(statement)
         if statement.is_update:
+            # `mark_running` now issues TWO updates: `_claim_epoch`'s job_queue
+            # touch, then the schedule_run compare-and-set. `rowcount` models
+            # the CAS only -- the claim succeeds unless a test says otherwise.
+            # Match the TARGET, not any mention: the schedule_run CAS also
+            # names workflow.job_queue inside its EXISTS subquery.
+            if str(statement).startswith("UPDATE workflow.job_queue"):
+                return _Result(rowcount=1)
             return _Result(rowcount=self.rowcount)
         return _Result(scalar=self.current_epoch)
 
@@ -49,7 +56,12 @@ def test_mark_running_compare_and_set_contains_the_epoch_predicate() -> None:
         fencing_epoch=7,
     )
 
-    sql = str(connection.statements[0])
+    statements = [str(statement) for statement in connection.statements]
+    # Lock order is load-bearing: the job row is claimed BEFORE the run row, so
+    # Transaction A acquires the two locks in the same order as `finalize_run`
+    # and the cancellation command. Reversing it deadlocks (40P01).
+    assert statements[0].startswith("UPDATE workflow.job_queue")
+    sql = next(s for s in statements if s.startswith("UPDATE schedule_run"))
     assert "EXISTS" in sql
     assert "workflow.job_queue" in sql
     assert "fencing_epoch" in sql
