@@ -163,6 +163,21 @@ def test_reproducible_configuration_is_identical_across_three_real_solves() -> N
         for r in multi
     ])
 
+    # The multi-worker configuration trades bit-for-bit reproducibility for search
+    # parallelism, so its assignment sets are not required to match run-to-run, and
+    # its tight wall-time budget is expected to leave round 2 as UNKNOWN (round-1
+    # snapshot present) on every run — but the trade must still be a *measured*,
+    # stable quantity, not merely printed and never re-checked: all three runs must
+    # land on the same status, round 1 must have converged (a real snapshot, not a
+    # NaN round-1-level timeout) in each, and the coverage/cost objectives they find
+    # must stay close to each other.
+    assert len({result.solver_status for result in multi}) == 1
+    multi_round1_values = [result.round1_value for result in multi]
+    assert all(value == value for value in multi_round1_values)  # none are NaN
+    assert max(multi_round1_values) - min(multi_round1_values) < 0.05 * max(multi_round1_values)
+    multi_round2_values = [result.round2_value for result in multi]
+    assert max(multi_round2_values) - min(multi_round2_values) < 0.05 * max(multi_round2_values)
+
 
 def test_one_wall_ceiling_bounds_both_solver_rounds() -> None:
     payload = json.loads(

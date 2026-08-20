@@ -40,20 +40,28 @@ def calculate_candidate_metrics(
     functions = {task.task_id: task.function for task in tasks}
     required_by_function: dict[str, float] = defaultdict(float)
     served_by_function: dict[str, float] = defaultdict(float)
+    required_by_task: dict[str, float] = defaultdict(float)
+    served_by_task: dict[str, float] = defaultdict(float)
     interval_required = []
     interval_served = []
+
+    # Reference rate per task from every qualified worker, not just whoever this
+    # candidate happened to assign — a fixed, candidate-independent conversion so
+    # "required minutes" for a volume row does not vary with the solve and stays
+    # defined even for a task no assignment overlaps.
+    qualified_rates_by_task: dict[str, list[float]] = defaultdict(list)
+    for worker in facts.workers:
+        for qualification in worker.qualifications:
+            qualified_rates_by_task[qualification.task_id].append(qualification.rate)
 
     for row in demand:
         matching = [a for a in assignments if a.task_id == row.task_id and _overlap(a.start_minute, a.end_minute, row.start_minute, row.end_minute)]
         if row.unit == "headcount":
             required = (row.end_minute - row.start_minute) * row.amount
         else:
-            rates = [
-                q.rate for assignment in matching
-                for q in assignment.qualification_refs if q.task_id == row.task_id
-            ]
+            rates = qualified_rates_by_task.get(row.task_id, [])
             if not rates:
-                raise ValueError(f"volume demand {row.record_id} has no assigned-worker qualification rate")
+                raise ValueError(f"volume demand {row.record_id} has no worker qualified for task {row.task_id}")
             required = row.amount / (sum(rates) / len(rates)) * 60.0
         served = float(sum(_overlap(a.start_minute, a.end_minute, row.start_minute, row.end_minute) for a in matching))
         interval_required.append((row.record_id, required))
@@ -61,6 +69,8 @@ def calculate_candidate_metrics(
         function = functions.get(row.task_id, "Unknown")
         required_by_function[function] += required
         served_by_function[function] += served
+        required_by_task[row.task_id] += required
+        served_by_task[row.task_id] += served
 
     assigned_by_worker: dict[str, int] = defaultdict(int)
     total_cost = 0.0
@@ -90,13 +100,15 @@ def calculate_candidate_metrics(
         member_count=len(assigned_by_worker),
     )
     soft_results = tuple(
-        _soft_constraint_result(constraint, assignments, assigned_by_worker)
+        _soft_constraint_result(constraint, assignments, assigned_by_worker, required_by_task, served_by_task)
         for constraint in constraints
     )
     return metrics, soft_results
 
 
-def _soft_constraint_result(constraint, assignments, assigned_by_worker) -> ConstraintResultV1:
+def _soft_constraint_result(
+    constraint, assignments, assigned_by_worker, required_by_task, served_by_task
+) -> ConstraintResultV1:
     entities = {entity.group: entity.record_id for entity in constraint.resolved_entities}
     task_id = entities.get("work-areas-and-tasks")
     worker_id = entities.get("workers")
@@ -114,8 +126,18 @@ def _soft_constraint_result(constraint, assignments, assigned_by_worker) -> Cons
         start, end = constraint.start_minute or 0, constraint.end_minute or 0
         measured, limit, unit = sum(1 for a in assignments if a.worker_id == worker_id and a.start_minute < end and a.end_minute > start), 1.0, "assignments"
         satisfied = measured >= 1
+    elif constraint.kind == "scale_demand":
+        # scale_demand rescales the task's demand target inside round 1
+        # (engine/cpsat/builder.py:_aggregate_demand) before any assignment
+        # exists, so the only honest post-solve fact is whether the solve
+        # delivered against that scaled target. required_by_task carries the
+        # unscaled demand, so the factor is reapplied here.
+        measured = served_by_task.get(task_id or "", 0.0)
+        limit = required_by_task.get(task_id or "", 0.0) * float(constraint.factor or 1)
+        unit = "minutes"
+        satisfied = measured >= limit
     else:
-        measured, limit, unit, satisfied = 1.0, float(constraint.factor or 1), "factor", True
+        raise ValueError(f"unsupported proposal constraint kind: {constraint.kind}")
     return ConstraintResultV1(
         constraint_id=f"soft:{constraint.kind}:{task_id or worker_id or ''}",
         constraint_type=constraint.kind,

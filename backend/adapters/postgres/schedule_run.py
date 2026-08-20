@@ -83,6 +83,7 @@ class PostgresScheduleRunRepository:
         status: ScheduleRunStatusV1,
         reason: str | None,
         candidate: ScheduleVersionV1 | None,
+        finished_at: datetime | None = None,
     ) -> None:
         candidate_id = None
         if candidate is not None:
@@ -132,7 +133,7 @@ class PostgresScheduleRunRepository:
                 status=status,
                 reason=reason,
                 candidate_schedule_version_id=candidate_id,
-                finished_at=candidate.created_at if candidate else datetime.now(timezone.utc),
+                finished_at=candidate.created_at if candidate else (finished_at or datetime.now(timezone.utc)),
             )
         )
         if getattr(result, "rowcount", 1) != 1:

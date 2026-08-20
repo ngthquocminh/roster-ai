@@ -67,7 +67,10 @@ def test_all_seven_independent_hard_checks_pass_on_valid_assignments() -> None:
         ("assignment_inside_selected_shift", lambda a, f: ((replace(a[0], end_minute=500), a[1]), f)),
         ("one_task_per_working_slot", lambda a, f: (a + (replace(a[0], record_id="overlap", start_minute=60),), f)),
         ("selected_shift_nonempty", lambda a, f: ((a[0],), f)),
-        ("one_shift_per_window", lambda a, f: (a, replace(f, selected_shifts=f.selected_shifts + (replace(f.selected_shifts[0], shift_id="s3"),)))),
+        ("one_shift_per_window", lambda a, f: (
+            a + (AssignmentV1("a3", "w1", "t1", "s3", 700, 760, (QualificationRefV1("t1", 10),), "solver"),),
+            replace(f, selected_shifts=f.selected_shifts + (SelectedShiftFactV1("s3", "w1", "window-1", "roster", 700, 760, 60),)),
+        )),
         ("max_shifts_per_day", lambda a, f: (a, replace(f, max_shifts_per_day=(("Full Time", 0),)))),
         ("weekly_hours_and_minimum_gap", lambda a, f: (a, replace(f, max_hours_per_week=(("Full Time", 8.0),)))),
         ("worker_qualification", lambda a, f: ((replace(a[0], task_id="t2"), a[1]), f)),
@@ -76,7 +79,7 @@ def test_all_seven_independent_hard_checks_pass_on_valid_assignments() -> None:
 def test_each_corruption_observes_its_own_guard_failing(expected, mutate) -> None:
     assignments, facts = mutate(_assignments(), _facts())
     failed = {result.constraint_type for result in validate_hard_constraints(assignments, facts) if not result.satisfied}
-    assert expected in failed
+    assert failed == {expected}
     with pytest.raises(HardConstraintViolation):
         require_hard_constraints(assignments, facts)
 

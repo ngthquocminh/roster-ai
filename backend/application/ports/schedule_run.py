@@ -1,6 +1,7 @@
 """Application port for immutable snapshots and schedule-run persistence."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
@@ -30,6 +31,7 @@ class ScheduleRunRepository(Protocol):
         status: ScheduleRunStatusV1,
         reason: str | None,
         candidate: ScheduleVersionV1 | None,
+        finished_at: datetime | None = None,
     ) -> None: ...
 
 

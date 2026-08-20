@@ -104,6 +104,7 @@ def finalize_schedule_run(
         status=status,
         reason=reason,
         candidate=candidate,
+        finished_at=clock(),
     )
     return FinalizedScheduleRunV1(status, reason, candidate)
 

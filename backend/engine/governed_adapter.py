@@ -172,6 +172,7 @@ class _GovernedLexResult:
     round2_value: float
     wall_time_seconds: float
     snapshot: list[int] | None = None
+    reason: str | None = None
 
     def value(self, variable) -> int:
         if self.snapshot is not None:
@@ -193,23 +194,35 @@ def _solve_lexicographic_governed(
     solver.parameters.num_search_workers = num_search_workers
     solver.parameters.random_seed = seed
 
-    def apply_remaining_budget(deterministic_used: float = 0.0) -> bool:
+    def apply_remaining_budget(deterministic_used: float = 0.0) -> str | None:
+        """Configure the solver's remaining budget for the next round.
+
+        Returns None once a budget is applied, or which ceiling is already
+        exhausted ("wall" or "deterministic") — AD-7 requires wall-time
+        exhaustion (`solver_timed_out`) to stay distinguishable from any other
+        ceiling exhausting first (`solver_failed`/`budget_exhausted`).
+        """
         wall_remaining = wall_time_limit_seconds - (perf_counter() - started)
         if wall_remaining <= 0:
-            return False
+            return "wall"
         solver.parameters.max_time_in_seconds = wall_remaining
         if max_deterministic_time is not None:
             deterministic_remaining = max_deterministic_time - deterministic_used
             if deterministic_remaining <= 0:
-                return False
+                return "deterministic"
             solver.parameters.max_deterministic_time = deterministic_remaining
         else:
             solver.parameters.ClearField("max_deterministic_time")
-        return True
+        return None
 
     model = builder.m
     model.Minimize(builder.round1_unmet)
-    apply_remaining_budget()
+    exhausted = apply_remaining_budget()
+    if exhausted is not None:
+        return _GovernedLexResult(
+            "UNKNOWN", solver, float("nan"), float("nan"), perf_counter() - started,
+            reason="deterministic_budget_exhausted" if exhausted == "deterministic" else None,
+        )
     first_status = solver.Solve(model)
     if first_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         return _GovernedLexResult(
@@ -223,10 +236,12 @@ def _solve_lexicographic_governed(
 
     model.Add(builder.round1_unmet <= int(round(round1_value)))
     model.Minimize(builder.round2_cost)
-    if not apply_remaining_budget(deterministic_used):
+    exhausted = apply_remaining_budget(deterministic_used)
+    if exhausted is not None:
         return _GovernedLexResult(
             "UNKNOWN", solver, round1_value, float(round1_cost),
             perf_counter() - started, snapshot,
+            reason="deterministic_budget_exhausted" if exhausted == "deterministic" else None,
         )
     second_status = solver.Solve(model)
     if second_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
@@ -386,6 +401,7 @@ class GovernedSchedulerAdapter:
             round2_value=result.round2_value,
             wall_time_seconds=result.wall_time_seconds,
             validation_facts=validation_facts,
+            reason=result.reason,
         )
 
 
