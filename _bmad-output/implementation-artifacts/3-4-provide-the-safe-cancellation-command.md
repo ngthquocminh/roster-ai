@@ -505,35 +505,35 @@ assertion removed, recorded in the Dev Agent Record with the command and the cou
 
 #### Task 7 — Live PostgreSQL race and idempotency suite (AC: 1)
 
-- [ ] New `tests/test_cancellation_race_postgres.py`, `@pytest.mark.postgres`, reusing
+- [x] New `tests/test_cancellation_race_postgres.py`, `@pytest.mark.postgres`, reusing
       `governed_postgres_engine`, the `lease_ids` module fixture, and the `_queue_jobs` / `_lease` /
       `_only_leasable` helpers from `tests/test_job_leasing_postgres.py:43-186, 471`. Read those helpers
       before writing new ones — `_only_leasable` exists because `lease_next_job` orders by `created_at`
       and a module-scoped fixture leaves earlier tests' rows behind (Story 3.3's Debug Log).
-- [ ] Both race directions from AC1, both cooperative checkpoints, the exact-row-count commit/rollback
+- [x] Both race directions from AC1, both cooperative checkpoints, the exact-row-count commit/rollback
       assertion over all three writes, and the replay/conflict pair.
-- [ ] A negative-privilege assertion: `shiftmind_runtime` still cannot UPDATE `lease_owner`,
+- [x] A negative-privilege assertion: `shiftmind_runtime` still cannot UPDATE `lease_owner`,
       `lease_expires_at`, or `fencing_epoch` on `workflow.job_queue` after this story's grant.
-- [ ] New `tests/test_schedule_runs_api.py` for the route: the four problem responses, the 200 replay,
+- [x] New `tests/test_schedule_runs_api.py` for the route: the four problem responses, the 200 replay,
       and the header bounds. Follow `tests/test_gate_a_mutation_audit.py:200-242`'s `TestClient` +
       `app.dependency_overrides` fixture pattern; the three central denial tests pick the new route up
       automatically from `_versioned_write_routes()`.
 
 #### Task 8 — Ledger, scope declarations, and Gate A (AC: 1)
 
-- [ ] `deferred-work.md:287`: **update, do not close.** Record that Story 3.4 split the transaction and
+- [x] `deferred-work.md:287`: **update, do not close.** Record that Story 3.4 split the transaction and
       made `solver_running` observable, that the heartbeat and `renew_job_lease`'s missing caller remain
       open, and keep the owner as Story 3.5.
-- [ ] `deferred-work.md`: the `job_queue` terminal-failure entry gains Gap 1's no-op-lease consequence.
+- [x] `deferred-work.md`: the `job_queue` terminal-failure entry gains Gap 1's no-op-lease consequence.
       Add any new item this story's own review surfaces — do not pre-write findings that have not
       happened.
-- [ ] `tests/test_lease_worker.py`: extend `test_deferred_owners_are_named_in_scope_controls` to assert
+- [x] `tests/test_lease_worker.py`: extend `test_deferred_owners_are_named_in_scope_controls` to assert
       the new declarations, keeping the three existing assertions intact.
 - [ ] Gate A re-run per `docs/GATE-A-RUNBOOK.md`: `gate_a_passed: true`, `blocking: []`, regenerating
       `evidence/story-1.11/gate-a-readiness-report.json` **through**
       `backend/scripts/evidence_binding.py` in a separate commit (`docs/EVIDENCE-CONVENTION.md`). This
       story produces no new evidence file of its own.
-- [ ] Verify the mandated zero-line diffs with `git diff --stat` (Project Structure Notes).
+- [x] Verify the mandated zero-line diffs with `git diff --stat` (Project Structure Notes).
 
 ---
 
@@ -757,6 +757,12 @@ Codex (GPT-5)
   the second cancellation branch made its focused test fail `solver_failed != solver_cancelled`.
 - 2026-08-20 Phase B checkpoint: backend 1079 collected / 1070 passed / 2 skipped / 7 deselected;
   the worker transaction-count test observed exactly two runtime transactions per solving job.
+- 2026-08-20 Phase C PostgreSQL proof: 6/6 cancellation race tests passed, including exact three-write
+  rollback, both cooperative checkpoints, both completion-race directions, replay conflict, and the
+  negative lease/fencing privilege set.
+- 2026-08-20 Phase C pre-evidence validation: backend 1085 collected / 1076 passed / 2 skipped / 7
+  deselected; frontend Vitest 410/410; TypeScript typecheck passed; oxlint passed with three inherited
+  Fast Refresh warnings. Mandated zero-line diff paths remained unchanged.
 
 ### Completion Notes List
 
@@ -769,10 +775,15 @@ Codex (GPT-5)
   committed checkpoints, resumes recovered running work under the current epoch, and never writes the
   illegal `solver_running -> solver_cancelled` edge. `worker/lease_worker.py` required no change because
   its runtime context is already a factory invoked once per transaction.
+- Phase C implementation complete: live PostgreSQL proves the cancellation bundle is atomic and
+  idempotent, cancellation/completion races remain inside AD-7, and runtime UPDATE privileges do not
+  include lease ownership, expiry, or fencing columns. Gate A evidence regeneration remains the final
+  clean-tree step.
 
 ### File List
 
 - _bmad-output/implementation-artifacts/3-4-provide-the-safe-cancellation-command.md
+- _bmad-output/implementation-artifacts/deferred-work.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 - backend/adapters/postgres/schedule_run.py
 - backend/adapters/postgres/schema.py
@@ -788,11 +799,13 @@ Codex (GPT-5)
 - backend/engine/governed_adapter.py
 - backend/migrations/versions/b3c4d5e6f7a8_add_schedule_run_resource_version.py
 - backend/tests/test_cancel_schedule_run.py
+- backend/tests/test_cancellation_race_postgres.py
 - backend/tests/architecture/test_schedule_run_state_machine.py
 - backend/tests/test_evidence_binding.py
 - backend/tests/test_gate_a_mutation_audit.py
 - backend/tests/test_finalize_schedule_run.py
 - backend/tests/test_lease_next_job.py
+- backend/tests/test_lease_worker.py
 - backend/tests/test_postgres_schema.py
 - backend/tests/test_schedule_run_persistence.py
 - backend/tests/test_schedule_runs_api.py
@@ -802,6 +815,8 @@ Codex (GPT-5)
 
 ## Change Log
 
+- 2026-08-20: Completed Phase C live PostgreSQL race/atomicity proof, deferred-scope reconciliation,
+  and pre-evidence regression validation.
 - 2026-08-20: Completed Phase B cooperative transaction split, recovery path, cancellation checkpoints,
   and executable AD-7 edge guard.
 - 2026-08-20: Completed Phase A cancellation aggregate, command, API, migration, generated contracts,

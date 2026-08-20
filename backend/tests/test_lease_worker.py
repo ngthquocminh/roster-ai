@@ -21,6 +21,7 @@ from application.contracts.job_lease import (
 )
 from application.ports.schedule_run import StaleLeaseError
 from application.use_cases.enqueue_compute import SCOPE_CONTROLS as ENQUEUE_CONTROLS
+from application.use_cases.cancel_schedule_run import SCOPE_CONTROLS as CANCEL_CONTROLS
 from application.use_cases.lease_and_execute_schedule_run import (
     SCOPE_CONTROLS as LEASE_CONTROLS,
 )
@@ -288,6 +289,10 @@ def test_deferred_owners_are_named_in_scope_controls() -> None:
     assert "job_failure_state:owned_by_story_3_5" in LEASE_CONTROLS
     assert "ceilings:lease_seconds_owned_by_story_3_6" in LEASE_CONTROLS
     assert "contracts:attempt_id_unset_until_first_lease" in ENQUEUE_CONTROLS
+    assert "cancellation:cooperative_checkpoints" in LEASE_CONTROLS
+    assert "cancellation:mid_solve_preemption_owned_by_story_3_5" in LEASE_CONTROLS
+    assert "job_terminal_state:owned_by_story_3_5" in CANCEL_CONTROLS
+    assert "heartbeat:owned_by_story_3_5" in CANCEL_CONTROLS
 
 
 def test_idempotency_key_is_bounded_by_the_narrower_column() -> None:
