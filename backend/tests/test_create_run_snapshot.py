@@ -42,8 +42,8 @@ class _RunRepository:
     def __init__(self) -> None:
         self.created = []
 
-    def create_queued_run(self, _connection, *, snapshot, site_id):
-        self.created.append((snapshot, site_id))
+    def create_queued_run(self, _connection, *, snapshot, site_id, actor_id):
+        self.created.append((snapshot, site_id, actor_id))
 
 
 class _Connection:
@@ -125,7 +125,8 @@ def test_create_run_snapshot_freezes_persisted_authority_and_evidence() -> None:
     assert len(snapshot.input_evidence_refs) == 1
     assert snapshot.input_evidence_refs[0].record_id == "task-1"
     assert snapshot.input_evidence_refs[0].producing_run_version is None
-    assert runs.created == [(snapshot, context.site_id)]
+    assert len(runs.created) == 1
+    assert runs.created[0][:2] == (snapshot, context.site_id)
 
 
 @pytest.mark.parametrize(
@@ -164,9 +165,9 @@ def test_postgres_repository_uses_one_connection_for_snapshot_and_run() -> None:
     connection = _Connection()
 
     PostgresScheduleRunRepository().create_queued_run(
-        connection, snapshot=snapshot, site_id=context.site_id
+        connection, snapshot=snapshot, site_id=context.site_id, actor_id=uuid4()
     )
 
     assert [statement.table.name for statement in connection.statements] == [
-        "run_snapshot", "schedule_run"
+        "run_snapshot", "schedule_run", "persisted_event"
     ]

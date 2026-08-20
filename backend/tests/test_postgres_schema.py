@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import BigInteger, UniqueConstraint
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKeyConstraint, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from adapters.postgres.schema import metadata
@@ -163,3 +163,50 @@ def test_schedule_run_resource_version_revision_is_narrow_and_reversible() -> No
     ) in migration
     assert "REVOKE UPDATE (cancellation_requested) ON workflow.job_queue" in migration
     assert "REVOKE UPDATE (resource_version) ON schedule_run" in migration
+
+
+def test_persisted_event_admits_exactly_conversation_or_schedule_run_streams() -> None:
+    table = metadata.tables["persisted_event"]
+
+    assert table.c.conversation_id.nullable is True
+    assert table.c.agent_run_id.nullable is True
+    assert table.c.schedule_run_id.nullable is True
+    constraints = {constraint.name: constraint for constraint in table.constraints}
+    stream_check = constraints["ck_persisted_event_stream_owner"]
+    assert isinstance(stream_check, CheckConstraint)
+    expression = str(stream_check.sqltext)
+    assert "conversation_id IS NOT NULL" in expression
+    assert "schedule_run_id IS NULL" in expression
+    assert "schedule_run_id IS NOT NULL" in expression
+    assert "conversation_id IS NULL" in expression
+    assert "stream_id = conversation_id" in expression
+    assert "stream_id = schedule_run_id" in expression
+
+    schedule_run_fk = constraints["fk_persisted_event_schedule_run_site"]
+    assert isinstance(schedule_run_fk, ForeignKeyConstraint)
+    assert tuple(schedule_run_fk.column_keys) == ("schedule_run_id", "site_id")
+
+
+def test_run_event_migration_widens_stream_owner_additively() -> None:
+    migration = (
+        BACKEND_ROOT
+        / "migrations"
+        / "versions"
+        / "c4d5e6f7a8b9_widen_persisted_event_and_job_status.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'down_revision: str = "b3c4d5e6f7a8"' in migration
+    assert "schedule_run_id" in migration
+    assert "fk_persisted_event_schedule_run_site" in migration
+    assert "ck_persisted_event_stream_owner" in migration
+    assert "nullable=True" in migration
+    assert "'queued','leased','completed','failed'" in migration
+
+
+def test_job_queue_metadata_admits_terminal_failure() -> None:
+    checks = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in metadata.tables["workflow.job_queue"].constraints
+        if isinstance(constraint, CheckConstraint)
+    }
+    assert "'failed'" in checks["ck_job_queue_status"]

@@ -1,21 +1,27 @@
 """Versioned idempotent commands for governed schedule runs."""
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi.responses import JSONResponse, Response
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Connection
 
 from api.deps import (
     get_schedule_run_repository,
     get_session,
     get_site_context,
+    get_site_context_opener,
+    SiteContextOpener,
 )
 from api.problems import problem_response
 from api.schemas import ProblemDetailsV1, ScheduleRunCancellationIn, ScheduleRunOut
-from application.ports.schedule_run import ScheduleRunRepository
+from application.ports.schedule_run import ScheduleRunRepository, ScheduleRunViewV1
+from application.contracts.stream_cursor import StreamCursorV1, parse_stream_cursor
+from api.routers.conversations import EventStreamResponse, _cursor_invalid, _event_frames
 from application.ports.session import ResolvedSession
 from application.use_cases.cancel_schedule_run import (
     CancelScheduleRunError,
@@ -38,9 +44,28 @@ _PROBLEMS = {
 IdempotencyKey = Annotated[
     str, Header(alias="Idempotency-Key", min_length=1, max_length=40)
 ]
+_STREAM_RESPONSES = {
+    200: {
+        "description": "Persisted schedule-run progress as resumable SSE frames.",
+        "content": {"text/event-stream": {"schema": {"type": "string"}}},
+    },
+    400: {"model": ProblemDetailsV1},
+    **_PROBLEMS,
+    500: {"model": ProblemDetailsV1},
+}
 
 
 def _out(value: ScheduleRunCancellationV1) -> ScheduleRunOut:
+    return ScheduleRunOut(
+        schedule_run_id=value.schedule_run_id,
+        status=value.status,
+        reason=value.reason,
+        resource_version=value.resource_version,
+        cancellation_requested=value.cancellation_requested,
+    )
+
+
+def _view_out(value: ScheduleRunViewV1) -> ScheduleRunOut:
     return ScheduleRunOut(
         schedule_run_id=value.schedule_run_id,
         status=value.status,
@@ -90,6 +115,78 @@ def _command_problem(exc: CancelScheduleRunError) -> JSONResponse:
         title="Invalid cancellation command",
         detail=str(exc) or "The cancellation command could not be validated.",
     )
+
+
+@router.get(
+    "/{run_id}/events",
+    responses=_STREAM_RESPONSES,
+    response_class=EventStreamResponse,
+)
+async def schedule_run_events(
+    run_id: UUID,
+    request: Request,
+    last_event_id: str | None = Query(default=None),
+    session: ResolvedSession = Depends(get_session),
+    repository: ScheduleRunRepository = Depends(get_schedule_run_repository),
+    open_site_context: SiteContextOpener = Depends(get_site_context_opener),
+) -> Response:
+    raw = request.headers.get("last-event-id")
+    if not raw:
+        raw = last_event_id
+
+    cursor = Decimal(0)
+    if raw is not None:
+        parsed = parse_stream_cursor(raw)
+        if not isinstance(parsed, StreamCursorV1):
+            return _cursor_invalid()
+        if parsed.stream_id != run_id:
+            return _cursor_invalid()
+        cursor = parsed.sequence
+
+    def _head():
+        with open_site_context(session.site_id) as connection:
+            return repository.event_head(
+                connection, run_id=run_id, site_id=session.site_id
+            )
+
+    head = await run_in_threadpool(_head)
+    if head is None:
+        return _not_found()
+    if cursor > head.max_sequence:
+        return _cursor_invalid()
+
+    return EventStreamResponse(
+        _event_frames(
+            repository=repository,
+            open_site_context=open_site_context,
+            site_id=session.site_id,
+            stream_id=run_id,
+            cursor=cursor,
+        ),
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get(
+    "/{run_id}",
+    response_model=ScheduleRunOut,
+    responses=_PROBLEMS,
+)
+def get_schedule_run(
+    run_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    session: ResolvedSession = Depends(get_session),
+    repository: ScheduleRunRepository = Depends(get_schedule_run_repository),
+):
+    value = repository.get_run(
+        connection, run_id=run_id, site_id=session.site_id
+    )
+    if value is None:
+        return _not_found()
+    return _view_out(value)
 
 
 # The return annotation is omitted because the handler returns either the

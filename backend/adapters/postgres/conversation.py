@@ -550,6 +550,7 @@ def _event_from_row(row) -> PersistedEventV1:
         request_id=row.request_id,
         conversation_id=row.conversation_id,
         agent_run_id=row.agent_run_id,
+        schedule_run_id=row.schedule_run_id,
         site_id=row.site_id,
         actor_id=row.actor_id,
         payload=_activity_from_payload(row.payload),

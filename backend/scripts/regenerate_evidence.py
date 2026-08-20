@@ -69,6 +69,8 @@ EVIDENCE_FILES: tuple[str, ...] = (
     # (this script rewrites existing files and cannot create one); registered
     # here so it is re-bindable like every other evidence file.
     "evidence/story-2.4/nfr35-sse-reconnect-replay.json",
+    # Story 3.5. Bootstrapped by generate_run_event_latency_evidence.py.
+    "evidence/story-3.5/nfr35-first-run-event.json",
 )
 
 #: Anchored at line end only. `pytest -q` prefixes the line with its progress
@@ -82,6 +84,9 @@ _MEASUREMENT_MARKERS = {
     ),
     "evidence/story-2.4/nfr35-sse-reconnect-replay.json": re.compile(
         r"NFR35_SSE_REPLAY_MEASUREMENTS=(\[.*\])\s*$", re.MULTILINE
+    ),
+    "evidence/story-3.5/nfr35-first-run-event.json": re.compile(
+        r"NFR35_RUN_EVENT_LATENCY_MEASUREMENTS=(\[.*\])\s*$", re.MULTILINE
     ),
 }
 

@@ -138,98 +138,98 @@ for completeness and deliberately not re-derived.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Widen `persisted_event` for a schedule-run-owned stream** (AC: 1)
-  - [ ] Migration (`down_revision = "b3c4d5e6f7a8"`): make `persisted_event.conversation_id` and
+- [x] **Task 1 — Widen `persisted_event` for a schedule-run-owned stream** (AC: 1)
+  - [x] Migration (`down_revision = "b3c4d5e6f7a8"`): make `persisted_event.conversation_id` and
         `agent_run_id` nullable; add nullable `schedule_run_id UUID` with
         `ForeignKeyConstraint(["schedule_run_id", "site_id"], ["schedule_run.id", "schedule_run.site_id"], ondelete="RESTRICT")`.
         Replace `ck_persisted_event_stream_is_conversation` with a CHECK admitting exactly two
         shapes: `(conversation_id IS NOT NULL AND schedule_run_id IS NULL AND stream_id = conversation_id)`
         OR `(schedule_run_id IS NOT NULL AND conversation_id IS NULL AND stream_id = schedule_run_id)`.
         Additive-only; existing rows (all conversation-shaped) satisfy the new CHECK unchanged.
-  - [ ] `alembic check` from the repository root: zero autogenerate operations, exactly one new
+  - [x] `alembic check` from the repository root: zero autogenerate operations, exactly one new
         migration file.
-  - [ ] `PersistedEventV1` dataclass: make `conversation_id`/`agent_run_id` `UUID | None`, add
+  - [x] `PersistedEventV1` dataclass: make `conversation_id`/`agent_run_id` `UUID | None`, add
         `schedule_run_id: UUID | None`. Widening a dataclass field is additive; existing callers
         that always pass both conversation fields are unaffected.
-  - [ ] Do **not** reuse `conversation_id` as the schedule-run stream identity (rejected
+  - [x] Do **not** reuse `conversation_id` as the schedule-run stream identity (rejected
         alternative — see Decision 1 below).
 
-- [ ] **Task 2 — Add `RunProgressActivityV1`** (AC: 1, 2)
-  - [ ] New frozen dataclass in `application/contracts/activity.py`: `activity_id`,
+- [x] **Task 2 — Add `RunProgressActivityV1`** (AC: 1, 2)
+  - [x] New frozen dataclass in `application/contracts/activity.py`: `activity_id`,
         `activity_type: Literal["run_progress"]`, `schedule_run_id: UUID`,
         `status: ScheduleRunStatusV1`, `reason: str | None`, `resource_version: int`,
         `occurred_at: datetime`, `schema_version`. Add to the `ActivityItemV1` union. Deliberately
         carries no `conversation_id`/`scenario_id` — see Decision 2.
-  - [ ] Extend `conversations.py`'s `_activity()` (or its equivalent used by the new route) to
+  - [x] Extend `conversations.py`'s `_activity()` (or its equivalent used by the new route) to
         render `RunProgressActivityV1` into an `ActivityItemOut` union member; add the
         corresponding response-schema case in `api/schemas.py`.
 
-- [ ] **Task 3 — Emit one persisted event per `ScheduleRun` transition** (AC: 1, 3)
-  - [ ] `ScheduleRunRepository` port gains an implicit responsibility (no new protocol method is
+- [x] **Task 3 — Emit one persisted event per `ScheduleRun` transition** (AC: 1, 3)
+  - [x] `ScheduleRunRepository` port gains an implicit responsibility (no new protocol method is
         required — each existing transition method writes its own event in the same statement's
         transaction): `create_queued_run` (queued), `mark_running` (running),
         `request_cancellation` (cancellation_requested), `cancel_queued_run` (cancelled, from
         queued), `finalize_run` (completed/infeasible/timed_out/cancelled/failed).
-  - [ ] Reuse the `coalesce(max(sequence), 0) + 1` per-`stream_id` allocation subquery already
+  - [x] Reuse the `coalesce(max(sequence), 0) + 1` per-`stream_id` allocation subquery already
         established in `adapters/postgres/conversation.py:229-230`. `resource_version` on the
         event equals the schedule_run row's own post-increment `resource_version`.
-  - [ ] `event_type` follows the Consistency Conventions naming pattern (`ARCHITECTURE-SPINE.md:254`,
+  - [x] `event_type` follows the Consistency Conventions naming pattern (`ARCHITECTURE-SPINE.md:254`,
         `run.<status>.v1`, e.g. `run.queued.v1`, `run.running.v1`, `run.cancellation_requested.v1`,
         `run.completed.v1`, `run.infeasible.v1`, `run.timed_out.v1`, `run.cancelled.v1`,
         `run.failed.v1`).
-  - [ ] Prove AC3's "persists once with no implicit retry": a test that replays
+  - [x] Prove AC3's "persists once with no implicit retry": a test that replays
         `enqueue_compute`'s idempotency-hit path and asserts no second `queued` event is written;
         a test that a lost CAS in `mark_running`/`finalize_run` raises before any event row
         exists (assert zero rows, not just that the visible status is unchanged).
 
-- [ ] **Task 4 — Reopen `JobStatusV1` for a terminal failure state** (AC: 1, 3)
-  - [ ] Add `"failed"` to `JobStatusV1`/`JOB_STATUSES` and `ck_job_queue_status` (same migration
+- [x] **Task 4 — Reopen `JobStatusV1` for a terminal failure state** (AC: 1, 3)
+  - [x] Add `"failed"` to `JobStatusV1`/`JOB_STATUSES` and `ck_job_queue_status` (same migration
         as Task 1).
-  - [ ] In `lease_and_execute_schedule_run`, wrap the currently-unguarded body between lease
+  - [x] In `lease_and_execute_schedule_run`, wrap the currently-unguarded body between lease
         acquisition and `complete_job` (missing snapshot, an exhausted `mark_running` retry
         raising `RunTransitionConflictError` on the second attempt, and any other exception
         surfaced before a terminal status is reached) so it drives the **job** to `status="failed"`
         and the **schedule run** to `solver_failed`/reason `"job_execution_failed"` in one
         transaction, instead of leaving the job `leased` to expire and be re-leased at the queue
         head forever.
-  - [ ] Test: an injected repository/scheduler fake that raises after lease acquisition; assert
+  - [x] Test: an injected repository/scheduler fake that raises after lease acquisition; assert
         the job reaches `failed`, the run reaches `solver_failed`, and the run is never re-leased
         by a subsequent `lease_next_job` call.
 
-- [ ] **Task 5 — Heartbeat renewal caller** (AC: 1)
-  - [ ] Around `scheduler.solve(snapshot)` in `execute_schedule_run`, run a background thread
+- [x] **Task 5 — Heartbeat renewal caller** (AC: 1)
+  - [x] Around `scheduler.solve(snapshot)` in `execute_schedule_run`, run a background thread
         that calls `repository.renew_job_lease` every `lease_seconds // 3` seconds (its own
         short-lived connection, never the solve's own runtime connection), stopped via a
         `threading.Event` in a `finally` block once `solve()` returns.
-  - [ ] Scope this call to lease liveness only — it must never set `SolverOutcomeV1.reason =
+  - [x] Scope this call to lease liveness only — it must never set `SolverOutcomeV1.reason =
         "cancelled"` or otherwise influence the terminal status (see Decision 5/6: mid-solve
         preemption stays out of this story).
-  - [ ] Test with a fake scheduler that sleeps past what an unrenewed lease would survive; assert
+  - [x] Test with a fake scheduler that sleeps past what an unrenewed lease would survive; assert
         the fencing epoch/lease stays current through the sleep and the eventual `finalize_run`
         is not fenced out.
 
-- [ ] **Task 6 — SSE replay route for one schedule run** (AC: 2, 4)
-  - [ ] New `GET /api/v1/schedule-runs/{run_id}/events` on `schedule_runs.py`, mirroring
+- [x] **Task 6 — SSE replay route for one schedule run** (AC: 2, 4)
+  - [x] New `GET /api/v1/schedule-runs/{run_id}/events` on `schedule_runs.py`, mirroring
         `conversations.py`'s `/{conversation_id}/events` route byte-for-byte in mechanics: cursor
         precedence (`Last-Event-ID` header over `?last_event_id=`), foreign-stream rejection by
         string comparison alone (zero queries), one short transaction per poll via
         `get_site_context_opener`, `EventStreamResponse`, 15s heartbeat comments (not persisted),
         1s poll interval, non-disclosing `stream_cursor_invalid` rejection shape.
-  - [ ] `ScheduleRunRepository` needs an `events_after(connection, *, stream_id, after, limit)`
+  - [x] `ScheduleRunRepository` needs an `events_after(connection, *, stream_id, after, limit)`
         method mirroring `ConversationRepository.events_after`, plus a lightweight "does this run
         exist for this site, what is its current max sequence" pre-flight (mirrors `_head()`'s
         `timeline(limit=1)` use, scoped to `schedule_run`/`persisted_event` instead).
-  - [ ] Reject a foreign or malformed cursor with the same `stream_cursor_invalid` shape
+  - [x] Reject a foreign or malformed cursor with the same `stream_cursor_invalid` shape
         `conversations.py` already defines (reuse `parse_stream_cursor`/`StreamCursorV1`, do not
         duplicate the parser).
 
-- [ ] **Task 7 — Polling fallback route** (AC: 2)
-  - [ ] New `GET /api/v1/schedule-runs/{run_id}` returning the existing `ScheduleRunOut` shape
+- [x] **Task 7 — Polling fallback route** (AC: 2)
+  - [x] New `GET /api/v1/schedule-runs/{run_id}` returning the existing `ScheduleRunOut` shape
         (`schedule_run_id`, `status`, `reason`, `resource_version`, `cancellation_requested`) —
         the same fields `cancel()`'s `_out()` already produces. Do **not** add `created_at`/
         `finished_at` to `ScheduleRunOut`; that gap is already deferred to Story 3.7
         (3.4 review Defer finding) and is not this story's to close.
-  - [ ] 404 via the same `_not_found()` helper `cancel()` uses, for an unknown or cross-site run.
+  - [x] 404 via the same `_not_found()` helper `cancel()` uses, for an unknown or cross-site run.
 
 - [ ] **Task 8 — NFR35 evidence for AC4** (AC: 4)
   - [ ] New measuring test (mirrors `test_postgres_integration.py`'s
@@ -456,6 +456,57 @@ for completeness and deliberately not re-derived.
 
 ### Debug Log References
 
+- 2026-08-21 — Task 1 plan/verification: added failing contract and schema tests first (3 observed failures), then widened the event envelope and SQLAlchemy metadata, added the single `c4d5e6f7a8b9` migration, upgraded the local test database, and confirmed `alembic check` reports no new operations.
+- 2026-08-21 — Task 2 plan/verification: observed the missing `RunProgressActivityV1` import fail, then added the frozen contract and discriminated response model; the existing generic `_activity()` projection now validates the new union member without conversation fields.
+- 2026-08-21 — Task 3 plan/verification: observed empty-event failures for enqueue and transition paths, then inserted run progress inside each existing transaction after its successful CAS/insert. Event resource versions come from SQL `RETURNING`; lost CAS paths emit nothing. Updated legacy SQL test doubles to model the returning rows.
+- 2026-08-21 — Task 4 plan/verification: observed three red failures for the closed job vocabulary, missing failure wrapper, and schema CHECK. Added fenced `fail_job`, allowed the AD-7 queued-to-failed/timed-out terminal edges, and persisted run failure plus job failure in one recovery transaction. The architecture edge guard was observed failing when its old AST assumption no longer represented the expanded legal mapping, then upgraded to inspect the explicit mapping.
+- 2026-08-21 — Task 5 plan/verification: observed the slow-solve test complete with zero renewals, then added a daemon heartbeat thread around `scheduler.solve`. It waits `max(1, lease_seconds // 3)`, renews through independent runtime transactions, stops in `finally`, and ignores the cancellation carrier. A live 3.1-second solve under a 2-second lease retained epoch 1 and finalized normally.
+- 2026-08-21 — Task 6 plan/verification: observed the missing schedule-run event-head contract at collection, then added typed head/replay reads and the SSE route by reusing the shipped conversation transport generator. Cursor precedence, foreign-stream zero-query rejection, maximum-sequence validation, immediate/15-second comment heartbeats, 200-event batches, and one short site transaction per poll remain shared mechanics.
+- 2026-08-21 — Task 7 plan/verification: observed the missing polling read contract at collection, then added a site-scoped schedule-run view joining the optional job carrier and exposed it through `GET /schedule-runs/{run_id}`. The route projects only the existing response fields and reuses `_not_found()`.
+
 ### Completion Notes List
 
+- Task 1 complete: schedule-run streams now use `stream_id = schedule_run_id`; conversation identifiers are nullable without overloading them. Focused tests: 18 passed. Full backend regression from `backend/`: 1085 passed, 2 skipped, 7 deselected.
+- Task 2 complete: literal run progress serializes through `ActivityItemOut` with stable status, reason, resource version, occurrence time, and string sequence. Focused tests: 9 passed. Full backend regression: 1086 passed, 2 skipped, 7 deselected.
+- Task 3 complete: every ScheduleRun edge emits one monotonic `run.<literal>.v1` event, enqueue replay remains single-effect, and stale/lost transitions write no event. PostgreSQL transition suites: 19 passed. Full backend regression: 1087 passed, 2 skipped, 7 deselected.
+- Task 4 complete: exceptions after leasing now terminate both job and run as `failed`/`solver_failed` with `job_execution_failed`, and failed jobs are excluded from future leases. Focused suites: 35 passed. Full backend regression: 1090 passed, 2 skipped, 7 deselected.
+- Task 5 complete: solve-time heartbeat renewal keeps the active fencing epoch current without changing cancellation or terminal semantics. Focused suites: 45 passed. Full backend regression: 1092 passed, 2 skipped, 7 deselected.
+- Task 6 complete: schedule-run progress is replayable from `Last-Event-ID`/query cursors with no duplicate frames and non-disclosing invalid-cursor handling. Stream/PostgreSQL focused suites: 37 passed. Full backend regression: 1098 passed, 2 skipped, 7 deselected.
+- Task 7 complete: polling/manual refresh returns authoritative literal state and the cancellation carrier without adding timestamps or changing authority. Focused API/PostgreSQL tests: 13 passed. Full backend regression: 1100 passed, 2 skipped, 7 deselected.
+
 ### File List
+
+- _bmad-output/implementation-artifacts/3-5-persist-literal-run-state-and-replay-progress.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- backend/adapters/postgres/schema.py
+- backend/adapters/postgres/conversation.py
+- backend/adapters/postgres/schedule_run.py
+- backend/api/schemas.py
+- backend/api/routers/schedule_runs.py
+- backend/application/contracts/activity.py
+- backend/application/contracts/job_lease.py
+- backend/application/contracts/persisted_event.py
+- backend/application/ports/schedule_run.py
+- backend/application/use_cases/cancel_schedule_run.py
+- backend/application/use_cases/create_run_snapshot.py
+- backend/application/use_cases/execute_schedule_run.py
+- backend/application/use_cases/lease_and_execute_schedule_run.py
+- backend/migrations/versions/c4d5e6f7a8b9_widen_persisted_event_and_job_status.py
+- backend/tests/test_conversation_contracts.py
+- backend/tests/test_cancel_schedule_run.py
+- backend/tests/test_cancellation_race_postgres.py
+- backend/tests/test_create_run_snapshot.py
+- backend/tests/test_enqueue_compute.py
+- backend/tests/test_evidence_binding.py
+- backend/tests/test_fencing_recovery.py
+- backend/tests/test_finalize_schedule_run.py
+- backend/tests/test_job_leasing_postgres.py
+- backend/tests/test_job_lease_contracts.py
+- backend/tests/test_lease_next_job.py
+- backend/tests/test_lease_worker.py
+- backend/tests/test_postgres_schema.py
+- backend/tests/test_schedule_runs_api.py
+- backend/tests/test_schedule_run_stream_api.py
+- backend/tests/architecture/test_schedule_run_state_machine.py
+- backend/engine/governed_adapter.py
+- backend/worker/lease_worker.py

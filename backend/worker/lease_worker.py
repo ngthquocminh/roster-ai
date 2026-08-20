@@ -51,9 +51,8 @@ def runtime_context(engine: Engine, site_id: UUID) -> Iterator[Connection]:
 
 
 #: Multiple of the solver wall-time budget used when no lease duration is given.
-#: There is no heartbeat yet (SCOPE_CONTROLS `heartbeat:owned_by_story_3_5`), so
-#: a lease shorter than the solve it covers would be stolen mid-flight and the
-#: finished work discarded. Story 3.6 owns the real ceiling
+#: Story 3.5 renews the lease while a solve is active. This multiple remains a
+#: defensive floor and reduces heartbeat churn; Story 3.6 owns the real ceiling
 #: (`ceilings:lease_seconds_owned_by_story_3_6`); this is only a floor that keeps
 #: the default safe until it does.
 LEASE_SECONDS_SOLVER_MULTIPLE = 4

@@ -164,12 +164,33 @@ class DraftActivityOut(ActivityCommonOut):
     consequence_summary: str
 
 
+class RunProgressActivityOut(BaseModel):
+    schema_version: str
+    activity_id: UUID
+    activity_type: Literal["run_progress"]
+    schedule_run_id: UUID
+    status: Literal[
+        "solver_queued",
+        "solver_running",
+        "cancellation_requested",
+        "solver_completed",
+        "solver_infeasible",
+        "solver_timed_out",
+        "solver_cancelled",
+        "solver_failed",
+    ]
+    reason: str | None
+    resource_version: int
+    occurred_at: datetime
+    sequence: str
+
+
 class TerminalOutcomeActivityOut(ActivityCommonOut):
     activity_type: Literal["terminal_outcome"]
     outcome: TerminalOutcomeV1
 
 
-ActivityItemOut = Annotated[
+ConversationActivityItemOut = Annotated[
     PlannerMessageActivityOut
     | AgentResponseActivityOut
     | ClarificationActivityOut
@@ -179,8 +200,19 @@ ActivityItemOut = Annotated[
 ]
 
 
+ActivityItemOut = Annotated[
+    PlannerMessageActivityOut
+    | AgentResponseActivityOut
+    | ClarificationActivityOut
+    | DraftActivityOut
+    | RunProgressActivityOut
+    | TerminalOutcomeActivityOut,
+    Field(discriminator="activity_type"),
+]
+
+
 class AcceptedTurnOut(BaseModel):
-    activity: ActivityItemOut
+    activity: ConversationActivityItemOut
     resource_version: int
     agent_run_status: str
     sequence: str
@@ -188,7 +220,7 @@ class AcceptedTurnOut(BaseModel):
 
 
 class ExecutedTurnOut(BaseModel):
-    activity: ActivityItemOut
+    activity: ConversationActivityItemOut
     resource_version: int
     agent_run_status: str
     sequence: str
@@ -199,7 +231,7 @@ class TimelineOut(BaseModel):
     conversation_id: UUID
     resource_version: int
     latest_agent_run_status: str | None
-    items: list[ActivityItemOut]
+    items: list[ConversationActivityItemOut]
     limit: int
     # The window is anchored at the newest events; `has_more` reports that
     # older ones exist beyond it. Without it a full page is indistinguishable

@@ -14,6 +14,7 @@ from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.schema import (
     command_idempotency,
     job_queue,
+    persisted_event,
     run_snapshot,
     schedule_run,
     schedule_version,
@@ -161,6 +162,12 @@ def test_cancel_bundle_replay_conflict_and_rollback_cover_all_three_writes(
                 command_idempotency.c.idempotency_key == key
             )
         ) == 1
+        assert connection.execute(
+            select(
+                persisted_event.c.event_type,
+                persisted_event.c.resource_version,
+            ).where(persisted_event.c.stream_id == run_id)
+        ).all() == [("run.cancelled.v1", 2)]
 
     with pytest.raises(IdempotencyKeyConflictError), governed_postgres_engine.begin() as connection:
         _runtime(connection, lease_ids["site"])
@@ -201,6 +208,11 @@ def test_cancel_bundle_replay_conflict_and_rollback_cover_all_three_writes(
         assert connection.scalar(
             select(func.count()).select_from(command_idempotency).where(
                 command_idempotency.c.idempotency_key == rollback_key
+            )
+        ) == 0
+        assert connection.scalar(
+            select(func.count()).select_from(persisted_event).where(
+                persisted_event.c.stream_id == rollback_run
             )
         ) == 0
 
@@ -282,6 +294,15 @@ def test_checkpoint_2_observes_a_cancel_after_running_commit(
                 schedule_version.c.schedule_run_id == run_id
             )
         ) == 0
+        assert connection.execute(
+            select(persisted_event.c.event_type)
+            .where(persisted_event.c.stream_id == run_id)
+            .order_by(persisted_event.c.sequence)
+        ).scalars().all() == [
+            "run.running.v1",
+            "run.cancellation_requested.v1",
+            "run.cancelled.v1",
+        ]
 
 
 def test_cancellation_then_completion_uses_the_legal_requested_edge(

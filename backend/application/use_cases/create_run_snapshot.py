@@ -130,7 +130,12 @@ def create_run_snapshot(
     )
     # One repository call on the caller-owned transaction makes it impossible
     # for an adapter to commit the immutable snapshot without its queued run.
-    run_repository.create_queued_run(connection, snapshot=snapshot, site_id=context.site_id)
+    run_repository.create_queued_run(
+        connection,
+        snapshot=snapshot,
+        site_id=context.site_id,
+        actor_id=record.created_by_actor_id,
+    )
     return snapshot
 
 

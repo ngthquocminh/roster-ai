@@ -101,6 +101,20 @@ class DraftActivityV1:
 
 
 @dataclass(frozen=True)
+class RunProgressActivityV1:
+    """Literal persisted state for one schedule-run transition."""
+
+    activity_id: UUID
+    activity_type: Literal["run_progress"]
+    schedule_run_id: UUID
+    status: "ScheduleRunStatusV1"
+    reason: str | None
+    resource_version: int
+    occurred_at: datetime
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
 class TerminalOutcomeActivityV1:
     """Literal non-answer state, including reason-discriminated refusal."""
 
@@ -117,17 +131,19 @@ class TerminalOutcomeActivityV1:
 
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
+from application.contracts.schedule_version import ScheduleRunStatusV1
 
 ActivityItemV1 = (
     PlannerMessageActivityV1
     | AgentResponseActivityV1
     | ClarificationActivityV1
     | DraftActivityV1
+    | RunProgressActivityV1
     | TerminalOutcomeActivityV1
 )
 
 __all__ = [
     "ActivityItemV1", "ActivityTypeV1", "AgentResponseActivityV1",
-    "ClarificationActivityV1", "DraftActivityV1", "PlannerMessageActivityV1", "SCHEMA_VERSION",
+    "ClarificationActivityV1", "DraftActivityV1", "PlannerMessageActivityV1", "RunProgressActivityV1", "SCHEMA_VERSION",
     "TerminalOutcomeActivityV1",
 ]

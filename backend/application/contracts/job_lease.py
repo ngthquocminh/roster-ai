@@ -8,10 +8,10 @@ from uuid import UUID
 
 
 JobTypeV1 = Literal["schedule_run_execute"]
-JobStatusV1 = Literal["queued", "leased", "completed"]
+JobStatusV1 = Literal["queued", "leased", "completed", "failed"]
 
 JOB_TYPES: frozenset[str] = frozenset(("schedule_run_execute",))
-JOB_STATUSES: frozenset[str] = frozenset(("queued", "leased", "completed"))
+JOB_STATUSES: frozenset[str] = frozenset(("queued", "leased", "completed", "failed"))
 
 #: `command_idempotency.idempotency_key` is `String(40)` and the enqueue bundle
 #: writes both tables in one transaction, so a longer key would pass the job

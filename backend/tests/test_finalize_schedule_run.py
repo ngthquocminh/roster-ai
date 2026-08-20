@@ -44,7 +44,21 @@ class _Connection:
 
     def execute(self, statement):
         self.statements.append(statement)
-        return SimpleNamespace(rowcount=1)
+        class _Result:
+            rowcount = 1
+
+            @staticmethod
+            def one_or_none():
+                return SimpleNamespace(
+                    resource_version=2,
+                    finished_at=datetime.now(timezone.utc),
+                )
+
+            @staticmethod
+            def scalar_one():
+                return uuid4()
+
+        return _Result()
 
 
 def _snapshot(*, with_evidence: bool = False) -> RunSnapshotV1:
@@ -182,11 +196,18 @@ def test_postgres_terminal_write_inserts_candidate_only_for_completed() -> None:
     # `job_queue` comes FIRST on both paths: the fence is claimed under a row
     # lock before any candidate row is written, so a stale worker is rejected
     # by the guard itself rather than by the caller happening to roll back.
-    assert [statement.table.name for statement in candidate_connection.statements] == [
-        "job_queue", "schedule_version", "schedule_assignment", "schedule_run"
+    def _table_name(statement):
+        table = getattr(statement, "table", None)
+        if table is not None:
+            return table.name
+        return statement.get_final_froms()[0].name
+
+    assert [_table_name(statement) for statement in candidate_connection.statements] == [
+        "job_queue", "schedule_version", "schedule_assignment", "schedule_run",
+        "job_queue", "persisted_event",
     ]
-    assert [statement.table.name for statement in terminal_connection.statements] == [
-        "job_queue", "schedule_run"
+    assert [_table_name(statement) for statement in terminal_connection.statements] == [
+        "job_queue", "schedule_run", "job_queue", "persisted_event",
     ]
 
 

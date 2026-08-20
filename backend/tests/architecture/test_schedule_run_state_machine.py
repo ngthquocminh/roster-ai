@@ -100,27 +100,18 @@ def _mark_running_edge(tree: ast.Module) -> tuple[str, str]:
 
 def _finalize_edges(tree: ast.Module) -> set[tuple[str, str]]:
     targets = _assigned_literal(tree, "_FINALIZE_STATUSES")
-    function = _function(tree, "finalize_run")
-    conditional = next(
+    mapping_node = next(
         node.value
-        for node in function.body
+        for node in tree.body
         if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "expected_statuses"
-            for target in node.targets
-        )
+        and any(isinstance(target, ast.Name) and target.id == "_FINALIZE_EXPECTED_STATUSES" for target in node.targets)
     )
-    assert isinstance(conditional, ast.IfExp)
-    assert isinstance(conditional.test, ast.Compare)
-    assert conditional.test.comparators[0].value == "solver_cancelled"
-    cancelled_sources = _string_tuple(conditional.body)
-    other_sources = _string_tuple(conditional.orelse)
+    mapping = ast.literal_eval(mapping_node)
+    assert set(mapping) == set(targets)
     return {
         (source, target)
-        for target in targets
-        for source in (
-            cancelled_sources if target == "solver_cancelled" else other_sources
-        )
+        for target, sources in mapping.items()
+        for source in sources
     }
 
 

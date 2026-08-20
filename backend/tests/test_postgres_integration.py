@@ -16,10 +16,11 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, insert, inspect, select, text
+from sqlalchemy import create_engine, func, insert, inspect, select, text, update
 from sqlalchemy.exc import DBAPIError
 
 from adapters.postgres.conversation import PostgresConversationRepository
+from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.fixture_history import PostgresFixtureHistoryAdapter
 from adapters.postgres.scenario_projection import (
     PostgresScenarioProjectionReader,
@@ -28,9 +29,12 @@ from adapters.postgres.scenario_projection import (
 )
 from adapters.postgres.schema import (
     app_user,
+    conversation,
     membership,
     organization,
     persisted_event,
+    proposal,
+    proposal_version,
     scenario_version,
     session_index,
     site,
@@ -45,8 +49,12 @@ from api.deps import (
 )
 from api.main import app
 from application.ports.scenario_projection import GroupQueryV1
+from application.contracts.proposal import ProposalV1
+from application.ports.proposal import ProposalRecordV1
+from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
+from application.use_cases.enqueue_compute import enqueue_compute
 from scripts.gate_a_cutover import FixtureSpec, REPO_ROOT, run_cutover
 from services import run_service
 from settings import default_settings
@@ -303,7 +311,9 @@ def _seed_conversation_stream(postgres_engine, *, site_id, scenario_id, version_
         engine.dispose()
 
 
-def _drive_sse_stream(*, path: str, stop_when: bytes) -> tuple[float, bytes]:
+def _drive_sse_stream(
+    *, path: str, stop_when: bytes, started_at: float | None = None
+) -> tuple[float, bytes]:
     """Time an SSE connect at the ASGI boundary, stopping at `stop_when`.
 
     `TestClient` cannot be used here. Its transport writes every
@@ -326,7 +336,7 @@ def _drive_sse_stream(*, path: str, stop_when: bytes) -> tuple[float, bytes]:
     async def _drive() -> None:
         chunks: list[bytes] = []
         finished = asyncio.Event()
-        started = perf_counter()
+        started = perf_counter() if started_at is None else started_at
 
         async def receive():
             await finished.wait()
@@ -522,6 +532,145 @@ def test_nfr35_sse_reconnect_replay_meets_five_second_threshold(
     # Every run must pass; an average that hides a miss is not the threshold.
     assert all(item["duration_ms"] <= 5_000 for item in measurements)
     print("NFR35_SSE_REPLAY_MEASUREMENTS=" + json.dumps(measurements))
+
+
+@pytest.mark.postgres
+def test_nfr35_first_run_event_meets_five_second_threshold(
+    postgres_engine,
+    tmp_path,
+) -> None:
+    """AC4: acknowledgement-to-client receipt, 1 warm-up + 3 passing runs."""
+    payload = json.loads(
+        (REPO_ROOT / "data" / "sample_tiny_input_more_tm.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().provisioning_database_url,
+        engine=postgres_engine,
+    )
+    suffix = uuid4().hex
+    site_id = adapter.ensure_seed_site(
+        f"NFR35 Run Event Organization {suffix}",
+        f"NFR35 Run Event Site {suffix}",
+    )
+    imported = adapter.import_fixture(
+        site_id=site_id,
+        fixture_id=f"sample_tiny_input_more_tm-run-event-{suffix}",
+        version="v1",
+        payload=payload,
+        source_package="tests",
+        source_path="data/sample_tiny_input_more_tm.json",
+    )
+    conversation_id, proposal_id, proposal_version_id = uuid4(), uuid4(), uuid4()
+    with postgres_engine.begin() as connection:
+        scenario_id = connection.scalar(
+            select(scenario_version.c.scenario_id).where(
+                scenario_version.c.id == imported.scenario_version_id
+            )
+        )
+        actor_id = connection.scalar(select(app_user.c.id).limit(1))
+        if actor_id is None:
+            actor_id = uuid4()
+            connection.execute(insert(app_user).values(
+                id=actor_id,
+                idp_subject=f"nfr35-run-event-{suffix}",
+                email=f"nfr35-run-event-{suffix}@example.test",
+            ))
+        connection.execute(insert(conversation).values(
+            id=conversation_id,
+            site_id=site_id,
+            scenario_id=scenario_id,
+            scenario_version_id=imported.scenario_version_id,
+            created_by_actor_id=actor_id,
+        ))
+        connection.execute(insert(proposal).values(
+            id=proposal_id,
+            site_id=site_id,
+            scenario_id=scenario_id,
+            scenario_version_id=imported.scenario_version_id,
+            conversation_id=conversation_id,
+            created_by_actor_id=actor_id,
+        ))
+        connection.execute(insert(proposal_version).values(
+            id=proposal_version_id,
+            site_id=site_id,
+            proposal_id=proposal_id,
+            version_ordinal=1,
+            payload={},
+            canonical_hash="b" * 64,
+        ))
+        connection.execute(update(proposal).where(
+            proposal.c.id == proposal_id
+        ).values(current_version_id=proposal_version_id))
+
+    proposal_value = ProposalV1(
+        proposal_id=proposal_id,
+        proposal_version_id=proposal_version_id,
+        scenario_id=scenario_id,
+        scenario_version_id=imported.scenario_version_id,
+        canonical_hash="b" * 64,
+        resource_version=1,
+    )
+    context = ScenarioContext(
+        scenario_name="NFR35 Run Event",
+        scenario_id=scenario_id,
+        scenario_version_id=imported.scenario_version_id,
+        fixture_version="v1",
+        checksum_algorithm=imported.checksum_algorithm,
+        checksum_schema_version=imported.checksum_schema_version,
+        checksum_digest=imported.checksum_digest,
+        site_id=site_id,
+        baseline_schedule_version=None,
+    )
+
+    class _ProposalRepository:
+        def get_current(self, _connection, *, proposal_id, for_update=False):
+            return ProposalRecordV1(proposal_value, 1, actor_id)
+
+    class _Catalogue:
+        def get_scenario_context(self, _connection, _scenario_id):
+            return context
+
+    run_repository = PostgresScheduleRunRepository()
+    settings = default_settings()
+
+    def _enqueue(index: int):
+        with site_context(postgres_engine, site_id) as connection:
+            result = enqueue_compute(
+                _ProposalRepository(),
+                _Catalogue(),
+                run_repository,
+                connection,
+                proposal_id=proposal_id,
+                site_id=site_id,
+                expected_proposal_resource_version=1,
+                idempotency_key=f"nfr35-run-event-{index}",
+                settings=settings,
+            )
+        return result.schedule_run_id, perf_counter()
+
+    measurements = []
+    with _catalogue_client(postgres_engine, site_id=site_id, tmp_path=tmp_path):
+        for index in range(4):
+            run_id, acknowledged_at = _enqueue(index)
+            duration_ms, body = _drive_sse_stream(
+                path=f"/api/v1/schedule-runs/{run_id}/events",
+                stop_when=f"id: {run_id}:1".encode(),
+                started_at=acknowledged_at,
+            )
+            assert b'"activity_type":"run_progress"' in body
+            if index:
+                measurements.append({
+                    "run": index,
+                    "endpoint": "/api/v1/schedule-runs/{run_id}/events",
+                    "event": "run.queued.v1",
+                    "duration_ms": duration_ms,
+                })
+
+    assert len(measurements) == 3
+    assert all(item["duration_ms"] <= 5_000 for item in measurements)
+    print("NFR35_RUN_EVENT_LATENCY_MEASUREMENTS=" + json.dumps(measurements))
 
 
 @pytest.mark.postgres

@@ -41,8 +41,8 @@ class _RunRepository:
         self.jobs = []
         self.idempotency = {}
 
-    def create_queued_run(self, _connection, *, snapshot, site_id):
-        self.snapshots.append((snapshot, site_id))
+    def create_queued_run(self, _connection, *, snapshot, site_id, actor_id):
+        self.snapshots.append((snapshot, site_id, actor_id))
 
     def enqueue_job(self, _connection, *, job, site_id):
         self.jobs.append((job, site_id))
@@ -106,15 +106,10 @@ def _fixture():
 def test_enqueue_compute_creates_snapshot_job_and_idempotent_result_together() -> None:
     """AC1's enqueue-compute bundle: snapshot + queued run + job + replay record.
 
-    AC1 also names an "initial persisted event". That clause is deliberately
-    NOT COVERED here (Decision 6): `persisted_event` requires NOT NULL
-    `conversation_id`/`agent_run_id` with FKs plus
-    `CHECK (stream_id = conversation_id)`, and nothing in this story creates a
-    conversation or an agent run — so any write would fail on the same CHECK
-    Story 3.2 hit, for the same reason. Widening that table is Story 3.5's
-    contract change, made against Story 3.5's own ACs. The job row's own
-    committed existence is this story's answer to AD-6's "committed before
-    acknowledgement". Recorded as `events:owned_by_story_3_5` in SCOPE_CONTROLS.
+    Story 3.5 extends this bundle with one schedule-run-owned queued event;
+    the PostgreSQL integration test proves that fourth durable effect and its
+    idempotent replay count because this unit fake intentionally stores only
+    repository calls.
 
     `attempt_id` is likewise absent by design (Decision 5): an attempt is per
     lease ACQUISITION, and nothing has leased this job yet.

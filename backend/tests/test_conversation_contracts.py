@@ -14,6 +14,7 @@ from application.contracts.activity import (
     ClarificationActivityV1,
     DraftActivityV1,
     PlannerMessageActivityV1,
+    RunProgressActivityV1,
     TerminalOutcomeActivityV1,
 )
 from application.contracts.dialogue import (
@@ -90,6 +91,76 @@ def test_persisted_event_requires_one_typed_frozen_payload() -> None:
             site_id=uuid4(),
             actor_id=uuid4(),
         )
+
+
+def test_persisted_event_supports_a_schedule_run_owned_stream() -> None:
+    now = datetime.now(timezone.utc)
+    schedule_run_id = uuid4()
+    event = PersistedEventV1(
+        stream_id=schedule_run_id,
+        sequence=Decimal("1"),
+        event_type="run.queued.v1",
+        occurred_at=now,
+        resource_version=1,
+        request_id=uuid4(),
+        conversation_id=None,
+        agent_run_id=None,
+        site_id=uuid4(),
+        actor_id=uuid4(),
+        payload=PlannerMessageActivityV1(
+            activity_id=uuid4(),
+            activity_type="planner_message",
+            conversation_id=uuid4(),
+            conversation_resource_version=1,
+            scenario_id=uuid4(),
+            scenario_version_id=uuid4(),
+            occurred_at=now,
+            message_id=uuid4(),
+            text="placeholder until Task 2 adds run_progress",
+        ),
+        schedule_run_id=schedule_run_id,
+    )
+
+    assert event.conversation_id is None
+    assert event.agent_run_id is None
+    assert event.schedule_run_id == schedule_run_id
+
+
+def test_run_progress_activity_round_trips_to_the_discriminated_api_shape() -> None:
+    now = datetime.now(timezone.utc)
+    schedule_run_id = uuid4()
+    activity = RunProgressActivityV1(
+        activity_id=uuid4(),
+        activity_type="run_progress",
+        schedule_run_id=schedule_run_id,
+        status="solver_running",
+        reason=None,
+        resource_version=2,
+        occurred_at=now,
+    )
+    event = PersistedEventV1(
+        stream_id=schedule_run_id,
+        sequence=Decimal("2"),
+        event_type="run.running.v1",
+        occurred_at=now,
+        resource_version=2,
+        request_id=uuid4(),
+        conversation_id=None,
+        agent_run_id=None,
+        site_id=uuid4(),
+        actor_id=uuid4(),
+        payload=activity,
+        schedule_run_id=schedule_run_id,
+    )
+
+    transport = _activity(event)
+    assert transport.activity_type == "run_progress"
+    assert transport.schedule_run_id == schedule_run_id
+    assert transport.status == "solver_running"
+    assert transport.resource_version == 2
+    assert transport.sequence == "2"
+    with pytest.raises(FrozenInstanceError):
+        activity.status = "solver_completed"  # type: ignore[misc]
 
 
 def test_sequence_is_serialized_as_a_json_string_and_routes_are_peer_resources() -> None:

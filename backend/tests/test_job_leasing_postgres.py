@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+import time
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from adapters.postgres.schema import (
     conversation,
     job_queue,
     organization,
+    persisted_event,
     proposal,
     proposal_version,
     run_snapshot,
@@ -30,10 +32,13 @@ from application.contracts.proposal import ProposalV1
 from application.contracts.schedule_version import ScheduleVersionV1
 from application.ports.proposal import ProposalRecordV1
 from application.ports.scenario_catalogue import ScenarioContext
-from application.ports.schedule_run import StaleLeaseError
+from application.ports.schedule_run import RunTransitionConflictError, StaleLeaseError
 from application.use_cases.enqueue_compute import (
     IdempotencyKeyConflictError,
     enqueue_compute,
+)
+from application.use_cases.lease_and_execute_schedule_run import (
+    lease_and_execute_schedule_run,
 )
 
 
@@ -418,6 +423,21 @@ def test_enqueue_replay_and_rollback_have_exact_row_counts(
                 command_idempotency.c.idempotency_key == "live-enqueue"
             )
         ) == 1
+        events = connection.execute(
+            select(
+                persisted_event.c.event_type,
+                persisted_event.c.resource_version,
+                persisted_event.c.schedule_run_id,
+                persisted_event.c.conversation_id,
+                persisted_event.c.payload,
+            ).where(persisted_event.c.stream_id == first.schedule_run_id)
+        ).all()
+        assert len(events) == 1
+        assert events[0].event_type == "run.queued.v1"
+        assert events[0].resource_version == 1
+        assert events[0].schedule_run_id == first.schedule_run_id
+        assert events[0].conversation_id is None
+        assert events[0].payload["status"] == "solver_queued"
 
     with pytest.raises(IdempotencyKeyConflictError), governed_postgres_engine.begin() as connection:
         _runtime(connection, lease_ids["site"])
@@ -577,6 +597,200 @@ def test_a_stale_worker_writes_no_candidate_and_the_current_epoch_writes_exactly
                 schedule_run.c.id == run_id
             )
         ) == survivor.schedule_version_id
+
+
+def test_transition_events_are_monotonic_and_lost_cas_writes_none(
+    governed_postgres_engine, lease_ids
+) -> None:
+    job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
+    _only_leasable(governed_postgres_engine, job_id)
+    lease = _lease(governed_postgres_engine, "event-worker")
+    repository = PostgresScheduleRunRepository()
+
+    with governed_postgres_engine.begin() as connection:
+        _runtime(connection, lease_ids["site"])
+        repository.mark_running(
+            connection,
+            run_id=run_id,
+            site_id=lease_ids["site"],
+            fencing_epoch=lease["fencing_epoch"],
+        )
+        repository.finalize_run(
+            connection,
+            run_id=run_id,
+            site_id=lease_ids["site"],
+            fencing_epoch=lease["fencing_epoch"],
+            status="solver_failed",
+            reason="seeded_failure",
+            candidate=None,
+        )
+
+    with governed_postgres_engine.connect() as connection:
+        events = connection.execute(
+            select(
+                persisted_event.c.sequence,
+                persisted_event.c.event_type,
+                persisted_event.c.resource_version,
+                persisted_event.c.payload,
+            )
+            .where(persisted_event.c.stream_id == run_id)
+            .order_by(persisted_event.c.sequence)
+        ).all()
+    assert [(row.sequence, row.event_type, row.resource_version) for row in events] == [
+        (1, "run.running.v1", 2),
+        (2, "run.failed.v1", 3),
+    ]
+    assert events[-1].payload["reason"] == "seeded_failure"
+
+    with governed_postgres_engine.begin() as connection:
+        _runtime(connection, lease_ids["site"])
+        head = repository.event_head(
+            connection, run_id=run_id, site_id=lease_ids["site"]
+        )
+        replay = repository.events_after(
+            connection, stream_id=run_id, after=1, limit=200
+        )
+        run_view = repository.get_run(
+            connection, run_id=run_id, site_id=lease_ids["site"]
+        )
+    assert head.max_sequence == 2
+    assert len(replay) == 1
+    assert replay[0].payload.activity_type == "run_progress"
+    assert replay[0].payload.status == "solver_failed"
+    assert replay[0].sequence == 2
+    assert run_view.schedule_run_id == run_id
+    assert run_view.status == "solver_failed"
+    assert run_view.reason == "seeded_failure"
+    assert run_view.resource_version == 3
+    assert run_view.cancellation_requested is False
+
+    with pytest.raises(RunTransitionConflictError), governed_postgres_engine.begin() as connection:
+        _runtime(connection, lease_ids["site"])
+        repository.mark_running(
+            connection,
+            run_id=run_id,
+            site_id=lease_ids["site"],
+            fencing_epoch=lease["fencing_epoch"],
+        )
+    with governed_postgres_engine.connect() as connection:
+        assert connection.scalar(
+            select(func.count()).select_from(persisted_event).where(
+                persisted_event.c.stream_id == run_id
+            )
+        ) == 2
+
+
+def test_failure_after_lease_is_terminal_and_never_released(
+    governed_postgres_engine, lease_ids
+) -> None:
+    job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
+    _only_leasable(governed_postgres_engine, job_id)
+
+    class _FailingLoadRepository(PostgresScheduleRunRepository):
+        def load_snapshot(self, connection, *, run_id, site_id):
+            raise RuntimeError("injected after lease")
+
+    from tests.test_cancellation_race_postgres import _run_worker
+
+    outcome = _run_worker(
+        governed_postgres_engine,
+        _FailingLoadRepository(),
+        SimpleNamespace(solve=lambda snapshot: None),
+    )
+    assert outcome.status == "solver_failed"
+
+    with governed_postgres_engine.connect() as connection:
+        assert connection.execute(
+            select(job_queue.c.status, schedule_run.c.status, schedule_run.c.reason)
+            .select_from(
+                job_queue.join(
+                    schedule_run,
+                    (schedule_run.c.id == job_queue.c.schedule_run_id)
+                    & (schedule_run.c.site_id == job_queue.c.site_id),
+                )
+            )
+            .where(job_queue.c.id == job_id)
+        ).one() == ("failed", "solver_failed", "job_execution_failed")
+        assert connection.execute(
+            select(persisted_event.c.event_type).where(
+                persisted_event.c.stream_id == run_id
+            )
+        ).scalars().all() == ["run.failed.v1"]
+
+    with governed_postgres_engine.connect().execution_options(
+        isolation_level="AUTOCOMMIT"
+    ) as connection:
+        connection.exec_driver_sql("SET ROLE shiftmind_lease")
+        try:
+            assert PostgresScheduleRunRepository().lease_next_job(
+                connection,
+                lease_owner="second-worker",
+                lease_seconds=30,
+            ) is None
+        finally:
+            connection.exec_driver_sql("RESET ROLE")
+
+
+def test_heartbeat_keeps_a_slow_solve_inside_its_fencing_epoch(
+    governed_postgres_engine, lease_ids
+) -> None:
+    job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
+    _only_leasable(governed_postgres_engine, job_id)
+    from tests.test_cancellation_race_postgres import (
+        _runtime_connection,
+        _seed_valid_snapshot,
+    )
+
+    _seed_valid_snapshot(governed_postgres_engine, lease_ids, run_id)
+
+    class _SlowScheduler:
+        def solve(self, snapshot):
+            time.sleep(3.1)
+            error = RuntimeError("slow seeded failure")
+            error.code = "slow_seeded_failure"
+            raise error
+
+    with governed_postgres_engine.connect().execution_options(
+        isolation_level="AUTOCOMMIT"
+    ) as lease_connection:
+        lease_connection.exec_driver_sql("SET ROLE shiftmind_lease")
+        try:
+            outcome = lease_and_execute_schedule_run(
+                lease_connection,
+                lambda site_id: _runtime_connection(
+                    governed_postgres_engine, site_id
+                ),
+                PostgresScheduleRunRepository(),
+                _SlowScheduler(),
+                lease_owner="heartbeat-worker",
+                lease_seconds=2,
+            )
+        finally:
+            lease_connection.exec_driver_sql("RESET ROLE")
+
+    assert outcome.status == "solver_failed"
+    with governed_postgres_engine.connect() as connection:
+        row = connection.execute(
+            select(
+                job_queue.c.status,
+                job_queue.c.fencing_epoch,
+                job_queue.c.heartbeat_at,
+                schedule_run.c.status,
+                schedule_run.c.reason,
+            )
+            .select_from(
+                job_queue.join(
+                    schedule_run,
+                    (schedule_run.c.id == job_queue.c.schedule_run_id)
+                    & (schedule_run.c.site_id == job_queue.c.site_id),
+                )
+            )
+            .where(job_queue.c.id == job_id)
+        ).one()
+    assert row.status == "completed"
+    assert row.fencing_epoch == 1
+    assert row.heartbeat_at is not None
+    assert row[3:] == ("solver_failed", "slow_seeded_failure")
 
 
 def test_renew_job_lease_extends_only_the_epoch_the_caller_still_holds(

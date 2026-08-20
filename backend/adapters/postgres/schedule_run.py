@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
 from sqlalchemy import Connection, exists, func, insert, select, text, update
@@ -11,12 +11,14 @@ from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from adapters.postgres.schema import (
     command_idempotency,
     job_queue,
+    persisted_event,
     run_snapshot,
     schedule_assignment,
     schedule_run,
     schedule_version,
 )
 from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
+from application.contracts.activity import RunProgressActivityV1
 from application.contracts.canonical import contract_digest
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import ScheduleRunStatusV1, ScheduleVersionV1
@@ -26,6 +28,8 @@ from application.ports.schedule_run import (
     IllegalTransitionError,
     RunNotCancellableError,
     RunTransitionConflictError,
+    ScheduleRunEventHeadV1,
+    ScheduleRunViewV1,
     ScheduleRunStateV1,
     StaleLeaseError,
 )
@@ -50,8 +54,188 @@ _FINALIZE_STATUSES = frozenset(
     )
 )
 
+_FINALIZE_EXPECTED_STATUSES = {
+    "solver_completed": ("solver_running", "cancellation_requested"),
+    "solver_infeasible": ("solver_running", "cancellation_requested"),
+    "solver_timed_out": (
+        "solver_queued",
+        "solver_running",
+        "cancellation_requested",
+    ),
+    "solver_cancelled": ("cancellation_requested",),
+    "solver_failed": (
+        "solver_queued",
+        "solver_running",
+        "cancellation_requested",
+    ),
+}
+
 
 class PostgresScheduleRunRepository:
+    def get_run(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleRunViewV1 | None:
+        row = connection.execute(
+            select(
+                schedule_run.c.id,
+                schedule_run.c.status,
+                schedule_run.c.reason,
+                schedule_run.c.resource_version,
+                job_queue.c.cancellation_requested,
+            )
+            .select_from(
+                schedule_run.outerjoin(
+                    job_queue,
+                    (job_queue.c.schedule_run_id == schedule_run.c.id)
+                    & (job_queue.c.site_id == schedule_run.c.site_id),
+                )
+            )
+            .where(schedule_run.c.id == run_id, schedule_run.c.site_id == site_id)
+        ).one_or_none()
+        if row is None:
+            return None
+        return ScheduleRunViewV1(
+            schedule_run_id=row.id,
+            status=row.status,
+            reason=row.reason,
+            resource_version=row.resource_version,
+            cancellation_requested=bool(row.cancellation_requested),
+        )
+
+    def event_head(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleRunEventHeadV1 | None:
+        row = connection.execute(
+            select(
+                schedule_run.c.id,
+                func.max(persisted_event.c.sequence).label("max_sequence"),
+            )
+            .select_from(
+                schedule_run.outerjoin(
+                    persisted_event,
+                    (persisted_event.c.schedule_run_id == schedule_run.c.id)
+                    & (persisted_event.c.site_id == schedule_run.c.site_id)
+                    & (persisted_event.c.stream_id == schedule_run.c.id),
+                )
+            )
+            .where(schedule_run.c.id == run_id, schedule_run.c.site_id == site_id)
+            .group_by(schedule_run.c.id)
+        ).one_or_none()
+        if row is None:
+            return None
+        return ScheduleRunEventHeadV1(row.max_sequence or 0)
+
+    def events_after(
+        self,
+        connection: Connection,
+        *,
+        stream_id: UUID,
+        after,
+        limit: int,
+    ):
+        visible = connection.execute(
+            select(schedule_run.c.id).where(schedule_run.c.id == stream_id)
+        ).scalar_one_or_none()
+        if visible is None:
+            return None
+        rows = connection.execute(
+            select(persisted_event)
+            .where(
+                persisted_event.c.stream_id == stream_id,
+                persisted_event.c.schedule_run_id == stream_id,
+                persisted_event.c.sequence > after,
+            )
+            .order_by(persisted_event.c.sequence)
+            .limit(limit)
+        ).all()
+        return tuple(self._progress_event_from_row(row) for row in rows)
+
+    @staticmethod
+    def _progress_event_from_row(row):
+        activity = TypeAdapter(RunProgressActivityV1).validate_python(row.payload)
+        from application.contracts.persisted_event import PersistedEventV1
+
+        return PersistedEventV1(
+            stream_id=row.stream_id,
+            sequence=row.sequence,
+            event_type=row.event_type,
+            occurred_at=_as_utc(row.occurred_at),
+            resource_version=row.resource_version,
+            request_id=row.request_id,
+            conversation_id=row.conversation_id,
+            agent_run_id=row.agent_run_id,
+            schedule_run_id=row.schedule_run_id,
+            site_id=row.site_id,
+            actor_id=row.actor_id,
+            payload=activity,
+        )
+
+    @staticmethod
+    def _write_progress_event(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        actor_id: UUID,
+        status: ScheduleRunStatusV1,
+        reason: str | None,
+        resource_version: int,
+        occurred_at: datetime | None = None,
+    ) -> None:
+        when = occurred_at or datetime.now(timezone.utc)
+        activity = RunProgressActivityV1(
+            activity_id=uuid4(),
+            activity_type="run_progress",
+            schedule_run_id=run_id,
+            status=status,
+            reason=reason,
+            resource_version=resource_version,
+            occurred_at=when,
+        )
+        next_sequence = (
+            select(func.coalesce(func.max(persisted_event.c.sequence), 0) + 1)
+            .where(persisted_event.c.stream_id == run_id)
+            .scalar_subquery()
+        )
+        event_name = status.removeprefix("solver_")
+        connection.execute(
+            insert(persisted_event).values(
+                site_id=site_id,
+                stream_id=run_id,
+                sequence=next_sequence,
+                event_type=f"run.{event_name}.v1",
+                occurred_at=when,
+                resource_version=resource_version,
+                request_id=uuid4(),
+                conversation_id=None,
+                agent_run_id=None,
+                schedule_run_id=run_id,
+                actor_id=actor_id,
+                payload=TypeAdapter(RunProgressActivityV1).dump_python(
+                    activity, mode="json"
+                ),
+            )
+        )
+
+    @staticmethod
+    def _actor_for_run(
+        connection: Connection, *, run_id: UUID, site_id: UUID
+    ) -> UUID:
+        return connection.execute(
+            select(job_queue.c.actor_id).where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+            )
+        ).scalar_one()
+
     def get_run_state(
         self,
         connection: Connection,
@@ -75,6 +259,7 @@ class PostgresScheduleRunRepository:
         *,
         run_id: UUID,
         site_id: UUID,
+        actor_id: UUID,
         expected_resource_version: int,
         expected_status: str,
         status: str,
@@ -88,7 +273,7 @@ class PostgresScheduleRunRepository:
         }
         if terminal:
             values["finished_at"] = func.now()
-        result = connection.execute(
+        row = connection.execute(
             update(schedule_run)
             .where(
                 schedule_run.c.id == run_id,
@@ -97,12 +282,22 @@ class PostgresScheduleRunRepository:
                 schedule_run.c.resource_version == expected_resource_version,
             )
             .values(**values)
-        )
-        if getattr(result, "rowcount", 1) != 1:
+            .returning(schedule_run.c.resource_version)
+        ).one_or_none()
+        if row is None:
             raise RunNotCancellableError(
                 f"schedule run is no longer {expected_status} at resource version "
                 f"{expected_resource_version}"
             )
+        PostgresScheduleRunRepository._write_progress_event(
+            connection,
+            run_id=run_id,
+            site_id=site_id,
+            actor_id=actor_id,
+            status=status,
+            reason=reason,
+            resource_version=row.resource_version,
+        )
 
     def cancel_queued_run(
         self,
@@ -110,12 +305,14 @@ class PostgresScheduleRunRepository:
         *,
         run_id: UUID,
         site_id: UUID,
+        actor_id: UUID,
         expected_resource_version: int,
     ) -> None:
         self._cancel_transition(
             connection,
             run_id=run_id,
             site_id=site_id,
+            actor_id=actor_id,
             expected_resource_version=expected_resource_version,
             expected_status="solver_queued",
             status="solver_cancelled",
@@ -129,12 +326,14 @@ class PostgresScheduleRunRepository:
         *,
         run_id: UUID,
         site_id: UUID,
+        actor_id: UUID,
         expected_resource_version: int,
     ) -> None:
         self._cancel_transition(
             connection,
             run_id=run_id,
             site_id=site_id,
+            actor_id=actor_id,
             expected_resource_version=expected_resource_version,
             expected_status="solver_running",
             status="cancellation_requested",
@@ -295,7 +494,7 @@ class PostgresScheduleRunRepository:
         self._claim_epoch(
             connection, run_id=run_id, site_id=site_id, fencing_epoch=fencing_epoch
         )
-        result = connection.execute(
+        row = connection.execute(
             update(schedule_run)
             .where(
                 schedule_run.c.id == run_id,
@@ -307,8 +506,9 @@ class PostgresScheduleRunRepository:
                 status="solver_running",
                 resource_version=schedule_run.c.resource_version + 1,
             )
-        )
-        if getattr(result, "rowcount", 1) != 1:
+            .returning(schedule_run.c.resource_version)
+        ).one_or_none()
+        if row is None:
             self._raise_transition_failure(
                 connection,
                 run_id=run_id,
@@ -317,6 +517,17 @@ class PostgresScheduleRunRepository:
                 expected_status="solver_queued",
                 target_status="solver_running",
             )
+        self._write_progress_event(
+            connection,
+            run_id=run_id,
+            site_id=site_id,
+            actor_id=self._actor_for_run(
+                connection, run_id=run_id, site_id=site_id
+            ),
+            status="solver_running",
+            reason=None,
+            resource_version=row.resource_version,
+        )
 
     def create_queued_run(
         self,
@@ -324,6 +535,7 @@ class PostgresScheduleRunRepository:
         *,
         snapshot: RunSnapshotV1,
         site_id: UUID,
+        actor_id: UUID,
     ) -> None:
         assert snapshot.snapshot_id is not None
         assert snapshot.schedule_run_id is not None
@@ -355,6 +567,16 @@ class PostgresScheduleRunRepository:
                 run_snapshot_id=snapshot.snapshot_id,
                 status="solver_queued",
             )
+        )
+        self._write_progress_event(
+            connection,
+            run_id=snapshot.schedule_run_id,
+            site_id=site_id,
+            actor_id=actor_id,
+            status="solver_queued",
+            reason=None,
+            resource_version=1,
+            occurred_at=snapshot.accepted_at,
         )
 
     def enqueue_job(
@@ -502,6 +724,37 @@ class PostgresScheduleRunRepository:
                 )
             raise ValueError("job is no longer leased")
 
+    def fail_job(
+        self,
+        connection: Connection,
+        *,
+        job_id: UUID,
+        site_id: UUID,
+        fencing_epoch: int,
+    ) -> None:
+        result = connection.execute(
+            update(job_queue)
+            .where(
+                job_queue.c.id == job_id,
+                job_queue.c.site_id == site_id,
+                job_queue.c.status == "leased",
+                job_queue.c.fencing_epoch == fencing_epoch,
+            )
+            .values(status="failed", heartbeat_at=func.now())
+        )
+        if getattr(result, "rowcount", 1) != 1:
+            current_epoch = connection.execute(
+                select(job_queue.c.fencing_epoch).where(
+                    job_queue.c.id == job_id,
+                    job_queue.c.site_id == site_id,
+                )
+            ).scalar_one_or_none()
+            if current_epoch != fencing_epoch:
+                raise StaleLeaseError(
+                    f"job lease epoch {fencing_epoch} is stale; current is {current_epoch}"
+                )
+            raise ValueError("job is no longer leased")
+
     def get_idempotent_result(
         self,
         connection: Connection,
@@ -566,11 +819,7 @@ class PostgresScheduleRunRepository:
     ) -> None:
         if status not in _FINALIZE_STATUSES:
             raise ValueError(f"{status} is not a terminal schedule-run status")
-        expected_statuses = (
-            ("cancellation_requested",)
-            if status == "solver_cancelled"
-            else ("solver_running", "cancellation_requested")
-        )
+        expected_statuses = _FINALIZE_EXPECTED_STATUSES[status]
         # AC3 is about the EFFECT commit, so the fence is claimed under a real
         # row lock before any candidate row is written. Without this the guard
         # rejected nothing on its own — the inserts had already happened and
@@ -615,7 +864,7 @@ class PostgresScheduleRunRepository:
                     lock_ref=assignment.lock_ref,
                 ))
             candidate_id = candidate.schedule_version_id
-        result = connection.execute(
+        row = connection.execute(
             update(schedule_run)
             .where(
                 schedule_run.c.id == run_id,
@@ -630,8 +879,9 @@ class PostgresScheduleRunRepository:
                 resource_version=schedule_run.c.resource_version + 1,
                 finished_at=candidate.created_at if candidate else (finished_at or datetime.now(timezone.utc)),
             )
-        )
-        if getattr(result, "rowcount", 1) != 1:
+            .returning(schedule_run.c.resource_version, schedule_run.c.finished_at)
+        ).one_or_none()
+        if row is None:
             self._raise_transition_failure(
                 connection,
                 run_id=run_id,
@@ -640,6 +890,18 @@ class PostgresScheduleRunRepository:
                 expected_status=" or ".join(expected_statuses),
                 target_status=status,
             )
+        self._write_progress_event(
+            connection,
+            run_id=run_id,
+            site_id=site_id,
+            actor_id=self._actor_for_run(
+                connection, run_id=run_id, site_id=site_id
+            ),
+            status=status,
+            reason=reason,
+            resource_version=row.resource_version,
+            occurred_at=_as_utc(row.finished_at),
+        )
 
 
 __all__ = ["PostgresScheduleRunRepository"]

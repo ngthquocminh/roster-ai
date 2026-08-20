@@ -16,18 +16,18 @@ from application.use_cases.execute_schedule_run import execute_schedule_run
 
 SCOPE_CONTROLS = (
     "COVERS: roles:worker_reuses_shiftmind_runtime; "
-    "NOT COVERED: events:owned_by_story_3_5; "
+    "COVERS: events:literal_schedule_run_transitions; "
     "COVERS: cancellation:cooperative_checkpoints; "
-    "NOT COVERED: cancellation:mid_solve_preemption_owned_by_story_3_5; "
+    "NOT COVERED: cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit; "
     "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
     # `solver_running` now commits before the solve and is observable. The
     # remaining heartbeat debt is only the missing renew_job_lease caller.
-    "NOT COVERED: heartbeat:owned_by_story_3_5 — renewal caller only; "
+    "COVERS: heartbeat:independent_short_transaction_renewal; "
     # A job that fails between lease and completion stays `leased`, expires and
     # is re-leased forever — `JobStatusV1` has no terminal-failure member.
     # Story 3.5 must reopen that closed vocabulary anyway: its AC names
     # `failed` and `timed-out` as required literal states.
-    "NOT COVERED: job_failure_state:owned_by_story_3_5; "
+    "COVERS: job_failure_state:failed_terminal_and_not_released; "
     # `lease_seconds` must exceed the solver budget or every long solve fences
     # itself out. `DEFAULT_LEASE_SECONDS` is a floor, not the ceiling AD-8
     # wants: Story 3.6's AC requires application-owned ceilings for solver time
@@ -72,6 +72,59 @@ def lease_and_execute_schedule_run(
     )
     if lease is None:
         return None
+    try:
+        return _execute_leased_schedule_run(
+            runtime_connection_factory,
+            repository,
+            scheduler,
+            lease=lease,
+            lease_seconds=lease_seconds,
+        )
+    except Exception:
+        assert lease.job_id is not None
+        assert lease.schedule_run_id is not None
+        assert lease.site_id is not None
+        with runtime_connection_factory(lease.site_id) as runtime_connection:
+            state = repository.get_run_state(
+                runtime_connection,
+                run_id=lease.schedule_run_id,
+                site_id=lease.site_id,
+            )
+            if state is None:
+                raise
+            if state.status not in {
+                "solver_completed",
+                "solver_infeasible",
+                "solver_timed_out",
+                "solver_cancelled",
+                "solver_failed",
+            }:
+                repository.finalize_run(
+                    runtime_connection,
+                    run_id=lease.schedule_run_id,
+                    site_id=lease.site_id,
+                    fencing_epoch=lease.fencing_epoch,
+                    status="solver_failed",
+                    reason="job_execution_failed",
+                    candidate=None,
+                )
+            repository.fail_job(
+                runtime_connection,
+                job_id=lease.job_id,
+                site_id=lease.site_id,
+                fencing_epoch=lease.fencing_epoch,
+            )
+        return _outcome(lease, "solver_failed")
+
+
+def _execute_leased_schedule_run(
+    runtime_connection_factory: RuntimeConnectionFactory,
+    repository: ScheduleRunRepository,
+    scheduler: SchedulerPort,
+    *,
+    lease,
+    lease_seconds: int,
+) -> LeaseOutcomeV1:
     assert lease.job_id is not None
     assert lease.attempt_id is not None
     assert lease.schedule_run_id is not None
@@ -173,6 +226,9 @@ def lease_and_execute_schedule_run(
                 snapshot=snapshot,
                 site_id=lease.site_id,
                 fencing_epoch=lease.fencing_epoch,
+                job_id=lease.job_id,
+                lease_seconds=lease_seconds,
+                runtime_connection_factory=runtime_connection_factory,
             )
             status = finalized.status
         else:

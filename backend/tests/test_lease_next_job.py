@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import time
 from uuid import uuid4
 
-from application.contracts.job_lease import JobLeaseV1
+from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
 from application.ports.schedule_run import ScheduleRunStateV1
 from application.use_cases.lease_and_execute_schedule_run import (
@@ -80,6 +81,13 @@ class _Repository:
     def complete_job(self, connection, **values):
         self.calls.append(("complete", connection, values))
 
+    def fail_job(self, connection, **values):
+        self.calls.append(("fail", connection, values))
+
+    def renew_job_lease(self, connection, **values):
+        self.calls.append(("renew", connection, values))
+        return LeaseRenewalV1(renewed=True)
+
 
 class _Scheduler:
     def __init__(self) -> None:
@@ -117,6 +125,63 @@ def test_no_job_does_not_open_a_runtime_transaction() -> None:
 
     assert result is None
     assert runtime.site_ids == []
+
+
+def test_exception_after_lease_fails_the_job_and_queued_run_atomically() -> None:
+    lease = _lease()
+
+    class _FailingRepository(_Repository):
+        def load_snapshot(self, connection, *, run_id, site_id):
+            raise RuntimeError("injected after lease")
+
+    repository = _FailingRepository(
+        lease, ScheduleRunStateV1("solver_queued", 1)
+    )
+    runtime = _RuntimeFactory()
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        _Scheduler(),
+        lease_owner="worker-1",
+        lease_seconds=30,
+    )
+
+    assert result.status == "solver_failed"
+    finalize = next(call for call in repository.calls if call[0] == "finalize")
+    failed = next(call for call in repository.calls if call[0] == "fail")
+    assert finalize[1] == failed[1] == "runtime-connection-2"
+    assert finalize[2]["status"] == "solver_failed"
+    assert finalize[2]["reason"] == "job_execution_failed"
+    assert failed[2]["fencing_epoch"] == lease.fencing_epoch
+
+
+def test_solve_renews_its_lease_on_an_independent_runtime_connection() -> None:
+    lease = _lease()
+    repository = _Repository(lease)
+    runtime = _RuntimeFactory()
+
+    class _SlowScheduler(_Scheduler):
+        def solve(self, snapshot):
+            time.sleep(1.2)
+            return super().solve(snapshot)
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        _SlowScheduler(),
+        lease_owner="worker-1",
+        lease_seconds=1,
+    )
+
+    assert result.status == "solver_failed"
+    renewals = [call for call in repository.calls if call[0] == "renew"]
+    assert renewals
+    assert all(call[1] != "runtime-connection-2" for call in renewals)
+    assert all(call[2]["fencing_epoch"] == lease.fencing_epoch for call in renewals)
+    assert all(call[2]["extension_seconds"] == 1 for call in renewals)
 
 
 def test_checkpoint_1_cancellation_finalizes_without_calling_the_solver() -> None:
