@@ -131,7 +131,10 @@ def test_every_adapter_schedule_run_transition_is_an_ad7_edge() -> None:
 # those three are the only writers -- an invariant nothing asserted, so the
 # next story could add a fourth transition method and keep a green guard.
 _SCHEDULE_RUN_WRITERS = frozenset(
-    {"_cancel_transition", "mark_running", "finalize_run"}
+    {"_cancel_transition", "mark_running", "create_queued_run", "finalize_run"}
+)
+_PROGRESS_EVENT_WRITERS = frozenset(
+    {"_cancel_transition", "mark_running", "create_queued_run", "finalize_run"}
 )
 
 
@@ -154,6 +157,62 @@ def _functions_updating_schedule_run(tree: ast.Module) -> set[str]:
     return writers
 
 
+def _functions_inserting_schedule_run(tree: ast.Module) -> set[str]:
+    """Every function containing an `insert(schedule_run)` call, by name."""
+    writers = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == "insert"
+                and inner.args
+                and isinstance(inner.args[0], ast.Name)
+                and inner.args[0].id == "schedule_run"
+            ):
+                writers.add(node.name)
+    return writers
+
+
+def _functions_calling_progress_event_writer(tree: ast.Module) -> set[str]:
+    """Every transition function that calls `_write_progress_event`, by name."""
+    callers = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name == "_write_progress_event":
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr == "_write_progress_event"
+            ):
+                callers.add(node.name)
+    return callers
+
+
+def _functions_inserting_persisted_event(tree: ast.Module) -> set[str]:
+    """Every function containing an `insert(persisted_event)` call, by name."""
+    writers = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == "insert"
+                and inner.args
+                and isinstance(inner.args[0], ast.Name)
+                and inner.args[0].id == "persisted_event"
+            ):
+                writers.add(node.name)
+    return writers
+
+
 def test_only_the_known_helpers_write_a_schedule_run_transition() -> None:
     """Make the edge guard exhaustive rather than merely correct about three functions.
 
@@ -164,4 +223,19 @@ def test_only_the_known_helpers_write_a_schedule_run_transition() -> None:
     """
     tree = ast.parse(ADAPTER.read_text(encoding="utf-8"), filename=str(ADAPTER))
 
-    assert _functions_updating_schedule_run(tree) == _SCHEDULE_RUN_WRITERS
+    actual_writers = (
+        _functions_updating_schedule_run(tree)
+        | _functions_inserting_schedule_run(tree)
+    )
+    assert actual_writers == _SCHEDULE_RUN_WRITERS
+
+
+def test_only_transition_writers_emit_run_progress_events() -> None:
+    """Keep the persisted-event guard exhaustive as transition methods grow."""
+    tree = ast.parse(ADAPTER.read_text(encoding="utf-8"), filename=str(ADAPTER))
+
+    assert (
+        _functions_calling_progress_event_writer(tree)
+        == _PROGRESS_EVENT_WRITERS
+    )
+    assert _functions_inserting_persisted_event(tree) == {"_write_progress_event"}

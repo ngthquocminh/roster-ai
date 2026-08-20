@@ -231,8 +231,8 @@ for completeness and deliberately not re-derived.
         (3.4 review Defer finding) and is not this story's to close.
   - [x] 404 via the same `_not_found()` helper `cancel()` uses, for an unknown or cross-site run.
 
-- [ ] **Task 8 — NFR35 evidence for AC4** (AC: 4)
-  - [ ] New measuring test (mirrors `test_postgres_integration.py`'s
+- [x] **Task 8 — NFR35 evidence for AC4** (AC: 4)
+  - [x] New measuring test (mirrors `test_postgres_integration.py`'s
         `test_nfr35_sse_reconnect_replay_meets_five_second_threshold`): commit an
         `enqueue_compute` bundle directly (standing in for "API acknowledgement" — Story 3.6 has
         not yet shipped the live HTTP creation command) as the timing origin, drive the real ASGI
@@ -241,11 +241,11 @@ for completeness and deliberately not re-derived.
         first `run_progress` (queued) frame. One discarded warm-up run, then 3 consecutive
         measured runs, all must meet 5000 ms. Print an
         `NFR35_RUN_EVENT_LATENCY_MEASUREMENTS=[...]` marker.
-  - [ ] New `backend/scripts/generate_run_event_latency_evidence.py`, structured exactly like
+  - [x] New `backend/scripts/generate_run_event_latency_evidence.py`, structured exactly like
         `generate_sse_replay_evidence.py` (hardcoded `THRESHOLD_MS = 5_000`, `resolve_bindings()`
         refusing a dirty tree, atomic write, `audit_evidence_file()` self-audit). Register the
         new file in `regenerate_evidence.py`'s `EVIDENCE_FILES`/`_MEASUREMENT_MARKERS`.
-  - [ ] Follow `docs/EVIDENCE-CONVENTION.md`'s order exactly: commit code → confirm clean tree →
+  - [x] Follow `docs/EVIDENCE-CONVENTION.md`'s order exactly: commit code → confirm clean tree →
         measure → generate → commit `evidence/story-3.5/nfr35-first-run-event.json` separately.
         Never hand-type it.
 
@@ -463,6 +463,7 @@ for completeness and deliberately not re-derived.
 - 2026-08-21 — Task 5 plan/verification: observed the slow-solve test complete with zero renewals, then added a daemon heartbeat thread around `scheduler.solve`. It waits `max(1, lease_seconds // 3)`, renews through independent runtime transactions, stops in `finally`, and ignores the cancellation carrier. A live 3.1-second solve under a 2-second lease retained epoch 1 and finalized normally.
 - 2026-08-21 — Task 6 plan/verification: observed the missing schedule-run event-head contract at collection, then added typed head/replay reads and the SSE route by reusing the shipped conversation transport generator. Cursor precedence, foreign-stream zero-query rejection, maximum-sequence validation, immediate/15-second comment heartbeats, 200-event batches, and one short site transaction per poll remain shared mechanics.
 - 2026-08-21 — Task 7 plan/verification: observed the missing polling read contract at collection, then added a site-scoped schedule-run view joining the optional job carrier and exposed it through `GET /schedule-runs/{run_id}`. The route projects only the existing response fields and reuses `_not_found()`.
+- 2026-08-21 — Task 8 plan/verification: committed the implementation, confirmed a clean tree, then ran the largest Gate A fixture with one discarded warm-up and three measured ASGI-stream runs. Generated and self-audited the evidence from captured stdout before committing it separately; measured first-event latencies were 14.377 ms, 18.190 ms, and 15.687 ms.
 
 ### Completion Notes List
 
@@ -473,6 +474,7 @@ for completeness and deliberately not re-derived.
 - Task 5 complete: solve-time heartbeat renewal keeps the active fencing epoch current without changing cancellation or terminal semantics. Focused suites: 45 passed. Full backend regression: 1092 passed, 2 skipped, 7 deselected.
 - Task 6 complete: schedule-run progress is replayable from `Last-Event-ID`/query cursors with no duplicate frames and non-disclosing invalid-cursor handling. Stream/PostgreSQL focused suites: 37 passed. Full backend regression: 1098 passed, 2 skipped, 7 deselected.
 - Task 7 complete: polling/manual refresh returns authoritative literal state and the cancellation carrier without adding timestamps or changing authority. Focused API/PostgreSQL tests: 13 passed. Full backend regression: 1100 passed, 2 skipped, 7 deselected.
+- Task 8 complete: the committed NFR35 record binds the clean implementation commit and proves all three client-observed first-event deliveries below 5,000 ms (maximum 18.190 ms). Evidence convention/generator suites: 57 passed.
 
 ### File List
 
