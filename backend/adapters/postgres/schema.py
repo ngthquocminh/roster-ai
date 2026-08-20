@@ -405,6 +405,101 @@ Index("ix_proposal_conversation_id", proposal.c.conversation_id)
 Index("ix_proposal_version_proposal_id", proposal_version.c.proposal_id)
 Index("ix_command_idempotency_actor_operation", command_idempotency.c.actor_id, command_idempotency.c.operation)
 
+run_snapshot = Table(
+    "run_snapshot", metadata, _id_column(), _site_id_column(),
+    Column("scenario_id", UUID(as_uuid=True), nullable=False),
+    Column("scenario_version_id", UUID(as_uuid=True), nullable=False),
+    Column("proposal_id", UUID(as_uuid=True), nullable=False),
+    Column("proposal_version_id", UUID(as_uuid=True), nullable=False),
+    Column("baseline_schedule_version", String(100), nullable=True),
+    Column("payload", JSONB, nullable=False),
+    Column("canonical_hash", String(64), nullable=False),
+    Column("checksum_algorithm", String(20), nullable=False, server_default=text("'sha256'")),
+    Column("checksum_schema_version", String(40), nullable=False, server_default=text("'rfc8785-v1'")),
+    Column("accepted_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(["scenario_id", "site_id"], ["scenario.id", "scenario.site_id"], name="fk_run_snapshot_scenario_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["scenario_version_id", "site_id"], ["scenario_version.id", "scenario_version.site_id"], name="fk_run_snapshot_scenario_version_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["proposal_id", "site_id"], ["proposal.id", "proposal.site_id"], name="fk_run_snapshot_proposal_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["proposal_version_id", "site_id"], ["proposal_version.id", "proposal_version.site_id"], name="fk_run_snapshot_proposal_version_site", ondelete="RESTRICT"),
+    UniqueConstraint("id", "site_id", name="uq_run_snapshot_id_site"),
+    CheckConstraint("checksum_algorithm = 'sha256'", name="ck_run_snapshot_checksum_algorithm"),
+    CheckConstraint("checksum_schema_version = 'rfc8785-v1'", name="ck_run_snapshot_checksum_schema_version"),
+    CheckConstraint("canonical_hash ~ '^[0-9a-f]{64}$'", name="ck_run_snapshot_canonical_hash"),
+)
+
+schedule_run = Table(
+    "schedule_run", metadata, _id_column(), _site_id_column(),
+    Column("run_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("status", String(40), nullable=False, server_default=text("'solver_queued'")),
+    Column("reason", String(100), nullable=True),
+    Column("candidate_schedule_version_id", UUID(as_uuid=True), nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("finished_at", DateTime(timezone=True), nullable=True),
+    ForeignKeyConstraint(["run_snapshot_id", "site_id"], ["run_snapshot.id", "run_snapshot.site_id"], name="fk_schedule_run_snapshot_site", ondelete="RESTRICT"),
+    UniqueConstraint("id", "site_id", name="uq_schedule_run_id_site"),
+    CheckConstraint("status IN ('solver_queued','solver_running','cancellation_requested','solver_completed','solver_infeasible','solver_timed_out','solver_cancelled','solver_failed')", name="ck_schedule_run_status"),
+    CheckConstraint("candidate_schedule_version_id IS NULL OR status = 'solver_completed'", name="ck_schedule_run_candidate_completed"),
+)
+
+schedule_version = Table(
+    "schedule_version", metadata, _id_column(), _site_id_column(),
+    Column("schedule_run_id", UUID(as_uuid=True), nullable=False),
+    Column("scenario_id", UUID(as_uuid=True), nullable=False),
+    Column("scenario_version_id", UUID(as_uuid=True), nullable=False),
+    Column("proposal_id", UUID(as_uuid=True), nullable=False),
+    Column("proposal_version_id", UUID(as_uuid=True), nullable=False),
+    Column("solver_status", String(20), nullable=False),
+    Column("payload", JSONB, nullable=False),
+    Column("canonical_hash", String(64), nullable=False),
+    Column("checksum_algorithm", String(20), nullable=False, server_default=text("'sha256'")),
+    Column("checksum_schema_version", String(40), nullable=False, server_default=text("'rfc8785-v1'")),
+    Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    ForeignKeyConstraint(["schedule_run_id", "site_id"], ["schedule_run.id", "schedule_run.site_id"], name="fk_schedule_version_run_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["scenario_id", "site_id"], ["scenario.id", "scenario.site_id"], name="fk_schedule_version_scenario_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["scenario_version_id", "site_id"], ["scenario_version.id", "scenario_version.site_id"], name="fk_schedule_version_scenario_version_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["proposal_id", "site_id"], ["proposal.id", "proposal.site_id"], name="fk_schedule_version_proposal_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["proposal_version_id", "site_id"], ["proposal_version.id", "proposal_version.site_id"], name="fk_schedule_version_proposal_version_site", ondelete="RESTRICT"),
+    UniqueConstraint("schedule_run_id", name="uq_schedule_version_run"),
+    UniqueConstraint("id", "site_id", name="uq_schedule_version_id_site"),
+    CheckConstraint("solver_status IN ('OPTIMAL','FEASIBLE')", name="ck_schedule_version_feasible_status"),
+    CheckConstraint("checksum_algorithm = 'sha256'", name="ck_schedule_version_checksum_algorithm"),
+    CheckConstraint("checksum_schema_version = 'rfc8785-v1'", name="ck_schedule_version_checksum_schema_version"),
+    CheckConstraint("canonical_hash ~ '^[0-9a-f]{64}$'", name="ck_schedule_version_canonical_hash"),
+)
+schedule_run.append_constraint(
+    ForeignKeyConstraint(
+        ["candidate_schedule_version_id", "site_id"],
+        ["schedule_version.id", "schedule_version.site_id"],
+        name="fk_schedule_run_candidate_site",
+        ondelete="RESTRICT",
+        use_alter=True,
+    )
+)
+
+schedule_assignment = Table(
+    "schedule_assignment", metadata, _id_column(), _site_id_column(),
+    Column("schedule_version_id", UUID(as_uuid=True), nullable=False),
+    Column("assignment_record_id", String(200), nullable=False),
+    Column("worker_id", String(200), nullable=False),
+    Column("task_id", String(200), nullable=False),
+    Column("shift_id", String(200), nullable=True),
+    Column("start_minute", BigInteger, nullable=False),
+    Column("end_minute", BigInteger, nullable=False),
+    Column("qualification_refs", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("source", String(40), nullable=False),
+    Column("lock_ref", String(200), nullable=True),
+    ForeignKeyConstraint(["schedule_version_id", "site_id"], ["schedule_version.id", "schedule_version.site_id"], name="fk_schedule_assignment_version_site", ondelete="RESTRICT"),
+    UniqueConstraint("schedule_version_id", "assignment_record_id", name="uq_schedule_assignment_record"),
+    UniqueConstraint("id", "site_id", name="uq_schedule_assignment_id_site"),
+    CheckConstraint("start_minute >= 0 AND end_minute > start_minute", name="ck_schedule_assignment_interval"),
+)
+
+for _table in (run_snapshot, schedule_run, schedule_version, schedule_assignment):
+    Index(f"ix_{_table.name}_site_id", _table.c.site_id)
+Index("ix_schedule_run_snapshot_id", schedule_run.c.run_snapshot_id)
+Index("ix_schedule_version_run_id", schedule_version.c.schedule_run_id)
+Index("ix_schedule_assignment_version_id", schedule_assignment.c.schedule_version_id)
+
 login_handshake = Table(
     "login_handshake",
     metadata,
