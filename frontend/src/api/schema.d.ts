@@ -659,6 +659,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/schedule-runs/{run_id}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_v1_schedule_runs__run_id__cancellation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1822,6 +1839,34 @@ export interface components {
             lock_count: number;
             /** Constraint Count */
             constraint_count: number;
+        };
+        /** ScheduleRunCancellationIn */
+        ScheduleRunCancellationIn: {
+            /** Expected Resource Version */
+            expected_resource_version: number;
+        };
+        /** ScheduleRunOut */
+        ScheduleRunOut: {
+            /**
+             * Schedule Run Id
+             * Format: uuid
+             */
+            schedule_run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "solver_queued" | "solver_running" | "cancellation_requested" | "solver_completed" | "solver_infeasible" | "solver_timed_out" | "solver_cancelled" | "solver_failed";
+            /** Reason */
+            reason: string | null;
+            /** Resource Version */
+            resource_version: number;
+            /** Cancellation Requested */
+            cancellation_requested: boolean;
+            /** Created At */
+            created_at?: string | null;
+            /** Finished At */
+            finished_at?: string | null;
         };
         /** TaskPageOut */
         TaskPageOut: {
@@ -4010,6 +4055,79 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    cancel_api_v1_schedule_runs__run_id__cancellation_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleRunCancellationIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleRunOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -21,7 +21,14 @@ from application.contracts.canonical import contract_digest
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import ScheduleRunStatusV1, ScheduleVersionV1
 from application.contracts.scenario_projection import QualificationRefV1
-from application.ports.schedule_run import IdempotentScheduleRunResultV1, StaleLeaseError
+from application.ports.schedule_run import (
+    IdempotentScheduleRunResultV1,
+    IllegalTransitionError,
+    RunNotCancellableError,
+    RunTransitionConflictError,
+    ScheduleRunStateV1,
+    StaleLeaseError,
+)
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -33,7 +40,140 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
+_FINALIZE_STATUSES = frozenset(
+    (
+        "solver_completed",
+        "solver_infeasible",
+        "solver_timed_out",
+        "solver_cancelled",
+        "solver_failed",
+    )
+)
+
+
 class PostgresScheduleRunRepository:
+    def get_run_state(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleRunStateV1 | None:
+        row = connection.execute(
+            select(schedule_run.c.status, schedule_run.c.resource_version).where(
+                schedule_run.c.id == run_id,
+                schedule_run.c.site_id == site_id,
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return ScheduleRunStateV1(row.status, row.resource_version)
+
+    @staticmethod
+    def _cancel_transition(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+        expected_status: str,
+        status: str,
+        reason: str,
+        terminal: bool,
+    ) -> None:
+        values = {
+            "status": status,
+            "reason": reason,
+            "resource_version": schedule_run.c.resource_version + 1,
+        }
+        if terminal:
+            values["finished_at"] = func.now()
+        result = connection.execute(
+            update(schedule_run)
+            .where(
+                schedule_run.c.id == run_id,
+                schedule_run.c.site_id == site_id,
+                schedule_run.c.status == expected_status,
+                schedule_run.c.resource_version == expected_resource_version,
+            )
+            .values(**values)
+        )
+        if getattr(result, "rowcount", 1) != 1:
+            raise RunNotCancellableError(
+                f"schedule run is no longer {expected_status} at resource version "
+                f"{expected_resource_version}"
+            )
+
+    def cancel_queued_run(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+    ) -> None:
+        self._cancel_transition(
+            connection,
+            run_id=run_id,
+            site_id=site_id,
+            expected_resource_version=expected_resource_version,
+            expected_status="solver_queued",
+            status="solver_cancelled",
+            reason="cancelled",
+            terminal=True,
+        )
+
+    def request_cancellation(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+    ) -> None:
+        self._cancel_transition(
+            connection,
+            run_id=run_id,
+            site_id=site_id,
+            expected_resource_version=expected_resource_version,
+            expected_status="solver_running",
+            status="cancellation_requested",
+            reason="cancellation_requested",
+            terminal=False,
+        )
+
+    @staticmethod
+    def set_job_cancellation_requested(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> None:
+        connection.execute(
+            update(job_queue)
+            .where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+            )
+            .values(cancellation_requested=True)
+        )
+
+    @staticmethod
+    def get_job_cancellation_requested(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> bool:
+        """Read the job's carrier flag. A run with no job row carries no request."""
+        value = connection.execute(
+            select(job_queue.c.cancellation_requested).where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+            )
+        ).scalar_one_or_none()
+        return bool(value)
+
     @staticmethod
     def _has_current_epoch(run_id: UUID, site_id: UUID, fencing_epoch: int):
         # `status == 'leased'` and a positive epoch are load-bearing, not
@@ -102,6 +242,7 @@ class PostgresScheduleRunRepository:
         site_id: UUID,
         fencing_epoch: int,
         expected_status: str,
+        target_status: str | None = None,
     ) -> None:
         current_epoch = connection.execute(
             select(job_queue.c.fencing_epoch).where(
@@ -113,7 +254,27 @@ class PostgresScheduleRunRepository:
             raise StaleLeaseError(
                 f"schedule run lease epoch {fencing_epoch} is stale; current is {current_epoch}"
             )
-        raise ValueError(f"schedule run is no longer {expected_status}")
+        # Both reads below run only on the failure path, so the happy path pays
+        # nothing. Naming the ACTUAL current status matters: the old message
+        # said "no longer <expected>" for a run that was never <expected>.
+        current_status = connection.execute(
+            select(schedule_run.c.status).where(
+                schedule_run.c.id == run_id,
+                schedule_run.c.site_id == site_id,
+            )
+        ).scalar_one_or_none()
+        if (current_status, target_status) == ("solver_running", "solver_cancelled"):
+            raise IllegalTransitionError(
+                "solver_running -> solver_cancelled is not an AD-7 ScheduleRun edge. "
+                "Cancelling running work must pass through cancellation_requested "
+                "(AD-6: cancellation is cooperative). A solver-reported 'cancelled' "
+                "outcome on a run nobody cancelled has no legal terminal edge -- see "
+                "finalize_schedule_run._terminal, which maps it without knowing the "
+                "current status. Root cause is owned by Story 3.5."
+            )
+        raise RunTransitionConflictError(
+            f"schedule run is {current_status}, expected {expected_status}"
+        )
 
     def mark_running(
         self,
@@ -123,6 +284,17 @@ class PostgresScheduleRunRepository:
         site_id: UUID,
         fencing_epoch: int,
     ) -> None:
+        # Transaction A now COMMITS this edge, so the fence must be claimed
+        # under a real row lock exactly as `finalize_run` does. The unlocked
+        # `_has_current_epoch` EXISTS can pass against an epoch a concurrent
+        # `lease_next_job` is superseding; before the split a later rollback
+        # suppressed the write, but a committed `solver_running` from a
+        # fenced-out worker is durable AND bumps `resource_version`, which
+        # silently invalidates an in-flight cancel holding the right version.
+        # Claiming job_queue BEFORE schedule_run also fixes the lock order.
+        self._claim_epoch(
+            connection, run_id=run_id, site_id=site_id, fencing_epoch=fencing_epoch
+        )
         result = connection.execute(
             update(schedule_run)
             .where(
@@ -131,7 +303,10 @@ class PostgresScheduleRunRepository:
                 schedule_run.c.status == "solver_queued",
                 self._has_current_epoch(run_id, site_id, fencing_epoch),
             )
-            .values(status="solver_running")
+            .values(
+                status="solver_running",
+                resource_version=schedule_run.c.resource_version + 1,
+            )
         )
         if getattr(result, "rowcount", 1) != 1:
             self._raise_transition_failure(
@@ -140,6 +315,7 @@ class PostgresScheduleRunRepository:
                 site_id=site_id,
                 fencing_epoch=fencing_epoch,
                 expected_status="solver_queued",
+                target_status="solver_running",
             )
 
     def create_queued_run(
@@ -388,6 +564,13 @@ class PostgresScheduleRunRepository:
         candidate: ScheduleVersionV1 | None,
         finished_at: datetime | None = None,
     ) -> None:
+        if status not in _FINALIZE_STATUSES:
+            raise ValueError(f"{status} is not a terminal schedule-run status")
+        expected_statuses = (
+            ("cancellation_requested",)
+            if status == "solver_cancelled"
+            else ("solver_running", "cancellation_requested")
+        )
         # AC3 is about the EFFECT commit, so the fence is claimed under a real
         # row lock before any candidate row is written. Without this the guard
         # rejected nothing on its own — the inserts had already happened and
@@ -437,13 +620,14 @@ class PostgresScheduleRunRepository:
             .where(
                 schedule_run.c.id == run_id,
                 schedule_run.c.site_id == site_id,
-                schedule_run.c.status == "solver_running",
+                schedule_run.c.status.in_(expected_statuses),
                 self._has_current_epoch(run_id, site_id, fencing_epoch),
             )
             .values(
                 status=status,
                 reason=reason,
                 candidate_schedule_version_id=candidate_id,
+                resource_version=schedule_run.c.resource_version + 1,
                 finished_at=candidate.created_at if candidate else (finished_at or datetime.now(timezone.utc)),
             )
         )
@@ -453,7 +637,8 @@ class PostgresScheduleRunRepository:
                 run_id=run_id,
                 site_id=site_id,
                 fencing_epoch=fencing_epoch,
-                expected_status="solver_running",
+                expected_status=" or ".join(expected_statuses),
+                target_status=status,
             )
 
 

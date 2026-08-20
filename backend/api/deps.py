@@ -17,6 +17,7 @@ from sqlalchemy import Connection, Engine, create_engine as create_postgres_engi
 from adapters.postgres.identity import PostgresIdentitySessionStore
 from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.proposal import PostgresProposalRepository
+from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
 from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
@@ -25,6 +26,7 @@ from application.ports.conversation import ConversationRepository
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.scenario_projection import ScenarioProjectionReader
+from application.ports.schedule_run import ScheduleRunRepository
 from application.capabilities.registry import (
     CapabilityGrantContextV1,
     compose_granted_capabilities,
@@ -122,6 +124,13 @@ _proposal_repository: ProposalRepository = PostgresProposalRepository()
 
 def get_proposal_repository() -> ProposalRepository:
     return _proposal_repository
+
+
+_schedule_run_repository: ScheduleRunRepository = PostgresScheduleRunRepository()
+
+
+def get_schedule_run_repository() -> ScheduleRunRepository:
+    return _schedule_run_repository
 
 
 @lru_cache(maxsize=8)

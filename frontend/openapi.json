@@ -3269,6 +3269,110 @@
           }
         }
       }
+    },
+    "/api/v1/schedule-runs/{run_id}/cancellation": {
+      "post": {
+        "tags": [
+          "schedule-runs"
+        ],
+        "summary": "Cancel",
+        "operationId": "cancel_api_v1_schedule_runs__run_id__cancellation_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleRunCancellationIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleRunOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5795,6 +5899,95 @@
           "constraint_count"
         ],
         "title": "ScenarioOverviewOut"
+      },
+      "ScheduleRunCancellationIn": {
+        "properties": {
+          "expected_resource_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Resource Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_resource_version"
+        ],
+        "title": "ScheduleRunCancellationIn"
+      },
+      "ScheduleRunOut": {
+        "properties": {
+          "schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Run Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "solver_queued",
+              "solver_running",
+              "cancellation_requested",
+              "solver_completed",
+              "solver_infeasible",
+              "solver_timed_out",
+              "solver_cancelled",
+              "solver_failed"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resource_version": {
+            "type": "integer",
+            "title": "Resource Version"
+          },
+          "cancellation_requested": {
+            "type": "boolean",
+            "title": "Cancellation Requested"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schedule_run_id",
+          "status",
+          "reason",
+          "resource_version",
+          "cancellation_requested"
+        ],
+        "title": "ScheduleRunOut"
       },
       "TaskPageOut": {
         "properties": {

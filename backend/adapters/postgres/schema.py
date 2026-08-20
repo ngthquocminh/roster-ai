@@ -434,6 +434,7 @@ schedule_run = Table(
     Column("status", String(40), nullable=False, server_default=text("'solver_queued'")),
     Column("reason", String(100), nullable=True),
     Column("candidate_schedule_version_id", UUID(as_uuid=True), nullable=True),
+    Column("resource_version", BigInteger, nullable=False, server_default=text("1")),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     Column("finished_at", DateTime(timezone=True), nullable=True),
     ForeignKeyConstraint(["run_snapshot_id", "site_id"], ["run_snapshot.id", "run_snapshot.site_id"], name="fk_schedule_run_snapshot_site", ondelete="RESTRICT"),

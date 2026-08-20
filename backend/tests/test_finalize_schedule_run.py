@@ -207,3 +207,4 @@ def test_adapter_error_is_persisted_as_specific_solver_failure() -> None:
     assert (result.status, result.reason, result.candidate) == (
         "solver_failed", "snapshot_digest_mismatch", None
     )
+    assert not hasattr(repository, "running")
