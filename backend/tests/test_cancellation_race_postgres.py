@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -381,3 +383,257 @@ def test_runtime_grant_cannot_write_lease_or_fencing_columns(
     assert update_columns.isdisjoint(
         {"lease_owner", "lease_expires_at", "fencing_epoch"}
     )
+
+
+# ---------------------------------------------------------------------------
+# Genuinely concurrent races.
+#
+# Every test above this line runs its transactions strictly one after another:
+# each `engine.begin()` block closes before the next opens, so no two sessions
+# ever contend for a row. That proves the state machine and nothing about
+# concurrency -- which is why a lock-ordering deadlock between the cancel
+# command and `finalize_run` survived a green suite. The tests below hold two
+# transactions open at once and are the only ones that can see it.
+# ---------------------------------------------------------------------------
+
+
+def _wait_for_blocked_backend(engine, *, timeout=15.0) -> bool:
+    """Block until some backend is waiting on a lock, so the interleaving is real."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with engine.connect() as probe:
+            waiting = probe.execute(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE wait_event_type = 'Lock' AND state = 'active'"
+                )
+            ).scalar_one()
+        if waiting:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _running_run(engine, ids):
+    """Seed a leased, solver_running run with a valid snapshot."""
+    job_id, run_id = _queue_jobs(engine, ids, 1)[0]
+    _seed_valid_snapshot(engine, ids, run_id)
+    _only_leasable(engine, job_id)
+    lease = _lease(engine, f"worker-{uuid4()}")
+    with engine.begin() as connection:
+        _runtime(connection, ids["site"])
+        PostgresScheduleRunRepository().mark_running(
+            connection,
+            run_id=run_id,
+            site_id=ids["site"],
+            fencing_epoch=lease["fencing_epoch"],
+        )
+    return job_id, run_id, lease
+
+
+def test_cancel_racing_an_open_finalize_does_not_deadlock(
+    governed_postgres_engine, lease_ids
+) -> None:
+    """The cancel command and `finalize_run` must take the two row locks in one order.
+
+    `finalize_run` claims `workflow.job_queue` (`_claim_epoch`) and only then
+    writes `schedule_run`; its window between the two spans one INSERT per
+    assignment. Taking them in the opposite order deadlocks these two sessions
+    (40P01) -- discarding a completed solve on one side, or turning a 409 into
+    a bare 500 on the other.
+    """
+    _, run_id, lease = _running_run(governed_postgres_engine, lease_ids)
+    repository = PostgresScheduleRunRepository()
+    candidate = _candidate(run_id, lease_ids)
+    claimed = threading.Event()
+    failures = {}
+    refusals = {}
+
+    def finalizing_worker():
+        try:
+            with governed_postgres_engine.begin() as connection:
+                _runtime(connection, lease_ids["site"])
+                connection.exec_driver_sql("SET lock_timeout = '15s'")
+                # Hold the job row exactly as finalize_run does, then pause in
+                # the window before the schedule_run write.
+                repository._claim_epoch(
+                    connection,
+                    run_id=run_id,
+                    site_id=lease_ids["site"],
+                    fencing_epoch=lease["fencing_epoch"],
+                )
+                claimed.set()
+                _wait_for_blocked_backend(governed_postgres_engine)
+                repository.finalize_run(
+                    connection,
+                    run_id=run_id,
+                    site_id=lease_ids["site"],
+                    fencing_epoch=lease["fencing_epoch"],
+                    status="solver_completed",
+                    reason=None,
+                    candidate=candidate,
+                )
+        except Exception as exc:  # noqa: BLE001 - surfaced as a failure below
+            failures["worker"] = exc
+
+    def cancelling_planner():
+        assert claimed.wait(15), "worker never claimed the job row"
+        try:
+            with governed_postgres_engine.begin() as connection:
+                _runtime(connection, lease_ids["site"])
+                connection.exec_driver_sql("SET lock_timeout = '15s'")
+                cancel_schedule_run(
+                    repository,
+                    connection,
+                    run_id=run_id,
+                    site_id=lease_ids["site"],
+                    actor_id=lease_ids["actor"],
+                    expected_resource_version=2,
+                    idempotency_key=_key("deadlock", run_id),
+                )
+        except StaleResourceVersionError as exc:
+            # Losing to a completed solve is correct; a deadlock is not.
+            refusals["cancel"] = exc
+        except Exception as exc:  # noqa: BLE001
+            failures["cancel"] = exc
+
+    threads = [
+        threading.Thread(target=finalizing_worker),
+        threading.Thread(target=cancelling_planner),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=45)
+        assert not thread.is_alive(), "a session hung -- lock ordering regressed"
+
+    assert not failures, f"unexpected failure: {failures}"
+    assert "cancel" in refusals
+    with governed_postgres_engine.connect() as connection:
+        # The completed solve survived: no deadlock rolled it back.
+        assert connection.execute(
+            select(schedule_run.c.status).where(schedule_run.c.id == run_id)
+        ).scalar_one() == "solver_completed"
+        assert connection.scalar(
+            select(func.count()).select_from(schedule_version).where(
+                schedule_version.c.schedule_run_id == run_id
+            )
+        ) == 1
+
+
+def test_concurrent_replay_of_one_idempotency_key_returns_the_stored_result(
+    governed_postgres_engine, lease_ids
+) -> None:
+    """AD-8: a replay returns the ORIGINAL semantic result, including under contention.
+
+    Two in-flight requests carrying the same key both read
+    `get_idempotent_result -> None`. The loser's compare-and-set then matches
+    zero rows, which used to surface as `409 run_not_cancellable` while the
+    cancel was in fact succeeding -- exactly the double-click / timeout-retry
+    case idempotency keys exist for.
+    """
+    _, run_id, _lease_row = _running_run(governed_postgres_engine, lease_ids)
+    repository = PostgresScheduleRunRepository()
+    key = _key("concurrent", run_id)
+    ready = threading.Barrier(2)
+    results = {}
+    failures = {}
+
+    def cancel(name):
+        try:
+            with governed_postgres_engine.begin() as connection:
+                _runtime(connection, lease_ids["site"])
+                connection.exec_driver_sql("SET lock_timeout = '15s'")
+                ready.wait(timeout=15)
+                results[name] = cancel_schedule_run(
+                    repository,
+                    connection,
+                    run_id=run_id,
+                    site_id=lease_ids["site"],
+                    actor_id=lease_ids["actor"],
+                    expected_resource_version=2,
+                    idempotency_key=key,
+                )
+        except Exception as exc:  # noqa: BLE001
+            failures[name] = exc
+
+    threads = [
+        threading.Thread(target=cancel, args=(name,)) for name in ("first", "second")
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=45)
+        assert not thread.is_alive()
+
+    assert not failures, f"a replay was refused instead of replayed: {failures}"
+    assert results["first"] == results["second"]
+    assert results["first"].status == "cancellation_requested"
+    assert results["first"].resource_version == 3
+    with governed_postgres_engine.connect() as connection:
+        assert connection.scalar(
+            select(func.count()).select_from(command_idempotency).where(
+                command_idempotency.c.idempotency_key == key
+            )
+        ) == 1
+        assert connection.execute(
+            select(schedule_run.c.status, schedule_run.c.resource_version).where(
+                schedule_run.c.id == run_id
+            )
+        ).one() == ("cancellation_requested", 3)
+
+
+def test_cancel_committing_between_the_state_read_and_mark_running_is_recovered(
+    governed_postgres_engine, lease_ids
+) -> None:
+    """Checkpoint 1's read is unlocked, so its compare-and-set can lose.
+
+    The dangerous ordering is not "cancel commits, then the worker reads" -- it
+    is "worker reads solver_queued, cancel commits, the worker's WHERE
+    re-evaluates and matches zero rows". That used to raise a bare ValueError
+    out of `run_once`, leaving the job `leased` with no terminal status.
+    """
+    job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
+    _seed_valid_snapshot(governed_postgres_engine, lease_ids, run_id)
+    _only_leasable(governed_postgres_engine, job_id)
+    scheduler = _ForbiddenScheduler()
+
+    class _CancelDuringStateRead:
+        """Commit a cancellation on another connection, once, mid-Transaction A."""
+
+        def __init__(self, inner) -> None:
+            self._inner = inner
+            self.fired = False
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        def get_run_state(self, connection, **kwargs):
+            state = self._inner.get_run_state(connection, **kwargs)
+            if not self.fired:
+                self.fired = True
+                _cancel(
+                    governed_postgres_engine,
+                    lease_ids,
+                    run_id,
+                    1,
+                    _key("cp1race", run_id),
+                )
+            return state
+
+    outcome = _run_worker(
+        governed_postgres_engine,
+        _CancelDuringStateRead(PostgresScheduleRunRepository()),
+        scheduler,
+    )
+
+    assert outcome.status == "solver_cancelled"
+    assert scheduler.calls == 0
+    with governed_postgres_engine.connect() as connection:
+        assert connection.execute(
+            select(schedule_run.c.status).where(schedule_run.c.id == run_id)
+        ).scalar_one() == "solver_cancelled"
+        # The job reached a terminal state instead of being stranded `leased`.
+        assert connection.execute(
+            select(job_queue.c.status).where(job_queue.c.id == job_id)
+        ).scalar_one() == "completed"

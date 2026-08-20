@@ -133,3 +133,44 @@ def test_every_adapter_schedule_run_transition_is_an_ad7_edge() -> None:
     }
 
     assert adapter_edges <= AD7_EDGES
+
+
+# The three extractors above enumerate the edges written by three NAMED
+# functions. That is only equal to "every edge the adapter can write" while
+# those three are the only writers -- an invariant nothing asserted, so the
+# next story could add a fourth transition method and keep a green guard.
+_SCHEDULE_RUN_WRITERS = frozenset(
+    {"_cancel_transition", "mark_running", "finalize_run"}
+)
+
+
+def _functions_updating_schedule_run(tree: ast.Module) -> set[str]:
+    """Every function containing an `update(schedule_run)` call, by name."""
+    writers = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == "update"
+                and inner.args
+                and isinstance(inner.args[0], ast.Name)
+                and inner.args[0].id == "schedule_run"
+            ):
+                writers.add(node.name)
+    return writers
+
+
+def test_only_the_known_helpers_write_a_schedule_run_transition() -> None:
+    """Make the edge guard exhaustive rather than merely correct about three functions.
+
+    Without this, adding a fourth `update(schedule_run)` call site writes an
+    edge AD-7 may not have while
+    `test_every_adapter_schedule_run_transition_is_an_ad7_edge` stays green --
+    the "guard that cannot go red" pattern retro action A2 exists to prevent.
+    """
+    tree = ast.parse(ADAPTER.read_text(encoding="utf-8"), filename=str(ADAPTER))
+
+    assert _functions_updating_schedule_run(tree) == _SCHEDULE_RUN_WRITERS
