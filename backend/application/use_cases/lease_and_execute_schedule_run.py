@@ -14,16 +14,12 @@ from application.use_cases.execute_schedule_run import execute_schedule_run
 SCOPE_CONTROLS = (
     "COVERS: roles:worker_reuses_shiftmind_runtime; "
     "NOT COVERED: events:owned_by_story_3_5; "
-    "NOT COVERED: cancellation:owned_by_story_3_4; "
+    "COVERS: cancellation:cooperative_checkpoints; "
+    "NOT COVERED: cancellation:mid_solve_preemption_owned_by_story_3_5; "
     "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
-    # AD-6 requires a heartbeat. `workflow.renew_job_lease` exists and is
-    # granted, but nothing calls it: the domain work runs in one transaction,
-    # so a renewal issued there is invisible to other sessions until commit —
-    # exactly when it no longer matters. Story 3.5's state machine AC forces
-    # `running` to commit its own event (epics.md:959-962) and decides what
-    # wall-time exhaustion means (epics.md:969-972); the heartbeat belongs
-    # with that work, not bolted on here.
-    "NOT COVERED: heartbeat:owned_by_story_3_5; "
+    # `solver_running` now commits before the solve and is observable. The
+    # remaining heartbeat debt is only the missing renew_job_lease caller.
+    "NOT COVERED: heartbeat:owned_by_story_3_5 — renewal caller only; "
     # A job that fails between lease and completion stays `leased`, expires and
     # is re-leased forever — `JobStatusV1` has no terminal-failure member.
     # Story 3.5 must reopen that closed vocabulary anyway: its AC names
@@ -48,6 +44,15 @@ class LeaseOutcomeV1:
 RuntimeConnectionFactory = Callable[[UUID], ContextManager[Any]]
 
 
+def _outcome(lease, status: ScheduleRunStatusV1) -> LeaseOutcomeV1:
+    return LeaseOutcomeV1(
+        job_id=lease.job_id,
+        attempt_id=lease.attempt_id,
+        schedule_run_id=lease.schedule_run_id,
+        status=status,
+    )
+
+
 def lease_and_execute_schedule_run(
     lease_connection: Any,
     runtime_connection_factory: RuntimeConnectionFactory,
@@ -69,6 +74,9 @@ def lease_and_execute_schedule_run(
     assert lease.schedule_run_id is not None
     assert lease.site_id is not None
 
+    # Transaction A is deliberately short: committing `solver_running` here
+    # makes it visible to the cancellation command and releases the row lock
+    # before the solve starts.
     with runtime_connection_factory(lease.site_id) as runtime_connection:
         snapshot = repository.load_snapshot(
             runtime_connection,
@@ -77,20 +85,68 @@ def lease_and_execute_schedule_run(
         )
         if snapshot is None:
             raise ValueError("leased job references a missing run snapshot")
-        if lease.cancellation_requested:
+        state = repository.get_run_state(
+            runtime_connection,
+            run_id=lease.schedule_run_id,
+            site_id=lease.site_id,
+        )
+        if state is None:
+            raise ValueError("leased job references a missing schedule run")
+        if state.status == "solver_queued":
             repository.mark_running(
                 runtime_connection,
                 run_id=lease.schedule_run_id,
                 site_id=lease.site_id,
                 fencing_epoch=lease.fencing_epoch,
             )
+        elif state.status == "solver_running":
+            # A recovered attempt under the current fencing epoch resumes the
+            # already-visible run without replaying the queued->running edge.
+            pass
+        elif state.status == "cancellation_requested":
             repository.finalize_run(
                 runtime_connection,
                 run_id=lease.schedule_run_id,
                 site_id=lease.site_id,
                 fencing_epoch=lease.fencing_epoch,
                 status="solver_cancelled",
-                reason="cancellation_requested_before_execution",
+                reason="cancelled",
+                candidate=None,
+            )
+            repository.complete_job(
+                runtime_connection,
+                job_id=lease.job_id,
+                site_id=lease.site_id,
+                fencing_epoch=lease.fencing_epoch,
+            )
+            return _outcome(lease, "solver_cancelled")
+        else:
+            repository.complete_job(
+                runtime_connection,
+                job_id=lease.job_id,
+                site_id=lease.site_id,
+                fencing_epoch=lease.fencing_epoch,
+            )
+            return _outcome(lease, state.status)
+
+    # Transaction B gets a fresh READ COMMITTED snapshot. A cancellation that
+    # landed after A committed is therefore observed before scheduler.solve.
+    with runtime_connection_factory(lease.site_id) as runtime_connection:
+        state = repository.get_run_state(
+            runtime_connection,
+            run_id=lease.schedule_run_id,
+            site_id=lease.site_id,
+        )
+        if state is None:
+            raise ValueError("leased job references a missing schedule run")
+        if state.status == "cancellation_requested":
+            repository.finalize_run(
+                runtime_connection,
+                run_id=lease.schedule_run_id,
+                site_id=lease.site_id,
+                fencing_epoch=lease.fencing_epoch,
+                status="solver_cancelled",
+                reason="cancelled",
                 candidate=None,
             )
             status: ScheduleRunStatusV1 = "solver_cancelled"
@@ -110,12 +166,7 @@ def lease_and_execute_schedule_run(
             site_id=lease.site_id,
             fencing_epoch=lease.fencing_epoch,
         )
-    return LeaseOutcomeV1(
-        job_id=lease.job_id,
-        attempt_id=lease.attempt_id,
-        schedule_run_id=lease.schedule_run_id,
-        status=status,
-    )
+    return _outcome(lease, status)
 
 
 __all__ = [

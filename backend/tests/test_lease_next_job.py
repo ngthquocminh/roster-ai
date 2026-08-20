@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from application.contracts.job_lease import JobLeaseV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
+from application.ports.schedule_run import ScheduleRunStateV1
 from application.use_cases.lease_and_execute_schedule_run import (
     lease_and_execute_schedule_run,
 )
@@ -51,8 +52,9 @@ def _lease(*, cancelled=False) -> JobLeaseV1:
 
 
 class _Repository:
-    def __init__(self, lease) -> None:
+    def __init__(self, lease, *states) -> None:
         self.lease = lease
+        self.states = list(states or (ScheduleRunStateV1("solver_queued", 1), ScheduleRunStateV1("solver_running", 2)))
         self.calls = []
 
     def lease_next_job(self, connection, *, lease_owner, lease_seconds):
@@ -62,6 +64,10 @@ class _Repository:
     def load_snapshot(self, connection, *, run_id, site_id):
         self.calls.append(("load", connection, run_id, site_id))
         return _snapshot(run_id)
+
+    def get_run_state(self, connection, *, run_id, site_id):
+        self.calls.append(("state", connection, run_id, site_id))
+        return self.states.pop(0)
 
     def mark_running(self, connection, **values):
         self.calls.append(("running", connection, values))
@@ -91,7 +97,7 @@ class _RuntimeFactory:
     @contextmanager
     def __call__(self, site_id):
         self.site_ids.append(site_id)
-        yield "runtime-connection"
+        yield f"runtime-connection-{len(self.site_ids)}"
 
 
 def test_no_job_does_not_open_a_runtime_transaction() -> None:
@@ -111,14 +117,17 @@ def test_no_job_does_not_open_a_runtime_transaction() -> None:
     assert runtime.site_ids == []
 
 
-def test_cancelled_job_finalizes_without_calling_the_solver() -> None:
-    lease = _lease(cancelled=True)
-    repository = _Repository(lease)
+def test_checkpoint_1_cancellation_finalizes_without_calling_the_solver() -> None:
+    lease = _lease(cancelled=False)
+    repository = _Repository(
+        lease, ScheduleRunStateV1("cancellation_requested", 2)
+    )
     scheduler = _Scheduler()
+    runtime = _RuntimeFactory()
 
     result = lease_and_execute_schedule_run(
         "lease-connection",
-        _RuntimeFactory(),
+        runtime,
         repository,
         scheduler,
         lease_owner="worker-1",
@@ -127,9 +136,11 @@ def test_cancelled_job_finalizes_without_calling_the_solver() -> None:
 
     assert scheduler.calls == 0
     assert result.status == "solver_cancelled"
+    assert runtime.site_ids == [lease.site_id]
     finalize = next(call for call in repository.calls if call[0] == "finalize")
     assert finalize[2]["fencing_epoch"] == lease.fencing_epoch
     assert finalize[2]["status"] == "solver_cancelled"
+    assert finalize[2]["reason"] == "cancelled"
 
 
 def test_leased_job_executes_and_completes_under_the_returned_epoch() -> None:
@@ -149,8 +160,87 @@ def test_leased_job_executes_and_completes_under_the_returned_epoch() -> None:
 
     assert scheduler.calls == 1
     assert result.status == "solver_failed"
-    assert runtime.site_ids == [lease.site_id]
+    assert runtime.site_ids == [lease.site_id, lease.site_id]
     running = next(call for call in repository.calls if call[0] == "running")
     complete = next(call for call in repository.calls if call[0] == "complete")
+    assert running[1] == "runtime-connection-1"
+    assert complete[1] == "runtime-connection-2"
     assert running[2]["fencing_epoch"] == lease.fencing_epoch
     assert complete[2]["fencing_epoch"] == lease.fencing_epoch
+
+
+def test_checkpoint_2_observes_cancellation_after_mark_running_commits() -> None:
+    lease = _lease()
+    repository = _Repository(
+        lease,
+        ScheduleRunStateV1("solver_queued", 1),
+        ScheduleRunStateV1("cancellation_requested", 3),
+    )
+    scheduler = _Scheduler()
+    runtime = _RuntimeFactory()
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        scheduler,
+        lease_owner="worker-1",
+        lease_seconds=30,
+    )
+
+    assert result.status == "solver_cancelled"
+    assert scheduler.calls == 0
+    assert runtime.site_ids == [lease.site_id, lease.site_id]
+    assert [call[0] for call in repository.calls].count("running") == 1
+    assert [call[0] for call in repository.calls].count("state") == 2
+    finalize = next(call for call in repository.calls if call[0] == "finalize")
+    assert finalize[1] == "runtime-connection-2"
+    assert finalize[2]["reason"] == "cancelled"
+
+
+def test_recovered_running_run_skips_mark_running_and_resumes_in_second_transaction() -> None:
+    lease = _lease()
+    repository = _Repository(
+        lease,
+        ScheduleRunStateV1("solver_running", 4),
+        ScheduleRunStateV1("solver_running", 4),
+    )
+    scheduler = _Scheduler()
+    runtime = _RuntimeFactory()
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        scheduler,
+        lease_owner="worker-1",
+        lease_seconds=30,
+    )
+
+    assert result.status == "solver_failed"
+    assert scheduler.calls == 1
+    assert all(call[0] != "running" for call in repository.calls)
+    assert runtime.site_ids == [lease.site_id, lease.site_id]
+
+
+def test_terminal_run_completes_job_without_opening_solve_transaction() -> None:
+    lease = _lease()
+    repository = _Repository(
+        lease, ScheduleRunStateV1("solver_completed", 8)
+    )
+    scheduler = _Scheduler()
+    runtime = _RuntimeFactory()
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        scheduler,
+        lease_owner="worker-1",
+        lease_seconds=30,
+    )
+
+    assert result.status == "solver_completed"
+    assert scheduler.calls == 0
+    assert runtime.site_ids == [lease.site_id]
+    assert [call[0] for call in repository.calls].count("complete") == 1

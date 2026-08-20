@@ -18,7 +18,8 @@ from application.use_cases.create_run_snapshot import create_run_snapshot
 SCOPE_CONTROLS = (
     "COVERS: roles:worker_reuses_shiftmind_runtime; "
     "NOT COVERED: events:owned_by_story_3_5; "
-    "NOT COVERED: cancellation:owned_by_story_3_4; "
+    "COVERS: cancellation:queued_and_running; "
+    "NOT COVERED: cancellation:mid_solve_preemption_owned_by_story_3_5; "
     "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
     # AC1 names "actor/site/attempt IDs" in the bundle, but `attempt_id` is
     # NULL on every job this use case creates. That is Decision 5 working as

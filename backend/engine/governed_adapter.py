@@ -49,7 +49,8 @@ SCOPE_CONTROLS = (
     "NOT COVERED: solution-quality parity at longer ceilings — deterministic "
     "reproducibility is the governed default; performance ceilings remain settings-owned.",
     "NOT COVERED: events:owned_by_story_3_5 — persisted run progress/event replay is not emitted here.",
-    "NOT COVERED: cancellation:owned_by_story_3_4 — solver_cancelled is persistable but no cancellation request is observed here.",
+    "COVERS: cancellation:cooperative_checkpoints_before_solver — the worker observes persisted cancellation before entering this adapter.",
+    "NOT COVERED: cancellation:mid_solve_preemption_owned_by_story_3_5 — an in-flight CP-SAT call is not interrupted.",
     "NOT COVERED: baseline:pointer_owned_by_epic_4 — candidates are created without moving the site baseline pointer.",
     "NOT COVERED: locks:seeded_supply_only — production projection still supplies zero locks; independent validation is tested with a seeded lock.",
     "NOT COVERED: constraints:min_gap_not_wired — governed validation retains the legacy 2-hour minimum; source fixture 10-hour policy needs its own change.",

@@ -38,6 +38,17 @@ def _as_utc(value: datetime | None) -> datetime | None:
     return value.astimezone(timezone.utc)
 
 
+_FINALIZE_STATUSES = frozenset(
+    (
+        "solver_completed",
+        "solver_infeasible",
+        "solver_timed_out",
+        "solver_cancelled",
+        "solver_failed",
+    )
+)
+
+
 class PostgresScheduleRunRepository:
     def get_run_state(
         self,
@@ -502,6 +513,13 @@ class PostgresScheduleRunRepository:
         candidate: ScheduleVersionV1 | None,
         finished_at: datetime | None = None,
     ) -> None:
+        if status not in _FINALIZE_STATUSES:
+            raise ValueError(f"{status} is not a terminal schedule-run status")
+        expected_statuses = (
+            ("cancellation_requested",)
+            if status == "solver_cancelled"
+            else ("solver_running", "cancellation_requested")
+        )
         # AC3 is about the EFFECT commit, so the fence is claimed under a real
         # row lock before any candidate row is written. Without this the guard
         # rejected nothing on its own — the inserts had already happened and
@@ -551,7 +569,7 @@ class PostgresScheduleRunRepository:
             .where(
                 schedule_run.c.id == run_id,
                 schedule_run.c.site_id == site_id,
-                schedule_run.c.status.in_(("solver_running", "cancellation_requested")),
+                schedule_run.c.status.in_(expected_statuses),
                 self._has_current_epoch(run_id, site_id, fencing_epoch),
             )
             .values(
@@ -568,7 +586,7 @@ class PostgresScheduleRunRepository:
                 run_id=run_id,
                 site_id=site_id,
                 fencing_epoch=fencing_epoch,
-                expected_status="solver_running or cancellation_requested",
+                expected_status=" or ".join(expected_statuses),
             )
 
 

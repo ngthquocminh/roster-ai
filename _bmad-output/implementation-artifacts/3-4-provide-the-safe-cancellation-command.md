@@ -461,35 +461,35 @@ assertion removed, recorded in the Dev Agent Record with the command and the cou
 
 #### Task 5 — Split the worker's domain transaction (AC: 1)
 
-- [ ] `application/use_cases/execute_schedule_run.py`: remove the `repository.mark_running` call and its
+- [x] `application/use_cases/execute_schedule_run.py`: remove the `repository.mark_running` call and its
       `assert`. The use case now solves and finalizes an already-running run. Keep `fencing_epoch` and
       `_FencedFinalizationRepository` unchanged.
-- [ ] `application/use_cases/lease_and_execute_schedule_run.py`: open **two** runtime transactions via
+- [x] `application/use_cases/lease_and_execute_schedule_run.py`: open **two** runtime transactions via
       the existing `runtime_connection_factory` (Decision 6). Delete the current
       `lease.cancellation_requested` branch (`:80-96`) — the illegal AD-7 edge — and replace it with
       Checkpoint 1's table (Decision 7).
-- [ ] Transaction B opens with Checkpoint 2's re-read before `scheduler.solve`. `complete_job` stays in
+- [x] Transaction B opens with Checkpoint 2's re-read before `scheduler.solve`. `complete_job` stays in
       Transaction B.
-- [ ] Update `SCOPE_CONTROLS` in `lease_and_execute_schedule_run.py`: `cancellation:owned_by_story_3_4`
+- [x] Update `SCOPE_CONTROLS` in `lease_and_execute_schedule_run.py`: `cancellation:owned_by_story_3_4`
       is now covered — replace it with `COVERS: cancellation:cooperative_checkpoints` plus the mid-solve
       non-coverage. Narrow the `heartbeat:owned_by_story_3_5` note to state that `solver_running` is now
       committed and only the renewal itself remains outstanding. `job_failure_state:owned_by_story_3_5`
       and `ceilings:lease_seconds_owned_by_story_3_6` stay verbatim —
       `tests/test_lease_worker.py:283` asserts both.
-- [ ] `application/use_cases/enqueue_compute.py` and `engine/governed_adapter.py`: update their
+- [x] `application/use_cases/enqueue_compute.py` and `engine/governed_adapter.py`: update their
       `cancellation:owned_by_story_3_4` `SCOPE_CONTROLS` strings to name what is now covered and what is
       not. These are one-line string edits; `engine/governed_adapter.py` changes in no other way.
-- [ ] `worker/lease_worker.py`: verify `run_once` needs no change — `runtime_context` is already a
+- [x] `worker/lease_worker.py`: verify `run_once` needs no change — `runtime_context` is already a
       factory invoked per call. If it does change, say why in the Dev Agent Record.
 
 #### Task 6 — The AD-7 edge guard (AC: 1)
 
-- [ ] New `tests/architecture/test_schedule_run_state_machine.py`. Transcribe AD-7's `ScheduleRun` edge
+- [x] New `tests/architecture/test_schedule_run_state_machine.py`. Transcribe AD-7's `ScheduleRun` edge
       list from `ARCHITECTURE-SPINE.md:106-122` as a literal frozenset of `(from, to)` pairs, with the
       spine line range in the docstring. Assert that every status predicate/target pair the adapter can
       write — parsed from `adapters/postgres/schedule_run.py` by AST, in the style of
       `tests/architecture/test_solver_boundaries.py` — is a member.
-- [ ] Observe it red by widening `finalize_run`'s predicate to include a terminal status, and record the
+- [x] Observe it red by widening `finalize_run`'s predicate to include a terminal status, and record the
       failure output (A2). A guard that cannot go red is the exact defect that produced 19 Epic 2
       findings.
 
@@ -749,6 +749,14 @@ Codex (GPT-5)
 - 2026-08-20 Phase A checkpoint: backend 1075 collected / 1066 passed / 2 skipped / 7 deselected;
   PostgreSQL 66 collected / 66 passed; `alembic check` reported no operations; downgrade to
   `a2b3c4d5e6f7` and upgrade to head succeeded; OpenAPI reported seven versioned write routes.
+- 2026-08-20 Phase B RED: six worker tests failed against the inherited single transaction and the
+  execution use case's inherited `mark_running` call. After the split, 31 focused worker/finalization
+  tests passed.
+- 2026-08-20 A2 state-machine mutation: admitting `solver_completed` as a `finalize_run` source made
+  the AST guard fail on four forbidden terminal-to-terminal edges. A2 Checkpoint-2 mutation: removing
+  the second cancellation branch made its focused test fail `solver_failed != solver_cancelled`.
+- 2026-08-20 Phase B checkpoint: backend 1079 collected / 1070 passed / 2 skipped / 7 deselected;
+  the worker transaction-count test observed exactly two runtime transactions per solving job.
 
 ### Completion Notes List
 
@@ -757,6 +765,10 @@ Codex (GPT-5)
   transaction.
 - Added the authenticated, CSRF-protected, site-scoped cancellation endpoint with stable RFC 7807
   mappings and regenerated API contracts.
+- Phase B complete: the worker commits `solver_running` before solving, observes cancellation at both
+  committed checkpoints, resumes recovered running work under the current epoch, and never writes the
+  illegal `solver_running -> solver_cancelled` edge. `worker/lease_worker.py` required no change because
+  its runtime context is already a factory invoked once per transaction.
 
 ### File List
 
@@ -770,10 +782,17 @@ Codex (GPT-5)
 - backend/api/schemas.py
 - backend/application/ports/schedule_run.py
 - backend/application/use_cases/cancel_schedule_run.py
+- backend/application/use_cases/enqueue_compute.py
+- backend/application/use_cases/execute_schedule_run.py
+- backend/application/use_cases/lease_and_execute_schedule_run.py
+- backend/engine/governed_adapter.py
 - backend/migrations/versions/b3c4d5e6f7a8_add_schedule_run_resource_version.py
 - backend/tests/test_cancel_schedule_run.py
+- backend/tests/architecture/test_schedule_run_state_machine.py
 - backend/tests/test_evidence_binding.py
 - backend/tests/test_gate_a_mutation_audit.py
+- backend/tests/test_finalize_schedule_run.py
+- backend/tests/test_lease_next_job.py
 - backend/tests/test_postgres_schema.py
 - backend/tests/test_schedule_run_persistence.py
 - backend/tests/test_schedule_runs_api.py
@@ -783,6 +802,8 @@ Codex (GPT-5)
 
 ## Change Log
 
+- 2026-08-20: Completed Phase B cooperative transaction split, recovery path, cancellation checkpoints,
+  and executable AD-7 edge guard.
 - 2026-08-20: Completed Phase A cancellation aggregate, command, API, migration, generated contracts,
   and validation checkpoint.
 - 2026-08-20: Story drafted via `/bmad-create-story 3.4` from `epics.md#Story-3.4`, Story 3.3's as-built

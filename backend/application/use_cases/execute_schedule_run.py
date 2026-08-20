@@ -1,4 +1,4 @@
-"""Execute one queued governed run and preserve every terminal outcome."""
+"""Execute one already-running governed run and preserve every terminal outcome."""
 from __future__ import annotations
 
 from typing import Any
@@ -37,12 +37,6 @@ def execute_schedule_run(
     fencing_epoch: int,
 ) -> FinalizedScheduleRunV1:
     assert snapshot.schedule_run_id is not None
-    repository.mark_running(
-        connection,
-        run_id=snapshot.schedule_run_id,
-        site_id=site_id,
-        fencing_epoch=fencing_epoch,
-    )
     try:
         outcome = scheduler.solve(snapshot)
     except Exception as exc:
