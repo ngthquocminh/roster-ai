@@ -4,7 +4,7 @@ baseline_commit: 8623affe118a2312fc0bc6839ad5a75c64aa4f72
 
 # Story 3.4: Provide the Safe Cancellation Command [Technical Enabler]
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -529,7 +529,7 @@ assertion removed, recorded in the Dev Agent Record with the command and the cou
       happened.
 - [x] `tests/test_lease_worker.py`: extend `test_deferred_owners_are_named_in_scope_controls` to assert
       the new declarations, keeping the three existing assertions intact.
-- [ ] Gate A re-run per `docs/GATE-A-RUNBOOK.md`: `gate_a_passed: true`, `blocking: []`, regenerating
+- [x] Gate A re-run per `docs/GATE-A-RUNBOOK.md`: `gate_a_passed: true`, `blocking: []`, regenerating
       `evidence/story-1.11/gate-a-readiness-report.json` **through**
       `backend/scripts/evidence_binding.py` in a separate commit (`docs/EVIDENCE-CONVENTION.md`). This
       story produces no new evidence file of its own.
@@ -763,6 +763,9 @@ Codex (GPT-5)
 - 2026-08-20 Phase C pre-evidence validation: backend 1085 collected / 1076 passed / 2 skipped / 7
   deselected; frontend Vitest 410/410; TypeScript typecheck passed; oxlint passed with three inherited
   Fast Refresh warnings. Mandated zero-line diff paths remained unchanged.
+- 2026-08-20 clean-tree Gate A measurement at `7ac7012`: backend 1085 collected / 1077 passed / 1
+  skipped / 7 deselected; Vitest 410/410; Playwright XML 48/48. The generator wrote
+  `gate_a_passed: true`, `blocking: []`, and evidence-convention validation passed 49/49.
 
 ### Completion Notes List
 
@@ -777,8 +780,10 @@ Codex (GPT-5)
   its runtime context is already a factory invoked once per transaction.
 - Phase C implementation complete: live PostgreSQL proves the cancellation bundle is atomic and
   idempotent, cancellation/completion races remain inside AD-7, and runtime UPDATE privileges do not
-  include lease ownership, expiry, or fencing columns. Gate A evidence regeneration remains the final
-  clean-tree step.
+  include lease ownership, expiry, or fencing columns. Gate A evidence was regenerated from the clean
+  Phase C commit and committed separately.
+- Story complete: all eight tasks and AC1 are satisfied. The cancellation command is ready for code
+  review; no solver, metric, demand, assignment, frontend source, or baseline-pointer behavior changed.
 
 ### File List
 
@@ -810,11 +815,14 @@ Codex (GPT-5)
 - backend/tests/test_schedule_run_persistence.py
 - backend/tests/test_schedule_runs_api.py
 - docs/GATE-A-RUNBOOK.md
+- evidence/story-1.11/gate-a-readiness-report.json
 - frontend/openapi.json
 - frontend/src/api/schema.d.ts
 
 ## Change Log
 
+- 2026-08-20: Regenerated and separately committed Gate A readiness evidence; marked Story 3.4 ready
+  for review.
 - 2026-08-20: Completed Phase C live PostgreSQL race/atomicity proof, deferred-scope reconciliation,
   and pre-evidence regression validation.
 - 2026-08-20: Completed Phase B cooperative transaction split, recovery path, cancellation checkpoints,
