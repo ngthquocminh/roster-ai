@@ -1392,7 +1392,7 @@ development_status:
   epic-3: in-progress
   3-1-create-and-revise-a-reversible-repair-draft: done
   3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: done
-  3-3-lease-solver-jobs-with-fencing: in-progress
+  3-3-lease-solver-jobs-with-fencing: review
   3-4-provide-the-safe-cancellation-command: backlog
   3-5-persist-literal-run-state-and-replay-progress: backlog
   3-6-start-explicit-bounded-optimization: backlog

@@ -4,7 +4,7 @@ baseline_commit: 2d41ee8ff8dccb350dbba0a6cc6a12e1a5c5fc17
 
 # Story 3.3: Lease Solver Jobs with Fencing [Technical Enabler]
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -349,7 +349,7 @@ assertion removed, recorded in the Dev Agent Record.
 
 #### Task 1 — `JobLeaseV1` contract (AC: 1)
 
-- [ ] New `application/contracts/job_lease.py`: `JobLeaseV1` with every AD-20-required field
+- [x] New `application/contracts/job_lease.py`: `JobLeaseV1` with every AD-20-required field
       (Decision 1's column list). Closed `Literal` for `job_type` and `status`. A `__post_init__`
       guard mirroring `RunSnapshotV1`'s (Story 3.2 Task 1) requiring `job_id`, `site_id`, `job_type`,
       `schedule_run_id`, `actor_id`, `contract_version` — the fields that must exist before any lease,
@@ -357,56 +357,56 @@ assertion removed, recorded in the Dev Agent Record.
 
 #### Task 2 — Migration: `workflow` schema, `job_queue` table, `shiftmind_lease` role (AC: 1, 2)
 
-- [ ] Create schema `workflow`. Create `workflow.job_queue` per Decision 1's column list, with
+- [x] Create schema `workflow`. Create `workflow.job_queue` per Decision 1's column list, with
       `UniqueConstraint("schedule_run_id")`, `UniqueConstraint("id", "site_id")`, status/job_type
       CHECKs, and an index supporting `lease_next_job`'s query (`status`, `lease_expires_at`).
       Copy the RLS/FORCE RLS/policy shape from `migrations/versions/a4f92d7c8e31_...py:94-99`.
-- [ ] `GRANT SELECT, INSERT ON workflow.job_queue TO shiftmind_runtime` (the enqueue path);
+- [x] `GRANT SELECT, INSERT ON workflow.job_queue TO shiftmind_runtime` (the enqueue path);
       `REVOKE UPDATE, DELETE`; a later narrow `GRANT UPDATE (status, heartbeat_at) ON
       workflow.job_queue TO shiftmind_runtime` for completion/heartbeat bookkeeping the domain
       transaction itself performs (not lease/fencing fields — those are owner-function-only, Decision
       2).
-- [ ] Create role `shiftmind_lease` (`NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
+- [x] Create role `shiftmind_lease` (`NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
       NOBYPASSRLS`), copying `d128d081ab48`'s `DO $$ ... IF NOT EXISTS` idempotent-create shape. Grant
       it **no** table privileges at all — verify with `information_schema.role_table_grants` in Task
       8's checkpoint.
-- [ ] `alembic check` must report zero operations, run from the repository root.
+- [x] `alembic check` must report zero operations, run from the repository root.
 
 #### Task 3 — `lease_next_job` and `renew_job_lease` (AC: 2, 3)
 
-- [ ] `CREATE FUNCTION workflow.lease_next_job(p_lease_owner text, p_lease_seconds int) RETURNS
+- [x] `CREATE FUNCTION workflow.lease_next_job(p_lease_owner text, p_lease_seconds int) RETURNS
       workflow.job_queue` (or a narrower composite) — `SECURITY DEFINER`, fixed `search_path`, no
       dynamic SQL. Body: `SELECT ... FROM workflow.job_queue WHERE (status = 'queued') OR (status =
       'leased' AND lease_expires_at < now()) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`, then
       `UPDATE ... SET status='leased', lease_owner=p_lease_owner, lease_expires_at=now() +
       p_lease_seconds * interval '1 second', heartbeat_at=now(), fencing_epoch=fencing_epoch+1,
       attempt_id=gen_random_uuid() WHERE id = <selected> RETURNING *`.
-- [ ] `CREATE FUNCTION workflow.renew_job_lease(p_job_id uuid, p_fencing_epoch bigint,
+- [x] `CREATE FUNCTION workflow.renew_job_lease(p_job_id uuid, p_fencing_epoch bigint,
       p_extension_seconds int) RETURNS boolean` — `SECURITY DEFINER`; `UPDATE ... SET
       lease_expires_at = now() + ..., heartbeat_at = now() WHERE id = p_job_id AND fencing_epoch =
       p_fencing_epoch`; returns whether a row was updated (i.e., the caller still holds the current
       epoch).
-- [ ] `REVOKE EXECUTE ... FROM PUBLIC` on both; `GRANT EXECUTE ON FUNCTION
+- [x] `REVOKE EXECUTE ... FROM PUBLIC` on both; `GRANT EXECUTE ON FUNCTION
       workflow.lease_next_job TO shiftmind_lease`; `GRANT EXECUTE ON FUNCTION
       workflow.renew_job_lease TO shiftmind_runtime`.
 
 #### Task 4 — `ScheduleRunRepository` gains job/idempotency methods; `enqueue_compute` use case (AC: 1)
 
-- [ ] `application/ports/proposal.py`: add `created_by_actor_id: UUID` to `ProposalRecordV1`.
+- [x] `application/ports/proposal.py`: add `created_by_actor_id: UUID` to `ProposalRecordV1`.
       `adapters/postgres/proposal.py`: extend `get_current`'s `SELECT` to include
       `proposal.c.created_by_actor_id`. Update any test that constructs `ProposalRecordV1`
       positionally.
-- [ ] `application/ports/schedule_run.py`: extend `ScheduleRunRepository` with
+- [x] `application/ports/schedule_run.py`: extend `ScheduleRunRepository` with
       `enqueue_job(connection, *, job: JobLeaseV1, site_id) -> None`,
       `get_idempotent_result(...)`/`_store_idempotent_result(...)` matching
       `adapters/postgres/proposal.py:98-203`'s signature and semantics against the **same**
       `command_idempotency` table.
-- [ ] `adapters/postgres/schedule_run.py`: implement both against `workflow.job_queue` /
+- [x] `adapters/postgres/schedule_run.py`: implement both against `workflow.job_queue` /
       `command_idempotency`.
-- [ ] New `application/use_cases/enqueue_compute.py :: enqueue_compute` per Decision 3: resolve actor
+- [x] New `application/use_cases/enqueue_compute.py :: enqueue_compute` per Decision 3: resolve actor
       from the proposal, check idempotency, call `create_run_snapshot` unchanged, insert the job row,
       store the idempotent result — all inside the caller-owned transaction.
-- [ ] Define a local `EnqueueComputeError(ValueError)` and `IdempotencyKeyConflictError
+- [x] Define a local `EnqueueComputeError(ValueError)` and `IdempotencyKeyConflictError
       (EnqueueComputeError)` in `enqueue_compute.py`, matching `manage_proposal.py`'s **shape**
       (conflict detected via `stored.body_hash != body_hash`) but **not** importing
       `manage_proposal.ProposalCommandError` — that base class names the proposal aggregate
@@ -427,35 +427,35 @@ assertion removed, recorded in the Dev Agent Record.
 
 #### Task 5 — Thread `fencing_epoch` through `mark_running`/`finalize_run` (AC: 3)
 
-- [ ] `ScheduleRunRepository.mark_running` and `.finalize_run`: add required `fencing_epoch: int`;
+- [x] `ScheduleRunRepository.mark_running` and `.finalize_run`: add required `fencing_epoch: int`;
       extend the `UPDATE ... WHERE` predicate per Decision 4. Raise a distinct
       `StaleLeaseError` (not the existing generic `ValueError`) when the epoch predicate is what
       failed versus when the status predicate was what failed — a caller needs to tell "someone else
       already finished this run" apart from "my lease was revoked," and today's bare `ValueError`
       cannot.
-- [ ] `execute_schedule_run`: add `fencing_epoch: int`, pass through to both calls.
+- [x] `execute_schedule_run`: add `fencing_epoch: int`, pass through to both calls.
 
 #### Task 6 — `lease_and_execute_schedule_run` use case, and the thin worker adapter (AC: 2, 3)
 
-- [ ] New `application/use_cases/lease_and_execute_schedule_run.py :: lease_and_execute_schedule_run`
+- [x] New `application/use_cases/lease_and_execute_schedule_run.py :: lease_and_execute_schedule_run`
       (Decision 8): takes the lease-role connection, the runtime-role connection factory, the
       `ScheduleRunRepository`, and the `SchedulerPort` as parameters (framework-free, testable with
       fakes exactly like `execute_schedule_run`). Calls `lease_next_job` (via a repository/port method
       wrapping the `SECURITY DEFINER` function call); if a job was returned, loads the
       `RunSnapshotV1` payload and calls `execute_schedule_run` with the leased `fencing_epoch`.
-- [ ] Read `cancellation_requested` before executing; if true, finalize immediately as
+- [x] Read `cancellation_requested` before executing; if true, finalize immediately as
       `solver_cancelled` without calling the solver (Decision 7 — representable, not yet
       reachable in tests beyond a seeded row, since nothing sets the flag until Story 3.4).
-- [ ] No job found: return `None` without opening a domain transaction or touching `shiftmind_runtime`
+- [x] No job found: return `None` without opening a domain transaction or touching `shiftmind_runtime`
       at all.
-- [ ] New `backend/worker/lease_worker.py` (first file in this package): a thin adapter —
+- [x] New `backend/worker/lease_worker.py` (first file in this package): a thin adapter —
       opens the `shiftmind_lease` connection and a `shiftmind_runtime` connection factory (Task 7),
       calls `lease_and_execute_schedule_run`, commits. No leasing, fencing, or finalization logic of
       its own lives here.
 
 #### Task 7 — Two-role connection handling (AC: 2)
 
-- [ ] Wherever the current codebase establishes a trusted-role connection for `shiftmind_runtime`
+- [x] Wherever the current codebase establishes a trusted-role connection for `shiftmind_runtime`
       (`api/deps.py` or equivalent — read it before adding a sibling, do not duplicate the pattern
       blind), add the equivalent for `shiftmind_lease`, scoped to the worker process only. Do **not**
       let `shiftmind_lease` ever open an RLS-scoped domain transaction — it has no table grants to do
@@ -473,19 +473,19 @@ assertion removed, recorded in the Dev Agent Record.
 
 #### Task 8 — Recovery and idempotency test suite (AC: 1, 2, 3)
 
-- [ ] Worker-kill simulation: lease a job, do not finalize, let the lease expire, lease again from a
+- [x] Worker-kill simulation: lease a job, do not finalize, let the lease expire, lease again from a
       second simulated worker, finalize under the new epoch, assert exactly one terminal outcome and
       the stale attempt's late finalize call is rejected.
-- [ ] Idempotent `enqueue_compute` replay (same key, same body) returns the identical
+- [x] Idempotent `enqueue_compute` replay (same key, same body) returns the identical
       `(schedule_run_id, job_id)` pair with no new rows; conflicting body hash raises.
-- [ ] `SCOPE_CONTROLS` for the new modules: `roles:worker_reuses_shiftmind_runtime` (Decision 2),
+- [x] `SCOPE_CONTROLS` for the new modules: `roles:worker_reuses_shiftmind_runtime` (Decision 2),
       `events:owned_by_story_3_5` (Decision 6), `cancellation:owned_by_story_3_4` (Decision 7),
       `contracts:capability_version_unpopulated_until_story_3_6` (Decision 7).
-- [ ] `deferred-work.md`: re-point `:189`'s owner per Gap 1 — do not close it, redirect it. Add any
+- [x] `deferred-work.md`: re-point `:189`'s owner per Gap 1 — do not close it, redirect it. Add any
       new items this story's own review surfaces once implementation is real (do not pre-write
       findings that have not happened yet).
-- [ ] Gate A re-run: `gate_a_passed: true`, `blocking: []`.
-- [ ] Verify the mandated zero-line diffs with `git diff --stat` (Project Structure Notes).
+- [x] Gate A re-run: `gate_a_passed: true`, `blocking: []`.
+- [x] Verify the mandated zero-line diffs with `git diff --stat` (Project Structure Notes).
 
 ---
 
@@ -659,11 +659,73 @@ _To be filled by the dev agent._
 
 ### Debug Log References
 
+- Red-green-refactor plan: contract and schema first; transactional enqueue second; fenced run
+  transitions and one-job worker boundary third; live PostgreSQL recovery/privilege proof last.
+- RED observed before implementation: contract import, Workflow metadata/migration, owner-held
+  functions, enqueue use case, lease-and-execute use case, and worker adapter tests all failed on
+  their absent boundary before their minimal implementations landed.
+- A2 idempotency mutation: disabling the replay branch made
+  `test_enqueue_compute_replays_without_creating_a_second_effect` fail because the replay minted a
+  second `(schedule_run_id, job_id)` pair; restoration returned `3 passed`.
+- A2 fencing mutation: removing the epoch predicate made
+  `test_stale_epoch_is_rejected_by_the_compare_and_set_itself` fail because the stale transition was
+  accepted; restoration returned `4 passed`.
+- Phase/final measurements: backend `1021 passed, 1 skipped, 7 deselected`; PostgreSQL `62 passed`;
+  fresh-database `alembic check` reported no new operations; live lease proof used 4 jobs / 2
+  sessions / 0 duplicate leases; `shiftmind_lease` direct table query was denied.
+- Gate A: post-commit backend JUnit green, Vitest JUnit green, Playwright `48/48` with zero failures;
+  readiness output `gate_a_passed: true` with no blockers. The Windows streaming reporter was
+  terminated only after the complete 48-case XML was verified, per the runbook's documented exit
+  limitation.
+
 ### Completion Notes List
+
+- Added the frozen AD-20 `JobLeaseV1` contract and a Workflow-owned, FORCE-RLS `job_queue` migration
+  with closed job/status vocabularies, lease-only role, narrow runtime grants, and two owner-held
+  fixed-search-path functions.
+- Added transactional enqueue idempotency that preserves the proposal creator and replays the
+  original run/job identities without creating duplicate effects.
+- Added epoch-checked run transitions with distinct stale-lease classification, lease renewal,
+  snapshot loading, cancellation-aware one-job execution, fenced job completion, and the first thin
+  worker role adapter.
+- Proved SKIP LOCKED concurrency, monotonically increasing attempts/epochs, lost-worker recovery,
+  stale commit rejection, exact role/routine privileges, enqueue rollback, and stable terminal
+  uniqueness against live PostgreSQL.
+- Re-pointed the AgentRun recovery ledger entry without closing it. No capability, route, frontend,
+  solver, evidence, demand/metric, or persisted-event surface was changed; golden dataset remains 21.
 
 ### File List
 
+- `_bmad-output/implementation-artifacts/3-3-lease-solver-jobs-with-fencing.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/adapters/postgres/proposal.py`
+- `backend/adapters/postgres/schedule_run.py`
+- `backend/adapters/postgres/schema.py`
+- `backend/application/contracts/job_lease.py`
+- `backend/application/ports/proposal.py`
+- `backend/application/ports/schedule_run.py`
+- `backend/application/use_cases/enqueue_compute.py`
+- `backend/application/use_cases/execute_schedule_run.py`
+- `backend/application/use_cases/lease_and_execute_schedule_run.py`
+- `backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py`
+- `backend/tests/architecture/test_lease_role_boundaries.py`
+- `backend/tests/test_create_run_snapshot.py`
+- `backend/tests/test_enqueue_compute.py`
+- `backend/tests/test_evidence_binding.py`
+- `backend/tests/test_fencing_recovery.py`
+- `backend/tests/test_finalize_schedule_run.py`
+- `backend/tests/test_job_lease_contracts.py`
+- `backend/tests/test_job_leasing_postgres.py`
+- `backend/tests/test_lease_next_job.py`
+- `backend/tests/test_postgres_schema.py`
+- `backend/worker/__init__.py`
+- `backend/worker/lease_worker.py`
+
 ## Change Log
 
+- 2026-08-20: Implemented durable solver-job enqueue, PostgreSQL SKIP LOCKED leasing, monotonic
+  fencing/heartbeat functions, two-role worker execution, stale-worker recovery, and live
+  privilege/idempotency proofs; full regression and Gate A green; status moved to review.
 - 2026-08-20: Story drafted via `/bmad-create-story 3.3` from `epics.md#Story-3.3`, Story 3.2's
   as-built state at commit `2d41ee8`, and `ARCHITECTURE-SPINE.md` AD-6/7/8/12/18/20/22/23.
