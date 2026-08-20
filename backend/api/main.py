@@ -32,6 +32,7 @@ from api.routers import (
     health,
     proposals,
     runs,
+    schedule_runs,
     scenario_catalogue,
     scenario_projection,
     scenarios,
@@ -266,3 +267,4 @@ app.include_router(scenario_catalogue.router, prefix="/api/v1")
 app.include_router(scenario_projection.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")
 app.include_router(proposals.router, prefix="/api/v1")
+app.include_router(schedule_runs.router, prefix="/api/v1")

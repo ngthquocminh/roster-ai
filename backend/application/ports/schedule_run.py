@@ -17,11 +17,55 @@ class IdempotentScheduleRunResultV1:
     response_payload: dict
 
 
+@dataclass(frozen=True)
+class ScheduleRunStateV1:
+    status: ScheduleRunStatusV1
+    resource_version: int
+
+
 class StaleLeaseError(ValueError):
     """The caller's fencing epoch is no longer current for this run."""
 
 
+class RunNotCancellableError(ValueError):
+    """The schedule run no longer permits the requested cancellation edge."""
+
+
 class ScheduleRunRepository(Protocol):
+    def get_run_state(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleRunStateV1 | None: ...
+
+    def cancel_queued_run(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+    ) -> None: ...
+
+    def request_cancellation(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+    ) -> None: ...
+
+    def set_job_cancellation_requested(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> None: ...
+
     def mark_running(
         self,
         connection: Any,
@@ -119,6 +163,8 @@ class ScheduleRunRepository(Protocol):
 
 __all__ = [
     "IdempotentScheduleRunResultV1",
+    "RunNotCancellableError",
     "ScheduleRunRepository",
+    "ScheduleRunStateV1",
     "StaleLeaseError",
 ]

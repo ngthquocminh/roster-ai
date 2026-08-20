@@ -21,7 +21,12 @@ from application.contracts.canonical import contract_digest
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import ScheduleRunStatusV1, ScheduleVersionV1
 from application.contracts.scenario_projection import QualificationRefV1
-from application.ports.schedule_run import IdempotentScheduleRunResultV1, StaleLeaseError
+from application.ports.schedule_run import (
+    IdempotentScheduleRunResultV1,
+    RunNotCancellableError,
+    ScheduleRunStateV1,
+    StaleLeaseError,
+)
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -34,6 +39,112 @@ def _as_utc(value: datetime | None) -> datetime | None:
 
 
 class PostgresScheduleRunRepository:
+    def get_run_state(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleRunStateV1 | None:
+        row = connection.execute(
+            select(schedule_run.c.status, schedule_run.c.resource_version).where(
+                schedule_run.c.id == run_id,
+                schedule_run.c.site_id == site_id,
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return ScheduleRunStateV1(row.status, row.resource_version)
+
+    @staticmethod
+    def _cancel_transition(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+        expected_status: str,
+        status: str,
+        reason: str,
+        terminal: bool,
+    ) -> None:
+        values = {
+            "status": status,
+            "reason": reason,
+            "resource_version": schedule_run.c.resource_version + 1,
+        }
+        if terminal:
+            values["finished_at"] = func.now()
+        result = connection.execute(
+            update(schedule_run)
+            .where(
+                schedule_run.c.id == run_id,
+                schedule_run.c.site_id == site_id,
+                schedule_run.c.status == expected_status,
+                schedule_run.c.resource_version == expected_resource_version,
+            )
+            .values(**values)
+        )
+        if getattr(result, "rowcount", 1) != 1:
+            raise RunNotCancellableError(
+                f"schedule run is no longer {expected_status} at resource version "
+                f"{expected_resource_version}"
+            )
+
+    def cancel_queued_run(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+    ) -> None:
+        self._cancel_transition(
+            connection,
+            run_id=run_id,
+            site_id=site_id,
+            expected_resource_version=expected_resource_version,
+            expected_status="solver_queued",
+            status="solver_cancelled",
+            reason="cancelled",
+            terminal=True,
+        )
+
+    def request_cancellation(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        expected_resource_version: int,
+    ) -> None:
+        self._cancel_transition(
+            connection,
+            run_id=run_id,
+            site_id=site_id,
+            expected_resource_version=expected_resource_version,
+            expected_status="solver_running",
+            status="cancellation_requested",
+            reason="cancellation_requested",
+            terminal=False,
+        )
+
+    @staticmethod
+    def set_job_cancellation_requested(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> None:
+        connection.execute(
+            update(job_queue)
+            .where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+            )
+            .values(cancellation_requested=True)
+        )
+
     @staticmethod
     def _has_current_epoch(run_id: UUID, site_id: UUID, fencing_epoch: int):
         # `status == 'leased'` and a positive epoch are load-bearing, not
@@ -131,7 +242,10 @@ class PostgresScheduleRunRepository:
                 schedule_run.c.status == "solver_queued",
                 self._has_current_epoch(run_id, site_id, fencing_epoch),
             )
-            .values(status="solver_running")
+            .values(
+                status="solver_running",
+                resource_version=schedule_run.c.resource_version + 1,
+            )
         )
         if getattr(result, "rowcount", 1) != 1:
             self._raise_transition_failure(
@@ -437,13 +551,14 @@ class PostgresScheduleRunRepository:
             .where(
                 schedule_run.c.id == run_id,
                 schedule_run.c.site_id == site_id,
-                schedule_run.c.status == "solver_running",
+                schedule_run.c.status.in_(("solver_running", "cancellation_requested")),
                 self._has_current_epoch(run_id, site_id, fencing_epoch),
             )
             .values(
                 status=status,
                 reason=reason,
                 candidate_schedule_version_id=candidate_id,
+                resource_version=schedule_run.c.resource_version + 1,
                 finished_at=candidate.created_at if candidate else (finished_at or datetime.now(timezone.utc)),
             )
         )
@@ -453,7 +568,7 @@ class PostgresScheduleRunRepository:
                 run_id=run_id,
                 site_id=site_id,
                 fencing_epoch=fencing_epoch,
-                expected_status="solver_running",
+                expected_status="solver_running or cancellation_requested",
             )
 
 

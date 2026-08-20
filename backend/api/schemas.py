@@ -225,6 +225,32 @@ class ProposalRejectionIn(BaseModel):
     expected_resource_version: int = Field(ge=1)
 
 
+class ScheduleRunCancellationIn(BaseModel):
+    expected_resource_version: int = Field(ge=1)
+
+
+class ScheduleRunOut(BaseModel):
+    schedule_run_id: UUID
+    status: Literal[
+        "solver_queued",
+        "solver_running",
+        "cancellation_requested",
+        "solver_completed",
+        "solver_infeasible",
+        "solver_timed_out",
+        "solver_cancelled",
+        "solver_failed",
+    ]
+    reason: str | None
+    resource_version: int
+    cancellation_requested: bool
+    # The cancellation command's replay payload intentionally contains only
+    # semantic command state. Story 3.7's read surface will populate the
+    # aggregate timestamps; keeping them optional avoids manufacturing them.
+    created_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
 class ProposalOut(BaseModel):
     proposal_id: UUID
     proposal_version_id: UUID

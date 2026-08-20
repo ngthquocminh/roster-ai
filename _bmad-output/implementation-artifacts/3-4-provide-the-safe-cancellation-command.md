@@ -362,58 +362,58 @@ assertion removed, recorded in the Dev Agent Record with the command and the cou
 
 #### Task 1 — Migration: `resource_version` and two column grants (AC: 1)
 
-- [ ] New revision with `down_revision = "a2b3c4d5e6f7"` (current head, verified at `8623aff`). Add
+- [x] New revision with `down_revision = "a2b3c4d5e6f7"` (current head, verified at `8623aff`). Add
       `schedule_run.resource_version BIGINT NOT NULL` with `server_default=text("1")`. Mirror it in
       `adapters/postgres/schema.py`'s `schedule_run` table so `alembic check` stays clean.
-- [ ] `GRANT UPDATE (resource_version) ON schedule_run TO shiftmind_runtime` — additive to
+- [x] `GRANT UPDATE (resource_version) ON schedule_run TO shiftmind_runtime` — additive to
       `f1a2b3c4d5e6_...py:124`'s existing column grant, not a replacement.
-- [ ] `GRANT UPDATE (cancellation_requested) ON workflow.job_queue TO shiftmind_runtime` (Decision 2).
-- [ ] `downgrade()` reverses both grants and drops the column, in that order.
-- [ ] `alembic check` reports zero operations, **run from the repository root**
+- [x] `GRANT UPDATE (cancellation_requested) ON workflow.job_queue TO shiftmind_runtime` (Decision 2).
+- [x] `downgrade()` reverses both grants and drops the column, in that order.
+- [x] `alembic check` reports zero operations, **run from the repository root**
       (`deferred-work.md:138-147`).
 
 #### Task 2 — Port and adapter: run state, the two edges, and the version bumps (AC: 1)
 
-- [ ] `application/ports/schedule_run.py`: add a frozen
+- [x] `application/ports/schedule_run.py`: add a frozen
       `ScheduleRunStateV1(status: ScheduleRunStatusV1, resource_version: int)` and three methods —
       `get_run_state(connection, *, run_id, site_id) -> ScheduleRunStateV1 | None`,
       `cancel_queued_run(...)`, `request_cancellation(...)`. Add `RunNotCancellableError(ValueError)`
       beside the existing `StaleLeaseError`.
-- [ ] `adapters/postgres/schedule_run.py`: implement all three as compare-and-set UPDATEs, each carrying
+- [x] `adapters/postgres/schedule_run.py`: implement all three as compare-and-set UPDATEs, each carrying
       `resource_version=schedule_run.c.resource_version + 1` and the expected-version predicate.
       `cancel_queued_run` requires `status == "solver_queued"` and sets `finished_at`;
       `request_cancellation` requires `status == "solver_running"` and leaves `finished_at` NULL.
-- [ ] Add `resource_version + 1` to `mark_running` and `finalize_run`'s `.values()` (Decision 1). Widen
+- [x] Add `resource_version + 1` to `mark_running` and `finalize_run`'s `.values()` (Decision 1). Widen
       `finalize_run`'s predicate to `status.in_(("solver_running", "cancellation_requested"))`.
       `_claim_epoch` and `_has_current_epoch` are unchanged — do not touch the fencing guard.
-- [ ] `set_job_cancellation_requested(connection, *, run_id, site_id) -> None`:
+- [x] `set_job_cancellation_requested(connection, *, run_id, site_id) -> None`:
       `UPDATE workflow.job_queue SET cancellation_requested = true WHERE schedule_run_id = :run_id AND
       site_id = :site_id`. A zero-row result is **not** an error (Decision 4).
 
 #### Task 3 — `cancel_schedule_run` use case (AC: 1)
 
-- [ ] New `application/use_cases/cancel_schedule_run.py`. Signature mirrors `enqueue_compute`:
+- [x] New `application/use_cases/cancel_schedule_run.py`. Signature mirrors `enqueue_compute`:
       `(run_repository, connection, *, run_id, site_id, actor_id, expected_resource_version,
       idempotency_key) -> ScheduleRunCancellationV1 | None`. Define
       `ScheduleRunCancellationV1` as a frozen dataclass **in this module**, beside the use case,
       the way `EnqueueComputeResultV1` sits in `enqueue_compute.py` — it is a command result, not a
       cross-epic contract, so it does not belong in `application/contracts/`.
-- [ ] Order of operations, matching `manage_proposal.py:_replay_or_conflict` exactly: bound-check the key
+- [x] Order of operations, matching `manage_proposal.py:_replay_or_conflict` exactly: bound-check the key
       against `MAX_IDEMPOTENCY_KEY_LENGTH`; read state; `None` → return `None`; replay check (stored hit
       with matching hash → return the stored payload; mismatched hash → `IdempotencyKeyConflictError`);
       expected-version guard; Decision 5's status branch; then `_store_idempotent_result`.
-- [ ] The stored `response_payload` is JSONB and must be plain JSON — a flat dict of strings and ints
+- [x] The stored `response_payload` is JSONB and must be plain JSON — a flat dict of strings and ints
       (`schedule_run_id`, `status`, `reason`, `resource_version`), mirroring
       `enqueue_compute.py:127-133`. Replay reconstructs the result from it; never store a dataclass or
       a `datetime`.
-- [ ] `_operation(run_id)` returns `f"cancel_schedule_run:{run_id}"` — the key never enters the operation
+- [x] `_operation(run_id)` returns `f"cancel_schedule_run:{run_id}"` — the key never enters the operation
       string (`manage_proposal.py:_operation`). `_body_hash` covers
       `{run_id, expected_resource_version}` via `contract_digest`.
-- [ ] Define `CancelScheduleRunError(ValueError)`, `IdempotencyKeyConflictError`,
+- [x] Define `CancelScheduleRunError(ValueError)`, `IdempotencyKeyConflictError`,
       `StaleResourceVersionError(expected, current)`, and `RunNotCancellableError` **locally**. Do not
       import `manage_proposal.ProposalCommandError` — Story 3.3 Task 4 established that a schedule-run
       failure raised under a proposal base class misattributes the owning aggregate.
-- [ ] `SCOPE_CONTROLS`: `COVERS: cancellation:queued_and_running`;
+- [x] `SCOPE_CONTROLS`: `COVERS: cancellation:queued_and_running`;
       `NOT COVERED: cancellation:mid_solve_preemption_owned_by_story_3_5`;
       `NOT COVERED: job_terminal_state:owned_by_story_3_5`;
       `NOT COVERED: heartbeat:owned_by_story_3_5`;
@@ -421,26 +421,26 @@ assertion removed, recorded in the Dev Agent Record with the command and the cou
 
 #### Task 4 — Route, schemas, dependency, and the two Gate A records (AC: 1)
 
-- [ ] `api/schemas.py`: `ScheduleRunCancellationIn(expected_resource_version: int)` and
+- [x] `api/schemas.py`: `ScheduleRunCancellationIn(expected_resource_version: int)` and
       `ScheduleRunOut(schedule_run_id, status, reason, resource_version, cancellation_requested,
       created_at, finished_at)`. Follow the neighbouring models' field style.
-- [ ] `api/deps.py`: `get_schedule_run_repository()` returning `PostgresScheduleRunRepository()`, copying
+- [x] `api/deps.py`: `get_schedule_run_repository()` returning `PostgresScheduleRunRepository()`, copying
       `get_proposal_repository`'s Depends-overridable shape (`api/deps.py:123`). Do **not** add a second
       trusted-site-context opener — reuse `get_site_context`.
-- [ ] New `api/routers/schedule_runs.py` — **not** `runs.py` (Decision 3). Copy
+- [x] New `api/routers/schedule_runs.py` — **not** `runs.py` (Decision 3). Copy
       `api/routers/proposals.py`'s structure: `_PROBLEMS` mapping, `IdempotencyKey` annotated header,
       `_not_found()`, and a `_command_problem()` mapping the four exception types onto
       `idempotency_key_conflict`, `stale_resource_version`, `run_not_cancellable`, and
       `invalid_cancellation_command`. Omit the handler's return annotation for the reason stated in that
       file's comment.
-- [ ] `api/main.py`: `app.include_router(schedule_runs.router, prefix="/api/v1")`, added to the existing
+- [x] `api/main.py`: `app.include_router(schedule_runs.router, prefix="/api/v1")`, added to the existing
       versioned block.
-- [ ] `tests/test_gate_a_mutation_audit.py:260-271`: append
+- [x] `tests/test_gate_a_mutation_audit.py:260-271`: append
       `("POST", "/api/v1/schedule-runs/{run_id}/cancellation")` to the `versioned` literal, in sorted
       position.
-- [ ] `docs/GATE-A-RUNBOOK.md`: add the path to the approved-write-path table (lines 42-47) with the
+- [x] `docs/GATE-A-RUNBOOK.md`: add the path to the approved-write-path table (lines 42-47) with the
       reason it touches no governed scenario data and no baseline pointer.
-- [ ] Regenerate `frontend/openapi.json` and `frontend/src/api/schema.d.ts`
+- [x] Regenerate `frontend/openapi.json` and `frontend/src/api/schema.d.ts`
       (`uv run python scripts/export_openapi.py` from `backend/`, then `npm run codegen:types` from
       `frontend/`). Both are generated artefacts — never hand-edited, and no other `frontend/src/**` file
       changes.
@@ -728,15 +728,62 @@ why. If a task appears to need anything else in this list, it belongs to a later
 
 ### Agent Model Used
 
-_To be filled by the dev agent._
+Codex (GPT-5)
+
+### Implementation Plan
+
+- Phase A: add the versioned aggregate column and grants, implement repository/use-case/API command
+  boundaries, and lock behavior down with unit, API, schema, migration, and Gate A tests.
+- Phase B: split worker execution into committed transition/solve transactions and enforce AD-7 edges
+  structurally.
+- Phase C: prove races and atomicity against live PostgreSQL, reconcile deferred scope, regenerate Gate
+  A evidence, and run all release-level validation.
 
 ### Debug Log References
 
+- 2026-08-20 Phase A RED: `test_schedule_run_resource_version_revision_is_narrow_and_reversible`
+  failed on the absent `resource_version`; Task 2 and Task 3 suites then failed at their missing port
+  and use-case imports; the API suite failed at its missing repository dependency.
+- 2026-08-20 A2 replay mutation: disabling the stored-result branch made both queued and running replay
+  cases fail with `StaleResourceVersionError`; restored branch passes 14/14 command tests.
+- 2026-08-20 Phase A checkpoint: backend 1075 collected / 1066 passed / 2 skipped / 7 deselected;
+  PostgreSQL 66 collected / 66 passed; `alembic check` reported no operations; downgrade to
+  `a2b3c4d5e6f7` and upgrade to head succeeded; OpenAPI reported seven versioned write routes.
+
 ### Completion Notes List
+
+- Phase A complete: `schedule_run` now has a monotonically bumped resource version, cancellation uses
+  the two legal AD-7 compare-and-set edges, and the job flag plus idempotency result share the caller's
+  transaction.
+- Added the authenticated, CSRF-protected, site-scoped cancellation endpoint with stable RFC 7807
+  mappings and regenerated API contracts.
 
 ### File List
 
+- _bmad-output/implementation-artifacts/3-4-provide-the-safe-cancellation-command.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- backend/adapters/postgres/schedule_run.py
+- backend/adapters/postgres/schema.py
+- backend/api/deps.py
+- backend/api/main.py
+- backend/api/routers/schedule_runs.py
+- backend/api/schemas.py
+- backend/application/ports/schedule_run.py
+- backend/application/use_cases/cancel_schedule_run.py
+- backend/migrations/versions/b3c4d5e6f7a8_add_schedule_run_resource_version.py
+- backend/tests/test_cancel_schedule_run.py
+- backend/tests/test_evidence_binding.py
+- backend/tests/test_gate_a_mutation_audit.py
+- backend/tests/test_postgres_schema.py
+- backend/tests/test_schedule_run_persistence.py
+- backend/tests/test_schedule_runs_api.py
+- docs/GATE-A-RUNBOOK.md
+- frontend/openapi.json
+- frontend/src/api/schema.d.ts
+
 ## Change Log
 
+- 2026-08-20: Completed Phase A cancellation aggregate, command, API, migration, generated contracts,
+  and validation checkpoint.
 - 2026-08-20: Story drafted via `/bmad-create-story 3.4` from `epics.md#Story-3.4`, Story 3.3's as-built
   state at commit `8623aff`, and `ARCHITECTURE-SPINE.md` AD-6/7/8/13/20/22/23.

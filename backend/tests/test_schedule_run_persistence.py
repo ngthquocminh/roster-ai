@@ -110,9 +110,13 @@ def test_live_schedule_grants_keep_immutable_tables_insert_select_only(
                 )
             ).scalars()
         )
-    assert update_columns == {
-        "status", "reason", "candidate_schedule_version_id", "finished_at"
-    }
+        assert update_columns == {
+            "status",
+            "reason",
+            "candidate_schedule_version_id",
+            "finished_at",
+            "resource_version",
+        }
 
 
 @pytest.mark.postgres

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import BigInteger, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from adapters.postgres.schema import metadata
@@ -141,3 +141,25 @@ def test_agent_run_status_grant_revision_is_column_scoped_and_reversible() -> No
     assert "GRANT UPDATE (status) ON agent_run TO shiftmind_runtime" in migration
     assert "REVOKE UPDATE (status) ON agent_run FROM shiftmind_runtime" in migration
     assert "ADD COLUMN" not in migration.upper()
+
+
+def test_schedule_run_resource_version_revision_is_narrow_and_reversible() -> None:
+    table = metadata.tables["schedule_run"]
+    assert isinstance(table.c.resource_version.type, BigInteger)
+    assert table.c.resource_version.nullable is False
+    assert str(table.c.resource_version.server_default.arg) == "1"
+
+    migration = (
+        BACKEND_ROOT
+        / "migrations"
+        / "versions"
+        / "b3c4d5e6f7a8_add_schedule_run_resource_version.py"
+    ).read_text(encoding="utf-8")
+    assert 'down_revision: str = "a2b3c4d5e6f7"' in migration
+    assert "GRANT UPDATE (resource_version) ON schedule_run TO shiftmind_runtime" in migration
+    assert (
+        "GRANT UPDATE (cancellation_requested) ON workflow.job_queue "
+        "TO shiftmind_runtime"
+    ) in migration
+    assert "REVOKE UPDATE (cancellation_requested) ON workflow.job_queue" in migration
+    assert "REVOKE UPDATE (resource_version) ON schedule_run" in migration
