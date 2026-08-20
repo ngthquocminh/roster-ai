@@ -1441,7 +1441,7 @@ development_status:
   3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: done
   3-3-lease-solver-jobs-with-fencing: done
   3-4-provide-the-safe-cancellation-command: done
-  3-5-persist-literal-run-state-and-replay-progress: in-progress
+  3-5-persist-literal-run-state-and-replay-progress: review
   3-6-start-explicit-bounded-optimization: backlog
   3-7-monitor-cancel-and-reopen-runs: backlog
   3-8-compare-candidate-and-baseline-results: backlog

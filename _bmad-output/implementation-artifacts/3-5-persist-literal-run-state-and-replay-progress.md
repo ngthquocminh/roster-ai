@@ -4,7 +4,7 @@ baseline_commit: 1d24cb5d72c627e7921c61cacc95626f2c8544f2
 
 # Story 3.5: Persist Literal Run State and Replay Progress [Technical Enabler]
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -249,15 +249,15 @@ for completeness and deliberately not re-derived.
         measure → generate → commit `evidence/story-3.5/nfr35-first-run-event.json` separately.
         Never hand-type it.
 
-- [ ] **Task 9 — AD-7 structural guards and regression** (AC: 1, 3)
-  - [ ] Extend `tests/architecture/test_schedule_run_state_machine.py`'s pattern (or add a
+- [x] **Task 9 — AD-7 structural guards and regression** (AC: 1, 3)
+  - [x] Extend `tests/architecture/test_schedule_run_state_machine.py`'s pattern (or add a
         sibling test) so the event-emitting code paths are covered by the same
         "every writer is a known, named function" AST-exhaustiveness style already used for
         `_SCHEDULE_RUN_WRITERS` — a fifth transition-writing function added later without
         updating the guard must fail loudly, not pass silently.
-  - [ ] Observe each new guard failing with its assertion removed before trusting it green
+  - [x] Observe each new guard failing with its assertion removed before trusting it green
         (retro action A2); record the observation in Completion Notes.
-  - [ ] Full regression: `pytest` (all markers), `alembic check` from the repository root,
+  - [x] Full regression: `pytest` (all markers), `alembic check` from the repository root,
         Gate A re-run, `npm run build && npm test` if the generated OpenAPI/schema types moved
         (they will — two new GET paths).
 
@@ -464,6 +464,7 @@ for completeness and deliberately not re-derived.
 - 2026-08-21 — Task 6 plan/verification: observed the missing schedule-run event-head contract at collection, then added typed head/replay reads and the SSE route by reusing the shipped conversation transport generator. Cursor precedence, foreign-stream zero-query rejection, maximum-sequence validation, immediate/15-second comment heartbeats, 200-event batches, and one short site transaction per poll remain shared mechanics.
 - 2026-08-21 — Task 7 plan/verification: observed the missing polling read contract at collection, then added a site-scoped schedule-run view joining the optional job carrier and exposed it through `GET /schedule-runs/{run_id}`. The route projects only the existing response fields and reuses `_not_found()`.
 - 2026-08-21 — Task 8 plan/verification: committed the implementation, confirmed a clean tree, then ran the largest Gate A fixture with one discarded warm-up and three measured ASGI-stream runs. Generated and self-audited the evidence from captured stdout before committing it separately; measured first-event latencies were 14.377 ms, 18.190 ms, and 15.687 ms.
+- 2026-08-21 — Task 9 plan/verification: expanded the AST guard to enumerate schedule-run inserts/updates, progress-event callers, and the sole direct persisted-event insert helper. With `create_queued_run` intentionally omitted from both known-writer sets, the two new assertions failed and named it as the extra writer; restoring the complete sets made all three guard tests pass.
 
 ### Completion Notes List
 
@@ -475,6 +476,7 @@ for completeness and deliberately not re-derived.
 - Task 6 complete: schedule-run progress is replayable from `Last-Event-ID`/query cursors with no duplicate frames and non-disclosing invalid-cursor handling. Stream/PostgreSQL focused suites: 37 passed. Full backend regression: 1098 passed, 2 skipped, 7 deselected.
 - Task 7 complete: polling/manual refresh returns authoritative literal state and the cancellation carrier without adding timestamps or changing authority. Focused API/PostgreSQL tests: 13 passed. Full backend regression: 1100 passed, 2 skipped, 7 deselected.
 - Task 8 complete: the committed NFR35 record binds the clean implementation commit and proves all three client-observed first-event deliveries below 5,000 ms (maximum 18.190 ms). Evidence convention/generator suites: 57 passed.
+- Task 9 complete: transition/event-writer exhaustiveness is guarded and every final gate passed. Backend JUnit: 1111 passed, 1 skipped, 7 deselected; Alembic: no new upgrade operations; frontend: build passed, 410 Vitest tests passed, lint passed with 3 existing Fast Refresh warnings, generated contracts stable; Playwright: 48 cases; refreshed Gate A verdict: passed.
 
 ### File List
 
@@ -491,9 +493,12 @@ for completeness and deliberately not re-derived.
 - backend/application/ports/schedule_run.py
 - backend/application/use_cases/cancel_schedule_run.py
 - backend/application/use_cases/create_run_snapshot.py
+- backend/application/use_cases/enqueue_compute.py
 - backend/application/use_cases/execute_schedule_run.py
 - backend/application/use_cases/lease_and_execute_schedule_run.py
 - backend/migrations/versions/c4d5e6f7a8b9_widen_persisted_event_and_job_status.py
+- backend/scripts/generate_run_event_latency_evidence.py
+- backend/scripts/regenerate_evidence.py
 - backend/tests/test_conversation_contracts.py
 - backend/tests/test_cancel_schedule_run.py
 - backend/tests/test_cancellation_race_postgres.py
@@ -506,9 +511,19 @@ for completeness and deliberately not re-derived.
 - backend/tests/test_job_lease_contracts.py
 - backend/tests/test_lease_next_job.py
 - backend/tests/test_lease_worker.py
+- backend/tests/test_postgres_integration.py
 - backend/tests/test_postgres_schema.py
+- backend/tests/test_run_event_latency_evidence.py
 - backend/tests/test_schedule_runs_api.py
 - backend/tests/test_schedule_run_stream_api.py
 - backend/tests/architecture/test_schedule_run_state_machine.py
 - backend/engine/governed_adapter.py
 - backend/worker/lease_worker.py
+- evidence/story-1.11/gate-a-readiness-report.json
+- evidence/story-3.5/nfr35-first-run-event.json
+- frontend/openapi.json
+- frontend/src/api/schema.d.ts
+
+## Change Log
+
+- 2026-08-21 — Implemented Story 3.5: durable literal run-state events, replay/polling APIs, lease-heartbeat and post-lease failure semantics, NFR35 evidence, generated frontend contracts, and exhaustive transition-writer guards. Moved story to review.
