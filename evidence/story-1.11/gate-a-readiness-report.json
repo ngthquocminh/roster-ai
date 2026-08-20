@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-08-19",
+  "measurement_date": "2026-08-20",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -1037,21 +1037,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 998,
-      "run_started": "2026-08-19T23:25:27.821467+07:00",
-      "sha256": "9534505601c7dc097dfdd8ea5f33aa3b4eef87094edf4cac1db98e00ee721b99"
+      "cases": 1042,
+      "run_started": "2026-08-20T18:46:24.693677+07:00",
+      "sha256": "35d5368cc946e51e40c10aacd16b73b46eae3159ab2025d46d28ba6128f16193"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 410,
-      "run_started": "2026-08-19T16:29:48.452Z",
-      "sha256": "b62399db8bb0bbf7b32b3b85789a3e4322bf1618169614567b677be37be768b5"
+      "run_started": "2026-08-20T11:49:35.076Z",
+      "sha256": "e1d2d760bc51d5ee2f242f1ebe9845a87032d7e09cb67f9674bd6b9ef79752cc"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 48,
-      "run_started": "2026-08-19T16:30:07.964Z",
-      "sha256": "e17215847a559c9bfa35f8f3c54b14d39210cac56ff7aa1cad0bca0f3687b1e2"
+      "run_started": "2026-08-20T11:49:51.377Z",
+      "sha256": "ba9e7ab80c2070f68b8075ae2311560da657931d1d9f1d180130843d5a70ac30"
     }
   },
   "version_bindings": {
@@ -1065,7 +1065,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "6c95b9da0ec39de3f9c0d1e311bcebee946dba0e",
+      "git_commit": "b15ebf67878fd4e842a7613546f92c4307247c57",
       "working_tree_dirty": false
     },
     "image": {
@@ -1073,7 +1073,7 @@
       "web": "local source tree",
       "database": "postgres:18"
     },
-    "schema_version": "f1a2b3c4d5e6"
+    "schema_version": "a2b3c4d5e6f7"
   },
   "blocking": [],
   "gate_a_passed": true,
