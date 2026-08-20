@@ -93,7 +93,11 @@ class PostgresProposalRepository:
                 "resource_version": row.resource_version,
             }
         )
-        return ProposalRecordV1(value, row.version_ordinal)
+        return ProposalRecordV1(
+            proposal=value,
+            version_ordinal=row.version_ordinal,
+            created_by_actor_id=row.created_by_actor_id,
+        )
 
     def get_idempotent_result(
         self,

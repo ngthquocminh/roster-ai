@@ -1,0 +1,126 @@
+"""Lease and execute at most one governed schedule-run job."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Callable, ContextManager
+from uuid import UUID
+
+from application.contracts.schedule_version import ScheduleRunStatusV1
+from application.ports.scheduler import SchedulerPort
+from application.ports.schedule_run import ScheduleRunRepository
+from application.use_cases.execute_schedule_run import execute_schedule_run
+
+
+SCOPE_CONTROLS = (
+    "COVERS: roles:worker_reuses_shiftmind_runtime; "
+    "NOT COVERED: events:owned_by_story_3_5; "
+    "NOT COVERED: cancellation:owned_by_story_3_4; "
+    "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
+    # AD-6 requires a heartbeat. `workflow.renew_job_lease` exists and is
+    # granted, but nothing calls it: the domain work runs in one transaction,
+    # so a renewal issued there is invisible to other sessions until commit —
+    # exactly when it no longer matters. Story 3.5's state machine AC forces
+    # `running` to commit its own event (epics.md:959-962) and decides what
+    # wall-time exhaustion means (epics.md:969-972); the heartbeat belongs
+    # with that work, not bolted on here.
+    "NOT COVERED: heartbeat:owned_by_story_3_5; "
+    # A job that fails between lease and completion stays `leased`, expires and
+    # is re-leased forever — `JobStatusV1` has no terminal-failure member.
+    # Story 3.5 must reopen that closed vocabulary anyway: its AC names
+    # `failed` and `timed-out` as required literal states.
+    "NOT COVERED: job_failure_state:owned_by_story_3_5; "
+    # `lease_seconds` must exceed the solver budget or every long solve fences
+    # itself out. `DEFAULT_LEASE_SECONDS` is a floor, not the ceiling AD-8
+    # wants: Story 3.6's AC requires application-owned ceilings for solver time
+    # and total elapsed time (epics.md:1000-1003).
+    "NOT COVERED: ceilings:lease_seconds_owned_by_story_3_6"
+)
+
+
+@dataclass(frozen=True)
+class LeaseOutcomeV1:
+    job_id: UUID
+    attempt_id: UUID
+    schedule_run_id: UUID
+    status: ScheduleRunStatusV1
+
+
+RuntimeConnectionFactory = Callable[[UUID], ContextManager[Any]]
+
+
+def lease_and_execute_schedule_run(
+    lease_connection: Any,
+    runtime_connection_factory: RuntimeConnectionFactory,
+    repository: ScheduleRunRepository,
+    scheduler: SchedulerPort,
+    *,
+    lease_owner: str,
+    lease_seconds: int,
+) -> LeaseOutcomeV1 | None:
+    lease = repository.lease_next_job(
+        lease_connection,
+        lease_owner=lease_owner,
+        lease_seconds=lease_seconds,
+    )
+    if lease is None:
+        return None
+    assert lease.job_id is not None
+    assert lease.attempt_id is not None
+    assert lease.schedule_run_id is not None
+    assert lease.site_id is not None
+
+    with runtime_connection_factory(lease.site_id) as runtime_connection:
+        snapshot = repository.load_snapshot(
+            runtime_connection,
+            run_id=lease.schedule_run_id,
+            site_id=lease.site_id,
+        )
+        if snapshot is None:
+            raise ValueError("leased job references a missing run snapshot")
+        if lease.cancellation_requested:
+            repository.mark_running(
+                runtime_connection,
+                run_id=lease.schedule_run_id,
+                site_id=lease.site_id,
+                fencing_epoch=lease.fencing_epoch,
+            )
+            repository.finalize_run(
+                runtime_connection,
+                run_id=lease.schedule_run_id,
+                site_id=lease.site_id,
+                fencing_epoch=lease.fencing_epoch,
+                status="solver_cancelled",
+                reason="cancellation_requested_before_execution",
+                candidate=None,
+            )
+            status: ScheduleRunStatusV1 = "solver_cancelled"
+        else:
+            finalized = execute_schedule_run(
+                repository,
+                scheduler,
+                runtime_connection,
+                snapshot=snapshot,
+                site_id=lease.site_id,
+                fencing_epoch=lease.fencing_epoch,
+            )
+            status = finalized.status
+        repository.complete_job(
+            runtime_connection,
+            job_id=lease.job_id,
+            site_id=lease.site_id,
+            fencing_epoch=lease.fencing_epoch,
+        )
+    return LeaseOutcomeV1(
+        job_id=lease.job_id,
+        attempt_id=lease.attempt_id,
+        schedule_run_id=lease.schedule_run_id,
+        status=status,
+    )
+
+
+__all__ = [
+    "LeaseOutcomeV1",
+    "RuntimeConnectionFactory",
+    "SCOPE_CONTROLS",
+    "lease_and_execute_schedule_run",
+]

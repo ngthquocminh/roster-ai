@@ -19,12 +19,13 @@ from application.use_cases.create_run_snapshot import (
 class _ProposalRepository:
     def __init__(self, proposal: ProposalV1 | None) -> None:
         self.proposal = proposal
+        self.actor_id = uuid4()
 
     def get_current(self, _connection, *, proposal_id, for_update=False):
         assert for_update is True
         if self.proposal is None or self.proposal.proposal_id != proposal_id:
             return None
-        return ProposalRecordV1(self.proposal, 1)
+        return ProposalRecordV1(self.proposal, 1, self.actor_id)
 
 
 class _Catalogue:
