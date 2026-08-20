@@ -32,6 +32,7 @@ EXPECTED_TABLES = {
     "schedule_run",
     "schedule_version",
     "schedule_assignment",
+    "workflow.job_queue",
 }
 SITE_OWNED_TABLES = {
     "scenario",
@@ -50,6 +51,7 @@ SITE_OWNED_TABLES = {
     "schedule_run",
     "schedule_version",
     "schedule_assignment",
+    "workflow.job_queue",
 }
 
 

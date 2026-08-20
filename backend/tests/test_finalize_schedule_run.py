@@ -34,8 +34,8 @@ class _Repository:
     def finalize_run(self, _connection, **values):
         self.calls.append(values)
 
-    def mark_running(self, _connection, *, run_id, site_id):
-        self.running = (run_id, site_id)
+    def mark_running(self, _connection, *, run_id, site_id, fencing_epoch):
+        self.running = (run_id, site_id, fencing_epoch)
 
 
 class _Connection:
@@ -170,11 +170,13 @@ def test_postgres_terminal_write_inserts_candidate_only_for_completed() -> None:
 
     adapter.finalize_run(
         candidate_connection, run_id=snapshot.schedule_run_id, site_id=uuid4(),
-        status="solver_completed", reason=None, candidate=completed.candidate,
+        fencing_epoch=1, status="solver_completed", reason=None,
+        candidate=completed.candidate,
     )
     adapter.finalize_run(
         terminal_connection, run_id=snapshot.schedule_run_id, site_id=uuid4(),
-        status="solver_timed_out", reason="budget_exhausted", candidate=None,
+        fencing_epoch=1, status="solver_timed_out", reason="budget_exhausted",
+        candidate=None,
     )
 
     assert [statement.table.name for statement in candidate_connection.statements] == [
@@ -195,7 +197,8 @@ def test_adapter_error_is_persisted_as_specific_solver_failure() -> None:
 
     repository = _Repository()
     result = execute_schedule_run(
-        repository, Scheduler(), object(), snapshot=_snapshot(), site_id=uuid4()
+        repository, Scheduler(), object(), snapshot=_snapshot(), site_id=uuid4(),
+        fencing_epoch=1,
     )
 
     assert (result.status, result.reason, result.candidate) == (

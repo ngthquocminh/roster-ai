@@ -5,23 +5,64 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from pydantic import TypeAdapter
-from sqlalchemy import Connection, insert, update
+from sqlalchemy import Connection, exists, insert, select, text, update
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
 
 from adapters.postgres.schema import (
+    command_idempotency,
+    job_queue,
     run_snapshot,
     schedule_assignment,
     schedule_run,
     schedule_version,
 )
+from application.contracts.job_lease import JobLeaseV1
 from application.contracts.canonical import contract_digest
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import ScheduleRunStatusV1, ScheduleVersionV1
 from application.contracts.scenario_projection import QualificationRefV1
+from application.ports.schedule_run import IdempotentScheduleRunResultV1, StaleLeaseError
 
 
 class PostgresScheduleRunRepository:
+    @staticmethod
+    def _has_current_epoch(run_id: UUID, site_id: UUID, fencing_epoch: int):
+        return exists(
+            select(1).select_from(job_queue).where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+                job_queue.c.fencing_epoch == fencing_epoch,
+            )
+        )
+
+    @staticmethod
+    def _raise_transition_failure(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        fencing_epoch: int,
+        expected_status: str,
+    ) -> None:
+        current_epoch = connection.execute(
+            select(job_queue.c.fencing_epoch).where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+            )
+        ).scalar_one_or_none()
+        if current_epoch != fencing_epoch:
+            raise StaleLeaseError(
+                f"schedule run lease epoch {fencing_epoch} is stale; current is {current_epoch}"
+            )
+        raise ValueError(f"schedule run is no longer {expected_status}")
+
     def mark_running(
-        self, connection: Connection, *, run_id: UUID, site_id: UUID
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        fencing_epoch: int,
     ) -> None:
         result = connection.execute(
             update(schedule_run)
@@ -29,11 +70,18 @@ class PostgresScheduleRunRepository:
                 schedule_run.c.id == run_id,
                 schedule_run.c.site_id == site_id,
                 schedule_run.c.status == "solver_queued",
+                self._has_current_epoch(run_id, site_id, fencing_epoch),
             )
             .values(status="solver_running")
         )
         if getattr(result, "rowcount", 1) != 1:
-            raise ValueError("schedule run is no longer solver_queued")
+            self._raise_transition_failure(
+                connection,
+                run_id=run_id,
+                site_id=site_id,
+                fencing_epoch=fencing_epoch,
+                expected_status="solver_queued",
+            )
 
     def create_queued_run(
         self,
@@ -74,12 +122,201 @@ class PostgresScheduleRunRepository:
             )
         )
 
+    def enqueue_job(
+        self,
+        connection: Connection,
+        *,
+        job: JobLeaseV1,
+        site_id: UUID,
+    ) -> None:
+        if job.site_id != site_id:
+            raise ValueError("job site does not match the transaction site")
+        connection.execute(
+            insert(job_queue).values(
+                id=job.job_id,
+                site_id=site_id,
+                job_type=job.job_type,
+                status=job.status,
+                schedule_run_id=job.schedule_run_id,
+                actor_id=job.actor_id,
+                attempt_id=job.attempt_id,
+                contract_version=job.contract_version,
+                capability_version=job.capability_version,
+                idempotency_key=job.idempotency_key,
+                lease_owner=job.lease_owner,
+                lease_expires_at=job.lease_expires_at,
+                heartbeat_at=job.heartbeat_at,
+                fencing_epoch=job.fencing_epoch,
+                cancellation_requested=job.cancellation_requested,
+                created_at=job.created_at,
+            )
+        )
+
+    def lease_next_job(
+        self,
+        connection: Connection,
+        *,
+        lease_owner: str,
+        lease_seconds: int,
+    ) -> JobLeaseV1 | None:
+        row = connection.execute(
+            text(
+                "SELECT * FROM workflow.lease_next_job("
+                ":lease_owner, :lease_seconds)"
+            ),
+            {"lease_owner": lease_owner, "lease_seconds": lease_seconds},
+        ).mappings().one_or_none()
+        if row is None or row["id"] is None:
+            return None
+        return JobLeaseV1(
+            job_id=row["id"],
+            job_type=row["job_type"],
+            status=row["status"],
+            site_id=row["site_id"],
+            actor_id=row["actor_id"],
+            attempt_id=row["attempt_id"],
+            contract_version=row["contract_version"],
+            capability_version=row["capability_version"],
+            schedule_run_id=row["schedule_run_id"],
+            idempotency_key=row["idempotency_key"],
+            lease_owner=row["lease_owner"],
+            lease_expires_at=row["lease_expires_at"],
+            heartbeat_at=row["heartbeat_at"],
+            fencing_epoch=row["fencing_epoch"],
+            cancellation_requested=row["cancellation_requested"],
+            created_at=row["created_at"],
+        )
+
+    def renew_job_lease(
+        self,
+        connection: Connection,
+        *,
+        job_id: UUID,
+        fencing_epoch: int,
+        extension_seconds: int,
+    ) -> bool:
+        return bool(
+            connection.execute(
+                text(
+                    "SELECT workflow.renew_job_lease("
+                    ":job_id, :fencing_epoch, :extension_seconds)"
+                ),
+                {
+                    "job_id": job_id,
+                    "fencing_epoch": fencing_epoch,
+                    "extension_seconds": extension_seconds,
+                },
+            ).scalar_one()
+        )
+
+    def load_snapshot(
+        self,
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> RunSnapshotV1 | None:
+        payload = connection.execute(
+            select(run_snapshot.c.payload)
+            .select_from(
+                schedule_run.join(
+                    run_snapshot,
+                    (run_snapshot.c.id == schedule_run.c.run_snapshot_id)
+                    & (run_snapshot.c.site_id == schedule_run.c.site_id),
+                )
+            )
+            .where(schedule_run.c.id == run_id, schedule_run.c.site_id == site_id)
+        ).scalar_one_or_none()
+        return None if payload is None else TypeAdapter(RunSnapshotV1).validate_python(payload)
+
+    def complete_job(
+        self,
+        connection: Connection,
+        *,
+        job_id: UUID,
+        site_id: UUID,
+        fencing_epoch: int,
+    ) -> None:
+        result = connection.execute(
+            update(job_queue)
+            .where(
+                job_queue.c.id == job_id,
+                job_queue.c.site_id == site_id,
+                job_queue.c.status == "leased",
+                job_queue.c.fencing_epoch == fencing_epoch,
+            )
+            .values(status="completed", heartbeat_at=datetime.now(timezone.utc))
+        )
+        if getattr(result, "rowcount", 1) != 1:
+            current_epoch = connection.execute(
+                select(job_queue.c.fencing_epoch).where(
+                    job_queue.c.id == job_id,
+                    job_queue.c.site_id == site_id,
+                )
+            ).scalar_one_or_none()
+            if current_epoch != fencing_epoch:
+                raise StaleLeaseError(
+                    f"job lease epoch {fencing_epoch} is stale; current is {current_epoch}"
+                )
+            raise ValueError("job is no longer leased")
+
+    def get_idempotent_result(
+        self,
+        connection: Connection,
+        *,
+        site_id: UUID,
+        actor_id: UUID,
+        operation: str,
+        idempotency_key: str,
+    ) -> IdempotentScheduleRunResultV1 | None:
+        row = connection.execute(
+            select(
+                command_idempotency.c.body_hash,
+                command_idempotency.c.response_payload,
+            ).where(
+                command_idempotency.c.site_id == site_id,
+                command_idempotency.c.actor_id == actor_id,
+                command_idempotency.c.operation == operation,
+                command_idempotency.c.idempotency_key == idempotency_key,
+            )
+        ).one_or_none()
+        return (
+            None
+            if row is None
+            else IdempotentScheduleRunResultV1(row.body_hash, row.response_payload)
+        )
+
+    @staticmethod
+    def _store_idempotent_result(
+        connection: Connection,
+        *,
+        site_id: UUID,
+        actor_id: UUID,
+        operation: str,
+        idempotency_key: str,
+        body_hash: str,
+        response_payload: dict,
+    ) -> None:
+        connection.execute(
+            postgres_insert(command_idempotency)
+            .values(
+                site_id=site_id,
+                actor_id=actor_id,
+                operation=operation,
+                idempotency_key=idempotency_key,
+                body_hash=body_hash,
+                response_payload=response_payload,
+            )
+            .on_conflict_do_nothing(constraint="uq_command_idempotency_request")
+        )
+
     def finalize_run(
         self,
         connection: Connection,
         *,
         run_id: UUID,
         site_id: UUID,
+        fencing_epoch: int,
         status: ScheduleRunStatusV1,
         reason: str | None,
         candidate: ScheduleVersionV1 | None,
@@ -128,6 +365,7 @@ class PostgresScheduleRunRepository:
                 schedule_run.c.id == run_id,
                 schedule_run.c.site_id == site_id,
                 schedule_run.c.status == "solver_running",
+                self._has_current_epoch(run_id, site_id, fencing_epoch),
             )
             .values(
                 status=status,
@@ -137,7 +375,13 @@ class PostgresScheduleRunRepository:
             )
         )
         if getattr(result, "rowcount", 1) != 1:
-            raise ValueError("schedule run is no longer solver_running")
+            self._raise_transition_failure(
+                connection,
+                run_id=run_id,
+                site_id=site_id,
+                fencing_epoch=fencing_epoch,
+                expected_status="solver_running",
+            )
 
 
 __all__ = ["PostgresScheduleRunRepository"]

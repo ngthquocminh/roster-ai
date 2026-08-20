@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -494,11 +495,78 @@ schedule_assignment = Table(
     CheckConstraint("start_minute >= 0 AND end_minute > start_minute", name="ck_schedule_assignment_interval"),
 )
 
+job_queue = Table(
+    "job_queue",
+    metadata,
+    _id_column(),
+    _site_id_column(),
+    Column(
+        "job_type",
+        String(60),
+        nullable=False,
+        server_default=text("'schedule_run_execute'"),
+    ),
+    Column("status", String(20), nullable=False, server_default=text("'queued'")),
+    Column("schedule_run_id", UUID(as_uuid=True), nullable=False),
+    Column("actor_id", UUID(as_uuid=True), nullable=False),
+    Column("attempt_id", UUID(as_uuid=True), nullable=True),
+    Column("contract_version", String(40), nullable=False),
+    Column("capability_version", String(80), nullable=True),
+    Column("idempotency_key", String(200), nullable=False),
+    Column("lease_owner", String(200), nullable=True),
+    Column("lease_expires_at", DateTime(timezone=True), nullable=True),
+    Column("heartbeat_at", DateTime(timezone=True), nullable=True),
+    Column("fencing_epoch", BigInteger, nullable=False, server_default=text("0")),
+    Column(
+        "cancellation_requested",
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    ),
+    Column(
+        "created_at",
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    ),
+    ForeignKeyConstraint(
+        ["schedule_run_id", "site_id"],
+        ["schedule_run.id", "schedule_run.site_id"],
+        name="fk_job_queue_schedule_run_site",
+        ondelete="RESTRICT",
+    ),
+    ForeignKeyConstraint(
+        ["actor_id"],
+        ["app_user.id"],
+        name="fk_job_queue_actor",
+        ondelete="RESTRICT",
+    ),
+    UniqueConstraint("schedule_run_id", name="uq_job_queue_schedule_run"),
+    UniqueConstraint("id", "site_id", name="uq_job_queue_id_site"),
+    CheckConstraint(
+        "job_type IN ('schedule_run_execute')",
+        name="ck_job_queue_job_type",
+    ),
+    CheckConstraint(
+        "status IN ('queued','leased','completed')",
+        name="ck_job_queue_status",
+    ),
+    CheckConstraint("fencing_epoch >= 0", name="ck_job_queue_fencing_epoch"),
+    schema="workflow",
+)
+
 for _table in (run_snapshot, schedule_run, schedule_version, schedule_assignment):
     Index(f"ix_{_table.name}_site_id", _table.c.site_id)
 Index("ix_schedule_run_snapshot_id", schedule_run.c.run_snapshot_id)
 Index("ix_schedule_version_run_id", schedule_version.c.schedule_run_id)
 Index("ix_schedule_assignment_version_id", schedule_assignment.c.schedule_version_id)
+Index("ix_job_queue_site_id", job_queue.c.site_id)
+Index(
+    "ix_job_queue_leaseable",
+    job_queue.c.status,
+    job_queue.c.lease_expires_at,
+    job_queue.c.created_at,
+)
 
 login_handshake = Table(
     "login_handshake",

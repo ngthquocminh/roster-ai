@@ -12,6 +12,7 @@ from application.contracts.proposal import ProposalV1
 class ProposalRecordV1:
     proposal: ProposalV1
     version_ordinal: int
+    created_by_actor_id: UUID
 
 
 @dataclass(frozen=True)
