@@ -4,7 +4,7 @@ baseline_commit: 8623affe118a2312fc0bc6839ad5a75c64aa4f72
 
 # Story 3.4: Provide the Safe Cancellation Command [Technical Enabler]
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -535,6 +535,38 @@ assertion removed, recorded in the Dev Agent Record with the command and the cou
       story produces no new evidence file of its own.
 - [x] Verify the mandated zero-line diffs with `git diff --stat` (Project Structure Notes).
 
+### Review Findings
+
+Code review 2026-08-20 — three layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor), full diff
+`main...HEAD`, all layers completed. Suite green at review time (1077 passed / 1 skipped; 72 postgres).
+
+- [x] [Review][Patch] `finalize_run` rejects `solver_running → solver_cancelled` while `finalize_schedule_run._terminal` still produces it, and the resulting failure is an anonymous zero-row `ValueError` [backend/adapters/postgres/schedule_run.py:238] — **D1 resolved (Minh, 2026-08-20): patch adapter-side, do not breach the zero-line-diff fence on `finalize_schedule_run.py`.** Add `IllegalTransitionError` to `application/ports/schedule_run.py`; widen `_raise_transition_failure` to read the actual current status and name the forbidden AD-7 edge; pass `target_status` at the call sites (`:584`, `:262`). Root cause stays open and is owned by Story 3.5 — this makes it self-diagnosing, not fixed.
+
+- [x] [Review][Patch] Cancel command and `finalize_run` take the two row locks in opposite order — ABBA deadlock [backend/application/use_cases/cancel_schedule_run.py:154]
+- [x] [Review][Patch] Checkpoint 1 reads run state unlocked, then loses the `mark_running` compare-and-set and raises a bare `ValueError` out of the worker [backend/application/use_cases/lease_and_execute_schedule_run.py:88]
+- [x] [Review][Patch] A lost cancellation compare-and-set is reported as `run_not_cancellable` when the real cause is a moved `resource_version` [backend/adapters/postgres/schedule_run.py:99]
+- [x] [Review][Patch] A concurrently replayed `Idempotency-Key` returns `409 run_not_cancellable` instead of the stored result [backend/application/use_cases/cancel_schedule_run.py:100]
+- [x] [Review][Patch] Every "race" test is strictly sequential — no test holds two transactions open at once [backend/tests/test_cancellation_race_postgres.py:285]
+- [x] [Review][Patch] Checkpoint 2 has no terminal-status short-circuit, so a fenced-out worker runs a full duplicate solve before failing [backend/application/use_cases/lease_and_execute_schedule_run.py:142]
+- [x] [Review][Patch] Transaction A now commits `mark_running` without claiming the fence under a row lock [backend/adapters/postgres/schedule_run.py:240]
+- [x] [Review][Patch] `ScheduleRunOut.cancellation_requested` is a hard-coded `True` published as a required contract field [backend/api/routers/schedule_runs.py:48]
+- [x] [Review][Patch] The route's tests monkeypatch the use case away, so router↔use-case wiring is never exercised [backend/tests/test_schedule_runs_api.py:66]
+- [x] [Review][Patch] The AD-7 guard inspects three hard-coded function names with no assertion they are the only `update(schedule_run)` sites [backend/tests/architecture/test_schedule_run_state_machine.py:118]
+- [x] [Review][Patch] `enqueue_compute.SCOPE_CONTROLS` claims `COVERS: cancellation:queued_and_running`, which that module does not implement [backend/application/use_cases/enqueue_compute.py:21]
+- [x] [Review][Patch] `deferred-work.md` rewrites dropped their `file:line` anchors [_bmad-output/implementation-artifacts/deferred-work.md]
+- [x] [Review][Patch] Dead `cancelled=` parameter left on the `_lease` test helper after the cancellation branch was replaced [backend/tests/test_lease_next_job.py:33]
+- [x] [Review][Patch] Phase A checkpoint item 3 (live column-privilege dump) was never reported in the Dev Agent Record [_bmad-output/implementation-artifacts/3-4-provide-the-safe-cancellation-command.md:750]
+
+- [x] [Review][Defer] `finished_at` is written from two different clocks — `func.now()` on the cancel path, a Python clock in `finalize_run` [backend/adapters/postgres/schedule_run.py:577] — deferred, pre-existing (the new path follows the stated DB-clock rule; the deviating side is the older one)
+- [x] [Review][Defer] `getattr(result, "rowcount", 1) != 1` defaults a missing rowcount to success, so the guards fail open [backend/adapters/postgres/schedule_run.py:99] — deferred, pre-existing (same pattern at `:207`, `:261`, `:441`, `:583`)
+- [x] [Review][Defer] `ScheduleRunOut.created_at` / `finished_at` are declared in the published contract but never populated [backend/api/routers/schedule_runs.py:43] — deferred, pre-existing (dev scoped them to Story 3.7 with an in-file comment)
+- [x] [Review][Defer] A `solver_running` cancellation with no `job_queue` row parks the run non-terminal with no observer [backend/application/use_cases/cancel_schedule_run.py:130] — deferred, incidentally safe today (`mark_running` requires a leased job row); belongs with Story 3.5's orphan handling
+- [x] [Review][Defer] `execute_schedule_run` lost `mark_running` and its "must already be `solver_running`" precondition now lives only in a docstring [backend/application/use_cases/execute_schedule_run.py:38] — deferred, no live consequence
+- [x] [Review][Defer] AD-13's correlation ID and resource ID are absent from the new RFC 7807 problems [backend/api/routers/schedule_runs.py:64] — deferred, pre-existing repo-wide shape; the spec instructed copying `proposals.py`
+
+**Dismissed as noise (3):** the empty-`idempotency_key` guard is *not* untested — `tests/test_cancel_schedule_run.py:290` parametrizes `("", "x"*41)`; the state-read-before-replay ordering that turns an invisible run into a 404 is defensible (the alternative leaks across sites); `JobLeaseV1.cancellation_requested` being written-but-unread is Decision 4 working as designed ("the flag is a carrier, the status is the authority") and AD-20 requires the lease contract to carry it.
+
+
 ---
 
 ## Dev Notes
@@ -749,6 +781,16 @@ Codex (GPT-5)
 - 2026-08-20 Phase A checkpoint: backend 1075 collected / 1066 passed / 2 skipped / 7 deselected;
   PostgreSQL 66 collected / 66 passed; `alembic check` reported no operations; downgrade to
   `a2b3c4d5e6f7` and upgrade to head succeeded; OpenAPI reported seven versioned write routes.
+- 2026-08-20 Phase A checkpoint item 3 (omitted at the time, measured at code review from
+  `information_schema.column_privileges` against the governed test database at migration head
+  `b3c4d5e6f7a8`). `shiftmind_runtime` holds:
+  - `schedule_run` — `UPDATE: candidate_schedule_version_id, finished_at, reason, resource_version,
+    status`
+  - `job_queue` — `UPDATE: cancellation_requested, heartbeat_at, status`
+  The two additive grants are exactly `schedule_run.resource_version` and
+  `job_queue.cancellation_requested`. No lease or fencing column is present: `lease_owner`,
+  `lease_expires_at` and `fencing_epoch` appear under `SELECT`/`INSERT` only, never `UPDATE` — the
+  negative half asserted by `test_runtime_grant_cannot_write_lease_or_fencing_columns`.
 - 2026-08-20 Phase B RED: six worker tests failed against the inherited single transaction and the
   execution use case's inherited `mark_running` call. After the split, 31 focused worker/finalization
   tests passed.
