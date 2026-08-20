@@ -40,7 +40,10 @@ def upgrade() -> None:
         sa.Column("attempt_id", UUID, nullable=True),
         sa.Column("contract_version", sa.String(40), nullable=False),
         sa.Column("capability_version", sa.String(80), nullable=True),
-        sa.Column("idempotency_key", sa.String(200), nullable=False),
+        # Matches `command_idempotency.idempotency_key`. The enqueue bundle
+        # writes both tables in one transaction, so a wider column here would
+        # only defer the truncation error to the second insert.
+        sa.Column("idempotency_key", sa.String(40), nullable=False),
         sa.Column("lease_owner", sa.String(200), nullable=True),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("heartbeat_at", sa.DateTime(timezone=True), nullable=True),
@@ -189,26 +192,39 @@ def upgrade() -> None:
           p_job_id uuid,
           p_fencing_epoch bigint,
           p_extension_seconds integer
-        ) RETURNS boolean
+        ) RETURNS TABLE (renewed boolean, cancellation_requested boolean)
         LANGUAGE plpgsql
         SECURITY DEFINER
         SET search_path = pg_catalog, workflow
         AS $$
         DECLARE
-          updated_count integer;
+          v_site_id uuid;
+          v_cancelled boolean;
         BEGIN
           IF p_extension_seconds <= 0 THEN
             RAISE EXCEPTION 'lease extension must be positive' USING ERRCODE = '22023';
           END IF;
+          -- The owner carries BYPASSRLS, so job_queue's site-isolation policy
+          -- does NOT apply inside a definer-rights body like this one. Without
+          -- this predicate any holder of the caller role could extend another
+          -- tenant's lease. Unset app.site_id yields NULL and matches nothing,
+          -- so the function fails closed rather than open.
+          v_site_id := NULLIF(current_setting('app.site_id', true), '')::uuid;
           UPDATE workflow.job_queue AS q
           SET lease_expires_at = pg_catalog.now()
                 + p_extension_seconds * interval '1 second',
               heartbeat_at = pg_catalog.now()
           WHERE q.id = p_job_id
+            AND q.site_id = v_site_id
             AND q.status = 'leased'
-            AND q.fencing_epoch = p_fencing_epoch;
-          GET DIAGNOSTICS updated_count = ROW_COUNT;
-          RETURN updated_count = 1;
+            AND q.fencing_epoch = p_fencing_epoch
+          RETURNING q.cancellation_requested INTO v_cancelled;
+          -- Decision 7: the flag is READ here so a leased-but-cancelled job can
+          -- surface to the worker; nothing in this story SETS it (Story 3.4).
+          -- COALESCE is a SQL construct, not a pg_catalog function; qualifying
+          -- it raises UndefinedFunction. It needs no search_path protection.
+          RETURN QUERY SELECT v_cancelled IS NOT NULL,
+                              COALESCE(v_cancelled, false);
         END;
         $$
         """

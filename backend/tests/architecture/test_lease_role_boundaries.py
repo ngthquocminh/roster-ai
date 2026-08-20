@@ -49,6 +49,15 @@ def test_job_queue_metadata_is_workflow_owned_and_closed() -> None:
     }
 
 
+def lease_role_holds_no_table_grant(source: str) -> bool:
+    """The structural guard itself, named so it can be driven against a
+    deliberately broken source as well as the real one."""
+    lease_lines = "\n".join(
+        line for line in source.splitlines() if "shiftmind_lease" in line
+    )
+    return "GRANT SELECT" not in lease_lines
+
+
 def test_migration_creates_a_lease_only_role_and_narrow_runtime_updates() -> None:
     source = MIGRATION.read_text(encoding="utf-8")
     assert "CREATE SCHEMA workflow AUTHORIZATION shiftmind_owner" in source
@@ -56,9 +65,7 @@ def test_migration_creates_a_lease_only_role_and_narrow_runtime_updates() -> Non
     assert "NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS" in source
     assert "GRANT SELECT, INSERT ON workflow.job_queue TO shiftmind_runtime" in source
     assert "GRANT UPDATE (status, heartbeat_at) ON workflow.job_queue TO shiftmind_runtime" in source
-    assert "GRANT SELECT" not in "\n".join(
-        line for line in source.splitlines() if "shiftmind_lease" in line
-    )
+    assert lease_role_holds_no_table_grant(source)
     assert "ENABLE ROW LEVEL SECURITY" in source
     assert "FORCE ROW LEVEL SECURITY" in source
 
@@ -81,9 +88,18 @@ def test_owner_held_lease_functions_are_fixed_and_non_public() -> None:
 
 
 def test_structural_guard_would_observe_a_broad_lease_role_grant() -> None:
-    unsafe = "GRANT SELECT ON workflow.job_queue TO shiftmind_lease"
-    lease_lines = "\n".join(line for line in unsafe.splitlines() if "shiftmind_lease" in line)
-    assert "GRANT SELECT" in lease_lines
+    """Retro action A2: observe the guard FAILING with its subject broken.
+
+    The previous version of this test asserted that a locally-constructed
+    string contained itself — it never read the migration and could not fail.
+    This one drives the real predicate against the real source with one broad
+    grant injected, so the guard is proven to discriminate.
+    """
+    source = MIGRATION.read_text(encoding="utf-8")
+    assert lease_role_holds_no_table_grant(source)
+
+    widened = source + '\nop.execute("GRANT SELECT ON workflow.job_queue TO shiftmind_lease")\n'
+    assert not lease_role_holds_no_table_grant(widened)
 
 
 def test_worker_opens_lease_and_domain_roles_in_separate_contexts() -> None:

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from pydantic import TypeAdapter
-from sqlalchemy import Connection, exists, insert, select, text, update
+from sqlalchemy import Connection, exists, func, insert, select, text, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 
 from adapters.postgres.schema import (
@@ -16,7 +16,7 @@ from adapters.postgres.schema import (
     schedule_run,
     schedule_version,
 )
-from application.contracts.job_lease import JobLeaseV1
+from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
 from application.contracts.canonical import contract_digest
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import ScheduleRunStatusV1, ScheduleVersionV1
@@ -24,16 +24,75 @@ from application.contracts.scenario_projection import QualificationRefV1
 from application.ports.schedule_run import IdempotentScheduleRunResultV1, StaleLeaseError
 
 
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Normalise a `timestamptz` decoded in the session timezone to UTC."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 class PostgresScheduleRunRepository:
     @staticmethod
     def _has_current_epoch(run_id: UUID, site_id: UUID, fencing_epoch: int):
+        # `status == 'leased'` and a positive epoch are load-bearing, not
+        # decoration: a job is enqueued at fencing_epoch=0, so without them a
+        # caller passing 0 would satisfy the fence for a job that was never
+        # leased and could drive a run terminal outside any lease at all.
         return exists(
             select(1).select_from(job_queue).where(
                 job_queue.c.schedule_run_id == run_id,
                 job_queue.c.site_id == site_id,
+                job_queue.c.status == "leased",
                 job_queue.c.fencing_epoch == fencing_epoch,
+                job_queue.c.fencing_epoch > 0,
             )
         )
+
+    @staticmethod
+    def _claim_epoch(
+        connection: Connection,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+        fencing_epoch: int,
+    ) -> None:
+        """Take a real row lock on the job before writing any effect.
+
+        The `EXISTS` predicate inside the compare-and-set is an unlocked read:
+        under READ COMMITTED it can pass against an epoch that a concurrent
+        `lease_next_job` is in the middle of superseding, letting an expired
+        worker commit. This touch UPDATE takes a row-exclusive lock that
+        conflicts with that function's `FOR UPDATE`, so the two serialise, and
+        it runs BEFORE the candidate rows are written rather than after.
+
+        It uses only the `heartbeat_at` column the runtime role is granted
+        (`GRANT UPDATE (status, heartbeat_at)`), and writes the clock from the
+        database so the column has one time source.
+        """
+        result = connection.execute(
+            update(job_queue)
+            .where(
+                job_queue.c.schedule_run_id == run_id,
+                job_queue.c.site_id == site_id,
+                job_queue.c.status == "leased",
+                job_queue.c.fencing_epoch == fencing_epoch,
+                job_queue.c.fencing_epoch > 0,
+            )
+            .values(heartbeat_at=func.now())
+        )
+        if getattr(result, "rowcount", 1) != 1:
+            current_epoch = connection.execute(
+                select(job_queue.c.fencing_epoch).where(
+                    job_queue.c.schedule_run_id == run_id,
+                    job_queue.c.site_id == site_id,
+                )
+            ).scalar_one_or_none()
+            raise StaleLeaseError(
+                f"schedule run lease epoch {fencing_epoch} is stale; "
+                f"current is {current_epoch}"
+            )
 
     @staticmethod
     def _raise_transition_failure(
@@ -168,6 +227,10 @@ class PostgresScheduleRunRepository:
         ).mappings().one_or_none()
         if row is None or row["id"] is None:
             return None
+        # psycopg decodes `timestamptz` using the SESSION TimeZone, which
+        # nothing pins to UTC. `JobLeaseV1` requires a zero utcoffset, so
+        # without this every lease would raise on a non-UTC server. Same
+        # normalisation `adapters/postgres/conversation.py` already applies.
         return JobLeaseV1(
             job_id=row["id"],
             job_type=row["job_type"],
@@ -180,11 +243,11 @@ class PostgresScheduleRunRepository:
             schedule_run_id=row["schedule_run_id"],
             idempotency_key=row["idempotency_key"],
             lease_owner=row["lease_owner"],
-            lease_expires_at=row["lease_expires_at"],
-            heartbeat_at=row["heartbeat_at"],
+            lease_expires_at=_as_utc(row["lease_expires_at"]),
+            heartbeat_at=_as_utc(row["heartbeat_at"]),
             fencing_epoch=row["fencing_epoch"],
             cancellation_requested=row["cancellation_requested"],
-            created_at=row["created_at"],
+            created_at=_as_utc(row["created_at"]),
         )
 
     def renew_job_lease(
@@ -194,19 +257,22 @@ class PostgresScheduleRunRepository:
         job_id: UUID,
         fencing_epoch: int,
         extension_seconds: int,
-    ) -> bool:
-        return bool(
-            connection.execute(
-                text(
-                    "SELECT workflow.renew_job_lease("
-                    ":job_id, :fencing_epoch, :extension_seconds)"
-                ),
-                {
-                    "job_id": job_id,
-                    "fencing_epoch": fencing_epoch,
-                    "extension_seconds": extension_seconds,
-                },
-            ).scalar_one()
+    ) -> LeaseRenewalV1:
+        row = connection.execute(
+            text(
+                "SELECT renewed, cancellation_requested "
+                "FROM workflow.renew_job_lease("
+                ":job_id, :fencing_epoch, :extension_seconds)"
+            ),
+            {
+                "job_id": job_id,
+                "fencing_epoch": fencing_epoch,
+                "extension_seconds": extension_seconds,
+            },
+        ).mappings().one()
+        return LeaseRenewalV1(
+            renewed=bool(row["renewed"]),
+            cancellation_requested=bool(row["cancellation_requested"]),
         )
 
     def load_snapshot(
@@ -245,7 +311,7 @@ class PostgresScheduleRunRepository:
                 job_queue.c.status == "leased",
                 job_queue.c.fencing_epoch == fencing_epoch,
             )
-            .values(status="completed", heartbeat_at=datetime.now(timezone.utc))
+            .values(status="completed", heartbeat_at=func.now())
         )
         if getattr(result, "rowcount", 1) != 1:
             current_epoch = connection.execute(
@@ -322,6 +388,13 @@ class PostgresScheduleRunRepository:
         candidate: ScheduleVersionV1 | None,
         finished_at: datetime | None = None,
     ) -> None:
+        # AC3 is about the EFFECT commit, so the fence is claimed under a real
+        # row lock before any candidate row is written. Without this the guard
+        # rejected nothing on its own — the inserts had already happened and
+        # only the caller's rollback suppressed them.
+        self._claim_epoch(
+            connection, run_id=run_id, site_id=site_id, fencing_epoch=fencing_epoch
+        )
         candidate_id = None
         if candidate is not None:
             assert candidate.schedule_version_id is not None

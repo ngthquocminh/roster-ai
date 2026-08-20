@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import UUID
 
-from application.contracts.job_lease import JobLeaseV1
+from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import ScheduleRunStatusV1, ScheduleVersionV1
 
@@ -62,7 +62,7 @@ class ScheduleRunRepository(Protocol):
         job_id: UUID,
         fencing_epoch: int,
         extension_seconds: int,
-    ) -> bool: ...
+    ) -> LeaseRenewalV1: ...
 
     def load_snapshot(
         self,

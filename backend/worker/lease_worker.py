@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Iterator
+from math import ceil
+from typing import Any, Iterator
 from uuid import UUID
 
 from sqlalchemy import Connection, Engine, text
@@ -28,7 +29,13 @@ def lease_context(engine: Engine) -> Iterator[Connection]:
         try:
             yield connection
         finally:
-            connection.exec_driver_sql("RESET ROLE")
+            # A failed RESET must not mask the in-flight exception, and a
+            # connection still holding the lease role must never go back to the
+            # pool. Invalidate instead of hiding either problem.
+            try:
+                connection.exec_driver_sql("RESET ROLE")
+            except Exception:  # noqa: BLE001
+                connection.invalidate()
 
 
 @contextmanager
@@ -43,6 +50,22 @@ def runtime_context(engine: Engine, site_id: UUID) -> Iterator[Connection]:
         yield connection
 
 
+#: Multiple of the solver wall-time budget used when no lease duration is given.
+#: There is no heartbeat yet (SCOPE_CONTROLS `heartbeat:owned_by_story_3_5`), so
+#: a lease shorter than the solve it covers would be stolen mid-flight and the
+#: finished work discarded. Story 3.6 owns the real ceiling
+#: (`ceilings:lease_seconds_owned_by_story_3_6`); this is only a floor that keeps
+#: the default safe until it does.
+LEASE_SECONDS_SOLVER_MULTIPLE = 4
+MINIMUM_LEASE_SECONDS = 60
+
+
+def default_lease_seconds(settings: Any) -> int:
+    """Derive a lease duration that cannot be shorter than the solver budget."""
+    budget = float(getattr(settings, "solver_wall_time_limit_seconds", 0.0) or 0.0)
+    return max(MINIMUM_LEASE_SECONDS, ceil(budget * LEASE_SECONDS_SOLVER_MULTIPLE))
+
+
 def run_once(
     engine: Engine,
     repository: ScheduleRunRepository,
@@ -51,7 +74,13 @@ def run_once(
     lease_owner: str,
     lease_seconds: int,
 ) -> LeaseOutcomeV1 | None:
-    """Lease and advance at most one job; process supervision stays external."""
+    """Lease and advance at most one job; process supervision stays external.
+
+    `lease_seconds` must exceed the solver wall-time budget — see
+    `default_lease_seconds`, which callers without their own ceiling should use.
+    """
+    if lease_seconds <= 0:
+        raise ValueError("lease_seconds must be positive")
     with lease_context(engine) as lease_connection:
         return lease_and_execute_schedule_run(
             lease_connection,
@@ -63,4 +92,11 @@ def run_once(
         )
 
 
-__all__ = ["lease_context", "run_once", "runtime_context"]
+__all__ = [
+    "LEASE_SECONDS_SOLVER_MULTIPLE",
+    "MINIMUM_LEASE_SECONDS",
+    "default_lease_seconds",
+    "lease_context",
+    "run_once",
+    "runtime_context",
+]

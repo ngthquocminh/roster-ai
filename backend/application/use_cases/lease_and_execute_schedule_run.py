@@ -15,7 +15,25 @@ SCOPE_CONTROLS = (
     "COVERS: roles:worker_reuses_shiftmind_runtime; "
     "NOT COVERED: events:owned_by_story_3_5; "
     "NOT COVERED: cancellation:owned_by_story_3_4; "
-    "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6"
+    "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
+    # AD-6 requires a heartbeat. `workflow.renew_job_lease` exists and is
+    # granted, but nothing calls it: the domain work runs in one transaction,
+    # so a renewal issued there is invisible to other sessions until commit —
+    # exactly when it no longer matters. Story 3.5's state machine AC forces
+    # `running` to commit its own event (epics.md:959-962) and decides what
+    # wall-time exhaustion means (epics.md:969-972); the heartbeat belongs
+    # with that work, not bolted on here.
+    "NOT COVERED: heartbeat:owned_by_story_3_5; "
+    # A job that fails between lease and completion stays `leased`, expires and
+    # is re-leased forever — `JobStatusV1` has no terminal-failure member.
+    # Story 3.5 must reopen that closed vocabulary anyway: its AC names
+    # `failed` and `timed-out` as required literal states.
+    "NOT COVERED: job_failure_state:owned_by_story_3_5; "
+    # `lease_seconds` must exceed the solver budget or every long solve fences
+    # itself out. `DEFAULT_LEASE_SECONDS` is a floor, not the ceiling AD-8
+    # wants: Story 3.6's AC requires application-owned ceilings for solver time
+    # and total elapsed time (epics.md:1000-1003).
+    "NOT COVERED: ceilings:lease_seconds_owned_by_story_3_6"
 )
 
 

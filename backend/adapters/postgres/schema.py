@@ -512,7 +512,7 @@ job_queue = Table(
     Column("attempt_id", UUID(as_uuid=True), nullable=True),
     Column("contract_version", String(40), nullable=False),
     Column("capability_version", String(80), nullable=True),
-    Column("idempotency_key", String(200), nullable=False),
+    Column("idempotency_key", String(40), nullable=False),
     Column("lease_owner", String(200), nullable=True),
     Column("lease_expires_at", DateTime(timezone=True), nullable=True),
     Column("heartbeat_at", DateTime(timezone=True), nullable=True),

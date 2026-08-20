@@ -179,11 +179,14 @@ def test_postgres_terminal_write_inserts_candidate_only_for_completed() -> None:
         candidate=None,
     )
 
+    # `job_queue` comes FIRST on both paths: the fence is claimed under a row
+    # lock before any candidate row is written, so a stale worker is rejected
+    # by the guard itself rather than by the caller happening to roll back.
     assert [statement.table.name for statement in candidate_connection.statements] == [
-        "schedule_version", "schedule_assignment", "schedule_run"
+        "job_queue", "schedule_version", "schedule_assignment", "schedule_run"
     ]
     assert [statement.table.name for statement in terminal_connection.statements] == [
-        "schedule_run"
+        "job_queue", "schedule_run"
     ]
 
 

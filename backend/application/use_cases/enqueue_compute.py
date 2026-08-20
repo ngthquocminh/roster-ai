@@ -7,7 +7,7 @@ from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from application.contracts.canonical import contract_digest
-from application.contracts.job_lease import JobLeaseV1
+from application.contracts.job_lease import MAX_IDEMPOTENCY_KEY_LENGTH, JobLeaseV1
 from application.contracts.run_snapshot import SCHEMA_VERSION
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
@@ -19,7 +19,13 @@ SCOPE_CONTROLS = (
     "COVERS: roles:worker_reuses_shiftmind_runtime; "
     "NOT COVERED: events:owned_by_story_3_5; "
     "NOT COVERED: cancellation:owned_by_story_3_4; "
-    "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6"
+    "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
+    # AC1 names "actor/site/attempt IDs" in the bundle, but `attempt_id` is
+    # NULL on every job this use case creates. That is Decision 5 working as
+    # intended — an attempt is per LEASE ACQUISITION, and nothing has leased
+    # this job yet — not an omission. Recorded here because Decisions 6 and 7
+    # both got an entry for their equivalent gaps and this one did not.
+    "NOT COVERED: contracts:attempt_id_unset_until_first_lease"
 )
 
 
@@ -65,6 +71,13 @@ def enqueue_compute(
     )
     if record is None:
         raise EnqueueComputeError("proposal was not found")
+    if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
+        # Both tables are written in this one transaction; an over-long key
+        # would insert into job_queue and then abort the whole transaction on
+        # command_idempotency with a driver-level truncation error.
+        raise EnqueueComputeError(
+            f"idempotency_key must be 1..{MAX_IDEMPOTENCY_KEY_LENGTH} characters"
+        )
     actor_id = record.created_by_actor_id
     operation = f"enqueue_compute:{proposal_id}"
     body_hash = _body_hash(proposal_id, expected_proposal_resource_version)

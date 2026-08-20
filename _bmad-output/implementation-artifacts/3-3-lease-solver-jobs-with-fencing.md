@@ -4,7 +4,7 @@ baseline_commit: 2d41ee8ff8dccb350dbba0a6cc6a12e1a5c5fc17
 
 # Story 3.3: Lease Solver Jobs with Fencing [Technical Enabler]
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -487,6 +487,40 @@ assertion removed, recorded in the Dev Agent Record.
 - [x] Gate A re-run: `gate_a_passed: true`, `blocking: []`.
 - [x] Verify the mandated zero-line diffs with `git diff --stat` (Project Structure Notes).
 
+### Review Findings
+
+_Adversarial code review (Blind Hunter + Edge Case Hunter + Acceptance Auditor), 2026-08-20, against `main...HEAD` at `acd243b`. All three layers completed; none failed._
+
+- [x] [Review][Patch] Declare the deferred heartbeat as data — add `heartbeat:owned_by_story_3_5` and `ceilings:lease_seconds_owned_by_story_3_6` to `SCOPE_CONTROLS`, in the same `NOT COVERED:` form the module already uses for events/cancellation/capability_version (resolution of D1) [backend/application/use_cases/lease_and_execute_schedule_run.py:14]
+- [x] [Review][Patch] Give `lease_seconds` a safe default bound to `solver_wall_time_limit_seconds` so a worker cannot be configured to fence its own solve before Story 3.6 owns the ceiling — this is the half of D1 that closes a real window if 3.6 ships before 3.5 [backend/worker/lease_worker.py:52]
+- [x] [Review][Patch] Assert `SCOPE_CONTROLS` states its non-coverage, mirroring `test_scheduling_inspect.py:269-271` — these two use cases are not capability modules, so `test_capability_conformance.py:133-142` does not reach them and the declaration is currently unenforced [backend/tests/test_enqueue_compute.py]
+- [x] [Review][Patch] Epoch guard is a non-locking read evaluated *after* the effects are written — `_has_current_epoch`'s plain `EXISTS` takes no row lock, so under READ COMMITTED a worker whose lease expired can pass the fence while a re-lease is in flight and commit its result; and in `finalize_run` the `schedule_version`/`schedule_assignment` inserts run before the epoch-checked UPDATE, so the guard rejects nothing on its own — only caller rollback suppresses the evidence [backend/adapters/postgres/schedule_run.py:29]
+- [x] [Review][Patch] `fencing_epoch=0` satisfies the fence for a job that was never leased — the guard matches only `(schedule_run_id, site_id, fencing_epoch)` and never requires `status='leased'` or a positive epoch, so any caller holding the run id can drive a run terminal without ever taking a lease [backend/adapters/postgres/schedule_run.py:29]
+- [x] [Review][Patch] AC3's "no duplicate terminal evidence or candidate creation" half is never exercised — every fencing test finalizes with `candidate=None`, making the `schedule_version` count assertion vacuous; `uq_schedule_version_run` is never observed doing anything [backend/tests/test_job_leasing_postgres.py:257]
+- [x] [Review][Patch] Lease timestamps assume the server session `TimeZone` is UTC — `JobLeaseV1.__post_init__` rejects any non-zero `utcoffset()`, psycopg decodes `timestamptz` in the session timezone, and nothing pins it; on a non-UTC server every lease raises `ValueError("job timestamps must be UTC-aware")`. `adapters/postgres/conversation.py:506` already normalises with `.astimezone(timezone.utc)`; this adapter does not [backend/adapters/postgres/schedule_run.py:183]
+- [x] [Review][Patch] `renew_job_lease` has no site predicate — it is `SECURITY DEFINER` owned by `shiftmind_owner` (which carries `BYPASSRLS`), so RLS does not apply inside it, and the body filters only on `id`, `status`, and `fencing_epoch`. Any session able to `SET ROLE shiftmind_runtime` can extend another tenant's lease given its job id and epoch [backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py:188]
+- [x] [Review][Patch] `renew_job_lease` does not read or return `cancellation_requested`, contradicting Decision 7's explicit requirement that both lease functions read it so Story 3.4 need not invent plumbing; it `RETURNS boolean` [backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py:188]
+- [x] [Review][Patch] `test_structural_guard_would_observe_a_broad_lease_role_grant` is a tautology — it asserts a locally-constructed string contains itself, never reads `MIGRATION`, and cannot fail whatever the migration says. Retro action A2 (in force for this story) requires every new guard to be observed failing [backend/tests/architecture/test_lease_role_boundaries.py:83]
+- [x] [Review][Patch] Several new guards and the worker adapter have no behavioural test — no test imports `worker.lease_worker` or calls `run_once` (only `read_text()` substring assertions), `renew_job_lease` is never invoked, the `lease_next_job` row-to-contract mapping is never executed, and neither `complete_job`'s stale-epoch branch nor `enqueue_job`'s site-mismatch guard is reached [backend/tests/architecture/test_lease_role_boundaries.py:89]
+- [x] [Review][Patch] `idempotency_key` widths disagree across the two tables written in one transaction — `workflow.job_queue.idempotency_key` is `String(200)`, `command_idempotency.idempotency_key` is `String(40)`, and `enqueue_compute` validates neither length nor emptiness, so a 41-200 char key aborts the transaction with a raw `StringDataRightTruncation` from the second insert. Related `JobLeaseV1` gaps: empty `idempotency_key` passes, `status` is never checked against its `Literal`, a `queued` job carrying lease fields is not rejected [backend/adapters/postgres/schema.py:515]
+- [x] [Review][Patch] AC1's forced-rollback assertion covers 1 of the 4 tables it names — only `command_idempotency` absence is asserted; `run_snapshot`, `schedule_run`, and `job_queue` are not [backend/tests/test_job_leasing_postgres.py:437]
+- [x] [Review][Patch] `attempt_id` is NULL in the enqueue-compute bundle, which AC1 names verbatim, with no `NOT COVERED` entry — this follows directly from Decision 5 (per-lease attempt), but unlike Decision 6 and Decision 7 the tension was never recorded in `SCOPE_CONTROLS` [backend/application/use_cases/enqueue_compute.py:18]
+- [x] [Review][Patch] Decision 6's mandated test-docstring citation is missing — the decision requires the `NOT COVERED: events:owned_by_story_3_5` reasoning to be cited in the AC1 test's docstring; `test_enqueue_compute.py` contains no docstrings at all [backend/tests/test_enqueue_compute.py:126]
+- [x] [Review][Patch] `RESET ROLE` in the lease context's `finally` can mask the in-flight exception and return a still-`SET ROLE` connection to the pool if it raises [backend/worker/lease_worker.py:31]
+- [x] [Review][Patch] `complete_job` writes `heartbeat_at` from the Python clock while `lease_next_job`/`renew_job_lease` write it from `pg_catalog.now()` — mixed clock sources on one column [backend/adapters/postgres/schedule_run.py:248]
+- [x] [Review][Patch] Dev Agent Record is incomplete — `Agent Model Used` is still `_To be filled by the dev agent._`, and the Phase A checkpoint's items 3-4 (live `job_queue` grant dump and `role_routine_grants`) were never reported as numbers in the Debug Log [_bmad-output/implementation-artifacts/3-3-lease-solver-jobs-with-fencing.md:656]
+- [x] [Review][Defer] **The AD-6 heartbeat and the single long-lived domain transaction** [backend/application/use_cases/lease_and_execute_schedule_run.py:80] — deferred to **Story 3.5** (Minh, 2026-08-20, D1 option c). 3.5's state machine AC requires `running` to emit one monotonic persisted event (`epics.md:959-962`), which cannot hold while `mark_running` sits inside an uncommitted transaction, and its ceiling AC requires wall-time exhaustion to become `timed-out` with no implicit retry (`epics.md:969-972`) — the exact lease-expiry decision a heartbeat exists to inform. `renew_job_lease` stays as declared dead code, the same posture `cancellation_requested` holds for Story 3.4.
+- [x] [Review][Defer] **The `lease_seconds` ceiling** [backend/worker/lease_worker.py:52] — deferred to **Story 3.6** (Minh, 2026-08-20, D1 option c). 3.6's second AC requires positive application-owned ceilings for solver time and total elapsed time, with no ceiling originating from model output (`epics.md:1000-1003`); 3.6 is also the first story to create `schedule_run` rows through a real route, so it cannot avoid choosing this number. A safe default lands in this story as a patch so the gap is not open in the interval.
+- [x] [Review][Defer] **No terminal-failure state on `job_queue`: a job failing between lease and `complete_job` is re-leased forever at the head of the queue** [backend/application/contracts/job_lease.py:12] — deferred to **Story 3.5** (Minh, 2026-08-20, D2 option 1). 3.5's state machine AC names `failed` and `timed-out` as required literal states (`epics.md:959-962`), so 3.5 must reopen the closed `JobStatusV1` vocabulary Decision 1 froze; adding a fourth member now would be redesigned there weeks later. Reachable paths meanwhile: missing snapshot (`lease_and_execute_schedule_run.py:61`), `RunSnapshotV1` validation drift (`adapters/postgres/schedule_run.py:212-230`), any `mark_running` status mismatch. Risk is nil until a worker process exists, which arrives with Story 3.6/3.7 — at or after 3.5.
+- [x] [Review][Defer] `actor_id` and the idempotency scope come from the proposal's author, not the requester [backend/application/use_cases/enqueue_compute.py:68] — deferred, decided by Decision 3; the collapse of two requesters' keys into one actor namespace is Story 3.6's to fix when a real HTTP actor exists
+- [x] [Review][Defer] `api/deps.py`'s "the single place in this repository that establishes trusted site context" is now false — `worker/runtime_context` duplicates it [backend/api/deps.py:180] — deferred, pre-existing constraint: `api/**` is a mandated zero-line diff for this story
+- [x] [Review][Defer] `GRANT shiftmind_lease TO shiftmind_login` lets the API process `SET ROLE shiftmind_lease`, wider than Task 7's "scoped to the worker process only" [backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py:181] — deferred, unavoidable with a single LOGIN role
+- [x] [Review][Defer] AD-23 drift: it states `workflow.job_queue` grants runtime roles "no table access", while Task 2 mandates `SELECT, INSERT` plus `UPDATE (status, heartbeat_at)` to `shiftmind_runtime` [backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py:120] — deferred, the implementation correctly follows the story; the spine text needs amending
+- [x] [Review][Defer] The migration has no backfill, so any pre-existing non-terminal `schedule_run` row strands permanently (`_has_current_epoch` false forever, `StaleLeaseError ... current is None`) [backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py:23] — deferred, benign today because no route calls `create_run_snapshot`; real at first deployment with rows
+- [x] [Review][Defer] `ix_job_queue_leaseable` cannot serve the lease query's disjunctive predicate with its third-column ordering, and `completed` rows are never pruned [backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py:89] — deferred, performance only at current volumes
+- [x] [Review][Defer] `assert` guards load-bearing invariants that become `None` flowing into the DB layer under `python -O` [backend/application/use_cases/lease_and_execute_schedule_run.py:49] — deferred, pre-existing codebase-wide pattern
+
+
 ---
 
 ## Dev Notes
@@ -655,7 +689,7 @@ had no such need. If a task appears to need anything else in this list, it belon
 
 ### Agent Model Used
 
-_To be filled by the dev agent._
+claude-opus-5 (implementation and code review).
 
 ### Debug Log References
 
@@ -673,6 +707,25 @@ _To be filled by the dev agent._
 - Phase/final measurements: backend `1021 passed, 1 skipped, 7 deselected`; PostgreSQL `62 passed`;
   fresh-database `alembic check` reported no new operations; live lease proof used 4 jobs / 2
   sessions / 0 duplicate leases; `shiftmind_lease` direct table query was denied.
+- Phase A checkpoint items 3-4, reported as the numbers the checkpoint asked for rather than only as
+  test names: `workflow.job_queue` grants are exactly `shiftmind_runtime -> {SELECT, INSERT,
+  UPDATE(status, heartbeat_at)}` and `shiftmind_lease -> {}` (zero table grants, asserted live in
+  `test_live_role_and_routine_grants_are_narrow`); routine grants are exactly
+  `{shiftmind_lease -> lease_next_job, shiftmind_runtime -> renew_job_lease}` — 2 rows, no others.
+- Code review (2026-08-20, claude-opus-5): 24 findings — 2 decision-needed, 15 patch, 7 defer, 5
+  dismissed. Both decisions resolved by Minh as deferrals with named owners (heartbeat and job
+  failure state -> Story 3.5; `lease_seconds` ceiling -> Story 3.6); 18 patches applied. Post-patch
+  measurements, run against live PostgreSQL 18 (docker compose): backend `1040 passed, 2 skipped, 7
+  deselected`; `-m postgres` `66 passed` (up from 62 — the four new live tests). Baseline was
+  `1021 passed, 1 skipped`; +20 new tests, and `test_evidence_binding` skips on a dirty tree until
+  these changes are committed. Fresh-database `alembic check` reported no new operations, and the
+  story revision round-trips (`downgrade f1a2b3c4d5e6` -> `upgrade head`) cleanly.
+- Three defects were found only by executing the SQL, not by review: the narrowed `varchar(40)`
+  `idempotency_key` rejected the test helper's 41-character seed key (the narrowing working as
+  intended); `pg_catalog.coalesce` raised `UndefinedFunction` because COALESCE is a SQL construct,
+  not a catalog function; and the four new live tests leased whichever job was OLDEST rather than
+  their own, because `lease_next_job` orders by `created_at` and the module-scoped fixture leaves
+  earlier tests' queued rows behind. All three are fixed and the suite is green.
 - Gate A: post-commit backend JUnit green, Vitest JUnit green, Playwright `48/48` with zero failures;
   readiness output `gate_a_passed: true` with no blockers. The Windows streaming reporter was
   terminated only after the complete 48-case XML was verified, per the runbook's documented exit
