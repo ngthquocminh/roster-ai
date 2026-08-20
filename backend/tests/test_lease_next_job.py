@@ -30,7 +30,7 @@ def _snapshot(run_id) -> RunSnapshotV1:
     )
 
 
-def _lease(*, cancelled=False) -> JobLeaseV1:
+def _lease() -> JobLeaseV1:
     now = datetime(2026, 8, 20, tzinfo=timezone.utc)
     return JobLeaseV1(
         job_id=uuid4(),
@@ -46,7 +46,9 @@ def _lease(*, cancelled=False) -> JobLeaseV1:
         lease_expires_at=now,
         heartbeat_at=now,
         fencing_epoch=3,
-        cancellation_requested=cancelled,
+        # A carrier only: Decision 4 makes the run status the authority, so
+        # no worker branch reads this. AD-20 still requires it on the contract.
+        cancellation_requested=False,
         created_at=now,
     )
 
@@ -118,7 +120,7 @@ def test_no_job_does_not_open_a_runtime_transaction() -> None:
 
 
 def test_checkpoint_1_cancellation_finalizes_without_calling_the_solver() -> None:
-    lease = _lease(cancelled=False)
+    lease = _lease()
     repository = _Repository(
         lease, ScheduleRunStateV1("cancellation_requested", 2)
     )

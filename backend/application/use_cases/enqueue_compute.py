@@ -18,7 +18,10 @@ from application.use_cases.create_run_snapshot import create_run_snapshot
 SCOPE_CONTROLS = (
     "COVERS: roles:worker_reuses_shiftmind_runtime; "
     "NOT COVERED: events:owned_by_story_3_5; "
-    "COVERS: cancellation:queued_and_running; "
+    # This module creates the job and the run; it neither writes nor observes
+    # a cancellation. The command lives in `cancel_schedule_run`, the
+    # observation in `lease_and_execute_schedule_run`.
+    "NOT COVERED: cancellation:command_owned_by_cancel_schedule_run; "
     "NOT COVERED: cancellation:mid_solve_preemption_owned_by_story_3_5; "
     "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
     # AC1 names "actor/site/attempt IDs" in the bundle, but `attempt_id` is
