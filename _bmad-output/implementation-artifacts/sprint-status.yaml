@@ -41,7 +41,54 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-20
+last_updated: 2026-08-21
+
+# NOTE (2026-08-21): Story 3-5 created and moved to ready-for-dev. It is a [Technical Enabler]
+# with NO planner-visible outcome — the progress surface that consumes its work is Story 3.7's.
+# It closes four items forward-referenced to it by name in Stories 3.2-3.4's own code
+# (deferred-work.md:287,289(partially, re-pointed),291,301 and SCOPE_CONTROLS markers in
+# enqueue_compute.py, lease_and_execute_schedule_run.py, cancel_schedule_run.py,
+# governed_adapter.py): (1) `persisted_event` has never had a row written for a ScheduleRun
+# transition — confirmed by exhaustive grep, zero occurrences outside conversation-scoped
+# writes; (2) `ActivityTypeV1` reserves `"run_progress"` but ships no concrete
+# RunProgressActivityV1 class; (3) `workflow.renew_job_lease` (Story 3.3) has never had a
+# caller — confirmed dead code; (4) `JobStatusV1` is closed at queued|leased|completed with no
+# failure member, so a job dying between lease and completion is re-leased forever at the
+# queue head.
+#
+# TEN DECISIONS WERE MADE AT CREATION and are recorded in the story, the two most consequential:
+# (1) ScheduleRun gets its OWN event-stream identity (stream_id = schedule_run_id), NOT the
+#     owning conversation's, even though `proposal.conversation_id` is NOT NULL today and reuse
+#     would have been the path of least resistance — rejected because RunSnapshotV1 carries no
+#     conversation_id at all (Scheduling does not depend on Conversation identity, AD-22) and
+#     Story 3.9's manual solver flow explicitly does not invoke AgentRuntime, so a future
+#     schedule_run may have no conversation whatsoever.
+# (2) MID-SOLVE PREEMPTION IS CORRECTED OFF THIS STORY'S SCOPE, NOT SILENTLY ABSORBED. Four
+#     SCOPE_CONTROLS comments across three files speculatively assigned it to "Story 3.5," but
+#     none of this story's four ACs (epics.md:959-977, verified at creation) require
+#     interrupting an in-flight CP-SAT call — the existing two cooperative checkpoints already
+#     bound cancellation latency to one solve's wall-time ceiling. Re-pointed to "the first
+#     story that raises wall_time_limit_seconds materially above the current 30s default"
+#     (candidate: Story 3.6), per the established re-annotate-in-place pattern.
+#
+# ONE STRUCTURAL INVARIANT IS RECORDED AS VERIFIED-SAFE-TODAY RATHER THAN DEFENDED WITH NEW
+# CODE: deferred-work.md:301's orphaned "solver_running cancellation with no job_queue row" is
+# unreachable under every current caller (enqueue_compute always creates the job atomically
+# with the run; mark_running requires a leased job row to exist). Story 3.9 (the next story
+# that could create a job-less schedule_run) must re-verify this invariant before relying on it.
+#
+# NO EVIDENCE FILE IS OWED for most of this story's mechanism, but AC4 (NFR35: first persisted
+# run event <= 5s of API acknowledgement) DOES carry a measured threshold and IS new evidence —
+# evidence/story-3.5/nfr35-first-run-event.json, generated via a new script mirroring Story
+# 2.4's generate_sse_replay_evidence.py exactly, measured against a directly-committed
+# enqueue_compute bundle standing in for "API acknowledgement" (Story 3.6's live HTTP create
+# route has not shipped yet — the same seeded-measurement precedent Story 2.4 set).
+#
+# ZERO-LINE DIFF FENCES: backend/domain/**, backend/engine/cpsat/** (solver logic; only
+# governed_adapter.py's SCOPE_CONTROLS comment moves), backend/llm/**, backend/ingest/**,
+# backend/store/**, backend/services/**, test_gate_a_mutation_audit.py's write-surface literal,
+# docs/GATE-A-RUNBOOK.md (the two new routes are GET, not write routes), frontend/src/** except
+# the two generated artefacts (openapi.json, schema.d.ts).
 
 # NOTE (2026-08-18): Story 3-1 created and moved to ready-for-dev; epic-3 backlog -> in-progress.
 # It is the FIRST story of Epic 3 and the reversible-draft boundary (FR9/FR10). It is also the first
@@ -1394,7 +1441,7 @@ development_status:
   3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: done
   3-3-lease-solver-jobs-with-fencing: done
   3-4-provide-the-safe-cancellation-command: done
-  3-5-persist-literal-run-state-and-replay-progress: backlog
+  3-5-persist-literal-run-state-and-replay-progress: ready-for-dev
   3-6-start-explicit-bounded-optimization: backlog
   3-7-monitor-cancel-and-reopen-runs: backlog
   3-8-compare-candidate-and-baseline-results: backlog
