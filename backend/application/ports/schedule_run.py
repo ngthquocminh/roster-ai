@@ -46,6 +46,36 @@ class ScheduleRunViewV1:
     finished_at: datetime | None = None
 
 
+@dataclass(frozen=True)
+class ScheduleRunSummaryV1:
+    """One row of the planner-visible Runs list (Story 3.7 AC1).
+
+    Every field here already lives on `schedule_run`, `run_snapshot`, or
+    `proposal_version` -- no new column, no migration. `proposal_version` is
+    the immutable ordinal (`proposal_version.version_ordinal`), not the live,
+    mutable `proposal.resource_version` a Retry command needs; Retry re-reads
+    the current resource version through the existing proposal read (see
+    `RunsTable.tsx`), not from this row.
+    """
+
+    schedule_run_id: UUID
+    status: ScheduleRunStatusV1
+    reason: str | None
+    resource_version: int
+    created_at: datetime
+    finished_at: datetime | None
+    scenario_version_id: UUID
+    proposal_id: UUID
+    proposal_version: int
+    baseline_schedule_version: str | None
+
+
+@dataclass(frozen=True)
+class ScheduleRunPageV1:
+    items: tuple[ScheduleRunSummaryV1, ...]
+    next_cursor: int | None
+
+
 class StaleLeaseError(ValueError):
     """The caller's fencing epoch is no longer current for this run."""
 
@@ -75,6 +105,16 @@ class ScheduleRunRepository(Protocol):
         run_id: UUID,
         site_id: UUID,
     ) -> ScheduleRunViewV1 | None: ...
+
+    def list_runs(
+        self,
+        connection: Any,
+        *,
+        scenario_id: UUID,
+        site_id: UUID,
+        cursor: int,
+        limit: int,
+    ) -> ScheduleRunPageV1: ...
 
     def event_head(
         self,
@@ -266,6 +306,8 @@ __all__ = [
     "RunTransitionConflictError",
     "ScheduleRunRepository",
     "ScheduleRunEventHeadV1",
+    "ScheduleRunPageV1",
+    "ScheduleRunSummaryV1",
     "ScheduleRunViewV1",
     "ScheduleRunStateV1",
     "StaleLeaseError",

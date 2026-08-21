@@ -28,7 +28,9 @@ from api.schemas import (
     RunProgressActivityOut,
     ScheduleRunCancellationIn,
     ScheduleRunOut,
+    ScheduleRunPageOut,
     ScheduleRunStartIn,
+    ScheduleRunSummaryOut,
 )
 from application.capabilities.installed import enabled_feature_policy
 from application.capabilities.registry import (
@@ -136,6 +138,30 @@ def _view_out(value: ScheduleRunViewV1) -> ScheduleRunOut:
         cancellation_requested=value.cancellation_requested,
         created_at=value.created_at,
         finished_at=value.finished_at,
+    )
+
+
+def _summary_out(value) -> ScheduleRunSummaryOut:
+    return ScheduleRunSummaryOut(
+        schedule_run_id=value.schedule_run_id,
+        status=value.status,
+        reason=value.reason,
+        resource_version=value.resource_version,
+        created_at=value.created_at,
+        finished_at=value.finished_at,
+        scenario_version_id=value.scenario_version_id,
+        proposal_id=value.proposal_id,
+        proposal_version=value.proposal_version,
+        baseline_schedule_version=value.baseline_schedule_version,
+    )
+
+
+def _scenario_not_found() -> JSONResponse:
+    return problem_response(
+        status=404,
+        code="scenario_not_found",
+        title="Scenario not found",
+        detail="No scenario with that identifier is visible in this site.",
     )
 
 
@@ -384,6 +410,44 @@ def start_schedule_run(
     )
     assert view is not None
     return _view_out(view)
+
+
+#: Bounds mirror `scenario_projection`'s list routes (`limit` default 50, cap
+#: 200) rather than inventing a new convention for this story's one list route.
+_DEFAULT_RUN_PAGE_LIMIT = 50
+_MAX_RUN_PAGE_LIMIT = 200
+
+
+@router.get(
+    "",
+    response_model=ScheduleRunPageOut,
+    responses={404: {"model": ProblemDetailsV1}},
+)
+def list_schedule_runs(
+    scenario_id: UUID,
+    cursor: int = Query(default=0, ge=0),
+    limit: int = Query(default=_DEFAULT_RUN_PAGE_LIMIT, ge=1, le=_MAX_RUN_PAGE_LIMIT),
+    connection: Connection = Depends(get_site_context),
+    session: ResolvedSession = Depends(get_session),
+    scenario_catalogue: ScenarioCatalogueReader = Depends(get_catalogue_reader),
+    run_repository: ScheduleRunRepository = Depends(get_schedule_run_repository),
+):
+    # Existence/site-visibility check mirrors `get_projection`: a scenario this
+    # site cannot see must read as 404, not as an empty (and misleading) page.
+    context = scenario_catalogue.get_scenario_context(connection, scenario_id)
+    if context is None:
+        return _scenario_not_found()
+    page = run_repository.list_runs(
+        connection,
+        scenario_id=scenario_id,
+        site_id=session.site_id,
+        cursor=cursor,
+        limit=limit,
+    )
+    return ScheduleRunPageOut(
+        items=[_summary_out(item) for item in page.items],
+        next_cursor=page.next_cursor,
+    )
 
 
 @router.get(

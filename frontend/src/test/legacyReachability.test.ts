@@ -5,9 +5,12 @@ import { expect, it } from "vitest";
 
 const SOURCE_ROOT = join(process.cwd(), "src");
 const ENTRY = join(SOURCE_ROOT, "App.tsx");
+// `components/runs/` was on this list until Story 3.7 legitimately
+// repopulated it with the real Runs workspace (RunsTable, RunStatusBadge,
+// ProgressCard), reachable from App.tsx via ScenarioRuns.tsx -- it is no
+// longer orphaned legacy surface.
 const LEGACY_PREFIXES = [
   "components/editor/",
-  "components/runs/",
   "components/results/",
   "components/scenarios/",
 ];

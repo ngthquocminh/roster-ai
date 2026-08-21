@@ -266,18 +266,23 @@ class ScheduleRunStartIn(BaseModel):
     expected_resource_version: int = Field(ge=1)
 
 
+#: AD-7's closed status graph. Named once so the list route's summary and the
+#: command routes' `ScheduleRunOut` cannot silently diverge on the vocabulary.
+ScheduleRunStatusOut = Literal[
+    "solver_queued",
+    "solver_running",
+    "cancellation_requested",
+    "solver_completed",
+    "solver_infeasible",
+    "solver_timed_out",
+    "solver_cancelled",
+    "solver_failed",
+]
+
+
 class ScheduleRunOut(BaseModel):
     schedule_run_id: UUID
-    status: Literal[
-        "solver_queued",
-        "solver_running",
-        "cancellation_requested",
-        "solver_completed",
-        "solver_infeasible",
-        "solver_timed_out",
-        "solver_cancelled",
-        "solver_failed",
-    ]
+    status: ScheduleRunStatusOut
     reason: str | None
     resource_version: int
     cancellation_requested: bool
@@ -286,6 +291,28 @@ class ScheduleRunOut(BaseModel):
     # aggregate timestamps; keeping them optional avoids manufacturing them.
     created_at: datetime | None = None
     finished_at: datetime | None = None
+
+
+class ScheduleRunSummaryOut(BaseModel):
+    """One row of the Runs workspace list (Story 3.7 AC1)."""
+
+    schedule_run_id: UUID
+    status: ScheduleRunStatusOut
+    reason: str | None
+    resource_version: int
+    created_at: datetime
+    finished_at: datetime | None
+    scenario_version_id: UUID
+    proposal_id: UUID
+    proposal_version: int
+    # Story 3.1 Decision 7: stays None until Epic 4 supplies a real baseline
+    # pointer. Rendered as "—" client-side, never as "" or 0 (Trap 4).
+    baseline_schedule_version: str | None
+
+
+class ScheduleRunPageOut(BaseModel):
+    items: list[ScheduleRunSummaryOut]
+    next_cursor: int | None
 
 
 class ProposalOut(BaseModel):

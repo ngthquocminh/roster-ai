@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from sqlalchemy import CheckConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.exc import IntegrityError
 
+from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.schema import metadata
 
 
@@ -141,3 +143,101 @@ def test_live_candidate_check_rejects_non_completed_run(governed_postgres_engine
         with pytest.raises(IntegrityError, match="ck_schedule_run_candidate_completed"):
             with connection.begin_nested():
                 connection.execute(text("UPDATE schedule_run SET status='solver_failed', candidate_schedule_version_id=:candidate WHERE id=:run"), {"candidate": ids["candidate"], "run": ids["run"]})
+
+
+def _seed_run(connection, *, site_id, scenario_id, actor_id, created_at, baseline=None):
+    """Seed one full scenario -> ... -> schedule_run chain and return its id.
+
+    Mirrors `test_live_candidate_check_rejects_non_completed_run`'s insert
+    sequence (the schema requires every link); factored out so Story 3.7's
+    `list_runs` test can seed several runs, across two scenarios, without
+    repeating the whole chain inline per row. `app_user` carries a singleton
+    constraint (`uq_app_user_singleton`), so the actor is seeded once by the
+    caller and passed in rather than minted per run.
+    """
+    ids = {
+        name: uuid4()
+        for name in (
+            "scenario_version",
+            "conversation",
+            "proposal",
+            "proposal_version",
+            "snapshot",
+            "run",
+        )
+    }
+    # `(site_id, fixture_id, version)` is unique; each seeded run needs its own
+    # scenario_version row, so the version string is minted per call.
+    connection.execute(text("INSERT INTO scenario_version (id,site_id,scenario_id,fixture_id,version,payload,checksum_digest) VALUES (:id,:site,:scenario,'fixture',:version,'{}'::jsonb,:digest)"), {"id": ids["scenario_version"], "site": site_id, "scenario": scenario_id, "version": str(ids["scenario_version"]), "digest": "a" * 64})
+    connection.execute(text("INSERT INTO conversation (id,site_id,scenario_id,scenario_version_id,created_by_actor_id) VALUES (:id,:site,:scenario,:version,:actor)"), {"id": ids["conversation"], "site": site_id, "scenario": scenario_id, "version": ids["scenario_version"], "actor": actor_id})
+    connection.execute(text("INSERT INTO proposal (id,site_id,scenario_id,scenario_version_id,conversation_id,created_by_actor_id) VALUES (:id,:site,:scenario,:version,:conversation,:actor)"), {"id": ids["proposal"], "site": site_id, "scenario": scenario_id, "version": ids["scenario_version"], "conversation": ids["conversation"], "actor": actor_id})
+    connection.execute(text("INSERT INTO proposal_version (id,site_id,proposal_id,version_ordinal,payload,canonical_hash) VALUES (:id,:site,:proposal,3,'{}'::jsonb,:digest)"), {"id": ids["proposal_version"], "site": site_id, "proposal": ids["proposal"], "digest": "b" * 64})
+    connection.execute(
+        text(
+            "INSERT INTO run_snapshot (id,site_id,scenario_id,scenario_version_id,proposal_id,"
+            "proposal_version_id,baseline_schedule_version,payload,canonical_hash,accepted_at) "
+            "VALUES (:id,:site,:scenario,:version,:proposal,:proposal_version,:baseline,'{}'::jsonb,:digest,CURRENT_TIMESTAMP)"
+        ),
+        {
+            "id": ids["snapshot"], "site": site_id, "scenario": scenario_id,
+            "version": ids["scenario_version"], "proposal": ids["proposal"],
+            "proposal_version": ids["proposal_version"], "baseline": baseline, "digest": "c" * 64,
+        },
+    )
+    connection.execute(
+        text("INSERT INTO schedule_run (id,site_id,run_snapshot_id,status,created_at) VALUES (:id,:site,:snapshot,'solver_completed',:created_at)"),
+        {"id": ids["run"], "site": site_id, "snapshot": ids["snapshot"], "created_at": created_at},
+    )
+    return ids["run"], ids["proposal"], ids["scenario_version"]
+
+
+@pytest.mark.postgres
+def test_live_list_runs_orders_newest_first_paginates_and_scopes_by_scenario(
+    governed_postgres_engine,
+) -> None:
+    site_id = uuid4()
+    scenario_id = uuid4()
+    other_scenario_id = uuid4()
+    now = datetime.now(timezone.utc)
+    repository = PostgresScheduleRunRepository()
+
+    organization_id = uuid4()
+    with governed_postgres_engine.begin() as connection:
+        connection.execute(text("SELECT set_config('app.site_id', :site, true)"), {"site": str(site_id)})
+        connection.execute(text("INSERT INTO organization (id,name) VALUES (:id,'Org')"), {"id": organization_id})
+        connection.execute(text("INSERT INTO site (id,organization_id,name) VALUES (:id,:org,'Site')"), {"id": site_id, "org": organization_id})
+        # `app_user` carries `uq_app_user_singleton` -- this module-scoped DB
+        # fixture is shared with earlier tests in this file, so reuse whatever
+        # singleton row already exists rather than inserting a second one.
+        actor_id = connection.execute(text("SELECT id FROM app_user LIMIT 1")).scalar_one_or_none()
+        if actor_id is None:
+            actor_id = uuid4()
+            connection.execute(text("INSERT INTO app_user (id,idp_subject,email) VALUES (:id,:subject,'planner@example.test')"), {"id": actor_id, "subject": f"subject-{actor_id}"})
+        connection.execute(text("INSERT INTO scenario (id,site_id,fixture_id,name) VALUES (:id,:site,'fixture','Scenario')"), {"id": scenario_id, "site": site_id})
+        connection.execute(text("INSERT INTO scenario (id,site_id,fixture_id,name) VALUES (:id,:site,'fixture-other','Other')"), {"id": other_scenario_id, "site": site_id})
+
+        older_run, older_proposal, older_version = _seed_run(
+            connection, site_id=site_id, scenario_id=scenario_id, actor_id=actor_id, created_at=now - timedelta(minutes=5)
+        )
+        newer_run, newer_proposal, newer_version = _seed_run(
+            connection, site_id=site_id, scenario_id=scenario_id, actor_id=actor_id, created_at=now
+        )
+        _seed_run(connection, site_id=site_id, scenario_id=other_scenario_id, actor_id=actor_id, created_at=now)
+
+        first_page = repository.list_runs(
+            connection, scenario_id=scenario_id, site_id=site_id, cursor=0, limit=1
+        )
+        assert [item.schedule_run_id for item in first_page.items] == [newer_run]
+        assert first_page.next_cursor == 1
+        assert first_page.items[0].proposal_id == newer_proposal
+        assert first_page.items[0].scenario_version_id == newer_version
+        assert first_page.items[0].proposal_version == 3
+        # Story 3.1 Decision 7: reads through as None, never "" or 0 (Trap 4).
+        assert first_page.items[0].baseline_schedule_version is None
+
+        second_page = repository.list_runs(
+            connection, scenario_id=scenario_id, site_id=site_id, cursor=1, limit=1
+        )
+        assert [item.schedule_run_id for item in second_page.items] == [older_run]
+        assert second_page.next_cursor is None
+        assert older_proposal  # sanity: the older row's identity was captured, not discarded

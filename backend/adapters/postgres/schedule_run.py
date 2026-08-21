@@ -12,6 +12,7 @@ from adapters.postgres.schema import (
     command_idempotency,
     job_queue,
     persisted_event,
+    proposal_version,
     run_snapshot,
     schedule_assignment,
     schedule_run,
@@ -35,6 +36,8 @@ from application.ports.schedule_run import (
     RunNotCancellableError,
     RunTransitionConflictError,
     ScheduleRunEventHeadV1,
+    ScheduleRunPageV1,
+    ScheduleRunSummaryV1,
     ScheduleRunViewV1,
     ScheduleRunStateV1,
     StaleLeaseError,
@@ -114,6 +117,78 @@ class PostgresScheduleRunRepository:
             cancellation_requested=bool(row.cancellation_requested),
             created_at=_as_utc(row.created_at),
             finished_at=_as_utc(row.finished_at),
+        )
+
+    def list_runs(
+        self,
+        connection: Connection,
+        *,
+        scenario_id: UUID,
+        site_id: UUID,
+        cursor: int,
+        limit: int,
+    ) -> ScheduleRunPageV1:
+        # Newest-first (AC1). `run_snapshot.scenario_id` -- not `schedule_run` --
+        # carries the scenario this run belongs to; `proposal_version` supplies
+        # the immutable ordinal a planner can cite (distinct from the mutable
+        # `proposal.resource_version` Retry needs, which this row deliberately
+        # does not carry -- see `ScheduleRunSummaryV1`'s docstring).
+        query = (
+            select(
+                schedule_run.c.id,
+                schedule_run.c.status,
+                schedule_run.c.reason,
+                schedule_run.c.resource_version,
+                schedule_run.c.created_at,
+                schedule_run.c.finished_at,
+                run_snapshot.c.scenario_version_id,
+                run_snapshot.c.proposal_id,
+                proposal_version.c.version_ordinal,
+                run_snapshot.c.baseline_schedule_version,
+            )
+            .select_from(
+                schedule_run.join(
+                    run_snapshot,
+                    (run_snapshot.c.id == schedule_run.c.run_snapshot_id)
+                    & (run_snapshot.c.site_id == schedule_run.c.site_id),
+                ).join(
+                    proposal_version,
+                    (proposal_version.c.id == run_snapshot.c.proposal_version_id)
+                    & (proposal_version.c.site_id == run_snapshot.c.site_id),
+                )
+            )
+            .where(
+                run_snapshot.c.scenario_id == scenario_id,
+                schedule_run.c.site_id == site_id,
+            )
+            .order_by(schedule_run.c.created_at.desc(), schedule_run.c.id.desc())
+            .offset(cursor)
+            # One extra row answers "is there a next page?" without a second
+            # COUNT query; `_apply_query` in scenario_projection uses the same
+            # over-fetch-by-one idiom for its cursor.
+            .limit(limit + 1)
+        )
+        rows = connection.execute(query).all()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        items = tuple(
+            ScheduleRunSummaryV1(
+                schedule_run_id=row.id,
+                status=row.status,
+                reason=row.reason,
+                resource_version=row.resource_version,
+                created_at=_as_utc(row.created_at),
+                finished_at=_as_utc(row.finished_at),
+                scenario_version_id=row.scenario_version_id,
+                proposal_id=row.proposal_id,
+                proposal_version=row.version_ordinal,
+                baseline_schedule_version=row.baseline_schedule_version,
+            )
+            for row in rows
+        )
+        return ScheduleRunPageV1(
+            items=items,
+            next_cursor=(cursor + limit) if has_more else None,
         )
 
     def event_head(
