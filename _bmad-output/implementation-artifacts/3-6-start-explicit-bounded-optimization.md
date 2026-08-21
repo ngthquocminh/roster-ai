@@ -4,7 +4,7 @@ baseline_commit: 0545b35c6c6abacbac72fc21259e6da6ac16982b
 
 # Story 3.6: Start Explicit Bounded Optimization
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -600,6 +600,235 @@ epoch and an attempt for work no worker ever leased.
         `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npx playwright test`,
         refreshed Gate A verdict.
 
+### Review Findings
+
+Code review 2026-08-21 (Blind Hunter + Edge Case Hunter + Acceptance Auditor, all three layers
+completed). Every finding below was re-verified against source before rating; seven layer findings
+were dismissed as false positives or out-of-scope and are not listed.
+
+- [x] [Review][Decision] **Frontend error copy branches on HTTP status only, so three distinct 409
+      codes from this route render one message** — `commandMessage` discriminates on `status`
+      alone, but the start route emits `stale_proposal`, `stale_resource_version` and
+      `idempotency_key_conflict` all as 409. All three render "This draft changed since you opened
+      it. Refresh to see the current version, then try again." For `idempotency_key_conflict` that
+      advice is actively wrong: `useStartScheduleRun` deliberately does not rotate the key on
+      error, so refreshing and retrying reproduces the same 409. Task 8 permitted either approach
+      but forbade half-migrating; `getErrorCode()` already has precedent at
+      `EvidenceTargetPanel.tsx:91`, so migrating is consistent with the codebase. Options: (a)
+      migrate all three DraftCard mutations to RFC 7807 `code` branching, (b) add a narrow
+      `idempotency_key_conflict` code check only, (c) leave as-is.
+      [frontend/src/features/chat/DraftCard.tsx:38]
+      **RESOLVED 2026-08-22 (Minh): option (a).** `commandMessage` now keys on `getErrorCode`
+      with an HTTP-status fallback, so all three mutations migrate together and no
+      half-migration is left behind.
+
+### Review Fixes Applied (2026-08-22)
+
+All 18 actionable findings above are fixed; the three `[Review][Defer]` items are recorded in
+`deferred-work.md` under *Deferred from: code review of story-3.6*. Notable shape changes:
+
+- **`ScheduleRunStartOut` was deleted, not widened.** `POST /api/v1/schedule-runs` now returns
+  `ScheduleRunOut` — the same representation `GET /api/v1/schedule-runs/{id}` already returns for
+  the same aggregate — and the route reads the run's live state through `get_run` before
+  responding. On the create path the answer is unchanged (`solver_queued`, version 1); only the
+  replay path stops asserting a state the run has left. Regenerated through `npm run codegen`;
+  `frontend/openapi.json` and `schema.d.ts` were never hand-edited.
+- **`enqueue_compute` gained `capability_version` and lost its `scheduling_optimize` import.** The
+  generic bundle now names no capability; the route threads `validated.capability_version`
+  through. This also removed a full `os.environ` re-parse from inside the write transaction.
+- **The proposal-version check moved above the advisory lock**, so a stale request at a saturated
+  site gets `409 stale_resource_version` rather than a `429` whose advice can never help.
+- **`_optional_int` / `_optional_float` were deleted** rather than left unused, and `lease_seconds`
+  joined `AC2_CEILING_FIELDS`, whose guard now drives every registered ceiling through its own
+  environment variable instead of restating the tuple as a literal.
+
+**Eight new guards, each observed failing first (retro A2):** the live-state response (reverted to
+creation constants → red); the chat-turn compute grant (risk-class predicate removed → red); the
+capability error mapping (handler moved back outside the `try` → red); the AC2 ceiling sweep
+(`lease_seconds` and `site_max_concurrent_runs` each fully unvalidated → red — note the first
+attempt stayed green because `lease_seconds` is defended twice, by positivity *and* by the
+relationship check, so both had to be removed); and the four frontend guards (409 code separation,
+403 handling, newest-error precedence, version-gated acknowledgement).
+
+**Full regression at fix time:** backend default 1165 passed / 2 skipped / 7 deselected (from
+1155); `pytest -m postgres` 84 passed; `pytest tests/test_evidence_convention.py` 55 passed;
+`alembic check` reports no new upgrade operations; `npm run lint` clean (3 pre-existing
+fast-refresh warnings); `npm run build` (`tsc -b` + vite) passes; Vitest 420 passed (from 416);
+Playwright 48 passed, no new spec added. Every zero-line fence in *Project Structure Notes* still
+holds. Golden cases are now 26 across 5 directories — above the ≥25 floor, the one added case
+being a `compute`-risk refusal, not a consequential/prohibited one.
+
+- [x] [Review][Patch] **`_start_problem` collapses four `SnapshotCreationError` codes and
+      `proposal_not_found` into a generic 422; the declared 404 is never emitted, and internal
+      exception text is echoed to the client** — only `stale_proposal` is special-cased.
+      `proposal_not_found`, `rejected_proposal`, `invalid_proposal` and `scenario_unavailable`
+      plus `EnqueueComputeError("proposal was not found")` all fall through to `422
+      invalid_run_command` with `detail=str(exc)`. Violates AD-13's denied/stale/missing/invalid
+      distinctness and Decision 7. A deleted or cross-site proposal returns a validation error;
+      DraftCard's 503 branch, written for exactly `scenario_unavailable`, is unreachable from this
+      route. [backend/api/routers/schedule_runs.py:197]
+
+- [x] [Review][Patch] **The start response hard-codes `status="solver_queued"` and
+      `resource_version=1`, so an idempotent replay reports state the run no longer has** — the
+      route never reads the run row, and `ScheduleRunStartOut.status` is pinned to
+      `Literal["solver_queued"]`, so the API is structurally unable to answer truthfully on
+      replay. Breaks AC3's "returns the original semantic run response" and AD-13's "current
+      version when relevant". The returned `1` feeds
+      `ScheduleRunCancellationIn.expected_resource_version`, so the acknowledgement hands the
+      planner a token guaranteed to 409 the next cancel. Fix requires reading the run and widening
+      the response Literal, then `npm run codegen`.
+      [backend/api/routers/schedule_runs.py:301]
+
+- [x] [Review][Patch] **The capability handler is invoked outside the route's `try`, so its
+      declared errors escape as HTTP 500** — `module.handler(...)` runs before the `try` that
+      catches only `(EnqueueComputeError, SnapshotCreationError)`. `InvalidRunRequestError` and
+      `BudgetExhaustedError` reach `versioned_unhandled_problem` and render `500 internal_error`.
+      Client-reachable today: a nil UUID `proposal_id` passes Pydantic and trips
+      `request.proposal_id.int == 0`. No `CapabilityError` handler exists anywhere under
+      `backend/api/`. [backend/api/routers/schedule_runs.py:271]
+
+- [x] [Review][Patch] **The site-concurrency gate is ordered before the proposal-version check, so
+      a stale request at a busy site gets an unactionable 429** — Decision 6 fixed the ordering
+      relative to the idempotency replay (correctly) but not relative to validation. The advisory
+      lock, count and `SiteConcurrencyExhaustedError` all precede the `resource_version`
+      comparison. A planner pinned to a superseded version is told "This site is at its run limit.
+      Try again shortly." and keeps failing until capacity frees, then finally learns the real
+      problem — contradicting AC4's "offers only valid recovery actions". The lock is also held
+      for the remainder of a transaction that is then rejected.
+      [backend/application/use_cases/enqueue_compute.py:127]
+
+- [x] [Review][Patch] **A generic use case imports a named capability module to read a constant
+      `"1"`, re-parsing the entire environment inside the open write transaction** —
+      `scheduling_optimize_manifest()` calls `default_settings()` purely to populate
+      `budget_limit`/`timeout_seconds`, while the only value consumed is `capability_version`.
+      Hard-codes one capability name into the generic enqueue bundle (Dev Note trap 6, one layer
+      up), and `test_core_is_capability_name_agnostic`'s six-file list does not cover
+      `enqueue_compute.py`, so the guard the diff extended does not see it. The route already
+      holds `validated.capability_version` and discards it — thread it in as a parameter.
+      [backend/application/use_cases/enqueue_compute.py:162]
+
+- [x] [Review][Patch] **No test asserts that `scheduling_optimize` is absent from the grant the
+      chat route composes — the story's own "So that" clause is unguarded** — production behaviour
+      is correct (`conversations.py:242-248` omits `explicit_run_request`, so it defaults to
+      `False` and the module really is absent from the agent toolset). But the conformance
+      `_grant_context` now defaults the flag to `True`, and the one gate test synthesizes a fake
+      compute module from `INSTALLED[0]` rather than using the real one, asserting the returned
+      tuple rather than the composed toolset. A regression in `conversations.py` would not be
+      caught. [backend/tests/test_capability_conformance.py:330]
+
+- [x] [Review][Patch] **The 403 `compute_not_granted` branch has zero test coverage and no
+      frontend handling** — `grep compute_not_granted` returns nothing across `backend/tests/` and
+      `frontend/src/`; the route tests override `get_capability_registry` entirely, so
+      `compose_granted_capabilities` never runs in a route test. On the UI side `commandMessage`
+      has no 403 branch and `runDisabled` ignores grant state, so `SCHEDULING_OPTIMIZE_ENABLED=false`
+      renders a permanent condition as "That command did not complete. Try again." with the button
+      still enabled. [backend/api/routers/schedule_runs.py:264]
+
+- [x] [Review][Patch] **A stale error from revise or reject masks every run error, including this
+      story's own 429 copy** — `revision.error ?? rejection.error ?? run.error` feeds one shared
+      `InlineAlert`. TanStack Query retains a mutation's error until that same mutation is re-fired
+      or reset, and nothing resets the siblings. A failed revise followed by a failed run shows the
+      revise message; the site-limit copy added by Task 8 is then never displayed.
+      [frontend/src/features/chat/DraftCard.tsx:131]
+
+- [x] [Review][Patch] **The queued-run acknowledgement outlives the proposal version it refers
+      to** — `run.data` is cleared only by re-firing or resetting the run mutation. After a
+      successful revise to version 2, the polite live region still announces the run accepted for
+      version 1, beside a draft that run does not reflect.
+      [frontend/src/features/chat/DraftCard.tsx:244]
+
+- [x] [Review][Patch] **`rejectedDescriptionId` is introduced by this story and referenced by no
+      `aria-describedby`** — verified absent at `0545b35`. It is minted and attached as an `id`,
+      but the assertion that looks like it justifies it
+      (`toHaveAccessibleDescription(/rejected proposal cannot be run/i)`) is satisfied by
+      `runExplanation` inside `runDescriptionId` instead. Dead accessibility wiring.
+      [frontend/src/features/chat/DraftCard.tsx:64]
+
+- [x] [Review][Patch] **`_optional_int` and `_optional_float` are now dead code whose docstrings
+      document the exact semantics this story reversed** — zero references remain after the
+      migration to `_positive_int`/`_positive_float`, yet both still document "an explicit empty
+      value means no limit (None)", the behaviour Decision 4 and
+      `test_malformed_settings_fail_loudly_at_process_start` now forbid. Leaving them is an
+      invitation to reintroduce the fallback. [backend/settings.py:178]
+
+- [x] [Review][Patch] **`lease_seconds` guard gaps: absent from `AC2_CEILING_FIELDS`, and its
+      cross-field invariant is bypassable** — the tuple names seven fields (which do match FR12's
+      literal list), but `lease_seconds` — added by this diff as a positive-validated,
+      application-owned ceiling — is not registered, so the guard that exists to make omission
+      detectable cannot see it. Separately, `default_lease_seconds` now returns `int(configured)`
+      verbatim, dropping the `max(MINIMUM_LEASE_SECONDS, ...)` floor on the configured branch, and
+      the relationship check lives only inside `default_settings()` while
+      `Settings.lease_seconds` carries a bare dataclass default of `120` — so
+      `replace(settings, solver_wall_time_limit_seconds=300.0)` silently produces the exact
+      fence-out failure `deferred-work.md:289` was closed against. Production path is safe.
+      [backend/settings.py:32]
+
+- [x] [Review][Patch] **A vacuous copy-pasted assertion terminates the new advisory-lock test** —
+      `test_site_advisory_lock_serializes_concurrent_enqueues_at_limit_one` ends by asserting zero
+      `job_queue` rows carry `idempotency_key == "rolled-back-enqueue"`, a key that test never
+      uses; it belongs to `test_enqueue_replay_and_rollback_have_exact_row_counts` above it. It
+      passes unconditionally and reads as coverage that does not exist.
+      [backend/tests/test_job_leasing_postgres.py:601]
+
+- [x] [Review][Patch] **SCOPE_CONTROLS drift, and Gap 2's audit marker is missing from the use
+      case** — `lease_and_execute_schedule_run.py` uses the prefix `"COVERED:"` where every sibling
+      entry in the same tuple uses `"COVERS:"`, and nothing catches it because
+      `test_scope_controls_state_their_non_coverage` only checks that `"NOT COVERED"` appears
+      somewhere. Gap 2 required `"NOT COVERED: audit:owned_by_epic_4"` in the new module **and in
+      the new use case**; it is present in `scheduling_optimize.py` but absent from
+      `enqueue_compute.SCOPE_CONTROLS`, the use case the route actually drives.
+      [backend/application/use_cases/lease_and_execute_schedule_run.py:74]
+
+- [x] [Review][Patch] **The NFR35 evidence generator still asserts that Story 3.6 has not shipped
+      the HTTP creation command** — the `clock_boundary_note` would re-emit that now-false claim
+      into `evidence/story-3.5/nfr35-first-run-event.json` on the next regeneration, and
+      `docs/EVIDENCE-CONVENTION.md` forbids hand-editing the JSON, so the generator is the only
+      place it can be corrected. Decision 8's hand-off to Story 3.11 is otherwise recorded
+      correctly. [backend/scripts/generate_run_event_latency_evidence.py:102]
+
+- [x] [Review][Patch] **All four golden cases are `allow` and differ only in literal UUIDs,
+      versions and key strings, so three declared error codes get zero eval coverage** — NFR28's
+      floor is numeric and is met, and `scheduling_compute` sets a 4×allow precedent, but
+      `scheduling_draft` and `scheduling_inspect` both carry refuse cases. `optimize_failed`,
+      `invalid_query` and `budget_exhausted` are declared and never exercised.
+      [backend/evals/golden/scheduling_optimize/valid.json:1]
+
+- [x] [Review][Patch] **`CapabilityGrantContextV1`'s docstring is now false for the run caller, and
+      `explicit_run_request` is undocumented** — the docstring asserts `conversation_id` is a
+      "genuinely varying server-derived value" and that "Every field is branched on by
+      `compose_granted_capabilities`". The run route passes `conversation_id=None` and
+      `conversation_site_id=session.site_id`, making both the cross-site check and the
+      revoked-conversation check unfalsifiable for the only compute-risk capability. Inert today
+      (`revoked_conversation_ids` is populated nowhere outside tests), but the contract text must
+      state the exception. [backend/application/capabilities/registry.py:16]
+
+- [x] [Review][Defer] **No production worker entrypoint exists, so the new route creates queued
+      runs that nothing executes** [backend/worker/lease_worker.py:61] — deferred, pre-existing.
+      `backend/worker/` holds only `__init__.py` and `lease_worker.py`; `run_once` and
+      `default_lease_seconds` are referenced solely from `backend/tests/test_lease_worker.py`, so
+      `settings.lease_seconds` is validated at startup and read by nothing in production. No
+      Story 3.6 AC requires execution (AC1 requires enqueueing one durable job), and the
+      operational worker loop is already owned by Story 3.11 in the ledger. The `:289` closure
+      wording "The worker helper consumes the validated setting" is true of the helper but
+      overstates the chain.
+
+- [x] [Review][Defer] **`cancellation_requested` counts toward the site limit with no guaranteed
+      exit while no worker runs** [backend/application/use_cases/enqueue_compute.py:37] —
+      deferred, pre-existing. The explicit non-terminal enumeration is exactly what Decision 6
+      mandated. But with `site_max_concurrent_runs` defaulting to 2 and no worker loop (see the
+      entry above), a planner who queues two runs and cancels both leaves two rows in
+      `cancellation_requested` forever, and every subsequent start returns 429 with no
+      UI-reachable recovery. Consequence of the missing worker loop, not of the enumeration.
+
+- [x] [Review][Defer] **The held idempotency key is not bound to the body it was minted for, so
+      `idempotency_key_conflict` is unrecoverable without a remount**
+      [frontend/src/hooks/useStartScheduleRun.ts:14] — deferred, pre-existing. `onError`
+      deliberately does not settle, and `createIdempotencyKeyHolder` stores only the key, never
+      the body. After a lost-response success followed by a revise, the retry carries the same key
+      with a different body hash and 409s permanently. Task 7 mandated copying `useReviseProposal`
+      line for line, and that hook has the identical shape — this is a replicated pre-existing
+      pattern, not a defect introduced by this story.
+
 ## Dev Notes
 
 ### The traps, ranked by how quietly they fail
@@ -829,6 +1058,8 @@ OpenAI GPT-5 Codex
 - backend/tests/test_scheduling_optimize.py
 - backend/tests/architecture/test_execute_turn_boundaries.py
 - backend/settings.py
+- backend/scripts/generate_run_event_latency_evidence.py
+- backend/evals/golden/scheduling_optimize/refuse-invalid-request.json
 - backend/tests/test_agent_runtime_adapter.py
 - backend/tests/test_lease_worker.py
 - backend/tests/test_enqueue_compute.py
@@ -851,6 +1082,10 @@ OpenAI GPT-5 Codex
 
 ## Change Log
 
+- 2026-08-22: Code review applied. Eighteen findings fixed across the start route's problem
+  mapping and response contract, the enqueue ordering and capability coupling, settings-ceiling
+  hygiene, and the Draft card's error copy; three findings deferred with named owners. See
+  *Review Findings* and *Review Fixes Applied*.
 - 2026-08-21: Implemented explicit bounded optimization start end-to-end: hardened operational
   ceilings, compute-risk transport grants, actor-scoped idempotent enqueue with per-site
   concurrency, the versioned start route, generated typed client/hook, accessible Run control,
