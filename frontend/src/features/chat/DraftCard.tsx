@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { useProposal } from "@/hooks/useProposal";
 import { useRejectProposal } from "@/hooks/useRejectProposal";
 import { useReviseProposal } from "@/hooks/useReviseProposal";
+import { useStartScheduleRun } from "@/hooks/useStartScheduleRun";
 import { getErrorStatus } from "@/lib/errors";
 
 type NumericKey = "n" | "factor" | "max_hours" | "start_minute";
@@ -42,6 +43,9 @@ function commandMessage(error: unknown): string {
   if (status === 422) {
     return "That revision was refused: check the values and try again.";
   }
+  if (status === 429) {
+    return "This site is at its run limit. Try again shortly.";
+  }
   if (status === 503) {
     return "The scenario could not be read just now. Try again shortly.";
   }
@@ -55,7 +59,10 @@ export function DraftCard({
   const query = useProposal(proposalId);
   const revision = useReviseProposal(proposalId);
   const rejection = useRejectProposal(proposalId);
+  const run = useStartScheduleRun();
   const staleDescriptionId = useId();
+  const rejectedDescriptionId = `${staleDescriptionId}-rejected`;
+  const runDescriptionId = `${staleDescriptionId}-run`;
   const [constraints, setConstraints] = useState<ProposalConstraintInput[]>([]);
   const [selected, setSelected] = useState("0");
   // Which server version the local edits were seeded from. Re-seeding on every
@@ -113,7 +120,15 @@ export function DraftCard({
   const selectedIndex = Math.min(Number(selected), Math.max(constraints.length - 1, 0));
   const current = constraints[selectedIndex];
   const parameter = current ? PARAMETER[current.kind] : undefined;
-  const commandError = revision.error ?? rejection.error;
+  const mutationPending = revision.isPending || rejection.isPending || run.isPending;
+  const runDisabled = proposal.stale || rejected || mutationPending;
+  const runExplanation = [
+    "Running optimization starts a bounded computation and does not change the baseline.",
+    proposal.stale ? "Refresh the proposal before running optimization." : null,
+    rejected ? "A rejected proposal cannot be run." : null,
+    mutationPending ? "Wait for the current proposal command to finish." : null,
+  ].filter(Boolean).join(" ");
+  const commandError = revision.error ?? rejection.error ?? run.error;
   const updateNumber = (key: NumericKey | "end_minute", raw: string) => {
     const value = raw === "" ? null : Number(raw);
     setConstraints((existing) => existing.map((constraint, index) =>
@@ -142,7 +157,7 @@ export function DraftCard({
         {rejected ? (
           <div aria-label="Draft is rejected" className="rounded-lg border p-3" role="status">
             <p className="font-medium">This proposal was rejected.</p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground" id={rejectedDescriptionId}>
               A rejected draft is final. Describe the change again to create a new one.
             </p>
           </div>
@@ -226,6 +241,33 @@ export function DraftCard({
             variant="destructive"
           />
         ) : null}
+        {run.data ? (
+          <div
+            aria-label="Optimization queued"
+            aria-live="polite"
+            className="rounded-lg border p-3 text-sm"
+            role="status"
+          >
+            Run <Identifier>{run.data.schedule_run_id}</Identifier> was accepted with status{" "}
+            <span className="font-medium">{run.data.status}</span>.
+          </div>
+        ) : null}
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground" id={runDescriptionId}>
+            {runExplanation}
+          </p>
+          <Button
+            aria-describedby={runDescriptionId}
+            className="min-h-11"
+            disabled={runDisabled}
+            onClick={() => run.mutate({
+              proposal_id: proposal.proposal_id,
+              expected_resource_version: proposal.resource_version,
+            })}
+            type="button"
+            variant="secondary"
+          >Run optimization</Button>
+        </div>
         {rejected ? null : (
           <>
             {/* Revise stays MOUNTED and disabled when stale, carrying the
@@ -237,7 +279,7 @@ export function DraftCard({
               <Button
                 aria-describedby={proposal.stale ? staleDescriptionId : undefined}
                 className="min-h-11"
-                disabled={proposal.stale || revision.isPending}
+                disabled={proposal.stale || mutationPending}
                 onClick={() => revision.mutate({ constraints, expected_resource_version: proposal.resource_version })}
                 type="button"
               >Revise proposal</Button>
@@ -246,7 +288,7 @@ export function DraftCard({
             {/* Reject is available while stale, deliberately: it changes no
                 baseline and is the only terminal path a stale draft has. */}
             <div>
-              <Button className="min-h-11" disabled={rejection.isPending} onClick={() => rejection.mutate({ expected_resource_version: proposal.resource_version })} type="button" variant="destructive">Reject proposal</Button>
+              <Button className="min-h-11" disabled={mutationPending} onClick={() => rejection.mutate({ expected_resource_version: proposal.resource_version })} type="button" variant="destructive">Reject proposal</Button>
             </div>
             {proposal.stale ? (
               <div>

@@ -6,13 +6,16 @@ import { DraftCard } from "./DraftCard";
 import * as proposalHooks from "@/hooks/useProposal";
 import * as reviseHooks from "@/hooks/useReviseProposal";
 import * as rejectHooks from "@/hooks/useRejectProposal";
+import * as startHooks from "@/hooks/useStartScheduleRun";
 
 vi.mock("@/hooks/useProposal");
 vi.mock("@/hooks/useReviseProposal");
 vi.mock("@/hooks/useRejectProposal");
+vi.mock("@/hooks/useStartScheduleRun");
 
 const mutateRevision = vi.fn();
 const mutateRejection = vi.fn();
+const mutateStart = vi.fn();
 const refetch = vi.fn();
 const proposal = {
   proposal_id: "11111111-1111-4111-8111-111111111111",
@@ -66,6 +69,9 @@ beforeEach(() => {
   vi.mocked(rejectHooks.useRejectProposal).mockReturnValue({
     mutate: mutateRejection, isPending: false, isError: false,
   } as never);
+  vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+    mutate: mutateStart, isPending: false, isError: false, data: undefined,
+  } as never);
 });
 
 describe("DraftCard", () => {
@@ -87,7 +93,10 @@ describe("DraftCard", () => {
     expect(revise).toHaveClass("min-h-11");
     expect(reject).toHaveClass("min-h-11");
     expect(revise.parentElement).not.toBe(reject.parentElement);
-    expect(screen.queryByRole("button", { name: /run optimization/i })).not.toBeInTheDocument();
+    const run = screen.getByRole("button", { name: "Run optimization" });
+    expect(run).toHaveClass("min-h-11");
+    expect(run).toHaveAttribute("data-variant", "secondary");
+    expect(run).toHaveAccessibleDescription(/starts a bounded computation.*does not change the baseline/i);
 
     await userEvent.clear(screen.getByRole("spinbutton", { name: "Maximum hours" }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "Maximum hours" }), "36");
@@ -98,6 +107,11 @@ describe("DraftCard", () => {
     }));
     await userEvent.click(reject);
     expect(mutateRejection).toHaveBeenCalledWith({ expected_resource_version: 1 });
+    await userEvent.click(run);
+    expect(mutateStart).toHaveBeenCalledWith({
+      proposal_id: proposal.proposal_id,
+      expected_resource_version: 1,
+    });
   });
 
   it("announces staleness, disables the REAL revise control, and still allows rejection", async () => {
@@ -117,6 +131,9 @@ describe("DraftCard", () => {
     expect(revise).toBeDisabled();
     expect(revise).toHaveAccessibleDescription(/scenario version changed/i);
     expect(screen.getByRole("button", { name: "Refresh proposal" })).toBeInTheDocument();
+    const run = screen.getByRole("button", { name: "Run optimization" });
+    expect(run).toBeDisabled();
+    expect(run).toHaveAccessibleDescription(/refresh.*before running/i);
     // The disabled control must be the one that would otherwise submit. An
     // earlier revision rendered a screen-reader-only, handler-less decoy button
     // when stale and left the real control unmounted, so this assertion passed
@@ -205,6 +222,44 @@ describe("DraftCard", () => {
     expect(screen.getByRole("status", { name: "Draft is rejected" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revise proposal" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reject proposal" })).not.toBeInTheDocument();
+    const run = screen.getByRole("button", { name: "Run optimization" });
+    expect(run).toBeDisabled();
+    expect(run).toHaveAccessibleDescription(/rejected proposal cannot be run/i);
+  });
+
+  it("announces the durable queued run identity without showing progress", () => {
+    vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+      mutate: mutateStart,
+      isPending: false,
+      isError: false,
+      data: {
+        schedule_run_id: "66666666-6666-4666-8666-666666666666",
+        status: "solver_queued",
+        resource_version: 1,
+      },
+    } as never);
+
+    render(<DraftCard proposalId={proposal.proposal_id} />);
+
+    const acknowledgement = screen.getByRole("status", { name: "Optimization queued" });
+    expect(acknowledgement).toHaveAttribute("aria-live", "polite");
+    expect(acknowledgement).toHaveTextContent("66666666-6666-4666-8666-666666666666");
+    expect(acknowledgement).toHaveTextContent("solver_queued");
+    expect(acknowledgement.querySelector("code")).toHaveClass("font-mono", "text-xs");
+    expect(acknowledgement).not.toHaveTextContent(/progress|percent|%/i);
+  });
+
+  it("explains the per-site run limit", () => {
+    vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+      mutate: mutateStart,
+      isPending: false,
+      error: { status: 429, code: "site_concurrency_exhausted" },
+      data: undefined,
+    } as never);
+
+    render(<DraftCard proposalId={proposal.proposal_id} />);
+
+    expect(screen.getByText(/site is at its run limit.*try again shortly/i)).toBeInTheDocument();
   });
 
   it("renders the persisted summary while the proposal is still loading", () => {

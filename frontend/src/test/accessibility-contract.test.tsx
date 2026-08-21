@@ -19,6 +19,7 @@ vi.mock("@/hooks/useScenarioProjection", () => ({
 vi.mock("@/hooks/useProposal");
 vi.mock("@/hooks/useReviseProposal");
 vi.mock("@/hooks/useRejectProposal");
+vi.mock("@/hooks/useStartScheduleRun");
 
 import { ScenarioDataView } from "@/features/scenario-data/ScenarioDataView";
 import { ScenarioVersionContext } from "@/features/scenario-workspace/ScenarioVersionContext";
@@ -27,6 +28,7 @@ import * as hooks from "@/hooks/useScenarioProjection";
 import * as proposalHooks from "@/hooks/useProposal";
 import * as reviseHooks from "@/hooks/useReviseProposal";
 import * as rejectHooks from "@/hooks/useRejectProposal";
+import * as startHooks from "@/hooks/useStartScheduleRun";
 
 async function expectAxeClean(container: HTMLElement) {
   const results = await axe(container, {
@@ -118,6 +120,9 @@ function mockProposal(stale = false) {
   } as never);
   vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
   vi.mocked(rejectHooks.useRejectProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
+  vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+    mutate: vi.fn(), isPending: false, data: undefined, error: null,
+  } as never);
 }
 
 it("preserves heading hierarchy and keyboard reading order through Scenario Data controls", async () => {
@@ -359,7 +364,9 @@ it("makes the Draft card and its discontinuous commands independently identifiab
   expect(region).toHaveTextContent("Draft — no baseline change");
   const revise = screen.getByRole("button", { name: "Revise proposal" });
   const reject = screen.getByRole("button", { name: "Reject proposal" });
-  expect(revise).not.toHaveAccessibleName(reject.textContent ?? "");
+  const run = screen.getByRole("button", { name: "Run optimization" });
+  expect(new Set([revise, reject, run].map((button) => button.getAttribute("aria-label") ?? button.textContent)).size).toBe(3);
+  expect(run).toHaveAccessibleDescription(/starts a bounded computation.*does not change the baseline/i);
   expect(revise.parentElement).not.toBe(reject.parentElement);
   // Structural, not merely visual: the rule between the two commands has to be
   // reportable. An aria-hidden div left the discontinuity claim resting on two
@@ -391,9 +398,10 @@ it("keeps the Draft commands discontinuous from Send itself (UX-DR35)", async ()
   const send = screen.getByRole("button", { name: /^send$/i });
   const revise = screen.getByRole("button", { name: "Revise proposal" });
   const reject = screen.getByRole("button", { name: "Reject proposal" });
+  const run = screen.getByRole("button", { name: "Run optimization" });
   const region = screen.getByRole("region", { name: "Draft proposal" });
 
-  for (const command of [revise, reject]) {
+  for (const command of [revise, reject, run]) {
     expect(command).not.toBe(send);
     expect(command).not.toHaveAccessibleName(send.textContent ?? "");
     // The draft commands live inside the Draft region; Send does not. Being in
@@ -403,6 +411,8 @@ it("keeps the Draft commands discontinuous from Send itself (UX-DR35)", async ()
     expect(region).not.toContainElement(send);
     expect(command.parentElement).not.toBe(send.parentElement);
   }
+  expect(send).toHaveAttribute("data-variant", "default");
+  expect(run).toHaveAttribute("data-variant", "secondary");
 });
 
 it("announces stale Draft state and explains why revision is disabled", async () => {
@@ -414,14 +424,40 @@ it("announces stale Draft state and explains why revision is disabled", async ()
     "The scenario version changed",
   );
   const revise = screen.getByRole("button", { name: "Revise proposal" });
+  const run = screen.getByRole("button", { name: "Run optimization" });
   expect(revise).toBeDisabled();
   expect(revise).toHaveAccessibleDescription(/scenario version changed/i);
+  expect(run).toBeDisabled();
+  expect(run).toHaveAccessibleDescription(/refresh.*before running/i);
   expect(screen.getByRole("button", { name: "Refresh proposal" })).toBeInTheDocument();
   // The described, disabled control must be the real submit control, not a
   // screen-reader-only decoy standing in for one that was never rendered.
   expect(revise.className).not.toMatch(/sr-only/);
   // Rejection stays available while stale: it changes no baseline.
   expect(screen.getByRole("button", { name: "Reject proposal" })).toBeEnabled();
+});
+
+it("announces the queued run identity and literal status through a polite live region", async () => {
+  mockProposal();
+  vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    error: null,
+    data: {
+      schedule_run_id: "66666666-6666-4666-8666-666666666666",
+      status: "solver_queued",
+      resource_version: 1,
+    },
+  } as never);
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  const acknowledgement = screen.getByRole("status", { name: "Optimization queued" });
+  expect(acknowledgement).toHaveAttribute("aria-live", "polite");
+  expect(acknowledgement).toHaveTextContent("solver_queued");
+  expect(acknowledgement).toHaveTextContent("66666666-6666-4666-8666-666666666666");
+  expect(within(acknowledgement).getByText("66666666-6666-4666-8666-666666666666"))
+    .toHaveClass("font-mono", "text-xs");
 });
 
 it.each([

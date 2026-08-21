@@ -525,73 +525,73 @@ epoch and an attempt for work no worker ever leased.
   - [x] Add the Gap 3 drain step to `docs/GATE-A-RUNBOOK.md` beside the new route. Close
         `deferred-work.md:281`.
 
-- [ ] **⛳ Checkpoint — commit Phase A and report five numbers.** Backend test count before and
+- [x] **⛳ Checkpoint — commit Phase A and report five numbers.** Backend test count before and
       after; number of `SCOPE_CONTROLS` markers naming Story 3.6 remaining (target: zero);
       number of `deferred-work.md` entries closed (target: four — `:128`, `:273`, `:281`,
       `:289`); Gate A verdict. Do not start Phase B on a red Phase A.
 
 ### ⛳ Phase B — the planner-facing control (Tasks 7–10)
 
-- [ ] **Task 7 — Codegen and the typed client** (AC: 1)
-  - [ ] `npm run codegen` from `frontend/` (`codegen:export` then `codegen:types`). Both
+- [x] **Task 7 — Codegen and the typed client** (AC: 1)
+  - [x] `npm run codegen` from `frontend/` (`codegen:export` then `codegen:types`). Both
         `frontend/openapi.json` and `frontend/src/api/schema.d.ts` change. **Never hand-edit
         either.**
-  - [ ] New `frontend/src/api/scheduleRuns.ts` — no such file exists today. Derive every type
+  - [x] New `frontend/src/api/scheduleRuns.ts` — no such file exists today. Derive every type
         through the `paths["/api/v1/schedule-runs"]["post"][...]` idiom
         (`api/proposals.ts:4-16`); hand-author no interfaces. Keep the wrapper's
         `if (error) throw { ...error, status: response.status }; return data;` shape.
-  - [ ] New `frontend/src/hooks/useStartScheduleRun.ts`, copying `useReviseProposal.ts` **line
+  - [x] New `frontend/src/hooks/useStartScheduleRun.ts`, copying `useReviseProposal.ts` **line
         for line** including `createIdempotencyKeyHolder()` in a `useRef` and `settle()` **only**
         in `onSuccess` — the key must survive `onError` so a retry after a lost response replays
         rather than minting a second key. That comment in `lib/idempotency.ts:1-13` is
         load-bearing, not decoration.
 
-- [ ] **Task 8 — The Run optimization control** (AC: 1, 4)
-  - [ ] `DraftCard.tsx` gains a **Run optimization** button in the footer beside Revise and
+- [x] **Task 8 — The Run optimization control** (AC: 1, 4)
+  - [x] `DraftCard.tsx` gains a **Run optimization** button in the footer beside Revise and
         Reject. It is **visually discontinuous from Send** (UX-DR35, NFR19,
         `DESIGN.md` "Send and Run optimization cannot share the same primary control
         treatment"). Introduce no new palette (UX-DR33), no glow/gradient/pulse (UX-DR32).
         `min-h-11` like every other Chat control.
-  - [ ] Disabled when the proposal is `stale` or `rejected` or a mutation is pending, with
+  - [x] Disabled when the proposal is `stale` or `rejected` or a mutation is pending, with
         `aria-describedby` pointing at a visible explanation — the exact pattern
         `DraftCard.tsx:231-238` already uses for Revise. `Button` has **no built-in busy
         variant**; the house convention is `disabled={mutation.isPending}` with static label
         text and no spinner (`DraftCard.tsx:240`, `Composer.tsx:84`). Follow it.
-  - [ ] **Accessible sequencing copy** (AC1): text stating that running optimization starts a
+  - [x] **Accessible sequencing copy** (AC1): text stating that running optimization starts a
         computation and changes no baseline. Operational and bounded — no ETA, no percentage, no
         anthropomorphic waiting, no celebration (UX-DR5).
-  - [ ] On success render one `role="status"` acknowledgement naming the run ID (in
+  - [x] On success render one `role="status"` acknowledgement naming the run ID (in
         `{typography.identifier}` monospace) and the literal returned status. **No progress, no
         polling, no navigation** (Decision 9).
-  - [ ] Extend `commandMessage()` for **429** (`site_concurrency_exhausted`) with copy that says
+  - [x] Extend `commandMessage()` for **429** (`site_concurrency_exhausted`) with copy that says
         the site is at its run limit and to try again shortly. Note the existing helper branches
         on HTTP `status` only; `getErrorCode()` exists in `lib/errors.ts` but nothing uses it
         yet — if you branch on the RFC 7807 `code`, do it consistently, do not half-migrate.
-  - [ ] Stale path (AC4): the card keeps the draft, keeps its values, and offers only Refresh
+  - [x] Stale path (AC4): the card keeps the draft, keeps its values, and offers only Refresh
         proposal — the control already shipped by Story 3.1. Never silently refetch into a
         rebased draft.
-  - [ ] **Invert `DraftCard.test.tsx:90`**, which currently asserts
+  - [x] **Invert `DraftCard.test.tsx:90`**, which currently asserts
         `queryByRole("button", { name: /run optimization/i })` is **not** in the document. Change
         the assertion; do not add a second one beside a now-false one.
 
-- [ ] **Task 9 — Accessibility proof and the UX-DR35 assertion** (AC: 1)
-  - [ ] Extend `frontend/src/test/accessibility-contract.test.tsx` — **not** a sibling file.
+- [x] **Task 9 — Accessibility proof and the UX-DR35 assertion** (AC: 1)
+  - [x] Extend `frontend/src/test/accessibility-contract.test.tsx` — **not** a sibling file.
         `deferred-work.md:206` records that Story 2.8's sibling sits outside the
         `accessibility_component_layer` Gate A check's hand-written file list, so its assertions
         are protected by CI but invisible to Gate A. Do not create a second orphan.
-  - [ ] Assert: Run optimization has a distinct accessible name from Send, Revise and Reject; the
+  - [x] Assert: Run optimization has a distinct accessible name from Send, Revise and Reject; the
         disabled state carries an accessible explanation; the run-ID acknowledgement is
         announced through the existing polite live-region pattern; status meaning never depends
         on colour alone (UX-DR32, NFR18).
-  - [ ] **Ship the automated Send-versus-Run discontinuity assertion** that
+  - [x] **Ship the automated Send-versus-Run discontinuity assertion** that
         `deferred-work.md:181` names this story as owner of. `EXPERIENCE.md`'s Accessibility
         Floor makes automated coverage the only accepted proof here. Close `:181`.
-  - [ ] **Add no new Playwright spec.** Story 3.12 owns the end-to-end repair journey, and a new
+  - [x] **Add no new Playwright spec.** Story 3.12 owns the end-to-end repair journey, and a new
         spec inside a Gate A check trips `deferred-work.md:208`'s reporter-truncation item.
 
 - [ ] **Task 10 — Fences, ledger, regression, Gate A** (AC: 1, 2, 3, 4)
-  - [ ] Verify every zero-line fence in *Project Structure Notes* with `git diff --stat`.
-  - [ ] Ledger: close `:128`, `:181`, `:273`, `:281`, `:289`. Add the Decision 8 (NFR35
+  - [x] Verify every zero-line fence in *Project Structure Notes* with `git diff --stat`.
+  - [x] Ledger: close `:128`, `:181`, `:273`, `:281`, `:289`. Add the Decision 8 (NFR35
         re-measurement now possible, owner Story 3.11) and Gap 1 (baseline version unsupplied,
         owner Epic 4) entries. **Leave Story 3.5's mid-solve-preemption re-pointing untouched**
         (Decision 5) and say so in Completion Notes.
@@ -742,6 +742,21 @@ something was added or missed that this story did not intend.
 - Task 6 RED: all start-route tests failed because the schedule-runs router exposed no enqueue
   command.
 - Task 6 GREEN: 56 route/Gate A/enqueue tests and the 1154-test backend regression passed.
+- Phase A checkpoint: commit `02ab5e6`; backend count 1111 before and 1155 after; zero Story 3.6
+  scope-control markers remain; four named deferred-work entries are closed/resolved; all 84
+  PostgreSQL tests and the freshly bound Gate A evidence pass.
+- Task 7 RED: focused Vitest could not resolve the absent `scheduleRuns` client and
+  `useStartScheduleRun` hook.
+- Task 7 GREEN: 3 focused tests, TypeScript, and the full 413-test frontend suite pass; the retry
+  regression proves a failed command keeps its key and a successful command rotates it.
+- Task 8 RED: five Draft-card assertions failed because no Run control, disabled explanation,
+  acknowledgement, or 429 copy existed.
+- Task 8 GREEN: all 9 focused card tests, the 24-test accessibility contract, TypeScript, and the
+  full 415-test frontend suite pass.
+- Task 9 RED proof: temporarily replacing Run's secondary variant with default and its polite
+  live-region setting with `off` made the Gate A-visible contract fail on both exact guards.
+- Task 9 GREEN: all 25 accessibility-contract tests and the full 416-test frontend suite pass;
+  no Playwright file was added.
 
 ### Implementation Plan
 
@@ -766,6 +781,16 @@ something was added or missed that this story did not intend.
 - Task 6: `POST /api/v1/schedule-runs` validates the transport-owned compute grant and command,
   returns a durable queued run identity, maps stable bounded/stale problems, and is recorded in
   both Gate A write-surface controls with the required pre-upgrade drain.
+- Phase A checkpoint: committed as `02ab5e6`; all five reported measures meet their targets and
+  Gate A is green against evidence regenerated from that clean commit.
+- Task 7: OpenAPI was regenerated from the backend route; the exclusively schema-derived client
+  and mutation hook preserve idempotency identity through errors and settle only on success.
+- Task 8: the Draft card exposes a secondary, bounded Run optimization command; it preserves
+  stale/rejected drafts, serializes mutations, reports stable errors, and acknowledges only the
+  durable queued run identity and literal status.
+- Task 9: the existing Gate A-visible accessibility contract proves distinct command names,
+  visible disabled reasoning, polite identifier/status acknowledgement, literal non-colour
+  status meaning, and Send-versus-Run visual discontinuity; deferred item `:181` is closed.
 
 ### File List
 
@@ -804,5 +829,14 @@ something was added or missed that this story did not intend.
 - backend/worker/lease_worker.py
 - _bmad-output/implementation-artifacts/3-6-start-explicit-bounded-optimization.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
+- frontend/openapi.json
+- frontend/src/api/schema.d.ts
+- frontend/src/api/scheduleRuns.ts
+- frontend/src/api/scheduleRuns.test.ts
+- frontend/src/hooks/useStartScheduleRun.ts
+- frontend/src/hooks/useStartScheduleRun.test.tsx
+- frontend/src/features/chat/DraftCard.tsx
+- frontend/src/features/chat/DraftCard.test.tsx
+- frontend/src/test/accessibility-contract.test.tsx
 
 ## Change Log

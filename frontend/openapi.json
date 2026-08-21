@@ -3270,6 +3270,110 @@
         }
       }
     },
+    "/api/v1/schedule-runs": {
+      "post": {
+        "tags": [
+          "schedule-runs"
+        ],
+        "summary": "Start Schedule Run",
+        "operationId": "start_schedule_run_api_v1_schedule_runs_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleRunStartIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleRunStartOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        }
+      }
+    },
     "/api/v1/schedule-runs/{run_id}/events": {
       "get": {
         "tags": [
@@ -6265,6 +6369,51 @@
           "cancellation_requested"
         ],
         "title": "ScheduleRunOut"
+      },
+      "ScheduleRunStartIn": {
+        "properties": {
+          "proposal_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Id"
+          },
+          "expected_resource_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Resource Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "expected_resource_version"
+        ],
+        "title": "ScheduleRunStartIn"
+      },
+      "ScheduleRunStartOut": {
+        "properties": {
+          "schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Run Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "solver_queued",
+            "title": "Status"
+          },
+          "resource_version": {
+            "type": "integer",
+            "title": "Resource Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schedule_run_id",
+          "status",
+          "resource_version"
+        ],
+        "title": "ScheduleRunStartOut"
       },
       "TaskPageOut": {
         "properties": {
