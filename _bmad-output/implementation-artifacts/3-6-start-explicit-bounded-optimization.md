@@ -4,7 +4,7 @@ baseline_commit: 0545b35c6c6abacbac72fc21259e6da6ac16982b
 
 # Story 3.6: Start Explicit Bounded Optimization
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -589,13 +589,13 @@ epoch and an attempt for work no worker ever leased.
   - [x] **Add no new Playwright spec.** Story 3.12 owns the end-to-end repair journey, and a new
         spec inside a Gate A check trips `deferred-work.md:208`'s reporter-truncation item.
 
-- [ ] **Task 10 — Fences, ledger, regression, Gate A** (AC: 1, 2, 3, 4)
+- [x] **Task 10 — Fences, ledger, regression, Gate A** (AC: 1, 2, 3, 4)
   - [x] Verify every zero-line fence in *Project Structure Notes* with `git diff --stat`.
   - [x] Ledger: close `:128`, `:181`, `:273`, `:281`, `:289`. Add the Decision 8 (NFR35
         re-measurement now possible, owner Story 3.11) and Gap 1 (baseline version unsupplied,
         owner Epic 4) entries. **Leave Story 3.5's mid-solve-preemption re-pointing untouched**
         (Decision 5) and say so in Completion Notes.
-  - [ ] Full regression: backend default, `pytest -m postgres`,
+  - [x] Full regression: backend default, `pytest -m postgres`,
         `pytest tests/test_evidence_convention.py`, `alembic check` from the repository root,
         `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npx playwright test`,
         refreshed Gate A verdict.
@@ -713,7 +713,7 @@ something was added or missed that this story did not intend.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+OpenAI GPT-5 Codex
 
 ### Debug Log References
 
@@ -757,6 +757,11 @@ something was added or missed that this story did not intend.
   live-region setting with `off` made the Gate A-visible contract fail on both exact guards.
 - Task 9 GREEN: all 25 accessibility-contract tests and the full 416-test frontend suite pass;
   no Playwright file was added.
+- Task 10 GREEN: zero fenced files changed; five named ledger items are closed/resolved; the
+  evidence convention has 55 passing tests; Alembic reports no new upgrade operations; lint,
+  typecheck, and production build pass; final backend is 1155 passed/1 skipped/7 deselected;
+  PostgreSQL is 84 passed; Vitest is 416 passed; Playwright is 48 passed; refreshed Gate A is
+  true across every AR28, NFR29, and AC2 category.
 
 ### Implementation Plan
 
@@ -791,6 +796,11 @@ something was added or missed that this story did not intend.
 - Task 9: the existing Gate A-visible accessibility contract proves distinct command names,
   visible disabled reasoning, polite identifier/status acknowledgement, literal non-colour
   status meaning, and Send-versus-Run visual discontinuity; deferred item `:181` is closed.
+- Task 10: all structural fences, ledger obligations, regressions, migration drift checks, and
+  clean-commit Gate A evidence pass. Decision 8's NFR35 re-measurement remains owned by Story
+  3.11; Gap 1's baseline-version supply remains owned by Epic 4. Story 3.5's mid-solve
+  preemption re-pointing was deliberately left untouched because the solver wall-time default
+  remains 30 seconds.
 
 ### File List
 
@@ -840,3 +850,8 @@ something was added or missed that this story did not intend.
 - frontend/src/test/accessibility-contract.test.tsx
 
 ## Change Log
+
+- 2026-08-21: Implemented explicit bounded optimization start end-to-end: hardened operational
+  ceilings, compute-risk transport grants, actor-scoped idempotent enqueue with per-site
+  concurrency, the versioned start route, generated typed client/hook, accessible Run control,
+  ledger closures, and complete Gate A verification.
