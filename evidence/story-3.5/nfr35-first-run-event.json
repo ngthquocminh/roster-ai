@@ -22,11 +22,11 @@
     "all_runs_must_pass": true,
     "threshold_ms": 5000,
     "clock_boundary": "committed enqueue_compute acknowledgement to the ASGI send carrying the first persisted run_progress frame",
-    "clock_boundary_note": "Story 3.6 has not shipped the HTTP creation command, so the direct transaction commit is the acknowledgement boundary. Delivery is observed at ASGI send; network transit is excluded.",
+    "clock_boundary_note": "Story 3.6 has not shipped the HTTP creation command, so the direct transaction commit is the acknowledgement boundary. Delivery is observed at ASGI send; network transit is excluded. SCOPE LIMIT: run.queued.v1 is written by create_queued_run INSIDE the enqueue transaction, and the stream is opened only after that transaction commits, so the measured path contains no queue, no worker, no solver and no lock contention -- it is an HTTP connect plus one indexed row read, and cannot exceed the threshold by construction. These figures bound read-path delivery latency; they do NOT measure queue-to-visible latency. The wait a planner actually experiences is gated by worker lease acquisition and is first observable at run.running.v1, which this story does not measure. Owner: Story 3.11 (worker kill / lease expiry).",
     "first_event": "run.queued.v1"
   },
   "code_versions": {
-    "git_commit": "9721fdfd51a7ce34b96a55e4202f2553ef6c580d",
+    "git_commit": "5194f6789303d2015d74553f12c359519554f8c3",
     "working_tree_dirty": false,
     "api_image": "local source tree",
     "database_image": "postgres:18"
@@ -36,22 +36,22 @@
       "run": 1,
       "endpoint": "/api/v1/schedule-runs/{run_id}/events",
       "event": "run.queued.v1",
-      "duration_ms": 14.377
+      "duration_ms": 64.638
     },
     {
       "run": 2,
       "endpoint": "/api/v1/schedule-runs/{run_id}/events",
       "event": "run.queued.v1",
-      "duration_ms": 18.19
+      "duration_ms": 53.601
     },
     {
       "run": 3,
       "endpoint": "/api/v1/schedule-runs/{run_id}/events",
       "event": "run.queued.v1",
-      "duration_ms": 15.687
+      "duration_ms": 54.779
     }
   ],
-  "maximum_duration_ms": 18.19,
+  "maximum_duration_ms": 64.638,
   "passed": true,
   "version_bindings": {
     "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
@@ -64,7 +64,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — the queued event precedes solver execution",
     "code": {
-      "git_commit": "9721fdfd51a7ce34b96a55e4202f2553ef6c580d",
+      "git_commit": "5194f6789303d2015d74553f12c359519554f8c3",
       "working_tree_dirty": false
     },
     "image": {
