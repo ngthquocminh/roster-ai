@@ -4,7 +4,7 @@ baseline_commit: 1d24cb5d72c627e7921c61cacc95626f2c8544f2
 
 # Story 3.5: Persist Literal Run State and Replay Progress [Technical Enabler]
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
