@@ -17,6 +17,7 @@ from api.deps import (
 from api.main import app
 from application.ports.schedule_run import (
     IdempotentScheduleRunResultV1,
+    ScheduleRunViewV1,
     ScheduleRunStateV1,
 )
 from application.ports.session import ResolvedSession
@@ -113,6 +114,56 @@ def test_cancellation_route_reports_the_flag_it_was_given_not_a_constant() -> No
     )
 
 
+def test_polling_fallback_returns_literal_persisted_run_state(client) -> None:
+    test_client, _, session = client
+    run_id = uuid4()
+
+    class _ReadRepository:
+        def get_run(self, _connection, *, run_id: object, site_id):
+            assert site_id == session.site_id
+            return ScheduleRunViewV1(
+                schedule_run_id=run_id,
+                status="cancellation_requested",
+                reason="cancellation_requested",
+                resource_version=3,
+                cancellation_requested=True,
+            )
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _ReadRepository()
+    response = test_client.get(
+        f"/api/v1/schedule-runs/{run_id}",
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "schedule_run_id": str(run_id),
+        "status": "cancellation_requested",
+        "reason": "cancellation_requested",
+        "resource_version": 3,
+        "cancellation_requested": True,
+        "created_at": None,
+        "finished_at": None,
+    }
+
+
+def test_polling_fallback_does_not_disclose_unknown_or_cross_site_run(client) -> None:
+    test_client, _, _ = client
+
+    class _MissingRepository:
+        def get_run(self, _connection, *, run_id, site_id):
+            return None
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _MissingRepository()
+    response = test_client.get(
+        f"/api/v1/schedule-runs/{uuid4()}",
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "schedule_run_not_found"
+
+
 @pytest.mark.parametrize(
     ("exception", "status", "code"),
     (
@@ -206,7 +257,7 @@ class _WiringRepository:
         return self.flag
 
     def request_cancellation(
-        self, _connection, *, run_id, site_id, expected_resource_version
+        self, _connection, *, run_id, site_id, actor_id, expected_resource_version
     ):
         return None
 

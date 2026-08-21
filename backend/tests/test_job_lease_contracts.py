@@ -12,7 +12,7 @@ from application.contracts.job_lease import JobLeaseV1, JobStatusV1, JobTypeV1
 
 def test_job_lease_uses_closed_workflow_vocabularies() -> None:
     assert get_args(JobTypeV1) == ("schedule_run_execute",)
-    assert get_args(JobStatusV1) == ("queued", "leased", "completed")
+    assert get_args(JobStatusV1) == ("queued", "leased", "completed", "failed")
 
 
 def test_job_lease_contains_the_ad20_lease_and_fencing_shape() -> None:

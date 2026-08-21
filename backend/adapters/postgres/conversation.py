@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import Connection, func, insert, select, update
+from sqlalchemy import Connection, func, insert, or_, select, update
 
 from adapters.postgres.schema import (
     agent_run,
@@ -322,13 +322,19 @@ class PostgresConversationRepository:
             select(persisted_event)
             .where(
                 persisted_event.c.stream_id == conversation_id,
-                # Exclude only this run's own events. `agent_run_id` is
-                # NOT NULL with a composite FK (`schema.py`), so no row can
-                # carry SQL NULL here and `!=` cannot silently drop one -- an
-                # earlier `or_(... is_(None), ...)` guard against that was
-                # unreachable and its comment described a defect the schema
-                # forbids.
-                persisted_event.c.agent_run_id != agent_run_id,
+                # Exclude only this run's own events. `agent_run_id` was
+                # NOT NULL when the guard below was removed as unreachable --
+                # Story 3.5 widened it to nullable so a schedule-run stream
+                # could omit it, and `ck_persisted_event_stream_owner`
+                # constrains only `conversation_id`/`schedule_run_id`. A bare
+                # `!=` evaluates to SQL NULL against a NULL row and would drop
+                # it from this window silently, so the NULL branch is explicit
+                # again rather than resting on an invariant that no longer
+                # holds.
+                or_(
+                    persisted_event.c.agent_run_id.is_(None),
+                    persisted_event.c.agent_run_id != agent_run_id,
+                ),
             )
             .order_by(persisted_event.c.sequence.desc())
             .limit(100)
@@ -550,6 +556,7 @@ def _event_from_row(row) -> PersistedEventV1:
         request_id=row.request_id,
         conversation_id=row.conversation_id,
         agent_run_id=row.agent_run_id,
+        schedule_run_id=row.schedule_run_id,
         site_id=row.site_id,
         actor_id=row.actor_id,
         payload=_activity_from_payload(row.payload),

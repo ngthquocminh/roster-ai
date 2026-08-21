@@ -1,4 +1,4 @@
-"""Versioned durable event envelope owned by the conversation aggregate."""
+"""Versioned durable event envelope for persisted workflow streams."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -19,9 +19,10 @@ class PersistedEventV1:
     occurred_at: datetime
     resource_version: int
     request_id: UUID
-    conversation_id: UUID
-    agent_run_id: UUID
+    conversation_id: UUID | None
+    agent_run_id: UUID | None
     site_id: UUID
     actor_id: UUID
     payload: ActivityItemV1
+    schedule_run_id: UUID | None = None
     schema_version: str = SCHEMA_VERSION

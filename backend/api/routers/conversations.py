@@ -6,7 +6,7 @@ import logging
 import asyncio
 from decimal import Decimal
 from time import monotonic
-from typing import AsyncIterator
+from typing import Any, AsyncIterator, Callable, Protocol
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -355,15 +355,36 @@ def _frame(event: PersistedEventV1) -> str:
     )
 
 
+class EventStreamReader(Protocol):
+    """The one method `_event_frames` needs from whichever repository owns the stream.
+
+    Annotating this parameter `ConversationRepository` became untrue the moment
+    the schedule-run router started reusing this generator: both satisfy the
+    same read shape, and neither should have to know about the other.
+    """
+
+    def events_after(
+        self, connection: Any, *, stream_id: UUID, after: Decimal, limit: int
+    ): ...
+
+
 async def _event_frames(
     *,
-    repository: ConversationRepository,
+    repository: EventStreamReader,
     open_site_context: SiteContextOpener,
     site_id: UUID,
     stream_id: UUID,
     cursor: Decimal,
+    is_final: Callable[[Any], bool] | None = None,
 ) -> AsyncIterator[str]:
-    """Replay from `cursor`, then poll forward, heartbeating through idleness."""
+    """Replay from `cursor`, then poll forward, heartbeating through idleness.
+
+    `is_final` closes the stream once the aggregate can emit nothing further.
+    A conversation is open-ended and passes none; a schedule run is a closed
+    AD-7 machine with five terminal statuses, and without this every finished
+    run would hold an open connection and a 1 Hz query until the client went
+    away -- which `EventSource` then reconnects.
+    """
     # Emit immediately, before any database work, so a proxy sees bytes on this
     # connection ahead of its idle timeout even when nothing is outstanding.
     yield _HEARTBEAT
@@ -392,6 +413,9 @@ async def _event_frames(
                 cursor = event.sequence
                 yield _frame(event)
                 last_emitted = monotonic()
+                if is_final is not None and is_final(event):
+                    # Delivered the terminal event; nothing can follow it.
+                    return
             if len(batch) == _REPLAY_BATCH:
                 # A full batch means more backlog is outstanding; drain it
                 # without waiting out a poll interval.

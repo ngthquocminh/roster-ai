@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import UUID
 
 from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
+from application.contracts.persisted_event import PersistedEventV1
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import ScheduleRunStatusV1, ScheduleVersionV1
 
@@ -21,6 +23,27 @@ class IdempotentScheduleRunResultV1:
 class ScheduleRunStateV1:
     status: ScheduleRunStatusV1
     resource_version: int
+
+
+@dataclass(frozen=True)
+class ScheduleRunEventHeadV1:
+    max_sequence: Decimal
+
+
+@dataclass(frozen=True)
+class ScheduleRunViewV1:
+    schedule_run_id: UUID
+    status: ScheduleRunStatusV1
+    reason: str | None
+    resource_version: int
+    cancellation_requested: bool
+    #: The polling fallback is the degraded path for clients that cannot hold
+    #: an SSE connection, so it must answer "when did this run finish?" --
+    #: `finalize_run` populates `finished_at` on the very row this view joins.
+    #: `ScheduleRunOut` has carried both fields since the cancellation replay
+    #: payload; only this read left them permanently null.
+    created_at: datetime | None = None
+    finished_at: datetime | None = None
 
 
 class StaleLeaseError(ValueError):
@@ -45,6 +68,31 @@ class IllegalTransitionError(ValueError):
 
 
 class ScheduleRunRepository(Protocol):
+    def get_run(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleRunViewV1 | None: ...
+
+    def event_head(
+        self,
+        connection: Any,
+        *,
+        run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleRunEventHeadV1 | None: ...
+
+    def events_after(
+        self,
+        connection: Any,
+        *,
+        stream_id: UUID,
+        after: Decimal,
+        limit: int,
+    ) -> tuple[PersistedEventV1, ...] | None: ...
+
     def get_run_state(
         self,
         connection: Any,
@@ -59,6 +107,7 @@ class ScheduleRunRepository(Protocol):
         *,
         run_id: UUID,
         site_id: UUID,
+        actor_id: UUID,
         expected_resource_version: int,
     ) -> None: ...
 
@@ -68,6 +117,7 @@ class ScheduleRunRepository(Protocol):
         *,
         run_id: UUID,
         site_id: UUID,
+        actor_id: UUID,
         expected_resource_version: int,
     ) -> None: ...
 
@@ -94,6 +144,7 @@ class ScheduleRunRepository(Protocol):
         run_id: UUID,
         site_id: UUID,
         fencing_epoch: int,
+        request_id: UUID | None = None,
     ) -> None: ...
 
     def create_queued_run(
@@ -102,6 +153,7 @@ class ScheduleRunRepository(Protocol):
         *,
         snapshot: RunSnapshotV1,
         site_id: UUID,
+        actor_id: UUID,
     ) -> None: ...
 
     def enqueue_job(
@@ -146,6 +198,15 @@ class ScheduleRunRepository(Protocol):
         fencing_epoch: int,
     ) -> None: ...
 
+    def fail_job(
+        self,
+        connection: Any,
+        *,
+        job_id: UUID,
+        site_id: UUID,
+        fencing_epoch: int,
+    ) -> None: ...
+
     def get_idempotent_result(
         self,
         connection: Any,
@@ -179,6 +240,7 @@ class ScheduleRunRepository(Protocol):
         reason: str | None,
         candidate: ScheduleVersionV1 | None,
         finished_at: datetime | None = None,
+        request_id: UUID | None = None,
     ) -> None: ...
 
 
@@ -188,6 +250,8 @@ __all__ = [
     "RunNotCancellableError",
     "RunTransitionConflictError",
     "ScheduleRunRepository",
+    "ScheduleRunEventHeadV1",
+    "ScheduleRunViewV1",
     "ScheduleRunStateV1",
     "StaleLeaseError",
 ]

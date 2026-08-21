@@ -315,18 +315,23 @@ persisted_event = Table(
     Column("occurred_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     Column("resource_version", BigInteger, nullable=False),
     Column("request_id", UUID(as_uuid=True), nullable=False),
-    Column("conversation_id", UUID(as_uuid=True), nullable=False),
-    Column("agent_run_id", UUID(as_uuid=True), nullable=False),
+    Column("conversation_id", UUID(as_uuid=True), nullable=True),
+    Column("agent_run_id", UUID(as_uuid=True), nullable=True),
+    Column("schedule_run_id", UUID(as_uuid=True), nullable=True),
     Column("actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
     Column("payload", JSONB, nullable=False),
     ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_persisted_event_conversation_site", ondelete="RESTRICT"),
     ForeignKeyConstraint(["agent_run_id", "site_id"], ["agent_run.id", "agent_run.site_id"], name="fk_persisted_event_agent_run_site", ondelete="RESTRICT"),
+    ForeignKeyConstraint(["schedule_run_id", "site_id"], ["schedule_run.id", "schedule_run.site_id"], name="fk_persisted_event_schedule_run_site", ondelete="RESTRICT"),
     UniqueConstraint("stream_id", "sequence", name="uq_persisted_event_stream_sequence"),
     UniqueConstraint("id", "site_id", name="uq_persisted_event_id_site"),
-    # A conversation stream's identity IS the conversation's UUID (AD-21), so a
-    # second stream cannot be numbered against the same conversation and
-    # collide inside one rendered timeline.
-    CheckConstraint("stream_id = conversation_id", name="ck_persisted_event_stream_is_conversation"),
+    CheckConstraint(
+        "(conversation_id IS NOT NULL AND schedule_run_id IS NULL "
+        "AND stream_id = conversation_id) OR "
+        "(schedule_run_id IS NOT NULL AND conversation_id IS NULL "
+        "AND stream_id = schedule_run_id)",
+        name="ck_persisted_event_stream_owner",
+    ),
 )
 
 # Indexes for this aggregate's reads and for the site_id predicate that FORCE
@@ -339,6 +344,7 @@ Index("ix_conversation_scenario_id", conversation.c.scenario_id)
 Index("ix_message_conversation_id", message.c.conversation_id)
 Index("ix_agent_run_conversation_created", agent_run.c.conversation_id, agent_run.c.created_at)
 Index("ix_persisted_event_conversation_id", persisted_event.c.conversation_id)
+Index("ix_persisted_event_schedule_run_id", persisted_event.c.schedule_run_id)
 
 proposal = Table(
     "proposal", metadata, _id_column(), _site_id_column(),
@@ -549,7 +555,7 @@ job_queue = Table(
         name="ck_job_queue_job_type",
     ),
     CheckConstraint(
-        "status IN ('queued','leased','completed')",
+        "status IN ('queued','leased','completed','failed')",
         name="ck_job_queue_status",
     ),
     CheckConstraint("fencing_epoch >= 0", name="ck_job_queue_fencing_epoch"),

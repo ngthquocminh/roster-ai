@@ -16,9 +16,9 @@ from application.ports.schedule_run import (
 
 SCOPE_CONTROLS = (
     "COVERS: cancellation:queued_and_running; "
-    "NOT COVERED: cancellation:mid_solve_preemption_owned_by_story_3_5; "
-    "NOT COVERED: job_terminal_state:owned_by_story_3_5; "
-    "NOT COVERED: heartbeat:owned_by_story_3_5; "
+    "NOT COVERED: cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit; "
+    "COVERED AT: job_terminal_state:lease_and_execute_schedule_run; "
+    "COVERED AT: heartbeat:execute_schedule_run; "
     "NOT COVERED: audit:owned_by_epic_4"
 )
 
@@ -194,6 +194,7 @@ def cancel_schedule_run(
                 connection,
                 run_id=run_id,
                 site_id=site_id,
+                actor_id=actor_id,
                 expected_resource_version=expected_resource_version,
             )
             result = ScheduleRunCancellationV1(
@@ -204,6 +205,7 @@ def cancel_schedule_run(
                 connection,
                 run_id=run_id,
                 site_id=site_id,
+                actor_id=actor_id,
                 expected_resource_version=expected_resource_version,
             )
             result = ScheduleRunCancellationV1(

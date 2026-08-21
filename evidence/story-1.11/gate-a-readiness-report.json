@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-08-20",
+  "measurement_date": "2026-08-21",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -59,8 +59,8 @@
           },
           "backend/tests/test_postgres_schema.py": {
             "status": "passed",
-            "total": 8,
-            "passed": 8,
+            "total": 11,
+            "passed": 11,
             "skipped": 0,
             "failed": 0
           },
@@ -132,8 +132,8 @@
           },
           "backend/tests/test_postgres_integration.py": {
             "status": "passed",
-            "total": 18,
-            "passed": 18,
+            "total": 19,
+            "passed": 19,
             "skipped": 0,
             "failed": 0
           }
@@ -704,8 +704,8 @@
         "cases": {
           "backend/tests/test_postgres_integration.py": {
             "status": "passed",
-            "total": 18,
-            "passed": 18,
+            "total": 19,
+            "passed": 19,
             "skipped": 0,
             "failed": 0
           }
@@ -935,8 +935,8 @@
           },
           "backend/tests/test_evidence_convention.py": {
             "status": "passed",
-            "total": 49,
-            "passed": 49,
+            "total": 55,
+            "passed": 55,
             "skipped": 0,
             "failed": 0
           },
@@ -1037,21 +1037,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 1078,
-      "run_started": "2026-08-20T21:37:31.685826+07:00",
-      "sha256": "fba4636475973d24d2068dd402ef24d8b56247939c49d6e33e2c06dcd2be6e0f"
+      "cases": 1112,
+      "run_started": "2026-08-21T04:41:15.915990+07:00",
+      "sha256": "754dea6c508f80644eca41cef2d11b4125f38bd101d1025d5fbbf481e9c6f6d5"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 410,
-      "run_started": "2026-08-20T14:40:30.454Z",
-      "sha256": "811a70f4b16d2e30c4ed7e11fe22542c319a6021d6aa3b9b1ef5fd163a5c7913"
+      "run_started": "2026-08-20T21:43:24.175Z",
+      "sha256": "c27ac651d7509b53ebcdcdf7f70c7131a9195b309ba6e28e29f6abe864e1f027"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 48,
-      "run_started": "2026-08-20T14:40:46.521Z",
-      "sha256": "1ce276d8d3b1a7561424e7d59af6d3ee160abb6b17d39c947609fe9a472dc043"
+      "run_started": "2026-08-20T21:41:22.864Z",
+      "sha256": "a9d3853d2c151b002a9b1cb9f9bc9b8873c9af7a41b94f8c522b3fb6a99551c9"
     }
   },
   "version_bindings": {
@@ -1065,7 +1065,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "7ac70121e6f660bb71da523948a1044d245dd276",
+      "git_commit": "8d9ca90c4afcbaa1b007ed941eee3ac05fc1dbde",
       "working_tree_dirty": false
     },
     "image": {
@@ -1073,7 +1073,7 @@
       "web": "local source tree",
       "database": "postgres:18"
     },
-    "schema_version": "b3c4d5e6f7a8"
+    "schema_version": "c4d5e6f7a8b9"
   },
   "blocking": [],
   "gate_a_passed": true,

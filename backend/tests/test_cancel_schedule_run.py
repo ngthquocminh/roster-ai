@@ -32,6 +32,9 @@ class _Result:
     def scalar_one_or_none(self):
         return self._scalar
 
+    def scalar_one(self):
+        return self._scalar or uuid4()
+
 
 class _Connection:
     def __init__(self, *results: _Result) -> None:
@@ -70,13 +73,14 @@ def test_get_run_state_returns_status_and_resource_version() -> None:
 def test_cancellation_transitions_are_versioned_compare_and_sets(
     method_name, from_status, to_status, sets_finished_at
 ) -> None:
-    connection = _Connection()
+    connection = _Connection(_Result(row=SimpleNamespace(resource_version=4)))
     repository = PostgresScheduleRunRepository()
 
     getattr(repository, method_name)(
         connection,
         run_id=uuid4(),
         site_id=uuid4(),
+        actor_id=uuid4(),
         expected_resource_version=3,
     )
 
@@ -95,6 +99,7 @@ def test_failed_cancellation_compare_and_set_is_distinct() -> None:
             _Connection(_Result(rowcount=0)),
             run_id=uuid4(),
             site_id=uuid4(),
+            actor_id=uuid4(),
             expected_resource_version=2,
         )
 
@@ -115,12 +120,23 @@ def test_job_cancellation_flag_is_site_scoped_and_zero_rows_are_allowed() -> Non
 
 def test_existing_run_updates_bump_resource_version() -> None:
     repository = PostgresScheduleRunRepository()
-    mark_connection = _Connection()
+    mark_connection = _Connection(
+        _Result(),
+        _Result(row=SimpleNamespace(resource_version=2)),
+        _Result(scalar=uuid4()),
+    )
     repository.mark_running(
         mark_connection, run_id=uuid4(), site_id=uuid4(), fencing_epoch=1
     )
 
-    finalize_connection = _Connection()
+    finalize_connection = _Connection(
+        _Result(),
+        _Result(row=SimpleNamespace(
+            resource_version=3,
+            finished_at=None,
+        )),
+        _Result(scalar=uuid4()),
+    )
     repository.finalize_run(
         finalize_connection,
         run_id=uuid4(),
@@ -137,7 +153,10 @@ def test_existing_run_updates_bump_resource_version() -> None:
         s for s in mark_connection.statements
         if str(s).startswith("UPDATE schedule_run")
     )
-    finalize = finalize_connection.statements[-1]
+    finalize = next(
+        s for s in finalize_connection.statements
+        if str(s).startswith("UPDATE schedule_run")
+    )
     assert "resource_version" in mark._values
     assert "resource_version" in finalize._values
     assert "cancellation_requested" in str(finalize.compile().params.values())

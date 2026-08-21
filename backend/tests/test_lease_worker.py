@@ -46,6 +46,9 @@ class _Result:
     def scalar_one_or_none(self):
         return self._scalar
 
+    def scalar_one(self):
+        return self._scalar or uuid4()
+
     def mappings(self):
         return self
 
@@ -68,7 +71,10 @@ class _Connection:
     def execute(self, statement, parameters=None):
         self.statements.append(statement)
         if getattr(statement, "is_update", False):
-            return _Result(rowcount=self.rowcount)
+            rows = self.rows
+            if str(statement).startswith("UPDATE schedule_run") and rows is None:
+                rows = SimpleNamespace(resource_version=2)
+            return _Result(rowcount=self.rowcount, rows=rows)
         if getattr(statement, "is_insert", False):
             return _Result(rowcount=self.rowcount)
         return _Result(scalar=self.current_epoch, rows=self.rows)
@@ -281,18 +287,15 @@ def test_scope_controls_state_their_non_coverage(controls) -> None:
     assert "NOT COVERED" in controls
 
 
-def test_deferred_owners_are_named_in_scope_controls() -> None:
-    """The heartbeat, the job failure state, and the lease ceiling were all
-    deferred at code review with a named owner; the declaration is the only
-    thing carrying that decision into the code."""
-    assert "heartbeat:owned_by_story_3_5" in LEASE_CONTROLS
-    assert "job_failure_state:owned_by_story_3_5" in LEASE_CONTROLS
+def test_resolved_and_deferred_owners_are_named_in_scope_controls() -> None:
+    assert "heartbeat:independent_short_transaction_renewal" in LEASE_CONTROLS
+    assert "job_failure_state:failed_terminal_and_not_released" in LEASE_CONTROLS
     assert "ceilings:lease_seconds_owned_by_story_3_6" in LEASE_CONTROLS
     assert "contracts:attempt_id_unset_until_first_lease" in ENQUEUE_CONTROLS
     assert "cancellation:cooperative_checkpoints" in LEASE_CONTROLS
-    assert "cancellation:mid_solve_preemption_owned_by_story_3_5" in LEASE_CONTROLS
-    assert "job_terminal_state:owned_by_story_3_5" in CANCEL_CONTROLS
-    assert "heartbeat:owned_by_story_3_5" in CANCEL_CONTROLS
+    assert "cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit" in LEASE_CONTROLS
+    assert "job_terminal_state:lease_and_execute_schedule_run" in CANCEL_CONTROLS
+    assert "heartbeat:execute_schedule_run" in CANCEL_CONTROLS
 
 
 def test_idempotency_key_is_bounded_by_the_narrower_column() -> None:

@@ -2,8 +2,14 @@
 from __future__ import annotations
 
 import ast
+from typing import get_args
 from pathlib import Path
 
+
+from application.contracts.schedule_version import (
+    RUN_EVENT_TYPES,
+    ScheduleRunStatusV1,
+)
 
 AD7_EDGES = frozenset(
     {
@@ -100,27 +106,18 @@ def _mark_running_edge(tree: ast.Module) -> tuple[str, str]:
 
 def _finalize_edges(tree: ast.Module) -> set[tuple[str, str]]:
     targets = _assigned_literal(tree, "_FINALIZE_STATUSES")
-    function = _function(tree, "finalize_run")
-    conditional = next(
+    mapping_node = next(
         node.value
-        for node in function.body
+        for node in tree.body
         if isinstance(node, ast.Assign)
-        and any(
-            isinstance(target, ast.Name) and target.id == "expected_statuses"
-            for target in node.targets
-        )
+        and any(isinstance(target, ast.Name) and target.id == "_FINALIZE_EXPECTED_STATUSES" for target in node.targets)
     )
-    assert isinstance(conditional, ast.IfExp)
-    assert isinstance(conditional.test, ast.Compare)
-    assert conditional.test.comparators[0].value == "solver_cancelled"
-    cancelled_sources = _string_tuple(conditional.body)
-    other_sources = _string_tuple(conditional.orelse)
+    mapping = ast.literal_eval(mapping_node)
+    assert set(mapping) == set(targets)
     return {
         (source, target)
-        for target in targets
-        for source in (
-            cancelled_sources if target == "solver_cancelled" else other_sources
-        )
+        for target, sources in mapping.items()
+        for source in sources
     }
 
 
@@ -140,7 +137,10 @@ def test_every_adapter_schedule_run_transition_is_an_ad7_edge() -> None:
 # those three are the only writers -- an invariant nothing asserted, so the
 # next story could add a fourth transition method and keep a green guard.
 _SCHEDULE_RUN_WRITERS = frozenset(
-    {"_cancel_transition", "mark_running", "finalize_run"}
+    {"_cancel_transition", "mark_running", "create_queued_run", "finalize_run"}
+)
+_PROGRESS_EVENT_WRITERS = frozenset(
+    {"_cancel_transition", "mark_running", "create_queued_run", "finalize_run"}
 )
 
 
@@ -163,6 +163,62 @@ def _functions_updating_schedule_run(tree: ast.Module) -> set[str]:
     return writers
 
 
+def _functions_inserting_schedule_run(tree: ast.Module) -> set[str]:
+    """Every function containing an `insert(schedule_run)` call, by name."""
+    writers = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == "insert"
+                and inner.args
+                and isinstance(inner.args[0], ast.Name)
+                and inner.args[0].id == "schedule_run"
+            ):
+                writers.add(node.name)
+    return writers
+
+
+def _functions_calling_progress_event_writer(tree: ast.Module) -> set[str]:
+    """Every transition function that calls `_write_progress_event`, by name."""
+    callers = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name == "_write_progress_event":
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Attribute)
+                and inner.func.attr == "_write_progress_event"
+            ):
+                callers.add(node.name)
+    return callers
+
+
+def _functions_inserting_persisted_event(tree: ast.Module) -> set[str]:
+    """Every function containing an `insert(persisted_event)` call, by name."""
+    writers = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if (
+                isinstance(inner, ast.Call)
+                and isinstance(inner.func, ast.Name)
+                and inner.func.id == "insert"
+                and inner.args
+                and isinstance(inner.args[0], ast.Name)
+                and inner.args[0].id == "persisted_event"
+            ):
+                writers.add(node.name)
+    return writers
+
+
 def test_only_the_known_helpers_write_a_schedule_run_transition() -> None:
     """Make the edge guard exhaustive rather than merely correct about three functions.
 
@@ -173,4 +229,52 @@ def test_only_the_known_helpers_write_a_schedule_run_transition() -> None:
     """
     tree = ast.parse(ADAPTER.read_text(encoding="utf-8"), filename=str(ADAPTER))
 
-    assert _functions_updating_schedule_run(tree) == _SCHEDULE_RUN_WRITERS
+    actual_writers = (
+        _functions_updating_schedule_run(tree)
+        | _functions_inserting_schedule_run(tree)
+    )
+    assert actual_writers == _SCHEDULE_RUN_WRITERS
+
+
+def test_only_transition_writers_emit_run_progress_events() -> None:
+    """Keep the persisted-event guard exhaustive as transition methods grow."""
+    tree = ast.parse(ADAPTER.read_text(encoding="utf-8"), filename=str(ADAPTER))
+
+    assert (
+        _functions_calling_progress_event_writer(tree)
+        == _PROGRESS_EVENT_WRITERS
+    )
+    assert _functions_inserting_persisted_event(tree) == {"_write_progress_event"}
+
+
+def test_every_run_status_publishes_exactly_one_stable_event_type() -> None:
+    """AC1 says all eight literal states emit; the wire names are a closed set.
+
+    `event_type` was derived by `status.removeprefix("solver_")`, so renaming an
+    internal status literal would silently rename a published SSE event. Pinning
+    the mapping here makes that a red test instead. Three of these names --
+    `run.completed.v1`, `run.infeasible.v1`, `run.timed_out.v1` -- had no
+    assertion anywhere in the suite before this.
+    """
+    assert RUN_EVENT_TYPES == {
+        "solver_queued": "run.queued.v1",
+        "solver_running": "run.running.v1",
+        "cancellation_requested": "run.cancellation_requested.v1",
+        "solver_completed": "run.completed.v1",
+        "solver_infeasible": "run.infeasible.v1",
+        "solver_timed_out": "run.timed_out.v1",
+        "solver_cancelled": "run.cancelled.v1",
+        "solver_failed": "run.failed.v1",
+    }
+
+    # Every state AD-7 can reach has a name, and no name exists for a state
+    # that does not: a status added without a wire name would raise a KeyError
+    # inside `_write_progress_event` at runtime instead.
+    statuses = set(get_args(ScheduleRunStatusV1))
+    assert set(RUN_EVENT_TYPES) == statuses
+    assert len(set(RUN_EVENT_TYPES.values())) == len(statuses)
+
+    reachable = {source for source, _ in AD7_EDGES} | {
+        target for _, target in AD7_EDGES
+    }
+    assert reachable <= set(RUN_EVENT_TYPES)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -15,6 +16,14 @@ class _Result:
 
     def scalar_one_or_none(self):
         return self._scalar
+
+    def scalar_one(self):
+        return self._scalar or uuid4()
+
+    def one_or_none(self):
+        if self.rowcount != 1:
+            return None
+        return SimpleNamespace(resource_version=2)
 
 
 class _Connection:
