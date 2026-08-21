@@ -90,6 +90,7 @@ class AgentRuntimeConfig:
     model: str = "test"
     api_key: str | None = field(repr=False, default=None)
     default_budget: AgentBudgetV1 = field(default_factory=AgentBudgetV1)
+    retries_limit: int = 2
     instructions: str = (
         "You are ShiftMind's scheduling assistant. Be concise and factual."
     )
@@ -149,6 +150,10 @@ class PydanticAIAgentRuntime:
             output_type=output_type,
             instructions=self._config.instructions,
             capabilities=[Instrumentation(settings=instrumentation_settings)],
+            retries={
+                "tools": self._config.retries_limit,
+                "output": self._config.retries_limit,
+            },
         )
         output_toolset = self._agent._output_toolset
         self._output_tool_names = frozenset(
@@ -482,8 +487,10 @@ def create_agent_runtime(
             default_budget=AgentBudgetV1(
                 request_limit=settings.agent_runtime_request_limit,
                 tool_calls_limit=settings.agent_runtime_tool_calls_limit,
+                total_tokens_limit=settings.agent_runtime_total_tokens_limit,
                 deadline_seconds=settings.agent_runtime_deadline_seconds,
             ),
+            retries_limit=settings.agent_runtime_retries_limit,
         )
     return PydanticAIAgentRuntime(
         config=config,

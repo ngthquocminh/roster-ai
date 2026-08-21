@@ -52,17 +52,28 @@ def runtime_context(engine: Engine, site_id: UUID) -> Iterator[Connection]:
 
 #: Multiple of the solver wall-time budget used when no lease duration is given.
 #: Story 3.5 renews the lease while a solve is active. This multiple remains a
-#: defensive floor and reduces heartbeat churn; Story 3.6 owns the real ceiling
-#: (`ceilings:lease_seconds_owned_by_story_3_6`); this is only a floor that keeps
-#: the default safe until it does.
+#: defensive floor and reduces heartbeat churn. Settings validates the real
+#: application-owned ceiling against this same relationship at process start.
 LEASE_SECONDS_SOLVER_MULTIPLE = 4
 MINIMUM_LEASE_SECONDS = 60
 
 
 def default_lease_seconds(settings: Any) -> int:
-    """Derive a lease duration that cannot be shorter than the solver budget."""
+    """Return the validated ceiling, with a safe fallback for narrow test stubs.
+
+    The floor applies to BOTH branches. `default_settings()` validates the
+    `lease_seconds >= 4 x solver_wall_time_limit_seconds` relationship, but a
+    `Settings(...)` or `dataclasses.replace(...)` construction bypasses that
+    factory and keeps the bare dataclass default, so returning a configured
+    value verbatim would hand back a lease shorter than the solve it must cover
+    -- the exact fence-out this function exists to prevent.
+    """
+    configured = getattr(settings, "lease_seconds", None)
     budget = float(getattr(settings, "solver_wall_time_limit_seconds", 0.0) or 0.0)
-    return max(MINIMUM_LEASE_SECONDS, ceil(budget * LEASE_SECONDS_SOLVER_MULTIPLE))
+    derived = max(MINIMUM_LEASE_SECONDS, ceil(budget * LEASE_SECONDS_SOLVER_MULTIPLE))
+    if configured is not None:
+        return max(derived, int(configured))
+    return derived
 
 
 def run_once(

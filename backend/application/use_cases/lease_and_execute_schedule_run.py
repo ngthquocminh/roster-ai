@@ -58,7 +58,7 @@ SCOPE_CONTROLS = (
     "COVERS: events:literal_schedule_run_transitions; "
     "COVERS: cancellation:cooperative_checkpoints; "
     "NOT COVERED: cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit; "
-    "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
+    "COVERS: contracts:capability_version_persisted_on_job_lease; "
     # `solver_running` now commits before the solve and is observable. The
     # remaining heartbeat debt is only the missing renew_job_lease caller.
     "COVERS: heartbeat:independent_short_transaction_renewal; "
@@ -71,7 +71,7 @@ SCOPE_CONTROLS = (
     # itself out. `DEFAULT_LEASE_SECONDS` is a floor, not the ceiling AD-8
     # wants: Story 3.6's AC requires application-owned ceilings for solver time
     # and total elapsed time (epics.md:1000-1003).
-    "NOT COVERED: ceilings:lease_seconds_owned_by_story_3_6"
+    "COVERS: ceilings:lease_seconds_validated_at_process_start"
 )
 
 

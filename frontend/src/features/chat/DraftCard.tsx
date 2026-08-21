@@ -13,7 +13,8 @@ import { Separator } from "@/components/ui/separator";
 import { useProposal } from "@/hooks/useProposal";
 import { useRejectProposal } from "@/hooks/useRejectProposal";
 import { useReviseProposal } from "@/hooks/useReviseProposal";
-import { getErrorStatus } from "@/lib/errors";
+import { useStartScheduleRun } from "@/hooks/useStartScheduleRun";
+import { getErrorCode, getErrorStatus } from "@/lib/errors";
 
 type NumericKey = "n" | "factor" | "max_hours" | "start_minute";
 
@@ -34,16 +35,50 @@ function Identifier({ children }: Readonly<{ children: string }>) {
   return <code className="font-mono text-xs break-all">{children}</code>;
 }
 
+/**
+ * Copy keyed on the RFC 7807 `code`, falling back to HTTP status.
+ *
+ * Status alone cannot separate these: the run command answers `stale_proposal`,
+ * `stale_resource_version` and `idempotency_key_conflict` all as 409. Rendering
+ * one message for all three told a planner holding a conflicting key to
+ * "Refresh… then try again" — the one action that cannot help, because the key
+ * is deliberately held across failures and a refreshed body only changes the
+ * hash it conflicts on. `getErrorCode` already backs `EvidenceTargetPanel`.
+ */
+const CODE_MESSAGES: Readonly<Record<string, string>> = {
+  stale_proposal:
+    "This draft changed since you opened it. Refresh to see the current version, then try again.",
+  stale_resource_version:
+    "This draft changed since you opened it. Refresh to see the current version, then try again.",
+  idempotency_key_conflict:
+    "An earlier command with different values is still on record for this draft. Reload the page to start a fresh command.",
+  site_concurrency_exhausted: "This site is at its run limit. Try again shortly.",
+  proposal_not_found:
+    "This draft is no longer available. Describe the change again to create a new one.",
+  rejected_proposal:
+    "This proposal was rejected, so it cannot be run. Describe the change again to create a new one.",
+  scenario_unavailable:
+    "The scenario could not be read just now. Try again shortly.",
+  compute_not_granted:
+    "Optimization is turned off for this site, so no run can be started.",
+};
+
+const STATUS_MESSAGES: Readonly<Record<number, string>> = {
+  403: "Optimization is turned off for this site, so no run can be started.",
+  409: "This draft changed since you opened it. Refresh to see the current version, then try again.",
+  422: "That command was refused: check the values and try again.",
+  429: "This site is at its run limit. Try again shortly.",
+  503: "The scenario could not be read just now. Try again shortly.",
+};
+
 function commandMessage(error: unknown): string {
+  const code = getErrorCode(error);
+  if (code && code in CODE_MESSAGES) {
+    return CODE_MESSAGES[code];
+  }
   const status = getErrorStatus(error);
-  if (status === 409) {
-    return "This draft changed since you opened it. Refresh to see the current version, then try again.";
-  }
-  if (status === 422) {
-    return "That revision was refused: check the values and try again.";
-  }
-  if (status === 503) {
-    return "The scenario could not be read just now. Try again shortly.";
+  if (status !== undefined && status in STATUS_MESSAGES) {
+    return STATUS_MESSAGES[status];
   }
   return "That command did not complete. Try again.";
 }
@@ -55,7 +90,9 @@ export function DraftCard({
   const query = useProposal(proposalId);
   const revision = useReviseProposal(proposalId);
   const rejection = useRejectProposal(proposalId);
+  const run = useStartScheduleRun();
   const staleDescriptionId = useId();
+  const runDescriptionId = `${staleDescriptionId}-run`;
   const [constraints, setConstraints] = useState<ProposalConstraintInput[]>([]);
   const [selected, setSelected] = useState("0");
   // Which server version the local edits were seeded from. Re-seeding on every
@@ -113,7 +150,34 @@ export function DraftCard({
   const selectedIndex = Math.min(Number(selected), Math.max(constraints.length - 1, 0));
   const current = constraints[selectedIndex];
   const parameter = current ? PARAMETER[current.kind] : undefined;
-  const commandError = revision.error ?? rejection.error;
+  const mutationPending = revision.isPending || rejection.isPending || run.isPending;
+  const runDisabled = proposal.stale || rejected || mutationPending;
+  const runExplanation = [
+    "Running optimization starts a bounded computation and does not change the baseline.",
+    proposal.stale ? "Refresh the proposal before running optimization." : null,
+    rejected ? "A rejected proposal cannot be run." : null,
+    mutationPending ? "Wait for the current proposal command to finish." : null,
+  ].filter(Boolean).join(" ");
+  // Most recent failure wins, not a fixed order. A fixed chain meant a revise
+  // that failed once — and whose error TanStack retains until that same
+  // mutation is re-fired — masked every later run failure, so the site-limit
+  // message could never be seen after any failed revise.
+  // The acknowledgement is only true of the version the run was started from.
+  // `run.data` alone survives a successful revise — TanStack clears it only
+  // when the run mutation itself is re-fired — so the live region kept
+  // announcing a run accepted for version 1 beside a draft now at version 2.
+  // `run.variables` carries the body that produced `run.data`, so the two
+  // cannot drift apart the way a separately-tracked ref could.
+  const acknowledged =
+    run.data &&
+    run.variables?.expected_resource_version === proposal.resource_version
+      ? run.data
+      : null;
+  const commandError = [revision, rejection, run]
+    .filter((mutation) => mutation.error)
+    .sort((a, b) => (b.submittedAt ?? 0) - (a.submittedAt ?? 0))
+    .map((mutation) => mutation.error)
+    .at(0) ?? null;
   const updateNumber = (key: NumericKey | "end_minute", raw: string) => {
     const value = raw === "" ? null : Number(raw);
     setConstraints((existing) => existing.map((constraint, index) =>
@@ -226,6 +290,33 @@ export function DraftCard({
             variant="destructive"
           />
         ) : null}
+        {acknowledged ? (
+          <div
+            aria-label="Optimization queued"
+            aria-live="polite"
+            className="rounded-lg border p-3 text-sm"
+            role="status"
+          >
+            Run <Identifier>{acknowledged.schedule_run_id}</Identifier> was accepted with status{" "}
+            <span className="font-medium">{acknowledged.status}</span>.
+          </div>
+        ) : null}
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground" id={runDescriptionId}>
+            {runExplanation}
+          </p>
+          <Button
+            aria-describedby={runDescriptionId}
+            className="min-h-11"
+            disabled={runDisabled}
+            onClick={() => run.mutate({
+              proposal_id: proposal.proposal_id,
+              expected_resource_version: proposal.resource_version,
+            })}
+            type="button"
+            variant="secondary"
+          >Run optimization</Button>
+        </div>
         {rejected ? null : (
           <>
             {/* Revise stays MOUNTED and disabled when stale, carrying the
@@ -237,7 +328,7 @@ export function DraftCard({
               <Button
                 aria-describedby={proposal.stale ? staleDescriptionId : undefined}
                 className="min-h-11"
-                disabled={proposal.stale || revision.isPending}
+                disabled={proposal.stale || mutationPending}
                 onClick={() => revision.mutate({ constraints, expected_resource_version: proposal.resource_version })}
                 type="button"
               >Revise proposal</Button>
@@ -246,7 +337,7 @@ export function DraftCard({
             {/* Reject is available while stale, deliberately: it changes no
                 baseline and is the only terminal path a stale draft has. */}
             <div>
-              <Button className="min-h-11" disabled={rejection.isPending} onClick={() => rejection.mutate({ expected_resource_version: proposal.resource_version })} type="button" variant="destructive">Reject proposal</Button>
+              <Button className="min-h-11" disabled={mutationPending} onClick={() => rejection.mutate({ expected_resource_version: proposal.resource_version })} type="button" variant="destructive">Reject proposal</Button>
             </div>
             {proposal.stale ? (
               <div>

@@ -11,10 +11,15 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Connection
 
 from api.deps import (
+    get_capability_registry,
+    get_catalogue_reader,
+    get_proposal_repository,
     get_schedule_run_repository,
     get_session,
     get_site_context,
     get_site_context_opener,
+    get_settings,
+    CapabilityComposer,
     SiteContextOpener,
 )
 from api.problems import problem_response
@@ -23,9 +28,25 @@ from api.schemas import (
     RunProgressActivityOut,
     ScheduleRunCancellationIn,
     ScheduleRunOut,
+    ScheduleRunStartIn,
 )
+from application.capabilities.installed import enabled_feature_policy
+from application.capabilities.registry import (
+    CapabilityGrantContextV1,
+    PLANNER_ROLE,
+    resolve_granted_capability,
+)
+from application.capabilities.scheduling_optimize import (
+    CAPABILITY_NAME as OPTIMIZE_CAPABILITY_NAME,
+    SchedulingOptimizeDepsV1,
+    SchedulingOptimizeError,
+    SchedulingOptimizeRequestV1,
+)
+from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.schedule_version import RUN_EVENT_TYPES
 from application.ports.schedule_run import ScheduleRunRepository, ScheduleRunViewV1
+from application.ports.proposal import ProposalRepository
+from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.contracts.stream_cursor import StreamCursorV1, parse_stream_cursor
 from api.routers.conversations import EventStreamResponse, _cursor_invalid, _event_frames
 from application.ports.session import ResolvedSession
@@ -37,6 +58,16 @@ from application.use_cases.cancel_schedule_run import (
     StaleResourceVersionError,
     cancel_schedule_run,
 )
+from application.use_cases.create_run_snapshot import SnapshotCreationError
+from application.use_cases.enqueue_compute import (
+    EnqueueComputeError,
+    IdempotencyKeyConflictError as EnqueueIdempotencyKeyConflictError,
+    ProposalNotFoundError,
+    SiteConcurrencyExhaustedError,
+    StaleProposalResourceVersionError,
+    enqueue_compute,
+)
+from settings import Settings
 
 
 router = APIRouter(prefix="/schedule-runs", tags=["schedule-runs"])
@@ -46,6 +77,11 @@ _PROBLEMS = {
     404: {"model": ProblemDetailsV1},
     409: {"model": ProblemDetailsV1},
     422: {"model": ProblemDetailsV1},
+}
+_START_PROBLEMS = {
+    **_PROBLEMS,
+    429: {"model": ProblemDetailsV1},
+    503: {"model": ProblemDetailsV1},
 }
 IdempotencyKey = Annotated[
     str, Header(alias="Idempotency-Key", min_length=1, max_length=40)
@@ -161,6 +197,193 @@ def _command_problem(exc: CancelScheduleRunError) -> JSONResponse:
         title="Invalid cancellation command",
         detail=str(exc) or "The cancellation command could not be validated.",
     )
+
+
+#: Every distinct failure the start command can produce, mapped to its own
+#: status and stable code. AD-13 requires denied, stale, missing, invalid,
+#: timed-out, cancelled and failed to stay distinct; collapsing them into one
+#: 422 tells a planner whose proposal was deleted to "check the values", and
+#: leaves the frontend's 503 branch — written for `scenario_unavailable` —
+#: permanently unreachable.
+_SNAPSHOT_PROBLEMS: dict[str, tuple[int, str, str]] = {
+    "proposal_not_found": (
+        404,
+        "Proposal not found",
+        "No proposal with that identifier is visible in this site.",
+    ),
+    "rejected_proposal": (
+        409,
+        "Proposal was rejected",
+        "A rejected proposal cannot start a run. Describe the change again to create a new one.",
+    ),
+    "scenario_unavailable": (
+        503,
+        "Scenario could not be read",
+        "The governed scenario could not be read just now. Try again shortly.",
+    ),
+    "stale_proposal": (
+        409,
+        "Proposal is stale",
+        "The proposal's expected scenario or baseline version is no longer current.",
+    ),
+    "invalid_proposal": (
+        422,
+        "Invalid run command",
+        "The proposal does not carry the durable identifiers a run requires.",
+    ),
+}
+
+#: The capability handler's declared codes. `errors` on the manifest is asserted
+#: set-equal to the handler module's `CapabilityError` subclasses, so this map
+#: and that tuple move together.
+_CAPABILITY_PROBLEMS: dict[str, tuple[int, str, str]] = {
+    "invalid_query": (
+        422,
+        "Invalid run command",
+        "The run command could not be validated.",
+    ),
+    "budget_exhausted": (
+        429,
+        "Run budget exhausted",
+        "No tool-call budget remains for this request. Try again shortly.",
+    ),
+    "optimize_failed": (
+        422,
+        "Invalid run command",
+        "The run command could not be validated.",
+    ),
+}
+
+
+def _start_problem(exc: Exception) -> JSONResponse:
+    if isinstance(exc, SiteConcurrencyExhaustedError):
+        return problem_response(
+            status=429,
+            code="site_concurrency_exhausted",
+            title="Site run limit reached",
+            detail="This site is at its concurrent run limit. Try again shortly.",
+        )
+    if isinstance(exc, EnqueueIdempotencyKeyConflictError):
+        return problem_response(
+            status=409,
+            code="idempotency_key_conflict",
+            title="Idempotency key conflict",
+            detail="The idempotency key was already used with a different request body.",
+        )
+    if isinstance(exc, StaleProposalResourceVersionError):
+        return problem_response(
+            status=409,
+            code="stale_resource_version",
+            title="Stale resource version",
+            detail=(
+                f"Expected resource version {exc.expected}; current resource "
+                f"version is {exc.current}."
+            ),
+        )
+    if isinstance(exc, ProposalNotFoundError):
+        status, title, detail = _SNAPSHOT_PROBLEMS["proposal_not_found"]
+        return problem_response(
+            status=status, code="proposal_not_found", title=title, detail=detail
+        )
+    if isinstance(exc, SnapshotCreationError) and exc.code in _SNAPSHOT_PROBLEMS:
+        status, title, detail = _SNAPSHOT_PROBLEMS[exc.code]
+        return problem_response(
+            status=status, code=exc.code, title=title, detail=detail
+        )
+    if isinstance(exc, SchedulingOptimizeError) and exc.code in _CAPABILITY_PROBLEMS:
+        status, title, detail = _CAPABILITY_PROBLEMS[exc.code]
+        return problem_response(
+            status=status, code=exc.code, title=title, detail=detail
+        )
+    # Fixed copy only. The previous `str(exc)` echoed internal exception text —
+    # a query, a driver message, a path — across the boundary (AD-3).
+    return problem_response(
+        status=422,
+        code="invalid_run_command",
+        title="Invalid run command",
+        detail="The run command could not be validated.",
+    )
+
+
+@router.post(
+    "",
+    response_model=ScheduleRunOut,
+    responses=_START_PROBLEMS,
+)
+def start_schedule_run(
+    body: ScheduleRunStartIn,
+    idempotency_key: IdempotencyKey,
+    connection: Connection = Depends(get_site_context),
+    session: ResolvedSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    compose_capabilities: CapabilityComposer = Depends(get_capability_registry),
+    proposal_repository: ProposalRepository = Depends(get_proposal_repository),
+    scenario_catalogue: ScenarioCatalogueReader = Depends(get_catalogue_reader),
+    run_repository: ScheduleRunRepository = Depends(get_schedule_run_repository),
+):
+    granted = compose_capabilities(
+        CapabilityGrantContextV1(
+            role=PLANNER_ROLE,
+            site_id=session.site_id,
+            feature_policy=enabled_feature_policy(settings),
+            conversation_id=None,
+            conversation_site_id=session.site_id,
+            explicit_run_request=True,
+        )
+    )
+    module = resolve_granted_capability(granted, OPTIMIZE_CAPABILITY_NAME)
+    if module is None:
+        return problem_response(
+            status=403,
+            code="compute_not_granted",
+            title="Optimization is not available",
+            detail="Current policy does not grant optimization for this request.",
+        )
+    # The handler call belongs INSIDE the try. Left outside it, its declared
+    # errors — `invalid_query`, `budget_exhausted` — escaped every mapping and
+    # rendered as `500 internal_error`, which a nil-UUID `proposal_id` reaches
+    # from any client.
+    try:
+        validated = module.handler(
+            SchedulingOptimizeDepsV1(
+                actor_id=session.app_user_id,
+                site_id=session.site_id,
+                remaining_budget=AgentBudgetV1(
+                    tool_calls_limit=settings.agent_runtime_tool_calls_limit
+                ),
+            ),
+            SchedulingOptimizeRequestV1(
+                proposal_id=body.proposal_id,
+                expected_resource_version=body.expected_resource_version,
+                idempotency_key=idempotency_key,
+            ),
+            module.manifest,
+        )
+        result = enqueue_compute(
+            proposal_repository,
+            scenario_catalogue,
+            run_repository,
+            connection,
+            proposal_id=validated.proposal_id,
+            site_id=validated.site_id,
+            actor_id=validated.actor_id,
+            expected_proposal_resource_version=validated.expected_resource_version,
+            idempotency_key=validated.idempotency_key,
+            capability_version=validated.capability_version,
+            settings=settings,
+        )
+    except (EnqueueComputeError, SnapshotCreationError, SchedulingOptimizeError) as exc:
+        return _start_problem(exc)
+    # Read the run's live state rather than asserting the state it had at
+    # creation. On the create path this is still `solver_queued` at version 1;
+    # on the idempotent replay path the run may already have advanced, and AC3
+    # requires the original semantic run response — not two literals. The
+    # returned version is what the caller pins its next cancellation to.
+    view = run_repository.get_run(
+        connection, run_id=result.schedule_run_id, site_id=session.site_id
+    )
+    assert view is not None
+    return _view_out(view)
 
 
 @router.get(

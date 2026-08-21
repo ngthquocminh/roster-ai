@@ -12,8 +12,12 @@ from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.schedule_run import IdempotentScheduleRunResultV1
 from application.use_cases.enqueue_compute import (
     IdempotencyKeyConflictError,
+    NON_TERMINAL_RUN_STATUSES,
+    SiteConcurrencyExhaustedError,
     enqueue_compute,
 )
+from application.contracts.schedule_version import ScheduleRunStatusV1
+from typing import get_args
 
 
 class _ProposalRepository:
@@ -68,6 +72,14 @@ class _RunRepository:
             key, IdempotentScheduleRunResultV1(body_hash, response_payload)
         )
 
+    def acquire_site_enqueue_lock(self, _connection, *, site_id):
+        self.locked_site = site_id
+
+    def count_runs_with_statuses(self, _connection, *, site_id, statuses):
+        assert site_id == self.locked_site
+        assert statuses == NON_TERMINAL_RUN_STATUSES
+        return len(self.jobs)
+
 
 def _fixture():
     actor_id = uuid4()
@@ -99,6 +111,7 @@ def _fixture():
         solver_num_search_workers=1,
         solver_max_deterministic_time=30.0,
         solver_wall_time_limit_seconds=30.0,
+        site_max_concurrent_runs=2,
     )
     return actor_id, site_id, proposal, context, settings
 
@@ -125,8 +138,10 @@ def test_enqueue_compute_creates_snapshot_job_and_idempotent_result_together() -
         object(),
         proposal_id=proposal.proposal_id,
         site_id=site_id,
+        actor_id=actor_id,
         expected_proposal_resource_version=1,
         idempotency_key="enqueue-1",
+        capability_version="1",
         settings=settings,
         clock=lambda: accepted_at,
     )
@@ -139,7 +154,7 @@ def test_enqueue_compute_creates_snapshot_job_and_idempotent_result_together() -
     assert job.actor_id == actor_id
     assert job.site_id == site_id
     assert job.attempt_id is None
-    assert job.capability_version is None
+    assert job.capability_version == "1"
     assert job.idempotency_key == "enqueue-1"
     assert job.created_at == accepted_at
 
@@ -150,8 +165,10 @@ def test_enqueue_compute_replays_without_creating_a_second_effect() -> None:
     arguments = dict(
         proposal_id=proposal.proposal_id,
         site_id=site_id,
+        actor_id=actor_id,
         expected_proposal_resource_version=1,
         idempotency_key="enqueue-1",
+        capability_version="1",
         settings=settings,
     )
     first = enqueue_compute(
@@ -179,7 +196,9 @@ def test_enqueue_compute_rejects_same_key_with_a_different_expected_version() ->
     common = dict(
         proposal_id=proposal.proposal_id,
         site_id=site_id,
+        actor_id=actor_id,
         idempotency_key="enqueue-1",
+        capability_version="1",
         settings=settings,
     )
     enqueue_compute(
@@ -200,3 +219,102 @@ def test_enqueue_compute_rejects_same_key_with_a_different_expected_version() ->
             **common,
         )
     assert len(runs.jobs) == 1
+
+
+def test_same_key_is_scoped_to_the_requesting_actor() -> None:
+    proposal_author, site_id, proposal, context, settings = _fixture()
+    first_actor = uuid4()
+    second_actor = uuid4()
+    runs = _RunRepository()
+    common = dict(
+        proposal_id=proposal.proposal_id,
+        site_id=site_id,
+        expected_proposal_resource_version=1,
+        idempotency_key="shared-key",
+        capability_version="1",
+        settings=settings,
+    )
+
+    first = enqueue_compute(
+        _ProposalRepository(proposal, proposal_author),
+        _Catalogue(context),
+        runs,
+        object(),
+        actor_id=first_actor,
+        **common,
+    )
+    second = enqueue_compute(
+        _ProposalRepository(proposal, proposal_author),
+        _Catalogue(context),
+        runs,
+        object(),
+        actor_id=second_actor,
+        **common,
+    )
+
+    assert first != second
+    assert [actor_id for _snapshot, _site_id, actor_id in runs.snapshots] == [
+        first_actor,
+        second_actor,
+    ]
+    assert [job.actor_id for job, _site_id in runs.jobs] == [first_actor, second_actor]
+    assert len(runs.idempotency) == 2
+
+
+def test_replay_succeeds_even_when_site_concurrency_is_exhausted() -> None:
+    actor_id, site_id, proposal, context, settings = _fixture()
+    settings.site_max_concurrent_runs = 1
+    runs = _RunRepository()
+    arguments = dict(
+        proposal_id=proposal.proposal_id,
+        site_id=site_id,
+        actor_id=actor_id,
+        expected_proposal_resource_version=1,
+        idempotency_key="replay-at-limit",
+        capability_version="1",
+        settings=settings,
+    )
+    first = enqueue_compute(
+        _ProposalRepository(proposal, actor_id), _Catalogue(context), runs, object(), **arguments
+    )
+
+    replay = enqueue_compute(
+        _ProposalRepository(proposal, actor_id), _Catalogue(context), runs, object(), **arguments
+    )
+
+    assert replay == first
+    assert len(runs.jobs) == 1
+
+
+def test_new_request_fails_closed_when_site_concurrency_is_exhausted() -> None:
+    actor_id, site_id, proposal, context, settings = _fixture()
+    settings.site_max_concurrent_runs = 1
+    runs = _RunRepository()
+    common = dict(
+        proposal_id=proposal.proposal_id,
+        site_id=site_id,
+        actor_id=actor_id,
+        expected_proposal_resource_version=1,
+        capability_version="1",
+        settings=settings,
+    )
+    enqueue_compute(
+        _ProposalRepository(proposal, actor_id), _Catalogue(context), runs, object(),
+        idempotency_key="first", **common,
+    )
+
+    with pytest.raises(SiteConcurrencyExhaustedError):
+        enqueue_compute(
+            _ProposalRepository(proposal, actor_id), _Catalogue(context), runs, object(),
+            idempotency_key="second", **common,
+        )
+    assert len(runs.jobs) == 1
+
+
+def test_non_terminal_status_enumeration_is_exhaustive() -> None:
+    terminal = {
+        "solver_completed", "solver_infeasible", "solver_timed_out",
+        "solver_cancelled", "solver_failed",
+    }
+    assert set(get_args(ScheduleRunStatusV1)) == set(NON_TERMINAL_RUN_STATUSES) | terminal
+    assert set(NON_TERMINAL_RUN_STATUSES).isdisjoint(terminal)

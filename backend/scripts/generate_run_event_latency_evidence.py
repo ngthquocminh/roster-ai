@@ -99,8 +99,11 @@ def build_document(
                 "carrying the first persisted run_progress frame"
             ),
             "clock_boundary_note": (
-                "Story 3.6 has not shipped the HTTP creation command, so the "
-                "direct transaction commit is the acknowledgement boundary. "
+                "This harness seeds the bundle directly rather than driving "
+                "POST /api/v1/schedule-runs, so the direct transaction commit "
+                "is the acknowledgement boundary. Story 3.6 shipped that route, "
+                "so a future re-measurement CAN anchor on a real API "
+                "acknowledgement; Story 3.11 owns it. "
                 "Delivery is observed at ASGI send; network transit is excluded. "
                 "SCOPE LIMIT: run.queued.v1 is written by create_queued_run "
                 "INSIDE the enqueue transaction, and the stream is opened only "

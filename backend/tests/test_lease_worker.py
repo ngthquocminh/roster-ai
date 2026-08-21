@@ -290,7 +290,7 @@ def test_scope_controls_state_their_non_coverage(controls) -> None:
 def test_resolved_and_deferred_owners_are_named_in_scope_controls() -> None:
     assert "heartbeat:independent_short_transaction_renewal" in LEASE_CONTROLS
     assert "job_failure_state:failed_terminal_and_not_released" in LEASE_CONTROLS
-    assert "ceilings:lease_seconds_owned_by_story_3_6" in LEASE_CONTROLS
+    assert "ceilings:lease_seconds_validated_at_process_start" in LEASE_CONTROLS
     assert "contracts:attempt_id_unset_until_first_lease" in ENQUEUE_CONTROLS
     assert "cancellation:cooperative_checkpoints" in LEASE_CONTROLS
     assert "cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit" in LEASE_CONTROLS

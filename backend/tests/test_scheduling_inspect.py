@@ -58,7 +58,7 @@ from application.ports.scenario_projection import (
 from application.use_cases.read_scenario_facts import read_scenario_facts
 from evals.cases import RISK_CLASSES, case_from_mapping
 from evals.doubles import build_model_double
-from settings import default_settings
+from settings import InvalidFlagError, default_settings
 
 models.ALLOW_MODEL_REQUESTS = False
 
@@ -258,12 +258,11 @@ def test_manifest_is_complete_configured_and_fixture_backed(monkeypatch) -> None
     assert default_settings().scheduling_inspect_row_limit == 37
 
 
-def test_malformed_settings_fall_back_instead_of_crashing(monkeypatch) -> None:
+def test_malformed_settings_fail_loudly_at_process_start(monkeypatch) -> None:
     monkeypatch.setenv("SCHEDULING_INSPECT_ROW_LIMIT", "")
     monkeypatch.setenv("SCHEDULING_INSPECT_TIMEOUT_SECONDS", "not-a-number")
-    manifest = scheduling_inspect_manifest()
-    assert manifest.budget_limit == 200
-    assert manifest.timeout_seconds == 5.0
+    with pytest.raises(InvalidFlagError, match="SCHEDULING_INSPECT_ROW_LIMIT"):
+        scheduling_inspect_manifest()
 
 
 def test_scope_controls_are_stated_as_data_with_non_coverage() -> None:

@@ -27,6 +27,24 @@ load_dotenv(_BACKEND_DIR / ".env", override=False)
 # Live-verified tool-capable as of 2026-07-13; replaces meta-llama/llama-3.3-70b-instruct:free, which started returning upstream 429 rate-limit errors.
 _OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 
+# FR12 / NFR16 closed vocabulary. Keeping the application-owned ceilings named
+# in one place makes omission detectable when the contract changes.
+#
+# `lease_seconds` is included even though FR12 does not name it: it is a
+# positive, application-owned ceiling bounding how long one solve may hold its
+# work, and it was previously validated at process start while sitting outside
+# the very tuple that exists to notice an unvalidated ceiling.
+AC2_CEILING_FIELDS = (
+    "solver_wall_time_limit_seconds",
+    "agent_runtime_request_limit",
+    "agent_runtime_tool_calls_limit",
+    "agent_runtime_retries_limit",
+    "agent_runtime_total_tokens_limit",
+    "site_max_concurrent_runs",
+    "agent_runtime_deadline_seconds",
+    "lease_seconds",
+)
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -70,9 +88,12 @@ class Settings:
     agent_runtime_api_key: str | None = field(repr=False, default=None)
     # AD-7: budgets are application configuration, never model output. These are
     # the defaults; a caller may tighten them per request via AgentBudgetV1.
-    agent_runtime_request_limit: int | None = 8
-    agent_runtime_tool_calls_limit: int | None = 8
-    agent_runtime_deadline_seconds: float | None = 60.0
+    agent_runtime_request_limit: int = 8
+    agent_runtime_tool_calls_limit: int = 8
+    agent_runtime_deadline_seconds: float = 60.0
+    agent_runtime_retries_limit: int = 2
+    agent_runtime_total_tokens_limit: int = 32_768
+    site_max_concurrent_runs: int = 2
     scheduling_inspect_row_limit: int = 200
     scheduling_inspect_timeout_seconds: float = 5.0
     # scheduling_compute drains whole fact groups to compute a total, so it is
@@ -92,6 +113,7 @@ class Settings:
     solver_num_search_workers: int = 1
     solver_max_deterministic_time: float = 30.0
     solver_wall_time_limit_seconds: float = 30.0
+    lease_seconds: int = 120
     # AD-2 feature policy. `compose_granted_capabilities` refuses any module
     # whose `required_feature_policy` is absent here, so this is the supplier
     # that gate has always expected. It must NEVER be derived from the
@@ -106,6 +128,7 @@ class Settings:
     scheduling_compute_enabled: bool = True
     scheduling_draft_enabled: bool = True
     scheduling_inspect_enabled: bool = True
+    scheduling_optimize_enabled: bool = True
     demonstration_enabled: bool = False
 
 
@@ -158,29 +181,11 @@ def _flag(name: str, raw: str | None, fallback: bool) -> bool:
     )
 
 
-def _optional_int(raw: str | None, fallback: int | None) -> int | None:
-    """Parse an optional integer budget. An explicit empty value means "no limit"
-    (None), which is a different thing from "unset" (fall back to the default).
-    """
-    if raw is None:
-        return fallback
-    if raw.strip() == "":
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return fallback
-
-
-def _optional_float(raw: str | None, fallback: float | None) -> float | None:
-    if raw is None:
-        return fallback
-    if raw.strip() == "":
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        return fallback
+# `_optional_int` and `_optional_float` were deleted here, not left unused.
+# They documented that an explicit empty value means "no limit" (None) — the
+# exact semantics AC2 reverses, since an unbounded ceiling is not a positive
+# one. Leaving them beside the `_positive_*` helpers would invite the next
+# editor to reach for the parser that cannot fail.
 
 
 def _positive_int(name: str, raw: str | None, fallback: int) -> int:
@@ -260,35 +265,51 @@ def default_settings() -> Settings:
     csrf_secret = os.environ.get("CSRF_SECRET", "shiftmind-local-csrf-secret")
     agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "test")
     agent_runtime_api_key = os.environ.get("AGENT_RUNTIME_API_KEY")
-    agent_runtime_request_limit = _optional_int(
-        os.environ.get("AGENT_RUNTIME_REQUEST_LIMIT"), 8
+    agent_runtime_request_limit = _positive_int(
+        "AGENT_RUNTIME_REQUEST_LIMIT", os.environ.get("AGENT_RUNTIME_REQUEST_LIMIT"), 8
     )
-    agent_runtime_tool_calls_limit = _optional_int(
-        os.environ.get("AGENT_RUNTIME_TOOL_CALLS_LIMIT"), 8
+    agent_runtime_tool_calls_limit = _positive_int(
+        "AGENT_RUNTIME_TOOL_CALLS_LIMIT", os.environ.get("AGENT_RUNTIME_TOOL_CALLS_LIMIT"), 8
     )
-    agent_runtime_deadline_seconds = _optional_float(
-        os.environ.get("AGENT_RUNTIME_DEADLINE_SECONDS"), 60.0
+    agent_runtime_deadline_seconds = _positive_float(
+        "AGENT_RUNTIME_DEADLINE_SECONDS", os.environ.get("AGENT_RUNTIME_DEADLINE_SECONDS"), 60.0
     )
-    scheduling_inspect_row_limit = (
-        _optional_int(os.environ.get("SCHEDULING_INSPECT_ROW_LIMIT"), 200) or 200
+    agent_runtime_retries_limit = _positive_int(
+        "AGENT_RUNTIME_RETRIES_LIMIT", os.environ.get("AGENT_RUNTIME_RETRIES_LIMIT"), 2
     )
-    scheduling_inspect_timeout_seconds = (
-        _optional_float(os.environ.get("SCHEDULING_INSPECT_TIMEOUT_SECONDS"), 5.0)
-        or 5.0
+    agent_runtime_total_tokens_limit = _positive_int(
+        "AGENT_RUNTIME_TOTAL_TOKENS_LIMIT",
+        os.environ.get("AGENT_RUNTIME_TOTAL_TOKENS_LIMIT"),
+        32_768,
     )
-    scheduling_compute_row_limit = (
-        _optional_int(os.environ.get("SCHEDULING_COMPUTE_ROW_LIMIT"), 400) or 400
+    site_max_concurrent_runs = _positive_int(
+        "SITE_MAX_CONCURRENT_RUNS", os.environ.get("SITE_MAX_CONCURRENT_RUNS"), 2
     )
-    scheduling_compute_timeout_seconds = (
-        _optional_float(os.environ.get("SCHEDULING_COMPUTE_TIMEOUT_SECONDS"), 5.0)
-        or 5.0
+    scheduling_inspect_row_limit = _positive_int(
+        "SCHEDULING_INSPECT_ROW_LIMIT", os.environ.get("SCHEDULING_INSPECT_ROW_LIMIT"), 200
     )
-    scheduling_draft_timeout_seconds = (
-        _optional_float(os.environ.get("SCHEDULING_DRAFT_TIMEOUT_SECONDS"), 5.0)
-        or 5.0
+    scheduling_inspect_timeout_seconds = _positive_float(
+        "SCHEDULING_INSPECT_TIMEOUT_SECONDS",
+        os.environ.get("SCHEDULING_INSPECT_TIMEOUT_SECONDS"),
+        5.0,
     )
-    scheduling_draft_max_constraints = (
-        _optional_int(os.environ.get("SCHEDULING_DRAFT_MAX_CONSTRAINTS"), 10) or 10
+    scheduling_compute_row_limit = _positive_int(
+        "SCHEDULING_COMPUTE_ROW_LIMIT", os.environ.get("SCHEDULING_COMPUTE_ROW_LIMIT"), 400
+    )
+    scheduling_compute_timeout_seconds = _positive_float(
+        "SCHEDULING_COMPUTE_TIMEOUT_SECONDS",
+        os.environ.get("SCHEDULING_COMPUTE_TIMEOUT_SECONDS"),
+        5.0,
+    )
+    scheduling_draft_timeout_seconds = _positive_float(
+        "SCHEDULING_DRAFT_TIMEOUT_SECONDS",
+        os.environ.get("SCHEDULING_DRAFT_TIMEOUT_SECONDS"),
+        5.0,
+    )
+    scheduling_draft_max_constraints = _positive_int(
+        "SCHEDULING_DRAFT_MAX_CONSTRAINTS",
+        os.environ.get("SCHEDULING_DRAFT_MAX_CONSTRAINTS"),
+        10,
     )
     solver_engine_name = _nonempty(
         "SOLVER_ENGINE_NAME", os.environ.get("SOLVER_ENGINE_NAME"), "cpsat"
@@ -311,6 +332,17 @@ def default_settings() -> Settings:
         os.environ.get("SOLVER_WALL_TIME_LIMIT_SECONDS"),
         30.0,
     )
+    minimum_lease_seconds = math.ceil(solver_wall_time_limit_seconds * 4)
+    lease_seconds = _positive_int(
+        "LEASE_SECONDS",
+        os.environ.get("LEASE_SECONDS"),
+        max(60, minimum_lease_seconds),
+    )
+    if lease_seconds < minimum_lease_seconds:
+        raise InvalidFlagError(
+            "LEASE_SECONDS must be at least four times "
+            "SOLVER_WALL_TIME_LIMIT_SECONDS"
+        )
     scheduling_compute_enabled = _flag(
         "SCHEDULING_COMPUTE_ENABLED",
         os.environ.get("SCHEDULING_COMPUTE_ENABLED"), True
@@ -322,6 +354,11 @@ def default_settings() -> Settings:
     scheduling_inspect_enabled = _flag(
         "SCHEDULING_INSPECT_ENABLED",
         os.environ.get("SCHEDULING_INSPECT_ENABLED"), True
+    )
+    scheduling_optimize_enabled = _flag(
+        "SCHEDULING_OPTIMIZE_ENABLED",
+        os.environ.get("SCHEDULING_OPTIMIZE_ENABLED"),
+        True,
     )
     demonstration_enabled = _flag(
         "DEMONSTRATION_ENABLED", os.environ.get("DEMONSTRATION_ENABLED"), False
@@ -351,6 +388,9 @@ def default_settings() -> Settings:
         agent_runtime_request_limit=agent_runtime_request_limit,
         agent_runtime_tool_calls_limit=agent_runtime_tool_calls_limit,
         agent_runtime_deadline_seconds=agent_runtime_deadline_seconds,
+        agent_runtime_retries_limit=agent_runtime_retries_limit,
+        agent_runtime_total_tokens_limit=agent_runtime_total_tokens_limit,
+        site_max_concurrent_runs=site_max_concurrent_runs,
         scheduling_inspect_row_limit=scheduling_inspect_row_limit,
         scheduling_inspect_timeout_seconds=scheduling_inspect_timeout_seconds,
         scheduling_compute_row_limit=scheduling_compute_row_limit,
@@ -362,8 +402,10 @@ def default_settings() -> Settings:
         solver_num_search_workers=solver_num_search_workers,
         solver_max_deterministic_time=solver_max_deterministic_time,
         solver_wall_time_limit_seconds=solver_wall_time_limit_seconds,
+        lease_seconds=lease_seconds,
         scheduling_compute_enabled=scheduling_compute_enabled,
         scheduling_draft_enabled=scheduling_draft_enabled,
         scheduling_inspect_enabled=scheduling_inspect_enabled,
+        scheduling_optimize_enabled=scheduling_optimize_enabled,
         demonstration_enabled=demonstration_enabled,
     )

@@ -41,7 +41,85 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-21
+last_updated: 2026-08-22
+
+# NOTE (2026-08-21): Story 3-6 created and moved to ready-for-dev. It is EPIC 3'S FIRST
+# FULL-STACK STORY and the first planner-visible slice since 3.1 — it ships the Run optimization
+# control AND its command together (epics.md:847,1542). Story 3.1 deliberately shipped no
+# control and no disabled placeholder, so there is nothing to "activate".
+#
+# IT IS THE FIRST STORY TO CALL enqueue_compute FROM ANYTHING OTHER THAN A TEST. Verified by
+# exhaustive grep at 0545b35: the whole chain HTTP -> enqueue_compute -> create_run_snapshot ->
+# job_queue -> worker lease has never had its first link. Also the first to register a
+# risk_class="compute" capability (RiskClassV1 has reserved it since 2.5 with zero
+# implementations), the first to make a grant conditional on anything beyond
+# role/policy/site/conversation, the first to bound per-site concurrency (NO limit of any kind
+# exists today), and the first since 3.1 to touch the Gate A write-surface literal (3.5's two
+# routes were GET and correctly did not).
+#
+# NINE DECISIONS WERE MADE AT CREATION, the three most consequential:
+# (1) AC1'S "COMPUTE CAPABILITY" IS A REAL REGISTERED CapabilityModuleV1, and its GRANT is what
+#     enforces AD-5's "compute needs the planner's current explicit run request" — a clause with
+#     NO implementation anywhere today (risk_class is read only by manifest validation and eval
+#     accounting; capability_tools.py:79 branches solely on approval_policy). A new trusted
+#     CapabilityGrantContextV1.explicit_run_request is set ONLY by the HTTP command path, so
+#     during ordinary chat the module is ABSENT from the toolset, not present-and-denied. That is
+#     the story's own "So that" clause made structural. The cheaper alternative (HTTP command
+#     alone, no module) was REJECTED: AC1 names the capability and names *risk* among its
+#     validations, and it would leave two SCOPE_CONTROLS markers that name Story 3.6 BY NAME
+#     still open.
+# (2) SITE CONCURRENCY IS COUNTED AFTER THE IDEMPOTENCY REPLAY, UNDER AN ADVISORY LOCK. Check it
+#     first and a replay of an already-accepted run is refused by the very run it is replaying —
+#     AC3 and AC4 then contradict each other on the same request, and BOTH still pass if tested
+#     separately. This is the quietest trap in the story.
+# (3) solver_wall_time_limit_seconds STAYS AT 30.0, so mid-solve preemption does NOT become this
+#     story's. Story 3.5 re-pointed it to "the first story that raises wall_time_limit_seconds
+#     materially above the default — most plausibly 3.6"; AC2 requires ceilings to EXIST and be
+#     POSITIVE, not to be larger, so the trigger does not fire.
+#
+# AC2's SEVEN CEILINGS, AUDITED: solver time already positive-validated; agent iterations,
+# model/tool calls and total elapsed time EXIST BUT ARE UNVALIDATED; retries and site concurrency
+# DO NOT EXIST AT ALL; tokens has a contract field with no setting wiring it (deferred-work:128).
+# TWO SETTINGS DEFECTS FOUND, neither obvious: _optional_int documents that an EXPLICIT EMPTY
+# value means "no limit" (None), so AGENT_RUNTIME_TOOL_CALLS_LIMIT= yields an UNBOUNDED run — the
+# direct opposite of AC2; and the `_optional_int(...) or 200` idiom falls back only on falsy 0, so
+# a NEGATIVE override is truthy and reaches runtime intact. Fixing the default does not touch the
+# second path.
+#
+# THREE HONEST GAPS RAISED RATHER THAN PAPERED OVER:
+# (a) AC1's "proposal AND BASELINE versions" has only one drivable half. baseline_schedule_version
+#     is None everywhere by design until Epic 4 (Story 3.1 Decision 7/Gap 1), so the comparison is
+#     None != None and never trips. DO NOT fabricate one. Scenario-version drift is the drivable
+#     half and is AC4's stale test path.
+# (b) AC1's "authoritative audit evidence" has nothing to call — AuditEnvelopeV1 does not exist in
+#     backend/ at all (zero grep hits) and every shipped mutating use case says
+#     "NOT COVERED: audit:owned_by_epic_4". This story matches that precedent and no higher;
+#     recorded so nobody reports it as newly complete OR as a regression unique to 3.6.
+# (c) deferred-work:281 deferred a stranded-run upgrade path as "structurally unreachable because
+#     no route creates schedule_run rows" — THIS STORY REMOVES THAT PROTECTION. Resolved with a
+#     documented drain in GATE-A-RUNBOOK.md, not a backfill (a backfill would invent a lease epoch
+#     and an attempt for work no worker ever leased).
+#
+# CLOSES FIVE LEDGER ITEMS: :128 (total_tokens_limit unwired), :181 (UX-DR35 Send-vs-Run
+# discontinuity, automatically asserted), :273 (thread the requesting actor through
+# enqueue_compute), :281 (drain), :289 (lease_seconds unbound to the solver budget). LEAVES 3.5's
+# mid-solve-preemption re-pointing UNTOUCHED (Decision 5).
+#
+# NO EVIDENCE FILE AND NO MIGRATION. NFR35 is owned by 1.4/1.5/2.4/3.5 (epics.md:1317) and this
+# story has no NFR35 AC; 3.5's "re-measure once 3.6 ships the real route" is recorded in the
+# ledger with owner Story 3.11, not silently dropped. No migration is owed because every new
+# ceiling is configuration, the concurrency gate reads an existing table, and
+# job_queue.capability_version already exists nullable (schema.py:521).
+#
+# ZERO-LINE DIFF FENCES: backend/domain/**, backend/engine/**, backend/llm/**, backend/ingest/**,
+# backend/store/**, backend/services/**, backend/migrations/**,
+# application/capabilities/scheduling_compute.py (the similarly-named module is inspect-risk and
+# is NOT this story's), features/chat/ActivityTimeline.tsx, features/chat/Composer.tsx,
+# frontend/e2e/**.
+#
+# EXPECTED COUNTS AFTER: installed capability modules 4 -> 5, versioned write routes 7 -> 8,
+# golden case files 21 -> >=25 across 5 directories (NFR28 requires >=4 per capability). A
+# different number means something was added or missed.
 
 # NOTE (2026-08-21): Story 3-5 created and moved to ready-for-dev. It is a [Technical Enabler]
 # with NO planner-visible outcome — the progress surface that consumes its work is Story 3.7's.
@@ -1442,7 +1520,7 @@ development_status:
   3-3-lease-solver-jobs-with-fencing: done
   3-4-provide-the-safe-cancellation-command: done
   3-5-persist-literal-run-state-and-replay-progress: done
-  3-6-start-explicit-bounded-optimization: backlog
+  3-6-start-explicit-bounded-optimization: done
   3-7-monitor-cancel-and-reopen-runs: backlog
   3-8-compare-candidate-and-baseline-results: backlog
   3-9-continue-deterministic-work-during-model-outage: backlog

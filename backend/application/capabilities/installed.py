@@ -19,6 +19,7 @@ from application.capabilities.module import CapabilityModuleV1, validate_module
 from application.capabilities.scheduling_compute import scheduling_compute_module
 from application.capabilities.scheduling_draft import scheduling_draft_module
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
+from application.capabilities.scheduling_optimize import scheduling_optimize_module
 from application.contracts.capability_manifest import IncompleteManifestError
 
 # The literal installation set. One line per governed capability.
@@ -26,6 +27,7 @@ _INSTALLED_FACTORIES = (
     scheduling_compute_module,
     scheduling_draft_module,
     scheduling_inspect_module,
+    scheduling_optimize_module,
     demonstration_module,
 )
 

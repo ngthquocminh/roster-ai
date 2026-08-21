@@ -261,6 +261,11 @@ class ScheduleRunCancellationIn(BaseModel):
     expected_resource_version: int = Field(ge=1)
 
 
+class ScheduleRunStartIn(BaseModel):
+    proposal_id: UUID
+    expected_resource_version: int = Field(ge=1)
+
+
 class ScheduleRunOut(BaseModel):
     schedule_run_id: UUID
     status: Literal[

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from settings import InvalidFlagError, default_settings
+from settings import AC2_CEILING_FIELDS, InvalidFlagError, default_settings
 
 
 def test_a_malformed_feature_flag_fails_loudly_instead_of_falling_back(monkeypatch) -> None:
@@ -82,3 +82,64 @@ def test_invalid_governed_solver_setting_fails_at_startup(monkeypatch, name, raw
     monkeypatch.setenv(name, raw)
     with pytest.raises(InvalidFlagError, match=name):
         default_settings()
+
+
+@pytest.mark.parametrize(
+    "name",
+    (
+        "AGENT_RUNTIME_REQUEST_LIMIT",
+        "AGENT_RUNTIME_TOOL_CALLS_LIMIT",
+        "AGENT_RUNTIME_DEADLINE_SECONDS",
+        "AGENT_RUNTIME_RETRIES_LIMIT",
+        "AGENT_RUNTIME_TOTAL_TOKENS_LIMIT",
+    ),
+)
+def test_empty_agent_runtime_ceiling_is_rejected(monkeypatch, name) -> None:
+    monkeypatch.setenv(name, "")
+    with pytest.raises(InvalidFlagError, match=name):
+        default_settings()
+
+
+def test_negative_scheduling_row_limit_is_rejected(monkeypatch) -> None:
+    monkeypatch.setenv("SCHEDULING_COMPUTE_ROW_LIMIT", "-1")
+    with pytest.raises(InvalidFlagError, match="SCHEDULING_COMPUTE_ROW_LIMIT"):
+        default_settings()
+
+
+def test_lease_must_cover_four_solver_wall_time_budgets(monkeypatch) -> None:
+    monkeypatch.setenv("SOLVER_WALL_TIME_LIMIT_SECONDS", "30")
+    monkeypatch.setenv("LEASE_SECONDS", "119")
+    with pytest.raises(InvalidFlagError, match="LEASE_SECONDS"):
+        default_settings()
+
+
+def test_every_ac2_ceiling_is_present_and_positive() -> None:
+    settings = default_settings()
+    assert AC2_CEILING_FIELDS == (
+        "solver_wall_time_limit_seconds",
+        "agent_runtime_request_limit",
+        "agent_runtime_tool_calls_limit",
+        "agent_runtime_retries_limit",
+        "agent_runtime_total_tokens_limit",
+        "site_max_concurrent_runs",
+        "agent_runtime_deadline_seconds",
+        # Registered at code review. It was validated at process start while
+        # sitting outside the very tuple that exists to notice an unvalidated
+        # ceiling, so the guard could not have reported its removal.
+        "lease_seconds",
+    )
+    assert all(getattr(settings, name) > 0 for name in AC2_CEILING_FIELDS)
+
+
+def test_every_ac2_ceiling_rejects_a_non_positive_override(monkeypatch) -> None:
+    """The tuple must name settings that actually fail closed, not just exist.
+
+    Asserting the tuple against a hand-copied literal is a change detector: it
+    proves the names were typed twice, not that each one is validated. This
+    drives every registered ceiling through its own environment variable.
+    """
+    for name in AC2_CEILING_FIELDS:
+        monkeypatch.setenv(name.upper(), "-1")
+        with pytest.raises(InvalidFlagError, match=name.upper()):
+            default_settings()
+        monkeypatch.delenv(name.upper())

@@ -633,7 +633,7 @@ def test_nfr35_first_run_event_meets_five_second_threshold(
             return context
 
     run_repository = PostgresScheduleRunRepository()
-    settings = default_settings()
+    settings = replace(default_settings(), site_max_concurrent_runs=4)
 
     def _enqueue(index: int):
         with site_context(postgres_engine, site_id) as connection:
@@ -644,8 +644,10 @@ def test_nfr35_first_run_event_meets_five_second_threshold(
                 connection,
                 proposal_id=proposal_id,
                 site_id=site_id,
+                actor_id=actor_id,
                 expected_proposal_resource_version=1,
                 idempotency_key=f"nfr35-run-event-{index}",
+                capability_version="1",
                 settings=settings,
             )
         return result.schedule_run_id, perf_counter()
