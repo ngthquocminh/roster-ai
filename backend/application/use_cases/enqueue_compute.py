@@ -9,6 +9,8 @@ from uuid import UUID, uuid4
 from application.contracts.canonical import contract_digest
 from application.contracts.job_lease import MAX_IDEMPOTENCY_KEY_LENGTH, JobLeaseV1
 from application.contracts.run_snapshot import SCHEMA_VERSION
+from application.contracts.schedule_version import ScheduleRunStatusV1
+from application.capabilities.scheduling_optimize import scheduling_optimize_manifest
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.schedule_run import ScheduleRunRepository
@@ -23,13 +25,19 @@ SCOPE_CONTROLS = (
     # observation in `lease_and_execute_schedule_run`.
     "NOT COVERED: cancellation:command_owned_by_cancel_schedule_run; "
     "NOT COVERED: cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit; "
-    "NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6; "
+    "COVERS: contracts:capability_version_from_scheduling_optimize_manifest; "
     # AC1 names "actor/site/attempt IDs" in the bundle, but `attempt_id` is
     # NULL on every job this use case creates. That is Decision 5 working as
     # intended — an attempt is per LEASE ACQUISITION, and nothing has leased
     # this job yet — not an omission. Recorded here because Decisions 6 and 7
     # both got an entry for their equivalent gaps and this one did not.
     "NOT COVERED: contracts:attempt_id_unset_until_first_lease"
+)
+
+NON_TERMINAL_RUN_STATUSES: tuple[ScheduleRunStatusV1, ...] = (
+    "solver_queued",
+    "solver_running",
+    "cancellation_requested",
 )
 
 
@@ -39,6 +47,21 @@ class EnqueueComputeError(ValueError):
 
 class IdempotencyKeyConflictError(EnqueueComputeError):
     pass
+
+
+class SiteConcurrencyExhaustedError(EnqueueComputeError):
+    code = "site_concurrency_exhausted"
+
+
+class StaleProposalResourceVersionError(EnqueueComputeError):
+    code = "stale_resource_version"
+
+    def __init__(self, expected: int, current: int):
+        self.expected = expected
+        self.current = current
+        super().__init__(
+            f"expected proposal resource version {expected}; current is {current}"
+        )
 
 
 @dataclass(frozen=True)
@@ -64,6 +87,7 @@ def enqueue_compute(
     *,
     proposal_id: UUID,
     site_id: UUID,
+    actor_id: UUID,
     expected_proposal_resource_version: int,
     idempotency_key: str,
     settings: Any,
@@ -82,7 +106,6 @@ def enqueue_compute(
         raise EnqueueComputeError(
             f"idempotency_key must be 1..{MAX_IDEMPOTENCY_KEY_LENGTH} characters"
         )
-    actor_id = record.created_by_actor_id
     operation = f"enqueue_compute:{proposal_id}"
     body_hash = _body_hash(proposal_id, expected_proposal_resource_version)
     stored = run_repository.get_idempotent_result(
@@ -101,10 +124,20 @@ def enqueue_compute(
             schedule_run_id=UUID(stored.response_payload["schedule_run_id"]),
             job_id=UUID(stored.response_payload["job_id"]),
         )
+    run_repository.acquire_site_enqueue_lock(connection, site_id=site_id)
+    active_runs = run_repository.count_runs_with_statuses(
+        connection,
+        site_id=site_id,
+        statuses=NON_TERMINAL_RUN_STATUSES,
+    )
+    if active_runs >= settings.site_max_concurrent_runs:
+        raise SiteConcurrencyExhaustedError(
+            f"site has reached its limit of {settings.site_max_concurrent_runs} active runs"
+        )
     if record.proposal.resource_version != expected_proposal_resource_version:
-        raise EnqueueComputeError(
-            f"expected proposal resource version {expected_proposal_resource_version}; "
-            f"current is {record.proposal.resource_version}"
+        raise StaleProposalResourceVersionError(
+            expected_proposal_resource_version,
+            record.proposal.resource_version,
         )
 
     accepted_at = clock()
@@ -115,6 +148,7 @@ def enqueue_compute(
         connection,
         proposal_id=proposal_id,
         settings=settings,
+        actor_id=actor_id,
         clock=lambda: accepted_at,
     )
     assert snapshot.schedule_run_id is not None
@@ -125,7 +159,7 @@ def enqueue_compute(
         site_id=site_id,
         actor_id=actor_id,
         contract_version=SCHEMA_VERSION,
-        capability_version=None,
+        capability_version=scheduling_optimize_manifest().capability_version,
         schedule_run_id=snapshot.schedule_run_id,
         idempotency_key=idempotency_key,
         created_at=accepted_at,
@@ -152,6 +186,9 @@ __all__ = [
     "EnqueueComputeError",
     "EnqueueComputeResultV1",
     "IdempotencyKeyConflictError",
+    "NON_TERMINAL_RUN_STATUSES",
+    "SiteConcurrencyExhaustedError",
+    "StaleProposalResourceVersionError",
     "SCOPE_CONTROLS",
     "enqueue_compute",
 ]

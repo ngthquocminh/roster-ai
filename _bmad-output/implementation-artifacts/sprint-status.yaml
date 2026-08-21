@@ -1520,7 +1520,7 @@ development_status:
   3-3-lease-solver-jobs-with-fencing: done
   3-4-provide-the-safe-cancellation-command: done
   3-5-persist-literal-run-state-and-replay-progress: done
-  3-6-start-explicit-bounded-optimization: ready-for-dev
+  3-6-start-explicit-bounded-optimization: in-progress
   3-7-monitor-cancel-and-reopen-runs: backlog
   3-8-compare-candidate-and-baseline-results: backlog
   3-9-continue-deterministic-work-during-model-outage: backlog

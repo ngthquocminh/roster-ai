@@ -853,6 +853,39 @@ class PostgresScheduleRunRepository:
         )
 
     @staticmethod
+    def acquire_site_enqueue_lock(
+        connection: Connection,
+        *,
+        site_id: UUID,
+    ) -> None:
+        connection.execute(
+            text(
+                "SELECT pg_advisory_xact_lock("
+                "hashtextextended(CAST(:site_id AS text), 0))"
+            ),
+            {"site_id": str(site_id)},
+        )
+
+    @staticmethod
+    def count_runs_with_statuses(
+        connection: Connection,
+        *,
+        site_id: UUID,
+        statuses: tuple[ScheduleRunStatusV1, ...],
+    ) -> int:
+        return int(
+            connection.scalar(
+                select(func.count())
+                .select_from(schedule_run)
+                .where(
+                    schedule_run.c.site_id == site_id,
+                    schedule_run.c.status.in_(statuses),
+                )
+            )
+            or 0
+        )
+
+    @staticmethod
     def _store_idempotent_result(
         connection: Connection,
         *,

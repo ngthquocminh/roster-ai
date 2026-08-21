@@ -37,6 +37,7 @@ from application.capabilities.scheduling_compute import (
     scheduling_compute_module,
 )
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
+from application.capabilities.scheduling_optimize import scheduling_optimize_module
 from application.contracts.grounding import ClaimArgumentsV1, GroundedAnswerV1
 from application.ports.scenario_projection import GroupQueryKeysV1
 from evals.fixture_projection import FIXTURE_IDENTITY
@@ -208,6 +209,7 @@ def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
     modules = {
         "scheduling_compute": (scheduling_compute_module(),),
         "scheduling_inspect": (scheduling_inspect_module(),),
+        "scheduling_optimize": (scheduling_optimize_module(),),
     }.get(case.capability, (demonstration_module(),))
     kwargs = {
         "capabilities": modules,
@@ -501,6 +503,7 @@ MVP_PRODUCT_CAPABILITIES = {
     "scheduling_compute",
     "scheduling_draft",
     "scheduling_inspect",
+    "scheduling_optimize",
 }
 NON_PRODUCT_CAPABILITIES = {
     # A harness-proof module, not a product capability: Story 2.2 seeded exactly

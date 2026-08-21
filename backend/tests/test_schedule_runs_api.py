@@ -9,7 +9,10 @@ from fastapi.testclient import TestClient
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import (
+    get_capability_registry,
+    get_catalogue_reader,
     get_identity_store,
+    get_proposal_repository,
     get_schedule_run_repository,
     get_settings,
     get_site_context,
@@ -28,6 +31,13 @@ from application.use_cases.cancel_schedule_run import (
     ScheduleRunCancellationV1,
     StaleResourceVersionError,
 )
+from application.use_cases.create_run_snapshot import SnapshotCreationError
+from application.use_cases.enqueue_compute import (
+    EnqueueComputeResultV1,
+    SiteConcurrencyExhaustedError,
+    StaleProposalResourceVersionError,
+)
+from application.capabilities.scheduling_optimize import scheduling_optimize_module
 from settings import default_settings
 
 
@@ -73,6 +83,80 @@ def _headers(settings, *, key="cancel-1"):
         "X-CSRF-Token": _CSRF_TOKEN,
         "Idempotency-Key": key,
     }
+
+
+def test_start_route_composes_explicit_compute_grant_and_enqueues_once(
+    client, monkeypatch
+) -> None:
+    test_client, settings, session = client
+    proposal_id = uuid4()
+    run_id = uuid4()
+    job_id = uuid4()
+    observed = {}
+
+    def _compose(context):
+        observed["context"] = context
+        return (scheduling_optimize_module(),)
+
+    def _enqueue(*_args, **kwargs):
+        observed["enqueue"] = kwargs
+        return EnqueueComputeResultV1(run_id, job_id)
+
+    app.dependency_overrides[get_capability_registry] = lambda: _compose
+    app.dependency_overrides[get_proposal_repository] = lambda: object()
+    app.dependency_overrides[get_catalogue_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.enqueue_compute", _enqueue)
+
+    response = test_client.post(
+        "/api/v1/schedule-runs",
+        json={"proposal_id": str(proposal_id), "expected_resource_version": 3},
+        headers=_headers(settings, key="start-1"),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "schedule_run_id": str(run_id),
+        "status": "solver_queued",
+        "resource_version": 1,
+    }
+    assert observed["context"].explicit_run_request is True
+    assert observed["enqueue"]["actor_id"] == session.app_user_id
+    assert observed["enqueue"]["site_id"] == session.site_id
+    assert observed["enqueue"]["proposal_id"] == proposal_id
+    assert observed["enqueue"]["expected_proposal_resource_version"] == 3
+    assert observed["enqueue"]["idempotency_key"] == "start-1"
+
+
+@pytest.mark.parametrize(
+    ("exception", "status", "code"),
+    (
+        (SiteConcurrencyExhaustedError("limit"), 429, "site_concurrency_exhausted"),
+        (SnapshotCreationError("stale_proposal", "stale"), 409, "stale_proposal"),
+        (StaleProposalResourceVersionError(1, 2), 409, "stale_resource_version"),
+    ),
+)
+def test_start_route_maps_bounded_and_stale_problems(
+    client, monkeypatch, exception, status, code
+) -> None:
+    test_client, settings, _ = client
+    app.dependency_overrides[get_capability_registry] = lambda: (
+        lambda _context: (scheduling_optimize_module(),)
+    )
+    app.dependency_overrides[get_proposal_repository] = lambda: object()
+    app.dependency_overrides[get_catalogue_reader] = lambda: object()
+
+    def _raise(*_args, **_kwargs):
+        raise exception
+
+    monkeypatch.setattr("api.routers.schedule_runs.enqueue_compute", _raise)
+    response = test_client.post(
+        "/api/v1/schedule-runs",
+        json={"proposal_id": str(uuid4()), "expected_resource_version": 1},
+        headers=_headers(settings, key="start-problem"),
+    )
+
+    assert response.status_code == status
+    assert response.json()["code"] == code
 
 
 def test_cancellation_route_returns_the_replayed_semantic_result(

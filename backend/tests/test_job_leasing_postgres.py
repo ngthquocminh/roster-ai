@@ -3,6 +3,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import time
+from threading import Barrier
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -35,6 +36,7 @@ from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.schedule_run import RunTransitionConflictError, StaleLeaseError
 from application.use_cases.enqueue_compute import (
     IdempotencyKeyConflictError,
+    SiteConcurrencyExhaustedError,
     enqueue_compute,
 )
 from application.use_cases.lease_and_execute_schedule_run import (
@@ -384,11 +386,13 @@ def test_enqueue_replay_and_rollback_have_exact_row_counts(
         solver_num_search_workers=1,
         solver_max_deterministic_time=30.0,
         solver_wall_time_limit_seconds=30.0,
+        site_max_concurrent_runs=1000,
     )
     repository = PostgresScheduleRunRepository()
     arguments = dict(
         proposal_id=lease_ids["proposal"],
         site_id=lease_ids["site"],
+        actor_id=lease_ids["actor"],
         expected_proposal_resource_version=1,
         idempotency_key="live-enqueue",
         settings=settings,
@@ -490,6 +494,110 @@ def test_enqueue_replay_and_rollback_have_exact_row_counts(
                 command_idempotency.c.idempotency_key == "rolled-back-enqueue"
             )
         ) == 0
+
+
+def test_site_advisory_lock_serializes_concurrent_enqueues_at_limit_one(
+    governed_postgres_engine, lease_ids
+) -> None:
+    ids = {
+        name: uuid4()
+        for name in (
+            "site", "scenario", "scenario_version", "conversation", "proposal",
+            "proposal_version",
+        )
+    }
+    with governed_postgres_engine.begin() as connection:
+        connection.execute(
+            insert(site).values(
+                id=ids["site"], organization_id=lease_ids["org"], name=f"Concurrency {ids['site']}"
+            )
+        )
+        connection.execute(
+            insert(scenario).values(
+                id=ids["scenario"], site_id=ids["site"], fixture_id="concurrency-fixture",
+                name="Concurrency Fixture",
+            )
+        )
+        connection.execute(
+            insert(scenario_version).values(
+                id=ids["scenario_version"], site_id=ids["site"],
+                scenario_id=ids["scenario"], fixture_id="concurrency-fixture", version="v1",
+                payload={}, checksum_digest="c" * 64,
+            )
+        )
+        connection.execute(
+            insert(conversation).values(
+                id=ids["conversation"], site_id=ids["site"], scenario_id=ids["scenario"],
+                scenario_version_id=ids["scenario_version"],
+                created_by_actor_id=lease_ids["actor"],
+            )
+        )
+        connection.execute(
+            insert(proposal).values(
+                id=ids["proposal"], site_id=ids["site"], scenario_id=ids["scenario"],
+                scenario_version_id=ids["scenario_version"], conversation_id=ids["conversation"],
+                created_by_actor_id=lease_ids["actor"], state="active",
+                current_version_id=None, resource_version=1,
+            )
+        )
+        connection.execute(
+            insert(proposal_version).values(
+                id=ids["proposal_version"], site_id=ids["site"],
+                proposal_id=ids["proposal"], version_ordinal=1, payload={},
+                canonical_hash="d" * 64, checksum_algorithm="sha256",
+                checksum_schema_version="rfc8785-v1",
+            )
+        )
+        connection.execute(
+            update(proposal).where(proposal.c.id == ids["proposal"]).values(
+                current_version_id=ids["proposal_version"]
+            )
+        )
+
+    proposal_value = ProposalV1(
+        proposal_id=ids["proposal"], proposal_version_id=ids["proposal_version"],
+        scenario_id=ids["scenario"], scenario_version_id=ids["scenario_version"],
+        canonical_hash="d" * 64, resource_version=1,
+    )
+    context = ScenarioContext(
+        scenario_name="Concurrency Fixture", scenario_id=ids["scenario"],
+        scenario_version_id=ids["scenario_version"], fixture_version="v1",
+        checksum_algorithm="sha256", checksum_schema_version="rfc8785-v1",
+        checksum_digest="c" * 64, site_id=ids["site"], baseline_schedule_version=None,
+    )
+    settings = SimpleNamespace(
+        solver_engine_name="cpsat", solver_seed=42, solver_num_search_workers=1,
+        solver_max_deterministic_time=30.0, solver_wall_time_limit_seconds=30.0,
+        site_max_concurrent_runs=1,
+    )
+    barrier = Barrier(2)
+
+    def _enqueue(index: int) -> str:
+        barrier.wait()
+        try:
+            with governed_postgres_engine.begin() as connection:
+                _runtime(connection, ids["site"])
+                enqueue_compute(
+                    _ProposalRepository(proposal_value, lease_ids["actor"]),
+                    _Catalogue(context), PostgresScheduleRunRepository(), connection,
+                    proposal_id=ids["proposal"], site_id=ids["site"],
+                    actor_id=lease_ids["actor"], expected_proposal_resource_version=1,
+                    idempotency_key=f"concurrent-{index}", settings=settings,
+                )
+            return "created"
+        except SiteConcurrencyExhaustedError:
+            return "exhausted"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(_enqueue, (1, 2)))
+
+    assert sorted(outcomes) == ["created", "exhausted"]
+    with governed_postgres_engine.connect() as connection:
+        assert connection.scalar(
+            select(func.count()).select_from(schedule_run).where(
+                schedule_run.c.site_id == ids["site"]
+            )
+        ) == 1
         assert connection.scalar(
             select(func.count()).select_from(job_queue).where(
                 job_queue.c.idempotency_key == "rolled-back-enqueue"

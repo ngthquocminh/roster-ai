@@ -27,9 +27,10 @@ class CapabilityGrantContextV1:
     role: str
     site_id: UUID
     feature_policy: frozenset[str]
-    conversation_id: UUID
+    conversation_id: UUID | None
     conversation_site_id: UUID
     revoked_conversation_ids: frozenset[UUID] = frozenset()
+    explicit_run_request: bool = False
 
 
 def compose_granted_capabilities(
@@ -54,6 +55,8 @@ def compose_granted_capabilities(
     granted = []
     for module in resolved:
         validate_module(module)
+        if module.manifest.risk_class == "compute" and not context.explicit_run_request:
+            continue
         if (context.role == module.required_role
                 and module.required_feature_policy in context.feature_policy):
             granted.append(module)

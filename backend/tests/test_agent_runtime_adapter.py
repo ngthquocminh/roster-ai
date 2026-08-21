@@ -111,6 +111,8 @@ def test_factory_wires_configured_model_but_injected_model_wins() -> None:
                 "agent_runtime_request_limit": 1,
                 "agent_runtime_tool_calls_limit": 1,
                 "agent_runtime_deadline_seconds": 1.0,
+                "agent_runtime_retries_limit": 2,
+                "agent_runtime_total_tokens_limit": 100,
             },
         )()
     )
@@ -126,6 +128,8 @@ def test_factory_wires_configured_model_but_injected_model_wins() -> None:
                 "agent_runtime_request_limit": 1,
                 "agent_runtime_tool_calls_limit": 1,
                 "agent_runtime_deadline_seconds": 1.0,
+                "agent_runtime_retries_limit": 2,
+                "agent_runtime_total_tokens_limit": 100,
             },
         )(),
         model=injected,
@@ -140,6 +144,28 @@ def test_openrouter_model_uses_the_explicit_agent_runtime_key() -> None:
         )
     )
     assert runtime._model.__class__.__name__ == "OpenAIChatModel"
+
+
+def test_configured_retry_ceiling_bounds_tool_and_output_model_retries() -> None:
+    settings = type(
+        "SettingsStub",
+        (),
+        {
+            "agent_runtime_model": "test",
+            "agent_runtime_api_key": None,
+            "agent_runtime_request_limit": 8,
+            "agent_runtime_tool_calls_limit": 8,
+            "agent_runtime_deadline_seconds": 60.0,
+            "agent_runtime_retries_limit": 3,
+            "agent_runtime_total_tokens_limit": 2_000,
+        },
+    )()
+
+    runtime = create_agent_runtime(settings=settings)
+
+    assert runtime._agent._max_tool_retries == 3
+    assert runtime._agent._max_output_retries == 3
+    assert runtime._config.default_budget.total_tokens_limit == 2_000
 
 
 def test_full_multi_step_turn_suspend_resume_and_terminal_outcome() -> None:

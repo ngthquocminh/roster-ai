@@ -11,10 +11,15 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Connection
 
 from api.deps import (
+    get_capability_registry,
+    get_catalogue_reader,
+    get_proposal_repository,
     get_schedule_run_repository,
     get_session,
     get_site_context,
     get_site_context_opener,
+    get_settings,
+    CapabilityComposer,
     SiteContextOpener,
 )
 from api.problems import problem_response
@@ -23,9 +28,25 @@ from api.schemas import (
     RunProgressActivityOut,
     ScheduleRunCancellationIn,
     ScheduleRunOut,
+    ScheduleRunStartIn,
+    ScheduleRunStartOut,
 )
+from application.capabilities.installed import enabled_feature_policy
+from application.capabilities.registry import (
+    CapabilityGrantContextV1,
+    PLANNER_ROLE,
+    resolve_granted_capability,
+)
+from application.capabilities.scheduling_optimize import (
+    CAPABILITY_NAME as OPTIMIZE_CAPABILITY_NAME,
+    SchedulingOptimizeDepsV1,
+    SchedulingOptimizeRequestV1,
+)
+from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.schedule_version import RUN_EVENT_TYPES
 from application.ports.schedule_run import ScheduleRunRepository, ScheduleRunViewV1
+from application.ports.proposal import ProposalRepository
+from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.contracts.stream_cursor import StreamCursorV1, parse_stream_cursor
 from api.routers.conversations import EventStreamResponse, _cursor_invalid, _event_frames
 from application.ports.session import ResolvedSession
@@ -37,6 +58,15 @@ from application.use_cases.cancel_schedule_run import (
     StaleResourceVersionError,
     cancel_schedule_run,
 )
+from application.use_cases.create_run_snapshot import SnapshotCreationError
+from application.use_cases.enqueue_compute import (
+    EnqueueComputeError,
+    IdempotencyKeyConflictError as EnqueueIdempotencyKeyConflictError,
+    SiteConcurrencyExhaustedError,
+    StaleProposalResourceVersionError,
+    enqueue_compute,
+)
+from settings import Settings
 
 
 router = APIRouter(prefix="/schedule-runs", tags=["schedule-runs"])
@@ -47,6 +77,7 @@ _PROBLEMS = {
     409: {"model": ProblemDetailsV1},
     422: {"model": ProblemDetailsV1},
 }
+_START_PROBLEMS = {**_PROBLEMS, 429: {"model": ProblemDetailsV1}}
 IdempotencyKey = Annotated[
     str, Header(alias="Idempotency-Key", min_length=1, max_length=40)
 ]
@@ -160,6 +191,117 @@ def _command_problem(exc: CancelScheduleRunError) -> JSONResponse:
         code="invalid_cancellation_command",
         title="Invalid cancellation command",
         detail=str(exc) or "The cancellation command could not be validated.",
+    )
+
+
+def _start_problem(exc: Exception) -> JSONResponse:
+    if isinstance(exc, SiteConcurrencyExhaustedError):
+        return problem_response(
+            status=429,
+            code="site_concurrency_exhausted",
+            title="Site run limit reached",
+            detail="This site is at its concurrent run limit. Try again shortly.",
+        )
+    if isinstance(exc, EnqueueIdempotencyKeyConflictError):
+        return problem_response(
+            status=409,
+            code="idempotency_key_conflict",
+            title="Idempotency key conflict",
+            detail="The idempotency key was already used with a different request body.",
+        )
+    if isinstance(exc, SnapshotCreationError) and exc.code == "stale_proposal":
+        return problem_response(
+            status=409,
+            code="stale_proposal",
+            title="Proposal is stale",
+            detail="The proposal's expected scenario or baseline version is no longer current.",
+        )
+    if isinstance(exc, StaleProposalResourceVersionError):
+        return problem_response(
+            status=409,
+            code="stale_resource_version",
+            title="Stale resource version",
+            detail=(
+                f"Expected resource version {exc.expected}; current resource "
+                f"version is {exc.current}."
+            ),
+        )
+    return problem_response(
+        status=422,
+        code="invalid_run_command",
+        title="Invalid run command",
+        detail=str(exc) or "The run command could not be validated.",
+    )
+
+
+@router.post(
+    "",
+    response_model=ScheduleRunStartOut,
+    responses=_START_PROBLEMS,
+)
+def start_schedule_run(
+    body: ScheduleRunStartIn,
+    idempotency_key: IdempotencyKey,
+    connection: Connection = Depends(get_site_context),
+    session: ResolvedSession = Depends(get_session),
+    settings: Settings = Depends(get_settings),
+    compose_capabilities: CapabilityComposer = Depends(get_capability_registry),
+    proposal_repository: ProposalRepository = Depends(get_proposal_repository),
+    scenario_catalogue: ScenarioCatalogueReader = Depends(get_catalogue_reader),
+    run_repository: ScheduleRunRepository = Depends(get_schedule_run_repository),
+):
+    granted = compose_capabilities(
+        CapabilityGrantContextV1(
+            role=PLANNER_ROLE,
+            site_id=session.site_id,
+            feature_policy=enabled_feature_policy(settings),
+            conversation_id=None,
+            conversation_site_id=session.site_id,
+            explicit_run_request=True,
+        )
+    )
+    module = resolve_granted_capability(granted, OPTIMIZE_CAPABILITY_NAME)
+    if module is None:
+        return problem_response(
+            status=403,
+            code="compute_not_granted",
+            title="Optimization is not available",
+            detail="Current policy does not grant optimization for this request.",
+        )
+    validated = module.handler(
+        SchedulingOptimizeDepsV1(
+            actor_id=session.app_user_id,
+            site_id=session.site_id,
+            remaining_budget=AgentBudgetV1(
+                tool_calls_limit=settings.agent_runtime_tool_calls_limit
+            ),
+        ),
+        SchedulingOptimizeRequestV1(
+            proposal_id=body.proposal_id,
+            expected_resource_version=body.expected_resource_version,
+            idempotency_key=idempotency_key,
+        ),
+        module.manifest,
+    )
+    try:
+        result = enqueue_compute(
+            proposal_repository,
+            scenario_catalogue,
+            run_repository,
+            connection,
+            proposal_id=validated.proposal_id,
+            site_id=validated.site_id,
+            actor_id=validated.actor_id,
+            expected_proposal_resource_version=validated.expected_resource_version,
+            idempotency_key=validated.idempotency_key,
+            settings=settings,
+        )
+    except (EnqueueComputeError, SnapshotCreationError) as exc:
+        return _start_problem(exc)
+    return ScheduleRunStartOut(
+        schedule_run_id=result.schedule_run_id,
+        status="solver_queued",
+        resource_version=1,
     )
 
 

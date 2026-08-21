@@ -217,6 +217,21 @@ class ScheduleRunRepository(Protocol):
         idempotency_key: str,
     ) -> IdempotentScheduleRunResultV1 | None: ...
 
+    def acquire_site_enqueue_lock(
+        self,
+        connection: Any,
+        *,
+        site_id: UUID,
+    ) -> None: ...
+
+    def count_runs_with_statuses(
+        self,
+        connection: Any,
+        *,
+        site_id: UUID,
+        statuses: tuple[ScheduleRunStatusV1, ...],
+    ) -> int: ...
+
     def _store_idempotent_result(
         self,
         connection: Any,

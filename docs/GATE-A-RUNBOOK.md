@@ -45,7 +45,15 @@ Approved write paths, each with the reason it does not touch governed data:
 | `POST /api/v1/conversations/{id}/agent-runs/{id}/execute` | Advances an agent run; writes run state and, through `finalize_agent_run`, the proposal aggregate. |
 | `POST /api/v1/proposals/{id}/revisions` | Appends a new proposal version. Governed scenario rows untouched; the cited `scenario_version_id` is a foreign key, not a target. |
 | `POST /api/v1/proposals/{id}/rejection` | Terminal transition on the proposal aggregate only. |
+| `POST /api/v1/schedule-runs` | Creates an immutable run snapshot, queued schedule-run aggregate, workflow job, and run event; governed scenario rows and the baseline pointer remain untouched. |
 | `POST /api/v1/schedule-runs/{id}/cancellation` | Transitions the schedule-run aggregate and its workflow cancellation carrier; governed scenario data and the baseline pointer remain untouched. |
+
+Before deploying the first release that exposes `POST /api/v1/schedule-runs`,
+drain every pre-existing non-terminal schedule run (`solver_queued`,
+`solver_running`, or `cancellation_requested`) before applying the job-queue
+upgrade. A pre-upgrade run has no `workflow.job_queue` row and cannot be safely
+backfilled because no real lease epoch or attempt exists to assign it. Resume
+run creation only after the upgrade completes and the drain query returns zero.
 
 That table is enforced, in two independent steps. A new write route turns
 `test_gate_a_write_surface_is_exactly_the_approved_paths` red, because it

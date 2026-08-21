@@ -417,61 +417,61 @@ epoch and an attempt for work no worker ever leased.
 
 ### ⛳ Phase A — the governed command (Tasks 1–6)
 
-- [ ] **Task 1 — Harden every ceiling at process start** (AC: 2)
-  - [ ] `backend/settings.py`: switch `agent_runtime_request_limit`,
+- [x] **Task 1 — Harden every ceiling at process start** (AC: 2)
+  - [x] `backend/settings.py`: switch `agent_runtime_request_limit`,
         `agent_runtime_tool_calls_limit`, `agent_runtime_deadline_seconds` and the four
         `scheduling_*` limit/timeout settings from `_optional_int`/`_optional_float` (and the
         `... or <default>` idiom) to `_positive_int`/`_positive_float`.
-  - [ ] Add `agent_runtime_total_tokens_limit` (`AGENT_RUNTIME_TOTAL_TOKENS_LIMIT`) and wire it
+  - [x] Add `agent_runtime_total_tokens_limit` (`AGENT_RUNTIME_TOTAL_TOKENS_LIMIT`) and wire it
         into `create_agent_runtime`'s `AgentBudgetV1` (`agent/runtime.py:480-486`), which
         currently never populates `total_tokens_limit`. Closes `deferred-work.md:128`.
-  - [ ] Add `agent_runtime_retries_limit` (`AGENT_RUNTIME_RETRIES_LIMIT`) — AC2's only ceiling
+  - [x] Add `agent_runtime_retries_limit` (`AGENT_RUNTIME_RETRIES_LIMIT`) — AC2's only ceiling
         with no field of any kind today — and bound `ModelRetry` re-drives with it.
-  - [ ] Add `site_max_concurrent_runs` (`SITE_MAX_CONCURRENT_RUNS`), positive-validated.
-  - [ ] Add `lease_seconds` as a validated setting defaulting from
+  - [x] Add `site_max_concurrent_runs` (`SITE_MAX_CONCURRENT_RUNS`), positive-validated.
+  - [x] Add `lease_seconds` as a validated setting defaulting from
         `solver_wall_time_limit_seconds`; validate the **relationship**
         (`lease_seconds >= 4 × solver_wall_time_limit_seconds`, the invariant
         `default_lease_seconds()` already encodes), not just positivity. Closes
         `deferred-work.md:289`.
-  - [ ] Tests, each **observed failing first** (retro A2): an empty `AGENT_RUNTIME_*` value is
+  - [x] Tests, each **observed failing first** (retro A2): an empty `AGENT_RUNTIME_*` value is
         rejected rather than silently meaning "no limit"; a **negative** `SCHEDULING_*_ROW_LIMIT`
         is rejected rather than surviving the `or` fallback; a `lease_seconds` below the solver
         budget is rejected at process start.
-  - [ ] Add one guard asserting **every** AC2 ceiling is present and positive-validated, driven
+  - [x] Add one guard asserting **every** AC2 ceiling is present and positive-validated, driven
         from a named list — so an eighth ceiling added later without validation fails loudly.
 
-- [ ] **Task 2 — `compute` risk becomes real in the grant registry** (AC: 1)
-  - [ ] `CapabilityGrantContextV1` gains `explicit_run_request: bool = False`.
-  - [ ] `compose_granted_capabilities` (`application/capabilities/registry.py`) refuses to grant
+- [x] **Task 2 — `compute` risk becomes real in the grant registry** (AC: 1)
+  - [x] `CapabilityGrantContextV1` gains `explicit_run_request: bool = False`.
+  - [x] `compose_granted_capabilities` (`application/capabilities/registry.py`) refuses to grant
         any module whose `manifest.risk_class == "compute"` unless
         `context.explicit_run_request` is `True`. Keep it a rule about the **risk class**, not
         about a capability name — `test_core_is_capability_name_agnostic`
         (`test_capability_conformance.py:379-393`) forbids naming an installed capability in
         registry code.
-  - [ ] Test: with `explicit_run_request=False` the module is **absent** from the composed
+  - [x] Test: with `explicit_run_request=False` the module is **absent** from the composed
         toolset (not present-and-denied), matching
         `test_an_ungranted_module_is_absent_from_the_tool_set`.
-  - [ ] Observe this guard failing with its predicate removed before trusting it.
+  - [x] Observe this guard failing with its predicate removed before trusting it.
 
-- [ ] **Task 3 — The `scheduling_optimize` capability module** (AC: 1)
-  - [ ] New `backend/application/capabilities/scheduling_optimize.py`: request/result contracts,
+- [x] **Task 3 — The `scheduling_optimize` capability module** (AC: 1)
+  - [x] New `backend/application/capabilities/scheduling_optimize.py`: request/result contracts,
         handler, and `scheduling_optimize_manifest()` with `risk_class="compute"`,
         `approval_policy="none"` (approval is Epic 4's; a compute run changes no baseline),
         budget/timeout from the Task 1 settings, `idempotency_semantics` describing the
         `(actor, site, operation, key)` scope, `audit_mapping`/`evidence_mapping`, a **complete**
         `errors` tuple, and `evaluation_fixtures` pointing at **real files** —
         `test_installed_module_conforms` asserts `(BACKEND_ROOT / path).is_file()` for each.
-  - [ ] The handler **validates and returns**; it must not write. `AgentDepsV1` carries no
+  - [x] The handler **validates and returns**; it must not write. `AgentDepsV1` carries no
         writer and `test_handler_module_has_no_adapter_or_framework_import` forbids importing
         `adapters`/`sqlalchemy`/`fastapi`/`pydantic_ai`.
-  - [ ] Declare `SCOPE_CONTROLS` including at least: `"NOT COVERED: audit:owned_by_epic_4"`,
+  - [x] Declare `SCOPE_CONTROLS` including at least: `"NOT COVERED: audit:owned_by_epic_4"`,
         `"NOT COVERED: versions:baseline_schedule_version_unsupplied_until_epic_4"` (Gap 1), and
         `"NOT COVERED: progress:run_progress_surface_owned_by_story_3_7"`.
         `test_installed_module_records_its_scope_controls` requires at least one `NOT COVERED`.
-  - [ ] Register in `installed.py:_INSTALLED_FACTORIES`. Declared error codes must **exactly**
+  - [x] Register in `installed.py:_INSTALLED_FACTORIES`. Declared error codes must **exactly**
         equal the `CapabilityError` subclasses defined in the handler's module — conformance
         asserts set equality, not containment.
-  - [ ] Golden cases: **NFR28 requires ≥4 per allowed capability**
+  - [x] Golden cases: **NFR28 requires ≥4 per allowed capability**
         (`requirements-inventory.md:49`), and `backend/evals/golden/` is already organised one
         directory per capability (`demonstration`, `scheduling_compute`, `scheduling_draft`,
         `scheduling_inspect`). Add `backend/evals/golden/scheduling_optimize/` with **at least
@@ -480,11 +480,11 @@ epoch and an attempt for work no worker ever leased.
         consequential/prohibited cases: this module is `compute`, and NFR28's separate ≥10
         consequential/prohibited floor is Epic 4's.
 
-- [ ] **Task 4 — Thread the requesting actor through `enqueue_compute`** (AC: 1, 3)
-  - [ ] `enqueue_compute` gains an explicit `actor_id: UUID` keyword argument; use it for the
+- [x] **Task 4 — Thread the requesting actor through `enqueue_compute`** (AC: 1, 3)
+  - [x] `enqueue_compute` gains an explicit `actor_id: UUID` keyword argument; use it for the
         `command_idempotency` actor column **and** the `create_queued_run` actor, replacing
         `record.created_by_actor_id` (`enqueue_compute.py:85`).
-  - [ ] Populate `JobLeaseV1.capability_version` from the new manifest, removing
+  - [x] Populate `JobLeaseV1.capability_version` from the new manifest, removing
         `"NOT COVERED: contracts:capability_version_unpopulated_until_story_3_6"` from
         `enqueue_compute.py:26` **and** `lease_and_execute_schedule_run.py:62`. **No migration
         is owed** — verified: `job_queue.capability_version` already exists as
@@ -492,37 +492,37 @@ epoch and an attempt for work no worker ever leased.
         (`adapters/postgres/schema.py:521`), and `JobLeaseV1.capability_version` is already
         `str | None = None` (`job_lease.py:48`). The column is nullable and 80 characters wide;
         the manifest's version string must fit.
-  - [ ] Update the three existing tests in `test_enqueue_compute.py` to pass an actor explicitly.
-  - [ ] Test: two different actors with the **same** idempotency key and the same proposal get
+  - [x] Update the three existing tests in `test_enqueue_compute.py` to pass an actor explicitly.
+  - [x] Test: two different actors with the **same** idempotency key and the same proposal get
         two distinct runs — the defect `deferred-work.md:273` describes. Close `:273`.
 
-- [ ] **Task 5 — Site concurrency gate** (AC: 4)
-  - [ ] In `enqueue_compute`, **after** the idempotency replay lookup and **before** any write
+- [x] **Task 5 — Site concurrency gate** (AC: 4)
+  - [x] In `enqueue_compute`, **after** the idempotency replay lookup and **before** any write
         (Decision 6): take `pg_advisory_xact_lock` keyed on the site, count `schedule_run` rows
         whose status is in the explicitly enumerated non-terminal set, and raise a new
         `SiteConcurrencyExhaustedError` when the count reaches `settings.site_max_concurrent_runs`.
-  - [ ] Verify the runtime role can execute the advisory-lock function before relying on it; if
+  - [x] Verify the runtime role can execute the advisory-lock function before relying on it; if
         it cannot, record the finding rather than routing around the grant model.
-  - [ ] Test: a replay of an accepted run **succeeds** even when concurrency is exhausted (this
+  - [x] Test: a replay of an accepted run **succeeds** even when concurrency is exhausted (this
         is the ordering trap — assert it, do not assume it).
-  - [ ] Test: two concurrent enqueues against a limit of 1 produce exactly one run.
-  - [ ] Test: the enumerated non-terminal set is exhaustive against `ScheduleRunStatusV1` — a new
+  - [x] Test: two concurrent enqueues against a limit of 1 produce exactly one run.
+  - [x] Test: the enumerated non-terminal set is exhaustive against `ScheduleRunStatusV1` — a new
         status member must fail this test, not silently count as terminal.
 
-- [ ] **Task 6 — The route** (AC: 1, 3, 4)
-  - [ ] `POST /api/v1/schedule-runs` on `api/routers/schedule_runs.py` (Decision 2). Body
+- [x] **Task 6 — The route** (AC: 1, 3, 4)
+  - [x] `POST /api/v1/schedule-runs` on `api/routers/schedule_runs.py` (Decision 2). Body
         `{proposal_id, expected_resource_version}`, header `Idempotency-Key` (`max_length=40`),
         response the created run's id + literal status + resource version.
-  - [ ] Compose the grant with `explicit_run_request=True`, resolve the module, invoke its
+  - [x] Compose the grant with `explicit_run_request=True`, resolve the module, invoke its
         handler to validate, then call `enqueue_compute` on the request transaction.
-  - [ ] Extend `_command_problem()` with `site_concurrency_exhausted` → **429** and
+  - [x] Extend `_command_problem()` with `site_concurrency_exhausted` → **429** and
         `stale_proposal` → **409**; keep `idempotency_key_conflict` → 409 and
         `stale_resource_version` → 409 consistent with `proposals.py`.
-  - [ ] Register the route in `test_gate_a_mutation_audit.py`'s `versioned` literal
+  - [x] Register the route in `test_gate_a_mutation_audit.py`'s `versioned` literal
         (`:257-269`) **and** in `docs/GATE-A-RUNBOOK.md`'s approved-write-path table — both, or
         `test_gate_a_write_surface_is_exactly_the_approved_paths` and
         `test_runbook_records_every_versioned_write_path` fail independently.
-  - [ ] Add the Gap 3 drain step to `docs/GATE-A-RUNBOOK.md` beside the new route. Close
+  - [x] Add the Gap 3 drain step to `docs/GATE-A-RUNBOOK.md` beside the new route. Close
         `deferred-work.md:281`.
 
 - [ ] **⛳ Checkpoint — commit Phase A and report five numbers.** Backend test count before and
@@ -717,8 +717,92 @@ something was added or missed that this story did not intend.
 
 ### Debug Log References
 
+- Task 1 RED: the focused suite failed at collection because `AC2_CEILING_FIELDS` did not exist;
+  the new settings/retry assertions therefore could not pass against the baseline.
+- Task 1 GREEN: 105 focused tests passed (1 skipped); the correctly scoped backend regression
+  passed with 1126 tests, 2 skipped, and 7 deselected.
+- Task 2 RED: the explicit-run grant test failed because the trusted grant context had no
+  `explicit_run_request` field; after the risk-class predicate was added, conformance passed.
+- Task 2 GREEN: 44 conformance tests and the 1127-test backend regression passed.
+- Task 3 RED: the module tests failed at import because `scheduling_optimize` did not exist.
+- Task 3 GREEN: 132 focused tests passed; the backend regression passed with 1142 tests, 2
+  skipped, and 7 deselected. Installed modules are now 5 and golden files 25 across 5 folders.
+- Task 4 RED: all four enqueue tests rejected the new explicit `actor_id` argument against the
+  baseline signature.
+- Task 4 GREEN: 4 focused enqueue tests and the 1143-test backend regression passed.
+- Phase A checkpoint review RED: the actor-scope regression exposed that snapshot/queued-run
+  attribution still used the proposal author while job and idempotency attribution used the
+  requester.
+- Phase A checkpoint review GREEN: enqueue now passes the requester through snapshot creation;
+  11 focused snapshot/enqueue tests, 1154 default backend tests, and all 84 PostgreSQL tests pass.
+- Task 5 RED: the unit suite could not import the concurrency contract; separately, removing the
+  advisory-lock body made the real two-session race fail with two created runs.
+- Task 5 GREEN: 7 unit tests, the PostgreSQL race/advisory-role proof, the inherited NFR35 test,
+  and the 1147-test backend regression passed.
+- Task 6 RED: all start-route tests failed because the schedule-runs router exposed no enqueue
+  command.
+- Task 6 GREEN: 56 route/Gate A/enqueue tests and the 1154-test backend regression passed.
+
+### Implementation Plan
+
+- Implement each story task in order using focused red/green tests, then run the backend or
+  frontend regression surface required by that task before checking it complete.
+
 ### Completion Notes List
 
+- Task 1: all seven FR12 ceilings are positive application settings; malformed empty/negative
+  values fail at startup, retries and token limits reach AgentRuntime, and the lease duration is
+  validated to cover at least four solver wall-time budgets.
+- Task 2: compute-risk modules are absent unless trusted transport context explicitly marks the
+  request as a run request; the registry rule remains capability-name agnostic.
+- Task 3: registered `scheduling_optimize` as a write-free compute validator with trusted result
+  identity, exact declared errors, explicit scope reductions, and four genuine golden cases.
+- Task 4: idempotency, queued-run, and queued-job identity now use the requesting actor,
+  different actors may reuse a key independently, and queued jobs persist the optimize manifest
+  version.
+- Task 5: replay is resolved before capacity, new work is serialized per site with a PostgreSQL
+  transaction advisory lock, and the explicit non-terminal status set enforces the configured
+  site limit without races.
+- Task 6: `POST /api/v1/schedule-runs` validates the transport-owned compute grant and command,
+  returns a durable queued run identity, maps stable bounded/stale problems, and is recorded in
+  both Gate A write-surface controls with the required pre-upgrade drain.
+
 ### File List
+
+- backend/agent/runtime.py
+- backend/application/use_cases/lease_and_execute_schedule_run.py
+- backend/application/use_cases/enqueue_compute.py
+- backend/application/use_cases/create_run_snapshot.py
+- backend/application/ports/schedule_run.py
+- backend/adapters/postgres/schedule_run.py
+- backend/api/routers/schedule_runs.py
+- backend/api/schemas.py
+- backend/tests/test_schedule_runs_api.py
+- backend/tests/test_gate_a_mutation_audit.py
+- docs/GATE-A-RUNBOOK.md
+- _bmad-output/implementation-artifacts/deferred-work.md
+- backend/application/capabilities/registry.py
+- backend/application/capabilities/installed.py
+- backend/application/capabilities/scheduling_optimize.py
+- backend/evals/README.md
+- backend/evals/golden/scheduling_optimize/key-boundary.json
+- backend/evals/golden/scheduling_optimize/replay.json
+- backend/evals/golden/scheduling_optimize/valid.json
+- backend/evals/golden/scheduling_optimize/version-bound.json
+- backend/tests/test_capability_conformance.py
+- backend/tests/test_evaluation_harness.py
+- backend/tests/test_scheduling_optimize.py
+- backend/tests/architecture/test_execute_turn_boundaries.py
+- backend/settings.py
+- backend/tests/test_agent_runtime_adapter.py
+- backend/tests/test_lease_worker.py
+- backend/tests/test_enqueue_compute.py
+- backend/tests/test_job_leasing_postgres.py
+- backend/tests/test_postgres_integration.py
+- backend/tests/test_scheduling_inspect.py
+- backend/tests/test_settings.py
+- backend/worker/lease_worker.py
+- _bmad-output/implementation-artifacts/3-6-start-explicit-bounded-optimization.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log

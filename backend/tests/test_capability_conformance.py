@@ -55,6 +55,11 @@ _PROBE_ARGS = {
         "constraints": [],
     },
     "scheduling_inspect": {"group": "overview"},
+    "scheduling_optimize": {
+        "proposal_id": str(UUID(int=9)),
+        "expected_resource_version": 1,
+        "idempotency_key": "conformance-run",
+    },
     "shiftmind_demonstration": {"label": "alpha", "repeat": 1},
 }
 
@@ -90,6 +95,7 @@ def _grant_context(**overrides) -> CapabilityGrantContextV1:
             module.required_feature_policy for module in INSTALLED
         ),
         conversation_id=CONVERSATION, conversation_site_id=SITE,
+        explicit_run_request=True,
     )
     base.update(overrides)
     return CapabilityGrantContextV1(**base)
@@ -321,6 +327,26 @@ def test_an_ungranted_module_is_absent_from_the_tool_set(module) -> None:
     assert all(result.tool_name != name for result in outcome.tool_results)
 
 
+def test_compute_risk_is_absent_without_a_trusted_explicit_run_request() -> None:
+    compute_module = replace(
+        INSTALLED[0],
+        manifest=replace(INSTALLED[0].manifest, risk_class="compute"),
+    )
+    policy = frozenset({compute_module.required_feature_policy})
+
+    absent = compose_granted_capabilities(
+        _grant_context(feature_policy=policy, explicit_run_request=False),
+        modules=(compute_module,),
+    )
+    granted = compose_granted_capabilities(
+        _grant_context(feature_policy=policy, explicit_run_request=True),
+        modules=(compute_module,),
+    )
+
+    assert absent == ()
+    assert granted == (compute_module,)
+
+
 # --------------------------------------------------------------------------
 # AC3: declared failures cross the port with declared codes
 # --------------------------------------------------------------------------
@@ -383,7 +409,10 @@ def test_core_is_capability_name_agnostic() -> None:
         "application/contracts/capability_manifest.py",
     )
     # Both installed names, per Task 4 -- not only the one this story added.
-    literals = ("demonstration", "scheduling_compute", "scheduling_inspect")
+    literals = (
+        "demonstration", "scheduling_compute", "scheduling_inspect",
+        "scheduling_optimize",
+    )
     violations = [
         f"{path}:{literal}"
         for path in files

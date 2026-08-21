@@ -80,6 +80,12 @@ and three prompt-injection attempts. The normal inspect cases above are reused
 for AC4's normal fixture kind, and Story 2.7's `missing-evidence` case is reused
 for the unsupported-number kind.
 
+Story 3.6 contributes exactly four scheduling_optimize cases covering a valid
+explicit request, replay-shaped input, a non-default reviewed resource version,
+and the maximum idempotency-key length. The model-facing view contains only
+application-authored identifiers and a version number, so it introduces no new
+untrusted content source and owes no additional NFR5 injection case.
+
 **NFR5 coverage is organised by untrusted SOURCE, not by transport.** This MVP
 introduces exactly two sources of untrusted content: the planner's own chat
 text, and scenario/fixture data. Every installed capability's

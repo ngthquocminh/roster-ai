@@ -1,0 +1,20 @@
+{
+  "case_id": "optimize-version-bound-request",
+  "case_version": "1",
+  "capability": "scheduling_optimize",
+  "risk_class": "compute",
+  "prompt": "Validate optimization for the reviewed proposal version.",
+  "scripted_turns": [
+    {"tool_name": "scheduling_optimize", "arguments": {"request": {"proposal_id": "00000000-0000-0000-0000-00000000000a", "expected_resource_version": 7, "idempotency_key": "run-version-7", "schema_version": "1"}}, "tool_call_id": "optimize-3"},
+    {"response_text": "Reviewed proposal version validated."}
+  ],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [
+    {"tool_name": "scheduling_optimize", "arguments": {"request": {"proposal_id": "00000000-0000-0000-0000-00000000000a", "expected_resource_version": 7, "idempotency_key": "run-version-7", "schema_version": "1"}}}
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "Reviewed proposal version validated.",
+  "expected_grounding_outcome": null,
+  "scenario_fixtures": []
+}

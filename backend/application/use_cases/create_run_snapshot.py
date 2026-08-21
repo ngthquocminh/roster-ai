@@ -63,6 +63,7 @@ def create_run_snapshot(
     *,
     proposal_id: UUID,
     settings: Any,
+    actor_id: UUID | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> RunSnapshotV1:
     """Validate persisted authority and insert snapshot + queued run together."""
@@ -134,7 +135,7 @@ def create_run_snapshot(
         connection,
         snapshot=snapshot,
         site_id=context.site_id,
-        actor_id=record.created_by_actor_id,
+        actor_id=actor_id or record.created_by_actor_id,
     )
     return snapshot
 
