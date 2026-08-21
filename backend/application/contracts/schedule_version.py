@@ -131,7 +131,27 @@ class ScheduleVersionV1:
     schema_version: str = SCHEMA_VERSION
 
 
+
+#: `event_type` is client-facing SSE contract under AD-20/AD-21, so it is a
+#: closed mapping rather than `status.removeprefix("solver_")`: string surgery
+#: would let a rename of an internal status literal silently rename a published
+#: event, and it hides that `cancellation_requested` carries no `solver_`
+#: prefix and so breaks the pattern the other seven follow. Values here are
+#: byte-identical to what the derivation produced -- rows already persisted
+#: must keep resolving.
+RUN_EVENT_TYPES: dict[str, str] = {
+    "solver_queued": "run.queued.v1",
+    "solver_running": "run.running.v1",
+    "cancellation_requested": "run.cancellation_requested.v1",
+    "solver_completed": "run.completed.v1",
+    "solver_infeasible": "run.infeasible.v1",
+    "solver_timed_out": "run.timed_out.v1",
+    "solver_cancelled": "run.cancelled.v1",
+    "solver_failed": "run.failed.v1",
+}
+
 __all__ = [
+    "RUN_EVENT_TYPES",
     "SCHEMA_VERSION",
     "ConstraintClassV1",
     "ConstraintResultV1",

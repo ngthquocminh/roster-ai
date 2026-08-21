@@ -101,7 +101,18 @@ def build_document(
             "clock_boundary_note": (
                 "Story 3.6 has not shipped the HTTP creation command, so the "
                 "direct transaction commit is the acknowledgement boundary. "
-                "Delivery is observed at ASGI send; network transit is excluded."
+                "Delivery is observed at ASGI send; network transit is excluded. "
+                "SCOPE LIMIT: run.queued.v1 is written by create_queued_run "
+                "INSIDE the enqueue transaction, and the stream is opened only "
+                "after that transaction commits, so the measured path contains "
+                "no queue, no worker, no solver and no lock contention -- it is "
+                "an HTTP connect plus one indexed row read, and cannot exceed "
+                "the threshold by construction. These figures bound read-path "
+                "delivery latency; they do NOT measure queue-to-visible "
+                "latency. The wait a planner actually experiences is gated by "
+                "worker lease acquisition and is first observable at "
+                "run.running.v1, which this story does not measure. "
+                "Owner: Story 3.11 (worker kill / lease expiry)."
             ),
             "first_event": "run.queued.v1",
         },

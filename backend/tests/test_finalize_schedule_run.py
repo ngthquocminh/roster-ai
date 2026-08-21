@@ -58,6 +58,12 @@ class _Connection:
             def scalar_one():
                 return uuid4()
 
+            @staticmethod
+            def scalar_one_or_none():
+                # `_actor_for_run` tolerates a run with no job row now, so it
+                # asks for an optional scalar first.
+                return uuid4()
+
         return _Result()
 
 

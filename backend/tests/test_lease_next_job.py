@@ -5,10 +5,13 @@ from datetime import datetime, timezone
 import time
 from uuid import uuid4
 
+import pytest
+
 from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
 from application.ports.schedule_run import ScheduleRunStateV1
 from application.use_cases.lease_and_execute_schedule_run import (
+    FatalJobError,
     lease_and_execute_schedule_run,
 )
 
@@ -127,12 +130,13 @@ def test_no_job_does_not_open_a_runtime_transaction() -> None:
     assert runtime.site_ids == []
 
 
-def test_exception_after_lease_fails_the_job_and_queued_run_atomically() -> None:
+def test_fatal_exception_after_lease_fails_the_job_and_queued_run_atomically() -> None:
+    """A deterministic cause ends the attempt permanently -- replay cannot help."""
     lease = _lease()
 
     class _FailingRepository(_Repository):
         def load_snapshot(self, connection, *, run_id, site_id):
-            raise RuntimeError("injected after lease")
+            raise FatalJobError("injected after lease")
 
     repository = _FailingRepository(
         lease, ScheduleRunStateV1("solver_queued", 1)
@@ -155,6 +159,71 @@ def test_exception_after_lease_fails_the_job_and_queued_run_atomically() -> None
     assert finalize[2]["status"] == "solver_failed"
     assert finalize[2]["reason"] == "job_execution_failed"
     assert failed[2]["fencing_epoch"] == lease.fencing_epoch
+
+
+def test_transient_exception_after_lease_leaves_the_job_leased_for_recovery() -> None:
+    """AD-6: an expired lease is re-leased and recomputed, so do NOT go terminal.
+
+    `failed` is absorbing -- `lease_next_job` never re-selects it -- so marking
+    a transient failure terminal would permanently discard work the system is
+    built to retry, including a solve that succeeded and was rolled back with
+    the transaction that was about to record it.
+    """
+    lease = _lease()
+    injected = RuntimeError("transient database blip")
+
+    class _FailingRepository(_Repository):
+        def load_snapshot(self, connection, *, run_id, site_id):
+            raise injected
+
+    repository = _FailingRepository(
+        lease, ScheduleRunStateV1("solver_queued", 1)
+    )
+    runtime = _RuntimeFactory()
+
+    with pytest.raises(RuntimeError) as caught:
+        lease_and_execute_schedule_run(
+            "lease-connection",
+            runtime,
+            repository,
+            _Scheduler(),
+            lease_owner="worker-1",
+            lease_seconds=30,
+        )
+
+    # The original cause reaches supervision unmasked, and nothing wrote a
+    # terminal state or moved the job out of `leased`.
+    assert caught.value is injected
+    assert not [call for call in repository.calls if call[0] == "finalize"]
+    assert not [call for call in repository.calls if call[0] == "fail"]
+
+
+def test_cancellation_requested_is_not_rewritten_as_a_failure() -> None:
+    """An acknowledged cancellation outranks a fatal error on the same run."""
+    lease = _lease()
+
+    class _FailingRepository(_Repository):
+        def load_snapshot(self, connection, *, run_id, site_id):
+            raise FatalJobError("injected after lease")
+
+    repository = _FailingRepository(
+        lease, ScheduleRunStateV1("cancellation_requested", 2)
+    )
+    runtime = _RuntimeFactory()
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        _Scheduler(),
+        lease_owner="worker-1",
+        lease_seconds=30,
+    )
+
+    assert result.status == "solver_cancelled"
+    finalize = next(call for call in repository.calls if call[0] == "finalize")
+    assert finalize[2]["status"] == "solver_cancelled"
+    assert finalize[2]["reason"] == "cancelled"
 
 
 def test_solve_renews_its_lease_on_an_independent_runtime_connection() -> None:

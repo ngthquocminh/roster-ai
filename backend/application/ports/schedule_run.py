@@ -37,6 +37,13 @@ class ScheduleRunViewV1:
     reason: str | None
     resource_version: int
     cancellation_requested: bool
+    #: The polling fallback is the degraded path for clients that cannot hold
+    #: an SSE connection, so it must answer "when did this run finish?" --
+    #: `finalize_run` populates `finished_at` on the very row this view joins.
+    #: `ScheduleRunOut` has carried both fields since the cancellation replay
+    #: payload; only this read left them permanently null.
+    created_at: datetime | None = None
+    finished_at: datetime | None = None
 
 
 class StaleLeaseError(ValueError):
@@ -137,6 +144,7 @@ class ScheduleRunRepository(Protocol):
         run_id: UUID,
         site_id: UUID,
         fencing_epoch: int,
+        request_id: UUID | None = None,
     ) -> None: ...
 
     def create_queued_run(
@@ -232,6 +240,7 @@ class ScheduleRunRepository(Protocol):
         reason: str | None,
         candidate: ScheduleVersionV1 | None,
         finished_at: datetime | None = None,
+        request_id: UUID | None = None,
     ) -> None: ...
 
 

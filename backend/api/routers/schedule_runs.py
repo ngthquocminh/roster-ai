@@ -18,7 +18,13 @@ from api.deps import (
     SiteContextOpener,
 )
 from api.problems import problem_response
-from api.schemas import ProblemDetailsV1, ScheduleRunCancellationIn, ScheduleRunOut
+from api.schemas import (
+    ProblemDetailsV1,
+    RunProgressActivityOut,
+    ScheduleRunCancellationIn,
+    ScheduleRunOut,
+)
+from application.contracts.schedule_version import RUN_EVENT_TYPES
 from application.ports.schedule_run import ScheduleRunRepository, ScheduleRunViewV1
 from application.contracts.stream_cursor import StreamCursorV1, parse_stream_cursor
 from api.routers.conversations import EventStreamResponse, _cursor_invalid, _event_frames
@@ -46,8 +52,28 @@ IdempotencyKey = Annotated[
 ]
 _STREAM_RESPONSES = {
     200: {
-        "description": "Persisted schedule-run progress as resumable SSE frames.",
-        "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        # The body is an SSE byte stream, but each frame's `data:` line is one
+        # `RunProgressActivityOut`. Naming the model here is what puts it in
+        # the published components: it is otherwise referenced by no route, so
+        # the payload this story exists to deliver reached neither
+        # `frontend/openapi.json` nor the generated TypeScript, leaving Story
+        # 3.7 to hand-author a type the project's conventions forbid.
+        "description": (
+            "Persisted schedule-run progress as resumable SSE frames. Each frame is "
+            "`id: <run_uuid>:<sequence>`, `event: <event_type>`, `data: "
+            "<RunProgressActivityOut as compact JSON>`; comment-only heartbeats carry "
+            "no id and are not persisted."
+        ),
+        "model": RunProgressActivityOut,
+        # Declared explicitly so the frame payload is the only schema on this
+        # media type. Left to the model alone, FastAPI merges its `$ref` with
+        # the response class's `type: string`, which reads as "a string that is
+        # also this object".
+        "content": {
+            "text/event-stream": {
+                "schema": {"$ref": "#/components/schemas/RunProgressActivityOut"}
+            }
+        },
     },
     400: {"model": ProblemDetailsV1},
     **_PROBLEMS,
@@ -72,7 +98,27 @@ def _view_out(value: ScheduleRunViewV1) -> ScheduleRunOut:
         reason=value.reason,
         resource_version=value.resource_version,
         cancellation_requested=value.cancellation_requested,
+        created_at=value.created_at,
+        finished_at=value.finished_at,
     )
+
+
+#: AD-7's five terminal statuses. A run that reaches one can emit nothing
+#: further, so the stream closes rather than polling a finished aggregate
+#: forever.
+_TERMINAL_RUN_EVENT_TYPES = frozenset(
+    (
+        RUN_EVENT_TYPES["solver_completed"],
+        RUN_EVENT_TYPES["solver_infeasible"],
+        RUN_EVENT_TYPES["solver_timed_out"],
+        RUN_EVENT_TYPES["solver_cancelled"],
+        RUN_EVENT_TYPES["solver_failed"],
+    )
+)
+
+
+def _is_terminal_run_event(event) -> bool:
+    return event.event_type in _TERMINAL_RUN_EVENT_TYPES
 
 
 def _not_found() -> JSONResponse:
@@ -162,6 +208,7 @@ async def schedule_run_events(
             site_id=session.site_id,
             stream_id=run_id,
             cursor=cursor,
+            is_final=_is_terminal_run_event,
         ),
         headers={
             "Cache-Control": "no-cache, no-transform",

@@ -2,8 +2,14 @@
 from __future__ import annotations
 
 import ast
+from typing import get_args
 from pathlib import Path
 
+
+from application.contracts.schedule_version import (
+    RUN_EVENT_TYPES,
+    ScheduleRunStatusV1,
+)
 
 AD7_EDGES = frozenset(
     {
@@ -239,3 +245,36 @@ def test_only_transition_writers_emit_run_progress_events() -> None:
         == _PROGRESS_EVENT_WRITERS
     )
     assert _functions_inserting_persisted_event(tree) == {"_write_progress_event"}
+
+
+def test_every_run_status_publishes_exactly_one_stable_event_type() -> None:
+    """AC1 says all eight literal states emit; the wire names are a closed set.
+
+    `event_type` was derived by `status.removeprefix("solver_")`, so renaming an
+    internal status literal would silently rename a published SSE event. Pinning
+    the mapping here makes that a red test instead. Three of these names --
+    `run.completed.v1`, `run.infeasible.v1`, `run.timed_out.v1` -- had no
+    assertion anywhere in the suite before this.
+    """
+    assert RUN_EVENT_TYPES == {
+        "solver_queued": "run.queued.v1",
+        "solver_running": "run.running.v1",
+        "cancellation_requested": "run.cancellation_requested.v1",
+        "solver_completed": "run.completed.v1",
+        "solver_infeasible": "run.infeasible.v1",
+        "solver_timed_out": "run.timed_out.v1",
+        "solver_cancelled": "run.cancelled.v1",
+        "solver_failed": "run.failed.v1",
+    }
+
+    # Every state AD-7 can reach has a name, and no name exists for a state
+    # that does not: a status added without a wire name would raise a KeyError
+    # inside `_write_progress_event` at runtime instead.
+    statuses = set(get_args(ScheduleRunStatusV1))
+    assert set(RUN_EVENT_TYPES) == statuses
+    assert len(set(RUN_EVENT_TYPES.values())) == len(statuses)
+
+    reachable = {source for source, _ in AD7_EDGES} | {
+        target for _, target in AD7_EDGES
+    }
+    assert reachable <= set(RUN_EVENT_TYPES)

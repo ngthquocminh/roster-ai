@@ -1203,7 +1203,7 @@ def test_catalogue_api_hides_cross_site_rows_like_unknown_rows(
 
 
 @pytest.mark.postgres
-def test_migration_upgrade_and_downgrade_round_trip_on_fresh_database(
+def test_migration_upgrades_cleanly_and_refuses_an_irreversible_downgrade(
     fresh_postgres_database_url: str,
 ) -> None:
     alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
@@ -1220,14 +1220,22 @@ def test_migration_upgrade_and_downgrade_round_trip_on_fresh_database(
         alembic_config.attributes["connection"] = connection
         command.check(alembic_config)
 
-    with engine.begin() as connection:
-        alembic_config.attributes["connection"] = connection
-        command.downgrade(alembic_config, "base")
-    assert EXPECTED_TABLES.isdisjoint(set(inspect(engine).get_table_names()))
-    with engine.begin() as connection:
-        alembic_config.attributes["connection"] = connection
-        command.upgrade(alembic_config, "head")
+    # `c4d5e6f7a8b9` is deliberately irreversible: reversing it would delete
+    # governed run-progress events (AD-17) and cannot recreate the narrow
+    # `ck_job_queue_status` once any job has reached the absorbing `failed`
+    # state. The gate is asserted here rather than a round trip, because a
+    # mechanical reversal passed this very test on a fresh database and would
+    # have failed on every database anyone would actually downgrade.
+    with pytest.raises(NotImplementedError, match="persisted run-progress events"):
+        with engine.begin() as connection:
+            alembic_config.attributes["connection"] = connection
+            command.downgrade(alembic_config, "base")
+
+    # The refusal leaves the schema exactly as it was.
     assert EXPECTED_TABLES.issubset(set(inspect(engine).get_table_names()))
+    with engine.begin() as connection:
+        alembic_config.attributes["connection"] = connection
+        command.check(alembic_config)
     engine.dispose()
 
 

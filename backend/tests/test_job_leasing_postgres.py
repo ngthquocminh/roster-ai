@@ -38,6 +38,7 @@ from application.use_cases.enqueue_compute import (
     enqueue_compute,
 )
 from application.use_cases.lease_and_execute_schedule_run import (
+    FatalJobError,
     lease_and_execute_schedule_run,
 )
 
@@ -457,7 +458,15 @@ def test_enqueue_replay_and_rollback_have_exact_row_counts(
                         table.c.site_id == lease_ids["site"]
                     )
                 )
-                for table in (run_snapshot, schedule_run, job_queue, command_idempotency)
+                for table in (
+                    run_snapshot,
+                    schedule_run,
+                    job_queue,
+                    command_idempotency,
+                    # AD-22 puts the event IN the enqueue bundle, so a
+                    # leak here must fail the rollback proof too.
+                    persisted_event,
+                )
             }
 
     before_rollback = _site_counts()
@@ -680,15 +689,16 @@ def test_transition_events_are_monotonic_and_lost_cas_writes_none(
         ) == 2
 
 
-def test_failure_after_lease_is_terminal_and_never_released(
+def test_fatal_failure_after_lease_is_terminal_and_never_released(
     governed_postgres_engine, lease_ids
 ) -> None:
+    """A deterministic cause ends the job permanently: replay cannot help it."""
     job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
     _only_leasable(governed_postgres_engine, job_id)
 
     class _FailingLoadRepository(PostgresScheduleRunRepository):
         def load_snapshot(self, connection, *, run_id, site_id):
-            raise RuntimeError("injected after lease")
+            raise FatalJobError("injected after lease")
 
     from tests.test_cancellation_race_postgres import _run_worker
 
@@ -873,3 +883,137 @@ def test_renew_job_lease_refuses_a_job_belonging_to_another_site(
             extension_seconds=600,
         )
     assert foreign.renewed is False
+
+
+@pytest.mark.parametrize(
+    ("status", "reason", "event_type"),
+    [
+        ("solver_completed", None, "run.completed.v1"),
+        ("solver_infeasible", "infeasible", "run.infeasible.v1"),
+        # AC3: wall-time exhaustion becomes timed-out with a stable
+        # `budget_exhausted` reason. Every `budget_exhausted` assertion in the
+        # suite was on the AgentRun aggregate; none drove a ScheduleRun.
+        ("solver_timed_out", "budget_exhausted", "run.timed_out.v1"),
+    ],
+)
+def test_each_terminal_status_publishes_its_own_event_once(
+    governed_postgres_engine, lease_ids, status, reason, event_type
+) -> None:
+    """Close the three terminal names that had no assertion anywhere."""
+    job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
+    _only_leasable(governed_postgres_engine, job_id)
+    lease = _lease(governed_postgres_engine, "terminal-worker")
+    repository = PostgresScheduleRunRepository()
+
+    with governed_postgres_engine.begin() as connection:
+        _runtime(connection, lease_ids["site"])
+        repository.mark_running(
+            connection,
+            run_id=run_id,
+            site_id=lease_ids["site"],
+            fencing_epoch=lease["fencing_epoch"],
+        )
+        repository.finalize_run(
+            connection,
+            run_id=run_id,
+            site_id=lease_ids["site"],
+            fencing_epoch=lease["fencing_epoch"],
+            status=status,
+            reason=reason,
+            candidate=None,
+        )
+
+    with governed_postgres_engine.connect() as connection:
+        events = connection.execute(
+            select(
+                persisted_event.c.sequence,
+                persisted_event.c.event_type,
+                persisted_event.c.payload,
+            )
+            .where(persisted_event.c.stream_id == run_id)
+            .order_by(persisted_event.c.sequence)
+        ).all()
+
+    # Exactly one event per transition, monotonic, and terminal last (AD-7:
+    # persist and emit once, with no implicit retry).
+    assert [(row.sequence, row.event_type) for row in events] == [
+        (1, "run.running.v1"),
+        (2, event_type),
+    ]
+    assert events[-1].payload["status"] == status
+    assert events[-1].payload["reason"] == reason
+
+
+def test_transient_failure_after_lease_stays_leasable_for_recovery(
+    governed_postgres_engine, lease_ids
+) -> None:
+    """AD-6: an expired lease is re-leased and recomputed, so never go terminal.
+
+    `failed` is absorbing -- `lease_next_job` selects only `queued` or an
+    expired `leased` -- so marking a transient failure terminal would discard
+    work the system is built to retry. This drives the whole path against a
+    real database: the original exception escapes unmasked, nothing terminal is
+    written, and a second worker recovers the job once the lease lapses.
+    """
+    job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
+    _only_leasable(governed_postgres_engine, job_id)
+
+    class _FailingLoadRepository(PostgresScheduleRunRepository):
+        def load_snapshot(self, connection, *, run_id, site_id):
+            raise RuntimeError("transient database blip")
+
+    from tests.test_cancellation_race_postgres import _run_worker
+
+    with pytest.raises(RuntimeError, match="transient database blip"):
+        _run_worker(
+            governed_postgres_engine,
+            _FailingLoadRepository(),
+            SimpleNamespace(solve=lambda snapshot: None),
+        )
+
+    with governed_postgres_engine.connect() as connection:
+        # The job is still leased and the run is still queued: no terminal
+        # state was fabricated for a failure that may not recur.
+        assert connection.execute(
+            select(job_queue.c.status, schedule_run.c.status)
+            .select_from(
+                job_queue.join(
+                    schedule_run,
+                    (schedule_run.c.id == job_queue.c.schedule_run_id)
+                    & (schedule_run.c.site_id == job_queue.c.site_id),
+                )
+            )
+            .where(job_queue.c.id == job_id)
+        ).one() == ("leased", "solver_queued")
+        # Nothing was emitted at all. (`_queue_jobs` seeds rows directly rather
+        # than through `create_queued_run`, so this stream starts empty and any
+        # row here would be one the worker wrote.)
+        assert connection.execute(
+            select(persisted_event.c.event_type).where(
+                persisted_event.c.stream_id == run_id
+            )
+        ).scalars().all() == []
+
+    # Expire the lease exactly as a dead worker's would lapse.
+    with governed_postgres_engine.begin() as connection:
+        connection.execute(
+            update(job_queue)
+            .where(job_queue.c.id == job_id)
+            .values(lease_expires_at=text("pg_catalog.now() - interval '1 second'"))
+        )
+
+    with governed_postgres_engine.connect().execution_options(
+        isolation_level="AUTOCOMMIT"
+    ) as connection:
+        connection.exec_driver_sql("SET ROLE shiftmind_lease")
+        try:
+            recovered = PostgresScheduleRunRepository().lease_next_job(
+                connection,
+                lease_owner="second-worker",
+                lease_seconds=30,
+            )
+        finally:
+            connection.exec_driver_sql("RESET ROLE")
+
+    assert recovered is not None
+    assert recovered.schedule_run_id == run_id

@@ -46,12 +46,24 @@ class _RunRepository:
         self.created.append((snapshot, site_id, actor_id))
 
 
+class _Result:
+    """Enough of a SQLAlchemy result for the writers that read theirs back."""
+
+    @staticmethod
+    def one():
+        return SimpleNamespace(resource_version=1)
+
+
 class _Connection:
     def __init__(self) -> None:
         self.statements = []
 
     def execute(self, statement):
         self.statements.append(statement)
+        # `create_queued_run` reads `resource_version` back from its own
+        # RETURNING rather than asserting the `server_default`, so the stub has
+        # to answer instead of returning None.
+        return _Result()
 
 
 def _proposal(*, state="active") -> ProposalV1:

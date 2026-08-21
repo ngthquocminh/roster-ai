@@ -8,10 +8,49 @@ from uuid import UUID
 from application.contracts.schedule_version import ScheduleRunStatusV1
 from application.ports.scheduler import SchedulerPort
 from application.ports.schedule_run import (
+    IllegalTransitionError,
     RunTransitionConflictError,
     ScheduleRunRepository,
+    StaleLeaseError,
 )
 from application.use_cases.execute_schedule_run import execute_schedule_run
+
+
+class FatalJobError(ValueError):
+    """A leased job that cannot succeed however many times it is replayed.
+
+    Distinct from a bare `ValueError` so the retry classification below is a
+    decision the raiser makes explicitly, not one inferred from an exception
+    type shared with `StaleLeaseError` and friends.
+    """
+
+
+#: Deterministic causes: replaying the job reproduces them exactly, so the
+#: attempt is worth ending permanently rather than re-leasing forever at the
+#: head of the queue (`deferred-work.md:291`, the defect terminal `failed` was
+#: added for). Everything else -- a dropped connection, a saturated pool, a
+#: serialization failure, a blip on commit -- is transient: the job is left
+#: `leased`, its lease lapses, and `lease_next_job` recovers and recomputes it,
+#: which is AD-6's stated model ("unique effect keys make expired-worker
+#: recomputation harmless"). Marking those `failed` would discard a run the
+#: system is designed to retry, and Transaction B commits `finalize_run` and
+#: `complete_job` together, so a transient failure there rolls back an already
+#: successful solve.
+_FATAL_EXECUTION_ERRORS = (
+    FatalJobError,
+    RunTransitionConflictError,
+    IllegalTransitionError,
+)
+
+_TERMINAL_STATUSES = frozenset(
+    (
+        "solver_completed",
+        "solver_infeasible",
+        "solver_timed_out",
+        "solver_cancelled",
+        "solver_failed",
+    )
+)
 
 
 SCOPE_CONTROLS = (
@@ -80,10 +119,41 @@ def lease_and_execute_schedule_run(
             lease=lease,
             lease_seconds=lease_seconds,
         )
-    except Exception:
+    except StaleLeaseError:
+        # Our fence is already lost: another worker re-leased this job under a
+        # newer epoch and owns its outcome. Every write we could attempt would
+        # be rejected by that same epoch check, so stand down rather than
+        # fabricate a terminal state for a run we no longer control.
+        raise
+    except Exception as exc:
+        if not isinstance(exc, _FATAL_EXECUTION_ERRORS):
+            # Transient (dropped connection, saturated pool, serialization
+            # failure, a blip on commit). Leave the job `leased` so its lease
+            # lapses and `lease_next_job` recovers it -- AD-6's stated model.
+            # Marking it terminal `failed` would permanently discard work the
+            # system is built to retry: Transaction B commits `finalize_run`
+            # and `complete_job` together, so a transient failure there rolls
+            # back an already successful solve, and `failed` is an absorbing
+            # state no worker ever re-selects.
+            raise
         assert lease.job_id is not None
         assert lease.schedule_run_id is not None
         assert lease.site_id is not None
+        status = _record_fatal_failure(
+            runtime_connection_factory, repository, lease=lease, cause=exc
+        )
+        return _outcome(lease, status)
+
+
+def _record_fatal_failure(
+    runtime_connection_factory: RuntimeConnectionFactory,
+    repository: ScheduleRunRepository,
+    *,
+    lease,
+    cause: BaseException,
+) -> ScheduleRunStatusV1:
+    """End a permanently-failed attempt without ever masking `cause`."""
+    try:
         with runtime_connection_factory(lease.site_id) as runtime_connection:
             state = repository.get_run_state(
                 runtime_connection,
@@ -91,22 +161,28 @@ def lease_and_execute_schedule_run(
                 site_id=lease.site_id,
             )
             if state is None:
-                raise
-            if state.status not in {
-                "solver_completed",
-                "solver_infeasible",
-                "solver_timed_out",
-                "solver_cancelled",
-                "solver_failed",
-            }:
+                raise cause
+            status: ScheduleRunStatusV1 = state.status
+            if state.status not in _TERMINAL_STATUSES:
+                if state.status == "cancellation_requested":
+                    # An acknowledged cancellation must not be rewritten as a
+                    # failure. The run produced no result and the planner asked
+                    # for it to stop, so `solver_cancelled` is the honest
+                    # terminal. `_FINALIZE_EXPECTED_STATUSES` admits
+                    # `cancellation_requested` as a source for both, so the CAS
+                    # would succeed either way -- the choice belongs here.
+                    status, reason = "solver_cancelled", "cancelled"
+                else:
+                    status, reason = "solver_failed", "job_execution_failed"
                 repository.finalize_run(
                     runtime_connection,
                     run_id=lease.schedule_run_id,
                     site_id=lease.site_id,
                     fencing_epoch=lease.fencing_epoch,
-                    status="solver_failed",
-                    reason="job_execution_failed",
+                    status=status,
+                    reason=reason,
                     candidate=None,
+                    request_id=lease.attempt_id,
                 )
             repository.fail_job(
                 runtime_connection,
@@ -114,7 +190,15 @@ def lease_and_execute_schedule_run(
                 site_id=lease.site_id,
                 fencing_epoch=lease.fencing_epoch,
             )
-        return _outcome(lease, "solver_failed")
+            return status
+    except BaseException as recovery_error:
+        if recovery_error is cause:
+            raise
+        # The recovery write lost its own race -- typically the fence moved
+        # between the original failure and this attempt. Surfacing that instead
+        # of `cause` would hide the failure that actually happened, so re-raise
+        # the original with this one attached.
+        raise cause from recovery_error
 
 
 def _execute_leased_schedule_run(
@@ -140,7 +224,7 @@ def _execute_leased_schedule_run(
             site_id=lease.site_id,
         )
         if snapshot is None:
-            raise ValueError("leased job references a missing run snapshot")
+            raise FatalJobError("leased job references a missing run snapshot")
         # The state read is unlocked, so a cancellation can commit between it
         # and `mark_running`'s compare-and-set. Losing that CAS is recoverable:
         # re-read once and route through the same branches. Raising instead
@@ -153,7 +237,7 @@ def _execute_leased_schedule_run(
                 site_id=lease.site_id,
             )
             if state is None:
-                raise ValueError("leased job references a missing schedule run")
+                raise FatalJobError("leased job references a missing schedule run")
             if state.status == "solver_queued":
                 try:
                     repository.mark_running(
@@ -161,6 +245,7 @@ def _execute_leased_schedule_run(
                         run_id=lease.schedule_run_id,
                         site_id=lease.site_id,
                         fencing_epoch=lease.fencing_epoch,
+                        request_id=lease.attempt_id,
                     )
                 except RunTransitionConflictError:
                     if attempt == 1:
@@ -181,6 +266,7 @@ def _execute_leased_schedule_run(
                     status="solver_cancelled",
                     reason="cancelled",
                     candidate=None,
+                    request_id=lease.attempt_id,
                 )
                 repository.complete_job(
                     runtime_connection,
@@ -206,7 +292,7 @@ def _execute_leased_schedule_run(
             site_id=lease.site_id,
         )
         if state is None:
-            raise ValueError("leased job references a missing schedule run")
+            raise FatalJobError("leased job references a missing schedule run")
         if state.status == "cancellation_requested":
             repository.finalize_run(
                 runtime_connection,
@@ -216,6 +302,7 @@ def _execute_leased_schedule_run(
                 status="solver_cancelled",
                 reason="cancelled",
                 candidate=None,
+                request_id=lease.attempt_id,
             )
             status: ScheduleRunStatusV1 = "solver_cancelled"
         elif state.status == "solver_running":
@@ -229,6 +316,7 @@ def _execute_leased_schedule_run(
                 job_id=lease.job_id,
                 lease_seconds=lease_seconds,
                 runtime_connection_factory=runtime_connection_factory,
+                request_id=lease.attempt_id,
             )
             status = finalized.status
         else:
@@ -248,6 +336,7 @@ def _execute_leased_schedule_run(
 
 
 __all__ = [
+    "FatalJobError",
     "LeaseOutcomeV1",
     "RuntimeConnectionFactory",
     "SCOPE_CONTROLS",

@@ -4,7 +4,7 @@ baseline_commit: 1d24cb5d72c627e7921c61cacc95626f2c8544f2
 
 # Story 3.5: Persist Literal Run State and Replay Progress [Technical Enabler]
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -260,6 +260,106 @@ for completeness and deliberately not re-derived.
   - [x] Full regression: `pytest` (all markers), `alembic check` from the repository root,
         Gate A re-run, `npm run build && npm test` if the generated OpenAPI/schema types moved
         (they will — two new GET paths).
+
+### Review Findings
+
+_Adversarial code review, 2026-08-21. Layers: Blind Hunter, Edge Case Hunter, Acceptance
+Auditor. Every finding below was re-verified against the working tree before rating; severities
+are the reviewer's, not the layers'._
+
+- [x] [Review][Patch] **Worker failure policy — classify fatal vs transient**
+      _(Decision resolved 2026-08-21 by Minh: option (b).)_ Today
+      `lease_and_execute_schedule_run.py:83-116` catches every exception, writes
+      `solver_failed`/`job_execution_failed`, and moves the job to the terminal `failed`
+      status that `lease_next_job` never re-selects — its predicate
+      (`a2b3c4d5e6f7:152-154`) re-leases only `queued` or expired-`leased` rows, so this
+      story converted a self-healing state into a permanent one. Because Transaction B
+      commits `finalize_run` and `complete_job` in one block, a transient failure at
+      `complete_job` or at commit rolls back a successful `solver_completed` and its
+      candidate schedule version; the handler then re-reads `solver_running` and records that
+      solve as a permanent failure, discarding the originating exception without logging.
+      **Fix:** reserve terminal `failed` for the deterministic causes `deferred-work.md:291`
+      actually names — missing run snapshot, `RunSnapshotV1` validation drift,
+      `mark_running` status mismatch — and let every other exception lapse to lease expiry
+      so `lease_next_job` recovers and recomputes the job, which is AD-6's stated model
+      ("unique effect keys make expired-worker recomputation harmless"). Log the originating
+      exception on both branches. No new migration and no `attempts` column.
+- [x] [Review][Patch] **Migration `downgrade()` — replace with an explicit irreversibility
+      gate** _(Decision resolved 2026-08-21 by Minh: option (a), on MVP scope grounds.)_ The
+      current `downgrade()` (`c4d5e6f7a8b9_widen_persisted_event_and_job_status.py:71-103`)
+      is broken three ways. (1) It recreates the narrow
+      `ck_job_queue_status` — `status IN ('queued','leased','completed')` — without first
+      clearing any `'failed'` row; Postgres validates a new CHECK against existing rows, so the
+      first job `fail_job` ever wrote aborts the downgrade with a CheckViolation. `'failed'` is
+      an absorbing state (`lease_next_job` never re-selects it and no path clears it), so one
+      failure blocks downgrade permanently. (2) `DELETE FROM persisted_event WHERE
+      schedule_run_id IS NOT NULL` destroys governed run history, against AD-17's
+      "no in-product delete". (3) `persisted_event` carries FORCE ROW LEVEL SECURITY
+      (`a4f92d7c8e31:94-96`) keyed on `app.site_id`, which is unset during migration — so on
+      any deployment whose migration role lacks BYPASSRLS the DELETE silently matches zero rows
+      and the later `alter_column(conversation_id, nullable=False)` fails instead. Note (3) is
+      environment-dependent and was NOT reproduced: local migrations run as the provisioning
+      role (`settings.py:229`), likely superuser. All three pass green because
+      `test_postgres_integration.py:1206-1231` round-trips only a fresh empty database.
+      **Fix:** make `downgrade()` raise with a message naming teardown as the supported path.
+      Rationale recorded: options (b) and (c) both force an invented semantics for "a
+      permanently-failed job when the schema is rolled back" — complete/requeue/delete are all
+      lossy or dishonest — for a code path an MVP will not run.
+- [x] [Review][Patch] **`request_id` on run events must carry the real attempt, not a fresh
+      UUID** _(Decision resolved 2026-08-21 by Minh: correlation IDs only; worker-actor
+      identity deferred to Epic 4 on MVP scope grounds.)_ `schedule_run.py:217` sets
+      `request_id=uuid4()`, which satisfies the NOT NULL column while correlating to nothing —
+      defeating the only purpose of AD-21's "correlation IDs". The sibling adapter already does
+      this correctly: `conversation.py:191,357` take `request_id` as a caller-supplied
+      parameter and write it at `:239,417`. **Fix:** thread `lease.attempt_id`, which is
+      already on `JobLeaseV1` (`job_lease.py:46`) and already read by this same adapter
+      (`schedule_run.py:638`), through the worker transition paths, and the session request ID
+      through the cancel path. Low cost — the value is already in hand at every call site.
+- [x] [Review][Patch] **NFR35 evidence must disclose that its boundary cannot fail by
+      construction** _(Decision resolved 2026-08-21 by Minh: option (a) — keep the
+      measurement, add the disclosure; measuring `run.running.v1` needs a lease worker in the
+      test loop, which is out of MVP scope.)_ AC4 is literally satisfied and
+      `EVIDENCE-CONVENTION.md` is followed correctly — no field in
+      `evidence/story-3.5/nfr35-first-run-event.json` is false. But `run.queued.v1` is written
+      by `create_queued_run` inside the enqueue transaction and the SSE stream is opened only
+      after that transaction commits, so the measured path contains no queue, no worker, no
+      solver and no lock contention: it is an HTTP connect plus one indexed row read. The
+      275x margin (18.19 ms against 5000 ms) therefore reports that the measurement avoids
+      everything that could be slow, not that the system is fast — and a 60-second lease
+      acquisition regression would still record `"passed": true`. **Fix:** extend
+      `protocol.clock_boundary_note` to state the scope limit explicitly (bounds read-path
+      delivery latency; does NOT measure queue-to-visible latency, which is gated by worker
+      lease acquisition via `run.running.v1` and is unmeasured here; owner Story 3.11), then
+      regenerate through `backend/scripts/generate_run_event_latency_evidence.py` per
+      `EVIDENCE-CONVENTION.md`. Do not hand-edit the JSON.
+
+- [x] [Review][Patch] Recovery handler can itself raise `StaleLeaseError` and escape, killing the worker and leaving the job `leased`; the originating exception is masked with no logging [backend/application/use_cases/lease_and_execute_schedule_run.py:83-116]
+- [x] [Review][Patch] A pending cancellation is silently rewritten as `solver_failed` — `_FINALIZE_EXPECTED_STATUSES["solver_failed"]` admits `cancellation_requested`, so `run.cancelled.v1` is never emitted after an acknowledged cancel [backend/adapters/postgres/schedule_run.py:66-70]
+- [x] [Review][Patch] Heartbeat thread has no exception handler; one DB blip kills it silently and the solve continues on an unrenewed lease until a second worker re-leases the same job [backend/application/use_cases/execute_schedule_run.py:53-63]
+- [x] [Review][Patch] `renewal.renewed is False` returns silently — the fenced-out solve burns to completion and its result is discarded at finalize [backend/application/use_cases/execute_schedule_run.py:62-63]
+- [x] [Review][Patch] `renewal.cancellation_requested` is fetched and discarded, so the heartbeat actively extends the lease of a run the planner already cancelled [backend/application/use_cases/execute_schedule_run.py:56-63]
+- [x] [Review][Patch] `heartbeat_thread.join()` has no timeout; a thread blocked on an exhausted pool stalls the worker after the solve already produced a result [backend/application/use_cases/execute_schedule_run.py:80-81]
+- [x] [Review][Patch] Partial heartbeat arguments silently disable renewal with no warning, and `lease_seconds <= 0` reaches `renew_job_lease` which raises SQLSTATE 22023 [backend/application/use_cases/execute_schedule_run.py:46-51]
+- [x] [Review][Patch] The SSE run stream never terminates — `_event_frames` is a `while True` written for open-ended conversations, but a schedule run is a closed AD-7 machine with five terminal statuses [backend/api/routers/schedule_runs.py:157-168]
+- [x] [Review][Patch] Run-stream reader raises raw `pydantic.ValidationError` instead of the typed `UnsupportedActivityPayloadError` the generator catches, tearing the body after a 200 and looping the client's `EventSource` on the same row [backend/adapters/postgres/schedule_run.py:161-163]
+- [x] [Review][Patch] `RunProgressActivityOut` reaches neither `frontend/openapi.json` nor `schema.d.ts` — `ActivityItemOut` (the only union carrying it) is referenced by no route model, so this story's own payload has no generated type for Story 3.7 [backend/api/schemas.py:203-211]
+- [x] [Review][Patch] `_actor_for_run` uses `.scalar_one()`, so a run with no `job_queue` row raises `NoResultFound` mid-transition and a second job row raises `MultipleResultsFound`; it also adds an unconditional SELECT to every transition's commit path to recover an ID three of four call sites already hold [backend/adapters/postgres/schedule_run.py:229-238]
+- [x] [Review][Patch] Widening `agent_run_id` to nullable invalidates the documented invariant that justified deleting the NULL guard in agent history; `ck_persisted_event_stream_owner` constrains only `conversation_id`/`schedule_run_id`, so a conversation-branch row with NULL `agent_run_id` is now schema-legal and would vanish from the 100-row window via `!=` [backend/adapters/postgres/conversation.py:321-332]
+- [x] [Review][Patch] Three of eight event names have zero test assertions — `run.completed.v1`, `run.infeasible.v1`, `run.timed_out.v1` — leaving AC3's wall-time/`budget_exhausted` mapping unasserted on `ScheduleRun` [backend/tests/]
+- [x] [Review][Patch] `event_type` is derived by `status.removeprefix("solver_")` string surgery with no closed mapping, so renaming an internal enum member silently renames a published wire contract; `cancellation_requested` also breaks the `run.<short>.v1` pattern [backend/adapters/postgres/schedule_run.py:208]
+- [x] [Review][Patch] `create_queued_run` hardcodes `resource_version=1` instead of reading it back via `.returning()` like every other writer, and does not guard `snapshot.accepted_at is None` [backend/adapters/postgres/schedule_run.py:571-579]
+- [x] [Review][Dismissed] ~~`_FINALIZE_EXPECTED_STATUSES["solver_timed_out"]` admits `solver_queued`~~ — **false positive, verified at apply time.** `("solver_queued", "solver_timed_out")` is in `AD7_EDGES` (`tests/architecture/test_schedule_run_state_machine.py:12`), mirroring the architecture spine, so the guard correctly reflects AD-7 and removing the entry would have narrowed it below the permitted set for no reason.
+- [x] [Review][Patch] `occurred_at` on one stream is written from three clocks (upstream Python, adapter Python, database), and a completed run's terminal event carries `candidate.created_at` rather than the transition time [backend/adapters/postgres/schedule_run.py:274,880,900]
+- [x] [Review][Patch] The enqueue-bundle rollback assertion omits `persisted_event` from `_site_counts()`, so an event leaking on rollback keeps the test green despite the comment claiming every table in the bundle is proven [backend/tests/test_job_leasing_postgres.py:452-461]
+- [x] [Review][Patch] The polling fallback — AC2's designated degraded path — returns `created_at`/`finished_at` as null on every response although `finalize_run` populates `finished_at` on the row it joins [backend/api/routers/schedule_runs.py:68-76]
+- [x] [Review][Patch] `deferred-work.md` is a zero-line diff: three entries still read "Owner: Story 3.5" for work this story shipped (heartbeat caller, `JobStatusV1.failed`), and a stale "Root cause is owned by Story 3.5" marker remains in the adapter [_bmad-output/implementation-artifacts/deferred-work.md:287,291,301; backend/adapters/postgres/schedule_run.py:472]
+
+- [x] [Review][Defer] `fail_job` uses the fail-open `getattr(result, "rowcount", 1)` guard [backend/adapters/postgres/schedule_run.py:745] — deferred, pre-existing
+- [x] [Review][Defer] The events route publishes its problem responses as `text/event-stream` [frontend/openapi.json] — deferred, pre-existing
+- [x] [Review][Defer] `_STREAM_RESPONSES` declares a 500 the run-events handler cannot emit [backend/api/routers/schedule_runs.py:47-56] — deferred, pre-existing
+- [x] [Review][Defer] Two evidence files in one story bind two different commits, neither of them HEAD [evidence/story-3.5/nfr35-first-run-event.json:32] — deferred, pre-existing
+- [x] [Review][Defer] Actor attribution mixes proposal-creator (worker transitions, via `_actor_for_run`) with session actor (cancel), and no event identifies the worker that acted [backend/adapters/postgres/schedule_run.py:229-238] — deferred to Epic 4; `actor_id` is NOT NULL with an FK to `app_user`, so a worker identity needs a seeded system user and a migration
+
 
 ## Dev Notes
 
