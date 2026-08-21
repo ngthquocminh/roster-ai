@@ -27,8 +27,13 @@ load_dotenv(_BACKEND_DIR / ".env", override=False)
 # Live-verified tool-capable as of 2026-07-13; replaces meta-llama/llama-3.3-70b-instruct:free, which started returning upstream 429 rate-limit errors.
 _OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 
-# FR12 / NFR16 closed vocabulary. Keeping the seven application-owned ceilings
-# named in one place makes omission detectable when the contract changes.
+# FR12 / NFR16 closed vocabulary. Keeping the application-owned ceilings named
+# in one place makes omission detectable when the contract changes.
+#
+# `lease_seconds` is included even though FR12 does not name it: it is a
+# positive, application-owned ceiling bounding how long one solve may hold its
+# work, and it was previously validated at process start while sitting outside
+# the very tuple that exists to notice an unvalidated ceiling.
 AC2_CEILING_FIELDS = (
     "solver_wall_time_limit_seconds",
     "agent_runtime_request_limit",
@@ -37,6 +42,7 @@ AC2_CEILING_FIELDS = (
     "agent_runtime_total_tokens_limit",
     "site_max_concurrent_runs",
     "agent_runtime_deadline_seconds",
+    "lease_seconds",
 )
 
 
@@ -175,29 +181,11 @@ def _flag(name: str, raw: str | None, fallback: bool) -> bool:
     )
 
 
-def _optional_int(raw: str | None, fallback: int | None) -> int | None:
-    """Parse an optional integer budget. An explicit empty value means "no limit"
-    (None), which is a different thing from "unset" (fall back to the default).
-    """
-    if raw is None:
-        return fallback
-    if raw.strip() == "":
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return fallback
-
-
-def _optional_float(raw: str | None, fallback: float | None) -> float | None:
-    if raw is None:
-        return fallback
-    if raw.strip() == "":
-        return None
-    try:
-        return float(raw)
-    except ValueError:
-        return fallback
+# `_optional_int` and `_optional_float` were deleted here, not left unused.
+# They documented that an explicit empty value means "no limit" (None) — the
+# exact semantics AC2 reverses, since an unbounded ceiling is not a positive
+# one. Leaving them beside the `_positive_*` helpers would invite the next
+# editor to reach for the parser that cannot fail.
 
 
 def _positive_int(name: str, raw: str | None, fallback: int) -> int:

@@ -647,6 +647,7 @@ def test_nfr35_first_run_event_meets_five_second_threshold(
                 actor_id=actor_id,
                 expected_proposal_resource_version=1,
                 idempotency_key=f"nfr35-run-event-{index}",
+                capability_version="1",
                 settings=settings,
             )
         return result.schedule_run_id, perf_counter()

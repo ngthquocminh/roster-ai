@@ -59,12 +59,21 @@ MINIMUM_LEASE_SECONDS = 60
 
 
 def default_lease_seconds(settings: Any) -> int:
-    """Return the validated ceiling, with a safe fallback for narrow test stubs."""
+    """Return the validated ceiling, with a safe fallback for narrow test stubs.
+
+    The floor applies to BOTH branches. `default_settings()` validates the
+    `lease_seconds >= 4 x solver_wall_time_limit_seconds` relationship, but a
+    `Settings(...)` or `dataclasses.replace(...)` construction bypasses that
+    factory and keeps the bare dataclass default, so returning a configured
+    value verbatim would hand back a lease shorter than the solve it must cover
+    -- the exact fence-out this function exists to prevent.
+    """
     configured = getattr(settings, "lease_seconds", None)
-    if configured is not None:
-        return int(configured)
     budget = float(getattr(settings, "solver_wall_time_limit_seconds", 0.0) or 0.0)
-    return max(MINIMUM_LEASE_SECONDS, ceil(budget * LEASE_SECONDS_SOLVER_MULTIPLE))
+    derived = max(MINIMUM_LEASE_SECONDS, ceil(budget * LEASE_SECONDS_SOLVER_MULTIPLE))
+    if configured is not None:
+        return max(derived, int(configured))
+    return derived
 
 
 def run_once(

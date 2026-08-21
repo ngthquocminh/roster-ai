@@ -34,6 +34,7 @@ from application.use_cases.cancel_schedule_run import (
 from application.use_cases.create_run_snapshot import SnapshotCreationError
 from application.use_cases.enqueue_compute import (
     EnqueueComputeResultV1,
+    ProposalNotFoundError,
     SiteConcurrencyExhaustedError,
     StaleProposalResourceVersionError,
 )
@@ -85,6 +86,36 @@ def _headers(settings, *, key="cancel-1"):
     }
 
 
+class _StartRepository:
+    """Answers the run read the start route performs after enqueueing."""
+
+    def __init__(self, view: ScheduleRunViewV1) -> None:
+        self.view = view
+        self.reads: list[object] = []
+
+    def get_run(self, _connection, *, run_id, site_id):
+        self.reads.append((run_id, site_id))
+        return self.view
+
+
+def _grant_optimize() -> None:
+    app.dependency_overrides[get_capability_registry] = lambda: (
+        lambda _context: (scheduling_optimize_module(),)
+    )
+    app.dependency_overrides[get_proposal_repository] = lambda: object()
+    app.dependency_overrides[get_catalogue_reader] = lambda: object()
+
+
+def _queued_view(run_id, *, status="solver_queued", resource_version=1):
+    return ScheduleRunViewV1(
+        schedule_run_id=run_id,
+        status=status,
+        reason=None,
+        resource_version=resource_version,
+        cancellation_requested=False,
+    )
+
+
 def test_start_route_composes_explicit_compute_grant_and_enqueues_once(
     client, monkeypatch
 ) -> None:
@@ -105,6 +136,8 @@ def test_start_route_composes_explicit_compute_grant_and_enqueues_once(
     app.dependency_overrides[get_capability_registry] = lambda: _compose
     app.dependency_overrides[get_proposal_repository] = lambda: object()
     app.dependency_overrides[get_catalogue_reader] = lambda: object()
+    repository = _StartRepository(_queued_view(run_id))
+    app.dependency_overrides[get_schedule_run_repository] = lambda: repository
     monkeypatch.setattr("api.routers.schedule_runs.enqueue_compute", _enqueue)
 
     response = test_client.post(
@@ -114,17 +147,98 @@ def test_start_route_composes_explicit_compute_grant_and_enqueues_once(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "schedule_run_id": str(run_id),
-        "status": "solver_queued",
-        "resource_version": 1,
-    }
+    body = response.json()
+    assert body["schedule_run_id"] == str(run_id)
+    assert body["status"] == "solver_queued"
+    assert body["resource_version"] == 1
     assert observed["context"].explicit_run_request is True
     assert observed["enqueue"]["actor_id"] == session.app_user_id
     assert observed["enqueue"]["site_id"] == session.site_id
     assert observed["enqueue"]["proposal_id"] == proposal_id
     assert observed["enqueue"]["expected_proposal_resource_version"] == 3
     assert observed["enqueue"]["idempotency_key"] == "start-1"
+    # The capability version travels from the validated result into the job,
+    # so the generic bundle names no capability of its own.
+    assert observed["enqueue"]["capability_version"] == (
+        scheduling_optimize_module().manifest.capability_version
+    )
+    assert repository.reads == [(run_id, session.site_id)]
+
+
+def test_start_route_returns_the_runs_live_state_not_creation_constants(
+    client, monkeypatch
+) -> None:
+    """AC3: a replay returns the ORIGINAL semantic run response.
+
+    The route used to answer with the literals `solver_queued` and
+    `resource_version=1` regardless of what the run had become. On the replay
+    path `enqueue_compute` returns the stored identifiers for a run a worker may
+    already have leased, so those constants described a state that had passed --
+    and the version they reported is exactly what a caller pins its next
+    cancellation to, guaranteeing a 409.
+    """
+    test_client, settings, session = client
+    run_id = uuid4()
+    _grant_optimize()
+    repository = _StartRepository(
+        _queued_view(run_id, status="solver_running", resource_version=2)
+    )
+    app.dependency_overrides[get_schedule_run_repository] = lambda: repository
+    monkeypatch.setattr(
+        "api.routers.schedule_runs.enqueue_compute",
+        lambda *_a, **_k: EnqueueComputeResultV1(run_id, uuid4()),
+    )
+
+    response = test_client.post(
+        "/api/v1/schedule-runs",
+        json={"proposal_id": str(uuid4()), "expected_resource_version": 1},
+        headers=_headers(settings, key="start-replay"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "solver_running"
+    assert response.json()["resource_version"] == 2
+    assert repository.reads == [(run_id, session.site_id)]
+
+
+def test_start_route_refuses_when_compute_is_not_granted(client) -> None:
+    """`SCHEDULING_OPTIMIZE_ENABLED=false` is a denial, not a validation failure."""
+    test_client, settings, _ = client
+    app.dependency_overrides[get_capability_registry] = lambda: (lambda _context: ())
+    app.dependency_overrides[get_proposal_repository] = lambda: object()
+    app.dependency_overrides[get_catalogue_reader] = lambda: object()
+
+    response = test_client.post(
+        "/api/v1/schedule-runs",
+        json={"proposal_id": str(uuid4()), "expected_resource_version": 1},
+        headers=_headers(settings, key="start-ungranted"),
+    )
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "compute_not_granted"
+
+
+def test_start_route_maps_capability_validation_failures(client) -> None:
+    """The handler runs INSIDE the route's try, so its declared codes are mapped.
+
+    Raised outside it, `InvalidRunRequestError` escaped every mapping and became
+    `500 internal_error`. A nil UUID passes Pydantic and reaches the handler, so
+    any client could produce that 500.
+    """
+    test_client, settings, _ = client
+    _grant_optimize()
+
+    response = test_client.post(
+        "/api/v1/schedule-runs",
+        json={
+            "proposal_id": "00000000-0000-0000-0000-000000000000",
+            "expected_resource_version": 1,
+        },
+        headers=_headers(settings, key="start-nil-uuid"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_query"
 
 
 @pytest.mark.parametrize(
@@ -133,17 +247,37 @@ def test_start_route_composes_explicit_compute_grant_and_enqueues_once(
         (SiteConcurrencyExhaustedError("limit"), 429, "site_concurrency_exhausted"),
         (SnapshotCreationError("stale_proposal", "stale"), 409, "stale_proposal"),
         (StaleProposalResourceVersionError(1, 2), 409, "stale_resource_version"),
+        # AD-13 keeps missing, denied, stale and invalid distinct. These four
+        # all collapsed into one 422 `invalid_run_command`, so a deleted
+        # proposal and an unreadable scenario were reported as bad input.
+        (ProposalNotFoundError("gone"), 404, "proposal_not_found"),
+        (
+            SnapshotCreationError("proposal_not_found", "gone"),
+            404,
+            "proposal_not_found",
+        ),
+        (
+            SnapshotCreationError("rejected_proposal", "rejected"),
+            409,
+            "rejected_proposal",
+        ),
+        (
+            SnapshotCreationError("scenario_unavailable", "unreadable"),
+            503,
+            "scenario_unavailable",
+        ),
+        (
+            SnapshotCreationError("invalid_proposal", "no identifiers"),
+            422,
+            "invalid_proposal",
+        ),
     ),
 )
 def test_start_route_maps_bounded_and_stale_problems(
     client, monkeypatch, exception, status, code
 ) -> None:
     test_client, settings, _ = client
-    app.dependency_overrides[get_capability_registry] = lambda: (
-        lambda _context: (scheduling_optimize_module(),)
-    )
-    app.dependency_overrides[get_proposal_repository] = lambda: object()
-    app.dependency_overrides[get_catalogue_reader] = lambda: object()
+    _grant_optimize()
 
     def _raise(*_args, **_kwargs):
         raise exception
@@ -157,6 +291,28 @@ def test_start_route_maps_bounded_and_stale_problems(
 
     assert response.status_code == status
     assert response.json()["code"] == code
+
+
+def test_start_route_does_not_echo_internal_exception_text(
+    client, monkeypatch
+) -> None:
+    """The catch-all used `str(exc)`, so a driver message could cross AD-3."""
+    test_client, settings, _ = client
+    _grant_optimize()
+
+    def _raise(*_args, **_kwargs):
+        raise SnapshotCreationError("unmapped_future_code", "connection to 10.0.0.7 failed")
+
+    monkeypatch.setattr("api.routers.schedule_runs.enqueue_compute", _raise)
+    response = test_client.post(
+        "/api/v1/schedule-runs",
+        json={"proposal_id": str(uuid4()), "expected_resource_version": 1},
+        headers=_headers(settings, key="start-opaque"),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "invalid_run_command"
+    assert "10.0.0.7" not in response.text
 
 
 def test_cancellation_route_returns_the_replayed_semantic_result(

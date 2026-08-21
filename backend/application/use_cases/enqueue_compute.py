@@ -10,7 +10,6 @@ from application.contracts.canonical import contract_digest
 from application.contracts.job_lease import MAX_IDEMPOTENCY_KEY_LENGTH, JobLeaseV1
 from application.contracts.run_snapshot import SCHEMA_VERSION
 from application.contracts.schedule_version import ScheduleRunStatusV1
-from application.capabilities.scheduling_optimize import scheduling_optimize_manifest
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.schedule_run import ScheduleRunRepository
@@ -25,7 +24,14 @@ SCOPE_CONTROLS = (
     # observation in `lease_and_execute_schedule_run`.
     "NOT COVERED: cancellation:command_owned_by_cancel_schedule_run; "
     "NOT COVERED: cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit; "
-    "COVERS: contracts:capability_version_from_scheduling_optimize_manifest; "
+    # The caller supplies the capability version it validated against. This use
+    # case names no capability: it is the generic bundle, and importing one
+    # module here would hard-code a capability name into it (AD-22).
+    "COVERS: contracts:capability_version_supplied_by_caller; "
+    # No audit envelope is written here. `AuditEnvelopeV1` does not exist in
+    # `backend/` at all; Epic 4 (FR21, AD-12) owns the contract, and inventing a
+    # partial shape here would leave Story 4.4 a second one to reconcile.
+    "NOT COVERED: audit:owned_by_epic_4; "
     # AC1 names "actor/site/attempt IDs" in the bundle, but `attempt_id` is
     # NULL on every job this use case creates. That is Decision 5 working as
     # intended — an attempt is per LEASE ACQUISITION, and nothing has leased
@@ -43,6 +49,17 @@ NON_TERMINAL_RUN_STATUSES: tuple[ScheduleRunStatusV1, ...] = (
 
 class EnqueueComputeError(ValueError):
     pass
+
+
+class ProposalNotFoundError(EnqueueComputeError):
+    """The pinned proposal is not visible in this site.
+
+    A distinct type rather than a bare `EnqueueComputeError`: AD-13 requires
+    missing to stay distinct from invalid, and the route cannot separate them
+    from an exception message without matching on prose.
+    """
+
+    code = "proposal_not_found"
 
 
 class IdempotencyKeyConflictError(EnqueueComputeError):
@@ -90,6 +107,7 @@ def enqueue_compute(
     actor_id: UUID,
     expected_proposal_resource_version: int,
     idempotency_key: str,
+    capability_version: str,
     settings: Any,
     clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
 ) -> EnqueueComputeResultV1:
@@ -98,7 +116,7 @@ def enqueue_compute(
         connection, proposal_id=proposal_id, for_update=True
     )
     if record is None:
-        raise EnqueueComputeError("proposal was not found")
+        raise ProposalNotFoundError("proposal was not found")
     if not idempotency_key or len(idempotency_key) > MAX_IDEMPOTENCY_KEY_LENGTH:
         # Both tables are written in this one transaction; an over-long key
         # would insert into job_queue and then abort the whole transaction on
@@ -124,6 +142,17 @@ def enqueue_compute(
             schedule_run_id=UUID(stored.response_payload["schedule_run_id"]),
             job_id=UUID(stored.response_payload["job_id"]),
         )
+    # Validate before taking capacity. Ordering matters twice over: a stale
+    # request refused with `site_concurrency_exhausted` tells the planner to
+    # "try again shortly" when the only recovery is Refresh proposal, which
+    # AC4's "offers only valid recovery actions" forbids; and checking first
+    # avoids holding the per-site advisory lock for the remainder of a
+    # transaction that is going to be rejected anyway.
+    if record.proposal.resource_version != expected_proposal_resource_version:
+        raise StaleProposalResourceVersionError(
+            expected_proposal_resource_version,
+            record.proposal.resource_version,
+        )
     run_repository.acquire_site_enqueue_lock(connection, site_id=site_id)
     active_runs = run_repository.count_runs_with_statuses(
         connection,
@@ -133,11 +162,6 @@ def enqueue_compute(
     if active_runs >= settings.site_max_concurrent_runs:
         raise SiteConcurrencyExhaustedError(
             f"site has reached its limit of {settings.site_max_concurrent_runs} active runs"
-        )
-    if record.proposal.resource_version != expected_proposal_resource_version:
-        raise StaleProposalResourceVersionError(
-            expected_proposal_resource_version,
-            record.proposal.resource_version,
         )
 
     accepted_at = clock()
@@ -159,7 +183,7 @@ def enqueue_compute(
         site_id=site_id,
         actor_id=actor_id,
         contract_version=SCHEMA_VERSION,
-        capability_version=scheduling_optimize_manifest().capability_version,
+        capability_version=capability_version,
         schedule_run_id=snapshot.schedule_run_id,
         idempotency_key=idempotency_key,
         created_at=accepted_at,
@@ -186,6 +210,7 @@ __all__ = [
     "EnqueueComputeError",
     "EnqueueComputeResultV1",
     "IdempotencyKeyConflictError",
+    "ProposalNotFoundError",
     "NON_TERMINAL_RUN_STATUSES",
     "SiteConcurrencyExhaustedError",
     "StaleProposalResourceVersionError",

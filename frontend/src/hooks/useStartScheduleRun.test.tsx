@@ -18,7 +18,9 @@ const body = {
 const queued = {
   schedule_run_id: "22222222-2222-2222-2222-222222222222",
   status: "solver_queued" as const,
+  reason: null,
   resource_version: 1,
+  cancellation_requested: false,
 };
 
 describe("useStartScheduleRun", () => {

@@ -123,5 +123,23 @@ def test_every_ac2_ceiling_is_present_and_positive() -> None:
         "agent_runtime_total_tokens_limit",
         "site_max_concurrent_runs",
         "agent_runtime_deadline_seconds",
+        # Registered at code review. It was validated at process start while
+        # sitting outside the very tuple that exists to notice an unvalidated
+        # ceiling, so the guard could not have reported its removal.
+        "lease_seconds",
     )
     assert all(getattr(settings, name) > 0 for name in AC2_CEILING_FIELDS)
+
+
+def test_every_ac2_ceiling_rejects_a_non_positive_override(monkeypatch) -> None:
+    """The tuple must name settings that actually fail closed, not just exist.
+
+    Asserting the tuple against a hand-copied literal is a change detector: it
+    proves the names were typed twice, not that each one is validated. This
+    drives every registered ceiling through its own environment variable.
+    """
+    for name in AC2_CEILING_FIELDS:
+        monkeypatch.setenv(name.upper(), "-1")
+        with pytest.raises(InvalidFlagError, match=name.upper()):
+            default_settings()
+        monkeypatch.delenv(name.upper())

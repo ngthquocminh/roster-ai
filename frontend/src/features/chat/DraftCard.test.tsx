@@ -237,6 +237,13 @@ describe("DraftCard", () => {
         status: "solver_queued",
         resource_version: 1,
       },
+      // A real mutation always carries the body that produced `data`. The card
+      // gates the acknowledgement on it so a run accepted for one proposal
+      // version is not announced beside a later one.
+      variables: {
+        proposal_id: proposal.proposal_id,
+        expected_resource_version: 1,
+      },
     } as never);
 
     render(<DraftCard proposalId={proposal.proposal_id} />);
@@ -260,6 +267,93 @@ describe("DraftCard", () => {
     render(<DraftCard proposalId={proposal.proposal_id} />);
 
     expect(screen.getByText(/site is at its run limit.*try again shortly/i)).toBeInTheDocument();
+  });
+
+  it("separates the three distinct 409 codes the run command can return", () => {
+    // All three arrive as HTTP 409, so status alone rendered one message for
+    // all of them. For a key conflict the shared "Refresh… then try again"
+    // copy is actively wrong: the key is held across failures on purpose, so a
+    // refreshed body only changes the hash it conflicts on.
+    vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+      mutate: mutateStart,
+      isPending: false,
+      submittedAt: 20,
+      error: { status: 409, code: "idempotency_key_conflict" },
+      data: undefined,
+    } as never);
+
+    render(<DraftCard proposalId={proposal.proposal_id} />);
+
+    expect(screen.getByText(/earlier command with different values/i)).toBeInTheDocument();
+    expect(screen.queryByText(/refresh to see the current version/i)).not.toBeInTheDocument();
+  });
+
+  it("reports a withdrawn compute grant as a settled condition, not a retry", () => {
+    vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+      mutate: mutateStart,
+      isPending: false,
+      submittedAt: 20,
+      error: { status: 403, code: "compute_not_granted" },
+      data: undefined,
+    } as never);
+
+    render(<DraftCard proposalId={proposal.proposal_id} />);
+
+    expect(screen.getByText(/optimization is turned off for this site/i)).toBeInTheDocument();
+    expect(screen.queryByText(/try again/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the newest command failure, not a stale one from another mutation", () => {
+    // TanStack retains a mutation's error until that same mutation is re-fired,
+    // so a fixed `revision ?? rejection ?? run` chain meant one failed revise
+    // permanently hid every later run failure — including the site-limit copy
+    // this card exists to show.
+    vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({
+      mutate: mutateRevision,
+      isPending: false,
+      submittedAt: 10,
+      error: { status: 422, code: "invalid_proposal" },
+    } as never);
+    vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+      mutate: mutateStart,
+      isPending: false,
+      submittedAt: 20,
+      error: { status: 429, code: "site_concurrency_exhausted" },
+      data: undefined,
+    } as never);
+
+    render(<DraftCard proposalId={proposal.proposal_id} />);
+
+    expect(screen.getByText(/site is at its run limit/i)).toBeInTheDocument();
+    expect(screen.queryByText(/check the values/i)).not.toBeInTheDocument();
+  });
+
+  it("withdraws the run acknowledgement once the draft moves past that version", () => {
+    vi.mocked(proposalHooks.useProposal).mockReturnValue({
+      data: { ...proposal, resource_version: 2 },
+      isPending: false, isError: false, error: null, refetch,
+    } as never);
+    vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
+      mutate: mutateStart,
+      isPending: false,
+      data: {
+        schedule_run_id: "66666666-6666-4666-8666-666666666666",
+        status: "solver_queued",
+        resource_version: 1,
+      },
+      variables: {
+        proposal_id: proposal.proposal_id,
+        expected_resource_version: 1,
+      },
+    } as never);
+
+    render(<DraftCard proposalId={proposal.proposal_id} />);
+
+    // The run was accepted for version 1; the draft is now version 2, so
+    // announcing it beside the revised draft would describe work that does not
+    // reflect what is on screen.
+    expect(screen.queryByRole("status", { name: "Optimization queued" }))
+      .not.toBeInTheDocument();
   });
 
   it("renders the persisted summary while the proposal is still loading", () => {

@@ -80,9 +80,14 @@ and three prompt-injection attempts. The normal inspect cases above are reused
 for AC4's normal fixture kind, and Story 2.7's `missing-evidence` case is reused
 for the unsupported-number kind.
 
-Story 3.6 contributes exactly four scheduling_optimize cases covering a valid
-explicit request, replay-shaped input, a non-default reviewed resource version,
-and the maximum idempotency-key length. The model-facing view contains only
+Story 3.6 contributes five scheduling_optimize cases covering a valid explicit
+request, replay-shaped input, a non-default reviewed resource version, the
+maximum idempotency-key length, and — added at code review — a refusal for a
+request that identifies no proposal. The first four are all `allow`, which left
+the module's declared `invalid_query` code with unit coverage but no agent-facing
+eval; the refusal case is scoped to this module's own `compute` risk class, so
+it is not one of the consequential/prohibited cases Task 3 reserved for Epic 4.
+The model-facing view contains only
 application-authored identifiers and a version number, so it introduces no new
 untrusted content source and owes no additional NFR5 injection case.
 

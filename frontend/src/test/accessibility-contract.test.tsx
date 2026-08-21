@@ -448,6 +448,10 @@ it("announces the queued run identity and literal status through a polite live r
       status: "solver_queued",
       resource_version: 1,
     },
+    variables: {
+      proposal_id: accessibleProposal.proposal_id,
+      expected_resource_version: 1,
+    },
   } as never);
   const { DraftCard } = await import("@/features/chat/DraftCard");
   render(<DraftCard proposalId={accessibleProposal.proposal_id} />);

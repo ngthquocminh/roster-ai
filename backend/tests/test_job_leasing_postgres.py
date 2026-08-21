@@ -395,6 +395,7 @@ def test_enqueue_replay_and_rollback_have_exact_row_counts(
         actor_id=lease_ids["actor"],
         expected_proposal_resource_version=1,
         idempotency_key="live-enqueue",
+        capability_version="1",
         settings=settings,
     )
     with governed_postgres_engine.begin() as connection:
@@ -582,7 +583,8 @@ def test_site_advisory_lock_serializes_concurrent_enqueues_at_limit_one(
                     _Catalogue(context), PostgresScheduleRunRepository(), connection,
                     proposal_id=ids["proposal"], site_id=ids["site"],
                     actor_id=lease_ids["actor"], expected_proposal_resource_version=1,
-                    idempotency_key=f"concurrent-{index}", settings=settings,
+                    idempotency_key=f"concurrent-{index}", capability_version="1",
+                    settings=settings,
                 )
             return "created"
         except SiteConcurrencyExhaustedError:
@@ -598,11 +600,14 @@ def test_site_advisory_lock_serializes_concurrent_enqueues_at_limit_one(
                 schedule_run.c.site_id == ids["site"]
             )
         ) == 1
+        # Exactly one job too: the losing session must leave no queued work
+        # behind. Asserting only the run count would pass if the advisory lock
+        # serialized the count but both sessions still enqueued a job.
         assert connection.scalar(
             select(func.count()).select_from(job_queue).where(
-                job_queue.c.idempotency_key == "rolled-back-enqueue"
+                job_queue.c.site_id == ids["site"]
             )
-        ) == 0
+        ) == 1
 
 
 def _only_leasable(engine, job_id):

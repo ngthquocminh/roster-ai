@@ -1965,21 +1965,6 @@ export interface components {
             /** Expected Resource Version */
             expected_resource_version: number;
         };
-        /** ScheduleRunStartOut */
-        ScheduleRunStartOut: {
-            /**
-             * Schedule Run Id
-             * Format: uuid
-             */
-            schedule_run_id: string;
-            /**
-             * Status
-             * @constant
-             */
-            status: "solver_queued";
-            /** Resource Version */
-            resource_version: number;
-        };
         /** TaskPageOut */
         TaskPageOut: {
             /**
@@ -4197,7 +4182,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ScheduleRunStartOut"];
+                    "application/json": components["schemas"]["ScheduleRunOut"];
                 };
             };
             /** @description Unauthorized */
@@ -4247,6 +4232,15 @@ export interface operations {
             };
             /** @description Too Many Requests */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

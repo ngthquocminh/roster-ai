@@ -141,6 +141,7 @@ def test_enqueue_compute_creates_snapshot_job_and_idempotent_result_together() -
         actor_id=actor_id,
         expected_proposal_resource_version=1,
         idempotency_key="enqueue-1",
+        capability_version="1",
         settings=settings,
         clock=lambda: accepted_at,
     )
@@ -167,6 +168,7 @@ def test_enqueue_compute_replays_without_creating_a_second_effect() -> None:
         actor_id=actor_id,
         expected_proposal_resource_version=1,
         idempotency_key="enqueue-1",
+        capability_version="1",
         settings=settings,
     )
     first = enqueue_compute(
@@ -196,6 +198,7 @@ def test_enqueue_compute_rejects_same_key_with_a_different_expected_version() ->
         site_id=site_id,
         actor_id=actor_id,
         idempotency_key="enqueue-1",
+        capability_version="1",
         settings=settings,
     )
     enqueue_compute(
@@ -228,6 +231,7 @@ def test_same_key_is_scoped_to_the_requesting_actor() -> None:
         site_id=site_id,
         expected_proposal_resource_version=1,
         idempotency_key="shared-key",
+        capability_version="1",
         settings=settings,
     )
 
@@ -267,6 +271,7 @@ def test_replay_succeeds_even_when_site_concurrency_is_exhausted() -> None:
         actor_id=actor_id,
         expected_proposal_resource_version=1,
         idempotency_key="replay-at-limit",
+        capability_version="1",
         settings=settings,
     )
     first = enqueue_compute(
@@ -290,6 +295,7 @@ def test_new_request_fails_closed_when_site_concurrency_is_exhausted() -> None:
         site_id=site_id,
         actor_id=actor_id,
         expected_proposal_resource_version=1,
+        capability_version="1",
         settings=settings,
     )
     enqueue_compute(

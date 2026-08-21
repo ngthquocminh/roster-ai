@@ -71,7 +71,7 @@ SCOPE_CONTROLS = (
     # itself out. `DEFAULT_LEASE_SECONDS` is a floor, not the ceiling AD-8
     # wants: Story 3.6's AC requires application-owned ceilings for solver time
     # and total elapsed time (epics.md:1000-1003).
-    "COVERED: ceilings:lease_seconds_validated_at_process_start"
+    "COVERS: ceilings:lease_seconds_validated_at_process_start"
 )
 
 

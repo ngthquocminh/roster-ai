@@ -3306,7 +3306,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScheduleRunStartOut"
+                  "$ref": "#/components/schemas/ScheduleRunOut"
                 }
               }
             }
@@ -3370,6 +3370,16 @@
               }
             },
             "description": "Too Many Requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         }
       }
@@ -6389,31 +6399,6 @@
           "expected_resource_version"
         ],
         "title": "ScheduleRunStartIn"
-      },
-      "ScheduleRunStartOut": {
-        "properties": {
-          "schedule_run_id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Schedule Run Id"
-          },
-          "status": {
-            "type": "string",
-            "const": "solver_queued",
-            "title": "Status"
-          },
-          "resource_version": {
-            "type": "integer",
-            "title": "Resource Version"
-          }
-        },
-        "type": "object",
-        "required": [
-          "schedule_run_id",
-          "status",
-          "resource_version"
-        ],
-        "title": "ScheduleRunStartOut"
       },
       "TaskPageOut": {
         "properties": {

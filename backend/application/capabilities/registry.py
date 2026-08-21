@@ -22,6 +22,23 @@ class CapabilityGrantContextV1:
     `conversation_site_id` are genuinely varying server-derived values. Every
     field is branched on by `compose_granted_capabilities`, so substituting a
     real policy supplier later is a change of supplier, not of shape.
+
+    `explicit_run_request` is the AD-5 `compute` gate: a compute-risk module is
+    granted only when the planner made a current, explicit run request. It is
+    set from the transport -- an authenticated, CSRF-validated POST -- and NEVER
+    from message text, which would be the model deciding its own authority
+    (AD-2). An ordinary chat turn leaves it at its default, so the module is
+    absent from the toolset rather than present-and-denied.
+
+    ONE CALLER IS AN EXCEPTION to "genuinely varying", recorded so the next
+    editor does not trust the paragraph above unqualified: the run command
+    (`POST /api/v1/schedule-runs`) has no conversation in scope and passes
+    `conversation_id=None` with `conversation_site_id == site_id`. Both the
+    cross-site check and the revoked-conversation check are therefore
+    unfalsifiable for it. That is inert today -- `revoked_conversation_ids` is
+    populated nowhere outside tests -- but a revocation supplier would not reach
+    this caller, so binding the run command to its proposal's conversation is
+    open work, not a settled design.
     """
 
     role: str

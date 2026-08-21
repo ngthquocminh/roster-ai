@@ -14,7 +14,7 @@ import { useProposal } from "@/hooks/useProposal";
 import { useRejectProposal } from "@/hooks/useRejectProposal";
 import { useReviseProposal } from "@/hooks/useReviseProposal";
 import { useStartScheduleRun } from "@/hooks/useStartScheduleRun";
-import { getErrorStatus } from "@/lib/errors";
+import { getErrorCode, getErrorStatus } from "@/lib/errors";
 
 type NumericKey = "n" | "factor" | "max_hours" | "start_minute";
 
@@ -35,19 +35,50 @@ function Identifier({ children }: Readonly<{ children: string }>) {
   return <code className="font-mono text-xs break-all">{children}</code>;
 }
 
+/**
+ * Copy keyed on the RFC 7807 `code`, falling back to HTTP status.
+ *
+ * Status alone cannot separate these: the run command answers `stale_proposal`,
+ * `stale_resource_version` and `idempotency_key_conflict` all as 409. Rendering
+ * one message for all three told a planner holding a conflicting key to
+ * "Refresh… then try again" — the one action that cannot help, because the key
+ * is deliberately held across failures and a refreshed body only changes the
+ * hash it conflicts on. `getErrorCode` already backs `EvidenceTargetPanel`.
+ */
+const CODE_MESSAGES: Readonly<Record<string, string>> = {
+  stale_proposal:
+    "This draft changed since you opened it. Refresh to see the current version, then try again.",
+  stale_resource_version:
+    "This draft changed since you opened it. Refresh to see the current version, then try again.",
+  idempotency_key_conflict:
+    "An earlier command with different values is still on record for this draft. Reload the page to start a fresh command.",
+  site_concurrency_exhausted: "This site is at its run limit. Try again shortly.",
+  proposal_not_found:
+    "This draft is no longer available. Describe the change again to create a new one.",
+  rejected_proposal:
+    "This proposal was rejected, so it cannot be run. Describe the change again to create a new one.",
+  scenario_unavailable:
+    "The scenario could not be read just now. Try again shortly.",
+  compute_not_granted:
+    "Optimization is turned off for this site, so no run can be started.",
+};
+
+const STATUS_MESSAGES: Readonly<Record<number, string>> = {
+  403: "Optimization is turned off for this site, so no run can be started.",
+  409: "This draft changed since you opened it. Refresh to see the current version, then try again.",
+  422: "That command was refused: check the values and try again.",
+  429: "This site is at its run limit. Try again shortly.",
+  503: "The scenario could not be read just now. Try again shortly.",
+};
+
 function commandMessage(error: unknown): string {
+  const code = getErrorCode(error);
+  if (code && code in CODE_MESSAGES) {
+    return CODE_MESSAGES[code];
+  }
   const status = getErrorStatus(error);
-  if (status === 409) {
-    return "This draft changed since you opened it. Refresh to see the current version, then try again.";
-  }
-  if (status === 422) {
-    return "That revision was refused: check the values and try again.";
-  }
-  if (status === 429) {
-    return "This site is at its run limit. Try again shortly.";
-  }
-  if (status === 503) {
-    return "The scenario could not be read just now. Try again shortly.";
+  if (status !== undefined && status in STATUS_MESSAGES) {
+    return STATUS_MESSAGES[status];
   }
   return "That command did not complete. Try again.";
 }
@@ -61,7 +92,6 @@ export function DraftCard({
   const rejection = useRejectProposal(proposalId);
   const run = useStartScheduleRun();
   const staleDescriptionId = useId();
-  const rejectedDescriptionId = `${staleDescriptionId}-rejected`;
   const runDescriptionId = `${staleDescriptionId}-run`;
   const [constraints, setConstraints] = useState<ProposalConstraintInput[]>([]);
   const [selected, setSelected] = useState("0");
@@ -128,7 +158,26 @@ export function DraftCard({
     rejected ? "A rejected proposal cannot be run." : null,
     mutationPending ? "Wait for the current proposal command to finish." : null,
   ].filter(Boolean).join(" ");
-  const commandError = revision.error ?? rejection.error ?? run.error;
+  // Most recent failure wins, not a fixed order. A fixed chain meant a revise
+  // that failed once — and whose error TanStack retains until that same
+  // mutation is re-fired — masked every later run failure, so the site-limit
+  // message could never be seen after any failed revise.
+  // The acknowledgement is only true of the version the run was started from.
+  // `run.data` alone survives a successful revise — TanStack clears it only
+  // when the run mutation itself is re-fired — so the live region kept
+  // announcing a run accepted for version 1 beside a draft now at version 2.
+  // `run.variables` carries the body that produced `run.data`, so the two
+  // cannot drift apart the way a separately-tracked ref could.
+  const acknowledged =
+    run.data &&
+    run.variables?.expected_resource_version === proposal.resource_version
+      ? run.data
+      : null;
+  const commandError = [revision, rejection, run]
+    .filter((mutation) => mutation.error)
+    .sort((a, b) => (b.submittedAt ?? 0) - (a.submittedAt ?? 0))
+    .map((mutation) => mutation.error)
+    .at(0) ?? null;
   const updateNumber = (key: NumericKey | "end_minute", raw: string) => {
     const value = raw === "" ? null : Number(raw);
     setConstraints((existing) => existing.map((constraint, index) =>
@@ -157,7 +206,7 @@ export function DraftCard({
         {rejected ? (
           <div aria-label="Draft is rejected" className="rounded-lg border p-3" role="status">
             <p className="font-medium">This proposal was rejected.</p>
-            <p className="text-sm text-muted-foreground" id={rejectedDescriptionId}>
+            <p className="text-sm text-muted-foreground">
               A rejected draft is final. Describe the change again to create a new one.
             </p>
           </div>
@@ -241,15 +290,15 @@ export function DraftCard({
             variant="destructive"
           />
         ) : null}
-        {run.data ? (
+        {acknowledged ? (
           <div
             aria-label="Optimization queued"
             aria-live="polite"
             className="rounded-lg border p-3 text-sm"
             role="status"
           >
-            Run <Identifier>{run.data.schedule_run_id}</Identifier> was accepted with status{" "}
-            <span className="font-medium">{run.data.status}</span>.
+            Run <Identifier>{acknowledged.schedule_run_id}</Identifier> was accepted with status{" "}
+            <span className="font-medium">{acknowledged.status}</span>.
           </div>
         ) : null}
         <div className="space-y-2">
