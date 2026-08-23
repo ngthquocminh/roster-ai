@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-23
+last_updated: 2026-08-24
 
 # NOTE (2026-08-21): Story 3-6 created and moved to ready-for-dev. It is EPIC 3'S FIRST
 # FULL-STACK STORY and the first planner-visible slice since 3.1 — it ships the Run optimization
@@ -1522,7 +1522,7 @@ development_status:
   3-5-persist-literal-run-state-and-replay-progress: done
   3-6-start-explicit-bounded-optimization: done
   3-7-monitor-cancel-and-reopen-runs: done
-  3-8-compare-candidate-and-baseline-results: backlog
+  3-8-compare-candidate-and-baseline-results: ready-for-dev
   3-9-continue-deterministic-work-during-model-outage: backlog
   3-10-prove-repair-correctness: backlog
   3-11-prove-recovery-and-idempotency: backlog
