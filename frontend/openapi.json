@@ -3406,6 +3406,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100000,
               "minimum": 0,
               "default": 0,
               "title": "Cursor"
@@ -3435,6 +3436,26 @@
               }
             }
           },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
           "404": {
             "content": {
               "application/json": {
@@ -3445,15 +3466,25 @@
             },
             "description": "Not Found"
           },
-          "422": {
-            "description": "Validation Error",
+          "409": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
                 }
               }
-            }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
           }
         }
       }
@@ -6456,6 +6487,11 @@
       },
       "ScheduleRunPageOut": {
         "properties": {
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/ScheduleRunSummaryOut"
@@ -6473,12 +6509,23 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "matching_count": {
+            "type": "integer",
+            "title": "Matching Count"
           }
         },
         "type": "object",
         "required": [
+          "scenario_id",
           "items",
-          "next_cursor"
+          "next_cursor",
+          "total_count",
+          "matching_count"
         ],
         "title": "ScheduleRunPageOut"
       },
@@ -6543,6 +6590,11 @@
             "format": "date-time",
             "title": "Created At"
           },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
           "finished_at": {
             "anyOf": [
               {
@@ -6588,6 +6640,7 @@
           "reason",
           "resource_version",
           "created_at",
+          "updated_at",
           "finished_at",
           "scenario_version_id",
           "proposal_id",

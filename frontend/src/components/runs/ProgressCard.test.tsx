@@ -13,6 +13,7 @@ function run(overrides: Partial<ScheduleRunSummary> = {}): ScheduleRunSummary {
     reason: null,
     resource_version: 1,
     created_at: "2026-08-22T10:00:00Z",
+    updated_at: "2026-08-22T10:03:00Z",
     finished_at: null,
     scenario_version_id: "22222222-2222-2222-2222-222222222222",
     proposal_id: "33333333-3333-3333-3333-333333333333",

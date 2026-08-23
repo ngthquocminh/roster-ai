@@ -46,7 +46,11 @@ from application.capabilities.scheduling_optimize import (
 )
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.schedule_version import RUN_EVENT_TYPES
-from application.ports.schedule_run import ScheduleRunRepository, ScheduleRunViewV1
+from application.ports.schedule_run import (
+    ScheduleRunRepository,
+    ScheduleRunSummaryV1,
+    ScheduleRunViewV1,
+)
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.contracts.stream_cursor import StreamCursorV1, parse_stream_cursor
@@ -141,13 +145,14 @@ def _view_out(value: ScheduleRunViewV1) -> ScheduleRunOut:
     )
 
 
-def _summary_out(value) -> ScheduleRunSummaryOut:
+def _summary_out(value: ScheduleRunSummaryV1) -> ScheduleRunSummaryOut:
     return ScheduleRunSummaryOut(
         schedule_run_id=value.schedule_run_id,
         status=value.status,
         reason=value.reason,
         resource_version=value.resource_version,
         created_at=value.created_at,
+        updated_at=value.updated_at,
         finished_at=value.finished_at,
         scenario_version_id=value.scenario_version_id,
         proposal_id=value.proposal_id,
@@ -416,24 +421,31 @@ def start_schedule_run(
 #: 200) rather than inventing a new convention for this story's one list route.
 _DEFAULT_RUN_PAGE_LIMIT = 50
 _MAX_RUN_PAGE_LIMIT = 200
+#: `cursor` is a raw SQL OFFSET and no index covers the scan, so an unbounded
+#: value lets one request make Postgres walk and discard arbitrarily many
+#: joined rows. Far beyond any real site's run count, but finite.
+_MAX_RUN_PAGE_CURSOR = 100_000
 
 
 @router.get(
     "",
     response_model=ScheduleRunPageOut,
-    responses={404: {"model": ProblemDetailsV1}},
+    responses=_PROBLEMS,
 )
 def list_schedule_runs(
     scenario_id: UUID,
-    cursor: int = Query(default=0, ge=0),
+    cursor: int = Query(default=0, ge=0, le=_MAX_RUN_PAGE_CURSOR),
     limit: int = Query(default=_DEFAULT_RUN_PAGE_LIMIT, ge=1, le=_MAX_RUN_PAGE_LIMIT),
     connection: Connection = Depends(get_site_context),
     session: ResolvedSession = Depends(get_session),
     scenario_catalogue: ScenarioCatalogueReader = Depends(get_catalogue_reader),
     run_repository: ScheduleRunRepository = Depends(get_schedule_run_repository),
 ):
-    # Existence/site-visibility check mirrors `get_projection`: a scenario this
-    # site cannot see must read as 404, not as an empty (and misleading) page.
+    # A scenario this site cannot see must read as 404, not as an empty (and
+    # misleading) page. `get_projection` enforces the same rule but with a bare
+    # `HTTPException(404)` through the projection reader; this route uses the
+    # catalogue reader and an RFC-7807 body so the client can branch on
+    # `scenario_not_found` rather than on a bare status.
     context = scenario_catalogue.get_scenario_context(connection, scenario_id)
     if context is None:
         return _scenario_not_found()
@@ -445,8 +457,11 @@ def list_schedule_runs(
         limit=limit,
     )
     return ScheduleRunPageOut(
+        scenario_id=scenario_id,
         items=[_summary_out(item) for item in page.items],
         next_cursor=page.next_cursor,
+        total_count=page.total_count,
+        matching_count=page.matching_count,
     )
 
 

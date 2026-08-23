@@ -1,5 +1,8 @@
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 
+import { getProposal } from "@/api/proposals";
 import type { ScheduleRunSummary } from "@/api/scheduleRuns";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { IdentifierCopyButton } from "@/components/primitives/IdentifierCopyButton";
@@ -10,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useCancelScheduleRun } from "@/hooks/useCancelScheduleRun";
-import { useProposal } from "@/hooks/useProposal";
+import { proposalKey } from "@/hooks/useProposal";
 import { useStartScheduleRun } from "@/hooks/useStartScheduleRun";
 import { formatTimestamp } from "@/lib/formatTimestamp";
 import { getErrorCode, getErrorStatus } from "@/lib/errors";
@@ -63,7 +66,7 @@ const RUN_CODE_MESSAGES: Readonly<Record<string, string>> = {
 
 function commandMessage(error: unknown): string {
   const code = getErrorCode(error);
-  if (code && code in RUN_CODE_MESSAGES) return RUN_CODE_MESSAGES[code];
+  if (code && Object.hasOwn(RUN_CODE_MESSAGES, code)) return RUN_CODE_MESSAGES[code];
   const status = getErrorStatus(error);
   if (status === 429) return "This site is at its run limit. Try again shortly.";
   return "That command did not complete. Try again.";
@@ -82,6 +85,11 @@ function CancelButton({ run }: Readonly<{ run: ScheduleRunSummary }>) {
       >
         Cancel
       </Button>
+      {cancellation.isSuccess ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          Cancellation requested.
+        </p>
+      ) : null}
       {cancellation.isError ? (
         <InlineAlert description={commandMessage(cancellation.error)} title="Cancel not applied" variant="destructive" />
       ) : null}
@@ -96,20 +104,38 @@ function RetryButton({ run }: Readonly<{ run: ScheduleRunSummary }>) {
   // resource version (not this run's frozen historical one): the proposal may
   // have been revised since this run was accepted, and retrying against a
   // stale version would only earn an immediate `stale_resource_version`.
-  const proposal = useProposal(run.proposal_id);
+  //
+  // That read happens ON CLICK, not on mount. As a `useProposal` hook it fired
+  // once per retryable row -- up to a full page of parallel proposal reads on
+  // first paint -- and gating `disabled` on its result was the speculative
+  // disable the guardrails argue against: one transient failure left Retry
+  // permanently inert with no way to force the attempt. `fetchQuery` still
+  // populates the same `["proposal", id]` cache entry the hook would have.
+  const queryClient = useQueryClient();
   const start = useStartScheduleRun();
-  const disabled = !proposal.data || start.isPending;
+  const [readFailed, setReadFailed] = useState(false);
+  const [reading, setReading] = useState(false);
   return (
     <div className="flex flex-col items-start gap-1">
       <Button
         className="min-h-11"
-        disabled={disabled}
+        disabled={reading || start.isPending}
         onClick={() => {
-          if (!proposal.data) return;
-          start.mutate({
-            proposal_id: run.proposal_id,
-            expected_resource_version: proposal.data.resource_version,
-          });
+          setReadFailed(false);
+          setReading(true);
+          void queryClient
+            .fetchQuery({
+              queryKey: proposalKey(run.proposal_id),
+              queryFn: () => getProposal(run.proposal_id),
+            })
+            .then((proposal) => {
+              start.mutate({
+                proposal_id: run.proposal_id,
+                expected_resource_version: proposal.resource_version,
+              });
+            })
+            .catch(() => setReadFailed(true))
+            .finally(() => setReading(false));
         }}
         type="button"
         variant="secondary"
@@ -117,15 +143,15 @@ function RetryButton({ run }: Readonly<{ run: ScheduleRunSummary }>) {
         Retry
       </Button>
       {start.isSuccess ? (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground" role="status">
           Run <span className="font-mono">{start.data.schedule_run_id}</span> queued.
         </p>
       ) : null}
       {start.isError ? (
         <InlineAlert description={commandMessage(start.error)} title="Retry not applied" variant="destructive" />
       ) : null}
-      {proposal.isError ? (
-        <InlineAlert description="The proposal behind this run could not be read." title="Retry unavailable" variant="destructive" />
+      {readFailed ? (
+        <InlineAlert description="The proposal behind this run could not be read. Try again." title="Retry not applied" variant="destructive" />
       ) : null}
     </div>
   );
@@ -168,6 +194,7 @@ function StatusCell({ run }: Readonly<{ run: ScheduleRunSummary }>) {
 }
 
 export function RunsTable({
+  emptyExplanation = "No runs yet for this scenario.",
   error,
   isLoading,
   onRetry,
@@ -179,6 +206,8 @@ export function RunsTable({
   error: Error | null;
   scenarioId: string;
   onRetry?: () => void;
+  /** Page-aware copy: "no runs yet" is the wrong sentence on page three. */
+  emptyExplanation?: string;
 }>) {
   if (isLoading) {
     return (
@@ -206,7 +235,7 @@ export function RunsTable({
     );
   }
   if (runs.length === 0) {
-    return <EmptyState explanation="No runs yet for this scenario." />;
+    return <EmptyState explanation={emptyExplanation} />;
   }
   return (
     <div aria-label="Runs" className="overflow-x-auto rounded-md border" role="region" tabIndex={0}>
@@ -230,8 +259,12 @@ export function RunsTable({
               <TableCell><IdentifierCopyButton identifierType="Run ID" value={run.schedule_run_id} /></TableCell>
               <TableCell><StatusCell run={run} /></TableCell>
               <TableCell>{formatTimestamp(run.created_at)}</TableCell>
-              <TableCell>{run.finished_at ? formatTimestamp(run.finished_at) : "—"}</TableCell>
-              <TableCell className="font-mono text-xs">{run.scenario_version_id}</TableCell>
+              {/* AC1's "updated time": the newest event on the run's stream,
+                  falling back server-side to created_at. Deliberately NOT
+                  finished_at, which is null for every non-terminal run --
+                  exactly the rows a planner opens this table to monitor. */}
+              <TableCell>{formatTimestamp(run.updated_at)}</TableCell>
+              <TableCell><IdentifierCopyButton identifierType="Scenario version" value={run.scenario_version_id} /></TableCell>
               <TableCell>{run.proposal_version}</TableCell>
               {/* Trap 4: Story 3.1 Decision 7 -- baseline stays None today.
                   Renders as "—", never "" or 0 (those would suggest a value

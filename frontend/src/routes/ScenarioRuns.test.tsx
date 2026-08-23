@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,7 +45,7 @@ describe("ScenarioRuns", () => {
   it("passes the fetched page's items through to RunsTable", () => {
     const items = [{ schedule_run_id: "run-1" }];
     mockUseScheduleRuns.mockReturnValue({
-      data: { items, next_cursor: null }, isPending: false, isError: false, error: null, refetch,
+      data: { items, next_cursor: null, total_count: 1, matching_count: 1 }, isPending: false, isError: false, error: null, refetch,
     } as never);
     renderRoute();
     const props = JSON.parse(screen.getByTestId("runs-table").dataset.props ?? "{}");
@@ -63,18 +63,29 @@ describe("ScenarioRuns", () => {
     expect(props.error).toEqual({ status: 500 });
   });
 
-  it("does not show pagination controls on a single, first page", () => {
+  it("renders the shared pager with every control disabled on a single, first page", () => {
     mockUseScheduleRuns.mockReturnValue({
-      data: { items: [], next_cursor: null }, isPending: false, isError: false, error: null, refetch,
+      data: { items: [], next_cursor: null, total_count: 0, matching_count: 0 }, isPending: false, isError: false, error: null, refetch,
     } as never);
     renderRoute();
-    expect(screen.queryByRole("group", { name: "Run pages" })).not.toBeInTheDocument();
+    const pager = screen.getByRole("group", { name: "Table pages" });
+    for (const name of ["First", "Previous", "Next", "Last"]) {
+      expect(within(pager).getByRole("button", { name })).toBeDisabled();
+    }
   });
 
-  it("advances the query cursor via Next and back to 0 via First", async () => {
+  it("hides the pager entirely while the first read is still in flight", () => {
+    mockUseScheduleRuns.mockReturnValue({
+      data: undefined, isPending: true, isError: false, error: null, refetch,
+    } as never);
+    renderRoute();
+    expect(screen.queryByRole("group", { name: "Table pages" })).not.toBeInTheDocument();
+  });
+
+  it("advances the query cursor via Next, and steps back via Previous", async () => {
     const user = userEvent.setup();
     mockUseScheduleRuns.mockReturnValue({
-      data: { items: [], next_cursor: 50 }, isPending: false, isError: false, error: null, refetch,
+      data: { items: [], next_cursor: 50, total_count: 120, matching_count: 120 }, isPending: false, isError: false, error: null, refetch,
     } as never);
     renderRoute();
 
@@ -84,7 +95,38 @@ describe("ScenarioRuns", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(mockUseScheduleRuns).toHaveBeenLastCalledWith(SCENARIO_ID, 50);
 
-    await user.click(screen.getByRole("button", { name: "First" }));
+    // Previous is what the bespoke First/Next pair could not offer: without
+    // total_count in the envelope the pager had no way to compute it.
+    await user.click(screen.getByRole("button", { name: "Previous" }));
     expect(mockUseScheduleRuns).toHaveBeenLastCalledWith(SCENARIO_ID, 0);
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Last" }));
+    expect(mockUseScheduleRuns).toHaveBeenLastCalledWith(SCENARIO_ID, 100);
+  });
+
+  it("offers an explicit Refresh control on the success path that re-reads the list", async () => {
+    // Nothing polls and no worker loop moves a run on its own yet, so the
+    // planner needs a way to re-read the list that is not a page reload.
+    // Before this existed, `refetch` was reachable only from the error branch.
+    mockUseScheduleRuns.mockReturnValue({
+      data: { items: [{ schedule_run_id: "run-1" }], next_cursor: null, total_count: 1, matching_count: 1 },
+      isPending: false, isError: false, isFetching: false, error: null, refetch,
+    } as never);
+    renderRoute();
+
+    await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Refresh while a read is already in flight", () => {
+    mockUseScheduleRuns.mockReturnValue({
+      data: { items: [], next_cursor: null, total_count: 0, matching_count: 0 },
+      isPending: false, isError: false, isFetching: true, error: null, refetch,
+    } as never);
+    renderRoute();
+
+    expect(screen.getByRole("button", { name: "Refreshing…" })).toBeDisabled();
   });
 });

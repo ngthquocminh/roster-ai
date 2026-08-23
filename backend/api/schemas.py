@@ -301,6 +301,10 @@ class ScheduleRunSummaryOut(BaseModel):
     reason: str | None
     resource_version: int
     created_at: datetime
+    # AC1's "updated time": newest `persisted_event.occurred_at` on the run's
+    # stream, falling back to `created_at`. Not `finished_at`, which is NULL
+    # for exactly the non-terminal runs a planner monitors.
+    updated_at: datetime
     finished_at: datetime | None
     scenario_version_id: UUID
     proposal_id: UUID
@@ -311,8 +315,16 @@ class ScheduleRunSummaryOut(BaseModel):
 
 
 class ScheduleRunPageOut(BaseModel):
+    #: Mirrors the subset of the API's established page envelope
+    #: (`TaskPageOut` and siblings) that this route can honour. `group` is a
+    #: scenario-projection concept and does not apply; `schema_version` is a
+    #: versioned-contract commitment Story 3.7 does not own and is deliberately
+    #: not claimed here.
+    scenario_id: UUID
     items: list[ScheduleRunSummaryOut]
     next_cursor: int | None
+    total_count: int
+    matching_count: int
 
 
 class ProposalOut(BaseModel):

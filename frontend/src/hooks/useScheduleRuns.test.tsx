@@ -32,7 +32,13 @@ describe("useScheduleRuns", () => {
   });
 
   it("fetches the page for the given scenario and cursor", async () => {
-    const page = { items: [], next_cursor: null };
+    const page = {
+      scenario_id: "scenario-1",
+      items: [],
+      next_cursor: null,
+      total_count: 0,
+      matching_count: 0,
+    };
     mockList.mockResolvedValueOnce(page);
 
     const { result } = renderHook(() => useScheduleRuns("scenario-1", 50), { wrapper });
@@ -40,5 +46,33 @@ describe("useScheduleRuns", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mockList).toHaveBeenCalledWith({ scenario_id: "scenario-1", cursor: 50 });
     expect(result.current.data).toEqual(page);
+  });
+
+  it("keeps the previous page rendered while the next one loads", async () => {
+    // Without `keepPreviousData` a page turn changes the query key, `data`
+    // drops to undefined, and the table is torn down to skeletons mid-fetch.
+    const first = {
+      scenario_id: "scenario-1",
+      items: [],
+      next_cursor: 50,
+      total_count: 120,
+      matching_count: 120,
+    };
+    mockList.mockResolvedValueOnce(first);
+    const { result, rerender } = renderHook(
+      ({ cursor }: { cursor: number }) => useScheduleRuns("scenario-1", cursor),
+      { wrapper, initialProps: { cursor: 0 } },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    let resolveSecond: (value: typeof first) => void = () => {};
+    mockList.mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+    rerender({ cursor: 50 });
+
+    // Mid-flight: the previous page is still on screen, not undefined.
+    expect(result.current.data).toEqual(first);
+    expect(result.current.isPending).toBe(false);
+    resolveSecond({ ...first, next_cursor: null });
+    await waitFor(() => expect(result.current.data?.next_cursor).toBeNull());
   });
 });

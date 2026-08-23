@@ -224,20 +224,79 @@ def test_live_list_runs_orders_newest_first_paginates_and_scopes_by_scenario(
         )
         _seed_run(connection, site_id=site_id, scenario_id=other_scenario_id, actor_id=actor_id, created_at=now)
 
+        # A second site, with its own scenario and run. `schedule_run.site_id`
+        # is this route's tenancy boundary and nothing else enforces it here --
+        # the scenario filter alone would not catch a dropped site predicate,
+        # because a foreign site's run lives under a scenario id this site
+        # never asks for. Asking for it explicitly is what makes the boundary
+        # falsifiable.
+        other_site_id = uuid4()
+        foreign_scenario_id = uuid4()
+        connection.execute(text("INSERT INTO site (id,organization_id,name) VALUES (:id,:org,'Other Site')"), {"id": other_site_id, "org": organization_id})
+        connection.execute(text("INSERT INTO scenario (id,site_id,fixture_id,name) VALUES (:id,:site,'fixture-foreign','Foreign')"), {"id": foreign_scenario_id, "site": other_site_id})
+        foreign_run, _, _ = _seed_run(
+            connection, site_id=other_site_id, scenario_id=foreign_scenario_id, actor_id=actor_id, created_at=now
+        )
+
+        # AC1's "updated time" reads the newest event on the run's stream.
+        # Only the newer run gets one, so this single insert exercises both
+        # branches of the COALESCE: an evented run reports the event time, an
+        # eventless run falls back to `created_at`.
+        changed_at = now + timedelta(minutes=2)
+        connection.execute(
+            text(
+                "INSERT INTO persisted_event "
+                "(id,site_id,stream_id,sequence,event_type,occurred_at,resource_version,"
+                "request_id,schedule_run_id,actor_id,payload) "
+                "VALUES (:id,:site,:run,1,'run.running.v1',:occurred_at,2,"
+                ":request,:run,:actor,'{}'::jsonb)"
+            ),
+            {
+                "id": uuid4(), "site": site_id, "run": newer_run,
+                "occurred_at": changed_at, "request": uuid4(), "actor": actor_id,
+            },
+        )
+
         first_page = repository.list_runs(
             connection, scenario_id=scenario_id, site_id=site_id, cursor=0, limit=1
         )
         assert [item.schedule_run_id for item in first_page.items] == [newer_run]
         assert first_page.next_cursor == 1
+        # Counts describe the whole scenario, not this page, and must exclude
+        # the run seeded under the other scenario.
+        assert first_page.total_count == 2
+        assert first_page.matching_count == 2
         assert first_page.items[0].proposal_id == newer_proposal
         assert first_page.items[0].scenario_version_id == newer_version
         assert first_page.items[0].proposal_version == 3
         # Story 3.1 Decision 7: reads through as None, never "" or 0 (Trap 4).
         assert first_page.items[0].baseline_schedule_version is None
+        # The evented run reports when it last changed, not when it started.
+        assert first_page.items[0].updated_at == changed_at
+        assert first_page.items[0].updated_at > first_page.items[0].created_at
 
         second_page = repository.list_runs(
             connection, scenario_id=scenario_id, site_id=site_id, cursor=1, limit=1
         )
         assert [item.schedule_run_id for item in second_page.items] == [older_run]
         assert second_page.next_cursor is None
-        assert older_proposal  # sanity: the older row's identity was captured, not discarded
+        assert second_page.items[0].proposal_id == older_proposal
+        assert second_page.items[0].scenario_version_id == older_version
+
+        # Tenancy: this site cannot read the other site's run even when it
+        # names that run's own scenario. Drop the `site_id` predicate from
+        # `list_runs` and this page comes back with one item.
+        foreign = repository.list_runs(
+            connection, scenario_id=foreign_scenario_id, site_id=site_id, cursor=0, limit=50
+        )
+        assert foreign.items == ()
+        assert foreign.total_count == 0
+        # ...and the other site reads its own run exactly once, proving the
+        # empty page above is scoping and not a broken seed.
+        owned = repository.list_runs(
+            connection, scenario_id=foreign_scenario_id, site_id=other_site_id, cursor=0, limit=50
+        )
+        assert [item.schedule_run_id for item in owned.items] == [foreign_run]
+        # The eventless run falls back to `created_at`, so the field is never
+        # NULL -- a planner always reads a real timestamp.
+        assert second_page.items[0].updated_at == second_page.items[0].created_at

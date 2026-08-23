@@ -49,4 +49,24 @@ describe("useStartScheduleRun", () => {
     await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(3));
     expect(mockStart.mock.calls[2][1]).not.toBe(failedKey);
   });
+
+  it("invalidates the Runs list on success so a started run appears in it", async () => {
+    // Story 3.7's Retry button reported "Run <id> queued" while the table it
+    // was clicked from kept showing the old page, and because the key HAS
+    // settled by then, clicking again started a second real run.
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    mockStart.mockResolvedValueOnce(queued);
+    const { result } = renderHook(() => useStartScheduleRun(), { wrapper });
+
+    act(() => result.current.mutate(body));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["scheduleRuns"] });
+  });
 });

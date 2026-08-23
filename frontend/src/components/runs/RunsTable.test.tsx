@@ -1,16 +1,18 @@
-import { render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as cancelHooks from "@/hooks/useCancelScheduleRun";
-import * as proposalHooks from "@/hooks/useProposal";
+import * as proposalsApi from "@/api/proposals";
 import * as startHooks from "@/hooks/useStartScheduleRun";
 import type { ScheduleRunSummary } from "@/api/scheduleRuns";
+import { formatTimestamp } from "@/lib/formatTimestamp";
 import { RunsTable } from "./RunsTable";
 
 vi.mock("@/hooks/useCancelScheduleRun");
-vi.mock("@/hooks/useProposal");
+vi.mock("@/api/proposals");
 vi.mock("@/hooks/useStartScheduleRun");
 
 const mutateCancel = vi.fn();
@@ -24,6 +26,7 @@ function run(overrides: Partial<ScheduleRunSummary> = {}): ScheduleRunSummary {
     reason: null,
     resource_version: 2,
     created_at: "2026-08-22T10:00:00Z",
+    updated_at: "2026-08-22T10:05:00Z",
     finished_at: "2026-08-22T10:05:00Z",
     scenario_version_id: "22222222-2222-2222-2222-222222222222",
     proposal_id: "33333333-3333-3333-3333-333333333333",
@@ -34,10 +37,18 @@ function run(overrides: Partial<ScheduleRunSummary> = {}): ScheduleRunSummary {
 }
 
 function renderTable(runs: ScheduleRunSummary[], props: Partial<React.ComponentProps<typeof RunsTable>> = {}) {
+  // Retry reads the proposal on click via `queryClient.fetchQuery`, so the
+  // table needs a real client. `retry: false` keeps a rejected read from
+  // being re-attempted behind the assertion.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <MemoryRouter>
-      <RunsTable error={null} isLoading={false} runs={runs} scenarioId={SCENARIO_ID} {...props} />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <RunsTable error={null} isLoading={false} runs={runs} scenarioId={SCENARIO_ID} {...props} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -49,10 +60,8 @@ beforeEach(() => {
     isError: false,
     error: null,
   } as never);
-  vi.mocked(proposalHooks.useProposal).mockReturnValue({
-    data: { resource_version: 9 },
-    isPending: false,
-    isError: false,
+  vi.mocked(proposalsApi.getProposal).mockResolvedValue({
+    resource_version: 9,
   } as never);
   vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
     mutate: mutateStart,
@@ -158,16 +167,53 @@ describe("RunsTable", () => {
     const user = userEvent.setup();
     renderTable([run({ status: "solver_completed", proposal_id: "proposal-9" })]);
     await user.click(screen.getByRole("button", { name: "Retry" }));
-    expect(proposalHooks.useProposal).toHaveBeenCalledWith("proposal-9");
-    expect(mutateStart).toHaveBeenCalledWith({
-      proposal_id: "proposal-9",
-      expected_resource_version: 9, // from the mocked useProposal, not run.resource_version (2)
-    });
+    await waitFor(() =>
+      expect(mutateStart).toHaveBeenCalledWith({
+        proposal_id: "proposal-9",
+        expected_resource_version: 9, // the live proposal read, not run.resource_version (2)
+      }),
+    );
+    expect(proposalsApi.getProposal).toHaveBeenCalledWith("proposal-9");
   });
 
-  it("does not create a new retry route -- reuses the existing start-run mutation hook", () => {
+  it("reads the proposal only when Retry is pressed, never once per row on mount", () => {
+    // One `useProposal` per retryable row fired a full page of proposal reads
+    // on first paint purely to decide whether to enable a button.
+    renderTable([
+      run({ schedule_run_id: "run-a", proposal_id: "proposal-a" }),
+      run({ schedule_run_id: "run-b", proposal_id: "proposal-b" }),
+      run({ schedule_run_id: "run-c", proposal_id: "proposal-c" }),
+    ]);
+    expect(proposalsApi.getProposal).not.toHaveBeenCalled();
+    for (const button of screen.getAllByRole("button", { name: "Retry" })) {
+      expect(button).toBeEnabled();
+    }
+  });
+
+  it("keeps Retry pressable after a failed proposal read, and reports the failure", async () => {
+    // The old gate (`disabled = !proposal.data`) left Retry permanently inert
+    // after one transient read failure -- the speculative disable the
+    // guardrails argue against.
+    const user = userEvent.setup();
+    vi.mocked(proposalsApi.getProposal).mockRejectedValueOnce({ status: 503 });
+    renderTable([run({ status: "solver_completed", proposal_id: "proposal-9" })]);
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText(/could not be read/)).toBeInTheDocument();
+    expect(mutateStart).not.toHaveBeenCalled();
+
+    const retry = screen.getByRole("button", { name: "Retry" });
+    expect(retry).toBeEnabled();
+    await user.click(retry);
+    await waitFor(() => expect(mutateStart).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not create a new retry route -- reuses the existing start-run mutation hook", async () => {
+    const user = userEvent.setup();
     renderTable([run({ status: "solver_completed" })]);
     expect(startHooks.useStartScheduleRun).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(mutateStart).toHaveBeenCalled());
   });
 
   it("shows View progress for non-terminal runs and View results for terminal ones", () => {
@@ -196,4 +242,24 @@ describe("RunsTable", () => {
     renderTable([run()]);
     expect(screen.getByRole("button", { name: /Copy Run ID/ })).toBeInTheDocument();
   });
+});
+
+it("shows an updated time for a non-terminal run, which has no finish time", () => {
+  // AC1 asks for an "updated time". The column used to render `finished_at`,
+  // which is null for exactly the runs a planner opens this table to monitor,
+  // so every in-flight row showed a permanent em dash.
+  renderTable([
+    run({
+      status: "solver_running",
+      finished_at: null,
+      updated_at: "2026-08-22T11:30:00Z",
+      created_at: "2026-08-22T10:00:00Z",
+    }),
+  ]);
+
+  // The Baseline column legitimately renders "—" (Trap 4), so assert on the
+  // Updated cell itself rather than on the absence of an em dash anywhere.
+  expect(
+    screen.getByRole("cell", { name: formatTimestamp("2026-08-22T11:30:00Z") }),
+  ).toBeInTheDocument();
 });

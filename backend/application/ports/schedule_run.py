@@ -63,6 +63,13 @@ class ScheduleRunSummaryV1:
     reason: str | None
     resource_version: int
     created_at: datetime
+    #: When this run last changed -- the newest `persisted_event.occurred_at`
+    #: on its stream, falling back to `created_at` for a run whose stream is
+    #: still empty. AC1 asks for an "updated time"; `finished_at` cannot serve
+    #: because it is NULL for every non-terminal run, which is exactly the set
+    #: a planner monitors. `schedule_run` carries no `updated_at` column, so
+    #: the event stream is the only source.
+    updated_at: datetime
     finished_at: datetime | None
     scenario_version_id: UUID
     proposal_id: UUID
@@ -74,6 +81,14 @@ class ScheduleRunSummaryV1:
 class ScheduleRunPageV1:
     items: tuple[ScheduleRunSummaryV1, ...]
     next_cursor: int | None
+    #: Every run visible for the scenario, not just this page -- the shared
+    #: `PaginationControls` primitive needs it to offer Previous/Last and a
+    #: "showing X-Y of N" line. This route publishes no filters yet, so
+    #: `matching_count` equals `total_count`; it is carried anyway so the shape
+    #: matches the API's other paged reads (`TaskPageOut` and siblings) and a
+    #: future filter does not become a breaking response change.
+    total_count: int
+    matching_count: int
 
 
 class StaleLeaseError(ValueError):

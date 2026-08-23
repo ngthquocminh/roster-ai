@@ -4,7 +4,7 @@ baseline_commit: 6d5a5c9
 
 # Story 3.7: Monitor, Cancel, and Reopen Runs
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -447,6 +447,62 @@ against any computed or inferred state.
   - [x] Record the arrow-key-grid-navigation trim (Task 8) and any other conscious scope cut as a
         `deferred-work.md` entry, not a silent omission.
 
+### Review Findings
+
+Code review 2026-08-22 (`bmad-code-review`, three parallel layers: Blind Hunter, Edge Case Hunter,
+Acceptance Auditor). Verification run by the reviewer: frontend `vitest run` 480/480 pass across 72
+files, `tsc --noEmit` clean, backend `pytest -m "not postgres and not live"` 1086 passed / 1 skipped.
+The 92 postgres-marked tests were deselected, so
+`test_live_list_runs_orders_newest_first_paginates_and_scopes_by_scenario` was NOT re-verified by the
+reviewer — that claim rests on the dev run alone.
+
+- [x] [Review][Decision] **RESOLVED 2026-08-23 — implemented the join.** `list_runs` now carries a correlated `MAX(persisted_event.occurred_at)` scoped by `schedule_run_id` + `site_id` (covered by `ix_persisted_event_schedule_run_id`), `COALESCE`d to `created_at` so the field is never null; `updated_at` added to `ScheduleRunSummaryV1`/`ScheduleRunSummaryOut`, OpenAPI + TS regenerated, and the table renders it instead of `finished_at`. Note the spec named `persisted_event.created_at`, which does not exist — the real column is `occurred_at`. Proof: the live postgres test now seeds one event on the newer run only, exercising both `COALESCE` branches (evented run reports the event time and is strictly later than `created_at`; eventless run falls back to `created_at`); plus a new API test and a new `RunsTable` test for a non-terminal run. ORIGINAL FINDING: **AC1's "updated time" was unimplemented — the Updated column rendered `finished_at`** — For `solver_queued`/`solver_running`/`cancellation_requested` (exactly the runs a planner monitors) `finished_at` is NULL, so "Updated" is a permanent em dash. AC1 requires "accepted/updated time"; the Architecture guardrails require the query to join `persisted_event` (for timeline) and the Implementation notes name `updated_at` from the latest `persisted_event.created_at`. `list_runs` joins only `run_snapshot` and `proposal_version`. The story contradicts itself — Task 1's field list names `finished_at` — so this needs a call: implement the `persisted_event` join and add `updated_at`, or relabel the column "Finished" and record the AC1 narrowing. [backend/adapters/postgres/schedule_run.py:`list_runs`, frontend/src/components/runs/RunsTable.tsx]
+
+- [x] [Review][Decision] **RESOLVED 2026-08-23 — explicit Refresh control, polling/SSE deferred to Story 3.11.** Rationale: there is no production worker loop yet, so nothing moves a run on its own today; every state change is planner-initiated (start, cancel) and both now invalidate `["scheduleRuns"]` (the start-side invalidation was the separate patch, applied in the same pass). Polling would therefore solve a problem that does not exist yet, and would contradict the repo's own convention — `useConversationTimeline`'s `refetchInterval` is a labelled FALLBACK for a dead SSE stream, default `false`, not a primary mechanism. SSE was rejected on cost and shape: `useConversationStream` is 312 conversation-specific lines with no reusable seam, and `/{run_id}/events` is per-run, so a list of N non-terminal runs would need N concurrent streams. A Refresh button also stays inside AC3's "static text only" constraint. Added to `ScenarioRuns.tsx` with two tests (refetch on click; disabled while `isFetching`). Deferral recorded with Story 3.11 as owner. ORIGINAL FINDING: **"Monitor" had no live surface — no polling, no SSE, and no manual refresh on the success path** — `useScheduleRuns` sets `retry: false` and nothing else: no `refetchInterval`, no `staleTime`, and no subscription to Story 3.5's existing `GET /schedule-runs/{run_id}/events`. A `solver_running` row reads "In progress" until the browser is reloaded; Cancel stays offered on a run that already finished and Retry stays hidden on one that completed. `query.refetch()` is wired only into `RunsTable`'s `if (error)` branch, so there is no refresh affordance when the list loads successfully. No AC demands auto-refresh, but "Monitor" is the story's first verb. Options: polling interval (repo precedent: `useConversationTimeline.ts:7`), SSE via the 3.5 events route, or an explicit Refresh button. [frontend/src/hooks/useScheduleRuns.ts:9-14]
+
+- [x] [Review][Decision] **RESOLVED 2026-08-23 — application-level reading, now proved by test.** "Remains available" preserves a capability that already exists: the Run optimization control is Story 3.6's, lives in Chat, and this story's obligation is not to block the way back to it. No new control was added to the Runs tab — "remains" is not "introduce". The failure mode that WOULD break the clause is a Runs route early-returning over the workspace shell and taking the tab bar with it, so that is what is now tested: new `frontend/src/routes/ScenarioRunsWorkspace.test.tsx` mounts the REAL `ScenarioWorkspace`, `WorkspaceTabs` and `RunsTable` (only the two data reads are mocked) and asserts that on a list failure the Chat / Scenario Data / Runs links and the persistent scenario context all survive, plus the same on an empty list. This closes the clause's traceability gap, which was the actual defect — not a missing feature. ORIGINAL FINDING: **AC2's "manual deterministic Run optimization remains available when permitted" had zero traceability on this surface** — The Runs workspace exposes no Run optimization entry point in any state; the empty branch is a bare `EmptyState` with no `action`, though the primitive accepts one. Availability rests entirely on the Chat tab staying reachable through the parent shell — structurally true, but no task, comment, deferred-work entry, or test addresses this AC clause. Decide: add an explicit affordance on the Runs tab, or record "reachable via the Chat tab" as the accepted reading. [frontend/src/components/runs/RunsTable.tsx, frontend/src/components/primitives/EmptyState.tsx]
+
+- [x] [Review][Decision] **RESOLVED 2026-08-23 — added the honourable subset, kept the rest out.** `ScheduleRunPageOut` now carries `scenario_id`, `total_count` and `matching_count` alongside `items`/`next_cursor`. Deliberately NOT added: `schema_version`, which is a versioned-contract commitment Story 3.7 does not own, and `group`, which is a scenario-projection concept with no meaning here. The counts come from a COUNT sharing the page query's exact FROM and WHERE, so it can never disagree with what the pages yield; this route publishes no filters, so `matching_count` equals `total_count` and is carried anyway so a future filter is not a breaking response change. Payoff: `ScenarioRuns.tsx` now uses the shared `PaginationControls` primitive instead of a bespoke First/Next pair — Previous, Last and a "showing X–Y of N" line all work, which also resolves most of the pagination patch below. Proved by the live postgres test (counts exclude the run seeded under another scenario: 2, not 3) and rewritten route tests. ORIGINAL FINDING: **The page envelope diverged from every other paged response in the API** — `ScheduleRunPageOut` carries `items` + `next_cursor` only. `TaskPageOut` and its Worker/Demand/Assignment/Lock/Constraint siblings all carry `schema_version`, `scenario_id`, `scenario_version_id`, `site_id`, `next_cursor`, `total_count`, `matching_count`. This is the direct cause of the minimal First/Next pager — the Completion Notes already name the missing `total_count`/`matching_count` as why `PaginationControls` could not be used. Decide: align the envelope with the established list contract, or accept a fourth list shape. [backend/api/schemas.py:`ScheduleRunPageOut`]
+
+- [x] [Review][Patch] **APPLIED 2026-08-23.** Retry never invalidated `["scheduleRuns"]`, so the queued run was invisible and repeat clicks queued duplicate runs — `useStartScheduleRun.onSuccess` now invalidates the prefix, mirroring `useCancelScheduleRun`; covered by a new test asserting the invalidation [frontend/src/hooks/useStartScheduleRun.ts:15]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** A list error blanked an already-populated table, violating AC2's "without hiding saved data"; repo precedent is `ScenarioWorkspace`'s `isError && !query.data` [frontend/src/components/runs/RunsTable.tsx, frontend/src/routes/ScenarioRuns.tsx:22]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** Every non-terminal row rendered two identically-labelled "Copy Run ID" buttons and the accepted timestamp twice, violating AC1's "separately labelled" [frontend/src/components/runs/ProgressCard.tsx:19]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** `useCancelScheduleRun`'s `onError` neither invalidated the list nor refreshes the row, so a failed cancel leaves a stale status and a stale Cancel button [frontend/src/hooks/useCancelScheduleRun.ts:27]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** N+1 proposal fetches: `useProposal` runs on mount inside every retryable row (up to 50 per page) purely to enable the button, which also forces the speculative disable the guardrails argue against — move the read into the click handler to fix both [frontend/src/components/runs/RunsTable.tsx:`RetryButton`]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** Site scoping — the route's tenancy boundary — was never exercised against a second site; the persistence test seeds one `site_id` and the API test only asserts the kwarg was passed [backend/tests/test_schedule_run_persistence.py]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** No test rendered the real table against the real hooks: `ScenarioRuns.test.tsx` mocks `RunsTable` wholesale and `RunsTable.test.tsx` mocks all three hooks — which is why the Retry-refresh and duplicate-copy-button defects survived a green suite [frontend/src/routes/ScenarioRuns.test.tsx]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** Pagination UX: no `placeholderData: keepPreviousData` (the table blanks to skeletons and the focused Next button self-disables mid-fetch), no Previous control, cursor held in component state rather than the URL, and the empty-state copy says "No runs yet for this scenario" on any page [frontend/src/routes/ScenarioRuns.tsx]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** The new route declared `responses={404: ...}` while every sibling uses `_PROBLEMS`; 401 is undeclared even though `useScheduleRuns` routes session expiry through `useRedirectOnUnauthorized`, and `openapi.json` propagates the gap [backend/api/routers/schedule_runs.py:424]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** `cursor` had no upper bound (`ge=0`, no `le=`) while `limit` is capped at 200, so a large value feeds an unbounded SQL `OFFSET` scan [backend/api/routers/schedule_runs.py:417]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** Accuracy sweep — three false statements in load-bearing comments and one in the record: the `list_runs` comment cites an over-fetch-by-one idiom in `_apply_query` that does not exist (`_slice_window` slices an in-memory sequence); the Trap 6 comment claims `listScheduleRuns` omits an unset cursor from the query string when it forwards params verbatim (page one always sends `cursor=0`); the 404 comment claims parity with `get_projection`, which uses a bare `HTTPException(404)` via a different reader; and the Debug Log claims "5 new list-route tests" where 4 exist [backend/adapters/postgres/schedule_run.py, frontend/src/routes/ScenarioRuns.tsx:11, backend/api/routers/schedule_runs.py:203]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** Hygiene sweep — `_summary_out(value)` has no parameter annotation against the project's "type hints on all parameters" convention; `assert older_proposal` is unfalsifiable and `older_version` is bound and never used; `commandMessage` uses `code in RUN_CODE_MESSAGES` which matches `Object.prototype` keys and would pass a function to `InlineAlert`; `ProgressCard` wraps focusable controls in an `aria-live` region whose `role="status"` already implies it [backend/api/routers/schedule_runs.py:150, backend/tests/test_schedule_run_persistence.py:243, frontend/src/components/runs/RunsTable.tsx:`commandMessage`, frontend/src/components/runs/ProgressCard.tsx:16]
+- [x] [Review][Patch] **APPLIED 2026-08-23.** Small UX/consistency: Cancel gives no success feedback while Retry announces "Run &lt;id&gt; queued"; the scenario version renders as a bare uuid with no copy control beside a proposal column that got a citable ordinal; query keys are hand-written string literals in two files where the repo convention is an exported factory (`proposalKey`, `conversationsKey`) [frontend/src/components/runs/RunsTable.tsx:234, frontend/src/hooks/useScheduleRuns.ts:10, frontend/src/hooks/useCancelScheduleRun.ts:25]
+
+
+**Patch pass 2026-08-23 — what changed.** All 12 remaining patches applied. Backend: `_PROBLEMS` on
+the list route (401 now declared, which the client already depended on), `cursor` bounded at 100_000,
+`_summary_out` annotated, the fabricated `_apply_query` over-fetch citation replaced with what
+`_slice_window` actually does, the unfalsifiable `assert older_proposal` replaced with assertions on
+the identities the page reports, and a live-Postgres tenancy case that seeds a second site and asks
+this site for the foreign scenario (dropping the `site_id` predicate now fails a test). Frontend:
+error-with-data keeps the rows and labels them stale, mirroring `ScenarioWorkspace`; the duplicate
+`Copy Run ID` control is gone from `ProgressCard`; cancel re-reads the list on failure too; Retry
+reads the proposal on click via `fetchQuery` instead of one `useProposal` per row, which also removes
+the speculative disable; the cursor moved into the URL with `keepPreviousData` so paging happens in
+place; empty-state copy is page-aware; `scheduleRunsKey` is now the single exported cache-key factory;
+Cancel announces success; the scenario version got a copy control; and `Object.hasOwn` guards the
+problem-code lookup. New `ScenarioRunsWorkspace.test.tsx` wires the real shell, route, table and hooks
+against a mocked network only — it is what now catches the Retry-refresh and error-with-data defects
+that a fully green suite had missed.
+
+- [x] [Review][Defer] Offset pagination over a mutable newest-first list duplicates and skips runs [backend/adapters/postgres/schedule_run.py:`list_runs`] — deferred, pre-existing repo-wide convention
+- [x] [Review][Defer] No index supports the new route's primary read path [backend/adapters/postgres/schema.py:567] — deferred, pre-existing (blocked by the story's "No new migration" constraint)
+- [x] [Review][Defer] Every "View progress"/"View results" link lands on a placeholder [frontend/src/routes/ScenarioResults.tsx] — deferred, pre-existing (Story 3.8 owns the Results view)
+- [x] [Review][Defer] The `cancellation_requested` boolean is absent from the list summary, so the transient "flag set, status not yet moved" case is invisible [backend/api/schemas.py:`ScheduleRunSummaryOut`] — deferred, pre-existing
+- [x] [Review][Defer] Operational timestamps render with no timezone marker [frontend/src/lib/formatTimestamp.ts] — deferred, pre-existing
+
+**Dismissed as noise (4):** (1) "the UI removes the only control that could recover a `cancellation_requested` run" — verified false: `cancel_schedule_run.py:178` makes a second cancel on that status a no-op replay, so recovery needs the worker loop, already in the ledger; the dev's documented resolution stands. (2) "`next_cursor` is not bound to the `limit` that produced it" — that is standard offset semantics. (3) `STATUS_ACCENT` duplicate accents and raw palette tokens — colour is accent-only by explicit design and the text always carries meaning. (4) The inherited idempotency-key-holder body-binding defect — already recorded in the ledger by Story 3.6 and again by this story.
+
 ## Done checklist
 
 - [x] `RunsTable.tsx` component implemented and tested
@@ -466,10 +522,16 @@ against any computed or inferred state.
       for the Runs page (`deferred-work.md`, MVP scope) — the existing e2e suite covers
       Scenario Data only.
 - [x] Status text is distinct and literal (no percentage, ETA, confidence)
+- [~] "Approve as baseline" renders as ONE uniformly disabled control, not the guardrails' two
+      distinct sub-states ("stale baseline" vs. plain-disabled). Recorded in `deferred-work.md`
+      with Story 4.1 as owner. [Marker corrected at code review 2026-08-23: this trim was
+      previously covered by an unqualified [x] above.]
 - [x] Baseline version displays as "—" when None
 - [x] All five terminal states render with distinct text
 - [x] Rows are newest-first (proven at the adapter, via a live-Postgres test) and navigable
-- [x] Copy-to-clipboard for run ID works with separate button
+- [x] Copy-to-clipboard for run ID works with separate button — one per row, and only one:
+      `ProgressCard` no longer renders a second control with the same accessible name (code
+      review 2026-08-23). The scenario version got a copy control too.
 - [x] Model outage (Story 3.9) doesn't hide saved data — structurally true: this route makes
       no LLM/model call of any kind, so a model outage cannot affect it either way
 - [x] Test: pagination with multiple runs
@@ -517,9 +579,11 @@ Claude Sonnet 5
   `test_live_list_runs_orders_newest_first_paginates_and_scopes_by_scenario`), proving newest-first
   order, cursor pagination, cross-scenario scoping, and `baseline_schedule_version` reading through
   as `None` against a real, migrated PostgreSQL database.
-- Task 2 GREEN: 29 tests in `test_schedule_runs_api.py` pass (24 pre-existing + 5 new list-route
+- Task 2 GREEN: 28 tests in `test_schedule_runs_api.py` pass (24 pre-existing + **4** new list-route
   tests: page shape, pagination/cursor pass-through, `limit` upper-bound rejection (422), unknown/
-  cross-site scenario → 404 `scenario_not_found`).
+  cross-site scenario → 404 `scenario_not_found`). [Corrected at code review 2026-08-23: the original
+  entry claimed 5 new tests and a total of 29; only four `test_list_route_*` functions existed, and
+  the entry's own parenthetical listed four. Review then added more — see the Review Findings.]
 - Task 3 GREEN: `npm run codegen` regenerated `frontend/openapi.json` and `src/api/schema.d.ts`
   cleanly from the running backend; `list_schedule_runs_api_v1_schedule_runs_get` operation and its
   query/response types are present.
@@ -632,6 +696,16 @@ backend/frontend regression at Task 10.
 - _bmad-output/implementation-artifacts/deferred-work.md
 
 ## Change Log
+
+- 2026-08-23: Code review (`bmad-code-review`, three parallel layers). 4 decision-needed resolved,
+  13 patches applied, 5 deferred with owners, 4 dismissed as noise. Behaviour changes: the Updated
+  column now reads the newest `persisted_event.occurred_at` instead of `finished_at` (AC1); the list
+  envelope gained `scenario_id`/`total_count`/`matching_count`, so the shared `PaginationControls`
+  replaces the bespoke First/Next pager; a Refresh control replaces reload-to-refresh; starting a run
+  (including via Retry) now invalidates the Runs list; a failed refetch keeps rows and labels them
+  stale instead of blanking the table; Retry reads the proposal on click rather than once per row.
+  Verified: backend `pytest` 1171 passed / 2 skipped (postgres included), frontend `vitest` 493
+  passed / 73 files, `tsc --noEmit` clean, `oxlint` 3 pre-existing warnings, `npm run build` succeeds.
 
 - 2026-08-22: Story implemented. Backend: `GET /api/v1/schedule-runs` list route (repository +
   Postgres adapter + schemas). Frontend: Runs workspace (`RunsTable`, `RunStatusBadge`,

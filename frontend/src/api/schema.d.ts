@@ -1958,10 +1958,19 @@ export interface components {
         };
         /** ScheduleRunPageOut */
         ScheduleRunPageOut: {
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
             /** Items */
             items: components["schemas"]["ScheduleRunSummaryOut"][];
             /** Next Cursor */
             next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
         };
         /** ScheduleRunStartIn */
         ScheduleRunStartIn: {
@@ -1997,6 +2006,11 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
             /** Finished At */
             finished_at: string | null;
             /**
@@ -4232,6 +4246,24 @@ export interface operations {
                     "application/json": components["schemas"]["ScheduleRunPageOut"];
                 };
             };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
             /** @description Not Found */
             404: {
                 headers: {
@@ -4241,13 +4273,22 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
         };
