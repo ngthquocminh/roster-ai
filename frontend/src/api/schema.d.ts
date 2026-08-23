@@ -666,7 +666,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Schedule Runs */
+        get: operations["list_schedule_runs_api_v1_schedule_runs_get"];
         put?: never;
         /** Start Schedule Run */
         post: operations["start_schedule_run_api_v1_schedule_runs_post"];
@@ -1955,6 +1956,22 @@ export interface components {
             /** Finished At */
             finished_at?: string | null;
         };
+        /** ScheduleRunPageOut */
+        ScheduleRunPageOut: {
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /** Items */
+            items: components["schemas"]["ScheduleRunSummaryOut"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+            /** Total Count */
+            total_count: number;
+            /** Matching Count */
+            matching_count: number;
+        };
         /** ScheduleRunStartIn */
         ScheduleRunStartIn: {
             /**
@@ -1964,6 +1981,52 @@ export interface components {
             proposal_id: string;
             /** Expected Resource Version */
             expected_resource_version: number;
+        };
+        /**
+         * ScheduleRunSummaryOut
+         * @description One row of the Runs workspace list (Story 3.7 AC1).
+         */
+        ScheduleRunSummaryOut: {
+            /**
+             * Schedule Run Id
+             * Format: uuid
+             */
+            schedule_run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "solver_queued" | "solver_running" | "cancellation_requested" | "solver_completed" | "solver_infeasible" | "solver_timed_out" | "solver_cancelled" | "solver_failed";
+            /** Reason */
+            reason: string | null;
+            /** Resource Version */
+            resource_version: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /** Proposal Version */
+            proposal_version: number;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
         };
         /** TaskPageOut */
         TaskPageOut: {
@@ -4152,6 +4215,75 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    list_schedule_runs_api_v1_schedule_runs_get: {
+        parameters: {
+            query: {
+                scenario_id: string;
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleRunPageOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

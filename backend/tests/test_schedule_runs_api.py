@@ -20,9 +20,12 @@ from api.deps import (
 from api.main import app
 from application.ports.schedule_run import (
     IdempotentScheduleRunResultV1,
+    ScheduleRunPageV1,
+    ScheduleRunSummaryV1,
     ScheduleRunViewV1,
     ScheduleRunStateV1,
 )
+from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.session import ResolvedSession
 from application.use_cases.cancel_schedule_run import (
     CancelScheduleRunError,
@@ -548,3 +551,190 @@ def test_cancellation_route_drives_the_real_use_case(client) -> None:
     assert replay.status_code == 200
     assert replay.json() == body
     assert len(repository.stored) == 1
+
+
+def _scenario_context(*, site_id) -> ScenarioContext:
+    return ScenarioContext(
+        scenario_name="Scenario",
+        scenario_id=uuid4(),
+        scenario_version_id=uuid4(),
+        fixture_version="v1",
+        checksum_algorithm="sha256",
+        checksum_schema_version="rfc8785-v1",
+        checksum_digest="a" * 64,
+        site_id=site_id,
+        baseline_schedule_version=None,
+    )
+
+
+def _summary(**overrides) -> ScheduleRunSummaryV1:
+    values = {
+        "schedule_run_id": uuid4(),
+        "status": "solver_completed",
+        "reason": None,
+        "resource_version": 1,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "finished_at": datetime.now(timezone.utc),
+        "scenario_version_id": uuid4(),
+        "proposal_id": uuid4(),
+        "proposal_version": 1,
+        "baseline_schedule_version": None,
+    }
+    values.update(overrides)
+    return ScheduleRunSummaryV1(**values)
+
+
+class _ListRepository:
+    def __init__(self, page: ScheduleRunPageV1) -> None:
+        self.page = page
+        self.calls: list[dict] = []
+
+    def list_runs(self, _connection, **kwargs):
+        self.calls.append(kwargs)
+        return self.page
+
+
+def test_list_route_returns_a_page_shaped_by_the_repository(client) -> None:
+    test_client, settings, session = client
+    scenario_id = uuid4()
+    app.dependency_overrides[get_catalogue_reader] = lambda: type(
+        "Reader", (), {"get_scenario_context": staticmethod(
+            lambda _connection, _scenario_id: _scenario_context(site_id=session.site_id)
+        )},
+    )()
+    summary = _summary(baseline_schedule_version=None)
+    repository = _ListRepository(ScheduleRunPageV1(items=(summary,), next_cursor=None, total_count=1, matching_count=1))
+    app.dependency_overrides[get_schedule_run_repository] = lambda: repository
+
+    response = test_client.get(
+        "/api/v1/schedule-runs",
+        params={"scenario_id": str(scenario_id)},
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["next_cursor"] is None
+    # The page envelope carries the counts `PaginationControls` needs, and the
+    # scenario it was read for. No `group`, no `schema_version` -- see
+    # `ScheduleRunPageOut`.
+    assert body["scenario_id"] == str(scenario_id)
+    assert body["total_count"] == 1
+    assert body["matching_count"] == 1
+    assert "schema_version" not in body
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["schedule_run_id"] == str(summary.schedule_run_id)
+    assert item["status"] == "solver_completed"
+    assert item["proposal_id"] == str(summary.proposal_id)
+    assert item["proposal_version"] == 1
+    # AC1's "updated time" is its own field, distinct from `finished_at`, so a
+    # non-terminal run still reports when it last changed.
+    assert datetime.fromisoformat(
+        item["updated_at"].replace("Z", "+00:00")
+    ) == summary.updated_at
+    # Trap 4: None renders as JSON null, never "" or 0 -- the client decides
+    # to show "—".
+    assert item["baseline_schedule_version"] is None
+    assert repository.calls == [
+        {
+            "scenario_id": scenario_id,
+            "site_id": session.site_id,
+            "cursor": 0,
+            "limit": 50,
+        }
+    ]
+
+
+def test_list_route_reports_updated_at_for_a_run_with_no_finish_time(client) -> None:
+    # AC1 asks for an "updated time". `finished_at` is NULL for every
+    # non-terminal run -- exactly the set a planner monitors -- so the two
+    # fields must not be the same value wearing two names.
+    test_client, settings, session = client
+    scenario_id = uuid4()
+    app.dependency_overrides[get_catalogue_reader] = lambda: type(
+        "Reader", (), {"get_scenario_context": staticmethod(
+            lambda _connection, _scenario_id: _scenario_context(site_id=session.site_id)
+        )},
+    )()
+    changed_at = datetime.now(timezone.utc)
+    summary = _summary(
+        status="solver_running",
+        finished_at=None,
+        updated_at=changed_at,
+    )
+    repository = _ListRepository(ScheduleRunPageV1(items=(summary,), next_cursor=None, total_count=1, matching_count=1))
+    app.dependency_overrides[get_schedule_run_repository] = lambda: repository
+
+    response = test_client.get(
+        "/api/v1/schedule-runs",
+        params={"scenario_id": str(scenario_id)},
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}"},
+    )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["finished_at"] is None
+    assert datetime.fromisoformat(
+        item["updated_at"].replace("Z", "+00:00")
+    ) == changed_at
+
+
+def test_list_route_paginates_with_a_cursor_and_bounded_limit(client) -> None:
+    test_client, settings, session = client
+    scenario_id = uuid4()
+    app.dependency_overrides[get_catalogue_reader] = lambda: type(
+        "Reader", (), {"get_scenario_context": staticmethod(
+            lambda _connection, _scenario_id: _scenario_context(site_id=session.site_id)
+        )},
+    )()
+    repository = _ListRepository(ScheduleRunPageV1(items=(), next_cursor=100, total_count=250, matching_count=250))
+    app.dependency_overrides[get_schedule_run_repository] = lambda: repository
+
+    response = test_client.get(
+        "/api/v1/schedule-runs",
+        params={"scenario_id": str(scenario_id), "cursor": 50, "limit": 10},
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["next_cursor"] == 100
+    assert repository.calls == [
+        {
+            "scenario_id": scenario_id,
+            "site_id": session.site_id,
+            "cursor": 50,
+            "limit": 10,
+        }
+    ]
+
+
+def test_list_route_rejects_a_limit_beyond_the_bound(client) -> None:
+    test_client, _, _ = client
+
+    response = test_client.get(
+        "/api/v1/schedule-runs",
+        params={"scenario_id": str(uuid4()), "limit": 500},
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_list_route_reports_an_unknown_or_cross_site_scenario_as_not_found(
+    client,
+) -> None:
+    test_client, _, _ = client
+    app.dependency_overrides[get_catalogue_reader] = lambda: type(
+        "Reader", (), {"get_scenario_context": staticmethod(lambda _c, _s: None)},
+    )()
+
+    response = test_client.get(
+        "/api/v1/schedule-runs",
+        params={"scenario_id": str(uuid4())},
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "scenario_not_found"

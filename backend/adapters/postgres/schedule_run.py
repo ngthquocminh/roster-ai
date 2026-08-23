@@ -12,6 +12,7 @@ from adapters.postgres.schema import (
     command_idempotency,
     job_queue,
     persisted_event,
+    proposal_version,
     run_snapshot,
     schedule_assignment,
     schedule_run,
@@ -35,6 +36,8 @@ from application.ports.schedule_run import (
     RunNotCancellableError,
     RunTransitionConflictError,
     ScheduleRunEventHeadV1,
+    ScheduleRunPageV1,
+    ScheduleRunSummaryV1,
     ScheduleRunViewV1,
     ScheduleRunStateV1,
     StaleLeaseError,
@@ -114,6 +117,123 @@ class PostgresScheduleRunRepository:
             cancellation_requested=bool(row.cancellation_requested),
             created_at=_as_utc(row.created_at),
             finished_at=_as_utc(row.finished_at),
+        )
+
+    def list_runs(
+        self,
+        connection: Connection,
+        *,
+        scenario_id: UUID,
+        site_id: UUID,
+        cursor: int,
+        limit: int,
+    ) -> ScheduleRunPageV1:
+        # Newest-first (AC1). `run_snapshot.scenario_id` -- not `schedule_run` --
+        # carries the scenario this run belongs to; `proposal_version` supplies
+        # the immutable ordinal a planner can cite (distinct from the mutable
+        # `proposal.resource_version` Retry needs, which this row deliberately
+        # does not carry -- see `ScheduleRunSummaryV1`'s docstring).
+        #
+        # AC1's "updated time". `schedule_run` has no `updated_at` column and
+        # `finished_at` is NULL for every non-terminal run, so the newest event
+        # on the run's stream is the only source. Correlated MAX rather than a
+        # join so a run with several events still yields one row;
+        # `ix_persisted_event_schedule_run_id` covers the lookup. COALESCE keeps
+        # the field non-nullable for a run whose stream is still empty.
+        last_event_at = (
+            select(func.max(persisted_event.c.occurred_at))
+            .where(
+                persisted_event.c.schedule_run_id == schedule_run.c.id,
+                persisted_event.c.site_id == schedule_run.c.site_id,
+            )
+            .correlate(schedule_run)
+            .scalar_subquery()
+        )
+        query = (
+            select(
+                schedule_run.c.id,
+                schedule_run.c.status,
+                schedule_run.c.reason,
+                schedule_run.c.resource_version,
+                schedule_run.c.created_at,
+                func.coalesce(last_event_at, schedule_run.c.created_at).label(
+                    "updated_at"
+                ),
+                schedule_run.c.finished_at,
+                run_snapshot.c.scenario_version_id,
+                run_snapshot.c.proposal_id,
+                proposal_version.c.version_ordinal,
+                run_snapshot.c.baseline_schedule_version,
+            )
+            .select_from(
+                schedule_run.join(
+                    run_snapshot,
+                    (run_snapshot.c.id == schedule_run.c.run_snapshot_id)
+                    & (run_snapshot.c.site_id == schedule_run.c.site_id),
+                ).join(
+                    proposal_version,
+                    (proposal_version.c.id == run_snapshot.c.proposal_version_id)
+                    & (proposal_version.c.site_id == run_snapshot.c.site_id),
+                )
+            )
+            .where(
+                run_snapshot.c.scenario_id == scenario_id,
+                schedule_run.c.site_id == site_id,
+            )
+            .order_by(schedule_run.c.created_at.desc(), schedule_run.c.id.desc())
+            .offset(cursor)
+            # One extra row answers "is there a next page?" in the same round
+            # trip. (`scenario_projection` pages differently -- `_slice_window`
+            # slices an already-materialised in-memory sequence and reads
+            # `len(items)`, so it has no SQL over-fetch to mirror.)
+            .limit(limit + 1)
+        )
+        rows = connection.execute(query).all()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        # Same FROM and WHERE as the page query, so the count can never
+        # disagree with what the pages actually yield. This route publishes no
+        # filters, so matching == total; both are reported to match the shape
+        # of the API's other paged reads.
+        total_count = connection.execute(
+            select(func.count())
+            .select_from(
+                schedule_run.join(
+                    run_snapshot,
+                    (run_snapshot.c.id == schedule_run.c.run_snapshot_id)
+                    & (run_snapshot.c.site_id == schedule_run.c.site_id),
+                ).join(
+                    proposal_version,
+                    (proposal_version.c.id == run_snapshot.c.proposal_version_id)
+                    & (proposal_version.c.site_id == run_snapshot.c.site_id),
+                )
+            )
+            .where(
+                run_snapshot.c.scenario_id == scenario_id,
+                schedule_run.c.site_id == site_id,
+            )
+        ).scalar_one()
+        items = tuple(
+            ScheduleRunSummaryV1(
+                schedule_run_id=row.id,
+                status=row.status,
+                reason=row.reason,
+                resource_version=row.resource_version,
+                created_at=_as_utc(row.created_at),
+                updated_at=_as_utc(row.updated_at),
+                finished_at=_as_utc(row.finished_at),
+                scenario_version_id=row.scenario_version_id,
+                proposal_id=row.proposal_id,
+                proposal_version=row.version_ordinal,
+                baseline_schedule_version=row.baseline_schedule_version,
+            )
+            for row in rows
+        )
+        return ScheduleRunPageV1(
+            items=items,
+            next_cursor=(cursor + limit) if has_more else None,
+            total_count=total_count,
+            matching_count=total_count,
         )
 
     def event_head(
