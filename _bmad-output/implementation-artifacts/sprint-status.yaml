@@ -43,6 +43,61 @@
 generated: 2026-07-24
 last_updated: 2026-08-24
 
+# NOTE (2026-08-24): Story 3-10 created and moved to ready-for-dev. It is EPIC 3'S FIRST PURE PROOF
+# STORY (the backend analog of 1.9-1.11) -- ships NO new capability, route, contract, migration, or
+# golden-dataset case; it assembles Stories 3.1-3.9's already-shipped pieces (draft -> snapshot -> job
+# -> lease -> solve -> finalize -> compare) into one deterministic, CI-blocking correctness proof.
+#
+# SIX DECISIONS WERE MADE AT CREATION. (A) "The seeded Wednesday outbound fixture" does not exist
+# yet -- the PRD marks it "[ASSUMPTION]" -- so this story builds it as a test-only double (NOT a
+# data/** or Gate A contract fixture), engineered with a deliberate coverage gap a real deterministic
+# CP-SAT solve closes. (B) `get_locks`/`get_baseline_assignments` are HARDCODED EMPTY BY CONSTRUCTION
+# in `PostgresScenarioProjectionReader` (`scenario_projection.py:650-656` literally passes `()`, not a
+# query result) -- proving "locks preserved"/"overtime <= baseline" non-vacuously requires seeding
+# through the real `ScenarioProjectionReader` port via `api/deps.py`'s existing `dependency_overrides`
+# seam, never hand-constructing `RunSnapshotV1.preserved_locks` (which would prove nothing about
+# production wiring). (C) `scheduling_optimize` (3.6) only validates and enqueues; the solve is
+# asynchronous and route/job-owned, so the Story 2.2 harness's `Evaluator`/`AgentRunOutcomeV1` shape
+# structurally cannot observe a solve's terminal numbers from one scripted turn -- "runs on the Story
+# 2.2 harness" means reusing its shared machinery (deterministic-double discipline, `resolve_bindings()`
+# evidence convention, the existing default+`-m postgres` dual CI track), not the Evaluator extension
+# point. New tests instead drive the REAL chain directly: `enqueue_compute` -> `worker.lease_worker
+# .run_once` -> `lease_and_execute_schedule_run` -> `execute_schedule_run` -> `finalize_schedule_run`,
+# reusing `test_job_leasing_postgres.py`'s real-Postgres scaffold. (D) ZERO NEW `evals/golden/**`
+# CASES -- same shape as Story 3.2's own zero-contribution precedent; the epics.md Release Gate
+# table's "3.10-3.12 contribute" line is an epic-level aggregate expectation, not a per-story mandate,
+# per the table's own re-verification caveat. (E) One fixture per AD-7 terminal status, reusing 3.2's
+# exact status-mapping table verbatim: `solver_completed` via a real solve; `solver_infeasible` via a
+# faked `SchedulerPort` (the real model is structurally always feasible per 3.2's own finding);
+# `solver_timed_out` via a real solve with an artificially tiny wall-time ceiling (3.2 Task 7's already-
+# fixed pattern, observed not re-fixed); `solver_cancelled` via the REAL 3.4 cancellation command
+# (not seeded); `solver_failed`/`hard_constraint_violated` via a corrupted-assignment variant or a
+# faked adapter. (F) Evidence via `resolve_bindings()` at `evidence/story-3.10/repair-correctness.json`,
+# following `docs/EVIDENCE-CONVENTION.md` exactly; `dataset` derived independently from `scenario`
+# (Story 2.2's own trap).
+#
+# TWO HONEST GAPS ARE RAISED RATHER THAN PAPERED OVER. (a) Mid-solve cancellation preemption stays
+# `NOT COVERED` -- `lease_and_execute_schedule_run.py`'s own pre-existing note, owner still "first
+# story raising the wall-time limit," not this story. (b) This proof runs against SEEDED doubles, not
+# real production data -- `get_locks`/`get_baseline_assignments` remain hardcoded empty after this
+# story (Decision B deliberately does not patch the adapter); a new `deferred-work.md` entry names
+# this story as origin with the owner left open, since no future story yet claims real lock/baseline-
+# assignment supply.
+#
+# SEVEN TRAPS flagged in the story, the quietest first: a guard that cannot go red (the seeded-reader
+# swap-back test exists specifically to catch this); hand-constructing `RunSnapshotV1.preserved_locks`
+# instead of seeding through the reader; writing a second gap/overtime comparator instead of reusing
+# Story 3.8's `calculate_comparison`; padding the golden dataset toward NFR28's floor because the
+# epics.md table lists this story as a nominal contributor; treating `solver_infeasible` as reachable
+# from a real corrupted scenario (it is not -- only a faked `SchedulerPort` reaches it, and that is
+# correct, not a shortcut); re-fixing the already-patched wall-time-ceiling trap in
+# `governed_adapter.py`; and editing `scenario_projection.py`'s empty readers "while in here."
+#
+# BASELINE AT CREATION (`efc0ba5`, clean tree): 1218/1225 backend tests collected (7 deselected, `live`
+# marker). Golden dataset: 26 files (demonstration 2, scheduling_compute 4, scheduling_draft 4,
+# scheduling_inspect 11, scheduling_optimize 5; consequential 1 + prohibited 4 = 5 of NFR28's >= 10
+# floor). Re-derive before attributing any failure to this story.
+
 # NOTE (2026-08-21): Story 3-6 created and moved to ready-for-dev. It is EPIC 3'S FIRST
 # FULL-STACK STORY and the first planner-visible slice since 3.1 — it ships the Run optimization
 # control AND its command together (epics.md:847,1542). Story 3.1 deliberately shipped no
@@ -1524,7 +1579,7 @@ development_status:
   3-7-monitor-cancel-and-reopen-runs: done
   3-8-compare-candidate-and-baseline-results: done
   3-9-continue-deterministic-work-during-model-outage: done
-  3-10-prove-repair-correctness: backlog
+  3-10-prove-repair-correctness: ready-for-dev
   3-11-prove-recovery-and-idempotency: backlog
   3-12-prove-the-repair-browser-journey: backlog
   epic-3-retrospective: optional
