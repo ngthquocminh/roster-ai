@@ -4,7 +4,7 @@ baseline_commit: efc0ba5
 
 # Story 3.10: Prove Repair Correctness
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -253,62 +253,62 @@ for `risk_class="consequential"` — `scheduling_optimize` itself is `compute`, 
 
 ### Task 1 — Build the seeded fixture and reader/scheduler test doubles (Decisions A, B)
 
-- [ ] `backend/tests/fixtures/repair_correctness.py` (or extend `fixture_projection.py` — document
+- [x] `backend/tests/fixtures/repair_correctness.py` (or extend `fixture_projection.py` — document
       the choice): seeded `ScenarioProjectionReader` returning non-empty `get_locks`/
       `get_baseline_assignments` for one synthetic `scenario_id`/`scenario_version_id`, plus tasks/
       demand/workers sufficient to drive a real CP-SAT solve with an engineered coverage gap.
-- [ ] Fake `SchedulerPort` implementations for the `solver_infeasible` and (if chosen)
+- [x] Fake `SchedulerPort` implementations for the `solver_infeasible` and (if chosen)
       `solver_failed`-via-fake-adapter fixtures — return `SolverOutcomeV1` directly, no OR-Tools call.
-- [ ] **Acceptance boundary:** run the real single-worker deterministic governed adapter against the
+- [x] **Acceptance boundary:** run the real single-worker deterministic governed adapter against the
       fixture once during development and record the resulting `MetricSetV1`/`ComparisonV1` numbers
       in Dev Notes/Completion Notes — do not assert a "known-feasible repair" you have not actually
       observed solving.
 
 ### Task 2 — Real end-to-end `solver_completed` correctness proof (AC: 1)
 
-- [ ] `backend/tests/test_repair_correctness_postgres.py`, `@pytest.mark.postgres`. Drive
+- [x] `backend/tests/test_repair_correctness_postgres.py`, `@pytest.mark.postgres`. Drive
       Decision C's real chain (`enqueue_compute` → `run_once` → `finalize_schedule_run`) against
       Decision A's fixture with the real governed CP-SAT adapter and Decision B's seeded reader.
-- [ ] Assert via `calculate_comparison` (reused from Story 3.8, not reimplemented):
+- [x] Assert via `calculate_comparison` (reused from Story 3.8, not reimplemented):
       `unresolved_gap_record_ids == ()`; `candidate_metrics.overtime_minutes <=
       baseline_metrics.overtime_minutes`; every `candidate_constraint_results[i].satisfied is True`
       (including `preserved_lock`); exactly one `schedule_version` row.
-- [ ] **Acceptance boundary:** the test fails red if the seeded reader is swapped back to the real
+- [x] **Acceptance boundary:** the test fails red if the seeded reader is swapped back to the real
       empty `PostgresScenarioProjectionReader` (proves the assertions are not vacuous) — demonstrate
       this once, then restore the seeded override, per this repo's established red-then-green
       convention (Story 2.1 Task 9 and every architecture guard since).
 
 ### Task 3 — Terminal-outcome fixtures: infeasible, timed-out, cancelled, failed (AC: 2)
 
-- [ ] One test per Decision E fixture (2–5), each through the same real `run_once`/cancellation-command
+- [x] One test per Decision E fixture (2–5), each through the same real `run_once`/cancellation-command
       chain as Task 2. Assert exact `(status, reason)`, zero `schedule_version` rows, and that input
       evidence refs on `run_snapshot` remain present.
-- [ ] Reuse `test_job_leasing_postgres.py`'s and `test_cancellation_race_postgres.py`'s existing
+- [x] Reuse `test_job_leasing_postgres.py`'s and `test_cancellation_race_postgres.py`'s existing
       connection/fixture helpers (`governed_postgres_engine`, job-queuing helpers) — do not build a
       second real-Postgres scaffold.
-- [ ] **Acceptance boundary:** a temporarily-corrupted assertion (e.g., asserting `schedule_version`
+- [x] **Acceptance boundary:** a temporarily-corrupted assertion (e.g., asserting `schedule_version`
       count `>= 0` instead of `== 0`) is observed passing incorrectly, then restored — demonstrating
       each guard actually discriminates (A2 discipline, `epic-1-2-retro-2026-08-16.md`).
 
 ### Task 4 — Evidence and dataset accounting (Decisions D, F)
 
-- [ ] Small report/evidence generator reusing `resolve_bindings()`; aggregates Tasks 2–3's verdicts.
-- [ ] Follow `docs/EVIDENCE-CONVENTION.md` exactly: commit code, confirm clean tree, run the suite,
+- [x] Small report/evidence generator reusing `resolve_bindings()`; aggregates Tasks 2–3's verdicts.
+- [x] Follow `docs/EVIDENCE-CONVENTION.md` exactly: commit code, confirm clean tree, run the suite,
       generate `evidence/story-3.10/repair-correctness.json`, commit evidence separately.
-- [ ] State explicitly in Completion Notes: zero new `backend/evals/golden/**` files; record the
+- [x] State explicitly in Completion Notes: zero new `backend/evals/golden/**` files; record the
       running dataset total and consequential/prohibited count unchanged from the Facts table.
-- [ ] **Acceptance boundary:** the evidence file passes `backend/tests/test_evidence_convention.py`
+- [x] **Acceptance boundary:** the evidence file passes `backend/tests/test_evidence_convention.py`
       unmodified; a call with a deliberately incomplete binding is observed raising and writing no
       file.
 
 ### Task 5 — Fences, ledger, regression, Gate A (AC: 1, 2)
 
-- [ ] `deferred-work.md`: add Gap 2's entry (seeded-vs-real lock/baseline-assignment supply).
-- [ ] Re-run Gate A: `gate_a_passed: true`, `blocking: []` (NFR29 — no proof story may weaken it).
-- [ ] Full regression: backend default suite, `-m postgres`, `-m live` (skips cleanly), frontend
+- [x] `deferred-work.md`: add Gap 2's entry (seeded-vs-real lock/baseline-assignment supply).
+- [x] Re-run Gate A: `gate_a_passed: true`, `blocking: []` (NFR29 — no proof story may weaken it).
+- [x] Full regression: backend default suite, `-m postgres`, `-m live` (skips cleanly), frontend
       suites (this story changes zero frontend files — they must stay green regardless), `alembic
       check` zero diff (this story adds no migration).
-- [ ] **Re-derive baselines at the start, not from this story's own text.** Collection at creation
+- [x] **Re-derive baselines at the start, not from this story's own text.** Collection at creation
       (`efc0ba5`, clean tree): 1218/1225 backend tests collected (7 deselected, `live` marker). Golden
       dataset: 26 files. Re-derive exact pass counts before treating any delta as regression.
 
@@ -454,8 +454,48 @@ for `risk_class="consequential"` — `scheduling_optimize` itself is `compute`, 
 
 ### Agent Model Used
 
+OpenAI Codex (GPT-5)
+
+### Implementation Plan
+
+- Keep all product contracts and runtime behavior unchanged; add a synthetic test-only projection/raw-payload fixture and substitute only the existing projection and scheduler ports.
+- Drive draft creation, proposal revision, snapshot creation, enqueue, lease, solve, finalize, persistence, and comparison through their real application paths.
+- Prove every AD-7 terminal outcome independently, generate NFR27-bound evidence from a clean code commit, then execute the complete regression and Gate A gates.
+
 ### Debug Log References
+
+- Baseline re-derived before implementation: 1218/1225 backend tests collected (7 live deselected), 86 PostgreSQL tests, 26 golden files, and 5 consequential/prohibited cases.
+- RED: fixture test failed with `ModuleNotFoundError` before `tests/fixtures/repair_correctness.py` existed; fake-outcome expectation then exposed finalizer-owned reason mapping.
+- RED/non-vacuity: temporarily returning empty locks/baseline assignments made the real-pipeline test fail at `draft.proposal.preserved_locks == LOCKS`; seeded methods were restored.
+- RED/discrimination: temporarily weakening the candidate row-count guard from `== 0` to `>= 0` passed incorrectly; exact-zero guard was restored.
+- Code commit `29f0398`; clean-tree five-fixture measurement generated evidence binding that commit. Evidence committed separately at `2512a28`.
+- Final validation: backend 1233 passed, 1 skipped, 7 live deselected in the Gate A measurement; PostgreSQL track 91 passed; live track 7 skipped cleanly; frontend 77 files/521 tests passed; typecheck, lint, build, Alembic check, and evidence convention (61 passed) green.
+- Gate A rerun: `gate_a_passed: true`, `blocking: []`.
 
 ### Completion Notes List
 
+- Added the dedicated `tests/fixtures/repair_correctness.py` fixture rather than widening the AgentRuntime evaluation fixture. It contains a synthetic Wednesday outbound volume row, two qualified workers, a one-worker baseline, one worker-shift lock, and fake scheduler boundaries for otherwise unreachable outcomes.
+- The real deterministic CP-SAT repair measured required 480.0 minutes, candidate served 480.0 minutes, baseline/candidate assignment counts 1/2, baseline/candidate overtime 0.0/0.0, one preserved lock, zero hard violations, and no unresolved gap records.
+- Proved exact terminal persistence through `worker.run_once`: completed/(no reason)/one candidate; infeasible/model_infeasible/no candidate; timed-out/budget_exhausted/no candidate; cancelled/cancelled/no candidate; failed/hard_constraint_violated/no candidate. Every snapshot retained input evidence refs.
+- Reused `calculate_comparison`; no duplicate demand, gap, overtime, or hard-constraint calculator was introduced. Production `scenario_projection.py`, capabilities, routes, migrations, frontend, and solver implementation remain unchanged.
+- Added a generic non-golden artifact binding path to `resolve_bindings()` and a Story 3.10 report generator. `evidence/story-3.10/repair-correctness.json` binds the exact Python fixture hash, all eleven NFR27 keys, PostgreSQL 18, OR-Tools 9.11.4210, and clean code commit `29f0398`.
+- Zero new `backend/evals/golden/**` files. Running total remains 26; consequential/prohibited remains 5. NFR28's floor is unchanged and not claimed here.
+- Honest gaps remain explicit: mid-solve cancellation preemption is not covered, and real production lock/baseline-assignment supplies remain empty by construction; Gap 2 is recorded in `deferred-work.md`.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/3-10-prove-repair-correctness.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/evals/repair_correctness_report.py`
+- `backend/scripts/evidence_binding.py`
+- `backend/tests/fixtures/__init__.py`
+- `backend/tests/fixtures/repair_correctness.py`
+- `backend/tests/test_repair_correctness_fixture.py`
+- `backend/tests/test_repair_correctness_postgres.py`
+- `backend/tests/test_repair_correctness_report.py`
+- `evidence/story-3.10/repair-correctness.json`
+
+## Change Log
+
+- 2026-08-24: Implemented deterministic repair correctness and terminal fail-closed proof; generated clean-commit NFR27 evidence; full regression and Gate A passed; status moved to review.
