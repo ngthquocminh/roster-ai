@@ -3692,6 +3692,99 @@
         }
       }
     },
+    "/api/v1/schedule-runs/{run_id}/result": {
+      "get": {
+        "tags": [
+          "schedule-runs"
+        ],
+        "summary": "Get Schedule Run Result",
+        "operationId": "get_schedule_run_result_api_v1_schedule_runs__run_id__result_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleRunResultOut"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
     "/api/v1/schedule-runs/{run_id}/cancellation": {
       "post": {
         "tags": [
@@ -3950,6 +4043,67 @@
           "parsed_constraint"
         ],
         "title": "AppliedConstraint"
+      },
+      "AssignmentDiffOut": {
+        "properties": {
+          "added_worker_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Added Worker Ids"
+          },
+          "removed_worker_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed Worker Ids"
+          },
+          "added_shift_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Added Shift Ids"
+          },
+          "removed_shift_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed Shift Ids"
+          },
+          "added_task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Added Task Ids"
+          },
+          "removed_task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Removed Task Ids"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "added_worker_ids",
+          "removed_worker_ids",
+          "added_shift_ids",
+          "removed_shift_ids",
+          "added_task_ids",
+          "removed_task_ids"
+        ],
+        "title": "AssignmentDiffOut"
       },
       "AssignmentOut": {
         "properties": {
@@ -4245,6 +4399,124 @@
         ],
         "title": "ClarificationActivityOut"
       },
+      "ComparisonOut": {
+        "properties": {
+          "candidate_schedule_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Candidate Schedule Version Id"
+          },
+          "candidate_schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Candidate Schedule Run Id"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "expected_baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Baseline Schedule Version"
+          },
+          "current_baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Baseline Schedule Version"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale"
+          },
+          "assignment_diff": {
+            "$ref": "#/components/schemas/AssignmentDiffOut"
+          },
+          "candidate_metrics": {
+            "$ref": "#/components/schemas/MetricSetOut"
+          },
+          "baseline_metrics": {
+            "$ref": "#/components/schemas/MetricSetOut"
+          },
+          "candidate_constraint_results": {
+            "items": {
+              "$ref": "#/components/schemas/ConstraintResultOut"
+            },
+            "type": "array",
+            "title": "Candidate Constraint Results"
+          },
+          "baseline_hard_constraint_results": {
+            "items": {
+              "$ref": "#/components/schemas/ConstraintResultOut"
+            },
+            "type": "array",
+            "title": "Baseline Hard Constraint Results"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "unresolved_gap_record_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unresolved Gap Record Ids"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefOut"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidate_schedule_version_id",
+          "candidate_schedule_run_id",
+          "scenario_id",
+          "scenario_version_id",
+          "expected_baseline_schedule_version",
+          "current_baseline_schedule_version",
+          "stale",
+          "assignment_diff",
+          "candidate_metrics",
+          "baseline_metrics",
+          "candidate_constraint_results",
+          "baseline_hard_constraint_results",
+          "warnings",
+          "unresolved_gap_record_ids",
+          "evidence_refs"
+        ],
+        "title": "ComparisonOut"
+      },
       "ConstraintPageOut": {
         "properties": {
           "schema_version": {
@@ -4408,6 +4680,88 @@
           "value_type"
         ],
         "title": "ConstraintProjectionOut"
+      },
+      "ConstraintResultOut": {
+        "properties": {
+          "constraint_id": {
+            "type": "string",
+            "title": "Constraint Id"
+          },
+          "constraint_type": {
+            "type": "string",
+            "title": "Constraint Type"
+          },
+          "constraint_class": {
+            "type": "string",
+            "enum": [
+              "hard",
+              "soft"
+            ],
+            "title": "Constraint Class"
+          },
+          "satisfied": {
+            "type": "boolean",
+            "title": "Satisfied"
+          },
+          "measured_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured Value"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          },
+          "contributing_assignment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Contributing Assignment Ids"
+          },
+          "contributing_evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefOut"
+            },
+            "type": "array",
+            "title": "Contributing Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "constraint_id",
+          "constraint_type",
+          "constraint_class",
+          "satisfied",
+          "measured_value",
+          "limit",
+          "unit",
+          "contributing_assignment_ids",
+          "contributing_evidence_refs"
+        ],
+        "title": "ConstraintResultOut"
       },
       "ConversationCreateIn": {
         "properties": {
@@ -4958,6 +5312,107 @@
         "type": "object",
         "title": "EntityCandidateV1",
         "description": "TRUSTED candidate resolved against the governed scenario projection."
+      },
+      "EvidenceRefOut": {
+        "properties": {
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "checksum_algorithm": {
+            "type": "string",
+            "title": "Checksum Algorithm"
+          },
+          "checksum_schema_version": {
+            "type": "string",
+            "title": "Checksum Schema Version"
+          },
+          "checksum_digest": {
+            "type": "string",
+            "title": "Checksum Digest"
+          },
+          "producing_run_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Producing Run Version"
+          },
+          "baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Schedule Version"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "record_id": {
+            "type": "string",
+            "title": "Record Id"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "start_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Minute"
+          },
+          "end_minute": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Minute"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scenario_version_id",
+          "checksum_algorithm",
+          "checksum_schema_version",
+          "checksum_digest",
+          "producing_run_version",
+          "baseline_schedule_version",
+          "group",
+          "record_id"
+        ],
+        "title": "EvidenceRefOut"
       },
       "EvidenceRefV1": {
         "properties": {
@@ -5573,6 +6028,127 @@
           "text"
         ],
         "title": "MessageCreateIn"
+      },
+      "MetricSetOut": {
+        "properties": {
+          "interval_coverage_required_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Interval Coverage Required Minutes",
+            "default": []
+          },
+          "interval_coverage_served_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Interval Coverage Served Minutes",
+            "default": []
+          },
+          "function_coverage_required_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Function Coverage Required Minutes",
+            "default": []
+          },
+          "function_coverage_served_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Function Coverage Served Minutes",
+            "default": []
+          },
+          "overtime_minutes": {
+            "type": "number",
+            "title": "Overtime Minutes",
+            "default": 0.0
+          },
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost",
+            "default": 0.0
+          },
+          "objective_components": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Objective Components",
+            "default": []
+          },
+          "assignment_count": {
+            "type": "integer",
+            "title": "Assignment Count",
+            "default": 0
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count",
+            "default": 0
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "MetricSetOut"
       },
       "OverrideOut": {
         "properties": {
@@ -6529,6 +7105,40 @@
         ],
         "title": "ScheduleRunPageOut"
       },
+      "ScheduleRunResultOut": {
+        "properties": {
+          "run": {
+            "$ref": "#/components/schemas/ScheduleRunOut"
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleVersionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "run",
+          "candidate",
+          "comparison"
+        ],
+        "title": "ScheduleRunResultOut"
+      },
       "ScheduleRunStartIn": {
         "properties": {
           "proposal_id": {
@@ -6649,6 +7259,113 @@
         ],
         "title": "ScheduleRunSummaryOut",
         "description": "One row of the Runs workspace list (Story 3.7 AC1)."
+      },
+      "ScheduleVersionOut": {
+        "properties": {
+          "schedule_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Version Id"
+          },
+          "schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Run Id"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "proposal_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Id"
+          },
+          "proposal_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Version Id"
+          },
+          "feasible_solver_status": {
+            "type": "string",
+            "enum": [
+              "OPTIMAL",
+              "FEASIBLE"
+            ],
+            "title": "Feasible Solver Status"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentOut"
+            },
+            "type": "array",
+            "title": "Assignments"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/MetricSetOut"
+          },
+          "constraint_results": {
+            "items": {
+              "$ref": "#/components/schemas/ConstraintResultOut"
+            },
+            "type": "array",
+            "title": "Constraint Results"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefOut"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schedule_version_id",
+          "schedule_run_id",
+          "scenario_id",
+          "scenario_version_id",
+          "proposal_id",
+          "proposal_version_id",
+          "feasible_solver_status",
+          "assignments",
+          "metrics",
+          "constraint_results",
+          "warnings",
+          "evidence_refs",
+          "created_at"
+        ],
+        "title": "ScheduleVersionOut"
       },
       "TaskPageOut": {
         "properties": {

@@ -5,6 +5,7 @@ type ScheduleRunStartPath = paths["/api/v1/schedule-runs"]["post"];
 type ScheduleRunListPath = paths["/api/v1/schedule-runs"]["get"];
 type ScheduleRunCancellationPath =
   paths["/api/v1/schedule-runs/{run_id}/cancellation"]["post"];
+type ScheduleRunResultPath = paths["/api/v1/schedule-runs/{run_id}/result"]["get"];
 
 export type ScheduleRunStart =
   ScheduleRunStartPath["requestBody"]["content"]["application/json"];
@@ -18,6 +19,17 @@ export type ScheduleRunCancellation =
   ScheduleRunCancellationPath["requestBody"]["content"]["application/json"];
 export type ScheduleRunCancelled =
   ScheduleRunCancellationPath["responses"][200]["content"]["application/json"];
+export type ScheduleRunResult =
+  ScheduleRunResultPath["responses"][200]["content"]["application/json"];
+
+export async function getScheduleRunResult(runId: string): Promise<ScheduleRunResult> {
+  const { data, error, response } = await client.GET(
+    "/api/v1/schedule-runs/{run_id}/result",
+    { params: { path: { run_id: runId } } },
+  );
+  if (error) throw { ...error, status: response.status };
+  return data as ScheduleRunResult;
+}
 
 export async function startScheduleRun(
   body: ScheduleRunStart,

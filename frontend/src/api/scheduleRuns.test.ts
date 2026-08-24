@@ -8,7 +8,7 @@ vi.mock("./client", () => ({
 }));
 
 import { client } from "./client";
-import { cancelScheduleRun, listScheduleRuns, startScheduleRun } from "./scheduleRuns";
+import { cancelScheduleRun, getScheduleRunResult, listScheduleRuns, startScheduleRun } from "./scheduleRuns";
 
 const mockGET = client.GET as unknown as ReturnType<typeof vi.fn>;
 const mockPOST = client.POST as unknown as ReturnType<typeof vi.fn>;
@@ -87,6 +87,24 @@ describe("listScheduleRuns", () => {
     await expect(
       listScheduleRuns({ scenario_id: "11111111-1111-1111-1111-111111111111" }),
     ).rejects.toMatchObject({ status: 404, code: "scenario_not_found" });
+  });
+});
+
+describe("getScheduleRunResult", () => {
+  it("gets the exact run result and preserves the envelope", async () => {
+    const runId = "22222222-2222-2222-2222-222222222222";
+    const result = { run: { schedule_run_id: runId, status: "solver_failed" }, candidate: null, comparison: null };
+    mockGET.mockResolvedValueOnce({ data: result, error: undefined, response: { status: 200 } });
+
+    await expect(getScheduleRunResult(runId)).resolves.toEqual(result);
+    expect(mockGET).toHaveBeenCalledWith("/api/v1/schedule-runs/{run_id}/result", {
+      params: { path: { run_id: runId } },
+    });
+  });
+
+  it("attaches status to a result failure", async () => {
+    mockGET.mockResolvedValueOnce({ data: undefined, error: { code: "schedule_run_not_found" }, response: { status: 404 } });
+    await expect(getScheduleRunResult("missing")).rejects.toMatchObject({ status: 404 });
   });
 });
 

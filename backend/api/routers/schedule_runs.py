@@ -14,6 +14,7 @@ from api.deps import (
     get_capability_registry,
     get_catalogue_reader,
     get_proposal_repository,
+    get_projection_reader,
     get_schedule_run_repository,
     get_session,
     get_site_context,
@@ -29,6 +30,9 @@ from api.schemas import (
     ScheduleRunCancellationIn,
     ScheduleRunOut,
     ScheduleRunPageOut,
+    ScheduleRunResultOut,
+    ScheduleVersionOut,
+    ComparisonOut,
     ScheduleRunStartIn,
     ScheduleRunSummaryOut,
 )
@@ -46,6 +50,8 @@ from application.capabilities.scheduling_optimize import (
 )
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.schedule_version import RUN_EVENT_TYPES
+from application.ports.scenario_projection import ScenarioProjectionReader
+from application.scheduling.comparison import ComparisonIntegrityError, calculate_comparison
 from application.ports.schedule_run import (
     ScheduleRunRepository,
     ScheduleRunSummaryV1,
@@ -536,6 +542,73 @@ def get_schedule_run(
     if value is None:
         return _not_found()
     return _view_out(value)
+
+
+@router.get(
+    "/{run_id}/result",
+    response_model=ScheduleRunResultOut,
+    responses={**_PROBLEMS, 500: {"model": ProblemDetailsV1}},
+)
+def get_schedule_run_result(
+    run_id: UUID,
+    connection: Connection = Depends(get_site_context),
+    session: ResolvedSession = Depends(get_session),
+    repository: ScheduleRunRepository = Depends(get_schedule_run_repository),
+    projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
+):
+    run = repository.get_run(connection, run_id=run_id, site_id=session.site_id)
+    if run is None:
+        return _not_found()
+    run_out = _view_out(run)
+    if run.status != "solver_completed":
+        return ScheduleRunResultOut(run=run_out, candidate=None, comparison=None)
+    candidate = repository.get_candidate(
+        connection, schedule_run_id=run_id, site_id=session.site_id
+    )
+    if candidate is None or candidate.scenario_id is None or candidate.scenario_version_id is None:
+        return problem_response(
+            status=500,
+            code="schedule_candidate_missing",
+            title="Schedule candidate missing",
+            detail="The completed run has no readable candidate evidence.",
+        )
+    snapshot = repository.load_snapshot(
+        connection, run_id=run_id, site_id=session.site_id
+    )
+    if snapshot is None:
+        return problem_response(
+            status=500,
+            code="run_snapshot_missing",
+            title="Run snapshot missing",
+            detail="The completed run has no immutable input snapshot.",
+        )
+    try:
+        comparison = calculate_comparison(
+            projection_reader,
+            connection,
+            candidate=candidate,
+            scenario_id=candidate.scenario_id,
+            scenario_version_id=candidate.scenario_version_id,
+            site_id=session.site_id,
+            expected_baseline_schedule_version=snapshot.baseline_schedule_version,
+        )
+    except ComparisonIntegrityError:
+        # Only the recomputation's own declared failure gets this specific,
+        # user-facing code. Anything else (a driver error, an unrelated bug)
+        # falls through to `versioned_unhandled_problem` (api/main.py), which
+        # reports it as the generic `internal_error` it actually is rather
+        # than the misleading claim that evidence failed to verify.
+        return problem_response(
+            status=500,
+            code="comparison_calculation_failed",
+            title="Comparison calculation failed",
+            detail="Candidate evidence could not be verified against the frozen scenario.",
+        )
+    return ScheduleRunResultOut(
+        run=run_out,
+        candidate=ScheduleVersionOut.model_validate(candidate, from_attributes=True),
+        comparison=ComparisonOut.model_validate(comparison, from_attributes=True),
+    )
 
 
 # The return annotation is omitted because the handler returns either the

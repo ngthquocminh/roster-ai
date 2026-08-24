@@ -2,6 +2,8 @@ import { RunStatusBadge } from "@/components/runs/RunStatusBadge";
 import { formatTimestamp } from "@/lib/formatTimestamp";
 import type { ScheduleRunSummary } from "@/api/scheduleRuns";
 
+type ProgressRun = Pick<ScheduleRunSummary, "status"> & { created_at?: string | null };
+
 /**
  * Renders a non-terminal run (`solver_queued`, `solver_running`,
  * `cancellation_requested`) as literal text plus its accepted timestamp.
@@ -20,11 +22,11 @@ import type { ScheduleRunSummary } from "@/api/scheduleRuns";
  * not repeated; and with no copy button left there is no focusable control
  * inside the live region.
  */
-export function ProgressCard({ run }: Readonly<{ run: ScheduleRunSummary }>) {
+export function ProgressCard({ run }: Readonly<{ run: ProgressRun }>) {
   return (
     <div className="flex flex-col gap-1 text-sm" role="status">
       <RunStatusBadge status={run.status} />
-      <p className="text-muted-foreground">Accepted {formatTimestamp(run.created_at)}</p>
+      <p className="text-muted-foreground">{run.created_at ? `Accepted ${formatTimestamp(run.created_at)}` : "Accepted time not recorded"}</p>
     </div>
   );
 }

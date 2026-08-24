@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -13,6 +14,7 @@ from api.deps import (
     get_catalogue_reader,
     get_identity_store,
     get_proposal_repository,
+    get_projection_reader,
     get_schedule_run_repository,
     get_settings,
     get_site_context,
@@ -27,6 +29,9 @@ from application.ports.schedule_run import (
 )
 from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.session import ResolvedSession
+from application.contracts.comparison import AssignmentDiffV1, ComparisonV1
+from application.contracts.schedule_version import MetricSetV1, ScheduleVersionV1
+from application.scheduling.comparison import ComparisonIntegrityError
 from application.use_cases.cancel_schedule_run import (
     CancelScheduleRunError,
     IdempotencyKeyConflictError,
@@ -87,6 +92,213 @@ def _headers(settings, *, key="cancel-1"):
         "X-CSRF-Token": _CSRF_TOKEN,
         "Idempotency-Key": key,
     }
+
+
+@pytest.mark.parametrize(
+    "status",
+    ("solver_queued", "solver_running", "cancellation_requested", "solver_infeasible", "solver_timed_out", "solver_cancelled", "solver_failed"),
+)
+def test_result_route_preserves_literal_run_without_candidate(client, status) -> None:
+    test_client, settings, session = client
+    run_id = uuid4()
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, status, "literal-reason", 2, status == "cancellation_requested")
+
+        def get_candidate(self, *_args, **_kwargs):
+            raise AssertionError("non-completed runs must not read a candidate")
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 200
+    assert response.json()["run"]["status"] == status
+    assert response.json()["candidate"] is None
+    assert response.json()["comparison"] is None
+
+
+def test_result_route_returns_completed_candidate_and_comparison(client, monkeypatch) -> None:
+    test_client, settings, session = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+    comparison = ComparisonV1(
+        candidate.schedule_version_id, run_id, scenario_id, version_id, None, None, False,
+        AssignmentDiffV1(), MetricSetV1(), MetricSetV1(), (), (), (), (), (),
+    )
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+
+        def get_candidate(self, *_args, **_kwargs):
+            return candidate
+
+        def load_snapshot(self, *_args, **_kwargs):
+            return SimpleNamespace(baseline_schedule_version=None)
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", lambda *_args, **_kwargs: comparison)
+
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 200
+    assert response.json()["candidate"]["schedule_run_id"] == str(run_id)
+    assert response.json()["comparison"]["stale"] is False
+
+
+def test_result_route_does_not_disclose_unknown_or_cross_site_run(client) -> None:
+    test_client, settings, _ = client
+
+    class _MissingRepository:
+        def get_run(self, *_args, **_kwargs):
+            return None
+
+        def get_candidate(self, *_args, **_kwargs):
+            raise AssertionError("an unknown run must never reach candidate reads")
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _MissingRepository()
+    response = test_client.get(
+        f"/api/v1/schedule-runs/{uuid4()}/result", headers=_headers(settings)
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "schedule_run_not_found"
+
+
+def test_result_route_reports_missing_candidate_as_a_distinct_problem(client) -> None:
+    test_client, settings, _ = client
+    run_id = uuid4()
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+
+        def get_candidate(self, *_args, **_kwargs):
+            return None
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "schedule_candidate_missing"
+
+
+def test_result_route_reports_missing_snapshot_as_a_distinct_problem(client) -> None:
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+
+        def get_candidate(self, *_args, **_kwargs):
+            return candidate
+
+        def load_snapshot(self, *_args, **_kwargs):
+            return None
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "run_snapshot_missing"
+
+
+def test_result_route_reports_comparison_integrity_failure_as_a_distinct_problem(
+    client, monkeypatch
+) -> None:
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+
+        def get_candidate(self, *_args, **_kwargs):
+            return candidate
+
+        def load_snapshot(self, *_args, **_kwargs):
+            return SimpleNamespace(baseline_schedule_version=None)
+
+    def _raise(*_args, **_kwargs):
+        raise ComparisonIntegrityError("persisted candidate metrics disagree with recomputation")
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", _raise)
+
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "comparison_calculation_failed"
+
+
+def test_result_route_lets_an_unrelated_bug_surface_as_the_generic_internal_error(
+    client, monkeypatch
+) -> None:
+    """The narrowed `except ComparisonIntegrityError` must not swallow other bugs.
+
+    Before this fix, a bare `except Exception` mapped ANY failure inside
+    `calculate_comparison` -- including an unrelated `KeyError`/`AttributeError`
+    -- to the same `comparison_calculation_failed` code as a genuine integrity
+    violation. This proves an unrelated exception now falls through to
+    `api/main.py`'s global handler and reports as `internal_error` instead.
+    """
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+
+        def get_candidate(self, *_args, **_kwargs):
+            return candidate
+
+        def load_snapshot(self, *_args, **_kwargs):
+            return SimpleNamespace(baseline_schedule_version=None)
+
+    def _raise(*_args, **_kwargs):
+        raise KeyError("unrelated bug, not an integrity failure")
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", _raise)
+
+    # The shared `client` fixture's TestClient re-raises server exceptions by
+    # default; the global handler's own docstring documents that Starlette's
+    # `BaseHTTPMiddleware` re-raises even a handled exception through
+    # `TestClient`, so this specific assertion needs `raise_server_exceptions=False`
+    # (matching the established pattern in `test_scenario_catalogue_api.py`).
+    with TestClient(app, raise_server_exceptions=False) as unraising_client:
+        response = unraising_client.get(
+            f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings)
+        )
+
+    assert response.status_code == 500
+    assert response.json()["code"] == "internal_error"
 
 
 class _StartRepository:

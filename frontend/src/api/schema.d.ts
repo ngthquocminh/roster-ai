@@ -711,6 +711,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/schedule-runs/{run_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Schedule Run Result */
+        get: operations["get_schedule_run_result_api_v1_schedule_runs__run_id__result_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/schedule-runs/{run_id}/cancellation": {
         parameters: {
             query?: never;
@@ -800,6 +817,26 @@ export interface components {
             };
             /** Parsed Constraint */
             parsed_constraint: string;
+        };
+        /** AssignmentDiffOut */
+        AssignmentDiffOut: {
+            /** Added Worker Ids */
+            added_worker_ids: string[];
+            /** Removed Worker Ids */
+            removed_worker_ids: string[];
+            /** Added Shift Ids */
+            added_shift_ids: string[];
+            /** Removed Shift Ids */
+            removed_shift_ids: string[];
+            /** Added Task Ids */
+            added_task_ids: string[];
+            /** Removed Task Ids */
+            removed_task_ids: string[];
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
         };
         /** AssignmentOut */
         AssignmentOut: {
@@ -943,6 +980,53 @@ export interface components {
             activity_type: "clarification";
             clarification: components["schemas"]["ResolvedClarificationV1"];
         };
+        /** ComparisonOut */
+        ComparisonOut: {
+            /**
+             * Candidate Schedule Version Id
+             * Format: uuid
+             */
+            candidate_schedule_version_id: string;
+            /**
+             * Candidate Schedule Run Id
+             * Format: uuid
+             */
+            candidate_schedule_run_id: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /** Expected Baseline Schedule Version */
+            expected_baseline_schedule_version: string | null;
+            /** Current Baseline Schedule Version */
+            current_baseline_schedule_version: string | null;
+            /** Stale */
+            stale: boolean;
+            assignment_diff: components["schemas"]["AssignmentDiffOut"];
+            candidate_metrics: components["schemas"]["MetricSetOut"];
+            baseline_metrics: components["schemas"]["MetricSetOut"];
+            /** Candidate Constraint Results */
+            candidate_constraint_results: components["schemas"]["ConstraintResultOut"][];
+            /** Baseline Hard Constraint Results */
+            baseline_hard_constraint_results: components["schemas"]["ConstraintResultOut"][];
+            /** Warnings */
+            warnings: string[];
+            /** Unresolved Gap Record Ids */
+            unresolved_gap_record_ids: string[];
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefOut"][];
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
         /** ConstraintPageOut */
         ConstraintPageOut: {
             /**
@@ -1007,6 +1091,35 @@ export interface components {
             value: string;
             /** Value Type */
             value_type: string | null;
+        };
+        /** ConstraintResultOut */
+        ConstraintResultOut: {
+            /** Constraint Id */
+            constraint_id: string;
+            /** Constraint Type */
+            constraint_type: string;
+            /**
+             * Constraint Class
+             * @enum {string}
+             */
+            constraint_class: "hard" | "soft";
+            /** Satisfied */
+            satisfied: boolean;
+            /** Measured Value */
+            measured_value: number | null;
+            /** Limit */
+            limit: number | null;
+            /** Unit */
+            unit: string;
+            /** Contributing Assignment Ids */
+            contributing_assignment_ids: string[];
+            /** Contributing Evidence Refs */
+            contributing_evidence_refs: components["schemas"]["EvidenceRefOut"][];
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
         };
         /** ConversationCreateIn */
         ConversationCreateIn: {
@@ -1264,6 +1377,39 @@ export interface components {
             label: string;
             /** Scenario Version Id */
             scenario_version_id?: string | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
+        /** EvidenceRefOut */
+        EvidenceRefOut: {
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /** Checksum Algorithm */
+            checksum_algorithm: string;
+            /** Checksum Schema Version */
+            checksum_schema_version: string;
+            /** Checksum Digest */
+            checksum_digest: string;
+            /** Producing Run Version */
+            producing_run_version: string | null;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
+            /** Group */
+            group: string;
+            /** Record Id */
+            record_id: string;
+            /** Field */
+            field?: string | null;
+            /** Start Minute */
+            start_minute?: number | null;
+            /** End Minute */
+            end_minute?: number | null;
             /**
              * Schema Version
              * @default 1
@@ -1537,6 +1683,74 @@ export interface components {
         MessageCreateIn: {
             /** Text */
             text: string;
+        };
+        /** MetricSetOut */
+        MetricSetOut: {
+            /**
+             * Interval Coverage Required Minutes
+             * @default []
+             */
+            interval_coverage_required_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Interval Coverage Served Minutes
+             * @default []
+             */
+            interval_coverage_served_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Function Coverage Required Minutes
+             * @default []
+             */
+            function_coverage_required_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Function Coverage Served Minutes
+             * @default []
+             */
+            function_coverage_served_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Overtime Minutes
+             * @default 0
+             */
+            overtime_minutes: number;
+            /**
+             * Total Cost
+             * @default 0
+             */
+            total_cost: number;
+            /**
+             * Objective Components
+             * @default []
+             */
+            objective_components: [
+                string,
+                number
+            ][];
+            /**
+             * Assignment Count
+             * @default 0
+             */
+            assignment_count: number;
+            /**
+             * Member Count
+             * @default 0
+             */
+            member_count: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
         };
         /** OverrideOut */
         OverrideOut: {
@@ -1972,6 +2186,12 @@ export interface components {
             /** Matching Count */
             matching_count: number;
         };
+        /** ScheduleRunResultOut */
+        ScheduleRunResultOut: {
+            run: components["schemas"]["ScheduleRunOut"];
+            candidate: components["schemas"]["ScheduleVersionOut"] | null;
+            comparison: components["schemas"]["ComparisonOut"] | null;
+        };
         /** ScheduleRunStartIn */
         ScheduleRunStartIn: {
             /**
@@ -2027,6 +2247,60 @@ export interface components {
             proposal_version: number;
             /** Baseline Schedule Version */
             baseline_schedule_version: string | null;
+        };
+        /** ScheduleVersionOut */
+        ScheduleVersionOut: {
+            /**
+             * Schedule Version Id
+             * Format: uuid
+             */
+            schedule_version_id: string;
+            /**
+             * Schedule Run Id
+             * Format: uuid
+             */
+            schedule_run_id: string;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /**
+             * Proposal Version Id
+             * Format: uuid
+             */
+            proposal_version_id: string;
+            /**
+             * Feasible Solver Status
+             * @enum {string}
+             */
+            feasible_solver_status: "OPTIMAL" | "FEASIBLE";
+            /** Assignments */
+            assignments: components["schemas"]["AssignmentOut"][];
+            metrics: components["schemas"]["MetricSetOut"];
+            /** Constraint Results */
+            constraint_results: components["schemas"]["ConstraintResultOut"][];
+            /** Warnings */
+            warnings: string[];
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefOut"][];
+            /** Created At */
+            created_at: string | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
         };
         /** TaskPageOut */
         TaskPageOut: {
@@ -4527,6 +4801,82 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_schedule_run_result_api_v1_schedule_runs__run_id__result_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScheduleRunResultOut"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

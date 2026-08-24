@@ -293,6 +293,99 @@ class ScheduleRunOut(BaseModel):
     finished_at: datetime | None = None
 
 
+class EvidenceRefOut(BaseModel):
+    scenario_version_id: UUID
+    checksum_algorithm: str
+    checksum_schema_version: str
+    checksum_digest: str
+    producing_run_version: str | None
+    baseline_schedule_version: str | None
+    group: str
+    record_id: str
+    field: str | None = None
+    start_minute: int | None = None
+    end_minute: int | None = None
+    schema_version: str = "1"
+
+
+class MetricSetOut(BaseModel):
+    interval_coverage_required_minutes: list[tuple[str, float]] = []
+    interval_coverage_served_minutes: list[tuple[str, float]] = []
+    function_coverage_required_minutes: list[tuple[str, float]] = []
+    function_coverage_served_minutes: list[tuple[str, float]] = []
+    overtime_minutes: float = 0.0
+    total_cost: float = 0.0
+    objective_components: list[tuple[str, float]] = []
+    assignment_count: int = 0
+    member_count: int = 0
+    schema_version: str = "1"
+
+
+class ConstraintResultOut(BaseModel):
+    constraint_id: str
+    constraint_type: str
+    constraint_class: Literal["hard", "soft"]
+    satisfied: bool
+    measured_value: float | None
+    limit: float | None
+    unit: str
+    contributing_assignment_ids: list[str]
+    contributing_evidence_refs: list[EvidenceRefOut]
+    schema_version: str = "1"
+
+
+class ScheduleVersionOut(BaseModel):
+    schedule_version_id: UUID
+    schedule_run_id: UUID
+    scenario_id: UUID
+    scenario_version_id: UUID
+    proposal_id: UUID
+    proposal_version_id: UUID
+    feasible_solver_status: Literal["OPTIMAL", "FEASIBLE"]
+    assignments: list["AssignmentOut"]
+    metrics: MetricSetOut
+    constraint_results: list[ConstraintResultOut]
+    warnings: list[str]
+    evidence_refs: list[EvidenceRefOut]
+    created_at: datetime | None
+    schema_version: str = "1"
+
+
+class AssignmentDiffOut(BaseModel):
+    added_worker_ids: list[str]
+    removed_worker_ids: list[str]
+    added_shift_ids: list[str]
+    removed_shift_ids: list[str]
+    added_task_ids: list[str]
+    removed_task_ids: list[str]
+    schema_version: str = "1"
+
+
+class ComparisonOut(BaseModel):
+    candidate_schedule_version_id: UUID
+    candidate_schedule_run_id: UUID
+    scenario_id: UUID
+    scenario_version_id: UUID
+    expected_baseline_schedule_version: str | None
+    current_baseline_schedule_version: str | None
+    stale: bool
+    assignment_diff: AssignmentDiffOut
+    candidate_metrics: MetricSetOut
+    baseline_metrics: MetricSetOut
+    candidate_constraint_results: list[ConstraintResultOut]
+    baseline_hard_constraint_results: list[ConstraintResultOut]
+    warnings: list[str]
+    unresolved_gap_record_ids: list[str]
+    evidence_refs: list[EvidenceRefOut]
+    schema_version: str = "1"
+
+
+class ScheduleRunResultOut(BaseModel):
+    run: ScheduleRunOut
+    candidate: ScheduleVersionOut | None
+    comparison: ComparisonOut | None
+
+
 class ScheduleRunSummaryOut(BaseModel):
     """One row of the Runs workspace list (Story 3.7 AC1)."""
 

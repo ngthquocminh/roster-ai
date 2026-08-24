@@ -1,5 +1,34 @@
 # Deferred Work
 
+## Deferred from: code review of story-3-8-compare-candidate-and-baseline-results (2026-08-24)
+
+- **`ScenarioProjectionReader` cannot read a pinned historical scenario version — a systemic Epic 2
+  port limitation, not a Story 3.8 defect.** `get_overview`/`get_tasks`/`get_workers`/`get_demand`
+  take no `scenario_version_id` parameter; the Postgres adapter's `_projection_row()`
+  (`adapters/postgres/scenario_projection.py:502-524`) always fetches whichever scenario version is
+  currently latest. Every caller that needs a specific pinned version (both `application/scheduling/comparison.py`,
+  added by this story, and `application/grounding/calculators.py`'s `_overview()`/`drain_projection_group`,
+  shipped in Epic 2) works around this the same way: read "latest", then manually verify
+  `overview.scenario_version_id == expected` and raise if it doesn't match. Story 3.8 reused this
+  idiom exactly as instructed ("the grounding calculator idioms from Epic 2"). The consequence: once a
+  scenario's fixture is reloaded (creating a new `scenario_version` — see `adapters/postgres/fixture_history.py`,
+  the only inserter), every grounding claim AND every completed run's `/result` comparison for that
+  scenario's earlier versions starts hard-failing (`CalculationVersionMismatchError` /
+  `ComparisonIntegrityError`) instead of reading the historical data it's pinned to. **Owner/revisit
+  trigger:** whichever story next needs to read scenario projection data at a specific past version —
+  fixing it means extending the `ScenarioProjectionReader` protocol and the Postgres adapter with a
+  version parameter, and updating both call sites (`comparison.py` and `calculators.py`) together so
+  they don't diverge.
+
+- **Comparison evidence trail only names the `baseline-assignments` group.** `calculate_comparison`
+  (`backend/application/scheduling/comparison.py`) emits `EvidenceRefV1` entries for the baseline
+  assignments it drains, but the `tasks`/`demand`/`workers` groups it also drains to produce
+  `candidate_metrics`/`baseline_metrics` get no evidence refs of their own. The underlying data is
+  still traceable — `calculate_comparison` enforces that `scenario_version_id` matches before reading
+  — so this is a completeness gap in the audit trail, not a correctness bug. **Owner/revisit trigger:**
+  whichever story next needs to answer "which specific task/demand/worker rows fed this metric" from
+  the evidence list alone, rather than from the enforced version pin.
+
 ## Deferred from: correct-course of story-2-7 grounding mechanism (2026-08-13)
 
 Surfaced while amending Story 2.7's Decision 2 (`sprint-change-proposal-2026-08-13.md`). None of these is caused by that amendment, and none is fixed by it. They are recorded together because they are one gap seen from three sides: **the harness evaluates the plumbing, not the model.** Story 2.7's grounding gate is a structural invariant — every rendered number is application-computed, from an immutable version, with a locator — and it is enforced per request. Whether the model chose the *right* metric for the question asked, and whether its prose fairly characterises the number beside it, are statistical properties that only an evaluation layer can measure. That layer has targets but no instrument.
@@ -399,3 +428,11 @@ rather than folded in.
 - **Operational timestamps render with no timezone marker.** `RunsTable`'s Accepted/Updated cells and `ProgressCard`'s "Accepted …" line use `formatTimestamp`, which deliberately slices the UTC wall-clock; no column header or label carries "(UTC)". A planner reading `Accepted 2026-08-22 10:00` on a shift floor will read it as site-local time, and the site timezone is `Australia/Sydney`. [frontend/src/lib/formatTimestamp.ts] — **Deferred reason: pre-existing shared helper, not introduced here** — changing its contract affects every surface that already renders a timestamp. This is, however, the first planner-facing surface where the offset is operationally load-bearing. **Owner/revisit trigger:** the first story permitted to change `formatTimestamp`'s contract, or Story 3.8's Results view — whichever comes first — fixing all timestamp surfaces in one pass.
 
 - **The Runs list has no live update mechanism — no polling and no SSE subscription; refresh is an explicit planner gesture.** `useScheduleRuns` carries no `refetchInterval` and nothing subscribes to Story 3.5's `GET /api/v1/schedule-runs/{run_id}/events`. [frontend/src/hooks/useScheduleRuns.ts] — **Deferred reason: nothing moves a run on its own yet.** There is no production worker loop (deferred to Story 3.11), so every state change today is planner-initiated — start and cancel — and both now invalidate `["scheduleRuns"]`, which keeps the table correct without polling. An explicit Refresh control was added instead (`ScenarioRuns.tsx`), which also respects AC3's "static text only" constraint. Two options were weighed and rejected *for now*: unconditional polling contradicts this repo's own convention, where `useConversationTimeline`'s `refetchInterval` is a labelled fallback for a dead stream and defaults to `false`; and SSE is the wrong shape for a list — `useConversationStream` is 312 conversation-specific lines with no reusable seam, and the events route is per-run, so N non-terminal rows would need N concurrent streams. **Owner: Story 3.11**, which lands the worker loop and is the first story where a run changes state with no planner gesture behind it — that is the point at which polling-fallback vs. SSE becomes a real decision rather than a guess.
+
+## Deferred from: implementation of story-3.8 (2026-08-24)
+
+- **A real non-empty baseline cannot yet produce authoritative cost or hard-constraint readings from the scenario projection.** `WorkerV1` exposes no wage and the projection exposes no solver-selected shift windows, so `application/scheduling/comparison.py` uses `wage_per_hour=0.0` and `selected_shifts=()` for the baseline-side reuse of the shared calculators. This is truthful for production today only because `PostgresScenarioProjectionReader.get_baseline_assignments()` is always empty; seeded tests exercise the diff mechanism but deliberately do not claim the placeholder cost/shift readings are production-correct. **Owner/revisit trigger: the first story that populates a real non-empty baseline assignment supply** must add authoritative wages and shift windows before enabling that supply.
+
+- **Comparison staleness is implemented and tested but vacuously false in production.** `calculate_comparison` compares the run snapshot's frozen `baseline_schedule_version` with the current `ScenarioOverviewV1.baseline_schedule_version`, returns both identifiers, and preserves the historical comparison under `stale: true`. Both production values remain `None`, so the trigger cannot occur outside a seeded test yet. **Owner: Story 4.3**, which introduces and moves the real baseline pointer.
+
+- **Non-candidate run outcomes have no persisted warning/evidence collection beyond their literal status and reason.** `ScheduleRunViewV1` and `ScheduleRunOut` carry status, reason, resource version, cancellation state, and timestamps; failed/infeasible/timed-out/cancelled runs have no `ScheduleVersionV1`, so the result endpoint has no warning/evidence tuple to return on those branches. `TerminalOutcomeCard` therefore renders the available literal reason and states that no candidate evidence was produced, without fabricating empty metrics or an approval action. **Owner/revisit trigger: the first story that persists terminal solver diagnostics independently of a candidate schedule version.**
