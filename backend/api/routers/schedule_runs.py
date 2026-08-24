@@ -51,7 +51,7 @@ from application.capabilities.scheduling_optimize import (
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.schedule_version import RUN_EVENT_TYPES
 from application.ports.scenario_projection import ScenarioProjectionReader
-from application.scheduling.comparison import calculate_comparison
+from application.scheduling.comparison import ComparisonIntegrityError, calculate_comparison
 from application.ports.schedule_run import (
     ScheduleRunRepository,
     ScheduleRunSummaryV1,
@@ -592,7 +592,12 @@ def get_schedule_run_result(
             site_id=session.site_id,
             expected_baseline_schedule_version=snapshot.baseline_schedule_version,
         )
-    except Exception:
+    except ComparisonIntegrityError:
+        # Only the recomputation's own declared failure gets this specific,
+        # user-facing code. Anything else (a driver error, an unrelated bug)
+        # falls through to `versioned_unhandled_problem` (api/main.py), which
+        # reports it as the generic `internal_error` it actually is rather
+        # than the misleading claim that evidence failed to verify.
         return problem_response(
             status=500,
             code="comparison_calculation_failed",

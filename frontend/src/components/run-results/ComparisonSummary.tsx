@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/button";
 type Comparison = NonNullable<ScheduleRunResult["comparison"]>;
 type Pair = [string, number];
 
-function sum(values: Pair[]): number | null {
-  return values.length ? values.reduce((total, [, value]) => total + value, 0) : null;
+function sum(values: Pair[]): number {
+  // An empty tuple is a real zero (no demand rows), not "not computed" --
+  // `calculate_candidate_metrics` always populates this field when a
+  // comparison exists, so there is no absent-data case to distinguish here.
+  return values.reduce((total, [, value]) => total + value, 0);
 }
 
 function delta(candidate: number | null, baseline: number | null): string {
@@ -32,7 +35,7 @@ export function ComparisonSummary({ comparison }: Readonly<{ comparison: Compari
     <section aria-labelledby="comparison-heading" className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xl font-semibold" id="comparison-heading">Candidate comparison</h3>
-        <Button disabled title="Approval is not available yet" type="button" variant="outline">Approve as baseline</Button>
+        <Button className="min-h-11" disabled title="Approval is not available yet" type="button" variant="outline">Approve as baseline</Button>
       </div>
 
       {comparison.stale ? <InlineAlert title="Historical comparison" description={`Expected baseline ${comparison.expected_baseline_schedule_version ?? "none"}; current baseline ${comparison.current_baseline_schedule_version ?? "none"}. The frozen numbers remain visible below.`} /> : null}

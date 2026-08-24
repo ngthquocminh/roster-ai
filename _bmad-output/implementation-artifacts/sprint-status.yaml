@@ -1522,7 +1522,7 @@ development_status:
   3-5-persist-literal-run-state-and-replay-progress: done
   3-6-start-explicit-bounded-optimization: done
   3-7-monitor-cancel-and-reopen-runs: done
-  3-8-compare-candidate-and-baseline-results: review
+  3-8-compare-candidate-and-baseline-results: done
   3-9-continue-deterministic-work-during-model-outage: backlog
   3-10-prove-repair-correctness: backlog
   3-11-prove-recovery-and-idempotency: backlog

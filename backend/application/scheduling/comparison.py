@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import math
 from typing import Any, cast
 from uuid import UUID
 
@@ -65,6 +66,79 @@ def _ids(assignments: tuple[AssignmentV1, ...], field: str) -> set[str]:
     return {value for assignment in assignments if (value := getattr(assignment, field)) is not None}
 
 
+def _sorted_values(pairs: tuple[tuple[str, float], ...]) -> tuple[float, ...]:
+    """Compare interval-coverage minutes by value only, never by record_id.
+
+    A demand row's `record_id` is a content hash at solve time
+    (`engine/governed_adapter.py`'s `contract_digest`) but a positional index
+    at comparison time (`adapters/postgres/scenario_projection.py`'s
+    `_normalize_demand`, e.g. "outbound:0"). The two identifier namespaces
+    were never meant to agree, so pairing (record_id, value) tuples for
+    equality would raise `ComparisonIntegrityError` for every completed run
+    with real demand. The sorted value multiset still proves the recomputed
+    numbers agree with what was persisted.
+    """
+    return tuple(sorted(value for _, value in pairs))
+
+
+# Proven necessary by `test_solve_time_and_comparison_time_metrics_agree_on_a_real_fixture`:
+# the same underlying rate/coverage arithmetic run through solve-time's
+# `engine/governed_adapter.py` facts versus comparison-time's freshly
+# re-normalized projection facts produces values that differ at the ~1e-9
+# relative level (float summation-order noise, not a real disagreement) --
+# e.g. 15929.70961666407 vs 15929.709616664071 for the same fixture. Both
+# tolerances sit ~1000x above that observed noise floor and ~1000x below the
+# 2-decimal-place precision the frontend actually renders, so a real drift
+# large enough to change a displayed number still raises.
+_FLOAT_REL_TOL = 1e-9
+_FLOAT_ABS_TOL = 1e-9
+
+
+def _floats_close(left: float, right: float) -> bool:
+    return math.isclose(left, right, rel_tol=_FLOAT_REL_TOL, abs_tol=_FLOAT_ABS_TOL)
+
+
+def _value_lists_close(left: tuple[float, ...], right: tuple[float, ...]) -> bool:
+    return len(left) == len(right) and all(
+        _floats_close(a, b) for a, b in zip(left, right)
+    )
+
+
+def _named_pairs_close(
+    left: tuple[tuple[str, float], ...], right: tuple[tuple[str, float], ...]
+) -> bool:
+    left_map, right_map = dict(left), dict(right)
+    return left_map.keys() == right_map.keys() and all(
+        _floats_close(value, right_map[name]) for name, value in left_map.items()
+    )
+
+
+def _metrics_disagree(recomputed: Any, persisted: Any) -> bool:
+    return (
+        recomputed.assignment_count != persisted.assignment_count
+        or recomputed.member_count != persisted.member_count
+        or not _floats_close(recomputed.overtime_minutes, persisted.overtime_minutes)
+        or not _floats_close(recomputed.total_cost, persisted.total_cost)
+        or not _named_pairs_close(recomputed.objective_components, persisted.objective_components)
+        or not _named_pairs_close(
+            recomputed.function_coverage_required_minutes,
+            persisted.function_coverage_required_minutes,
+        )
+        or not _named_pairs_close(
+            recomputed.function_coverage_served_minutes,
+            persisted.function_coverage_served_minutes,
+        )
+        or not _value_lists_close(
+            _sorted_values(recomputed.interval_coverage_required_minutes),
+            _sorted_values(persisted.interval_coverage_required_minutes),
+        )
+        or not _value_lists_close(
+            _sorted_values(recomputed.interval_coverage_served_minutes),
+            _sorted_values(persisted.interval_coverage_served_minutes),
+        )
+    )
+
+
 def calculate_comparison(
     reader: ScenarioProjectionReader,
     connection: Any,
@@ -104,7 +178,7 @@ def calculate_comparison(
     # readable through this projection. Preserve its immutable persisted cost,
     # while verifying every projection-recomputable field.
     recomputed_candidate = replace(recomputed_candidate, total_cost=candidate.metrics.total_cost)
-    if recomputed_candidate != candidate.metrics:
+    if _metrics_disagree(recomputed_candidate, candidate.metrics):
         raise ComparisonIntegrityError("persisted candidate metrics disagree with recomputation")
 
     baseline_metrics, _ = calculate_candidate_metrics(

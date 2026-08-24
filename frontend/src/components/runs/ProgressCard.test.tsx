@@ -39,3 +39,8 @@ describe.each(["solver_queued", "solver_running", "cancellation_requested"] as c
     });
   },
 );
+
+it("renders 'Accepted time not recorded' rather than a formatted null timestamp", () => {
+  render(<ProgressCard run={{ status: "solver_running", created_at: null }} />);
+  expect(screen.getByText("Accepted time not recorded")).toBeInTheDocument();
+});

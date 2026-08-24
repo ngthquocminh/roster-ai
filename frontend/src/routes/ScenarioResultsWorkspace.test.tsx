@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 
@@ -42,4 +43,49 @@ it("keeps the workspace shell and peer tabs available when Results fetch fails",
   expect(screen.getByRole("link", { name: "Scenario Data" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Runs" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Fixture A" })).toBeInTheDocument();
+});
+
+it("shows an alert for a run status this page does not recognize", async () => {
+  vi.mocked(getScheduleRunResult).mockResolvedValue({
+    run: {
+      schedule_run_id: runId, status: "some_future_status", reason: null,
+      resource_version: 1, cancellation_requested: false, created_at: null, finished_at: null,
+    },
+    candidate: null,
+    comparison: null,
+  } as never);
+  const router = createMemoryRouter([{
+    path: "/scenarios/:scenarioId", Component: ScenarioWorkspace,
+    children: [{ path: "runs/:runId", Component: ScenarioResults }],
+  }], { initialEntries: [`/scenarios/${scenarioId}/runs/${runId}`] });
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>);
+
+  expect(await screen.findByText("Unrecognized run status")).toBeInTheDocument();
+});
+
+it("hides stale content instead of showing it alongside the error when a background refetch fails", async () => {
+  vi.mocked(getScheduleRunResult)
+    .mockResolvedValueOnce({
+      run: {
+        schedule_run_id: runId, status: "solver_running", reason: null,
+        resource_version: 1, cancellation_requested: false,
+        created_at: "2026-08-24T00:00:00Z", finished_at: null,
+      },
+      candidate: null,
+      comparison: null,
+    } as never)
+    .mockRejectedValueOnce({ status: 500 });
+  const router = createMemoryRouter([{
+    path: "/scenarios/:scenarioId", Component: ScenarioWorkspace,
+    children: [{ path: "runs/:runId", Component: ScenarioResults }],
+  }], { initialEntries: [`/scenarios/${scenarioId}/runs/${runId}`] });
+
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>);
+
+  expect(await screen.findByText("In progress")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+  expect(await screen.findByText("Couldn't load this content.")).toBeInTheDocument();
+  expect(screen.queryByText("In progress")).not.toBeInTheDocument();
 });

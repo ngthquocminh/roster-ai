@@ -10,6 +10,7 @@ import { USER_ERROR_COPY } from "@/lib/errors";
 
 const NON_TERMINAL = new Set(["solver_queued", "solver_running", "cancellation_requested"]);
 const NON_PROMOTABLE = new Set(["solver_infeasible", "solver_timed_out", "solver_cancelled", "solver_failed"]);
+const KNOWN_RUN_STATUSES = new Set([...NON_TERMINAL, ...NON_PROMOTABLE, "solver_completed"]);
 
 export function ScenarioResults() {
   const { runId = "", scenarioId = "" } = useParams();
@@ -25,9 +26,9 @@ export function ScenarioResults() {
       {query.isPending ? <div aria-label="Loading results" className="space-y-3"><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div> : null}
       {query.isError ? <InlineAlert action={<Button onClick={() => { void query.refetch(); }} type="button" variant="outline">Retry</Button>} description={USER_ERROR_COPY.connection.description} title={USER_ERROR_COPY.connection.title} variant="destructive" /> : null}
 
-      {query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
-      {query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}
-      {query.data?.run.status === "solver_completed" && query.data.candidate && query.data.comparison ? (
+      {!query.isError && query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
+      {!query.isError && query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}
+      {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && query.data.comparison ? (
         <>
           <ComparisonSummary comparison={query.data.comparison} />
           <section aria-labelledby="candidate-schedule-heading" className="rounded-xl border p-4">
@@ -40,7 +41,8 @@ export function ScenarioResults() {
           </section>
         </>
       ) : null}
-      {query.data?.run.status === "solver_completed" && (!query.data.candidate || !query.data.comparison) ? <InlineAlert description="The completed run did not return verifiable candidate evidence." title="Result unavailable" variant="destructive" /> : null}
+      {!query.isError && query.data?.run.status === "solver_completed" && (!query.data.candidate || !query.data.comparison) ? <InlineAlert description="The completed run did not return verifiable candidate evidence." title="Result unavailable" variant="destructive" /> : null}
+      {!query.isError && query.data && !KNOWN_RUN_STATUSES.has(query.data.run.status) ? <InlineAlert description="This run reported a status this page does not recognize yet." title="Unrecognized run status" variant="destructive" /> : null}
     </section>
   );
 }

@@ -4,7 +4,7 @@ baseline_commit: a77df3579c79933e6a5cfdd0d8ad2c17e1a8d51f
 
 # Story 3.8: Compare Candidate and Baseline Results
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -575,6 +575,89 @@ completes without raising `CalculationLimitError`.
         implementation, not left as a silent gap.
   - [x] Full regression: backend `pytest` (postgres included), frontend `vitest run`, `tsc --noEmit`,
         `oxlint`, `npm run build`. Walk every Done checklist item below against the shipped code.
+
+---
+
+### Review Findings
+
+Code review (2026-08-24), diff `a77df357`..`HEAD`, three parallel adversarial layers (Blind Hunter,
+Edge Case Hunter, Acceptance Auditor) plus direct code reading beyond the diff hunks. 2 decision-needed
+(both resolved with the user — D1 → defer, D2 → fix), 11 patch (all applied), 2 defer, 6 dismissed as
+noise/pre-existing/non-issues after verification (one of the six — the try/except wrap — was only
+disproven during implementation, once `api/main.py`'s global exception handler was found to already
+cover it).
+
+- [x] [Review][Defer] `ScenarioProjectionReader.get_overview`/group reads always fetch the current
+      latest scenario version, never a pinned historical one, so `/result` permanently 500s every
+      prior completed run of a scenario after its fixture is reloaded, instead of degrading gracefully
+      (D1) [`application/ports/scenario_projection.py`, `adapters/postgres/scenario_projection.py`,
+      `application/scheduling/comparison.py`] — deferred, pre-existing: `application/grounding/calculators.py`
+      (Epic 2) uses the identical get-latest-then-verify-pinned-version pattern, so this is a systemic
+      port limitation Story 3.8 correctly reused per its own "Epic 2 idioms" instruction, not a defect
+      introduced by this diff. Fixing it consistently means extending the port for both call sites at
+      once — out of this story's scope.
+- [x] [Review][Patch] Add a real integration test (solve a fixture, persist the candidate, then call
+      the real Postgres-backed `calculate_comparison`) proving the solve-time
+      (`ingest/input_adapter.py`/`engine/governed_adapter.py`) and comparison-time
+      (`adapters/postgres/scenario_projection.py`'s `_normalize_tasks`/`_normalize_demand`/`_normalize_workers`)
+      metric normalization paths agree (resolved D2) [`backend/tests/test_schedule_comparison.py::test_solve_time_and_comparison_time_metrics_agree_on_a_real_fixture`]
+      — fixed, and the test caught two real, previously-undetectable bugs on its first run against
+      `data/sample_tiny_input.json`, both fixed in `application/scheduling/comparison.py`:
+      1. **Demand `record_id` namespace mismatch (deterministic, not probabilistic):** solve-time
+         (`engine/governed_adapter.py`) stamps `"dem_" + contract_digest(...)` (a content hash);
+         comparison-time (`_normalize_demand`) stamps `f"outbound:{index}"`/`f"inbound:{i}:{j}"`/`f"indirect:{index}"`
+         (a positional index) for the identical row. `interval_coverage_*_minutes` pairs `(record_id, value)`,
+         so the old whole-dataclass `!=` check would have raised `ComparisonIntegrityError` for **every**
+         completed run with real demand, not merely a rare one. Fixed by comparing the sorted **value**
+         multiset only (`_sorted_values`), never the record_id, for these two fields.
+      2. **Genuine float summation-order drift (~1e-9 relative), confirmed on the real fixture:**
+         `function_coverage_required_minutes["Pick"]` computed as `15929.70961666407` at solve time vs
+         `15929.709616664071` at comparison time — same formula, different row-iteration order between
+         the two independent normalizers. Fixed by replacing the exact `!=` equality with
+         `math.isclose(rel_tol=1e-9, abs_tol=1e-9)` for every float-valued metric field in the new
+         `_metrics_disagree()` (int fields `assignment_count`/`member_count` stay exact).
+- [x] [Review][Dismiss] ~~Wrap `get_candidate`/`load_snapshot` calls in try/except~~ — dismissed on
+      implementation: `api/main.py:101-125` already registers a global `app.exception_handler(Exception)`
+      that converts any unhandled exception on `/api/v1/*` into the standard RFC 7807 `internal_error`
+      envelope. No route in this file wraps individual repository calls; this one shouldn't either.
+- [x] [Review][Patch] Narrow the `except Exception` around `calculate_comparison` to
+      `except ComparisonIntegrityError` so an unrelated bug falls through to the global handler's
+      generic `internal_error` instead of being mislabelled `comparison_calculation_failed`
+      [`backend/api/routers/schedule_runs.py:595`] — fixed
+- [x] [Review][Patch] Add the `/result` route tests the Done checklist already claims: unknown run id
+      → `schedule_run_not_found`, cross-site run id → same code [`backend/tests/test_schedule_runs_api.py`]
+      — fixed (`test_result_route_does_not_disclose_unknown_or_cross_site_run`)
+- [x] [Review][Patch] Add test coverage for the three new 500 branches (`schedule_candidate_missing`,
+      `run_snapshot_missing`, `comparison_calculation_failed`) [`backend/tests/test_schedule_runs_api.py`]
+      — fixed, plus one more test proving an unrelated bug now surfaces as `internal_error` rather than
+      being mislabelled (see the `except ComparisonIntegrityError` patch above)
+- [x] [Review][Patch] Fix `ComparisonSummary.tsx`'s `sum()` helper conflating a genuinely empty
+      (zero-demand) coverage tuple with "not computed" [`frontend/src/components/run-results/ComparisonSummary.tsx:9-10,61-62`]
+      — fixed, `sum()` now returns a real `0` for an empty tuple instead of `null`
+- [x] [Review][Patch] Add a fallback `InlineAlert` branch in `ScenarioResults.tsx` for a `run.status`
+      outside the three hardcoded sets, instead of rendering nothing [`frontend/src/routes/ScenarioResults.tsx`]
+      — fixed (`KNOWN_RUN_STATUSES`)
+- [x] [Review][Patch] Gate `ScenarioResults.tsx` content rendering so a background refetch failure
+      doesn't show the destructive alert alongside stale comparison content [`frontend/src/routes/ScenarioResults.tsx:25-30`]
+      — fixed, every data-dependent branch now also checks `!query.isError`
+- [x] [Review][Patch] Add a `ProgressCard.test.tsx` case for `created_at: null` ("Accepted time not
+      recorded") — the prop/behavior change has no test [`frontend/src/components/runs/ProgressCard.tsx`]
+      — fixed
+- [x] [Review][Patch] Add `className="min-h-11"` to the disabled "Approve as baseline" button to match
+      Story 3.7's `ApproveButton` posture exactly [`frontend/src/components/run-results/ComparisonSummary.tsx:35`]
+      — fixed
+- [x] [Review][Patch] Strengthen three self-declared guard tests: Trap 6 (interval-coverage tuples
+      proven non-empty), Trap 3 (diff mechanism shown red-then-green on a mutation), Trap 5 (second
+      fetch still describes original inputs, not silently rebased) [`backend/tests/test_schedule_comparison.py`]
+      — fixed (three new tests)
+- [x] [Review][Patch] Split or extend `test_candidate_metric_drift_raises_and_large_drain_completes` so
+      the "large drain completes" half is independently asserted, not inferred from ordering
+      [`backend/tests/test_schedule_comparison.py`] — fixed, split into
+      `test_candidate_metric_drift_raises_integrity_error` and `test_large_drain_completes_without_raising`
+- [x] [Review][Defer] Evidence refs are emitted only for the `baseline-assignments` group; the
+      freshly-drained `tasks`/`demand`/`workers` groups backing computed metrics get no `EvidenceRefV1`
+      entries of their own [`backend/application/scheduling/comparison.py`] — deferred, pre-existing
+      pattern (matches this story's own placeholder-gap convention)
 
 ---
 

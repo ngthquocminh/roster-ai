@@ -1,5 +1,34 @@
 # Deferred Work
 
+## Deferred from: code review of story-3-8-compare-candidate-and-baseline-results (2026-08-24)
+
+- **`ScenarioProjectionReader` cannot read a pinned historical scenario version — a systemic Epic 2
+  port limitation, not a Story 3.8 defect.** `get_overview`/`get_tasks`/`get_workers`/`get_demand`
+  take no `scenario_version_id` parameter; the Postgres adapter's `_projection_row()`
+  (`adapters/postgres/scenario_projection.py:502-524`) always fetches whichever scenario version is
+  currently latest. Every caller that needs a specific pinned version (both `application/scheduling/comparison.py`,
+  added by this story, and `application/grounding/calculators.py`'s `_overview()`/`drain_projection_group`,
+  shipped in Epic 2) works around this the same way: read "latest", then manually verify
+  `overview.scenario_version_id == expected` and raise if it doesn't match. Story 3.8 reused this
+  idiom exactly as instructed ("the grounding calculator idioms from Epic 2"). The consequence: once a
+  scenario's fixture is reloaded (creating a new `scenario_version` — see `adapters/postgres/fixture_history.py`,
+  the only inserter), every grounding claim AND every completed run's `/result` comparison for that
+  scenario's earlier versions starts hard-failing (`CalculationVersionMismatchError` /
+  `ComparisonIntegrityError`) instead of reading the historical data it's pinned to. **Owner/revisit
+  trigger:** whichever story next needs to read scenario projection data at a specific past version —
+  fixing it means extending the `ScenarioProjectionReader` protocol and the Postgres adapter with a
+  version parameter, and updating both call sites (`comparison.py` and `calculators.py`) together so
+  they don't diverge.
+
+- **Comparison evidence trail only names the `baseline-assignments` group.** `calculate_comparison`
+  (`backend/application/scheduling/comparison.py`) emits `EvidenceRefV1` entries for the baseline
+  assignments it drains, but the `tasks`/`demand`/`workers` groups it also drains to produce
+  `candidate_metrics`/`baseline_metrics` get no evidence refs of their own. The underlying data is
+  still traceable — `calculate_comparison` enforces that `scenario_version_id` matches before reading
+  — so this is a completeness gap in the audit trail, not a correctness bug. **Owner/revisit trigger:**
+  whichever story next needs to answer "which specific task/demand/worker rows fed this metric" from
+  the evidence list alone, rather than from the enforced version pin.
+
 ## Deferred from: correct-course of story-2-7 grounding mechanism (2026-08-13)
 
 Surfaced while amending Story 2.7's Decision 2 (`sprint-change-proposal-2026-08-13.md`). None of these is caused by that amendment, and none is fixed by it. They are recorded together because they are one gap seen from three sides: **the harness evaluates the plumbing, not the model.** Story 2.7's grounding gate is a structural invariant — every rendered number is application-computed, from an immutable version, with a locator — and it is enforced per request. Whether the model chose the *right* metric for the question asked, and whether its prose fairly characterises the number beside it, are statistical properties that only an evaluation layer can measure. That layer has targets but no instrument.

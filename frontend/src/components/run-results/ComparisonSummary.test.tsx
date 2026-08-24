@@ -54,6 +54,28 @@ describe("ComparisonSummary", () => {
     expect(screen.getByRole("button", { name: "Approve as baseline" })).toBeDisabled();
   });
 
+  it("renders a real zero coverage delta for genuinely zero demand, not 'Not computed'", () => {
+    // Both sides empty is what a scenario with zero demand rows produces --
+    // calculate_candidate_metrics always populates this field, so an empty
+    // tuple here is a real answer (0), never an absent one (Trap 6).
+    const zeroDemand = comparison();
+    zeroDemand.candidate_metrics = {
+      ...zeroDemand.candidate_metrics,
+      interval_coverage_required_minutes: [],
+      interval_coverage_served_minutes: [],
+    };
+    zeroDemand.baseline_metrics = {
+      ...zeroDemand.baseline_metrics,
+      interval_coverage_required_minutes: [],
+      interval_coverage_served_minutes: [],
+    };
+
+    render(<ComparisonSummary comparison={zeroDemand} />);
+
+    expect(screen.getByText(/Coverage required delta/).nextElementSibling).toHaveTextContent("0.00");
+    expect(screen.getByText(/Coverage served delta/).nextElementSibling).toHaveTextContent("0.00");
+  });
+
   it("keeps historical numbers visible under the stale warning", () => {
     render(<ComparisonSummary comparison={comparison(true)} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/baseline-v1.*baseline-v2/i);
