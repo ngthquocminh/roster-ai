@@ -154,8 +154,10 @@ def write_recovery_idempotency_report(
         repo_root=repo_root,
         fixtures=(),
         dataset_files=tuple(
-            repo_root / "backend" / node.split("::", 1)[0]
-            for node in dict.fromkeys(PROOF_NODES.values())
+            repo_root / "backend" / relative_path
+            for relative_path in dict.fromkeys(
+                node.split("::", 1)[0] for node in PROOF_NODES.values()
+            )
         ),
         allow_dirty=allow_dirty,
     )
