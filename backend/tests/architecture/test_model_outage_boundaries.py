@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -57,6 +58,13 @@ FORBIDDEN_MODEL_IMPORTS: tuple[str, ...] = (
     "agent",
     "application.ports.agent_runtime",
 )
+# Exact, like `LEGACY_ENGINE_IMPORTERS` in `test_solver_boundaries.py`: these are
+# the ONLY modules reachable from the manual solver path that import across the
+# agent boundary, and both are import-time wiring never called by the run
+# command. Equality -- not a subset check -- is what stops a third one joining.
+ACCEPTED_AGENT_BRIDGES: frozenset[str] = frozenset(
+    {"api/deps.py", "application/use_cases/execute_turn.py"}
+)
 
 _SESSION_TOKEN = "model-outage-session"
 _CSRF_TOKEN = "model-outage-csrf"
@@ -86,7 +94,50 @@ def _manual_solver_files() -> tuple[Path, ...]:
     return tuple(files)
 
 
-def test_manual_solver_path_has_no_agent_runtime_import() -> None:
+def _module_path(name: str) -> Path | None:
+    """Resolve a first-party module name to its file, or None if third-party."""
+    module = BACKEND / f"{name.replace('.', '/')}.py"
+    if module.is_file():
+        return module
+    package = BACKEND / name.replace(".", "/") / "__init__.py"
+    return package if package.is_file() else None
+
+
+def _agent_bridges() -> dict[str, list[str]]:
+    """Every module REACHABLE from the manual solver path that crosses into the
+    agent boundary -- not just the seeds' own direct imports.
+
+    A direct-import scan of `MANUAL_SOLVER_PATHS` alone cannot see the real
+    shape: `api/routers/schedule_runs.py` imports `api.deps`, and `api/deps.py`
+    imports `agent.runtime`, so the crossing sits one hop outside the scan set
+    and the seed-only test reported a clean path that was not clean. The walk
+    stops AT the boundary -- it never descends into `agent.*`, whose internals
+    import each other by construction -- so what it returns is exactly the set
+    of bridge modules.
+    """
+    bridges: dict[str, list[str]] = {}
+    seen: set[str] = set()
+    stack = list(_manual_solver_files())
+    while stack:
+        path = stack.pop()
+        relative = path.relative_to(BACKEND).as_posix()
+        if relative in seen:
+            continue
+        seen.add(relative)
+        names = _imports(path)
+        forbidden = sorted(name for name in names if _is_model_import(name))
+        if forbidden:
+            bridges[relative] = forbidden
+        for name in names:
+            if _is_model_import(name):
+                continue
+            resolved = _module_path(name)
+            if resolved is not None and resolved.relative_to(BACKEND).as_posix() not in seen:
+                stack.append(resolved)
+    return bridges
+
+
+def test_manual_solver_path_has_no_direct_agent_runtime_import() -> None:
     offenders = {
         path.relative_to(BACKEND).as_posix(): sorted(
             name for name in _imports(path) if _is_model_import(name)
@@ -104,6 +155,36 @@ def test_model_import_detector_can_observe_a_forbidden_boundary(tmp_path) -> Non
         encoding="utf-8",
     )
     assert any(_is_model_import(name) for name in _imports(forbidden))
+
+
+def test_only_the_exact_declared_modules_bridge_to_the_agent_boundary() -> None:
+    """The set is EXACT so a new bridge cannot silently join (Story 3.9 review).
+
+    Neither entry is reached by the manual run command at RUNTIME -- AC2's
+    behavioral proof arms a runtime factory that raises and the flow still
+    completes end to end. Both are import-time only, and both are shared FastAPI
+    wiring the agent surfaces legitimately own:
+
+    * `api/deps.py` publishes `get_agent_runtime_factory` beside every other
+      `Depends` seam. Splitting it would also require breaking
+      `schedule_runs.py`'s import of `api/routers/conversations.py` for the SSE
+      helpers, which Story 3.9 put out of scope.
+    * `application/use_cases/execute_turn.py` is reached only through that same
+      `api/routers/conversations.py` hop.
+
+    Reviewed and accepted 2026-08-24; see `deferred-work.md` for the owner.
+    """
+    assert set(_agent_bridges()) == ACCEPTED_AGENT_BRIDGES
+
+
+def test_transitive_walk_observes_a_bridge_the_seed_scan_cannot_see() -> None:
+    """Without this the walk could pass vacuously by never leaving the seeds."""
+    seeds = {path.relative_to(BACKEND).as_posix() for path in _manual_solver_files()}
+    bridges = _agent_bridges()
+
+    assert bridges, "the walk found no bridge at all -- it is not traversing"
+    assert set(bridges) - seeds, "every bridge is a seed -- transitivity is not exercised"
+    assert bridges["api/deps.py"] == ["agent.runtime"]
 
 
 class _IdentityStore:
@@ -422,30 +503,100 @@ def test_manual_run_end_to_end_and_replay_survive_a_raising_runtime_factory(
     _exercise_manual_run_flow(tmp_path, monkeypatch)
 
 
-def test_manual_run_result_and_evidence_survive_a_raising_trace_exporter(
+def test_manual_solver_path_imports_no_telemetry_at_all() -> None:
+    """AC3 for the deterministic path, proven by ABSENCE rather than by miming.
+
+    The earlier revision of this case built a local `TracerProvider`, emitted one
+    span into it, and then ran the manual flow -- but that provider was never the
+    global provider and was never injected into anything the flow touches, so
+    deleting the whole block left the test passing identically. It could not go
+    red (Story 3.9 review), which is exactly the circularity Decision E forbade.
+
+    The real finding is stronger than the mimed one: nothing reachable from the
+    manual solver path imports a telemetry library at all, so no exporter --
+    working, failing, or absent -- can reach it. `test_agent_runtime_boundaries`
+    keeps `logfire` out of domain/application code; this keeps the whole
+    telemetry surface out of the deterministic path, and goes red the moment an
+    import is added.
+    """
+    telemetry_roots = ("opentelemetry", "logfire")
+    offenders: dict[str, list[str]] = {}
+    seen: set[str] = set()
+    stack = list(_manual_solver_files())
+    while stack:
+        path = stack.pop()
+        relative = path.relative_to(BACKEND).as_posix()
+        if relative in seen:
+            continue
+        seen.add(relative)
+        names = _imports(path)
+        found = sorted(
+            name for name in names
+            if any(name == root or name.startswith(f"{root}.") for root in telemetry_roots)
+        )
+        if found:
+            offenders[relative] = found
+        for name in names:
+            if _is_model_import(name):
+                continue
+            resolved = _module_path(name)
+            if resolved is not None and resolved.relative_to(BACKEND).as_posix() not in seen:
+                stack.append(resolved)
+
+    assert len(seen) > len(_manual_solver_files()), "the walk never left the seeds"
+    assert offenders == {}
+
+
+def test_manual_run_result_and_evidence_survive_a_failing_span_exporter(
     tmp_path, monkeypatch
 ) -> None:
+    """The same flow, with an exporter that has really raised in-process.
+
+    This is the behavioral half. `SimpleSpanProcessor` exports on the CALLING
+    thread when a span ENDS, so spans are ended either side of the flow: the
+    exporter raises before the deterministic work starts and again after it
+    finishes, and `calls` is asserted so the case cannot go vacuous. The
+    structural test above is what proves the flow itself is unreachable from
+    telemetry -- this proves a live, raising exporter changes nothing observable.
+    """
+    from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter
 
     class _RaisingExporter(SpanExporter):
+        def __init__(self) -> None:
+            self.calls = 0
+
         def export(self, _spans):
+            self.calls += 1
             raise RuntimeError("simulated exporter failure")
 
         def shutdown(self) -> None:
             return None
 
+    exporter = _RaisingExporter()
     provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(_RaisingExporter()))
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    # Never `set_tracer_provider`: OTel allows exactly one global per process and
+    # silently ignores a second, which would make this pass for the wrong reason
+    # and leak a broken provider into every later test in the session.
+    assert trace.get_tracer_provider() is not provider
+    tracer = provider.get_tracer(__name__)
     try:
-        # Drive the actual failure before the manual path. The SDK records the
-        # exporter error locally; it must not authorize, block, or corrupt the
-        # deterministic HTTP/worker/result flow exercised below.
-        with provider.get_tracer(__name__).start_as_current_span("export-fails"):
+        with tracer.start_as_current_span("export-fails-before"):
             pass
+        assert exporter.calls == 1, "the exporter did not raise before the flow"
+
         _exercise_manual_run_flow(tmp_path, monkeypatch)
+
+        with tracer.start_as_current_span("export-fails-after"):
+            pass
     finally:
         provider.shutdown()
+
+    # Guards the case against going vacuous: the failure must really have run,
+    # on both sides of the deterministic work.
+    assert exporter.calls == 2, "the raising exporter was not invoked twice"
 
 
 def test_solver_service_failure_keeps_its_own_problem_surface(
@@ -498,6 +649,12 @@ def test_solver_service_failure_keeps_its_own_problem_surface(
         app.dependency_overrides.clear()
         app.dependency_overrides.update(previous)
 
+    # EXPERIENCE.md:270 -- a solver/service failure must surface its OWN problem
+    # code and none of the model-outage surface's copy. Asserting `code !=
+    # "agent_unavailable"` after asserting `code == "scenario_unavailable"` was a
+    # tautology that could not go red (Story 3.9 review).
     assert response.status_code == 503
-    assert response.json()["code"] == "scenario_unavailable"
-    assert response.json()["code"] != "agent_unavailable"
+    body = response.json()
+    assert body["code"] == "scenario_unavailable"
+    assert "Agent unavailable" not in json.dumps(body)
+    assert "manual optimization are still available" not in json.dumps(body)

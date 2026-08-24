@@ -20,6 +20,8 @@ from adapters.postgres.proposal import PostgresProposalRepository
 from application.contracts.proposal import DraftConstraintProposalV1, ProposalV1
 from application.contracts.scenario_projection import TaskV1
 from application.contracts.grounding import GroundedResponseV1
+from application.contracts.activity import TerminalOutcomeActivityV1
+from application.contracts.dialogue import TerminalOutcomeV1
 from adapters.postgres.schema import (
     agent_run,
     app_user,
@@ -1101,3 +1103,82 @@ def test_two_executors_claim_one_run_but_persist_one_terminal_response(
                 persisted_event.c.event_type == "agent_response",
             )
         ).scalar_one() == 1
+
+
+def test_latest_terminal_outcome_for_site_reads_the_newest_typed_agent_failure(
+    governed_postgres_engine, ids
+) -> None:
+    """Story 3.9's availability read, against the real schema and RLS.
+
+    Every other repository read here is covered against a live database; this one
+    shipped covered only by an in-memory fake (Story 3.9 review), so a wrong
+    column, filter, or ordering could not fail a test. Trap 5 named exactly this:
+    `agent_run` stores `status` only, and the reason lives in the persisted
+    activity payload -- a query against `agent_run.failure_reason` would pass a
+    fake and break here.
+    """
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+
+    def finish(text: str, reason: str) -> None:
+        with _site_context(engine, ids["site"]) as connection:
+            accepted = accept_turn(
+                repo, connection, conversation_id=created.id, site_id=ids["site"],
+                actor_id=ids["actor"], text=text,
+            )
+        assert accepted is not None
+        with _site_context(engine, ids["site"]) as connection:
+            claimed = repo.claim_queued_run(
+                connection,
+                conversation_id=created.id,
+                agent_run_id=accepted.event.agent_run_id,
+            )
+        assert claimed is not None
+        with _site_context(engine, ids["site"]) as connection:
+            repo.finish_agent_run(
+                connection,
+                claimed=claimed,
+                status="agent_failed",
+                payload=TerminalOutcomeV1(
+                    status="failed", reason=reason, detail="Bounded copy."
+                ),
+                request_id=uuid4(),
+            )
+
+    # (a) Nothing terminal yet -> None, not an error and not a stale row.
+    with _site_context(engine, ids["site"]) as connection:
+        assert repo.latest_terminal_outcome_for_site(
+            connection, site_id=ids["site"]
+        ) is None
+
+    # (b) A provider outage is found, and its typed reason survives the round
+    #     trip through JSONB.
+    finish("provider down", "provider_error")
+    with _site_context(engine, ids["site"]) as connection:
+        found = repo.latest_terminal_outcome_for_site(connection, site_id=ids["site"])
+    assert found is not None
+    assert found.event_type == "terminal_outcome"
+    assert found.agent_run_id is not None
+    assert isinstance(found.payload, TerminalOutcomeActivityV1)
+    assert found.payload.outcome.reason == "provider_error"
+
+    # (c) NEWEST wins, not "any provider_error that ever happened". This is what
+    #     lets the availability read recover: a later non-provider failure means
+    #     the provider answered, so the composer must not stay disabled.
+    finish("bad output", "invalid_output")
+    with _site_context(engine, ids["site"]) as connection:
+        newest = repo.latest_terminal_outcome_for_site(connection, site_id=ids["site"])
+    assert newest is not None
+    assert isinstance(newest.payload, TerminalOutcomeActivityV1)
+    assert newest.payload.outcome.reason == "invalid_output"
+    assert newest.occurred_at >= found.occurred_at
+
+    # (d) Site isolation is enforced by the governed context, not only by the
+    #     `site_id` predicate the query also carries.
+    other_site = uuid4()
+    with _site_context(engine, other_site) as connection:
+        assert repo.latest_terminal_outcome_for_site(
+            connection, site_id=other_site
+        ) is None

@@ -582,7 +582,8 @@ def test_telemetry_export_failure_and_disabled_export_preserve_owned_activity(
             response.json()["agent_run_status"],
         )
 
-    working_provider = provider(InMemorySpanExporter())
+    control_exporter = InMemorySpanExporter()
+    working_provider = provider(control_exporter)
     failing_provider = provider(_RaisingExporter())
     try:
         working = execute_with(working_provider)
@@ -591,6 +592,13 @@ def test_telemetry_export_failure_and_disabled_export_preserve_owned_activity(
     finally:
         working_provider.shutdown()
         failing_provider.shutdown()
+
+    # Without this the proof is only as strong as the instrumentation: if the
+    # adapter ever stops emitting spans, all three runs become trivially
+    # identical and this NFR10 case goes vacuously green (Story 3.9 review).
+    assert control_exporter.get_finished_spans(), (
+        "no span was exported -- the telemetry seam was never exercised"
+    )
 
     assert export_failed == working
     assert export_disabled == working
