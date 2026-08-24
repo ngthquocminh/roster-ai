@@ -1,0 +1,178 @@
+{
+  "artifact_versions": {
+    "evidence_schema": "NFR27 bindings + schema_version",
+    "job_lease": "1",
+    "run_snapshot": "1",
+    "schedule_version": "1",
+    "stream_cursor": "1"
+  },
+  "failure_modes": {
+    "browser reconnect": {
+      "gates": [
+        "schedule_stream_reconnect",
+        "conversation_stream_reconnect"
+      ],
+      "passed": true
+    },
+    "cancellation race": {
+      "gates": [
+        "cancellation_race",
+        "concurrent_cancellation_replay"
+      ],
+      "passed": true
+    },
+    "command replay": {
+      "gates": [
+        "command_replay"
+      ],
+      "passed": true
+    },
+    "conflicting idempotency": {
+      "gates": [
+        "conflicting_cancellation_idempotency"
+      ],
+      "passed": true
+    },
+    "lease expiry": {
+      "gates": [
+        "lease_expiry"
+      ],
+      "passed": true
+    },
+    "stale draft": {
+      "gates": [
+        "stale_draft"
+      ],
+      "passed": true
+    },
+    "worker kill": {
+      "gates": [
+        "worker_kill",
+        "orphan_safety"
+      ],
+      "passed": true
+    }
+  },
+  "gates": {
+    "cancellation_race": {
+      "node": "tests/test_cancellation_race_postgres.py::test_checkpoint_2_observes_a_cancel_after_running_commit",
+      "passed": true
+    },
+    "command_replay": {
+      "node": "tests/test_job_leasing_postgres.py::test_enqueue_replay_and_rollback_have_exact_row_counts",
+      "passed": true
+    },
+    "concurrent_cancellation_replay": {
+      "node": "tests/test_cancellation_race_postgres.py::test_concurrent_replay_of_one_idempotency_key_returns_the_stored_result",
+      "passed": true
+    },
+    "conflicting_cancellation_idempotency": {
+      "node": "tests/test_cancellation_race_postgres.py::test_conflicting_cancel_version_is_rejected_after_real_database_contention",
+      "passed": true
+    },
+    "conversation_stream_reconnect": {
+      "node": "tests/test_conversation_stream_api.py::test_the_last_event_id_header_wins_over_the_query_parameter",
+      "passed": true
+    },
+    "lease_expiry": {
+      "node": "tests/test_job_leasing_postgres.py::test_expired_worker_is_fenced_and_recovered_worker_finishes_once",
+      "passed": true
+    },
+    "live_worker_latency": {
+      "node": "tests/test_worker_process_recovery_postgres.py::test_nfr35_live_worker_reaches_running_within_five_seconds",
+      "passed": true
+    },
+    "orphan_safety": {
+      "node": "tests/test_job_leasing_postgres.py::test_mark_running_cannot_create_a_jobless_solver_running_orphan",
+      "passed": true
+    },
+    "schedule_stream_reconnect": {
+      "node": "tests/test_schedule_run_stream_api.py::test_run_stream_replays_only_unseen_literal_progress",
+      "passed": true
+    },
+    "stale_draft": {
+      "node": "tests/test_conversations_postgres.py::test_commands_refuse_stale_resource_and_stale_scenario_without_rows",
+      "passed": true
+    },
+    "worker_kill": {
+      "node": "tests/test_worker_process_recovery_postgres.py::test_hard_killed_worker_is_reclaimed_and_commits_one_candidate",
+      "passed": true
+    }
+  },
+  "generated_at": "2026-08-24T17:50:02.611546+00:00",
+  "honest_gaps": [
+    "mid-solve CP-SAT preemption remains NOT COVERED and has no current story owner",
+    "worker deployment composition remains owned by Epic 5/6"
+  ],
+  "nfr35_live_worker": {
+    "clock_boundary": "committed queue acknowledgement to persisted run.running.v1",
+    "maximum_duration_ms": 122.426,
+    "measurements": [
+      {
+        "duration_ms": 56.611,
+        "event": "run.running.v1",
+        "run": 1
+      },
+      {
+        "duration_ms": 58.084,
+        "event": "run.running.v1",
+        "run": 2
+      },
+      {
+        "duration_ms": 122.426,
+        "event": "run.running.v1",
+        "run": 3
+      }
+    ],
+    "passed": true,
+    "scope_note": "Includes real OS worker startup/polling, lease acquisition, and the queued-to-running database transition. Story 3.5's narrower run.queued.v1 read-path 'cannot fail by construction' note does not apply to this measurement. Network transit remains excluded.",
+    "threshold_ms": 5000
+  },
+  "release_blocking": false,
+  "result": "passed",
+  "story": "3.11",
+  "version_bindings": {
+    "application": "ShiftMind Stories 2.2-3.11 governed workflow",
+    "code": {
+      "git_commit": "8901cf4d9d31fd829a376db0fb04e9c0a0a8987d",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "file_count": 6,
+      "files": {
+        "backend/tests/test_cancellation_race_postgres.py": {
+          "sha256": "b4723f105e51be713716a56629e0029d2ea53d9e5aab0c3441175c8406105bd2"
+        },
+        "backend/tests/test_conversation_stream_api.py": {
+          "sha256": "37458a3bc4b8a828402bc3078de7e20a063db7c904082bbca8a9aa94fe986b2a"
+        },
+        "backend/tests/test_conversations_postgres.py": {
+          "sha256": "f975290afcff7968d764c21e33517213b282889a80c6fb4d8fe6d1082aecc533"
+        },
+        "backend/tests/test_job_leasing_postgres.py": {
+          "sha256": "60d0562d802c2a7d2f95e7337782b86815654bdd5645c2378319e4c2e009b76e"
+        },
+        "backend/tests/test_schedule_run_stream_api.py": {
+          "sha256": "53066b34a21513e9b911d072bdf30c3a6db7720be4bb05fc52c0ced133c38149"
+        },
+        "backend/tests/test_worker_process_recovery_postgres.py": {
+          "sha256": "bc7d3929076374b028ef90e4adbb6aa8699175e45e7de602fc42838cb65b596a"
+        }
+      },
+      "kind": "version-controlled evaluation fixture artifacts"
+    },
+    "evaluator": "pytest Story 3.11 exact recovery/idempotency proof nodes",
+    "image": {
+      "api": "local source tree",
+      "database": "postgres:18",
+      "web": "local source tree"
+    },
+    "model": "not applicable \u2014 no model invocation",
+    "policy": "Story 3.11 AC1/AC2; NFR6/NFR7/NFR29/NFR35; AD-6/AD-8/AD-9",
+    "prompt": "not applicable \u2014 no model invocation",
+    "scenario": "not applicable \u2014 no scenario fixture touched",
+    "schema_version": "c4d5e6f7a8b9",
+    "solver": "deterministic test scheduler; solver quality is not under test",
+    "tool": "real worker subprocess, PostgreSQL lease/fencing, command and SSE seams"
+  }
+}
