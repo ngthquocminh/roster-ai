@@ -436,8 +436,10 @@ def resolve_bindings(
 
     Gate A callers omit ``dataset_files`` and preserve the original behavior:
     dataset and scenario both derive from the governed fixtures. Evaluation
-    callers pass committed golden JSON files, which derives an independent
-    dataset binding while ``fixtures`` continues to describe scenario data.
+    callers pass committed dataset files, which derives an independent dataset
+    binding while ``fixtures`` continues to describe scenario data. Golden JSON
+    keeps semantic case accounting; other fixture artifacts receive an exact,
+    line-ending-stable file binding.
 
     ``ignore_paths`` exempts a caller's own output file from the dirty-tree
     refusal (see :func:`working_tree_status`). When an exemption is actually
@@ -509,7 +511,13 @@ def resolve_bindings(
             "contract sha256 digests recorded alongside"
         )
     else:
-        dataset_binding = _evaluation_dataset_binding(dataset_files, repo_root)
+        dataset_paths = tuple(Path(path) for path in dataset_files)
+        if dataset_paths and all(
+            path.suffix.lower() == ".json" for path in dataset_paths
+        ):
+            dataset_binding = _evaluation_dataset_binding(dataset_paths, repo_root)
+        else:
+            dataset_binding = _artifact_dataset_binding(dataset_paths, repo_root)
 
     bindings: dict[str, Any] = {
         "dataset": dataset_binding,
@@ -563,6 +571,28 @@ def _dataset_file_digest(source: Path) -> str:
     text = Path(source).read_text(encoding="utf-8")
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def _artifact_dataset_binding(
+    dataset_files: Iterable[Path], repo_root: Path
+) -> dict[str, Any]:
+    """Bind exact committed non-golden evaluation fixture artifacts."""
+    files: dict[str, dict[str, str]] = {}
+    for source in sorted((Path(path) for path in dataset_files), key=str):
+        if not source.is_file():
+            raise ValueError(f"Evaluation fixture artifact does not exist: {source}")
+        try:
+            key = source.resolve().relative_to(repo_root.resolve()).as_posix()
+        except ValueError:
+            key = source.name
+        if key in files:
+            raise ValueError(f"Evaluation fixture binding path collision on {key!r}")
+        files[key] = {"sha256": _dataset_file_digest(source)}
+    return {
+        "kind": "version-controlled evaluation fixture artifacts",
+        "file_count": len(files),
+        "files": dict(sorted(files.items())),
+    }
 
 
 def _evaluation_dataset_binding(
