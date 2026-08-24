@@ -1,0 +1,82 @@
+{
+  "correctness": {
+    "baseline_assignment_count": 1,
+    "baseline_overtime_minutes": 0.0,
+    "candidate_assignment_count": 2,
+    "candidate_overtime_minutes": 0.0,
+    "hard_violation_count": 0,
+    "preserved_lock_count": 1,
+    "required_minutes": 480.0,
+    "served_minutes": 480.0,
+    "unresolved_gap_record_ids": []
+  },
+  "generated_at": "2026-08-24T16:18:09.580622+00:00",
+  "honest_gaps": [
+    "mid-solve cancellation preemption remains NOT COVERED",
+    "production get_locks/get_baseline_assignments remain empty by construction"
+  ],
+  "release_blocking": false,
+  "result": "passed",
+  "story": "3.10",
+  "terminal_outcomes": {
+    "solver_cancelled": {
+      "candidate_count": 0,
+      "passed": true,
+      "reason": "cancelled",
+      "status": "solver_cancelled"
+    },
+    "solver_completed": {
+      "candidate_count": 1,
+      "passed": true,
+      "reason": null,
+      "status": "solver_completed"
+    },
+    "solver_failed": {
+      "candidate_count": 0,
+      "passed": true,
+      "reason": "hard_constraint_violated",
+      "status": "solver_failed"
+    },
+    "solver_infeasible": {
+      "candidate_count": 0,
+      "passed": true,
+      "reason": "model_infeasible",
+      "status": "solver_infeasible"
+    },
+    "solver_timed_out": {
+      "candidate_count": 0,
+      "passed": true,
+      "reason": "budget_exhausted",
+      "status": "solver_timed_out"
+    }
+  },
+  "version_bindings": {
+    "application": "ShiftMind Stories 3.1-3.9 governed repair pipeline",
+    "code": {
+      "git_commit": "90464fbcf7bc8b6945de0fcadcf774fe54787c92",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "file_count": 1,
+      "files": {
+        "backend/tests/fixtures/repair_correctness.py": {
+          "sha256": "9f705562ca19ca55989b94657c4fa79e00b9590e2abadad82569420982c613d4"
+        }
+      },
+      "kind": "version-controlled evaluation fixture artifacts"
+    },
+    "evaluator": "pytest Story 3.10 real-pipeline assertions",
+    "image": {
+      "api": "local source tree",
+      "database": "postgres:18",
+      "web": "local source tree"
+    },
+    "model": "not applicable \u2014 no model invocation",
+    "policy": "Story 3.10 AC1/AC2; AD-7 terminal mapping; NFR11/NFR13/NFR14/NFR29",
+    "prompt": "not applicable \u2014 no model invocation",
+    "scenario": "not applicable \u2014 no scenario fixture touched",
+    "schema_version": "c4d5e6f7a8b9",
+    "solver": "ortools 9.11.4210; governed CP-SAT seed=42, num_search_workers=1; completed ceiling=10s; timeout fixture=0.000001s",
+    "tool": "real enqueue_compute and worker.run_once chain against PostgreSQL 18"
+  }
+}
