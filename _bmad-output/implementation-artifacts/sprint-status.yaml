@@ -1625,7 +1625,7 @@ development_status:
   3-8-compare-candidate-and-baseline-results: done
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
-  3-11-prove-recovery-and-idempotency: ready-for-dev
+  3-11-prove-recovery-and-idempotency: in-progress
   3-12-prove-the-repair-browser-journey: backlog
   epic-3-retrospective: optional
 

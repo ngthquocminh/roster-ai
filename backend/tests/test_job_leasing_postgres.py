@@ -302,6 +302,41 @@ def test_expired_worker_is_fenced_and_recovered_worker_finishes_once(
         assert connection.scalar(select(schedule_run.c.reason).where(schedule_run.c.id == run_id)) == "seeded_terminal"
 
 
+def test_mark_running_cannot_create_a_jobless_solver_running_orphan(
+    governed_postgres_engine, lease_ids
+) -> None:
+    """A running row cannot be created without the leased job that fences it."""
+    job_id, run_id = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
+    _only_leasable(governed_postgres_engine, job_id)
+    with governed_postgres_engine.begin() as connection:
+        connection.execute(job_queue.delete().where(job_queue.c.id == job_id))
+
+    repository = PostgresScheduleRunRepository()
+    with pytest.raises(StaleLeaseError), governed_postgres_engine.begin() as connection:
+        _runtime(connection, lease_ids["site"])
+        repository.mark_running(
+            connection,
+            run_id=run_id,
+            site_id=lease_ids["site"],
+            fencing_epoch=1,
+        )
+
+    with governed_postgres_engine.connect() as connection:
+        assert connection.scalar(
+            select(schedule_run.c.status).where(schedule_run.c.id == run_id)
+        ) == "solver_queued"
+        assert connection.scalar(
+            select(func.count()).select_from(job_queue).where(
+                job_queue.c.schedule_run_id == run_id
+            )
+        ) == 0
+        assert connection.scalar(
+            select(func.count()).select_from(persisted_event).where(
+                persisted_event.c.stream_id == run_id
+            )
+        ) == 0
+
+
 def test_lease_role_cannot_query_the_queue_directly(governed_postgres_engine) -> None:
     with pytest.raises(DBAPIError), governed_postgres_engine.begin() as connection:
         connection.exec_driver_sql("SET LOCAL ROLE shiftmind_lease")

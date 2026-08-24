@@ -1,3 +1,7 @@
+---
+baseline_commit: 6314b378f4e7247682395c04ee3fe1f520fd5250
+---
+
 # Story 3.11: Prove Recovery and Idempotency
 
 Status: ready-for-dev
@@ -104,25 +108,25 @@ The quietest first:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-derive baselines before attributing any failure (AC1, AC2)**
-  - [ ] Confirm current HEAD is clean and note the commit hash (do not trust this story's own cited numbers — re-run and record fresh: backend default suite pass/skip/deselect counts, `-m postgres` pass count, frontend file/test counts, golden dataset file count and consequential+prohibited count).
-- [ ] **Task 2 — Build the minimal worker entry point (AC1, Decision 1a)**
-  - [ ] Add `backend/worker/main.py`: poll loop calling `run_once(engine, repository, scheduler, lease_owner=..., lease_seconds=default_lease_seconds(settings))`; sleep on `None` outcome; graceful shutdown on `SIGTERM`/`SIGINT` that lets an in-flight `run_once` call finish before exiting.
-  - [ ] Unit test the loop's shutdown behavior directly (no subprocess needed for pure loop logic — signal handling and the run/sleep branch).
-- [ ] **Task 3 — Real-process worker-kill test (AC1, Decision 1a, Trap 1)**
-  - [ ] Spawn `backend/worker/main.py` as a real subprocess against `governed_postgres_engine`; queue a job; `SIGKILL` the process mid-lease (use a deliberately slow fixture double to guarantee the kill lands mid-lease, not before or after).
-  - [ ] Assert the job is later reclaimed by `lease_next_job`'s expiry predicate and reaches a terminal outcome exactly once (candidate row count == 1, no duplicate `schedule_version`, fencing epoch advanced).
-  - [ ] Demonstrate this test observed RED first (temporarily skip the kill, or weaken the fencing-epoch check) before finalizing — this repo's established red-then-green convention (Story 2.1 Task 9 and every architecture guard since); record the observation in Completion Notes.
-- [ ] **Task 4 — Orphan-safety invariant proof for `deferred-work.md:330` (AC1, Decision 1b)**
-  - [ ] Add a real-Postgres test proving a job-less `solver_running` row is unreachable through any current caller of `mark_running`.
-  - [ ] If the invariant does not hold, STOP and escalate rather than patching around it silently.
-- [ ] **Task 5 — New conflicting-idempotency test for `cancel_schedule_run` (AC1, Decision 3)**
-  - [ ] Add a test to `test_cancellation_race_postgres.py`: same idempotency key, differing `expected_resource_version`, under real contention — assert `IdempotencyKeyConflictError`/409, reusing the file's own `_key`/`_running_run`/`_wait_for_blocked_backend` helpers.
-- [ ] **Task 6 — Assemble the recovery/idempotency proof (AC1)**
-  - [ ] For each of the seven AC1 failure modes, enumerate which existing test(s) (Decision 2's table) plus which new test(s) (Tasks 3-5) prove it. Do not write redundant tests duplicating already-passing coverage.
-  - [ ] Re-run each enumerated node individually to confirm still-green against this story's baseline.
-- [ ] **Task 7 — Re-measure NFR35 against the live worker loop, if Decision 1a landed (AC1, AC2, Trap 6)**
-  - [ ] Extend or supplement `evidence/story-3.5/nfr35-first-run-event.json`'s own re-measurement invitation (`deferred-work.md:396`) using the new entry point in the loop; confirm whether the "cannot fail by construction" scope-limit framing still holds, and update the note if it does not.
+- [x] **Task 1 — Re-derive baselines before attributing any failure (AC1, AC2)**
+  - [x] Confirm current HEAD is clean and note the commit hash (do not trust this story's own cited numbers — re-run and record fresh: backend default suite pass/skip/deselect counts, `-m postgres` pass count, frontend file/test counts, golden dataset file count and consequential+prohibited count).
+- [x] **Task 2 — Build the minimal worker entry point (AC1, Decision 1a)**
+  - [x] Add `backend/worker/main.py`: poll loop calling `run_once(engine, repository, scheduler, lease_owner=..., lease_seconds=default_lease_seconds(settings))`; sleep on `None` outcome; graceful shutdown on `SIGTERM`/`SIGINT` that lets an in-flight `run_once` call finish before exiting.
+  - [x] Unit test the loop's shutdown behavior directly (no subprocess needed for pure loop logic — signal handling and the run/sleep branch).
+- [x] **Task 3 — Real-process worker-kill test (AC1, Decision 1a, Trap 1)**
+  - [x] Spawn `backend/worker/main.py` as a real subprocess against `governed_postgres_engine`; queue a job; `SIGKILL` the process mid-lease (use a deliberately slow fixture double to guarantee the kill lands mid-lease, not before or after).
+  - [x] Assert the job is later reclaimed by `lease_next_job`'s expiry predicate and reaches a terminal outcome exactly once (candidate row count == 1, no duplicate `schedule_version`, fencing epoch advanced).
+  - [x] Demonstrate this test observed RED first (temporarily skip the kill, or weaken the fencing-epoch check) before finalizing — this repo's established red-then-green convention (Story 2.1 Task 9 and every architecture guard since); record the observation in Completion Notes.
+- [x] **Task 4 — Orphan-safety invariant proof for `deferred-work.md:330` (AC1, Decision 1b)**
+  - [x] Add a real-Postgres test proving a job-less `solver_running` row is unreachable through any current caller of `mark_running`.
+  - [x] If the invariant does not hold, STOP and escalate rather than patching around it silently.
+- [x] **Task 5 — New conflicting-idempotency test for `cancel_schedule_run` (AC1, Decision 3)**
+  - [x] Add a test to `test_cancellation_race_postgres.py`: same idempotency key, differing `expected_resource_version`, under real contention — assert `IdempotencyKeyConflictError`/409, reusing the file's own `_key`/`_running_run`/`_wait_for_blocked_backend` helpers.
+- [x] **Task 6 — Assemble the recovery/idempotency proof (AC1)**
+  - [x] For each of the seven AC1 failure modes, enumerate which existing test(s) (Decision 2's table) plus which new test(s) (Tasks 3-5) prove it. Do not write redundant tests duplicating already-passing coverage.
+  - [x] Re-run each enumerated node individually to confirm still-green against this story's baseline.
+- [x] **Task 7 — Re-measure NFR35 against the live worker loop, if Decision 1a landed (AC1, AC2, Trap 6)**
+  - [x] Extend or supplement `evidence/story-3.5/nfr35-first-run-event.json`'s own re-measurement invitation (`deferred-work.md:396`) using the new entry point in the loop; confirm whether the "cannot fail by construction" scope-limit framing still holds, and update the note if it does not.
 - [ ] **Task 8 — Generate evidence (AC1, AC2, Decision 4)**
   - [ ] Build `backend/evals/recovery_idempotency_report.py` mirroring `repair_correctness_report.py`'s shape.
   - [ ] Commit code on a clean tree, run the measurement, generate `evidence/story-3.11/recovery-idempotency.json` via `resolve_bindings()`, run `test_evidence_convention.py`, commit evidence separately per `docs/EVIDENCE-CONVENTION.md`.
@@ -162,8 +166,44 @@ The quietest first:
 
 ### Agent Model Used
 
+Codex (GPT-5)
+
+### Implementation Plan
+
+- Establish a clean, freshly measured baseline before changing behavior.
+- Add the worker loop through red-green-refactor unit coverage, then prove hard-process death and lease reclamation through PostgreSQL.
+- Add only the two missing invariant/idempotency tests identified by the story, reuse all inherited recovery nodes, and bind the complete proof into one release-blocking report.
+- Re-measure NFR35, run all regression and release gates, then reconcile the deferred-work ledger and story records.
+
 ### Debug Log References
+
+- 2026-08-25 baseline at `6314b378f4e7247682395c04ee3fe1f520fd5250`: backend 1238 passed / 2 skipped / 7 deselected; PostgreSQL 91 passed; frontend 77 files / 521 tests; golden dataset 26 files, including 5 consequential/prohibited cases.
+- 2026-08-25 Task 2 RED: `tests/test_worker_main.py` failed collection because `worker.main` did not exist; GREEN: 3 focused tests passed, then backend regression 1241 passed / 2 skipped / 7 deselected.
+- 2026-08-25 Task 3 RED: letting the subprocess finish instead of killing it produced `recovered is None`; GREEN: hard process termination left the leased/running row reclaimable and the focused PostgreSQL proof passed.
+- 2026-08-25 Task 4 invariant proof: the existing `_claim_epoch`/`_has_current_epoch` fence rejected `mark_running` after its job row was removed; backend regression 1243 passed / 2 skipped / 7 deselected.
+- 2026-08-25 Task 5 RED/GREEN: the first contention fixture named the wrong table schema and failed before the behavioral assertion; corrected to the live `schedule_run` table, then the focused proof and backend regression passed (1244 passed / 2 skipped / 7 deselected).
+- 2026-08-25 Task 6: ten exact recovery/idempotency nodes were executed in ten isolated pytest processes; all passed.
+- 2026-08-25 Task 7 live-worker NFR35 measurement: 59.155 ms, 57.947 ms, and 118.579 ms from committed queue acknowledgement to persisted `run.running.v1`, all below 5000 ms. This path includes process polling, lease acquisition, and the queued-to-running transition, so Story 3.5's narrower queued-event "cannot fail by construction" note does not apply.
 
 ### Completion Notes List
 
+- ✅ Task 1: re-derived all requested baselines from a clean tree; no pre-existing regression was found.
+- ✅ Task 2: added a separately runnable, dependency-composed worker poll loop with cooperative SIGTERM/SIGINT shutdown and direct loop/signal coverage.
+- ✅ Task 3: killed the real worker subprocess while its job was leased/running, forced lease expiry, and proved a new epoch completed exactly one candidate on the original run/evidence stream; full backend regression passed (1242 passed / 2 skipped / 7 deselected).
+- ✅ Task 4: proved a job-less `solver_running` row is unreachable through `mark_running`; no production workaround was required.
+- ✅ Task 5: proved a same-key cancellation replay with a differing expected version is rejected after an observed real PostgreSQL lock wait, preserving one idempotency row and one cancellation effect.
+- ✅ Task 6: assembled the seven named AC1 failure modes into exact, independently rerunnable proof gates without padding the golden dataset.
+- ✅ Task 7: supplemented Story 3.5's read-path latency evidence with a real worker-loop measurement; full backend regression passed (1245 passed / 2 skipped / 7 deselected).
+
 ### File List
+
+- _bmad-output/implementation-artifacts/3-11-prove-recovery-and-idempotency.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- backend/tests/fixtures/worker_process.py
+- backend/evals/recovery_idempotency_report.py
+- backend/tests/test_cancellation_race_postgres.py
+- backend/tests/test_job_leasing_postgres.py
+- backend/tests/test_recovery_idempotency_report.py
+- backend/tests/test_worker_main.py
+- backend/tests/test_worker_process_recovery_postgres.py
+- backend/worker/main.py
