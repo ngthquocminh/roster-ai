@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -31,6 +34,7 @@ from application.use_cases.cancel_schedule_run import cancel_schedule_run
 from application.use_cases.enqueue_compute import enqueue_compute
 from application.use_cases.manage_proposal import revise_proposal
 from engine.governed_adapter import GovernedSchedulerAdapter
+from evals.repair_correctness_report import CORRECTNESS_OUTPUT_ENV
 from tests.fixtures.repair_correctness import (
     BASELINE_ASSIGNMENTS,
     FIXTURE_CHECKSUM_DIGEST,
@@ -300,6 +304,35 @@ def test_real_pipeline_closes_gap_preserves_lock_and_does_not_add_overtime(
             )
         ) == 1
 
+    correctness_output = os.environ.get(CORRECTNESS_OUTPUT_ENV)
+    if correctness_output:
+        Path(correctness_output).write_text(
+            json.dumps(
+                {
+                    "baseline_assignment_count": comparison.baseline_metrics.assignment_count,
+                    "candidate_assignment_count": comparison.candidate_metrics.assignment_count,
+                    "required_minutes": sum(
+                        minutes
+                        for _, minutes in comparison.candidate_metrics.interval_coverage_required_minutes
+                    ),
+                    "served_minutes": sum(
+                        minutes
+                        for _, minutes in comparison.candidate_metrics.interval_coverage_served_minutes
+                    ),
+                    "unresolved_gap_record_ids": list(comparison.unresolved_gap_record_ids),
+                    "preserved_lock_count": len(snapshot.preserved_locks),
+                    "hard_violation_count": sum(
+                        1
+                        for item in comparison.candidate_constraint_results
+                        if not item.satisfied
+                    ),
+                    "baseline_overtime_minutes": comparison.baseline_metrics.overtime_minutes,
+                    "candidate_overtime_minutes": comparison.candidate_metrics.overtime_minutes,
+                }
+            ),
+            encoding="utf-8",
+        )
+
 
 def _assert_non_promotable(engine, run_id, *, status, reason):
     repository = PostgresScheduleRunRepository()
@@ -370,10 +403,15 @@ def test_real_adapter_timeout_is_literal_bounded_and_has_no_candidate(
     assert outcome is not None and outcome.status == "solver_timed_out"
     assert scheduler.error is None, repr(scheduler.error)
     assert scheduler.solved is not None
-    # CP-SAT may return a few scheduler-clock ticks after the configured
-    # micro-ceiling. The fixed 50ms tolerance is still far below a second
-    # round of the ceiling and catches the historical double-budget defect.
-    assert scheduler.solved.wall_time_seconds <= ceiling + 0.05
+    # This ceiling is a microsecond, so wall_time_seconds is dominated by
+    # Python/interpreter scheduling noise, not CP-SAT search time -- no
+    # tolerance at this scale can discriminate a proportional (e.g. 2x)
+    # ceiling-application regression; that guard already exists at a scale
+    # where it can, in test_governed_solver_adapter.py's
+    # test_one_wall_ceiling_bounds_both_solver_rounds (0.25s ceiling, 0.40s
+    # bound). This assertion only catches a gross regression -- the ceiling
+    # being ignored outright and the solve left to run to completion.
+    assert scheduler.solved.wall_time_seconds <= ceiling + 0.02
     _assert_non_promotable(
         governed_postgres_engine,
         queued.schedule_run_id,

@@ -277,7 +277,11 @@ class RepairProjectionReader:
     def resolve_task(
         self, _connection, scenario_id, scenario_version_id, record_id
     ):
-        item = next((task for task in TASKS if task.record_id == record_id), None)
+        item = (
+            next((task for task in TASKS if task.record_id == record_id), None)
+            if scenario_id == SCENARIO_ID
+            else None
+        )
         return TaskResolutionV1(
             outcome="resolved" if item is not None else "not_found",
             scenario_id=scenario_id,
@@ -300,6 +304,11 @@ def infeasible_scheduler():
 
 
 def hard_constraint_failure_scheduler():
+    """Decision E option 2: a fake `SchedulerPort` returning `OPTIMAL` over
+    assignments that fail validation -- specifically, empty assignments
+    against the seeded worker-shift lock, tripping `preserved_lock`
+    (proved in `test_failed_scheduler_trips_exactly_the_preserved_lock_check`).
+    Not the corrupted-real-solve option (unqualified-worker reassignment)."""
     return SimpleNamespace(
         solve=lambda _snapshot: SolverOutcomeV1(
             solver_status="OPTIMAL",

@@ -398,6 +398,26 @@ def test_dataset_and_scenario_come_from_default_fixtures_not_a_second_copy():
     assert "sample_tiny_input" in bindings["dataset"]
 
 
+def test_mixed_extension_dataset_files_are_refused_not_silently_misrouted(
+    tmp_path,
+):
+    """A caller passing golden JSON alongside a non-golden artifact must be
+    told to bind each kind separately, not have the JSON silently lose its
+    semantic case accounting to the exact-file artifact branch."""
+    json_case = tmp_path / "case.json"
+    json_case.write_text("{}", encoding="utf-8")
+    other = tmp_path / "fixture.py"
+    other.write_text("x = 1\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="mixes golden .json cases"):
+        resolve_bindings(
+            _DECLARED,
+            repo_root=REPO_ROOT,
+            dataset_files=(json_case, other),
+            allow_dirty=True,
+        )
+
+
 def test_contract_digests_match_raw_file_sha256():
     digests = contract_digests(REPO_ROOT / "data" / "contract")
     assert digests["algorithm"] == "sha256"

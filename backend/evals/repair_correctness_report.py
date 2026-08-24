@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
+import sys
+import tempfile
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
-import subprocess
-import sys
 from typing import Mapping
 
 from scripts.evidence_binding import REPO_ROOT, resolve_bindings
@@ -52,37 +54,89 @@ DECLARED_BINDINGS = {
     ),
 }
 
+# The `solver_completed` fixture is the only one that produces correctness
+# numbers (gap closure, locks, overtime) rather than a bare terminal-status
+# verdict. It writes them to CORRECTNESS_OUTPUT_ENV as JSON when that env var
+# is set, so measure_repair_suite can carry the *actually measured* values
+# into the report instead of a value hand-typed once during development.
+CORRECTNESS_OUTPUT_ENV = "STORY_3_10_CORRECTNESS_OUTPUT"
 
-def measure_repair_suite(repo_root: Path = REPO_ROOT) -> dict[str, bool]:
-    """Run every terminal fixture independently; a miss blocks generation."""
+CORRECTNESS_KEYS = (
+    "baseline_assignment_count",
+    "candidate_assignment_count",
+    "required_minutes",
+    "served_minutes",
+    "unresolved_gap_record_ids",
+    "preserved_lock_count",
+    "hard_violation_count",
+    "baseline_overtime_minutes",
+    "candidate_overtime_minutes",
+)
+
+# What the report carries when the solver_completed fixture itself failed (or
+# never ran): honestly "not measured", never a stale or fabricated number.
+UNMEASURED_CORRECTNESS: dict[str, object] = {key: None for key in CORRECTNESS_KEYS}
+
+
+def measure_repair_suite(
+    repo_root: Path = REPO_ROOT,
+    *,
+    subprocess_timeout_seconds: float = 180.0,
+) -> tuple[dict[str, bool], dict[str, object], dict[str, str]]:
+    """Run every terminal fixture independently through its own subprocess.
+
+    Every node in TERMINAL_EXPECTATIONS runs regardless of an earlier one
+    failing, so a real regression still yields a complete five-fixture
+    verdict set and a `correctness` measurement (when available) rather than
+    an unstructured crash that never reaches `write_repair_correctness_report`.
+    """
     backend = repo_root / "backend"
     verdicts: dict[str, bool] = {}
-    for name, node in _TEST_NODES.items():
-        completed = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pytest",
-                f"tests/test_repair_correctness_postgres.py::{node}",
-                "-q",
-            ],
-            cwd=backend,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        verdicts[name] = completed.returncode == 0
-        if completed.returncode != 0:
-            raise RuntimeError(
-                f"repair fixture {name} failed:\n{completed.stdout}\n{completed.stderr}"
-            )
-    return verdicts
+    failures: dict[str, str] = {}
+    correctness = dict(UNMEASURED_CORRECTNESS)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        correctness_path = Path(tmp_dir) / "correctness.json"
+        for name, node in _TEST_NODES.items():
+            env = dict(os.environ)
+            if name == "solver_completed":
+                env[CORRECTNESS_OUTPUT_ENV] = str(correctness_path)
+            try:
+                completed = subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pytest",
+                        f"tests/test_repair_correctness_postgres.py::{node}",
+                        "-q",
+                    ],
+                    cwd=backend,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    env=env,
+                    timeout=subprocess_timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as exc:
+                verdicts[name] = False
+                failures[name] = (
+                    f"repair fixture {name} timed out after "
+                    f"{subprocess_timeout_seconds}s: {exc}"
+                )
+                continue
+            verdicts[name] = completed.returncode == 0
+            if completed.returncode != 0:
+                failures[name] = f"{completed.stdout}\n{completed.stderr}"
+        if verdicts.get("solver_completed") and correctness_path.exists():
+            correctness = json.loads(correctness_path.read_text(encoding="utf-8"))
+    return verdicts, correctness, failures
 
 
 def write_repair_correctness_report(
     output_path: Path,
     *,
     verdicts: Mapping[str, bool],
+    correctness: Mapping[str, object] = UNMEASURED_CORRECTNESS,
+    failures: Mapping[str, str] = {},
     declared_bindings: Mapping[str, object] = DECLARED_BINDINGS,
     repo_root: Path = REPO_ROOT,
     allow_dirty: bool = False,
@@ -90,6 +144,8 @@ def write_repair_correctness_report(
     """Resolve every binding before creating the report path."""
     if set(verdicts) != set(TERMINAL_EXPECTATIONS):
         raise ValueError("verdicts must cover exactly the five terminal fixtures")
+    if set(correctness) != set(CORRECTNESS_KEYS):
+        raise ValueError("correctness must cover exactly the measured fields")
     fixture_path = (
         repo_root / "backend" / "tests" / "fixtures" / "repair_correctness.py"
     )
@@ -111,23 +167,15 @@ def write_repair_correctness_report(
         "result": "passed" if passed else "failed",
         "release_blocking": not passed,
         "terminal_outcomes": terminal,
-        "correctness": {
-            "baseline_assignment_count": 1,
-            "candidate_assignment_count": 2,
-            "required_minutes": 480.0,
-            "served_minutes": 480.0,
-            "unresolved_gap_record_ids": [],
-            "preserved_lock_count": 1,
-            "hard_violation_count": 0,
-            "baseline_overtime_minutes": 0.0,
-            "candidate_overtime_minutes": 0.0,
-        },
+        "correctness": dict(correctness),
         "honest_gaps": [
             "mid-solve cancellation preemption remains NOT COVERED",
             "production get_locks/get_baseline_assignments remain empty by construction",
         ],
         "version_bindings": bindings,
     }
+    if failures:
+        report["failures"] = dict(failures)
     destination = Path(output_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
@@ -145,9 +193,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--allow-dirty", action="store_true")
     args = parser.parse_args(argv)
-    verdicts = measure_repair_suite(REPO_ROOT)
+    verdicts, correctness, failures = measure_repair_suite(REPO_ROOT)
     report = write_repair_correctness_report(
-        args.output, verdicts=verdicts, allow_dirty=args.allow_dirty
+        args.output,
+        verdicts=verdicts,
+        correctness=correctness,
+        failures=failures,
+        allow_dirty=args.allow_dirty,
     )
     return 0 if report["result"] == "passed" else 1
 
@@ -157,8 +209,11 @@ if __name__ == "__main__":
 
 
 __all__ = [
+    "CORRECTNESS_KEYS",
+    "CORRECTNESS_OUTPUT_ENV",
     "DECLARED_BINDINGS",
     "TERMINAL_EXPECTATIONS",
+    "UNMEASURED_CORRECTNESS",
     "measure_repair_suite",
     "write_repair_correctness_report",
 ]

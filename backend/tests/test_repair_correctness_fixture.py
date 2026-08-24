@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from application.contracts.run_snapshot import RunSnapshotV1
+from application.scheduling.hard_constraints import validate_hard_constraints
 from tests.fixtures.repair_correctness import (
     BASELINE_ASSIGNMENTS,
     DEMAND,
@@ -43,3 +44,23 @@ def test_failed_scheduler_returns_a_feasible_but_invalid_candidate() -> None:
     assert outcome.solver_status == "OPTIMAL"
     assert outcome.validation_facts is not None
     assert outcome.assignments == ()
+
+
+def test_failed_scheduler_trips_exactly_the_preserved_lock_check() -> None:
+    """Names which hard constraint this fixture's OPTIMAL-but-empty
+    assignments actually violate (Decision E's "fake SchedulerPort
+    returning OPTIMAL over assignments that fail validation" option): the
+    seeded worker-shift lock has no assignment left to satisfy it against,
+    tripping `preserved_lock` specifically -- not a coverage or
+    qualification check, since the fixture's own facts carry no workers,
+    shifts, or caps for those checks to act on."""
+    outcome = hard_constraint_failure_scheduler().solve(
+        RunSnapshotV1.__new__(RunSnapshotV1)
+    )
+
+    results = validate_hard_constraints(
+        outcome.assignments, outcome.validation_facts, preserved_locks=LOCKS
+    )
+
+    failed = {result.constraint_type for result in results if not result.satisfied}
+    assert failed == {"preserved_lock"}

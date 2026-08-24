@@ -512,10 +512,15 @@ def resolve_bindings(
         )
     else:
         dataset_paths = tuple(Path(path) for path in dataset_files)
-        if dataset_paths and all(
-            path.suffix.lower() == ".json" for path in dataset_paths
-        ):
+        suffixes = {path.suffix.lower() for path in dataset_paths}
+        if suffixes == {".json"}:
             dataset_binding = _evaluation_dataset_binding(dataset_paths, repo_root)
+        elif ".json" in suffixes:
+            raise ValueError(
+                "dataset_files mixes golden .json cases with non-golden "
+                "artifacts; bind each kind through a separate resolve_bindings "
+                f"call: {sorted(str(p) for p in dataset_paths)}"
+            )
         else:
             dataset_binding = _artifact_dataset_binding(dataset_paths, repo_root)
 

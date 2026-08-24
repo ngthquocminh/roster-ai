@@ -4,7 +4,7 @@ baseline_commit: efc0ba5
 
 # Story 3.10: Prove Repair Correctness
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -496,6 +496,28 @@ OpenAI Codex (GPT-5)
 - `backend/tests/test_repair_correctness_report.py`
 - `evidence/story-3.10/repair-correctness.json`
 
+### Review Findings
+
+- [x] [Review][Patch] Evidence report's `correctness` block is a hardcoded literal, not derived from the measured run — `baseline_overtime_minutes`/`candidate_overtime_minutes` have no exact-equality test pinning them, so they can silently go stale in the committed evidence file while CI stays green [backend/evals/repair_correctness_report.py:114-124]
+- [x] [Review][Patch] `measure_repair_suite()` raises `RuntimeError` on the first failing terminal-fixture subprocess instead of completing all five and producing a `"result": "failed"` evidence artifact — the report schema's failure path is dead code, unreachable from `main()` [backend/evals/repair_correctness_report.py:56-79]
+- [x] [Review][Patch] Timeout-adherence test's tolerance (`ceiling + 0.05`, ceiling=`0.000001`) is ~50,000x the configured budget and cannot catch a proportional "double-budget" regression at realistic ceilings, despite the comment's claim that it does [backend/tests/test_repair_correctness_postgres.py:348-376]
+- [x] [Review][Patch] `measure_repair_suite`'s five `subprocess.run` calls have no `timeout=` — a hung postgres test blocks evidence generation indefinitely [backend/evals/repair_correctness_report.py:61-73]
+- [x] [Review][Patch] `resolve_bindings()`'s new dataset-file dispatch silently routes a mixed `.json`/non-`.json` `dataset_files` list through the non-golden artifact branch with no error or partition; currently unreachable by any real caller but unguarded for the next one [backend/scripts/evidence_binding.py:511-518]
+- [x] [Review][Patch] `RepairProjectionReader.resolve_task` doesn't validate `scenario_id` against the fixture's `SCENARIO_ID` the way its sibling `get_overview` does — harmless today (one scenario exercised) but a latent inconsistency for future reuse of this fixture [backend/tests/fixtures/repair_correctness.py:277-286]
+- [x] [Review][Patch] The `solver_failed` fixture is asserted only by overall `(status, reason)`, never by which specific `constraint_type` tripped (it's actually `preserved_lock`, not a coverage/qualification check), and Decision E's "document which [approach] was chosen" isn't restated in Completion Notes [backend/tests/fixtures/repair_correctness.py:302-318]
+
+**Fix notes:**
+1. `measure_repair_suite` now hands the `solver_completed` subprocess an output-path env var (`STORY_3_10_CORRECTNESS_OUTPUT`); that test writes its real `calculate_comparison` numbers there as JSON, and the report generator reads them back instead of embedding a literal. Fields not backed by an exact-equality test assertion (the two overtime figures) are now genuinely measured on every run, not copied from a one-time dev observation.
+2. The subprocess loop no longer raises mid-loop; it runs all five nodes, records every verdict, and `write_repair_correctness_report` always produces a `result`/`release_blocking`-correct artifact — a real regression now yields an inspectable `"failed"` evidence file (with a new optional `failures` map naming which fixture(s) and why) instead of an unstructured crash. `main()` still exits non-zero on any miss, preserving "any miss blocks release."
+3. Comment corrected to state what the assertion actually verifies (a gross-regression sanity bound, not proportional double-budget detection, which is already covered by `test_governed_solver_adapter.py`'s `test_one_wall_ceiling_bounds_both_solver_rounds`); tolerance tightened from 50ms to 20ms.
+4. Added `timeout=180` to each `subprocess.run` call; a timeout is caught and recorded as a failed verdict rather than hanging.
+5. `resolve_bindings()` now raises on a mixed `.json`/non-`.json` `dataset_files` list instead of silently routing everything through the artifact branch; regression test added in `test_evidence_binding.py`.
+6. `resolve_task` now returns `not_found` for a `scenario_id` other than the fixture's own, mirroring `get_overview`.
+7. Added `test_failed_scheduler_trips_exactly_the_preserved_lock_check`, proving via `validate_hard_constraints` directly that this fixture's `OPTIMAL`-with-empty-assignments trips `preserved_lock` specifically; documented the Decision E option chosen (fake adapter, not corrupted real solve) in the fixture's own docstring.
+
+All three regression tiers re-run clean after these fixes: backend default suite (1238 passed, 2 skipped, 7 deselected), `-m postgres` (91 passed), and the story's own five-fixture postgres suite in isolation (5 passed). The evidence file has not yet been regenerated against these code changes — per `docs/EVIDENCE-CONVENTION.md` that must happen after this patch commit lands on a clean tree, not before.
+
 ## Change Log
 
 - 2026-08-24: Implemented deterministic repair correctness and terminal fail-closed proof; generated clean-commit NFR27 evidence; full regression and Gate A passed; status moved to review.
+- 2026-08-24: Code review completed — 0 decision-needed, 7 patch findings, 0 deferred, 14 dismissed as noise (see Review Findings).
