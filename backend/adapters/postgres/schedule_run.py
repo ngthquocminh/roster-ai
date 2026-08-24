@@ -81,6 +81,23 @@ _FINALIZE_EXPECTED_STATUSES = {
 
 
 class PostgresScheduleRunRepository:
+    def get_candidate(
+        self,
+        connection: Connection,
+        *,
+        schedule_run_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleVersionV1 | None:
+        row = connection.execute(
+            select(schedule_version.c.payload).where(
+                schedule_version.c.schedule_run_id == schedule_run_id,
+                schedule_version.c.site_id == site_id,
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return TypeAdapter(ScheduleVersionV1).validate_python(row.payload)
+
     def get_run(
         self,
         connection: Connection,

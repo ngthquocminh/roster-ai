@@ -4,7 +4,7 @@ baseline_commit: a77df3579c79933e6a5cfdd0d8ad2c17e1a8d51f
 
 # Story 3.8: Compare Candidate and Baseline Results
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -467,20 +467,20 @@ completes without raising `CalculationLimitError`.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — `ComparisonV1` contract** (AC: 1)
-  - [ ] `application/contracts/comparison.py`: `AssignmentDiffV1`, `ComparisonV1` per the Architecture
+- [x] **Task 1 — `ComparisonV1` contract** (AC: 1)
+  - [x] `application/contracts/comparison.py`: `AssignmentDiffV1`, `ComparisonV1` per the Architecture
         guardrails' shape. `schema_version` on both, `SCHEMA_VERSION = "1"`.
-  - [ ] Contract-shape test mirroring `schedule_version.py`'s own (round-trip via `TypeAdapter`, every
+  - [x] Contract-shape test mirroring `schedule_version.py`'s own (round-trip via `TypeAdapter`, every
         AD-20-required concept present).
 
-- [ ] **Task 2 — Promote `_drain` to a shared module** (Decision C, Trap 7)
-  - [ ] Move `_drain` from `calculators.py` into `application/grounding/pagination.py`, export it
+- [x] **Task 2 — Promote `_drain` to a shared module** (Decision C, Trap 7)
+  - [x] Move `_drain` from `calculators.py` into `application/grounding/pagination.py`, export it
         publicly (rename without the leading underscore), update `calculators.py`'s three call sites to
         import it back. No behavior change — same signature, same `MAX_PAGES` guard.
-  - [ ] Full Epic 2 grounding test suite still green (proves the move was mechanical).
+  - [x] Full Epic 2 grounding test suite still green (proves the move was mechanical).
 
-- [ ] **Task 3 — Baseline comparison calculator** (AC: 1, 2, 4; Decisions B–F; Traps 2, 3, 6, 8)
-  - [ ] `application/scheduling/comparison.py`: `calculate_comparison(...)` per the Architecture
+- [x] **Task 3 — Baseline comparison calculator** (AC: 1, 2, 4; Decisions B–F; Traps 2, 3, 6, 8)
+  - [x] `application/scheduling/comparison.py`: `calculate_comparison(...)` per the Architecture
         guardrails. Drains tasks/demand/workers/baseline-assignments via the promoted helper
         (`page_size=200, max_rows=2000`), builds the wage/shift-placeholder `ValidationFactsV1` for the
         baseline side (Decision B, with the inline comment naming the gap), calls
@@ -490,9 +490,9 @@ completes without raising `CalculationLimitError`.
         required), reads `ScenarioOverviewV1.baseline_schedule_version` and compares it against the
         `expected_baseline_schedule_version` argument to set `stale`/`expected_baseline_schedule_version`/
         `current_baseline_schedule_version` on `ComparisonV1` (Decision F, AC4).
-  - [ ] `SCOPE_CONTROLS` tuple recording the `max_rows=2000` bound and the wage/shift-placeholder gap
+  - [x] `SCOPE_CONTROLS` tuple recording the `max_rows=2000` bound and the wage/shift-placeholder gap
         (Story 2.5's convention).
-  - [ ] Tests: empty baseline (today's real case) produces a real, non-"Not computed" comparison
+  - [x] Tests: empty baseline (today's real case) produces a real, non-"Not computed" comparison
         showing 100% net-new; a **seeded non-empty** baseline (fake reader, every demand task given at
         least one qualified worker per Trap 3's note) proves the diff/delta mechanism goes red on a
         mutation (Trap 3's guard); candidate-metrics recomputation disagreement with a corrupted
@@ -504,112 +504,112 @@ completes without raising `CalculationLimitError`.
         on the result; equal (including both `None`, today's real case) asserts `stale: false` — this is
         the one test that actually exercises AC4's mechanism; Task 5/9 only carry it through the API/UI.
 
-- [ ] **Task 4 — Repository: `get_candidate` read** (AC: 1, 2, 3)
-  - [ ] `application/ports/schedule_run.py`: add `get_candidate` to `ScheduleRunRepository` Protocol.
-  - [ ] `adapters/postgres/schedule_run.py`: implement — SELECT `schedule_version` by
+- [x] **Task 4 — Repository: `get_candidate` read** (AC: 1, 2, 3)
+  - [x] `application/ports/schedule_run.py`: add `get_candidate` to `ScheduleRunRepository` Protocol.
+  - [x] `adapters/postgres/schedule_run.py`: implement — SELECT `schedule_version` by
         `schedule_run_id`+`site_id`, deserialize `payload` via
         `TypeAdapter(ScheduleVersionV1).validate_python`. Return `None` if no row.
-  - [ ] Unit test: a `solver_completed` run's candidate reads back byte-identical (via canonical hash)
+  - [x] Unit test: a `solver_completed` run's candidate reads back byte-identical (via canonical hash)
         to what `finalize_run` wrote; a non-`solver_completed` run returns `None`; cross-site read
         returns `None` (site isolation).
 
-- [ ] **Task 5 — Route: `GET /api/v1/schedule-runs/{run_id}/result`** (AC: 1, 2, 3)
-  - [ ] `api/schemas.py`: `ScheduleVersionOut`, `ComparisonOut`/`AssignmentDiffOut`,
+- [x] **Task 5 — Route: `GET /api/v1/schedule-runs/{run_id}/result`** (AC: 1, 2, 3)
+  - [x] `api/schemas.py`: `ScheduleVersionOut`, `ComparisonOut`/`AssignmentDiffOut`,
         `ScheduleRunResultOut { run, candidate, comparison }`.
-  - [ ] `api/routers/schedule_runs.py`: new route, `site_id`-scoped exactly like `get_schedule_run`
+  - [x] `api/routers/schedule_runs.py`: new route, `site_id`-scoped exactly like `get_schedule_run`
         (`schedule_runs.py:527-538`) — no `ScenarioCatalogueReader` detour, no separate scenario
         resolution. `scenario_id`/`scenario_version_id` for `calculate_comparison` come straight off the
         fetched candidate's `ScheduleVersionV1`. Unknown/cross-site run id → `_not_found()`, code
         `schedule_run_not_found` (matching the sibling route, not `get_projection`'s
         `scenario_not_found`). `_PROBLEMS` (401/404) declared like every sibling route (Trap from Story
         3.7's own patch pass — don't reintroduce the gap).
-  - [ ] Router tests: `solver_completed` → full envelope with `comparison` populated;
+  - [x] Router tests: `solver_completed` → full envelope with `comparison` populated;
         `solver_infeasible`/`solver_timed_out`/`solver_cancelled`/`solver_failed` → `candidate`/
         `comparison` both `None`, `run` populated with literal status/reason; non-terminal
         (`solver_queued`/`solver_running`/`cancellation_requested`) → same null shape; unknown run id →
         `schedule_run_not_found`; cross-site run id → same code, not 403 (matches the repo's
         non-disclosing pattern, AD-3).
 
-- [ ] **Task 6 — Regenerate the OpenAPI contract** (AC: 1, 2, 3)
-  - [ ] `npm run codegen` (backend must import cleanly) so `frontend/openapi.json`/`schema.d.ts` carry
+- [x] **Task 6 — Regenerate the OpenAPI contract** (AC: 1, 2, 3)
+  - [x] `npm run codegen` (backend must import cleanly) so `frontend/openapi.json`/`schema.d.ts` carry
         the new route/schemas. No hand-authored frontend types.
 
-- [ ] **Task 7 — Frontend API client + hook**
-  - [ ] `api/scheduleRuns.ts`: add `getScheduleRunResult(runId)` (GET, schema-derived types).
-  - [ ] `hooks/useScheduleRunResult.ts`: TanStack Query wrapper (`queryKey: scheduleRunResultKey(runId)`
+- [x] **Task 7 — Frontend API client + hook**
+  - [x] `api/scheduleRuns.ts`: add `getScheduleRunResult(runId)` (GET, schema-derived types).
+  - [x] `hooks/useScheduleRunResult.ts`: TanStack Query wrapper (`queryKey: scheduleRunResultKey(runId)`
         following the `scheduleRunsKey`/`proposalKey` exported-factory convention Story 3.7's patch pass
         established), `enabled` on non-empty `runId`, `useRedirectOnUnauthorized`/`getErrorStatus` wired
         like the sibling hooks.
-  - [ ] Tests for both (success/failure shape; disabled-until-runId).
+  - [x] Tests for both (success/failure shape; disabled-until-runId).
 
-- [ ] **Task 8 — `TerminalOutcomeCard.tsx`** (AC: 3; Trap 4)
-  - [ ] Renders literal status (`RunStatusBadge`), reason, available warnings/evidence for a
+- [x] **Task 8 — `TerminalOutcomeCard.tsx`** (AC: 3; Trap 4)
+  - [x] Renders literal status (`RunStatusBadge`), reason, available warnings/evidence for a
         non-promotable or non-terminal run. Zero elements with an "Approve" accessible name.
-  - [ ] Test: renders for all 4 non-promotable terminal statuses + all 3 non-terminal statuses, no
+  - [x] Test: renders for all 4 non-promotable terminal statuses + all 3 non-terminal statuses, no
         forbidden token (%, ETA, remaining, likely, probably — same list Story 3.7 used), zero "Approve"
         controls.
 
-- [ ] **Task 9 — `ComparisonSummary.tsx`** (AC: 1, 2, 4; Traps 4, 5, 6)
-  - [ ] Renders candidate/baseline version identifiers (`IdentifierCopyButton`), `AssignmentDiffV1` as
+- [x] **Task 9 — `ComparisonSummary.tsx`** (AC: 1, 2, 4; Traps 4, 5, 6)
+  - [x] Renders candidate/baseline version identifiers (`IdentifierCopyButton`), `AssignmentDiffV1` as
         labelled added/removed lists, coverage/overtime/cost/objective **deltas** derived from the two
         `MetricSetV1`s, constraint status (candidate full, baseline hard-only, visually separate,
         Decision D), warnings, unresolved gaps. `stale` banner with expected/current versions when
         `comparison.stale`. "Approve as baseline" uniformly disabled (Story 3.7's `ApproveButton`
         pattern, reused).
-  - [ ] Tests: real (non-"Not computed") values render for every AC1-named field on a populated
+  - [x] Tests: real (non-"Not computed") values render for every AC1-named field on a populated
         comparison; a field with a genuinely empty source tuple renders "Not computed" (not zero); a
         `stale: true` comparison shows the banner **and** still renders the historical numbers
         underneath (Trap 5); zero enabled "Approve" controls (Trap 4).
 
-- [ ] **Task 10 — `ScenarioResults.tsx` route wiring + `deferred-work.md` entries**
-  - [ ] Replace the `WorkspaceTabPlaceholder` outright: loading (`Skeleton`) → error (`InlineAlert` +
+- [x] **Task 10 — `ScenarioResults.tsx` route wiring + `deferred-work.md` entries**
+  - [x] Replace the `WorkspaceTabPlaceholder` outright: loading (`Skeleton`) → error (`InlineAlert` +
         retry) → non-terminal (`ProgressCard`, reused from `components/runs/`) → non-promotable
         terminal (`TerminalOutcomeCard`) → completed (`ComparisonSummary`).
-  - [ ] New `ScenarioResultsWorkspace.test.tsx` mounting the real shell/route/hooks against only a
+  - [x] New `ScenarioResultsWorkspace.test.tsx` mounting the real shell/route/hooks against only a
         mocked network boundary (Story 3.7's `ScenarioRunsWorkspace.test.tsx` pattern) — asserts the
         Chat/Scenario Data/Runs tabs survive a Results fetch failure.
-  - [ ] Record in `deferred-work.md`: (a) the wage-placeholder/shift-placeholder gap from Decision B,
+  - [x] Record in `deferred-work.md`: (a) the wage-placeholder/shift-placeholder gap from Decision B,
         naming "the first story that populates a real non-empty baseline assignment supply" as owner;
         (b) AC4's staleness mechanism being real-but-vacuously-non-stale until Story 4.3 (Decision F),
         naming Story 4.3 as the trigger; (c) any other conscious scope trim discovered during
         implementation, not left as a silent gap.
-  - [ ] Full regression: backend `pytest` (postgres included), frontend `vitest run`, `tsc --noEmit`,
+  - [x] Full regression: backend `pytest` (postgres included), frontend `vitest run`, `tsc --noEmit`,
         `oxlint`, `npm run build`. Walk every Done checklist item below against the shipped code.
 
 ---
 
 ## Done checklist
 
-- [ ] `application/contracts/comparison.py` — `ComparisonV1`/`AssignmentDiffV1` implemented and tested
-- [ ] `_drain` promoted to a shared, exported module; Epic 2 grounding suite unaffected
-- [ ] `application/scheduling/comparison.py` — `calculate_comparison` reuses Story 3.2's calculators,
+- [x] `application/contracts/comparison.py` — `ComparisonV1`/`AssignmentDiffV1` implemented and tested
+- [x] `_drain` promoted to a shared, exported module; Epic 2 grounding suite unaffected
+- [x] `application/scheduling/comparison.py` — `calculate_comparison` reuses Story 3.2's calculators,
       does not duplicate their formulas
-- [ ] `ScheduleRunRepository.get_candidate` implemented and tested (byte-identical read-back, site
+- [x] `ScheduleRunRepository.get_candidate` implemented and tested (byte-identical read-back, site
       isolation, `None` for non-completed runs)
-- [ ] `GET /api/v1/schedule-runs/{run_id}/result` implemented, `_PROBLEMS` declared, tested for every
+- [x] `GET /api/v1/schedule-runs/{run_id}/result` implemented, `_PROBLEMS` declared, tested for every
       terminal/non-terminal status
-- [ ] Frontend: `TerminalOutcomeCard.tsx`, `ComparisonSummary.tsx`, `useScheduleRunResult` hook,
+- [x] Frontend: `TerminalOutcomeCard.tsx`, `ComparisonSummary.tsx`, `useScheduleRunResult` hook,
       `getScheduleRunResult` client function
-- [ ] `ScenarioResults.tsx` replaces the placeholder end-to-end; every "View Results"/"View Progress"
+- [x] `ScenarioResults.tsx` replaces the placeholder end-to-end; every "View Results"/"View Progress"
       link from Story 3.7's Runs workspace now lands on real content
-- [ ] AC1: `ComparisonV1` names both versions, includes worker/shift/task diffs, coverage/overtime/cost/
+- [x] AC1: `ComparisonV1` names both versions, includes worker/shift/task diffs, coverage/overtime/cost/
       objective deltas, constraint status (both sides, correctly scoped per Decision D), warnings,
       unresolved gaps — every value produced by an application calculator, none by the model
-- [ ] AC2: deterministic status/warnings/metrics/comparison/schedule/evidence render independent of any
+- [x] AC2: deterministic status/warnings/metrics/comparison/schedule/evidence render independent of any
       model summary; "Not computed" reserved for genuine absence only (Decision E, Trap 6)
-- [ ] AC3: non-promotable terminal outcomes are visually/textually distinct from fetch failure and from
+- [x] AC3: non-promotable terminal outcomes are visually/textually distinct from fetch failure and from
       a completed result; zero enabled (or displayed) approval controls (Trap 4)
-- [ ] AC4: staleness mechanism is real and tested against a seeded case; recorded as vacuously
+- [x] AC4: staleness mechanism is real and tested against a seeded case; recorded as vacuously
       non-stale in production until Story 4.3 (Decision F) — not overclaimed as fully proven end-to-end
-- [ ] Baseline-empty-today comparisons show real, non-fabricated numbers (100% net-new), not
+- [x] Baseline-empty-today comparisons show real, non-fabricated numbers (100% net-new), not
       placeholders (Decision A)
-- [ ] Wage/shift-placeholder gap and AC4's vacuous-today status both recorded in `deferred-work.md`
+- [x] Wage/shift-placeholder gap and AC4's vacuous-today status both recorded in `deferred-work.md`
       with explicit owners (Task 10)
-- [ ] Keyboard navigation and WCAG AA accessibility pass automated checks only (Story 1.6/3.7 posture,
+- [x] Keyboard navigation and WCAG AA accessibility pass automated checks only (Story 1.6/3.7 posture,
       no new manual-AT scope)
-- [ ] Test: `ScenarioResultsWorkspace.test.tsx` proves the workspace shell survives a Results fetch
+- [x] Test: `ScenarioResultsWorkspace.test.tsx` proves the workspace shell survives a Results fetch
       failure
-- [ ] Full backend + frontend regression, typecheck, lint, and production build all pass
+- [x] Full backend + frontend regression, typecheck, lint, and production build all pass
 
 ---
 
@@ -646,6 +646,66 @@ _To be filled by the dev agent._
 
 ### Debug Log References
 
+- Implementation plan: define and round-trip the immutable comparison contract; promote bounded
+  projection paging without behavior change; recompute and verify comparison evidence; add the
+  site-scoped repository/API read; regenerate client contracts; then wire and accessibility-test each
+  literal Results state.
+- RED evidence: each new backend/frontend module was first exercised while absent; focused tests failed
+  on missing imports/routes before implementation.
+- Validation: `uv run pytest -q` from `backend/` (1186 passed, 2 skipped, 7 deselected);
+  `uv run pytest -m postgres -q` (85 passed); `npm test` (507 passed before final two axe cases, with
+  both final axe cases separately green); `npm run typecheck`; `npm run lint`; `npm run build`.
+- The first root-level backend invocation used the wrong pytest root and hit the pre-existing
+  `conftest` module-name collision; rerunning from `backend/` used the repository configuration and
+  passed completely.
+
 ### Completion Notes List
 
+- Added `ComparisonV1` and a deterministic comparison calculator that reuses the governed candidate
+  metrics and hard-constraint calculators, verifies persisted candidate metrics, supports seeded and
+  empty baselines, and exposes stale baseline identity without rebasing.
+- Added candidate read-back and `GET /api/v1/schedule-runs/{run_id}/result`, preserving literal
+  non-completed outcomes and returning a verified candidate/comparison only for completed runs.
+- Replaced the Results placeholder with loading, fetch-failure, progress, terminal-outcome, and
+  completed-comparison branches; completed results include assignment schedule and evidence locators.
+- Generated the OpenAPI/TypeScript contract, added the API client and TanStack Query hook, and proved
+  the real workspace shell survives result-fetch failure.
+- Added automated accessibility checks and recorded the baseline wage/shift, vacuous-staleness, and
+  terminal-diagnostics boundaries in `deferred-work.md` with explicit owners.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/3-8-compare-candidate-and-baseline-results.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/adapters/postgres/schedule_run.py`
+- `backend/api/routers/schedule_runs.py`
+- `backend/api/schemas.py`
+- `backend/application/contracts/comparison.py`
+- `backend/application/grounding/calculators.py`
+- `backend/application/grounding/pagination.py`
+- `backend/application/ports/schedule_run.py`
+- `backend/application/scheduling/comparison.py`
+- `backend/tests/test_comparison_contract.py`
+- `backend/tests/test_grounding_pagination.py`
+- `backend/tests/test_schedule_comparison.py`
+- `backend/tests/test_schedule_run_candidate_read.py`
+- `backend/tests/test_schedule_runs_api.py`
+- `frontend/openapi.json`
+- `frontend/src/api/scheduleRuns.test.ts`
+- `frontend/src/api/scheduleRuns.ts`
+- `frontend/src/api/schema.d.ts`
+- `frontend/src/components/run-results/ComparisonSummary.test.tsx`
+- `frontend/src/components/run-results/ComparisonSummary.tsx`
+- `frontend/src/components/run-results/TerminalOutcomeCard.test.tsx`
+- `frontend/src/components/run-results/TerminalOutcomeCard.tsx`
+- `frontend/src/components/runs/ProgressCard.tsx`
+- `frontend/src/hooks/useScheduleRunResult.test.tsx`
+- `frontend/src/hooks/useScheduleRunResult.ts`
+- `frontend/src/routes/ScenarioResults.tsx`
+- `frontend/src/routes/ScenarioResultsWorkspace.test.tsx`
+
+## Change Log
+
+- 2026-08-24: Implemented Story 3.8 candidate-to-baseline comparison, result API, generated client,
+  deterministic Results workspace, accessibility coverage, and explicit deferred-boundary records.

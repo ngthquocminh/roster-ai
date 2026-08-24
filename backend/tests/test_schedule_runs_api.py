@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -13,6 +14,7 @@ from api.deps import (
     get_catalogue_reader,
     get_identity_store,
     get_proposal_repository,
+    get_projection_reader,
     get_schedule_run_repository,
     get_settings,
     get_site_context,
@@ -27,6 +29,8 @@ from application.ports.schedule_run import (
 )
 from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.session import ResolvedSession
+from application.contracts.comparison import AssignmentDiffV1, ComparisonV1
+from application.contracts.schedule_version import MetricSetV1, ScheduleVersionV1
 from application.use_cases.cancel_schedule_run import (
     CancelScheduleRunError,
     IdempotencyKeyConflictError,
@@ -87,6 +91,64 @@ def _headers(settings, *, key="cancel-1"):
         "X-CSRF-Token": _CSRF_TOKEN,
         "Idempotency-Key": key,
     }
+
+
+@pytest.mark.parametrize(
+    "status",
+    ("solver_queued", "solver_running", "cancellation_requested", "solver_infeasible", "solver_timed_out", "solver_cancelled", "solver_failed"),
+)
+def test_result_route_preserves_literal_run_without_candidate(client, status) -> None:
+    test_client, settings, session = client
+    run_id = uuid4()
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, status, "literal-reason", 2, status == "cancellation_requested")
+
+        def get_candidate(self, *_args, **_kwargs):
+            raise AssertionError("non-completed runs must not read a candidate")
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 200
+    assert response.json()["run"]["status"] == status
+    assert response.json()["candidate"] is None
+    assert response.json()["comparison"] is None
+
+
+def test_result_route_returns_completed_candidate_and_comparison(client, monkeypatch) -> None:
+    test_client, settings, session = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+    comparison = ComparisonV1(
+        candidate.schedule_version_id, run_id, scenario_id, version_id, None, None, False,
+        AssignmentDiffV1(), MetricSetV1(), MetricSetV1(), (), (), (), (), (),
+    )
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs):
+            return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+
+        def get_candidate(self, *_args, **_kwargs):
+            return candidate
+
+        def load_snapshot(self, *_args, **_kwargs):
+            return SimpleNamespace(baseline_schedule_version=None)
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", lambda *_args, **_kwargs: comparison)
+
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 200
+    assert response.json()["candidate"]["schedule_run_id"] == str(run_id)
+    assert response.json()["comparison"]["stale"] is False
 
 
 class _StartRepository:
