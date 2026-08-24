@@ -41,7 +41,52 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-24
+last_updated: 2026-08-25
+
+# NOTE (2026-08-25): Story 3-11 created and moved to ready-for-dev. It is Epic 3's SECOND pure
+# proof story (3.10's sibling) — proving worker kill, lease expiry, browser reconnect, command
+# replay, cancellation race, stale draft, and conflicting idempotency (NFR6, NFR7), blocking on
+# regression (NFR29). MEASURED AT CREATION: six of the seven named failure modes already have a
+# real mechanism AND already-passing tests (worker kill/lease expiry: test_job_leasing_postgres.py;
+# browser reconnect: test_schedule_run_stream_api.py/test_conversation_stream_api.py; command
+# replay + conflicting idempotency: the shared body-hash-conflict path on every mutating use case;
+# cancellation race: test_cancellation_race_postgres.py, 9 tests; stale draft:
+# test_conversations_postgres.py:1012-1041). This story's job is to ASSEMBLE that coverage into one
+# NFR27-bound evidence artifact, not duplicate it.
+#
+# FOUR DECISIONS WERE MADE AT CREATION, the two most consequential:
+# (1) THIS STORY SHIPS A MINIMAL WORKER ENTRY POINT (`backend/worker/main.py`), because
+#     `deferred-work.md:402/404/396/426` all name Story 3.11 as owner of "no production worker
+#     entrypoint exists," and AC1's "worker kill" clause cannot be proven non-vacuously by any
+#     existing test — every one of them calls `run_once()` in-process; none kills a real OS
+#     process. NOT deployed to Docker/systemd in this story (Epic 5/6's concern) — proven by a
+#     real-subprocess-SIGKILL test only.
+# (2) `deferred-work.md:316`'s mid-solve CP-SAT preemption hook is explicitly NOT built here and
+#     re-pointed again with owner left open. VERIFIED LIVE: `GovernedSchedulerAdapter.solve()`
+#     (`backend/engine/governed_adapter.py:269-291`) has zero cancellation wiring; OR-Tools'
+#     `stop_search()` (confirmed via Context7) fires only inside a solution callback, so a search
+#     with no improving solution would never observe a stop signal — a guard-that-cannot-go-red
+#     risk this repo's own retro names as its most expensive pattern. This story's frozen AC1 text
+#     names "cancellation race" (already proven, cooperative/pre-solve), not mid-solve preemption;
+#     the ledger's "Owner: Story 3.11" string predates and is broader than that frozen text.
+#
+# ALSO DECIDED: `deferred-work.md:330` (orphaned `solver_running` cancellation with no observer)
+# closes by PROOF, not new code — a real-Postgres test proving `mark_running`'s `_has_current_epoch`
+# precondition makes the orphan path unreachable today (the Story 3.5 "verified-safe-today"
+# precedent). One genuinely new Postgres test is owed: `cancel_schedule_run` idempotency-key
+# replay against a differing `expected_resource_version` under contention — no existing test
+# drives that specific command through that specific race. ZERO NEW `evals/golden/**` cases
+# (same reasoning as Story 3.10's own zero-contribution precedent — none of the seven failure
+# modes are LLM-scriptable turns).
+#
+# NO NEW MIGRATION (the worker entry point is a script, not schema). ZERO-LINE `frontend/` DIFF
+# EXPECTED. Evidence: `evidence/story-3.11/recovery-idempotency.json`, generated via
+# `resolve_bindings()` exactly per `docs/EVIDENCE-CONVENTION.md` and Story 3.10's own mechanical
+# precedent (`backend/evals/recovery_idempotency_report.py` mirrors
+# `repair_correctness_report.py`).
+#
+# BASELINE AT CREATION (`5b87655`, clean tree, merge of Story 3.10 into `main`): re-derive test
+# counts at Task 1 — do not trust Story 3.10's own completion numbers as current.
 
 # NOTE (2026-08-24): Story 3-10 created and moved to ready-for-dev. It is EPIC 3'S FIRST PURE PROOF
 # STORY (the backend analog of 1.9-1.11) -- ships NO new capability, route, contract, migration, or
@@ -1580,7 +1625,7 @@ development_status:
   3-8-compare-candidate-and-baseline-results: done
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
-  3-11-prove-recovery-and-idempotency: backlog
+  3-11-prove-recovery-and-idempotency: ready-for-dev
   3-12-prove-the-repair-browser-journey: backlog
   epic-3-retrospective: optional
 
