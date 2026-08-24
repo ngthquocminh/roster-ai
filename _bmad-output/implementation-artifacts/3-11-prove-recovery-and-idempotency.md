@@ -127,9 +127,9 @@ The quietest first:
   - [x] Re-run each enumerated node individually to confirm still-green against this story's baseline.
 - [x] **Task 7 — Re-measure NFR35 against the live worker loop, if Decision 1a landed (AC1, AC2, Trap 6)**
   - [x] Extend or supplement `evidence/story-3.5/nfr35-first-run-event.json`'s own re-measurement invitation (`deferred-work.md:396`) using the new entry point in the loop; confirm whether the "cannot fail by construction" scope-limit framing still holds, and update the note if it does not.
-- [ ] **Task 8 — Generate evidence (AC1, AC2, Decision 4)**
-  - [ ] Build `backend/evals/recovery_idempotency_report.py` mirroring `repair_correctness_report.py`'s shape.
-  - [ ] Commit code on a clean tree, run the measurement, generate `evidence/story-3.11/recovery-idempotency.json` via `resolve_bindings()`, run `test_evidence_convention.py`, commit evidence separately per `docs/EVIDENCE-CONVENTION.md`.
+- [x] **Task 8 — Generate evidence (AC1, AC2, Decision 4)**
+  - [x] Build `backend/evals/recovery_idempotency_report.py` mirroring `repair_correctness_report.py`'s shape.
+  - [x] Commit code on a clean tree, run the measurement, generate `evidence/story-3.11/recovery-idempotency.json` via `resolve_bindings()`, run `test_evidence_convention.py`, commit evidence separately per `docs/EVIDENCE-CONVENTION.md`.
 - [ ] **Task 9 — Regression and Gate A**
   - [ ] Full backend suite (default + `-m postgres`); confirm zero new migration files (`alembic check`); confirm zero-line `frontend/` diff; re-run the evidence convention suite; re-run Gate A and record `gate_a_passed`/`blocking`.
 - [ ] **Task 10 — Ledger and sprint-status update**
@@ -184,6 +184,7 @@ Codex (GPT-5)
 - 2026-08-25 Task 5 RED/GREEN: the first contention fixture named the wrong table schema and failed before the behavioral assertion; corrected to the live `schedule_run` table, then the focused proof and backend regression passed (1244 passed / 2 skipped / 7 deselected).
 - 2026-08-25 Task 6: ten exact recovery/idempotency nodes were executed in ten isolated pytest processes; all passed.
 - 2026-08-25 Task 7 live-worker NFR35 measurement: 59.155 ms, 57.947 ms, and 118.579 ms from committed queue acknowledgement to persisted `run.running.v1`, all below 5000 ms. This path includes process polling, lease acquisition, and the queued-to-running transition, so Story 3.5's narrower queued-event "cannot fail by construction" note does not apply.
+- 2026-08-25 Task 8 clean measurement bound to `8901cf4d9d31fd829a376db0fb04e9c0a0a8987d`: all 11 exact gates passed; recorded live-worker runs were 56.611 ms, 58.084 ms, and 122.426 ms; evidence convention 67 passed. Code and evidence were committed separately (`8901cf4`, `96e2743`).
 
 ### Completion Notes List
 
@@ -194,6 +195,7 @@ Codex (GPT-5)
 - ✅ Task 5: proved a same-key cancellation replay with a differing expected version is rejected after an observed real PostgreSQL lock wait, preserving one idempotency row and one cancellation effect.
 - ✅ Task 6: assembled the seven named AC1 failure modes into exact, independently rerunnable proof gates without padding the golden dataset.
 - ✅ Task 7: supplemented Story 3.5's read-path latency evidence with a real worker-loop measurement; full backend regression passed (1245 passed / 2 skipped / 7 deselected).
+- ✅ Task 8: generated the release-blocking, exact-gate recovery/idempotency report with all NFR27 bindings and separately committed evidence.
 
 ### File List
 
@@ -207,3 +209,4 @@ Codex (GPT-5)
 - backend/tests/test_worker_main.py
 - backend/tests/test_worker_process_recovery_postgres.py
 - backend/worker/main.py
+- evidence/story-3.11/recovery-idempotency.json
