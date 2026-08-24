@@ -18,10 +18,13 @@ export function Composer({
   onSend,
   isPending,
   scenarioId,
+  disabledReason,
 }: Readonly<{
   onSend: (text: string) => Promise<unknown>;
   isPending: boolean;
   scenarioId: string;
+  /** ID of the visible description explaining why agent actions are disabled. */
+  disabledReason?: string;
 }>) {
   const [draft, setDraft] = useState("");
   const [failed, setFailed] = useState(false);
@@ -33,7 +36,7 @@ export function Composer({
 
   const submit = async () => {
     const text = draft.trim();
-    if (!text || isPending || inFlight.current) return;
+    if (!text || isPending || disabledReason || inFlight.current) return;
     inFlight.current = true;
     setFailed(false);
     try {
@@ -55,8 +58,10 @@ export function Composer({
         Message
       </label>
       <textarea
+        aria-describedby={disabledReason}
         className="min-h-24 w-full rounded-lg border bg-background p-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         id="chat-composer"
+        disabled={Boolean(disabledReason)}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -80,8 +85,9 @@ export function Composer({
       ) : null}
       <div className="flex justify-end">
         <Button
+          aria-describedby={disabledReason}
           className="min-h-11"
-          disabled={!draft.trim() || isPending}
+          disabled={!draft.trim() || isPending || Boolean(disabledReason)}
           onClick={() => void submit()}
           type="button"
         >

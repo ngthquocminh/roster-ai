@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { conversationsKey, useConversations } from "@/hooks/useConversations";
 import { forgetOrigin, originElementId, peekOrigin, type EvidenceOrigin } from "@/features/evidence/origin";
 import { useConversationStream } from "@/hooks/useConversationStream";
+import { useAgentAvailability } from "@/hooks/useAgentAvailability";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
 import { useSendMessage } from "@/hooks/useSendMessage";
 import { getErrorStatus, TERMINAL_STATUSES, USER_ERROR_COPY } from "@/lib/errors";
@@ -37,6 +38,8 @@ const RUN_STATUS_WORDS: Record<string, string> = {
   agent_cancelled: "cancelled",
   approval_required: "waiting for approval",
 };
+
+const AGENT_UNAVAILABLE_DESCRIPTION_ID = "agent-unavailable-description";
 
 function runStatusLabel(status: string): string {
   return `Agent run ${RUN_STATUS_WORDS[status] ?? status.replace(/_/g, " ")}`;
@@ -87,6 +90,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const location = useLocation();
   const context = useScenarioContext(scenarioId);
   const conversations = useConversations(scenarioId);
+  const availability = useAgentAvailability(scenarioId);
   // Selection lives in the URL, not component state: switching workspace tabs
   // unmounts this view, and `useState` would silently drop the planner back
   // onto the newest conversation — posting their next message into a different
@@ -150,6 +154,9 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
 
   const mutation = useSendMessage(selectedId, scenarioId);
   const pinned = items.find((c) => c.id === selectedId);
+  // A failed availability read is an API/service error, not evidence of a
+  // model outage. Fail open so one broken read cannot disable a working agent.
+  const agentUnavailable = availability.data?.available === false;
 
   return (
     <section aria-labelledby="chat-title" className="space-y-4">
@@ -171,6 +178,39 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
 
       {start.isError ? (
         <ErrorState error={start.error} onRetry={() => start.reset()} scenarioId={scenarioId} />
+      ) : null}
+
+      {agentUnavailable ? (
+        <InlineAlert
+          action={
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                className="font-medium underline underline-offset-3"
+                to={`/scenarios/${scenarioId}/data`}
+              >
+                Scenario Data
+              </Link>
+              <Link
+                className="font-medium underline underline-offset-3"
+                to={`/scenarios/${scenarioId}/runs`}
+              >
+                Runs
+              </Link>
+              <Button
+                className="min-h-11"
+                onClick={() => void availability.refetch()}
+                type="button"
+                variant="outline"
+              >
+                Check again
+              </Button>
+            </div>
+          }
+          description={USER_ERROR_COPY.agentUnavailable.description}
+          descriptionId={AGENT_UNAVAILABLE_DESCRIPTION_ID}
+          live="polite"
+          title={USER_ERROR_COPY.agentUnavailable.title}
+        />
       ) : null}
 
       {conversations.isPending ? (
@@ -229,6 +269,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
             </>
           )}
           <Composer
+            disabledReason={agentUnavailable ? AGENT_UNAVAILABLE_DESCRIPTION_ID : undefined}
             isPending={mutation.isPending}
             onSend={(text) => mutation.mutateAsync({ text })}
             scenarioId={scenarioId}

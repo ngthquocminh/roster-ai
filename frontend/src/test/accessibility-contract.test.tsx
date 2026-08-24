@@ -415,6 +415,41 @@ it("keeps the Draft commands discontinuous from Send itself (UX-DR35)", async ()
   expect(run).toHaveAttribute("data-variant", "secondary");
 });
 
+it("associates the real disabled composer controls with a polite outage alert", async () => {
+  const { InlineAlert } = await import("@/components/primitives/InlineAlert");
+  const { Composer } = await import("@/features/chat/Composer");
+  const descriptionId = "agent-unavailable-description-contract";
+  const { container } = render(
+    <MemoryRouter>
+      <InlineAlert
+        description="Scenario Data, saved results, and manual optimization are still available."
+        descriptionId={descriptionId}
+        live="polite"
+        title="Agent unavailable"
+      />
+      <Composer
+        disabledReason={descriptionId}
+        isPending={false}
+        onSend={async () => undefined}
+        scenarioId={scenarioId}
+      />
+    </MemoryRouter>,
+  );
+
+  const status = screen.getByRole("status");
+  expect(status).toHaveAttribute("aria-live", "polite");
+  expect(status).toContainElement(document.getElementById(descriptionId));
+  for (const control of [
+    screen.getByRole("textbox"),
+    screen.getByRole("button", { name: /^send$/i }),
+  ]) {
+    expect(control).toBeDisabled();
+    expect(control).toHaveAttribute("aria-describedby", descriptionId);
+    expect(control.className).not.toMatch(/sr-only/);
+  }
+  await expectAxeClean(container);
+});
+
 it("announces stale Draft state and explains why revision is disabled", async () => {
   mockProposal(true);
   const { DraftCard } = await import("@/features/chat/DraftCard");

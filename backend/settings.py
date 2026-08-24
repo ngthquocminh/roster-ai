@@ -43,6 +43,7 @@ AC2_CEILING_FIELDS = (
     "site_max_concurrent_runs",
     "agent_runtime_deadline_seconds",
     "lease_seconds",
+    "agent_availability_recency_seconds",
 )
 
 
@@ -93,6 +94,7 @@ class Settings:
     agent_runtime_deadline_seconds: float = 60.0
     agent_runtime_retries_limit: int = 2
     agent_runtime_total_tokens_limit: int = 32_768
+    agent_availability_recency_seconds: float = 120.0
     site_max_concurrent_runs: int = 2
     scheduling_inspect_row_limit: int = 200
     scheduling_inspect_timeout_seconds: float = 5.0
@@ -282,6 +284,11 @@ def default_settings() -> Settings:
         os.environ.get("AGENT_RUNTIME_TOTAL_TOKENS_LIMIT"),
         32_768,
     )
+    agent_availability_recency_seconds = _positive_float(
+        "AGENT_AVAILABILITY_RECENCY_SECONDS",
+        os.environ.get("AGENT_AVAILABILITY_RECENCY_SECONDS"),
+        120.0,
+    )
     site_max_concurrent_runs = _positive_int(
         "SITE_MAX_CONCURRENT_RUNS", os.environ.get("SITE_MAX_CONCURRENT_RUNS"), 2
     )
@@ -390,6 +397,7 @@ def default_settings() -> Settings:
         agent_runtime_deadline_seconds=agent_runtime_deadline_seconds,
         agent_runtime_retries_limit=agent_runtime_retries_limit,
         agent_runtime_total_tokens_limit=agent_runtime_total_tokens_limit,
+        agent_availability_recency_seconds=agent_availability_recency_seconds,
         site_max_concurrent_runs=site_max_concurrent_runs,
         scheduling_inspect_row_limit=scheduling_inspect_row_limit,
         scheduling_inspect_timeout_seconds=scheduling_inspect_timeout_seconds,

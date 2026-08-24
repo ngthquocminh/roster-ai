@@ -23,8 +23,12 @@ export const USER_ERROR_COPY = {
     title: "Run Failed",
     description: "This run couldn't be completed. Try starting a new run.",
   },
+  agentUnavailable: {
+    title: "Agent unavailable",
+    description: "Scenario Data, saved results, and manual optimization are still available.",
+  },
 } as const satisfies Record<
-  "connection" | "unexpectedCrash" | "runFailure",
+  "connection" | "unexpectedCrash" | "runFailure" | "agentUnavailable",
   UserErrorCopy
 >;
 

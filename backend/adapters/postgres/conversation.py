@@ -55,6 +55,27 @@ class UnsupportedActivityPayloadError(ValueError):
 
 
 class PostgresConversationRepository:
+    def latest_terminal_outcome_for_site(
+        self,
+        connection: Connection,
+        *,
+        site_id: UUID,
+    ) -> PersistedEventV1 | None:
+        row = connection.execute(
+            select(persisted_event)
+            .where(
+                persisted_event.c.site_id == site_id,
+                persisted_event.c.agent_run_id.is_not(None),
+                persisted_event.c.event_type == "terminal_outcome",
+            )
+            .order_by(
+                persisted_event.c.occurred_at.desc(),
+                persisted_event.c.id.desc(),
+            )
+            .limit(1)
+        ).one_or_none()
+        return None if row is None else _event_from_row(row)
+
     def create(
         self,
         connection: Connection,

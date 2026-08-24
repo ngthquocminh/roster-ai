@@ -115,6 +115,7 @@ class _Repository:
         self.accepted: list[str] = []
         self.timeline_has_more = False
         self.claimed_statuses: list[str] = []
+        self.finished_events: list[PersistedEventV1] = []
         self.raise_not_queued_on_claim = False
 
     def _conversation(self) -> ConversationV1:
@@ -137,7 +138,10 @@ class _Repository:
             conversation_id,
             2,
             "agent_queued",
-            (_event(conversation_id, self.scenario_id, self.version_id, "1"),),
+            (
+                _event(conversation_id, self.scenario_id, self.version_id, "1"),
+                *self.finished_events,
+            ),
             limit,
             self.timeline_has_more,
         )
@@ -207,6 +211,7 @@ class _Repository:
             actor_id=claimed.actor_id,
             payload=activity,
         )
+        self.finished_events.append(event)
         return ExecutedAgentRunV1(event, 3, status)
 
 
@@ -486,6 +491,118 @@ def test_runtime_failure_still_finalizes_the_claimed_run(conversation_client) ->
     assert response.status_code == 200
     assert response.json()["agent_run_status"] == "agent_failed"
     assert repository.claimed_statuses == ["agent_failed"]
+
+
+def test_telemetry_export_failure_and_disabled_export_preserve_owned_activity(
+    conversation_client,
+) -> None:
+    """NFR10 at the injectable OTel seam: telemetry cannot change product work."""
+    import json
+    from dataclasses import asdict
+
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+    from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+    from agent.runtime import PydanticAIAgentRuntime
+
+    client, repository, settings = conversation_client
+    answer = GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="Coverage remains available."),)
+    )
+
+    def scripted(_messages, info: AgentInfo) -> ModelResponse:
+        output_tool = info.output_tools[0]
+        return ModelResponse(
+            parts=[
+                ToolCallPart(
+                    tool_name=output_tool.name,
+                    args=json.dumps(asdict(answer)),
+                    tool_call_id="answer-1",
+                )
+            ]
+        )
+
+    class _RaisingExporter(SpanExporter):
+        def export(self, _spans):
+            raise RuntimeError("simulated exporter failure")
+
+        def shutdown(self) -> None:
+            return None
+
+    def provider(exporter) -> TracerProvider:
+        value = TracerProvider()
+        value.add_span_processor(SimpleSpanProcessor(exporter))
+        return value
+
+    def semantic_activity(item: dict) -> dict:
+        return {
+            key: value
+            for key, value in item.items()
+            if key
+            not in {
+                "activity_id",
+                "message_id",
+                "occurred_at",
+                "sequence",
+            }
+        }
+
+    def execute_with(tracer_provider) -> tuple[dict, list[dict], str]:
+        repository.claimed_statuses.clear()
+        repository.finished_events.clear()
+
+        def factory(**kwargs):
+            return PydanticAIAgentRuntime(
+                model=FunctionModel(scripted),
+                tracer_provider=tracer_provider,
+                capabilities=kwargs["capabilities"],
+                deps=kwargs["deps"],
+                answer_type=kwargs["answer_type"],
+            )
+
+        app.dependency_overrides[get_agent_runtime_factory] = lambda: factory
+        response = client.post(
+            f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+            headers=_headers(settings),
+        )
+        assert response.status_code == 200
+        timeline = client.get(
+            f"/api/v1/conversations/{repository.conversation_id}/timeline",
+            headers=_headers(settings),
+        )
+        assert timeline.status_code == 200
+        return (
+            semantic_activity(response.json()["activity"]),
+            [semantic_activity(item) for item in timeline.json()["items"]],
+            response.json()["agent_run_status"],
+        )
+
+    control_exporter = InMemorySpanExporter()
+    working_provider = provider(control_exporter)
+    failing_provider = provider(_RaisingExporter())
+    try:
+        working = execute_with(working_provider)
+        export_failed = execute_with(failing_provider)
+        export_disabled = execute_with(None)
+    finally:
+        working_provider.shutdown()
+        failing_provider.shutdown()
+
+    # Without this the proof is only as strong as the instrumentation: if the
+    # adapter ever stops emitting spans, all three runs become trivially
+    # identical and this NFR10 case goes vacuously green (Story 3.9 review).
+    assert control_exporter.get_finished_spans(), (
+        "no span was exported -- the telemetry seam was never exercised"
+    )
+
+    assert export_failed == working
+    assert export_disabled == working
+    assert working[2] == "agent_completed"
 
 
 def test_a_run_that_is_not_queued_is_refused_with_a_stable_problem(

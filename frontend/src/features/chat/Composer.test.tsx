@@ -6,15 +6,38 @@ import { Composer } from "./Composer";
 
 const SCENARIO = "33333333-3333-3333-3333-333333333333";
 
-function renderComposer(onSend: (text: string) => Promise<unknown>, isPending = false) {
+function renderComposer(
+  onSend: (text: string) => Promise<unknown>,
+  isPending = false,
+  disabledReason?: string,
+) {
   return render(
     <MemoryRouter>
-      <Composer isPending={isPending} onSend={onSend} scenarioId={SCENARIO} />
+      <Composer
+        disabledReason={disabledReason}
+        isPending={isPending}
+        onSend={onSend}
+        scenarioId={SCENARIO}
+      />
     </MemoryRouter>,
   );
 }
 
 describe("Composer", () => {
+  it("disables the real input and submit control and associates both with the outage description", () => {
+    renderComposer(vi.fn(), false, "agent-unavailable-description");
+
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    expect(screen.getByRole("textbox")).toHaveAttribute(
+      "aria-describedby",
+      "agent-unavailable-description",
+    );
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toHaveAttribute(
+      "aria-describedby",
+      "agent-unavailable-description",
+    );
+  });
   it("keeps Enter as a newline without submitting", async () => { const send = vi.fn(); renderComposer(send); const box = screen.getByRole("textbox"); await userEvent.type(box, "line{enter}two"); expect(box).toHaveValue("line\ntwo"); expect(send).not.toHaveBeenCalled(); });
   it.each([{ ctrlKey: true }, { metaKey: true }])("submits with the command shortcut", async (modifier) => { const send = vi.fn().mockResolvedValue(undefined); renderComposer(send); const box = screen.getByRole("textbox"); fireEvent.change(box, { target: { value: "inspect" } }); fireEvent.keyDown(box, { key: "Enter", ...modifier }); await waitFor(() => expect(send).toHaveBeenCalledWith("inspect")); });
   it("submits with the visible Send button", async () => { const send = vi.fn().mockResolvedValue(undefined); renderComposer(send); await userEvent.type(screen.getByRole("textbox"), "inspect"); await userEvent.click(screen.getByRole("button", { name: "Send" })); expect(send).toHaveBeenCalledWith("inspect"); });
