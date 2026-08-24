@@ -88,6 +88,13 @@ class AgentRunNotQueuedError(ValueError):
 
 
 class ConversationRepository(Protocol):
+    def latest_terminal_outcome_for_site(
+        self,
+        connection: Any,
+        *,
+        site_id: UUID,
+    ) -> PersistedEventV1 | None: ...
+
     def create(
         self,
         connection: Any,

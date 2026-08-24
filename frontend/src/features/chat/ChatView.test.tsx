@@ -13,7 +13,12 @@ vi.mock("@/hooks/useConversationTimeline", async (importOriginal) => ({
   useConversationTimeline: vi.fn(),
 }));
 vi.mock("@/hooks/useScenarioContext", () => ({ useScenarioContext: vi.fn() }));
+vi.mock("@/hooks/useAgentAvailability", () => ({ useAgentAvailability: vi.fn() }));
 vi.mock("@/hooks/useSendMessage", () => ({ useSendMessage: vi.fn() }));
+vi.mock("@/hooks/useProposal", () => ({ useProposal: vi.fn() }));
+vi.mock("@/hooks/useReviseProposal", () => ({ useReviseProposal: vi.fn() }));
+vi.mock("@/hooks/useRejectProposal", () => ({ useRejectProposal: vi.fn() }));
+vi.mock("@/hooks/useStartScheduleRun", () => ({ useStartScheduleRun: vi.fn() }));
 vi.mock("@/api/conversations", () => ({ createConversation: vi.fn(), executeTurn: vi.fn(), sendMessage: vi.fn() }));
 
 import { createConversation, executeTurn, sendMessage } from "@/api/conversations";
@@ -21,13 +26,23 @@ import { originElementId, rememberOrigin } from "@/features/evidence/origin";
 import { useConversations } from "@/hooks/useConversations";
 import { useConversationTimeline } from "@/hooks/useConversationTimeline";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
+import { useAgentAvailability } from "@/hooks/useAgentAvailability";
 import { useSendMessage } from "@/hooks/useSendMessage";
+import { useProposal } from "@/hooks/useProposal";
+import { useReviseProposal } from "@/hooks/useReviseProposal";
+import { useRejectProposal } from "@/hooks/useRejectProposal";
+import { useStartScheduleRun } from "@/hooks/useStartScheduleRun";
 import { ChatView } from "./ChatView";
 
 const mockConversations = useConversations as unknown as ReturnType<typeof vi.fn>;
 const mockTimeline = useConversationTimeline as unknown as ReturnType<typeof vi.fn>;
 const mockContext = useScenarioContext as unknown as ReturnType<typeof vi.fn>;
+const mockAvailability = useAgentAvailability as unknown as ReturnType<typeof vi.fn>;
 const mockSend = useSendMessage as unknown as ReturnType<typeof vi.fn>;
+const mockProposal = useProposal as unknown as ReturnType<typeof vi.fn>;
+const mockRevise = useReviseProposal as unknown as ReturnType<typeof vi.fn>;
+const mockReject = useRejectProposal as unknown as ReturnType<typeof vi.fn>;
+const mockStartRun = useStartScheduleRun as unknown as ReturnType<typeof vi.fn>;
 const mockCreate = createConversation as unknown as ReturnType<typeof vi.fn>;
 const mockExecute = executeTurn as unknown as ReturnType<typeof vi.fn>;
 const mockSendMessage = sendMessage as unknown as ReturnType<typeof vi.fn>;
@@ -66,6 +81,23 @@ function activity(id: string, text: string, sequence: string) {
   };
 }
 
+function draftActivity() {
+  return {
+    schema_version: "1",
+    activity_id: "77777777-7777-4777-8777-777777777777",
+    activity_type: "draft" as const,
+    conversation_id: NEWER,
+    conversation_resource_version: 3,
+    scenario_id: SCENARIO,
+    scenario_version_id: VERSION,
+    occurred_at: "2026-08-24T08:00:00Z",
+    proposal_id: "66666666-6666-4666-8666-666666666666",
+    proposal_version_id: "55555555-5555-4555-8555-555555555555",
+    consequence_summary: "One reversible change; no baseline change.",
+    sequence: "2",
+  };
+}
+
 function renderChat(initialEntry = `/scenarios/${SCENARIO}`) {
   const router = createMemoryRouter(
     [{ path: "/scenarios/:scenarioId", element: <ChatView scenarioId={SCENARIO} /> }],
@@ -85,13 +117,55 @@ beforeEach(() => {
   mockConversations.mockReset();
   mockTimeline.mockReset();
   mockContext.mockReset();
+  mockAvailability.mockReset();
   mockSend.mockReset();
+  mockProposal.mockReset();
+  mockRevise.mockReset();
+  mockReject.mockReset();
+  mockStartRun.mockReset();
   mockCreate.mockReset();
   mockExecute.mockReset();
   mockSendMessage.mockReset();
   mockContext.mockReturnValue({ data: { scenario_version_id: VERSION } });
+  mockAvailability.mockReturnValue({
+    data: { available: true, reason: null, observed_at: null },
+    error: null,
+    isError: false,
+    isPending: false,
+    refetch: vi.fn(),
+  });
   mockSendMutate = vi.fn();
   mockSend.mockReturnValue({ isPending: false, mutateAsync: mockSendMutate });
+  mockProposal.mockReturnValue({
+    data: {
+      proposal_id: draftActivity().proposal_id,
+      proposal_version_id: draftActivity().proposal_version_id,
+      scenario_id: SCENARIO,
+      scenario_version_id: VERSION,
+      current_scenario_version_id: VERSION,
+      expected_baseline_schedule_version: null,
+      resolved_entities: [],
+      constraints: [],
+      preserved_locks: [],
+      consequence_summary: draftActivity().consequence_summary,
+      canonical_hash: "a".repeat(64),
+      canonical_hash_algorithm: "sha256",
+      canonical_hash_schema_version: "rfc8785-v1",
+      state: "active",
+      resource_version: 1,
+      stale: false,
+      schema_version: "1",
+    },
+    isPending: false,
+    isError: false,
+    error: null,
+    refetch: vi.fn(),
+  });
+  mockRevise.mockReturnValue({ mutate: vi.fn(), isPending: false, error: null });
+  mockReject.mockReturnValue({ mutate: vi.fn(), isPending: false, error: null });
+  mockStartRun.mockReturnValue({
+    mutate: vi.fn(), isPending: false, data: undefined, error: null,
+  });
   mockConversations.mockReturnValue({
     data: { items: [conversation(NEWER), conversation(OLDER)], limit: 100, has_more: false },
     error: null,
@@ -116,6 +190,91 @@ beforeEach(() => {
 });
 
 describe("ChatView", () => {
+  it("disables the composer while the saved Draft's manual optimization stays enabled", () => {
+    mockAvailability.mockReturnValue({
+      data: { available: false, reason: "provider_error", observed_at: "2026-08-24T08:00:00Z" },
+      error: null, isError: false, isPending: false, refetch: vi.fn(),
+    });
+    mockTimeline.mockReturnValue({
+      data: {
+        conversation_id: NEWER,
+        resource_version: 3,
+        latest_agent_run_status: "agent_failed",
+        items: [activity("11111111-1111-1111-1111-111111111111", "Saved request", "1"), draftActivity()],
+        limit: 200,
+        has_more: false,
+      },
+      error: null, isError: false, isPending: false, refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Run optimization" })).toBeEnabled();
+  });
+
+  it.each([
+    ["pending", { data: undefined, error: null, isError: false, isPending: true }],
+    ["errored", { data: undefined, error: { status: 503 }, isError: true, isPending: false }],
+  ])("keeps durable history and the composer available while availability is %s", (_state, query) => {
+    mockAvailability.mockReturnValue({ ...query, refetch: vi.fn() });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByText("Check coverage")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeEnabled();
+    expect(screen.queryByText("Agent unavailable")).not.toBeInTheDocument();
+  });
+
+  it("keeps all outage recovery controls active and Check again refetches", async () => {
+    const refetch = vi.fn();
+    mockAvailability.mockReturnValue({
+      data: { available: false, reason: "provider_error", observed_at: "2026-08-24T08:00:00Z" },
+      error: null, isError: false, isPending: false, refetch,
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByRole("link", { name: "Scenario Data" })).toHaveAttribute(
+      "href", `/scenarios/${SCENARIO}/data`,
+    );
+    expect(screen.getByRole("link", { name: "Runs" })).toHaveAttribute(
+      "href", `/scenarios/${SCENARIO}/runs`,
+    );
+    const checkAgain = screen.getByRole("button", { name: "Check again" });
+    expect(checkAgain).toBeEnabled();
+    await userEvent.click(checkAgain);
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders no outage alert when availability is true", () => {
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.queryByText("Agent unavailable")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeEnabled();
+  });
+  it("shows narrow outage copy and disables only the composer controls", () => {
+    mockAvailability.mockReturnValue({
+      data: { available: false, reason: "provider_error", observed_at: "2026-08-24T08:00:00Z" },
+      error: null,
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByText("Agent unavailable")).toBeInTheDocument();
+    expect(screen.getByText(
+      "Scenario Data, saved results, and manual optimization are still available.",
+    )).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "New conversation" })).toBeEnabled();
+    expect(document.body).not.toHaveTextContent(/offline|try again later|\bETA\b/i);
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
   it("restores the exact invoking evidence link once without resending or regenerating", async () => {
     const agentActivityId = "88888888-8888-4888-8888-888888888888";
     const origin = { conversationId: NEWER, activityId: agentActivityId, segmentIndex: 0, refIndex: 0 };

@@ -25,6 +25,7 @@ from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import get_identity_store, get_settings
 from api.problems import problem_response
 from api.routers import (
+    agent_availability,
     auth,
     constraints,
     conversations,
@@ -263,6 +264,7 @@ app.include_router(scenarios.router)
 app.include_router(runs.router)
 app.include_router(constraints.router)
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(agent_availability.router, prefix="/api/v1")
 app.include_router(scenario_catalogue.router, prefix="/api/v1")
 app.include_router(scenario_projection.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")

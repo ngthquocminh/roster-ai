@@ -127,6 +127,7 @@ def test_every_ac2_ceiling_is_present_and_positive() -> None:
         # sitting outside the very tuple that exists to notice an unvalidated
         # ceiling, so the guard could not have reported its removal.
         "lease_seconds",
+        "agent_availability_recency_seconds",
     )
     assert all(getattr(settings, name) > 0 for name in AC2_CEILING_FIELDS)
 

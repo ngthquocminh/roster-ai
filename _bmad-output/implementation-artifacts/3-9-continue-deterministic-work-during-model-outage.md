@@ -4,7 +4,7 @@ baseline_commit: d833cf15c0d37c2be3e63a169c7df16a388a82cb
 
 # Story 3.9: Continue Deterministic Work During Model Outage
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -351,84 +351,84 @@ which then surfaces the alert on the next read. That is the honest behavior, and
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Availability use case and route (AC: #1)**
-  - [ ] `backend/application/use_cases/agent_availability.py`: a frozen `AgentAvailabilityV1`
+- [x] **Task 1 — Availability use case and route (AC: #1)**
+  - [x] `backend/application/use_cases/agent_availability.py`: a frozen `AgentAvailabilityV1`
         (`available: bool`, `reason: Literal["not_configured","provider_error"] | None`,
         `observed_at: datetime | None`) and a function taking the runtime factory, the conversation
         repository, the site id, and the recency window. **Not** in `application/contracts/` — it is
         never persisted and crosses no adapter boundary (AD-20 governs persisted contracts).
-  - [ ] Resolve `not_configured` by calling the injected factory inside `try`, catching `Exception`,
+  - [x] Resolve `not_configured` by calling the injected factory inside `try`, catching `Exception`,
         and never calling `run_turn`. Comment why.
-  - [ ] Resolve `provider_error` from the newest terminal agent-run activity for the site whose
+  - [x] Resolve `provider_error` from the newest terminal agent-run activity for the site whose
         typed `reason == "provider_error"` and whose timestamp is within the window. Add the
         repository read method if none fits; keep it site-scoped.
-  - [ ] `GET /api/v1/agent-availability` under the existing site-context and session dependencies.
+  - [x] `GET /api/v1/agent-availability` under the existing site-context and session dependencies.
         `scenario_id: UUID` required. Declare `_PROBLEM_RESPONSES` like its peers.
-  - [ ] `agent_availability_recency_seconds: float = 120.0` in `settings.py`, positive-validated at
+  - [x] `agent_availability_recency_seconds: float = 120.0` in `settings.py`, positive-validated at
         process start via the existing `_positive_float` helper and added to the validated-names
         list at `settings.py:39-44`.
-  - [ ] Regenerate the OpenAPI-derived frontend types.
+  - [x] Regenerate the OpenAPI-derived frontend types.
 
-- [ ] **Task 2 — Backend tests for availability (AC: #1)**
-  - [ ] `not_configured` when the factory raises; `provider_error` when a recent terminal outcome
+- [x] **Task 2 — Backend tests for availability (AC: #1)**
+  - [x] `not_configured` when the factory raises; `provider_error` when a recent terminal outcome
         carries it; `available: true` when the same activity is **older than the window** (Trap 1);
         `available: true` when the newest failure is `invalid_output` or `budget_exhausted`, not a
         provider error (Trap 4).
-  - [ ] Cross-site isolation: a `provider_error` at another site does not mark this site unavailable.
-  - [ ] The route never calls `run_turn` — assert against a factory whose runtime raises if
+  - [x] Cross-site isolation: a `provider_error` at another site does not mark this site unavailable.
+  - [x] The route never calls `run_turn` — assert against a factory whose runtime raises if
         `run_turn` is reached.
 
-- [ ] **Task 3 — Chat degraded mode (AC: #1)**
-  - [ ] `frontend/src/hooks/useAgentAvailability.ts` — a thin TanStack Query wrapper, `enabled` on a
+- [x] **Task 3 — Chat degraded mode (AC: #1)**
+  - [x] `frontend/src/hooks/useAgentAvailability.ts` — a thin TanStack Query wrapper, `enabled` on a
         present `scenarioId`, no business logic (the established hook shape).
-  - [ ] `agentUnavailable` entry in `USER_ERROR_COPY` with Decision C's exact copy.
-  - [ ] `ChatView`: render the `InlineAlert` above `Composer` when and only when the query has
+  - [x] `agentUnavailable` entry in `USER_ERROR_COPY` with Decision C's exact copy.
+  - [x] `ChatView`: render the `InlineAlert` above `Composer` when and only when the query has
         resolved `available: false`. Never while pending or errored (Traps 3 and 6). Timeline,
         conversation list, `New conversation`, and every `DraftCard` control are untouched.
-  - [ ] `Composer`: new optional `disabledReason?: string` prop. When set, the textarea and Send are
+  - [x] `Composer`: new optional `disabledReason?: string` prop. When set, the textarea and Send are
         disabled and `aria-describedby` points at the alert description. **Preserve the existing
         draft-retaining failure alert and the synchronous `inFlight` latch** — neither is replaced.
-  - [ ] Verify by reading the rendered output that no forbidden string ("offline", ETA, spinner)
+  - [x] Verify by reading the rendered output that no forbidden string ("offline", ETA, spinner)
         appears.
 
-- [ ] **Task 4 — Frontend tests (AC: #1)**
-  - [ ] Composer disabled **and** `DraftCard`'s Run optimization still enabled, asserted in one test
+- [x] **Task 4 — Frontend tests (AC: #1)**
+  - [x] Composer disabled **and** `DraftCard`'s Run optimization still enabled, asserted in one test
         (Trap 2).
-  - [ ] Durable timeline renders while availability is pending, and while availability errors, with
+  - [x] Durable timeline renders while availability is pending, and while availability errors, with
         no alert and an enabled composer (Traps 3, 6).
-  - [ ] All three controls present and active; `Check again` refetches.
-  - [ ] `available: true` renders no alert at all.
-  - [ ] Extend `frontend/src/test/accessibility-contract.test.tsx`: the disabled composer is the
+  - [x] All three controls present and active; `Check again` refetches.
+  - [x] `available: true` renders no alert at all.
+  - [x] Extend `frontend/src/test/accessibility-contract.test.tsx`: the disabled composer is the
         **real** submit control (not a decoy — the defect recorded at
         `accessibility-contract.test.tsx:433`), it is associated with the alert, and the alert
         announces politely.
 
-- [ ] **Task 5 — AC2 independence proof (AC: #2)**
-  - [ ] `backend/tests/architecture/test_model_outage_boundaries.py` with Decision F's three tests:
+- [x] **Task 5 — AC2 independence proof (AC: #2)**
+  - [x] `backend/tests/architecture/test_model_outage_boundaries.py` with Decision F's three tests:
         structural allow-set, detector self-test, behavioral end-to-end with a raising runtime
         factory.
-  - [ ] The behavioral test must traverse the real path — start the run, advance it, read
+  - [x] The behavioral test must traverse the real path — start the run, advance it, read
         `/schedule-runs/{id}/result` — and assert idempotent replay still returns the original
         semantic result with the runtime factory raising throughout.
-  - [ ] Assert the distinctness `EXPERIENCE.md:270` requires: a **solver/service** failure surfaces
+  - [x] Assert the distinctness `EXPERIENCE.md:270` requires: a **solver/service** failure surfaces
         its own problem code, never the model-outage surface.
 
-- [ ] **Task 6 — AC3 telemetry independence (AC: #3)**
-  - [ ] Decision E's two cases (raising exporter; no tracer provider), asserting identical owned
+- [x] **Task 6 — AC3 telemetry independence (AC: #3)**
+  - [x] Decision E's two cases (raising exporter; no tracer provider), asserting identical owned
         outcomes and identical persisted activity.
-  - [ ] One case driving the deterministic run path with a raising exporter installed, asserting the
+  - [x] One case driving the deterministic run path with a raising exporter installed, asserting the
         run row, result, and evidence are unaffected.
-  - [ ] Add the `NOT COVERED: audit:owned_by_epic_4` and
+  - [x] Add the `NOT COVERED: audit:owned_by_epic_4` and
         `NOT COVERED: diagnosis:cloudwatch_owned_by_epic_6` markers where AC3's scope is declared,
         following the `SCOPE_CONTROLS` convention.
 
-- [ ] **Task 7 — Ledger and notes**
-  - [ ] Ledger entries for Gap 1 (no agent-free draft creation), Gap 2 (audit/CloudWatch NOT
+- [x] **Task 7 — Ledger and notes**
+  - [x] Ledger entries for Gap 1 (no agent-free draft creation), Gap 2 (audit/CloudWatch NOT
         COVERED), Gap 3 (`available: true` is not a reachability proof), each with an owner/revisit
         trigger in the file's established format.
-  - [ ] Completion Notes must state exactly which clauses of NFR10 are proven and which are marked
+  - [x] Completion Notes must state exactly which clauses of NFR10 are proven and which are marked
         NOT COVERED, because `epics.md:333` lets Epic 5 rely on this story.
-  - [ ] **No evidence file.** Following Story 3.6 Decision 8: this story measures no threshold and
+  - [x] **No evidence file.** Following Story 3.6 Decision 8: this story measures no threshold and
         publishes no report, so `docs/EVIDENCE-CONVENTION.md`'s generation pipeline does not apply.
         Do not hand-write one.
 
@@ -507,8 +507,70 @@ if you only test them separately."
 
 ### Agent Model Used
 
+GPT-5 Codex
+
+### Implementation Plan
+
+- Implement each numbered task in story order using red-green-refactor.
+- Keep availability network-free: runtime construction plus recent typed, site-scoped terminal evidence.
+- Prove model and telemetry independence at existing seams without changing deterministic run code.
+- Run focused checks after each task and the canonical full regression suites before completion.
+
 ### Debug Log References
+
+- Task 1 RED: `test_agent_availability.py` failed collection because the availability use case did not exist.
+- Task 1 GREEN: 30 focused availability/settings tests passed; canonical backend regression passed (1200 passed, 2 skipped, 7 deselected).
+- A root-directory pytest invocation imported the spike suite's top-level `conftest`; the canonical story-required invocation from `backend/` passed, including the allegedly failing cleanup test.
+- Task 2 RED: the exact recency-cutoff case failed because the use case treated an activity at the cutoff as newer than the window.
+- Task 2 GREEN: strict recency, non-provider reasons, expiry, and cross-site isolation passed (35 focused; 1205 backend regression tests passed, 2 skipped, 7 deselected).
+- Task 3 RED: ChatView could not resolve the missing availability hook and Composer left the real controls enabled.
+- Task 3 GREEN: 22 focused tests and the full frontend suite (77 files, 515 tests) passed; typecheck passed; lint passed with three pre-existing Fast Refresh warnings.
+- Task 4 RED proof: deliberately hiding the saved timeline during outage made the combined composer-disabled/Run-optimization-enabled test fail because the real deterministic control disappeared.
+- Task 4 GREEN: 53 focused tests and the full frontend suite (77 files, 521 tests) passed; typecheck and lint passed (three pre-existing Fast Refresh warnings).
+- Task 5 RED/self-test: the AST detector observed a synthetic `application.ports.agent_runtime` import; the raising runtime factory remained armed throughout the behavioral flow.
+- Task 5 GREEN: four model-outage boundary tests and the full backend suite passed (1209 passed, 2 skipped, 7 deselected).
+- Task 6 RED: the scope-marker guard failed before the two declared absences existed; the first semantic timeline comparison also exposed a random fake planner-message identity that required normalization rather than weakening product assertions.
+- Task 6 GREEN: raising-exporter, disabled-export, and deterministic-run telemetry cases passed; full backend regression passed (1212 passed, 2 skipped, 7 deselected).
+- Task 7: ledger validation found all three named gaps and their owner/revisit triggers; the final scope audit found no forbidden-file edits and confirmed no Story 3.9 evidence file exists.
+- Final regression: backend passed 1212 tests (2 skipped, 7 deselected); frontend passed 521 tests across 77 files; OpenAPI regeneration, typecheck, lint, production build, and `git diff --check` passed. Lint retained three pre-existing Fast Refresh warnings and Vite retained its existing bundle-size advisory.
 
 ### Completion Notes List
 
+- Task 1: Added a frozen request-scoped availability read model, network-free use case, site-scoped terminal-outcome read, authenticated GET route, positive recency setting, and regenerated OpenAPI artifacts.
+- Task 2: Covered configuration failure, recent/expired provider evidence, strict cutoff behavior, non-provider failures, cross-site isolation, and the no-`run_turn` route invariant.
+- Task 3: Added the thin availability API/query hook, fixed outage copy, polite inline alert with Scenario Data/Runs/refetch controls, fail-open query-error behavior, and disabled/associated composer controls while preserving deterministic controls.
+- Task 4: Proved the timeline survives pending/error availability reads, the saved Draft's Run optimization remains enabled beside a disabled composer, recovery controls remain active, refetch works, healthy availability renders no alert, and the real controls satisfy the polite live-region accessibility contract.
+- Task 5: Proved the exact manual-solver module set has no AgentRuntime imports, exercised the real start/lease/solve/result path with a construction-raising runtime factory, preserved one semantic run across replay, and kept solver-service failure distinct from model outage.
+- Task 6: Proved optional trace export failure changes neither agent-owned outcome nor persisted activity/timeline nor deterministic run/result/evidence, and declared audit (Epic 4) plus CloudWatch diagnosis (Epic 6) honestly NOT COVERED.
+- Task 7: Recorded all three deferred gaps with owners and revisit triggers. NFR10 is proven for zero product-state corruption under disabled/failing optional trace export, continued availability of supported manual/deterministic workflows during model-provider outage, unchanged agent-originated persisted activity, and unchanged deterministic run/result/evidence; telemetry neither authorizes nor blocks work. NFR10's **zero authoritative-audit loss** clause is **NOT COVERED** (`audit:owned_by_epic_4`) because no authoritative audit writer exists, and AC3's CloudWatch-diagnosis clause is **NOT COVERED** (`diagnosis:cloudwatch_owned_by_epic_6`) because no CloudWatch adapter exists. No evidence file was created.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/3-9-continue-deterministic-work-during-model-outage.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/adapters/postgres/conversation.py`
+- `backend/api/main.py`
+- `backend/api/routers/agent_availability.py`
+- `backend/application/ports/conversation.py`
+- `backend/application/use_cases/agent_availability.py`
+- `backend/settings.py`
+- `backend/tests/test_agent_availability.py`
+- `backend/tests/architecture/test_model_outage_boundaries.py`
+- `backend/tests/test_conversations_api.py`
+- `backend/tests/test_settings.py`
+- `frontend/openapi.json`
+- `frontend/src/api/agentAvailability.ts`
+- `frontend/src/api/schema.d.ts`
+- `frontend/src/components/primitives/InlineAlert.tsx`
+- `frontend/src/features/chat/ChatView.test.tsx`
+- `frontend/src/features/chat/ChatView.tsx`
+- `frontend/src/features/chat/Composer.test.tsx`
+- `frontend/src/features/chat/Composer.tsx`
+- `frontend/src/hooks/useAgentAvailability.ts`
+- `frontend/src/lib/errors.ts`
+- `frontend/src/test/accessibility-contract.test.tsx`
+
+## Change Log
+
+- 2026-08-24: Implemented network-free agent availability, Chat degraded mode, deterministic model-outage boundaries, telemetry-independence proofs, accessibility coverage, and deferred-gap ledger entries; moved Story 3.9 to review.
