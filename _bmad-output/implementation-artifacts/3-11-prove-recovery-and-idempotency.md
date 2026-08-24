@@ -4,7 +4,7 @@ baseline_commit: 6314b378f4e7247682395c04ee3fe1f520fd5250
 
 # Story 3.11: Prove Recovery and Idempotency
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -130,11 +130,11 @@ The quietest first:
 - [x] **Task 8 — Generate evidence (AC1, AC2, Decision 4)**
   - [x] Build `backend/evals/recovery_idempotency_report.py` mirroring `repair_correctness_report.py`'s shape.
   - [x] Commit code on a clean tree, run the measurement, generate `evidence/story-3.11/recovery-idempotency.json` via `resolve_bindings()`, run `test_evidence_convention.py`, commit evidence separately per `docs/EVIDENCE-CONVENTION.md`.
-- [ ] **Task 9 — Regression and Gate A**
-  - [ ] Full backend suite (default + `-m postgres`); confirm zero new migration files (`alembic check`); confirm zero-line `frontend/` diff; re-run the evidence convention suite; re-run Gate A and record `gate_a_passed`/`blocking`.
-- [ ] **Task 10 — Ledger and sprint-status update**
-  - [ ] Close `deferred-work.md:402`, `:404` (worker entry point lands); close `:330` (proven-safe invariant, Task 4); close or update `:396` (NFR35 re-measured or scope re-confirmed, Task 7); re-annotate `:316` with owner left open per Decision 1c — do not delete the entry, re-point it.
-  - [ ] Add a dense creation/completion note to `sprint-status.yaml` matching this project's established convention (see Stories 3.1, 3.5, 3.6, 3.10 for shape).
+- [x] **Task 9 — Regression and Gate A**
+  - [x] Full backend suite (default + `-m postgres`); confirm zero new migration files (`alembic check`); confirm zero-line `frontend/` diff; re-run the evidence convention suite; re-run Gate A and record `gate_a_passed`/`blocking`.
+- [x] **Task 10 — Ledger and sprint-status update**
+  - [x] Close `deferred-work.md:402`, `:404` (worker entry point lands); close `:330` (proven-safe invariant, Task 4); close or update `:396` (NFR35 re-measured or scope re-confirmed, Task 7); re-annotate `:316` with owner left open per Decision 1c — do not delete the entry, re-point it.
+  - [x] Add a dense creation/completion note to `sprint-status.yaml` matching this project's established convention (see Stories 3.1, 3.5, 3.6, 3.10 for shape).
 
 ## Dev Notes
 
@@ -185,6 +185,8 @@ Codex (GPT-5)
 - 2026-08-25 Task 6: ten exact recovery/idempotency nodes were executed in ten isolated pytest processes; all passed.
 - 2026-08-25 Task 7 live-worker NFR35 measurement: 59.155 ms, 57.947 ms, and 118.579 ms from committed queue acknowledgement to persisted `run.running.v1`, all below 5000 ms. This path includes process polling, lease acquisition, and the queued-to-running transition, so Story 3.5's narrower queued-event "cannot fail by construction" note does not apply.
 - 2026-08-25 Task 8 clean measurement bound to `8901cf4d9d31fd829a376db0fb04e9c0a0a8987d`: all 11 exact gates passed; recorded live-worker runs were 56.611 ms, 58.084 ms, and 122.426 ms; evidence convention 67 passed. Code and evidence were committed separately (`8901cf4`, `96e2743`).
+- 2026-08-25 Task 9 final validation: backend default 1255 passed / 1 skipped / 7 deselected; PostgreSQL 95 passed / 1168 deselected; frontend 77 files / 521 tests; typecheck, lint, build, Playwright, `alembic check`, evidence convention (67 passed), and Gate A all passed. Gate A reported `gate_a_passed: true`; the only frontend output was three pre-existing fast-refresh warnings and the known build chunk-size warning.
+- 2026-08-25 Task 10: reconciled the recovery ledger, closed the worker-entrypoint/concurrency-lockout/orphan-invariant items, updated the worker-inclusive NFR35 boundary, and left true mid-solve CP-SAT preemption explicitly open with no roadmap owner.
 
 ### Completion Notes List
 
@@ -196,10 +198,13 @@ Codex (GPT-5)
 - ✅ Task 6: assembled the seven named AC1 failure modes into exact, independently rerunnable proof gates without padding the golden dataset.
 - ✅ Task 7: supplemented Story 3.5's read-path latency evidence with a real worker-loop measurement; full backend regression passed (1245 passed / 2 skipped / 7 deselected).
 - ✅ Task 8: generated the release-blocking, exact-gate recovery/idempotency report with all NFR27 bindings and separately committed evidence.
+- ✅ Task 9: completed every regression and release gate against the evidence-bound implementation; no frontend, migration, or golden-dataset changes were introduced, and Gate A passed without blockers.
+- ✅ Task 10: updated the deferred-work ledger honestly, recorded this completion in sprint status, and moved Story 3.11 to review.
 
 ### File List
 
 - _bmad-output/implementation-artifacts/3-11-prove-recovery-and-idempotency.md
+- _bmad-output/implementation-artifacts/deferred-work.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 - backend/tests/fixtures/worker_process.py
 - backend/evals/recovery_idempotency_report.py
@@ -210,3 +215,7 @@ Codex (GPT-5)
 - backend/tests/test_worker_process_recovery_postgres.py
 - backend/worker/main.py
 - evidence/story-3.11/recovery-idempotency.json
+
+### Change Log
+
+- 2026-08-25 — Added the runnable worker loop, real-process kill/recovery proof, orphan and cancellation-contention invariants, exact-gate evidence report, live-worker NFR35 measurement, and release-gate records; moved the story to review.
