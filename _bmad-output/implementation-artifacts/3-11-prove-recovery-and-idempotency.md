@@ -4,7 +4,7 @@ baseline_commit: 6314b378f4e7247682395c04ee3fe1f520fd5250
 
 # Story 3.11: Prove Recovery and Idempotency
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -197,6 +197,7 @@ Codex (GPT-5)
 - **Evidence regenerated** through `resolve_bindings()` from a clean tree at code commit `8ad4c13`: all **23** gates pass (up from 11), all seven AC1 failure modes pass, dataset binding 9 files. The artifact now carries the top-level `passed` key `gate_a_readiness.py` reads and is registered in `gate_a_checks.py`, so a regression now actually blocks — which is what AC2 always claimed.
 - **NFR35 re-measured at the shipped `DEFAULT_POLL_INTERVAL_SECONDS = 1.0`,** cold-start run reported rather than discarded: 772.406 ms (cold start), 71.042 ms, 76.990 ms, 57.457 ms — max 772.406 ms against the 5000 ms threshold. The pre-review figures (56.611/58.084/122.426 ms) were measured at a tuned-down 0.01 s interval with the startup run silently dropped, while the scope note claimed startup was included. Same system, honest number.
 - **Commit ordering corrected.** The first regeneration bound to a docs-only commit and `test_evidence_convention.py` correctly refused it ("touches no code file — it cannot prove anything about the behaviour measured"). Re-ordered to the repo's own precedent: code → evidence → docs.
+- **Gate A re-run at HEAD (`b0e72cf`) with Docker PostgreSQL up:** backend `1269 passed / 1 skipped / 7 deselected`; frontend `77 files / 521 tests`, zero failures; Playwright `48/48` across `chromium`+`msedge`, cross-checked against `--list`'s own count of 48. `gate_a_passed: true`, `blocking: []`; all nine invariants pass, including the new `[NFR29] recovery_and_idempotency`. Written to the gitignored `_bmad-output/test-artifacts/gate-a/story-3-11-readiness.json` rather than overwriting the committed `evidence/story-1.11/gate-a-readiness-report.json`, matching Stories 3.10/3.11's own precedent of recording the gate verdict here rather than recommitting that file on every proof story.
 
 ### Completion Notes List
 
@@ -233,7 +234,8 @@ Codex (GPT-5)
 ### Change Log
 
 - 2026-08-25 — Added the runnable worker loop, real-process kill/recovery proof, orphan and cancellation-contention invariants, exact-gate evidence report, live-worker NFR35 measurement, and release-gate records; moved the story to review.
-- 2026-08-25 (code review) — Applied all 17 patch findings. Wired the proof artifact into Gate A under a new NFR29 `recovery_and_idempotency` invariant (evidence check + live generator check) and emitted the top-level `passed` key `gate_a_readiness.py` actually reads; made a skipped PostgreSQL node fail closed instead of reading as a passed gate; rebuilt the orphan-safety proof with a control arm so the deletion is load-bearing; re-measured NFR35 at the shipped poll interval with the cold-start run reported rather than discarded; expanded the bound gates from 11 to 23 to cover every test Decision 2 enumerated; derived `artifact_versions` from the contract modules; removed the `resolved_bindings=` binding bypass; and re-pointed the four ledger entries that were closed or left stale in error. **The evidence file is now STALE and must be regenerated on a PostgreSQL-enabled machine per `docs/EVIDENCE-CONVENTION.md` before this story can move to done.**
+- 2026-08-25 (code review) — Applied all 17 patch findings. Wired the proof artifact into Gate A under a new NFR29 `recovery_and_idempotency` invariant (evidence check + live generator check) and emitted the top-level `passed` key `gate_a_readiness.py` actually reads; made a skipped PostgreSQL node fail closed instead of reading as a passed gate; rebuilt the orphan-safety proof with a control arm so the deletion is load-bearing; re-measured NFR35 at the shipped poll interval with the cold-start run reported rather than discarded; expanded the bound gates from 11 to 23 to cover every test Decision 2 enumerated; derived `artifact_versions` from the contract modules; removed the `resolved_bindings=` binding bypass; and re-pointed the four ledger entries that were closed or left stale in error.
+- 2026-08-25 (post-review, PostgreSQL available) — Ran the full Postgres track (95 passed), demonstrated RED-then-GREEN on the rebuilt orphan guard, reconciled the skip-count drift, and regenerated `evidence/story-3.11/recovery-idempotency.json` bound to code commit `8ad4c13` on a clean tree (23/23 gates, all 7 failure modes, `passed: true`). Corrected a commit-ordering mistake caught by `test_evidence_convention.py` itself (evidence had briefly bound to a docs-only commit) by re-sequencing to code → evidence → docs. Ran the full Gate A pipeline (backend 1269 passed/1 skipped, frontend 521 tests, Playwright 48/48 cross-checked against `--list`): `gate_a_passed: true`, `blocking: []`, all nine invariants pass including the new `recovery_and_idempotency`. Story moved to done.
 
 ### Review Findings
 

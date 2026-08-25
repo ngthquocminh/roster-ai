@@ -43,37 +43,54 @@
 generated: 2026-07-24
 last_updated: 2026-08-25
 
-# NOTE (2026-08-25): Story 3-11 implementation COMPLETE and moved to review. SHIPPED the minimal
-# separately runnable worker loop in `backend/worker/main.py`: runtime-factory composition,
-# configured lease duration, empty-queue-only polling sleep, and cooperative SIGTERM/SIGINT exit
-# after an in-flight `run_once`. A real OS subprocess was hard-killed after leasing/starting work;
-# after forced expiry a new worker reclaimed the original run with a higher fencing epoch and
-# produced exactly one candidate. The orphan invariant was proven against real PostgreSQL:
-# removing the carrier job makes `mark_running` raise `StaleLeaseError`, leaving the run queued
-# with no event. A real lock-contention test also proves same-key cancellation replay with a
-# different expected version is rejected while preserving one idempotency row/effect.
+# NOTE (2026-08-25): Story 3-11 DONE. The dev-complete version of this note (see git history for
+# the superseded figures) claimed 11 exact gates and a reconciled ledger; code review found the
+# proof layer itself was the weak point — three guards could not go red and the "release-blocking"
+# artifact was read by nothing — and every finding below reflects the POST-REVIEW state actually
+# on `main`.
 #
-# EVIDENCE: `evidence/story-3.11/recovery-idempotency.json`, generated from clean code commit
-# `8901cf4d9d31fd829a376db0fb04e9c0a0a8987d`, is release-blocking and passes all 11 exact gates:
-# the ten named recovery/idempotency nodes plus live-worker NFR35. Three consecutive measurements
-# from committed queue acknowledgement through process polling, lease acquisition, and persisted
-# `run.running.v1` were 56.611 / 58.084 / 122.426 ms against 5000 ms. NFR27 bindings cover the
-# job lease, run snapshot, schedule version, and stream cursor schemas at artifact version `1`.
-# Code and evidence were committed separately (`8901cf4`, `96e2743`) per the evidence convention.
+# WHAT SHIPPED: the minimal separately runnable worker loop in `backend/worker/main.py`
+# (runtime-factory composition, configured lease duration, empty-queue-only polling sleep,
+# cooperative SIGTERM/SIGINT exit after an in-flight `run_once`, and now bounded exponential
+# backoff on a transient failure instead of dying on the first one). A real OS subprocess was
+# hard-killed after leasing AND reaching `solver_running` (not merely after leasing); after forced
+# expiry a new worker reclaimed the original run with a higher fencing epoch, wrote zero candidates
+# on the killed epoch and exactly one after recovery, and the lineage assertion now checks the
+# recovery epoch actually appended to the killed epoch's stream rather than relying on a DB CHECK
+# constraint that was already guaranteeing it. The orphan invariant is proven with a CONTROL ARM:
+# two jobs leased at the same epoch, only the deleted carrier differing — the earlier version's
+# `DELETE` was decorative and the guard could not go red. A real lock-contention test proves
+# same-key cancellation replay with a different expected version is rejected while preserving one
+# idempotency row/effect.
 #
-# FINAL GATES: backend default 1255 passed / 1 skipped / 7 deselected; PostgreSQL 95 passed /
-# 1168 deselected; frontend 77 files / 521 tests; typecheck, lint, production build, both Playwright
-# projects, `alembic check`, evidence convention (67 passed), and Gate A all passed. Gate A reported
-# `gate_a_passed: true` with no blocking row. `frontend/`, `backend/migrations/versions/`, and
-# `evals/golden/**` remain zero-diff from the story baseline. The three existing fast-refresh lint
-# warnings and known >500 KB build-chunk warning remain non-blocking.
+# EVIDENCE: `evidence/story-3.11/recovery-idempotency.json`, regenerated from clean code commit
+# `8ad4c13` (code -> evidence -> docs commit order, matching the repo convention), is registered in
+# `gate_a_checks.py` under a new NFR29 `recovery_and_idempotency` invariant, carries the top-level
+# `passed` key `gate_a_readiness.py` actually reads, and passes all 23 exact gates (11 -> 23 to
+# cover every test the story's own Decision 2 table named, not a subset of it) across all seven
+# named failure modes. NFR35 is now measured at the SHIPPED 1.0s poll interval with the cold-start
+# run reported rather than discarded: 772.406 / 71.042 / 76.990 / 57.457 ms against 5000 ms — the
+# 56-122ms figures in the superseded note were measured at a tuned-down 0.01s interval with startup
+# silently dropped. `artifact_versions` is now derived by digesting the four contract modules
+# instead of a hand-typed literal. Code and evidence were committed separately per the evidence
+# convention, and a verdict-key rule was added to `docs/EVIDENCE-CONVENTION.md` so the next proof
+# story cannot reinvent an unbindable schema (Story 3.10's `repair-correctness.json` has the
+# identical gap; deliberately left open, recorded in `deferred-work.md`).
 #
-# LEDGER RECONCILED: the missing-worker-entrypoint, no-worker cancellation lockout, and jobless
-# `solver_running` orphan items are closed; NFR35 now records the worker-inclusive boundary while
-# leaving HTTP receipt-to-ack outside the measurement. True mid-solve CP-SAT preemption remains
-# explicitly open: `GovernedSchedulerAdapter.solve()` is synchronous and has no sound polling
-# seam, so Story 3.11 did not add a callback unable to observe a no-solution search. Deployment and
-# process supervision remain Epic 5/6 concerns.
+# FINAL GATES (post-review, PostgreSQL up): backend default 1269 passed / 1 skipped / 7 deselected;
+# `-m postgres` 95 passed / 1182 deselected; frontend 77 files / 521 tests, zero failures; Playwright
+# 48/48 across chromium+msedge, cross-checked against `--list`'s own count; evidence convention 67
+# passed; Gate A `gate_a_passed: true`, `blocking: []`, all nine invariants pass including the new
+# `recovery_and_idempotency`. `frontend/`, `backend/migrations/versions/`, and `evals/golden/**`
+# remain zero-diff from the story baseline.
+#
+# LEDGER: the worker-entrypoint and cancellation-lockout items were marked CLOSED in the
+# dev-complete pass IN ERROR — `worker/main.py` hard-errors without `--runtime-factory` and the only
+# factory in the repo is a test double, so their original complaints (nothing reads
+# `settings.lease_seconds` in production; no operator can actually run the worker) remain literally
+# true. Re-pointed to "mechanism proven, composition open, Owner: Epic 5/6" rather than closed. Two
+# more entries that named Story 3.11 as owner with their trigger now fired were also re-pointed
+# rather than left stale. True mid-solve CP-SAT preemption remains explicitly open with no owner.
 
 # NOTE (2026-08-25): Story 3-11 created and moved to ready-for-dev. It is Epic 3's SECOND pure
 # proof story (3.10's sibling) — proving worker kill, lease expiry, browser reconnect, command
@@ -1657,7 +1674,7 @@ development_status:
   3-8-compare-candidate-and-baseline-results: done
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
-  3-11-prove-recovery-and-idempotency: in-progress
+  3-11-prove-recovery-and-idempotency: done
   3-12-prove-the-repair-browser-journey: backlog
   epic-3-retrospective: optional
 
