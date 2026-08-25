@@ -188,6 +188,49 @@ content; the story-specific guards
 `test_gate_a_mutation_audit.py` for Story 1.9) still own that and stay as they
 are.
 
+## A verdict key Gate A can read
+
+**Rule: an evidence file that claims to block release MUST expose a top-level
+`passed` boolean, and MUST be registered in `backend/scripts/gate_a_checks.py`.**
+
+`gate_a_readiness.py` reads `document.get("passed")` and nothing else. Anything
+else — `result: "passed"`, `release_blocking: false`, a nested
+`gates.*.passed` — is recorded by the gate as `"missing"`, with the detail
+`evidence file records no 'passed' verdict`. That is by design: the gate fails
+closed on a shape nobody anticipated rather than guessing.
+
+The failure mode this rule exists to prevent is silent, and it happened twice
+before it was caught. Story 3.10 introduced a report-style artifact carrying
+`result`/`release_blocking` instead of `passed`, and registered it in no
+`GateACheck`. Story 3.11 was then explicitly instructed to mirror 3.10's shape,
+so the divergence propagated by instruction. Both stories ran Gate A, both
+recorded `gate_a_passed: true, blocking: []`, and both took that as
+confirmation — **but the gate passed precisely because the artifact was
+unregistered.** An unregistered evidence file cannot block anything, so the
+check that was supposed to detect the problem went green as a consequence of
+the problem. This is the "guard that cannot go red" pattern the Epic 1-2
+retrospective names as this project's most expensive, applied to the gate
+itself rather than to a test.
+
+Emitting `result` as well is fine — 3.11 emits both — but `passed` is the
+contract.
+
+Two further rules follow, both learned the same way:
+
+* **No invariant may rest on a stored flag alone.** A registered evidence file
+  pins a verdict from the commit that produced it, which is a past-tense answer
+  to a present-tense question. Pair it with a live check on the generator, as
+  `recovery_and_idempotency` pairs `recovery_and_idempotency_proof` (evidence)
+  with `recovery_idempotency_report_machinery` (pytest). Enforced by
+  `test_registry_covers_more_than_the_four_evidence_files`.
+* **A generator's verdict must require the proof to have RUN.** A process exit
+  code is not enough: `governed_postgres_engine` calls `pytest.skip` when
+  PostgreSQL is unreachable, and an all-skipped pytest run exits 0. A generator
+  reading only `returncode == 0` therefore stamps every PostgreSQL-backed gate
+  `passed` against zero executed assertions. Read pytest's own JUnit report and
+  require `tests > 0`, `skipped == 0`, `failures == 0`, `errors == 0` — see
+  `_junit_outcome` in `backend/evals/recovery_idempotency_report.py`.
+
 ## Checklist for a new evidence-producing story
 
 1. Build and iterate freely.
@@ -197,3 +240,6 @@ are.
 5. Generate the evidence file through `resolve_bindings()` — never by hand.
 6. Run `uv run --frozen pytest tests/test_evidence_convention.py`.
 7. `git commit` the evidence on its own.
+8. If the artifact claims to block release: emit a top-level `passed`, register
+   it in `gate_a_checks.py`, and pair it with a live check on its generator.
+   Otherwise nothing reads it and Gate A stays green because it is unbound.

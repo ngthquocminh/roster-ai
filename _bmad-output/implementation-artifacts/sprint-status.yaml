@@ -41,7 +41,101 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-24
+last_updated: 2026-08-25
+
+# NOTE (2026-08-25): Story 3-11 DONE. The dev-complete version of this note (see git history for
+# the superseded figures) claimed 11 exact gates and a reconciled ledger; code review found the
+# proof layer itself was the weak point — three guards could not go red and the "release-blocking"
+# artifact was read by nothing — and every finding below reflects the POST-REVIEW state actually
+# on `main`.
+#
+# WHAT SHIPPED: the minimal separately runnable worker loop in `backend/worker/main.py`
+# (runtime-factory composition, configured lease duration, empty-queue-only polling sleep,
+# cooperative SIGTERM/SIGINT exit after an in-flight `run_once`, and now bounded exponential
+# backoff on a transient failure instead of dying on the first one). A real OS subprocess was
+# hard-killed after leasing AND reaching `solver_running` (not merely after leasing); after forced
+# expiry a new worker reclaimed the original run with a higher fencing epoch, wrote zero candidates
+# on the killed epoch and exactly one after recovery, and the lineage assertion now checks the
+# recovery epoch actually appended to the killed epoch's stream rather than relying on a DB CHECK
+# constraint that was already guaranteeing it. The orphan invariant is proven with a CONTROL ARM:
+# two jobs leased at the same epoch, only the deleted carrier differing — the earlier version's
+# `DELETE` was decorative and the guard could not go red. A real lock-contention test proves
+# same-key cancellation replay with a different expected version is rejected while preserving one
+# idempotency row/effect.
+#
+# EVIDENCE: `evidence/story-3.11/recovery-idempotency.json`, regenerated from clean code commit
+# `8ad4c13` (code -> evidence -> docs commit order, matching the repo convention), is registered in
+# `gate_a_checks.py` under a new NFR29 `recovery_and_idempotency` invariant, carries the top-level
+# `passed` key `gate_a_readiness.py` actually reads, and passes all 23 exact gates (11 -> 23 to
+# cover every test the story's own Decision 2 table named, not a subset of it) across all seven
+# named failure modes. NFR35 is now measured at the SHIPPED 1.0s poll interval with the cold-start
+# run reported rather than discarded: 772.406 / 71.042 / 76.990 / 57.457 ms against 5000 ms — the
+# 56-122ms figures in the superseded note were measured at a tuned-down 0.01s interval with startup
+# silently dropped. `artifact_versions` is now derived by digesting the four contract modules
+# instead of a hand-typed literal. Code and evidence were committed separately per the evidence
+# convention, and a verdict-key rule was added to `docs/EVIDENCE-CONVENTION.md` so the next proof
+# story cannot reinvent an unbindable schema (Story 3.10's `repair-correctness.json` has the
+# identical gap; deliberately left open, recorded in `deferred-work.md`).
+#
+# FINAL GATES (post-review, PostgreSQL up): backend default 1269 passed / 1 skipped / 7 deselected;
+# `-m postgres` 95 passed / 1182 deselected; frontend 77 files / 521 tests, zero failures; Playwright
+# 48/48 across chromium+msedge, cross-checked against `--list`'s own count; evidence convention 67
+# passed; Gate A `gate_a_passed: true`, `blocking: []`, all nine invariants pass including the new
+# `recovery_and_idempotency`. `frontend/`, `backend/migrations/versions/`, and `evals/golden/**`
+# remain zero-diff from the story baseline.
+#
+# LEDGER: the worker-entrypoint and cancellation-lockout items were marked CLOSED in the
+# dev-complete pass IN ERROR — `worker/main.py` hard-errors without `--runtime-factory` and the only
+# factory in the repo is a test double, so their original complaints (nothing reads
+# `settings.lease_seconds` in production; no operator can actually run the worker) remain literally
+# true. Re-pointed to "mechanism proven, composition open, Owner: Epic 5/6" rather than closed. Two
+# more entries that named Story 3.11 as owner with their trigger now fired were also re-pointed
+# rather than left stale. True mid-solve CP-SAT preemption remains explicitly open with no owner.
+
+# NOTE (2026-08-25): Story 3-11 created and moved to ready-for-dev. It is Epic 3's SECOND pure
+# proof story (3.10's sibling) — proving worker kill, lease expiry, browser reconnect, command
+# replay, cancellation race, stale draft, and conflicting idempotency (NFR6, NFR7), blocking on
+# regression (NFR29). MEASURED AT CREATION: six of the seven named failure modes already have a
+# real mechanism AND already-passing tests (worker kill/lease expiry: test_job_leasing_postgres.py;
+# browser reconnect: test_schedule_run_stream_api.py/test_conversation_stream_api.py; command
+# replay + conflicting idempotency: the shared body-hash-conflict path on every mutating use case;
+# cancellation race: test_cancellation_race_postgres.py, 9 tests; stale draft:
+# test_conversations_postgres.py:1012-1041). This story's job is to ASSEMBLE that coverage into one
+# NFR27-bound evidence artifact, not duplicate it.
+#
+# FOUR DECISIONS WERE MADE AT CREATION, the two most consequential:
+# (1) THIS STORY SHIPS A MINIMAL WORKER ENTRY POINT (`backend/worker/main.py`), because
+#     `deferred-work.md:402/404/396/426` all name Story 3.11 as owner of "no production worker
+#     entrypoint exists," and AC1's "worker kill" clause cannot be proven non-vacuously by any
+#     existing test — every one of them calls `run_once()` in-process; none kills a real OS
+#     process. NOT deployed to Docker/systemd in this story (Epic 5/6's concern) — proven by a
+#     real-subprocess-SIGKILL test only.
+# (2) `deferred-work.md:316`'s mid-solve CP-SAT preemption hook is explicitly NOT built here and
+#     re-pointed again with owner left open. VERIFIED LIVE: `GovernedSchedulerAdapter.solve()`
+#     (`backend/engine/governed_adapter.py:269-291`) has zero cancellation wiring; OR-Tools'
+#     `stop_search()` (confirmed via Context7) fires only inside a solution callback, so a search
+#     with no improving solution would never observe a stop signal — a guard-that-cannot-go-red
+#     risk this repo's own retro names as its most expensive pattern. This story's frozen AC1 text
+#     names "cancellation race" (already proven, cooperative/pre-solve), not mid-solve preemption;
+#     the ledger's "Owner: Story 3.11" string predates and is broader than that frozen text.
+#
+# ALSO DECIDED: `deferred-work.md:330` (orphaned `solver_running` cancellation with no observer)
+# closes by PROOF, not new code — a real-Postgres test proving `mark_running`'s `_has_current_epoch`
+# precondition makes the orphan path unreachable today (the Story 3.5 "verified-safe-today"
+# precedent). One genuinely new Postgres test is owed: `cancel_schedule_run` idempotency-key
+# replay against a differing `expected_resource_version` under contention — no existing test
+# drives that specific command through that specific race. ZERO NEW `evals/golden/**` cases
+# (same reasoning as Story 3.10's own zero-contribution precedent — none of the seven failure
+# modes are LLM-scriptable turns).
+#
+# NO NEW MIGRATION (the worker entry point is a script, not schema). ZERO-LINE `frontend/` DIFF
+# EXPECTED. Evidence: `evidence/story-3.11/recovery-idempotency.json`, generated via
+# `resolve_bindings()` exactly per `docs/EVIDENCE-CONVENTION.md` and Story 3.10's own mechanical
+# precedent (`backend/evals/recovery_idempotency_report.py` mirrors
+# `repair_correctness_report.py`).
+#
+# BASELINE AT CREATION (`5b87655`, clean tree, merge of Story 3.10 into `main`): re-derive test
+# counts at Task 1 — do not trust Story 3.10's own completion numbers as current.
 
 # NOTE (2026-08-24): Story 3-10 created and moved to ready-for-dev. It is EPIC 3'S FIRST PURE PROOF
 # STORY (the backend analog of 1.9-1.11) -- ships NO new capability, route, contract, migration, or
@@ -1580,7 +1674,7 @@ development_status:
   3-8-compare-candidate-and-baseline-results: done
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
-  3-11-prove-recovery-and-idempotency: backlog
+  3-11-prove-recovery-and-idempotency: done
   3-12-prove-the-repair-browser-journey: backlog
   epic-3-retrospective: optional
 

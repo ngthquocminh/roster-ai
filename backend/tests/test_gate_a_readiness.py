@@ -95,6 +95,11 @@ def test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant():
     """AR28 lists six; accessibility reaches the gate via AC1's Given + NFR29."""
     assert tuple(inv.key for inv in NFR29_GATES) == (
         "accessibility_and_responsiveness",
+        # Added 2026-08-25 by Story 3.11's code review. NFR29 names
+        # "idempotency ... recovery" alongside accessibility, and 3.11's proof
+        # artifact was registered nowhere -- so Gate A reported green because
+        # the proof was unbound, not because it held.
+        "recovery_and_idempotency",
     )
     assert all(inv.authority == "NFR29" for inv in NFR29_GATES)
     ar28_keys = {inv.key for inv in AR28_INVARIANTS}
@@ -215,7 +220,7 @@ def test_api_parity_binds_a_test_that_still_exists():
     ), "api_parity's proving test is gone; the check now proves nothing"
 
 
-def test_registered_evidence_files_are_the_three_known_ones():
+def test_registered_evidence_files_are_the_four_known_ones():
     """A stored `passed` flag answering a present-tense question is a category
     error the registry tolerates only where a shared CI runner cannot reproduce
     the measurement. Keep that set small and named, so growth is deliberate.
@@ -231,6 +236,12 @@ def test_registered_evidence_files_are_the_three_known_ones():
         "evidence/story-1.4/nfr35-scenario-data-load.json",
         "evidence/story-1.5/nfr35-evidence-target-resolution.json",
         "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
+        # Grew back to four deliberately on 2026-08-25 (Story 3.11 code
+        # review): the recovery/idempotency proof declared itself
+        # release-blocking while being read by nothing. It is paired with a
+        # live pytest check on its generator, so the invariant does not rest
+        # on a stored flag alone.
+        "evidence/story-3.11/recovery-idempotency.json",
     }
 
 

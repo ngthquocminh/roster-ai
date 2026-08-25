@@ -77,6 +77,17 @@ NFR29_GATES: tuple[Invariant, ...] = (
         "Accessibility / responsiveness",
         "NFR29",
     ),
+    #: NFR29 names "idempotency ... recovery" in the same breath as
+    #: accessibility. Story 3.11 proves both and writes a release-blocking
+    #: artifact, but until this registration nothing read that artifact: an
+    #: unregistered evidence file cannot block, so Gate A reported green
+    #: BECAUSE the proof was unbound. Same failure shape as the
+    #: `measurement_integrity` note below.
+    Invariant(
+        "recovery_and_idempotency",
+        "Recovery / idempotency (worker kill, lease expiry, replay)",
+        "NFR29",
+    ),
 )
 
 #: Neither AR28's nor NFR29's, but AC2's: "any missing or unbound contributing
@@ -438,6 +449,33 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
             "backend/tests/test_evidence_convention.py",
             "backend/tests/test_gate_a_readiness.py",
         ),
+    ),
+    # ---------------------------------------------------------------- 3.11
+    GateACheck(
+        check="recovery_and_idempotency_proof",
+        story="3.11",
+        invariant="recovery_and_idempotency",
+        description=(
+            "Worker kill, lease expiry, browser reconnect, command replay, "
+            "cancellation race, stale draft, and conflicting idempotency, "
+            "each bound to exact rerunnable gates. Registered so a regression "
+            "in any of them blocks release, which is what AC2 claims."
+        ),
+        evidence_path="evidence/story-3.11/recovery-idempotency.json",
+    ),
+    GateACheck(
+        check="recovery_idempotency_report_machinery",
+        story="3.11",
+        invariant="recovery_and_idempotency",
+        description=(
+            "The proof generator's own logic, held to the gate for the same "
+            "reason Story 1.11's is: a generator that records a SKIPPED "
+            "PostgreSQL node as a passed gate would report every failure mode "
+            "green with the database down. No invariant may rest on a static "
+            "evidence file alone."
+        ),
+        runner="pytest",
+        test_files=("backend/tests/test_recovery_idempotency_report.py",),
     ),
 )
 

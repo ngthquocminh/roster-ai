@@ -302,6 +302,88 @@ def test_expired_worker_is_fenced_and_recovered_worker_finishes_once(
         assert connection.scalar(select(schedule_run.c.reason).where(schedule_run.c.id == run_id)) == "seeded_terminal"
 
 
+def _only_leasable_among(engine, job_ids):
+    """Take every row outside `job_ids` out of the leasable set.
+
+    The multi-job sibling of `_only_leasable`; see that helper for why the
+    module-scoped fixture makes this necessary.
+    """
+    with engine.begin() as connection:
+        connection.execute(
+            update(job_queue)
+            .where(job_queue.c.id.notin_(list(job_ids)))
+            .values(status="completed")
+        )
+
+
+def test_mark_running_cannot_create_a_jobless_solver_running_orphan(
+    governed_postgres_engine, lease_ids
+) -> None:
+    """A running row cannot be created without the leased job that fences it.
+
+    Both arms are leased, so both reach `mark_running` with `status='leased'`
+    and the SAME issued fencing epoch. The ONLY difference is whether the job
+    row still exists. Without the control arm this test passes for the wrong
+    reason: an unleased job sits at `status='queued'`/`fencing_epoch=0`, which
+    `_has_current_epoch` already rejects on three separate predicates, so the
+    deletion would carry no weight and the guard could never go red.
+    """
+    jobs = _queue_jobs(governed_postgres_engine, lease_ids, 2)
+    _only_leasable_among(governed_postgres_engine, [job_id for job_id, _ in jobs])
+    runs = dict(jobs)
+
+    leases = {}
+    for _ in jobs:
+        lease = _lease(governed_postgres_engine, "worker-orphan-proof")
+        leases[lease["id"]] = lease
+    assert set(leases) == set(runs)
+
+    (control_job, subject_job) = list(runs)
+    control_run, subject_run = runs[control_job], runs[subject_job]
+    repository = PostgresScheduleRunRepository()
+
+    # Control: the fence is satisfiable at this exact epoch and status.
+    with governed_postgres_engine.begin() as connection:
+        _runtime(connection, lease_ids["site"])
+        repository.mark_running(
+            connection,
+            run_id=control_run,
+            site_id=lease_ids["site"],
+            fencing_epoch=leases[control_job]["fencing_epoch"],
+        )
+
+    # Subject: identical in every respect except that its carrier row is gone.
+    with governed_postgres_engine.begin() as connection:
+        connection.execute(job_queue.delete().where(job_queue.c.id == subject_job))
+
+    with pytest.raises(StaleLeaseError), governed_postgres_engine.begin() as connection:
+        _runtime(connection, lease_ids["site"])
+        repository.mark_running(
+            connection,
+            run_id=subject_run,
+            site_id=lease_ids["site"],
+            fencing_epoch=leases[subject_job]["fencing_epoch"],
+        )
+
+    with governed_postgres_engine.connect() as connection:
+        assert connection.scalar(
+            select(schedule_run.c.status).where(schedule_run.c.id == control_run)
+        ) == "solver_running"
+        assert connection.scalar(
+            select(schedule_run.c.status).where(schedule_run.c.id == subject_run)
+        ) == "solver_queued"
+        assert connection.scalar(
+            select(func.count()).select_from(job_queue).where(
+                job_queue.c.schedule_run_id == subject_run
+            )
+        ) == 0
+        assert connection.scalar(
+            select(func.count()).select_from(persisted_event).where(
+                persisted_event.c.stream_id == subject_run
+            )
+        ) == 0
+
+
 def test_lease_role_cannot_query_the_queue_directly(governed_postgres_engine) -> None:
     with pytest.raises(DBAPIError), governed_postgres_engine.begin() as connection:
         connection.exec_driver_sql("SET LOCAL ROLE shiftmind_lease")

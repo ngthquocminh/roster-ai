@@ -604,6 +604,56 @@ def test_concurrent_replay_of_one_idempotency_key_returns_the_stored_result(
         ).one() == ("cancellation_requested", 3)
 
 
+def test_conflicting_cancel_version_is_rejected_after_real_database_contention(
+    governed_postgres_engine, lease_ids
+) -> None:
+    """The same key cannot be rebound to the post-cancel resource version."""
+    _, run_id, _lease_row = _running_run(governed_postgres_engine, lease_ids)
+    key = _key("version-conflict", run_id)
+    first = _cancel(governed_postgres_engine, lease_ids, run_id, 2, key)
+    assert first.resource_version == 3
+
+    started = threading.Event()
+    failures = {}
+
+    def conflicting_replay() -> None:
+        started.set()
+        try:
+            _cancel(governed_postgres_engine, lease_ids, run_id, 3, key)
+        except Exception as exc:  # noqa: BLE001 - asserted below
+            failures["conflict"] = exc
+
+    thread = threading.Thread(target=conflicting_replay)
+    try:
+        with governed_postgres_engine.begin() as blocker:
+            blocker.execute(text("LOCK TABLE schedule_run IN ACCESS EXCLUSIVE MODE"))
+            thread.start()
+            assert started.wait(15)
+            assert _wait_for_blocked_backend(governed_postgres_engine), (
+                "conflicting replay never contended on the real database"
+            )
+    finally:
+        # An assertion inside the blocker block releases the lock on the way
+        # out, but without this join the replay thread outlives the test and
+        # keeps mutating the module-scoped database under later tests.
+        if thread.is_alive() or thread.ident is not None:
+            thread.join(timeout=45)
+
+    assert not thread.is_alive(), "conflicting replay remained blocked"
+    assert isinstance(failures.get("conflict"), IdempotencyKeyConflictError)
+    with governed_postgres_engine.connect() as connection:
+        assert connection.scalar(
+            select(func.count()).select_from(command_idempotency).where(
+                command_idempotency.c.idempotency_key == key
+            )
+        ) == 1
+        assert connection.execute(
+            select(schedule_run.c.status, schedule_run.c.resource_version).where(
+                schedule_run.c.id == run_id
+            )
+        ).one() == ("cancellation_requested", 3)
+
+
 def test_cancel_committing_between_the_state_read_and_mark_running_is_recovered(
     governed_postgres_engine, lease_ids
 ) -> None:
