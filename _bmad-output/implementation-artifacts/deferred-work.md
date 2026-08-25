@@ -1,5 +1,55 @@
 # Deferred Work
 
+## Deferred from: code review of story-3.11 (2026-08-25)
+
+- **Story 3.10's `repair-correctness.json` is still bound to no Gate A check.** The same
+  defect Story 3.11's review found and fixed for 3.11: the artifact declares
+  `release_blocking` but is registered in no `GateACheck`, and emits `result: "passed"`
+  rather than the top-level `passed` boolean `scripts/gate_a_readiness.py:140` reads — so
+  even registering it as-is would record it as `missing`. 3.10's Task 5 recorded
+  `gate_a_passed: true, blocking: []` and took that as confirmation, but the gate passed
+  BECAUSE the file was unbound. The rule is now written down
+  (`docs/EVIDENCE-CONVENTION.md`, "A verdict key Gate A can read") and 3.11 is wired; 3.10
+  was deliberately left out of scope when this decision was taken. **Deferred reason: Minh
+  scoped the review fix to 3.11 only; sweeping 3.10 is a separate, equally mechanical
+  change.** **Owner: open** — one `GateACheck`, one top-level `passed` key, and a live
+  pytest check on `test_repair_correctness_report.py` to satisfy the
+  no-invariant-rests-on-a-stored-flag rule.
+
+- **Recorded dataset sha256 digests are write-only — nothing ever verifies them.** `resolve_bindings`
+  records a sha256 per bound test file, but `test_evidence_convention.py` only re-checks
+  `contract_digests` against `data/contract`, and `audit_evidence_drift`
+  (`backend/scripts/evidence_binding.py:811-813`) collects paths solely from
+  `_PATH_HINT_KEYS = ("contract", "checklist", "path", "source_path")` — the dataset map's keys are
+  paths but are not values under those keys. The six digests in
+  `evidence/story-3.11/recovery-idempotency.json` can therefore go stale silently, and the drift
+  detection the binding exists to provide never runs on them. **Deferred reason: pre-existing in the
+  shared binding helper; affects Story 3.10's evidence equally, so fixing it is a convention change
+  rather than a 3.11 patch.** **Owner: open.**
+
+- **`_wait_for_blocked_backend` is not scoped to the test's own database or the blocked pid.**
+  `backend/tests/test_cancellation_race_postgres.py:421-435` counts any backend on the whole cluster
+  with `wait_event_type='Lock'`, so "contention was observed" can be satisfied by an unrelated
+  session. **Deferred reason: pre-existing helper that Story 3.11's Decision 3 explicitly instructed
+  the dev to reuse rather than reinvent.** **Owner: open.**
+
+- **The new cancellation-contention harness has no discriminating power.** In
+  `test_conflicting_cancel_version_is_rejected_after_real_database_contention`
+  (`backend/tests/test_cancellation_race_postgres.py:607-650`) the `ACCESS EXCLUSIVE` lock only
+  delays `cancel_schedule_run`'s opening `get_run_state`; the 409 is then decided by a pure
+  `stored.body_hash != body_hash` comparison against an already-committed row. Deleting the whole
+  blocker/thread harness produces an identical assertion result, leaving only added flake surface.
+  **Deferred reason: the test asserts the right thing and follows Decision 3's own "under real
+  contention" wording — the redundancy is in the frozen spec, not in the implementation.**
+  **Owner: open, if the contention requirement is ever restated in a way a test can discriminate.**
+
+- **A second SIGTERM/SIGINT cannot abort a multi-minute in-flight `run_once`.**
+  `backend/worker/main.py:44-48` sets the stop event on every signal, so once shutdown is requested
+  a repeated Ctrl-C is inert and only SIGKILL ends the process. **Deferred reason: Decision 1a
+  specifies cooperative shutdown that lets the in-flight `run_once` finish; escalation-on-second-signal
+  is an operator affordance the frozen story did not ask for.** **Owner: Epic 5/6, alongside process
+  supervision.**
+
 ## Deferred from: code review of story-3-8-compare-candidate-and-baseline-results (2026-08-24)
 
 - **`ScenarioProjectionReader` cannot read a pinned historical scenario version — a systemic Epic 2
@@ -399,9 +449,9 @@ rather than folded in.
 
 ## Deferred from: code review of story-3.6 (2026-08-21)
 
-- ~~**No production worker entrypoint exists, so the new route creates queued runs that nothing executes.**~~ **CLOSED 2026-08-25 (Story 3.11):** `backend/worker/main.py` is a separately runnable poll loop that consumes `default_lease_seconds(settings)`, sleeps only on an empty queue, and lets an in-flight `run_once` finish after SIGTERM/SIGINT. A real subprocess hard-kill test proves lease expiry, fencing-epoch advance, original-run lineage, and exactly-one candidate recovery. Deployment/runtime-factory composition remains deliberately owned by Epic 5/6; the executable mechanism itself now exists and is proven.
+- **No production worker entrypoint exists, so the new route creates queued runs that nothing executes.** **RE-POINTED 2026-08-25 (Story 3.11 code review), previously marked CLOSED in error.** `backend/worker/main.py` is a separately runnable poll loop that consumes `default_lease_seconds(settings)`, sleeps only on an empty queue, lets an in-flight `run_once` finish after SIGTERM/SIGINT, and survives a transient failure with bounded backoff. A real subprocess hard-kill test proves lease expiry and single-effect recovery against it. **What is NOT closed:** the entry point requires `--runtime-factory module:attribute` and hard-errors without it, and the only factory in the repository is `backend/tests/fixtures/worker_process.py` — a test double whose scheduler sleeps. `default_settings()` (`backend/settings.py`) is still never called from the entry point, so this item's original complaint — `settings.lease_seconds` is validated at process start and read by nothing in production — remains literally true. The MECHANISM is proven; the production COMPOSITION does not exist. **Owner: Epic 5/6**, alongside process supervision and deployment packaging.
 
-- ~~**`cancellation_requested` counts toward the site concurrency limit with no guaranteed exit while no worker runs.**~~ **CLOSED 2026-08-25 (Story 3.11 mechanism):** the separately runnable worker loop leases queued cancellation carriers and the existing checkpoint path moves them to `solver_cancelled`; cancellation races and concurrent replay are exact release-blocking gates in `recovery-idempotency.json`. An operator still has to run the worker process—deployment is Epic 5/6—but the application no longer lacks an executable mechanism for clearing these rows.
+- **`cancellation_requested` counts toward the site concurrency limit with no guaranteed exit while no worker runs.** **RE-POINTED 2026-08-25 (Story 3.11 code review), previously marked CLOSED in error.** The worker loop leases queued cancellation carriers and the existing checkpoint path moves them to `solver_cancelled`; cancellation races and concurrent replay are exact release-blocking gates in `recovery-idempotency.json`. **What is NOT closed:** the previous closure said "an operator still has to run the worker process" — today no operator can, because there is no non-test runtime factory to point `--runtime-factory` at (see the entry above). The application has a proven mechanism and no runnable composition. **Owner: Epic 5/6.**
 
 - **The held idempotency key is not bound to the body it was minted for, so `idempotency_key_conflict` is unrecoverable without remounting the card.** `onError` deliberately does not settle the key, and `createIdempotencyKeyHolder` stores only the key, never the body it was first used with. After a lost-response success followed by a successful revise, the retry carries the same key with a different `_body_hash` and receives 409 permanently. [frontend/src/hooks/useStartScheduleRun.ts:14, frontend/src/lib/idempotency.ts:40] — **Deferred reason: replicated pre-existing pattern, not introduced here.** Story 3.6's Task 7 mandated copying `useReviseProposal` line for line, and that hook (and `useRejectProposal`) carry the identical shape, so the defect predates this story on two other commands. A fix belongs to whichever story revisits `lib/idempotency.ts` for all three mutations at once. **Owner/revisit trigger: the first story permitted to change the shared idempotency-key holder contract.**
 
@@ -423,11 +473,11 @@ rather than folded in.
 
 - **Every "View progress" / "View results" link in the Runs table lands on a placeholder.** `RunsTable`'s `RunActions` links to `/scenarios/{scenarioId}/runs/{runId}`; `App.tsx` maps `runs/:runId` to `ScenarioResults`, which is still `<WorkspaceTabPlaceholder description="Run results are not available yet." />`. A prominently labelled control on every row currently dead-ends. [frontend/src/routes/ScenarioResults.tsx] — **Deferred reason: correct forward-wiring, not a defect of this story.** Story 3.7's own header records that it *unblocks* Story 3.8, and the link target is the right one; only the destination is unbuilt. **Owner: Story 3.8**, which builds the Results view this link already points at.
 
-- **The `cancellation_requested` boolean is absent from the list summary, so the transient "flag set, status not yet moved" case is invisible in the table.** `ScheduleRunOut` (the per-run route) carries the boolean; the new `ScheduleRunSummaryOut` does not. `cancel_schedule_run.py:52-54` carries a comment naming this story by name: *"Story 3.7 renders this as a distinct literal state, so it has to be true."* The `cancellation_requested` **status** is rendered distinctly by `RunStatusBadge`, which satisfies the literal-state reading; what the list cannot show is Decision 4's narrower case, where the job-queue flag is set while the run row still reads `solver_running`. [backend/api/schemas.py:`ScheduleRunSummaryOut`] — **Deferred reason: the status-value reading of that comment is satisfied, and surfacing the boolean needs a `job_queue` join this story's "simple list query" scope does not carry.** **Owner/revisit trigger:** the story that lands the production worker loop (Story 3.11), when the flag-set-but-not-yet-moved window becomes observable in practice rather than theoretical.
+- **The `cancellation_requested` boolean is absent from the list summary, so the transient "flag set, status not yet moved" case is invisible in the table.** `ScheduleRunOut` (the per-run route) carries the boolean; the new `ScheduleRunSummaryOut` does not. `cancel_schedule_run.py:52-54` carries a comment naming this story by name: *"Story 3.7 renders this as a distinct literal state, so it has to be true."* The `cancellation_requested` **status** is rendered distinctly by `RunStatusBadge`, which satisfies the literal-state reading; what the list cannot show is Decision 4's narrower case, where the job-queue flag is set while the run row still reads `solver_running`. [backend/api/schemas.py:`ScheduleRunSummaryOut`] — **Deferred reason: the status-value reading of that comment is satisfied, and surfacing the boolean needs a `job_queue` join this story's "simple list query" scope does not carry.** **Owner/revisit trigger:** ~~the story that lands the production worker loop (Story 3.11)~~ — **TRIGGER FIRED 2026-08-25:** Story 3.11 landed the worker loop, so the flag-set-but-not-yet-moved window is now reachable in practice rather than theoretical. The item itself is still open and still needs the `job_queue` join. **Owner: open** — no story in the current roadmap claims it.
 
 - **Operational timestamps render with no timezone marker.** `RunsTable`'s Accepted/Updated cells and `ProgressCard`'s "Accepted …" line use `formatTimestamp`, which deliberately slices the UTC wall-clock; no column header or label carries "(UTC)". A planner reading `Accepted 2026-08-22 10:00` on a shift floor will read it as site-local time, and the site timezone is `Australia/Sydney`. [frontend/src/lib/formatTimestamp.ts] — **Deferred reason: pre-existing shared helper, not introduced here** — changing its contract affects every surface that already renders a timestamp. This is, however, the first planner-facing surface where the offset is operationally load-bearing. **Owner/revisit trigger:** the first story permitted to change `formatTimestamp`'s contract, or Story 3.8's Results view — whichever comes first — fixing all timestamp surfaces in one pass.
 
-- **The Runs list has no live update mechanism — no polling and no SSE subscription; refresh is an explicit planner gesture.** `useScheduleRuns` carries no `refetchInterval` and nothing subscribes to Story 3.5's `GET /api/v1/schedule-runs/{run_id}/events`. [frontend/src/hooks/useScheduleRuns.ts] — **Deferred reason: nothing moves a run on its own yet.** There is no production worker loop (deferred to Story 3.11), so every state change today is planner-initiated — start and cancel — and both now invalidate `["scheduleRuns"]`, which keeps the table correct without polling. An explicit Refresh control was added instead (`ScenarioRuns.tsx`), which also respects AC3's "static text only" constraint. Two options were weighed and rejected *for now*: unconditional polling contradicts this repo's own convention, where `useConversationTimeline`'s `refetchInterval` is a labelled fallback for a dead stream and defaults to `false`; and SSE is the wrong shape for a list — `useConversationStream` is 312 conversation-specific lines with no reusable seam, and the events route is per-run, so N non-terminal rows would need N concurrent streams. **Owner: Story 3.11**, which lands the worker loop and is the first story where a run changes state with no planner gesture behind it — that is the point at which polling-fallback vs. SSE becomes a real decision rather than a guess.
+- **The Runs list has no live update mechanism — no polling and no SSE subscription; refresh is an explicit planner gesture.** `useScheduleRuns` carries no `refetchInterval` and nothing subscribes to Story 3.5's `GET /api/v1/schedule-runs/{run_id}/events`. [frontend/src/hooks/useScheduleRuns.ts] — **Deferred reason: nothing moves a run on its own yet.** There is no production worker loop (deferred to Story 3.11), so every state change today is planner-initiated — start and cancel — and both now invalidate `["scheduleRuns"]`, which keeps the table correct without polling. An explicit Refresh control was added instead (`ScenarioRuns.tsx`), which also respects AC3's "static text only" constraint. Two options were weighed and rejected *for now*: unconditional polling contradicts this repo's own convention, where `useConversationTimeline`'s `refetchInterval` is a labelled fallback for a dead stream and defaults to `false`; and SSE is the wrong shape for a list — `useConversationStream` is 312 conversation-specific lines with no reusable seam, and the events route is per-run, so N non-terminal rows would need N concurrent streams. ~~**Owner: Story 3.11**, which lands the worker loop and is the first story where a run changes state with no planner gesture behind it — that is the point at which polling-fallback vs. SSE becomes a real decision rather than a guess.~~ **RE-POINTED 2026-08-25 (Story 3.11 code review).** Story 3.11 landed the worker loop, so the premise of the deferral — "nothing moves a run on its own yet" — no longer holds in principle. In practice it still does: the loop has no production runtime factory (see the worker-entrypoint entry above), so no run moves without a planner gesture until Epic 5/6 composes one. The polling-fallback vs. SSE decision becomes real at that point, not before. **Owner: open**, triggered by the first runnable production worker.
 
 ## Deferred from: implementation of story-3.8 (2026-08-24)
 
