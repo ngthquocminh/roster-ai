@@ -88,6 +88,11 @@ NFR29_GATES: tuple[Invariant, ...] = (
         "Recovery / idempotency (worker kill, lease expiry, replay)",
         "NFR29",
     ),
+    Invariant(
+        "repair_browser_journey",
+        "Repair browser journey (draft, run, reconnect, terminal outcome, comparison, evidence targeting)",
+        "NFR29",
+    ),
 )
 
 #: Neither AR28's nor NFR29's, but AC2's: "any missing or unbound contributing
@@ -414,6 +419,7 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
             "frontend/e2e/keyboard-journey.spec.ts",
             "frontend/e2e/layout-accessibility.spec.ts",
             "frontend/e2e/reduced-motion.spec.ts",
+            "frontend/e2e/repair-journey-accessibility.spec.ts",
             "frontend/e2e/responsive.spec.ts",
         ),
         # The description says "on Chromium and Edge"; make the report prove it.
@@ -476,6 +482,29 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         ),
         runner="pytest",
         test_files=("backend/tests/test_recovery_idempotency_report.py",),
+    ),
+    # ---------------------------------------------------------------- 3.12
+    GateACheck(
+        check="repair_browser_journey_proof",
+        story="3.12",
+        invariant="repair_browser_journey",
+        description=(
+            "Draft, explicit optimization, same-run reconnect, terminal "
+            "comparison, and exact Chat evidence targeting in a real browser."
+        ),
+        runner="playwright",
+        test_files=("frontend/e2e/repair-journey.spec.ts",),
+        required_projects=("chromium", "msedge"),
+    ),
+    GateACheck(
+        check="repair_browser_journey_evidence",
+        story="3.12",
+        invariant="repair_browser_journey",
+        description=(
+            "Clean-tree Chromium and Edge journey/accessibility measurement "
+            "bound to the exact implementation commit through NFR27."
+        ),
+        evidence_path="evidence/story-3.12/repair-browser-journey.json",
     ),
 )
 

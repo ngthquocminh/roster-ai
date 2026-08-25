@@ -100,6 +100,7 @@ def test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant():
         # artifact was registered nowhere -- so Gate A reported green because
         # the proof was unbound, not because it held.
         "recovery_and_idempotency",
+        "repair_browser_journey",
     )
     assert all(inv.authority == "NFR29" for inv in NFR29_GATES)
     ar28_keys = {inv.key for inv in AR28_INVARIANTS}
@@ -109,6 +110,25 @@ def test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant():
 def test_every_invariant_has_at_least_one_contributing_check():
     for key in invariant_keys():
         assert checks_for(key), f"invariant {key} has no contributing check"
+
+
+def test_story_3_12_registers_live_and_evidence_proofs_and_extends_accessibility():
+    repair_checks = {check.check: check for check in GATE_A_CHECKS if check.story == "3.12"}
+    assert set(repair_checks) == {
+        "repair_browser_journey_proof",
+        "repair_browser_journey_evidence",
+    }
+    assert repair_checks["repair_browser_journey_proof"].required_projects == (
+        "chromium",
+        "msedge",
+    )
+    assert repair_checks["repair_browser_journey_evidence"].evidence_path == (
+        "evidence/story-3.12/repair-browser-journey.json"
+    )
+    accessibility = next(
+        check for check in GATE_A_CHECKS if check.check == "accessibility_browser_layer"
+    )
+    assert "frontend/e2e/repair-journey-accessibility.spec.ts" in accessibility.test_files
 
 
 def test_all_ten_gate_a_stories_contribute_a_check():
@@ -220,7 +240,7 @@ def test_api_parity_binds_a_test_that_still_exists():
     ), "api_parity's proving test is gone; the check now proves nothing"
 
 
-def test_registered_evidence_files_are_the_four_known_ones():
+def test_registered_evidence_files_are_the_five_known_ones():
     """A stored `passed` flag answering a present-tense question is a category
     error the registry tolerates only where a shared CI runner cannot reproduce
     the measurement. Keep that set small and named, so growth is deliberate.
@@ -242,6 +262,9 @@ def test_registered_evidence_files_are_the_four_known_ones():
         # live pytest check on its generator, so the invariant does not rest
         # on a stored flag alone.
         "evidence/story-3.11/recovery-idempotency.json",
+        # Story 3.12 pairs this clean-tree browser measurement with the live
+        # Playwright journey check registered on the same invariant.
+        "evidence/story-3.12/repair-browser-journey.json",
     }
 
 

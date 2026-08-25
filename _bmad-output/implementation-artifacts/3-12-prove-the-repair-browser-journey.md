@@ -117,14 +117,14 @@ The quietest first:
   - [x] New `frontend/e2e/repair-journey-accessibility.spec.ts`: `expectAxeClean` (the existing helper, `frontend/e2e/support/accessibility.ts`) against Chat with a rendered `DraftCard`, Runs with a mix of non-terminal and terminal rows, and Results in both its `ProgressCard` and `ComparisonSummary` states — mirroring `accessibility.spec.ts`'s per-state scan pattern.
   - [x] Extend keyboard-only coverage (reusing `tabTo`/`expectKeyboardFocus` from `keyboard-journey.spec.ts`, imported or duplicated with attribution — dev's call) across Send, Run optimization, the Runs row's View progress/View results/Retry controls, and Results' Refresh — assert visible focus and that focus lands somewhere sensible after each navigation, matching the established convention (no bespoke a11y assertions invented here).
   - [x] Confirm semantic status text (not color alone) distinguishes non-terminal from each terminal outcome, per AC2's "semantic status text" clause — this is what `RunStatusBadge`/`ProgressCard`/`TerminalOutcomeCard` already claim to do; the new spec proves it in a real browser rather than jsdom.
-- [ ] **Task 5 — Generate evidence (AC1, AC2, Decision 5)**
-  - [ ] Build `backend/scripts/generate_repair_journey_evidence.py` mirroring `generate_sse_replay_evidence.py`'s shape: parse the captured Playwright JUnit run (via `streaming-junit-reporter.mjs`), assert both projects ran and passed the new specs by name, resolve NFR27 bindings, write `evidence/story-3.12/repair-browser-journey.json` with a `results` dict naming each assertion group (journey completion, run-ID-survives-reconnect, evidence-targeting, axe-browser, keyboard-operable, focus-management, semantic-status-text).
-  - [ ] Commit code on a clean tree, run the measurement, generate the evidence file, run `test_evidence_convention.py`, commit evidence separately per `docs/EVIDENCE-CONVENTION.md`.
-  - [ ] Register the new file in `regenerate_evidence.py`'s `EVIDENCE_FILES` tuple.
-- [ ] **Task 6 — Wire Gate A (AC1, AC2, Decision 6)**
-  - [ ] Add the `repair_browser_journey` invariant and its two `GateACheck` entries (6a-6c) to `backend/scripts/gate_a_checks.py`.
-  - [ ] Extend `accessibility_browser_layer`'s `test_files` tuple with `frontend/e2e/repair-journey-accessibility.spec.ts` (6d).
-  - [ ] Run `validate_registry()` (or the existing test that calls it) to confirm no duplicate check IDs and no uncovered invariant.
+- [x] **Task 5 — Generate evidence (AC1, AC2, Decision 5)**
+  - [x] Build `backend/scripts/generate_repair_journey_evidence.py` mirroring `generate_sse_replay_evidence.py`'s shape: parse the captured Playwright JUnit run (via `streaming-junit-reporter.mjs`), assert both projects ran and passed the new specs by name, resolve NFR27 bindings, write `evidence/story-3.12/repair-browser-journey.json` with a `results` dict naming each assertion group (journey completion, run-ID-survives-reconnect, evidence-targeting, axe-browser, keyboard-operable, focus-management, semantic-status-text).
+  - [x] Commit code on a clean tree, run the measurement, generate the evidence file, run `test_evidence_convention.py`, commit evidence separately per `docs/EVIDENCE-CONVENTION.md`.
+  - [x] Register the new file in `regenerate_evidence.py`'s `EVIDENCE_FILES` tuple.
+- [x] **Task 6 — Wire Gate A (AC1, AC2, Decision 6)**
+  - [x] Add the `repair_browser_journey` invariant and its two `GateACheck` entries (6a-6c) to `backend/scripts/gate_a_checks.py`.
+  - [x] Extend `accessibility_browser_layer`'s `test_files` tuple with `frontend/e2e/repair-journey-accessibility.spec.ts` (6d).
+  - [x] Run `validate_registry()` (or the existing test that calls it) to confirm no duplicate check IDs and no uncovered invariant.
 - [ ] **Task 7 — Regression and Gate A**
   - [ ] Full backend suite (default + `-m postgres`); confirm zero new migration files (`alembic check`); frontend Vitest; full Playwright run on both projects, cross-checked against `--list`'s own count (matching Story 3.11's own final-validation convention); re-run the evidence convention suite; re-run Gate A and record `gate_a_passed`/`blocking`.
 - [ ] **Task 8 — Sprint-status update**
@@ -181,6 +181,8 @@ GPT-5 Codex
 - 2026-08-25 Task 2 RED: focused stub-state test failed because the deterministic state module did not exist; GREEN: `repairJourneyStubs.test.ts` passed, then full Vitest `78` files / `522` tests, typecheck, and lint passed (three pre-existing Fast Refresh warnings only).
 - 2026-08-25 Task 3 RED: the journey advanced to terminal state on reconnect instead of restoring `solver_running`; GREEN: two non-terminal reads now cover initial mount + reload, with terminal state exposed only by explicit Refresh. Journey passed Chromium + Edge.
 - 2026-08-25 Task 4 RED: real-browser axe found `Reject proposal` contrast at 3.82:1, and keyboard navigation to Results left focus on `<body>`. GREEN: the shared destructive button uses an AA-safe solid treatment and Results focuses its heading on route entry. Both new specs passed `4/4` across Chromium + Edge; full Vitest remained `78` files / `522` tests with typecheck/lint green.
+- 2026-08-25 Task 5 RED: generator unit tests failed because no JUnit evidence parser existed. GREEN: `5` generator tests and `74` convention tests passed; clean-tree JUnit recorded `4/4` required browser executions with zero failures/errors/skips. Code commit `8873c9e`; separately bound evidence commit `151b156`.
+- 2026-08-25 Task 6 RED: registry tests failed with no `repair_browser_journey` invariant/checks and no accessibility-suite extension. GREEN: `41` Gate A readiness tests pass, including registry uniqueness, coverage, project requirements, and the deliberate fifth evidence registration.
 
 ### Completion Notes List
 
@@ -188,6 +190,8 @@ GPT-5 Codex
 - Task 2 complete: the shared API stub now accepts the scripted message/execute/run commands, appends the draft deterministically, and serves proposal, run-list, and running/completed result contracts from isolated per-page state.
 - Task 3 complete: one deterministic browser journey now proves exact Chat evidence jump/return, draft creation, optimization acknowledgement, Runs continuity, same-ID reconnect, and completed comparison content.
 - Task 4 complete: the repair surfaces are axe-clean in all named states, keyboard-operable, and expose distinct literal status text; two surfaced accessibility defects were fixed explicitly.
+- Task 5 complete: clean-tree browser results are bound through all NFR27 keys in a top-level `passed: true` evidence artifact and registered for deterministic rebinding.
+- Task 6 complete: Gate A now has separate live-browser and evidence checks for the repair journey, while the new accessibility spec extends the existing browser-layer invariant.
 
 ### File List
 
@@ -200,3 +204,9 @@ GPT-5 Codex
 - `frontend/e2e/repair-journey-accessibility.spec.ts`
 - `frontend/src/components/ui/button.tsx`
 - `frontend/src/routes/ScenarioResults.tsx`
+- `backend/scripts/generate_repair_journey_evidence.py`
+- `backend/scripts/regenerate_evidence.py`
+- `backend/tests/test_repair_journey_evidence.py`
+- `evidence/story-3.12/repair-browser-journey.json`
+- `backend/scripts/gate_a_checks.py`
+- `backend/tests/test_gate_a_readiness.py`
