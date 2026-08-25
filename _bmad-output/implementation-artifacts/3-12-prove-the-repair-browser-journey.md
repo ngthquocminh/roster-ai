@@ -100,23 +100,23 @@ The quietest first:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-derive baselines before attributing any failure (AC1, AC2)**
-  - [ ] Confirm current HEAD is clean and note the commit hash. Re-run and record fresh: backend default suite pass/skip/deselect counts, `-m postgres` pass count, frontend Vitest file/test counts, Playwright pass count (both projects) and its `--list` cross-check, golden dataset file count and consequential+prohibited count. Do not cite this story's own or Story 3.11's cited numbers as current.
-- [ ] **Task 2 — Extend `apiStubs.ts` with the repair-journey routes (AC1, Decision 4)**
-  - [ ] Add stub handling for `POST /api/v1/conversations/{CONVERSATION_ID}/messages` (accept, mark a "message sent" flag), a `draft` item appended to `GET .../timeline` once that flag is set (Decision 4c), and `GET /api/v1/proposals/{proposalId}` returning a `ProposalViewV1`-shaped body citing the existing `EVIDENCE_RECORD_ID`/`demand` fixture record.
-  - [ ] Add `POST /api/v1/schedule-runs` (accept, mint a fixed scripted `schedule_run_id`), `GET /api/v1/schedule-runs` (list containing that run), and `GET /api/v1/schedule-runs/{id}/result` with the call-counted `solver_running` → `solver_completed` progression (Decision 4a), the completed response carrying a real `candidate`/`comparison` payload with non-empty `assignments` and `evidence_refs`.
-  - [ ] Unit-check the new stub logic is deterministic (same sequence of calls always produces the same sequence of responses) before writing the spec that depends on it.
-- [ ] **Task 3 — Write the end-to-end journey spec (AC1)**
-  - [ ] New `frontend/e2e/repair-journey.spec.ts`: install the extended stubs, open Chat, send a message, assert the `draft` activity/`DraftCard` renders with its consequence summary and resolved entities, click "Run optimization", assert the in-card acknowledgement names the scripted run ID and status.
-  - [ ] Navigate to Runs, assert the row shows the same run ID (`IdentifierCopyButton`) and a non-terminal `ProgressCard` state, follow "View progress" to Results.
-  - [ ] On Results, assert `ProgressCard` renders `solver_running`'s literal text; perform the reconnect step (`page.reload()` or navigate away and back via the same URL) and assert the SAME run ID stays in the URL and the page re-renders correctly from a fresh mount (Decision 2).
-  - [ ] Trigger the terminal transition (the deterministic stub's second call), refresh, and assert `ComparisonSummary` renders with its literal metric-delta and evidence-reference content, matching AC1's "each literal state renders its required text".
-  - [ ] Exercise the evidence-targeting step (Decision 3): from Chat's claim segment, click its `EvidenceLink`, assert the jump lands on the exact evidence target in Scenario Data, then `Return to claim` and assert focus/URL restore — reusing the exact assertions `keyboard-journey.spec.ts`'s second test already proves, adapted to run as one step inside this longer journey rather than in isolation.
-  - [ ] Run on both `chromium` and `msedge` (the existing `playwright.config.ts` projects — no config change needed).
-- [ ] **Task 4 — Write the accessibility coverage (AC2, Decision 6d)**
-  - [ ] New `frontend/e2e/repair-journey-accessibility.spec.ts`: `expectAxeClean` (the existing helper, `frontend/e2e/support/accessibility.ts`) against Chat with a rendered `DraftCard`, Runs with a mix of non-terminal and terminal rows, and Results in both its `ProgressCard` and `ComparisonSummary` states — mirroring `accessibility.spec.ts`'s per-state scan pattern.
-  - [ ] Extend keyboard-only coverage (reusing `tabTo`/`expectKeyboardFocus` from `keyboard-journey.spec.ts`, imported or duplicated with attribution — dev's call) across Send, Run optimization, the Runs row's View progress/View results/Retry controls, and Results' Refresh — assert visible focus and that focus lands somewhere sensible after each navigation, matching the established convention (no bespoke a11y assertions invented here).
-  - [ ] Confirm semantic status text (not color alone) distinguishes non-terminal from each terminal outcome, per AC2's "semantic status text" clause — this is what `RunStatusBadge`/`ProgressCard`/`TerminalOutcomeCard` already claim to do; the new spec proves it in a real browser rather than jsdom.
+- [x] **Task 1 — Re-derive baselines before attributing any failure (AC1, AC2)**
+  - [x] Confirm current HEAD is clean and note the commit hash. Re-run and record fresh: backend default suite pass/skip/deselect counts, `-m postgres` pass count, frontend Vitest file/test counts, Playwright pass count (both projects) and its `--list` cross-check, golden dataset file count and consequential+prohibited count. Do not cite this story's own or Story 3.11's cited numbers as current.
+- [x] **Task 2 — Extend `apiStubs.ts` with the repair-journey routes (AC1, Decision 4)**
+  - [x] Add stub handling for `POST /api/v1/conversations/{CONVERSATION_ID}/messages` (accept, mark a "message sent" flag), a `draft` item appended to `GET .../timeline` once that flag is set (Decision 4c), and `GET /api/v1/proposals/{proposalId}` returning a `ProposalViewV1`-shaped body citing the existing `EVIDENCE_RECORD_ID`/`demand` fixture record.
+  - [x] Add `POST /api/v1/schedule-runs` (accept, mint a fixed scripted `schedule_run_id`), `GET /api/v1/schedule-runs` (list containing that run), and `GET /api/v1/schedule-runs/{id}/result` with the call-counted `solver_running` → `solver_completed` progression (Decision 4a), the completed response carrying a real `candidate`/`comparison` payload with non-empty `assignments` and `evidence_refs`.
+  - [x] Unit-check the new stub logic is deterministic (same sequence of calls always produces the same sequence of responses) before writing the spec that depends on it.
+- [x] **Task 3 — Write the end-to-end journey spec (AC1)**
+  - [x] New `frontend/e2e/repair-journey.spec.ts`: install the extended stubs, open Chat, send a message, assert the `draft` activity/`DraftCard` renders with its consequence summary and resolved entities, click "Run optimization", assert the in-card acknowledgement names the scripted run ID and status.
+  - [x] Navigate to Runs, assert the row shows the same run ID (`IdentifierCopyButton`) and a non-terminal `ProgressCard` state, follow "View progress" to Results.
+  - [x] On Results, assert `ProgressCard` renders `solver_running`'s literal text; perform the reconnect step (`page.reload()` or navigate away and back via the same URL) and assert the SAME run ID stays in the URL and the page re-renders correctly from a fresh mount (Decision 2).
+  - [x] Trigger the terminal transition (the deterministic stub's second call), refresh, and assert `ComparisonSummary` renders with its literal metric-delta and evidence-reference content, matching AC1's "each literal state renders its required text".
+  - [x] Exercise the evidence-targeting step (Decision 3): from Chat's claim segment, click its `EvidenceLink`, assert the jump lands on the exact evidence target in Scenario Data, then `Return to claim` and assert focus/URL restore — reusing the exact assertions `keyboard-journey.spec.ts`'s second test already proves, adapted to run as one step inside this longer journey rather than in isolation.
+  - [x] Run on both `chromium` and `msedge` (the existing `playwright.config.ts` projects — no config change needed).
+- [x] **Task 4 — Write the accessibility coverage (AC2, Decision 6d)**
+  - [x] New `frontend/e2e/repair-journey-accessibility.spec.ts`: `expectAxeClean` (the existing helper, `frontend/e2e/support/accessibility.ts`) against Chat with a rendered `DraftCard`, Runs with a mix of non-terminal and terminal rows, and Results in both its `ProgressCard` and `ComparisonSummary` states — mirroring `accessibility.spec.ts`'s per-state scan pattern.
+  - [x] Extend keyboard-only coverage (reusing `tabTo`/`expectKeyboardFocus` from `keyboard-journey.spec.ts`, imported or duplicated with attribution — dev's call) across Send, Run optimization, the Runs row's View progress/View results/Retry controls, and Results' Refresh — assert visible focus and that focus lands somewhere sensible after each navigation, matching the established convention (no bespoke a11y assertions invented here).
+  - [x] Confirm semantic status text (not color alone) distinguishes non-terminal from each terminal outcome, per AC2's "semantic status text" clause — this is what `RunStatusBadge`/`ProgressCard`/`TerminalOutcomeCard` already claim to do; the new spec proves it in a real browser rather than jsdom.
 - [ ] **Task 5 — Generate evidence (AC1, AC2, Decision 5)**
   - [ ] Build `backend/scripts/generate_repair_journey_evidence.py` mirroring `generate_sse_replay_evidence.py`'s shape: parse the captured Playwright JUnit run (via `streaming-junit-reporter.mjs`), assert both projects ran and passed the new specs by name, resolve NFR27 bindings, write `evidence/story-3.12/repair-browser-journey.json` with a `results` dict naming each assertion group (journey completion, run-ID-survives-reconnect, evidence-targeting, axe-browser, keyboard-operable, focus-management, semantic-status-text).
   - [ ] Commit code on a clean tree, run the measurement, generate the evidence file, run `test_evidence_convention.py`, commit evidence separately per `docs/EVIDENCE-CONVENTION.md`.
@@ -165,8 +165,38 @@ The quietest first:
 
 ### Agent Model Used
 
+GPT-5 Codex
+
+### Implementation Plan
+
+- Follow the story task order with red-green-refactor for deterministic browser stubs, journey coverage, accessibility coverage, evidence generation, and Gate A registration.
+- Keep all changes within the proof layer (`frontend/e2e/**`, evidence tooling/registries, and story/sprint records); do not change product behavior.
+
 ### Debug Log References
+
+- 2026-08-25 Task 1 baseline: clean worktree at live HEAD `d220dbdc5688e282ae7f8fd2f7a90016b1c18eb3`; preserved story baseline `977f82b64324a5edbc1b93eb59d337b8db650375`.
+- Backend default: `1268 passed, 2 skipped, 7 deselected`; PostgreSQL: `95 passed, 1182 deselected`.
+- Frontend Vitest: `77` files / `521` tests; Playwright: `48 passed`, matching `--list` (`48` tests / `7` files) across Chromium and Edge.
+- Golden dataset: `26` JSON cases; NFR28 risk subset `1 consequential + 4 prohibited = 5`.
+- 2026-08-25 Task 2 RED: focused stub-state test failed because the deterministic state module did not exist; GREEN: `repairJourneyStubs.test.ts` passed, then full Vitest `78` files / `522` tests, typecheck, and lint passed (three pre-existing Fast Refresh warnings only).
+- 2026-08-25 Task 3 RED: the journey advanced to terminal state on reconnect instead of restoring `solver_running`; GREEN: two non-terminal reads now cover initial mount + reload, with terminal state exposed only by explicit Refresh. Journey passed Chromium + Edge.
+- 2026-08-25 Task 4 RED: real-browser axe found `Reject proposal` contrast at 3.82:1, and keyboard navigation to Results left focus on `<body>`. GREEN: the shared destructive button uses an AA-safe solid treatment and Results focuses its heading on route entry. Both new specs passed `4/4` across Chromium + Edge; full Vitest remained `78` files / `522` tests with typecheck/lint green.
 
 ### Completion Notes List
 
+- Task 1 complete: all requested baselines were re-derived from the live clean HEAD before implementation.
+- Task 2 complete: the shared API stub now accepts the scripted message/execute/run commands, appends the draft deterministically, and serves proposal, run-list, and running/completed result contracts from isolated per-page state.
+- Task 3 complete: one deterministic browser journey now proves exact Chat evidence jump/return, draft creation, optimization acknowledgement, Runs continuity, same-ID reconnect, and completed comparison content.
+- Task 4 complete: the repair surfaces are axe-clean in all named states, keyboard-operable, and expose distinct literal status text; two surfaced accessibility defects were fixed explicitly.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/3-12-prove-the-repair-browser-journey.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `frontend/e2e/support/apiStubs.ts`
+- `frontend/e2e/support/repairJourneyStubState.ts`
+- `frontend/src/test/repairJourneyStubs.test.ts`
+- `frontend/e2e/repair-journey.spec.ts`
+- `frontend/e2e/repair-journey-accessibility.spec.ts`
+- `frontend/src/components/ui/button.tsx`
+- `frontend/src/routes/ScenarioResults.tsx`

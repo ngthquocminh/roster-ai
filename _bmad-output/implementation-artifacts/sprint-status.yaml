@@ -1712,7 +1712,7 @@ development_status:
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
   3-11-prove-recovery-and-idempotency: done
-  3-12-prove-the-repair-browser-journey: ready-for-dev
+  3-12-prove-the-repair-browser-journey: in-progress
   epic-3-retrospective: optional
 
   # Epic 4: Exact Baseline Decision and Decision Record
