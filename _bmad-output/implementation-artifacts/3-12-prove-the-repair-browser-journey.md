@@ -4,7 +4,7 @@ baseline_commit: 977f82b64324a5edbc1b93eb59d337b8db650375
 
 # Story 3.12: Prove the Repair Browser Journey
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -125,10 +125,10 @@ The quietest first:
   - [x] Add the `repair_browser_journey` invariant and its two `GateACheck` entries (6a-6c) to `backend/scripts/gate_a_checks.py`.
   - [x] Extend `accessibility_browser_layer`'s `test_files` tuple with `frontend/e2e/repair-journey-accessibility.spec.ts` (6d).
   - [x] Run `validate_registry()` (or the existing test that calls it) to confirm no duplicate check IDs and no uncovered invariant.
-- [ ] **Task 7 — Regression and Gate A**
-  - [ ] Full backend suite (default + `-m postgres`); confirm zero new migration files (`alembic check`); frontend Vitest; full Playwright run on both projects, cross-checked against `--list`'s own count (matching Story 3.11's own final-validation convention); re-run the evidence convention suite; re-run Gate A and record `gate_a_passed`/`blocking`.
-- [ ] **Task 8 — Sprint-status update**
-  - [ ] Add a dense creation/completion note to `sprint-status.yaml` matching this project's established convention (see Stories 3.1, 3.5, 3.6, 3.10, 3.11 for shape).
+- [x] **Task 7 — Regression and Gate A**
+  - [x] Full backend suite (default + `-m postgres`); confirm zero new migration files (`alembic check`); frontend Vitest; full Playwright run on both projects, cross-checked against `--list`'s own count (matching Story 3.11's own final-validation convention); re-run the evidence convention suite; re-run Gate A and record `gate_a_passed`/`blocking`.
+- [x] **Task 8 — Sprint-status update**
+  - [x] Add a dense creation/completion note to `sprint-status.yaml` matching this project's established convention (see Stories 3.1, 3.5, 3.6, 3.10, 3.11 for shape).
 
 ## Dev Notes
 
@@ -183,6 +183,7 @@ GPT-5 Codex
 - 2026-08-25 Task 4 RED: real-browser axe found `Reject proposal` contrast at 3.82:1, and keyboard navigation to Results left focus on `<body>`. GREEN: the shared destructive button uses an AA-safe solid treatment and Results focuses its heading on route entry. Both new specs passed `4/4` across Chromium + Edge; full Vitest remained `78` files / `522` tests with typecheck/lint green.
 - 2026-08-25 Task 5 RED: generator unit tests failed because no JUnit evidence parser existed. GREEN: `5` generator tests and `74` convention tests passed; clean-tree JUnit recorded `4/4` required browser executions with zero failures/errors/skips. Code commit `8873c9e`; separately bound evidence commit `151b156`.
 - 2026-08-25 Task 6 RED: registry tests failed with no `repair_browser_journey` invariant/checks and no accessibility-suite extension. GREEN: `41` Gate A readiness tests pass, including registry uniqueness, coverage, project requirements, and the deliberate fifth evidence registration.
+- 2026-08-25 Task 7: backend default `1282 passed / 1 skipped / 7 deselected`; PostgreSQL `95 passed / 1195 deselected`; frontend Vitest `78` files / `522` tests; Playwright `52/52` across Chromium + Edge, matching `--list` (`9` files); evidence convention `74 passed`; Alembic detected no upgrade operations; build/typecheck/lint green (three pre-existing Fast Refresh warnings). Gate A: `gate_a_passed: true`, `blocking: []`, all ten invariants passed including `repair_browser_journey`.
 
 ### Completion Notes List
 
@@ -192,6 +193,9 @@ GPT-5 Codex
 - Task 4 complete: the repair surfaces are axe-clean in all named states, keyboard-operable, and expose distinct literal status text; two surfaced accessibility defects were fixed explicitly.
 - Task 5 complete: clean-tree browser results are bound through all NFR27 keys in a top-level `passed: true` evidence artifact and registered for deterministic rebinding.
 - Task 6 complete: Gate A now has separate live-browser and evidence checks for the repair journey, while the new accessibility spec extends the existing browser-layer invariant.
+- Task 7 complete: full regression, migration drift, evidence convention, and Gate A all pass with no blocking result.
+- Task 8 complete: sprint tracking now records the shipped proof, surfaced accessibility fixes, clean-tree evidence binding, and final gate counts.
+- Definition of Done complete: all tasks/ACs are satisfied, the final post-task regression passed (`1281 passed / 2 skipped / 7 deselected`, Vitest `78/522`, Playwright `52/52`), File List and Change Log are complete, and the story is ready for review.
 
 ### File List
 
@@ -210,3 +214,8 @@ GPT-5 Codex
 - `evidence/story-3.12/repair-browser-journey.json`
 - `backend/scripts/gate_a_checks.py`
 - `backend/tests/test_gate_a_readiness.py`
+- `evidence/story-1.11/gate-a-readiness-report.json`
+
+### Change Log
+
+- 2026-08-25: Implemented Story 3.12 browser repair proof, fixed two surfaced accessibility defects, generated bound evidence, and registered/passed the new Gate A invariant.

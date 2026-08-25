@@ -43,6 +43,31 @@
 generated: 2026-07-24
 last_updated: 2026-08-25
 
+# NOTE (2026-08-25): Story 3-12 DEV COMPLETE. The final Epic 3 proof now drives the real browser
+# route tree end to end through Chat evidence targeting, a persisted draft, explicit Run optimization,
+# Runs, a same-ID non-terminal Results reload, explicit terminal refresh, and candidate comparison.
+# The deterministic shared stub gained the actual message/execute/proposal/run wire and a fixed
+# running -> reconnect-running -> completed progression; one journey spec and one accessibility spec
+# run under both Chromium and Edge. The new accessibility pass found two real product defects that
+# the prior component-only coverage could not see: the DraftCard destructive action measured 3.82:1
+# contrast (now an AA-safe solid treatment), and keyboard route entry left Results focus on <body>
+# (now focused to the Results heading). No API route, backend application contract, migration, solver,
+# or golden eval case changed.
+#
+# EVIDENCE: evidence/story-3.12/repair-browser-journey.json was generated from a clean-tree streaming
+# Playwright JUnit run (4/4 required project/spec executions, zero failures/errors/skips), binds all
+# NFR27 keys to code commit 8873c9e, exposes top-level passed:true, and passed the 74-test evidence
+# convention. Gate A now pairs a live Playwright check and separate evidence check under the new
+# NFR29 repair_browser_journey invariant, while repair-journey-accessibility extends the existing
+# accessibility_browser_layer check; the refreshed report is committed separately at de2dc81.
+#
+# FINAL GATES (clean committed tree): backend default 1282 passed / 1 skipped / 7 deselected;
+# -m postgres 95 passed / 1195 deselected; frontend 78 files / 522 tests; Playwright 52/52 across
+# chromium+msedge, cross-checked against --list's 52 tests / 9 files; Alembic no new operations;
+# evidence convention 74 passed; build/typecheck/lint green (three pre-existing Fast Refresh
+# warnings); Gate A gate_a_passed:true, blocking:[], all ten invariants passed including the new
+# repair_browser_journey. Zero new migration files and zero backend/evals/golden/** cases.
+
 # NOTE (2026-08-25): Story 3-12 created and moved to ready-for-dev. It is Epic 3's THIRD and final
 # pure proof story — where 3.10 proved solver correctness and 3.11 proved backend recovery/
 # idempotency, 3.12 proves the same repair journey (draft, Run optimization, mid-run reconnect,
@@ -1712,7 +1737,7 @@ development_status:
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
   3-11-prove-recovery-and-idempotency: done
-  3-12-prove-the-repair-browser-journey: in-progress
+  3-12-prove-the-repair-browser-journey: review
   epic-3-retrospective: optional
 
   # Epic 4: Exact Baseline Decision and Decision Record
