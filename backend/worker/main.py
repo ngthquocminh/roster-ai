@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import math
 import os
 import signal
 import socket
 import sys
-import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
@@ -23,6 +24,10 @@ from worker.lease_worker import default_lease_seconds, run_once
 
 
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
+#: Ceiling for the consecutive-failure backoff. A worker that cannot reach its
+#: database must keep retrying — process supervision is Epic 5/6's — but it must
+#: not spin against a down dependency either.
+MAX_ERROR_BACKOFF_SECONDS = 60.0
 RUNTIME_FACTORY_ENV = "SHIFTMIND_WORKER_RUNTIME_FACTORY"
 
 
@@ -48,6 +53,21 @@ def install_shutdown_handlers(stop_event: Event) -> None:
     signal.signal(signal.SIGINT, request_stop)
 
 
+def _report_error(error: BaseException, backoff_seconds: float) -> None:
+    """Surface a transient failure without a logging framework.
+
+    This repo configures no logger (CLI paths use `print`), and swallowing the
+    traceback would make a looping worker undiagnosable.
+    """
+    print(
+        f"worker: run_once failed, retrying in {backoff_seconds:.1f}s: "
+        f"{type(error).__name__}: {error}",
+        file=sys.stderr,
+        flush=True,
+    )
+    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
+
+
 def run_worker_loop(
     engine: Any,
     repository: Any,
@@ -57,22 +77,47 @@ def run_worker_loop(
     lease_owner: str,
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     stop_event: Event | None = None,
-    sleep: Callable[[float], None] = time.sleep,
+    sleep: Callable[[float], object] | None = None,
+    on_error: Callable[[BaseException, float], object] | None = None,
 ) -> None:
-    """Poll until stopped, allowing an in-flight ``run_once`` to finish."""
-    if poll_interval_seconds <= 0:
-        raise ValueError("poll_interval_seconds must be positive")
+    """Poll until stopped, allowing an in-flight ``run_once`` to finish.
+
+    A transient failure (dropped connection, saturated pool, lost lease race)
+    must not end the process: without it the recovery guarantee this worker
+    exists to provide would be defeated by the first blip. Failures back off
+    exponentially to `MAX_ERROR_BACKOFF_SECONDS` and reset on the next success.
+    """
+    if not math.isfinite(poll_interval_seconds) or poll_interval_seconds <= 0:
+        # `inf` and `nan` both slip past a bare `<= 0` check, and `sleep(inf)`
+        # parks the process in a wait no signal handler can shorten.
+        raise ValueError("poll_interval_seconds must be a positive finite number")
     stopping = stop_event or Event()
+    # `Event.wait` returns as soon as shutdown is requested; `time.sleep` would
+    # resume the full interval first (PEP 475) and delay a supervisor's stop.
+    wait = sleep if sleep is not None else stopping.wait
+    report = on_error if on_error is not None else _report_error
+    backoff_seconds = 0.0
     while not stopping.is_set():
-        outcome = run_once(
-            engine,
-            repository,
-            scheduler,
-            lease_owner=lease_owner,
-            lease_seconds=default_lease_seconds(settings),
-        )
+        try:
+            outcome = run_once(
+                engine,
+                repository,
+                scheduler,
+                lease_owner=lease_owner,
+                lease_seconds=default_lease_seconds(settings),
+            )
+        except Exception as error:  # noqa: BLE001 — a poll loop owns every failure
+            backoff_seconds = min(
+                MAX_ERROR_BACKOFF_SECONDS,
+                max(poll_interval_seconds, backoff_seconds * 2),
+            )
+            report(error, backoff_seconds)
+            if not stopping.is_set():
+                wait(backoff_seconds)
+            continue
+        backoff_seconds = 0.0
         if outcome is None and not stopping.is_set():
-            sleep(poll_interval_seconds)
+            wait(poll_interval_seconds)
 
 
 def _load_runtime_factory(reference: str) -> RuntimeFactory:
@@ -112,9 +157,19 @@ def main(argv: list[str] | None = None) -> int:
             "owned by Epic 5/6"
         )
 
-    runtime = _load_runtime_factory(args.runtime_factory)()
     stop_event = Event()
+    # Installed BEFORE the factory runs: a signal arriving while the factory is
+    # opening connections would otherwise take the default disposition and skip
+    # the `dispose()` below, leaking them.
     install_shutdown_handlers(stop_event)
+    try:
+        runtime = _load_runtime_factory(args.runtime_factory)()
+    except (ImportError, AttributeError, TypeError, ValueError) as error:
+        # A mistyped reference is operator error, not a crash worth a traceback.
+        parser.error(
+            f"could not load --runtime-factory {args.runtime_factory!r}: "
+            f"{type(error).__name__}: {error}"
+        )
     try:
         run_worker_loop(
             runtime.engine,
@@ -138,6 +193,7 @@ if __name__ == "__main__":
 
 __all__ = [
     "DEFAULT_POLL_INTERVAL_SECONDS",
+    "MAX_ERROR_BACKOFF_SECONDS",
     "RUNTIME_FACTORY_ENV",
     "WorkerRuntimeV1",
     "install_shutdown_handlers",

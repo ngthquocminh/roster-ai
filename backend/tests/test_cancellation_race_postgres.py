@@ -623,16 +623,22 @@ def test_conflicting_cancel_version_is_rejected_after_real_database_contention(
         except Exception as exc:  # noqa: BLE001 - asserted below
             failures["conflict"] = exc
 
-    with governed_postgres_engine.begin() as blocker:
-        blocker.execute(text("LOCK TABLE schedule_run IN ACCESS EXCLUSIVE MODE"))
-        thread = threading.Thread(target=conflicting_replay)
-        thread.start()
-        assert started.wait(15)
-        assert _wait_for_blocked_backend(governed_postgres_engine), (
-            "conflicting replay never contended on the real database"
-        )
+    thread = threading.Thread(target=conflicting_replay)
+    try:
+        with governed_postgres_engine.begin() as blocker:
+            blocker.execute(text("LOCK TABLE schedule_run IN ACCESS EXCLUSIVE MODE"))
+            thread.start()
+            assert started.wait(15)
+            assert _wait_for_blocked_backend(governed_postgres_engine), (
+                "conflicting replay never contended on the real database"
+            )
+    finally:
+        # An assertion inside the blocker block releases the lock on the way
+        # out, but without this join the replay thread outlives the test and
+        # keeps mutating the module-scoped database under later tests.
+        if thread.is_alive() or thread.ident is not None:
+            thread.join(timeout=45)
 
-    thread.join(timeout=45)
     assert not thread.is_alive(), "conflicting replay remained blocked"
     assert isinstance(failures.get("conflict"), IdempotencyKeyConflictError)
     with governed_postgres_engine.connect() as connection:
