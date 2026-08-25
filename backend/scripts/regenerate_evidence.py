@@ -71,6 +71,13 @@ EVIDENCE_FILES: tuple[str, ...] = (
     "evidence/story-2.4/nfr35-sse-reconnect-replay.json",
     # Story 3.5. Bootstrapped by generate_run_event_latency_evidence.py.
     "evidence/story-3.5/nfr35-first-run-event.json",
+    # Stories 3.10 and 3.11. Bootstrapped by their own report generators
+    # (`evals/repair_correctness_report.py`, `evals/recovery_idempotency_report.py`);
+    # registered here so they are re-bindable like every other evidence file.
+    # Their absence meant the retired Story 3.5 measurement was refreshed by a
+    # rebinding pass while the measurements superseding it were skipped.
+    "evidence/story-3.10/repair-correctness.json",
+    "evidence/story-3.11/recovery-idempotency.json",
 )
 
 #: Anchored at line end only. `pytest -q` prefixes the line with its progress
