@@ -1,16 +1,37 @@
 {
   "artifact_versions": {
+    "algorithm": "sha256",
     "evidence_schema": "NFR27 bindings + schema_version",
-    "job_lease": "1",
-    "run_snapshot": "1",
-    "schedule_version": "1",
-    "stream_cursor": "1"
+    "job_lease": {
+      "module": "backend/application/contracts/job_lease.py",
+      "sha256": "5c780f325eaad4650e6d1a05ea11fc17314b1b437a92dda5f1b3f7d9a904028f",
+      "version": "1"
+    },
+    "run_snapshot": {
+      "module": "backend/application/contracts/run_snapshot.py",
+      "sha256": "ca710e1dad48a37634b4f3990455134398c0c0ab5b343875d7a8468b23254d00",
+      "version": "1"
+    },
+    "schedule_version": {
+      "module": "backend/application/contracts/schedule_version.py",
+      "sha256": "539947044a40c8b832535c2e21d30a6769a9b7ba08524755db780cb467d11ddf",
+      "version": "1"
+    },
+    "stream_cursor": {
+      "module": "backend/application/contracts/stream_cursor.py",
+      "sha256": "8d50994a0b136cbcd7f6b0f538708b379bbd3164c20f611dc0c5e78fbb3728b4",
+      "version": "1"
+    }
   },
+  "failed_gates": [],
   "failure_modes": {
     "browser reconnect": {
       "gates": [
-        "schedule_stream_reconnect",
-        "conversation_stream_reconnect"
+        "schedule_stream_replay",
+        "schedule_stream_header_cursor",
+        "conversation_stream_replay",
+        "conversation_stream_cursor_strictly_greater",
+        "conversation_stream_header_precedence"
       ],
       "passed": true
     },
@@ -23,19 +44,29 @@
     },
     "command replay": {
       "gates": [
-        "command_replay"
+        "command_replay",
+        "concurrent_cancellation_replay"
       ],
       "passed": true
     },
     "conflicting idempotency": {
       "gates": [
-        "conflicting_cancellation_idempotency"
+        "conflicting_cancellation_idempotency",
+        "conflicting_cancel_bundle",
+        "conflicting_cancel_command_version",
+        "conflicting_enqueue_version",
+        "conflicting_conversation_version",
+        "conflicting_conversation_body",
+        "conflicting_api_409_mapping"
       ],
       "passed": true
     },
     "lease expiry": {
       "gates": [
-        "lease_expiry"
+        "lease_expiry",
+        "lease_expiry_stale_worker_writes_no_candidate",
+        "lease_expiry_transient_failure_stays_leasable",
+        "lease_expiry_fatal_failure_is_terminal"
       ],
       "passed": true
     },
@@ -48,7 +79,7 @@
     "worker kill": {
       "gates": [
         "worker_kill",
-        "orphan_safety"
+        "worker_kill_orphan_safety"
       ],
       "passed": true
     }
@@ -66,27 +97,71 @@
       "node": "tests/test_cancellation_race_postgres.py::test_concurrent_replay_of_one_idempotency_key_returns_the_stored_result",
       "passed": true
     },
+    "conflicting_api_409_mapping": {
+      "node": "tests/test_schedule_runs_api.py::test_cancellation_route_maps_command_problems",
+      "passed": true
+    },
+    "conflicting_cancel_bundle": {
+      "node": "tests/test_cancellation_race_postgres.py::test_cancel_bundle_replay_conflict_and_rollback_cover_all_three_writes",
+      "passed": true
+    },
+    "conflicting_cancel_command_version": {
+      "node": "tests/test_cancel_schedule_run.py::test_cancel_command_conflicts_when_expected_version_changes_on_replay",
+      "passed": true
+    },
     "conflicting_cancellation_idempotency": {
       "node": "tests/test_cancellation_race_postgres.py::test_conflicting_cancel_version_is_rejected_after_real_database_contention",
       "passed": true
     },
-    "conversation_stream_reconnect": {
+    "conflicting_conversation_body": {
+      "node": "tests/test_conversations_postgres.py::test_same_idempotency_key_with_another_body_conflicts_without_applying",
+      "passed": true
+    },
+    "conflicting_conversation_version": {
+      "node": "tests/test_conversations_postgres.py::test_replaying_a_key_against_another_expected_version_conflicts",
+      "passed": true
+    },
+    "conflicting_enqueue_version": {
+      "node": "tests/test_enqueue_compute.py::test_enqueue_compute_rejects_same_key_with_a_different_expected_version",
+      "passed": true
+    },
+    "conversation_stream_cursor_strictly_greater": {
+      "node": "tests/test_conversation_stream_api.py::test_a_cursor_replays_only_strictly_greater_sequences",
+      "passed": true
+    },
+    "conversation_stream_header_precedence": {
       "node": "tests/test_conversation_stream_api.py::test_the_last_event_id_header_wins_over_the_query_parameter",
+      "passed": true
+    },
+    "conversation_stream_replay": {
+      "node": "tests/test_conversation_stream_api.py::test_the_stream_opens_with_a_heartbeat_then_replays_every_outstanding_event",
       "passed": true
     },
     "lease_expiry": {
       "node": "tests/test_job_leasing_postgres.py::test_expired_worker_is_fenced_and_recovered_worker_finishes_once",
       "passed": true
     },
+    "lease_expiry_fatal_failure_is_terminal": {
+      "node": "tests/test_job_leasing_postgres.py::test_fatal_failure_after_lease_is_terminal_and_never_released",
+      "passed": true
+    },
+    "lease_expiry_stale_worker_writes_no_candidate": {
+      "node": "tests/test_job_leasing_postgres.py::test_a_stale_worker_writes_no_candidate_and_the_current_epoch_writes_exactly_one",
+      "passed": true
+    },
+    "lease_expiry_transient_failure_stays_leasable": {
+      "node": "tests/test_job_leasing_postgres.py::test_transient_failure_after_lease_stays_leasable_for_recovery",
+      "passed": true
+    },
     "live_worker_latency": {
       "node": "tests/test_worker_process_recovery_postgres.py::test_nfr35_live_worker_reaches_running_within_five_seconds",
       "passed": true
     },
-    "orphan_safety": {
-      "node": "tests/test_job_leasing_postgres.py::test_mark_running_cannot_create_a_jobless_solver_running_orphan",
+    "schedule_stream_header_cursor": {
+      "node": "tests/test_schedule_run_stream_api.py::test_header_cursor_wins_and_foreign_cursor_performs_zero_queries",
       "passed": true
     },
-    "schedule_stream_reconnect": {
+    "schedule_stream_replay": {
       "node": "tests/test_schedule_run_stream_api.py::test_run_stream_replays_only_unseen_literal_progress",
       "passed": true
     },
@@ -97,51 +172,77 @@
     "worker_kill": {
       "node": "tests/test_worker_process_recovery_postgres.py::test_hard_killed_worker_is_reclaimed_and_commits_one_candidate",
       "passed": true
+    },
+    "worker_kill_orphan_safety": {
+      "node": "tests/test_job_leasing_postgres.py::test_mark_running_cannot_create_a_jobless_solver_running_orphan",
+      "passed": true
     }
   },
-  "generated_at": "2026-08-24T17:50:02.611546+00:00",
+  "generated_at": "2026-08-25T01:57:09.364206+00:00",
   "honest_gaps": [
     "mid-solve CP-SAT preemption remains NOT COVERED and has no current story owner",
-    "worker deployment composition remains owned by Epic 5/6"
+    "worker deployment AND runtime-factory composition remain owned by Epic 5/6; the entry point has no non-test factory today",
+    "recorded dataset digests are not yet re-verified by any drift check"
   ],
   "nfr35_live_worker": {
-    "clock_boundary": "committed queue acknowledgement to persisted run.running.v1",
-    "maximum_duration_ms": 122.426,
+    "clock_boundary": "committed queue acknowledgement (job row flipped to `queued` and committed) to persisted run.running.v1",
+    "maximum_duration_ms": 772.406,
     "measurements": [
       {
-        "duration_ms": 56.611,
+        "cold_start": true,
+        "duration_ms": 772.406,
         "event": "run.running.v1",
+        "poll_interval_seconds": 1.0,
+        "poll_resolution_ms": 5.0,
         "run": 1
       },
       {
-        "duration_ms": 58.084,
+        "cold_start": false,
+        "duration_ms": 71.042,
         "event": "run.running.v1",
+        "poll_interval_seconds": 1.0,
+        "poll_resolution_ms": 5.0,
         "run": 2
       },
       {
-        "duration_ms": 122.426,
+        "cold_start": false,
+        "duration_ms": 76.99,
         "event": "run.running.v1",
+        "poll_interval_seconds": 1.0,
+        "poll_resolution_ms": 5.0,
         "run": 3
+      },
+      {
+        "cold_start": false,
+        "duration_ms": 57.457,
+        "event": "run.running.v1",
+        "poll_interval_seconds": 1.0,
+        "poll_resolution_ms": 5.0,
+        "run": 4
       }
     ],
     "passed": true,
-    "scope_note": "Includes real OS worker startup/polling, lease acquisition, and the queued-to-running database transition. Story 3.5's narrower run.queued.v1 read-path 'cannot fail by construction' note does not apply to this measurement. Network transit remains excluded.",
+    "scope_note": "Run 1 is the cold-start run and is REPORTED, not discarded, so the startup claim is literal: it carries whatever worker process start-up remains after launch. Runs 2-4 are warm. Each measurement records the poll interval it ran under and the poller resolution that bounds its precision. Network transit and the HTTP handler time from POST receipt to committed acknowledgement both remain EXCLUDED \u2014 no current release requirement assigns that narrower delta. Story 3.5's narrower run.queued.v1 read-path 'cannot fail by construction' note does not apply to this measurement.",
     "threshold_ms": 5000
   },
+  "passed": true,
   "release_blocking": false,
   "result": "passed",
   "story": "3.11",
   "version_bindings": {
     "application": "ShiftMind Stories 2.2-3.11 governed workflow",
     "code": {
-      "git_commit": "8901cf4d9d31fd829a376db0fb04e9c0a0a8987d",
+      "git_commit": "8ad4c139d90365341684399e7a5a09b446bfd9f3",
       "working_tree_dirty": false
     },
     "dataset": {
-      "file_count": 6,
+      "file_count": 9,
       "files": {
+        "backend/tests/test_cancel_schedule_run.py": {
+          "sha256": "b5dc69e6030fae1fa444f65afec13aff2224e53b93e56671a8c38c88edf7dce8"
+        },
         "backend/tests/test_cancellation_race_postgres.py": {
-          "sha256": "b4723f105e51be713716a56629e0029d2ea53d9e5aab0c3441175c8406105bd2"
+          "sha256": "27a0948c5a11086eaed90af6fc20c6580058ffe171e3c3c17a1d58ebbe9680f7"
         },
         "backend/tests/test_conversation_stream_api.py": {
           "sha256": "37458a3bc4b8a828402bc3078de7e20a063db7c904082bbca8a9aa94fe986b2a"
@@ -149,14 +250,20 @@
         "backend/tests/test_conversations_postgres.py": {
           "sha256": "f975290afcff7968d764c21e33517213b282889a80c6fb4d8fe6d1082aecc533"
         },
+        "backend/tests/test_enqueue_compute.py": {
+          "sha256": "cfb76478cbf9307fdb1ac41a9c68ca1f110da7fa427e5185657becae3313a5e5"
+        },
         "backend/tests/test_job_leasing_postgres.py": {
-          "sha256": "60d0562d802c2a7d2f95e7337782b86815654bdd5645c2378319e4c2e009b76e"
+          "sha256": "cb1389d4fb0c95108081cfa73daaad9cb0faa53ed01d31fe793684e1ad6a832d"
         },
         "backend/tests/test_schedule_run_stream_api.py": {
           "sha256": "53066b34a21513e9b911d072bdf30c3a6db7720be4bb05fc52c0ced133c38149"
         },
+        "backend/tests/test_schedule_runs_api.py": {
+          "sha256": "e090f97ed5080fc5fc7c7ab1dc0d1383eb4dbd96039360051377ddbb78ec1bb6"
+        },
         "backend/tests/test_worker_process_recovery_postgres.py": {
-          "sha256": "bc7d3929076374b028ef90e4adbb6aa8699175e45e7de602fc42838cb65b596a"
+          "sha256": "f3a4031df118192d60d6eae3ca1f19421540c4398ad932e2c8c618a0a7ca1a67"
         }
       },
       "kind": "version-controlled evaluation fixture artifacts"
