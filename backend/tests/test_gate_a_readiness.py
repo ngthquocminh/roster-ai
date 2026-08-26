@@ -576,6 +576,60 @@ def test_unbound_evidence_blocks_the_gate(tmp_path, monkeypatch):
             ), f"{entry['check']} is unbound but does not block"
 
 
+def test_main_refuses_to_report_success_over_its_own_unbound_output(
+    tmp_path, monkeypatch, capsys
+):
+    """It audited every other evidence file but never the one it wrote.
+
+    Regression for a Story 3.12 review miss: the readiness report was generated
+    while HEAD was a docs-only commit, so `code.git_commit` touched no code
+    file. `_is_code_path` excludes `docs/`, `evidence/`, `_bmad-output/` and
+    `*.md`, so the artifact proved nothing about the behaviour it measured —
+    and `main()` still printed `gate_a_passed: true` and exited 0. The repo-wide
+    convention sweep caught it, but only on a later run; CI found it, a human
+    did not.
+    """
+    from scripts import gate_a_readiness
+
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(
+        gate_a_readiness,
+        "build_report",
+        lambda *_a, **_k: {
+            "gate_a_passed": True,
+            "blocking": [],
+            "ar28_invariants": {},
+            "nfr29_gates": {},
+            "ac2_gates": {},
+        },
+    )
+    monkeypatch.setattr(
+        gate_a_readiness,
+        "audit_evidence_file",
+        lambda *_a, **_k: ("git_commit deadbeef touches no code file",),
+    )
+
+    exit_code = gate_a_readiness.main(
+        [
+            "--pytest-xml", str(_write(tmp_path, "pytest.xml", PYTEST_XML)),
+            "--vitest-xml", str(_write(tmp_path, "vitest.xml", VITEST_XML)),
+            "--playwright-xml", str(_write(tmp_path, "playwright.xml", PLAYWRIGHT_XML)),
+            "--output", str(output),
+            "--allow-dirty",
+            "--allow-missing",
+        ]
+    )
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "UNBOUND" in out
+    assert "touches no code file" in out
+    # The file is still written — the operator needs to see it — but the
+    # non-zero exit is what stops it being committed.
+    assert output.exists()
+    assert "gate_a_passed: true" not in out
+
+
 def test_build_report_accepts_pre_resolved_bindings():
     """Regenerating several evidence files in one pass needs this.
 
