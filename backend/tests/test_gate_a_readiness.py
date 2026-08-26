@@ -100,6 +100,7 @@ def test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant():
         # artifact was registered nowhere -- so Gate A reported green because
         # the proof was unbound, not because it held.
         "recovery_and_idempotency",
+        "repair_browser_journey",
     )
     assert all(inv.authority == "NFR29" for inv in NFR29_GATES)
     ar28_keys = {inv.key for inv in AR28_INVARIANTS}
@@ -109,6 +110,34 @@ def test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant():
 def test_every_invariant_has_at_least_one_contributing_check():
     for key in invariant_keys():
         assert checks_for(key), f"invariant {key} has no contributing check"
+
+
+def test_story_3_12_registers_live_and_evidence_proofs_and_extends_accessibility():
+    repair_checks = {check.check: check for check in GATE_A_CHECKS if check.story == "3.12"}
+    assert set(repair_checks) == {
+        "repair_browser_journey_proof",
+        "repair_browser_journey_evidence",
+        "repair_browser_journey_machinery",
+    }
+    assert repair_checks["repair_browser_journey_proof"].required_projects == (
+        "chromium",
+        "msedge",
+    )
+    assert repair_checks["repair_browser_journey_evidence"].evidence_path == (
+        "evidence/story-3.12/repair-browser-journey.json"
+    )
+    # The evidence check reads a stored `passed` flag and the generator never
+    # writes a failing artifact, so the flag outlives a journey that breaks.
+    # Story 3.11's `recovery_idempotency_report_machinery` set the precedent:
+    # no invariant may rest on a static evidence file alone.
+    machinery = repair_checks["repair_browser_journey_machinery"]
+    assert machinery.runner == "pytest"
+    assert machinery.test_files == ("backend/tests/test_repair_journey_evidence.py",)
+    assert machinery.evidence_path is None
+    accessibility = next(
+        check for check in GATE_A_CHECKS if check.check == "accessibility_browser_layer"
+    )
+    assert "frontend/e2e/repair-journey-accessibility.spec.ts" in accessibility.test_files
 
 
 def test_all_ten_gate_a_stories_contribute_a_check():
@@ -220,7 +249,7 @@ def test_api_parity_binds_a_test_that_still_exists():
     ), "api_parity's proving test is gone; the check now proves nothing"
 
 
-def test_registered_evidence_files_are_the_four_known_ones():
+def test_registered_evidence_files_are_the_five_known_ones():
     """A stored `passed` flag answering a present-tense question is a category
     error the registry tolerates only where a shared CI runner cannot reproduce
     the measurement. Keep that set small and named, so growth is deliberate.
@@ -242,6 +271,9 @@ def test_registered_evidence_files_are_the_four_known_ones():
         # live pytest check on its generator, so the invariant does not rest
         # on a stored flag alone.
         "evidence/story-3.11/recovery-idempotency.json",
+        # Story 3.12 pairs this clean-tree browser measurement with the live
+        # Playwright journey check registered on the same invariant.
+        "evidence/story-3.12/repair-browser-journey.json",
     }
 
 
@@ -542,6 +574,60 @@ def test_unbound_evidence_blocks_the_gate(tmp_path, monkeypatch):
             assert any(
                 b["check"] == entry["check"] for b in report["blocking"]
             ), f"{entry['check']} is unbound but does not block"
+
+
+def test_main_refuses_to_report_success_over_its_own_unbound_output(
+    tmp_path, monkeypatch, capsys
+):
+    """It audited every other evidence file but never the one it wrote.
+
+    Regression for a Story 3.12 review miss: the readiness report was generated
+    while HEAD was a docs-only commit, so `code.git_commit` touched no code
+    file. `_is_code_path` excludes `docs/`, `evidence/`, `_bmad-output/` and
+    `*.md`, so the artifact proved nothing about the behaviour it measured —
+    and `main()` still printed `gate_a_passed: true` and exited 0. The repo-wide
+    convention sweep caught it, but only on a later run; CI found it, a human
+    did not.
+    """
+    from scripts import gate_a_readiness
+
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(
+        gate_a_readiness,
+        "build_report",
+        lambda *_a, **_k: {
+            "gate_a_passed": True,
+            "blocking": [],
+            "ar28_invariants": {},
+            "nfr29_gates": {},
+            "ac2_gates": {},
+        },
+    )
+    monkeypatch.setattr(
+        gate_a_readiness,
+        "audit_evidence_file",
+        lambda *_a, **_k: ("git_commit deadbeef touches no code file",),
+    )
+
+    exit_code = gate_a_readiness.main(
+        [
+            "--pytest-xml", str(_write(tmp_path, "pytest.xml", PYTEST_XML)),
+            "--vitest-xml", str(_write(tmp_path, "vitest.xml", VITEST_XML)),
+            "--playwright-xml", str(_write(tmp_path, "playwright.xml", PLAYWRIGHT_XML)),
+            "--output", str(output),
+            "--allow-dirty",
+            "--allow-missing",
+        ]
+    )
+
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "UNBOUND" in out
+    assert "touches no code file" in out
+    # The file is still written — the operator needs to see it — but the
+    # non-zero exit is what stops it being committed.
+    assert output.exists()
+    assert "gate_a_passed: true" not in out
 
 
 def test_build_report_accepts_pre_resolved_bindings():

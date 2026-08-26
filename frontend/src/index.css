@@ -24,6 +24,7 @@
     --color-input: var(--input);
     --color-border: var(--border);
     --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
@@ -82,6 +83,10 @@
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
+    /* Governed pairing for the solid `destructive` button treatment. Declared
+       as a token rather than a raw `text-white` utility so the foreground
+       follows the palette if `--destructive` is ever re-themed. */
+    --destructive-foreground: #FFFFFF;
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: #4F46E5;

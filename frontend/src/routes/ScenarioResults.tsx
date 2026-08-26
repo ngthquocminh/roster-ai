@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useParams } from "react-router";
 import { ComparisonSummary } from "@/components/run-results/ComparisonSummary";
 import { TerminalOutcomeCard } from "@/components/run-results/TerminalOutcomeCard";
@@ -15,11 +16,16 @@ const KNOWN_RUN_STATUSES = new Set([...NON_TERMINAL, ...NON_PROMOTABLE, "solver_
 export function ScenarioResults() {
   const { runId = "", scenarioId = "" } = useParams();
   const query = useScheduleRunResult(runId);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [runId]);
 
   return (
     <section aria-labelledby="scenario-results-heading" className="mx-auto mt-6 max-w-6xl space-y-5" data-run-id={runId} data-scenario-id={scenarioId}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold" id="scenario-results-heading">Results</h2>
+        <h2 className="text-xl font-semibold outline-none" id="scenario-results-heading" ref={headingRef} tabIndex={-1}>Results</h2>
         <Button disabled={query.isFetching} onClick={() => { void query.refetch(); }} type="button" variant="outline">{query.isFetching ? "Refreshing…" : "Refresh"}</Button>
       </div>
 

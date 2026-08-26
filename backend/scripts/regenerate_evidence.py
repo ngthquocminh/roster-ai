@@ -78,6 +78,9 @@ EVIDENCE_FILES: tuple[str, ...] = (
     # rebinding pass while the measurements superseding it were skipped.
     "evidence/story-3.10/repair-correctness.json",
     "evidence/story-3.11/recovery-idempotency.json",
+    # Story 3.12. Bootstrapped from the committed Playwright JUnit report by
+    # generate_repair_journey_evidence.py.
+    "evidence/story-3.12/repair-browser-journey.json",
 )
 
 #: Anchored at line end only. `pytest -q` prefixes the line with its progress

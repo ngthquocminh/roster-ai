@@ -41,7 +41,108 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-25
+last_updated: 2026-08-26
+
+# NOTE (2026-08-26): Story 3-12 CODE REVIEW COMPLETE — back to in-progress, not done.
+# Three layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) ran; 3 decision-needed
+# (all resolved), 13 patches (all applied and verified), 4 deferred to deferred-work.md,
+# 2 dismissed. The load-bearing finding: AC1's "terminal outcome" state was never rendered in a
+# browser — the stub served a result endpoint for the running run only, so ScenarioResults'
+# NON_PROMOTABLE branch (TerminalOutcomeCard) was structurally unreachable and the accessibility
+# spec stopped one keypress short of it, while the Gate A invariant advertised "terminal outcome".
+# Also fixed: the agent-availability stub matched /api/v1/agent/availability while the app calls
+# /api/v1/agent-availability, so that branch was dead and Chat 404'd for the whole journey;
+# Decision 4a's "test-controlled counter" was app-controlled (installApiStubs now returns the stub
+# state and the spec calls completeRun()); the stubbed timeline dropped the planner's own message;
+# three assertions could not fail; the evidence dataset binding omitted the two stub modules that
+# decide every asserted value; the generator's own tests were registered at no Gate A check.
+# Decisions taken: prove ONE terminal status (the card is status-independent and the per-status
+# badge literals are already asserted against the Runs table); DISCLOSE that the seven evidence
+# result keys alias two spec verdicts rather than splitting the specs seven ways; DROP the NFR20
+# claim rather than add zoom/reduced-motion coverage to three more routes (portfolio-MVP scope).
+# Verified after patching: Playwright 52/52 (chromium+msedge), Vitest 79 files / 529 tests,
+# tsc clean, changed-surface backend tests 128 passed.
+# CLOSED OUT the same day once PostgreSQL 18 was up. Convention order held across four commits:
+# 4c4cadf (all 13 patches) -> 099d3b8 (story-3.12 evidence alone) -> 22a95d3 (a regression-figure
+# correction; the readiness generator correctly REFUSED to bind until it was committed) ->
+# 729b23f (gate-a readiness alone). Story 3.12 evidence rebound at 4c4cadf on a clean tree:
+# dataset file_count 2 -> 4 (the stub modules that decide every asserted value are now bound),
+# protocol.measurement pins the JUnit report by path/sha256/run_started, results_derivation
+# discloses the seven-keys-two-verdicts aliasing, NFR20 dropped. Readiness rebound at 22a95d3 from
+# three captures that all postdate the commit, so no runner carries a stale marker.
+# GATE A: gate_a_passed true, blocking []. All ten invariants pass. repair_browser_journey now
+# rests on THREE checks (live Playwright proof, bound evidence, and the new
+# repair_browser_journey_machinery pytest check) instead of two.
+# Final: pytest 1290 passed / 1 skipped / 7 deselected; -m postgres 95 passed / 0 skipped;
+# vitest 529; Playwright 52 (chromium+msedge); alembic check clean.
+# ONE REVIEW CONCLUSION WAS ITSELF WRONG AND IS CORRECTED IN THE STORY: the review first called the
+# Debug Log's "1282 passed / 1 skipped" a transcription error against the DoD's "1281 / 2".
+# Re-measuring disproved that — back-to-back runs on one commit gave 1289/2 then 1290/1 twice, the
+# split moving after `alembic upgrade head`. The pass/skip split is environment-conditional; the
+# stable invariant is the TOTAL (1283 pre-review, 1291 after the review's 8 new cases). Record the
+# total alongside the split in future stories or this non-discrepancy gets re-litigated every time.
+
+# NOTE (2026-08-25): Story 3-12 DEV COMPLETE. The final Epic 3 proof now drives the real browser
+# route tree end to end through Chat evidence targeting, a persisted draft, explicit Run optimization,
+# Runs, a same-ID non-terminal Results reload, explicit terminal refresh, and candidate comparison.
+# The deterministic shared stub gained the actual message/execute/proposal/run wire and a fixed
+# running -> reconnect-running -> completed progression; one journey spec and one accessibility spec
+# run under both Chromium and Edge. The new accessibility pass found two real product defects that
+# the prior component-only coverage could not see: the DraftCard destructive action measured 3.82:1
+# contrast (now an AA-safe solid treatment), and keyboard route entry left Results focus on <body>
+# (now focused to the Results heading). No API route, backend application contract, migration, solver,
+# or golden eval case changed.
+#
+# EVIDENCE: evidence/story-3.12/repair-browser-journey.json was generated from a clean-tree streaming
+# Playwright JUnit run (4/4 required project/spec executions, zero failures/errors/skips), binds all
+# NFR27 keys to code commit 8873c9e, exposes top-level passed:true, and passed the 74-test evidence
+# convention. Gate A now pairs a live Playwright check and separate evidence check under the new
+# NFR29 repair_browser_journey invariant, while repair-journey-accessibility extends the existing
+# accessibility_browser_layer check; the refreshed report is committed separately at de2dc81.
+#
+# FINAL GATES (clean committed tree): backend default 1282 passed / 1 skipped / 7 deselected;
+# -m postgres 95 passed / 1195 deselected; frontend 78 files / 522 tests; Playwright 52/52 across
+# chromium+msedge, cross-checked against --list's 52 tests / 9 files; Alembic no new operations;
+# evidence convention 74 passed; build/typecheck/lint green (three pre-existing Fast Refresh
+# warnings); Gate A gate_a_passed:true, blocking:[], all ten invariants passed including the new
+# repair_browser_journey. Zero new migration files and zero backend/evals/golden/** cases.
+
+# NOTE (2026-08-25): Story 3-12 created and moved to ready-for-dev. It is Epic 3's THIRD and final
+# pure proof story — where 3.10 proved solver correctness and 3.11 proved backend recovery/
+# idempotency, 3.12 proves the same repair journey (draft, Run optimization, mid-run reconnect,
+# terminal outcome, comparison) end to end in a real browser, plus accessibility on surfaces that
+# have never had browser-layer coverage before (NFR29, UX-DR10, UX-DR13; NFR18, NFR20, NFR29).
+#
+# MEASURED AT CREATION: every command this journey drives already exists and is an approved Gate A
+# write path (`docs/GATE-A-RUNBOOK.md`) — this story adds test infrastructure and a Gate A/evidence
+# registration, not product code. `frontend/e2e/support/apiStubs.ts` is GET-only today (405s every
+# mutating request) and no existing Playwright spec visits Chat, Runs, or Results — every browser
+# spec so far covers only Epic 1's read-only Fixture Catalogue/Scenario Data surfaces. `ScenarioResults`
+# has no live stream (no SSE hook is wired to the frontend for schedule runs, only Chat has one); it
+# reads the run by URL param and refetches on demand.
+#
+# TWO DECISIONS RESOLVE THE AC'S AMBIGUITY BEFORE DEV STARTS, so neither becomes a decision-grade
+# review finding the way Story 2.7's family/unit rule did:
+# (1) "Mid-run reconnect" proves the REST/URL contract (reload while non-terminal keeps the same run
+#     ID and re-renders correctly), NOT a live SSE wire reconnect — that is already proven at
+#     `test_schedule_run_stream_api.py` (backend) and `useConversationStream.test.tsx` (frontend
+#     hook). Playwright's `route.fulfill` cannot fixture a real incremental SSE stream, so this story
+#     does not attempt to.
+# (2) "Evidence targeting" is satisfied by re-exercising Chat's already-proven evidence jump
+#     (`EvidenceLink` → Scenario Data → Return to claim, Story 2.8, already covered by
+#     `keyboard-journey.spec.ts`) as one step of this longer journey — NOT by adding a working
+#     evidence link to the Results page, whose evidence list renders as plain text today
+#     (`ScenarioResults.tsx:38-41`) and stays that way; wiring it would be new UX-DR8-shaped product
+#     scope the frozen AC text does not name.
+#
+# Evidence/Gate-A plan: a thin one-off generator (`generate_repair_journey_evidence.py`, the Story
+# 2.4/3.5 shape — not the 3.10/3.11 pytest-node-aggregating report-generator shape, because this
+# proof is one Playwright spec's pass/fail, not a matrix of independently orchestrated failure
+# modes), a new NFR29 `repair_browser_journey` invariant with a playwright-runner check and a
+# separate evidence-path check (mirroring how `GateACheck` refuses combining the two), and an
+# extension of the EXISTING `accessibility_browser_layer` check's test files for AC2 rather than a
+# third invariant, since AC2's own text names it as the same Epic 1 suite gaining new surface
+# coverage. Zero new `backend/evals/golden/**` cases — this story has no LLM-scriptable turn.
 
 # NOTE (2026-08-25): Story 3-11 DONE. The dev-complete version of this note (see git history for
 # the superseded figures) claimed 11 exact gates and a reconciled ledger; code review found the
@@ -1675,7 +1776,7 @@ development_status:
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
   3-11-prove-recovery-and-idempotency: done
-  3-12-prove-the-repair-browser-journey: backlog
+  3-12-prove-the-repair-browser-journey: done
   epic-3-retrospective: optional
 
   # Epic 4: Exact Baseline Decision and Decision Record

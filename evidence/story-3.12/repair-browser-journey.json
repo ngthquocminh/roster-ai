@@ -1,0 +1,108 @@
+{
+  "story": "3.12",
+  "requirements": [
+    "NFR18",
+    "NFR29",
+    "UX-DR10",
+    "UX-DR13"
+  ],
+  "measurement_date": "2026-08-26",
+  "environment": {
+    "description": "local production frontend build exercised by Playwright",
+    "operating_system": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "python": "3.10.9",
+    "browser_projects": [
+      "chromium",
+      "msedge"
+    ],
+    "network_transit": "none; deterministic same-origin API route fixtures"
+  },
+  "protocol": {
+    "reporter": "frontend/e2e/support/streaming-junit-reporter.mjs",
+    "required_specs": {
+      "repair-journey.spec.ts": "completes draft, run, reconnect, comparison, and exact evidence targeting",
+      "repair-journey-accessibility.spec.ts": "keeps repair Chat, Runs, and Results axe-clean, keyboard-operable, and semantically literal"
+    },
+    "all_projects_must_pass": true,
+    "skips_are_failures": true,
+    "measurement": {
+      "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
+      "sha256": "40085b2f3d72c7698f60bdbdce647e86e2bd8dfbffbf61d1c685e95e5a0d1bbc",
+      "run_started": "2026-08-26T04:28:09.207Z"
+    }
+  },
+  "results_derivation": {
+    "note": "Each results key reports the pass/fail of the spec file containing its assertions, not an independent measurement.",
+    "journey_completion": "repair-journey.spec.ts",
+    "run_id_survives_reconnect": "repair-journey.spec.ts",
+    "evidence_link_resolves": "repair-journey.spec.ts",
+    "axe_browser": "repair-journey-accessibility.spec.ts",
+    "keyboard_operable": "repair-journey-accessibility.spec.ts",
+    "focus_management": "repair-journey-accessibility.spec.ts",
+    "semantic_status_text": "repair-journey-accessibility.spec.ts"
+  },
+  "results": {
+    "journey_completion": "passed",
+    "run_id_survives_reconnect": "passed",
+    "evidence_link_resolves": "passed",
+    "axe_browser": "passed",
+    "keyboard_operable": "passed",
+    "focus_management": "passed",
+    "semantic_status_text": "passed"
+  },
+  "project_outcomes": {
+    "chromium": {
+      "repair-journey.spec.ts": true,
+      "repair-journey-accessibility.spec.ts": true
+    },
+    "msedge": {
+      "repair-journey.spec.ts": true,
+      "repair-journey-accessibility.spec.ts": true
+    }
+  },
+  "passed": true,
+  "contract_digests": {
+    "algorithm": "sha256",
+    "sample_tiny_input": "77da9cadedd6535b255306cb0acad2ed5eed2ec80045b392ec58a2dfcab0890e",
+    "sample_tiny_input_more_tm": "2d9212ffb453b01a2e9c7266a5c1d5194085a40ece03fdb132db86b1eb8a340c"
+  },
+  "version_bindings": {
+    "dataset": {
+      "kind": "version-controlled evaluation fixture artifacts",
+      "file_count": 4,
+      "files": {
+        "frontend/e2e/repair-journey-accessibility.spec.ts": {
+          "sha256": "f9debe265204bb907527b41a5a01aa69d883a109213f868a55b48ae85f0bdc77"
+        },
+        "frontend/e2e/repair-journey.spec.ts": {
+          "sha256": "776adbe2fda9aae60b9c9f5d175dc0281d92a0000ae204a957c7a51c1d7ea90b"
+        },
+        "frontend/e2e/support/apiStubs.ts": {
+          "sha256": "010a14707a952b4bf258d012c3edd44e33a6af73dad9573e394863d9d6705ae3"
+        },
+        "frontend/e2e/support/repairJourneyStubState.ts": {
+          "sha256": "f7504f9fa41251ab950af79e65ce53d990ecafcdcdcb5f5ee130a067e1c760b1"
+        }
+      }
+    },
+    "evaluator": "Playwright streaming JUnit report; both required specs must execute without failures, errors, or skips in Chromium and Microsoft Edge",
+    "model": "not applicable — deterministic browser fixtures; no model invocation",
+    "prompt": "not applicable — no model invocation",
+    "tool": "Playwright 1.62.1 production-build browser run with @axe-core/playwright 4.12.1 and the committed streaming JUnit reporter",
+    "policy": "NFR18/NFR29 and UX-DR10/UX-DR13: draft-to-comparison journey, same-run reconnect, terminal outcome, exact evidence targeting, axe, keyboard, focus, and literal semantic status assertions all block release",
+    "application": "local frontend production build served by Vite preview",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable — deterministic browser fixture responses; no solver run",
+    "code": {
+      "git_commit": "4c4cadfa8d45cae422130a0c9873070d06d47e3c",
+      "working_tree_dirty": false
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    },
+    "schema_version": "c4d5e6f7a8b9"
+  }
+}

@@ -3,6 +3,27 @@ import { fileURLToPath } from "node:url";
 
 import type { Page, Route } from "@playwright/test";
 
+import {
+  CONVERSATION_ID,
+  createRepairJourneyStubState,
+  EVIDENCE_RECORD_ID,
+  PROPOSAL_ID,
+  SCHEDULE_RUN_ID,
+  SCENARIO_ID,
+  SCENARIO_VERSION_ID,
+} from "./repairJourneyStubState";
+
+export {
+  CONVERSATION_ID,
+  EVIDENCE_RECORD_ID,
+  PROPOSAL_ID,
+  SCHEDULE_RUN_ID,
+  SCENARIO_ID,
+  SCENARIO_VERSION_ID,
+  TERMINAL_RUN_IDS,
+  TIMED_OUT_RUN_ID,
+} from "./repairJourneyStubState";
+
 type Contract = Readonly<{
   fixture: { fixture_id: string; version: string };
   overview: Record<string, unknown>;
@@ -26,10 +47,6 @@ function loadContract(fixture: FixtureKey): Contract {
   return JSON.parse(readFileSync(contractPath, "utf8")) as Contract;
 }
 
-export const SCENARIO_ID = "11111111-1111-4111-8111-111111111111";
-export const SCENARIO_VERSION_ID = "22222222-2222-4222-8222-222222222222";
-export const CONVERSATION_ID = "55555555-5555-4555-8555-555555555555";
-export const EVIDENCE_RECORD_ID = "outbound:0";
 const SITE_ID = "33333333-3333-4333-8333-333333333333";
 const common = {
   schema_version: "v1",
@@ -98,11 +115,21 @@ function pageFor(contract: Contract, group: string, url: URL) {
 
 export async function installApiStubs(page: Page, options?: { fixture?: FixtureKey }) {
   const contract = loadContract(options?.fixture ?? "tiny");
+  const repairJourney = createRepairJourneyStubState();
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
 
+    if (request.method() === "POST" && path === `/api/v1/conversations/${CONVERSATION_ID}/messages`) {
+      return json(route, repairJourney.acceptMessage(), 201);
+    }
+    if (request.method() === "POST" && path.startsWith(`/api/v1/conversations/${CONVERSATION_ID}/agent-runs/`) && path.endsWith("/execute")) {
+      return json(route, repairJourney.executeTurn());
+    }
+    if (request.method() === "POST" && path === "/api/v1/schedule-runs") {
+      return json(route, repairJourney.startedRun());
+    }
     if (request.method() !== "GET") {
       return json(route, { detail: "Method not allowed in deterministic e2e stub" }, 405);
     }
@@ -124,54 +151,78 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
         has_more: false,
       });
     }
+    // Path must match `frontend/src/api/agentAvailability.ts` exactly — the
+    // hyphenated form. A `/agent/availability` spelling never matched, so this
+    // branch was dead and every Chat open fell through to the 404 tail.
+    if (path === "/api/v1/agent-availability") {
+      return json(route, { available: true, reason: null, observed_at: "2026-08-25T01:00:00Z" });
+    }
     if (path === `/api/v1/conversations/${CONVERSATION_ID}/timeline`) {
+      const baseItems = [{
+        schema_version: "1",
+        activity_id: "66666666-6666-4666-8666-666666666666",
+        activity_type: "agent_response",
+        conversation_id: CONVERSATION_ID,
+        conversation_resource_version: 2,
+        scenario_id: SCENARIO_ID,
+        scenario_version_id: SCENARIO_VERSION_ID,
+        occurred_at: "2026-08-15T00:00:00Z",
+        sequence: "1",
+        response: {
+          schema_version: "1",
+          scenario_version_id: SCENARIO_VERSION_ID,
+          segments: [{
+            schema_version: "1",
+            kind: "claim",
+            metric: "required_headcount_minutes",
+            arguments: { schema_version: "1", task_id: "pick", family: "outbound", start_minute: 2880, end_minute: 3600 },
+            result_id: "e2e-result-1",
+            value: 720,
+            unit: "minutes",
+            verdict: "supported",
+            failure: null,
+            evidence_refs: [{
+              schema_version: "1",
+              scenario_version_id: SCENARIO_VERSION_ID,
+              checksum_algorithm: "sha256",
+              checksum_schema_version: "rfc8785-v1",
+              checksum_digest: "a".repeat(64),
+              producing_run_version: null,
+              baseline_schedule_version: null,
+              group: "demand",
+              record_id: EVIDENCE_RECORD_ID,
+              field: "amount",
+              start_minute: 2880,
+              end_minute: 3600,
+            }],
+          }],
+        },
+      }];
       return json(route, {
         conversation_id: CONVERSATION_ID,
-        resource_version: 2,
+        resource_version: repairJourney.timelineItems(baseItems).length === baseItems.length ? 2 : 4,
         latest_agent_run_status: null,
-        items: [{
-          schema_version: "1",
-          activity_id: "66666666-6666-4666-8666-666666666666",
-          activity_type: "agent_response",
-          conversation_id: CONVERSATION_ID,
-          conversation_resource_version: 2,
-          scenario_id: SCENARIO_ID,
-          scenario_version_id: SCENARIO_VERSION_ID,
-          occurred_at: "2026-08-15T00:00:00Z",
-          sequence: "1",
-          response: {
-            schema_version: "1",
-            scenario_version_id: SCENARIO_VERSION_ID,
-            segments: [{
-              schema_version: "1",
-              kind: "claim",
-              metric: "required_headcount_minutes",
-              arguments: { schema_version: "1", task_id: "pick", family: "outbound", start_minute: 2880, end_minute: 3600 },
-              result_id: "e2e-result-1",
-              value: 720,
-              unit: "minutes",
-              verdict: "supported",
-              failure: null,
-              evidence_refs: [{
-                schema_version: "1",
-                scenario_version_id: SCENARIO_VERSION_ID,
-                checksum_algorithm: "sha256",
-                checksum_schema_version: "rfc8785-v1",
-                checksum_digest: "a".repeat(64),
-                producing_run_version: null,
-                baseline_schedule_version: null,
-                group: "demand",
-                record_id: EVIDENCE_RECORD_ID,
-                field: "amount",
-                start_minute: 2880,
-                end_minute: 3600,
-              }],
-            }],
-          },
-        }],
+        items: repairJourney.timelineItems(baseItems),
         limit: 200,
         has_more: false,
       });
+    }
+    if (path === `/api/v1/proposals/${PROPOSAL_ID}`) {
+      return json(route, repairJourney.proposal());
+    }
+    if (path === "/api/v1/schedule-runs") {
+      return json(route, repairJourney.runPage());
+    }
+    if (path === `/api/v1/schedule-runs/${SCHEDULE_RUN_ID}/result`) {
+      return json(route, repairJourney.nextResult());
+    }
+    // The pre-terminal rows in `runPage()` need result endpoints too, or the
+    // Runs table advertises a "View results" link that 404s and
+    // `ScenarioResults`' `NON_PROMOTABLE` branch can never render.
+    const resultMatch = /^\/api\/v1\/schedule-runs\/([^/]+)\/result$/.exec(path);
+    if (resultMatch) {
+      const terminal = repairJourney.terminalResult(resultMatch[1]!);
+      if (terminal) return json(route, terminal);
     }
     if (path === `/api/v1/scenarios/${SCENARIO_ID}`) {
       return json(route, {
@@ -204,4 +255,8 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
     }
     return json(route, { detail: `Unhandled e2e API path: ${path}` }, 404);
   });
+  // Returned so a spec can drive the scripted run's phase explicitly
+  // (`repairJourney.completeRun()`) instead of depending on how many result
+  // reads the application happens to issue. Existing specs ignore it.
+  return repairJourney;
 }

@@ -644,6 +644,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     staging.replace(args.output)
 
     print(f"Wrote {args.output}")
+
+    # Audit our OWN output, the way generate_repair_journey_evidence.main()
+    # already does. This module audits every other evidence file it reads
+    # (`_evidence_result`) but never the report it writes, so it could — and
+    # did — print `gate_a_passed: true` over an artifact bound to a docs-only
+    # commit. `_is_code_path` excludes `docs/`, `evidence/`, `_bmad-output/`
+    # and `*.md`, so generating while HEAD is a doc or evidence commit
+    # produces a report that proves nothing about the behaviour it measured.
+    # The repo-wide convention sweep catches it, but only if someone re-runs
+    # that suite after this step — and the runbook's step 3 is "commit the
+    # report", not "re-run the sweep". Fail here instead.
+    self_violations = audit_evidence_file(args.output, repo_root=REPO_ROOT)
+    if self_violations:
+        print("\nUNBOUND — this report violates docs/EVIDENCE-CONVENTION.md:")
+        for violation in self_violations:
+            print(f"  ! {violation}")
+        print(
+            "\nThe report was written but must not be committed as-is. If the "
+            "binding names a non-code commit, commit the code first (or land a "
+            "code-touching commit), re-run the measurements so they postdate "
+            "it, and regenerate."
+        )
+        return 1
+
     for key, rolled in report["ar28_invariants"].items():
         print(f"  [AR28] {key}: {rolled['result']}")
     for key, rolled in report["nfr29_gates"].items():
