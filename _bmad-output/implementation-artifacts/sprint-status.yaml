@@ -62,11 +62,25 @@ last_updated: 2026-08-26
 # claim rather than add zoom/reduced-motion coverage to three more routes (portfolio-MVP scope).
 # Verified after patching: Playwright 52/52 (chromium+msedge), Vitest 79 files / 529 tests,
 # tsc clean, changed-surface backend tests 128 passed.
-# BLOCKED, and why this is not 'done': evidence/story-3.12/repair-browser-journey.json is stale
-# (generator output changed) and needs a clean-tree regeneration, which requires committing the
-# code first per docs/EVIDENCE-CONVENTION.md; and evidence/story-1.11/gate-a-readiness-report.json
-# cannot be regenerated here because PostgreSQL was unreachable (no Docker daemon, no compose file),
-# so the -m postgres leg skipped instead of running. Gate A has NOT been re-run.
+# CLOSED OUT the same day once PostgreSQL 18 was up. Convention order held across four commits:
+# 4c4cadf (all 13 patches) -> 099d3b8 (story-3.12 evidence alone) -> 22a95d3 (a regression-figure
+# correction; the readiness generator correctly REFUSED to bind until it was committed) ->
+# 729b23f (gate-a readiness alone). Story 3.12 evidence rebound at 4c4cadf on a clean tree:
+# dataset file_count 2 -> 4 (the stub modules that decide every asserted value are now bound),
+# protocol.measurement pins the JUnit report by path/sha256/run_started, results_derivation
+# discloses the seven-keys-two-verdicts aliasing, NFR20 dropped. Readiness rebound at 22a95d3 from
+# three captures that all postdate the commit, so no runner carries a stale marker.
+# GATE A: gate_a_passed true, blocking []. All ten invariants pass. repair_browser_journey now
+# rests on THREE checks (live Playwright proof, bound evidence, and the new
+# repair_browser_journey_machinery pytest check) instead of two.
+# Final: pytest 1290 passed / 1 skipped / 7 deselected; -m postgres 95 passed / 0 skipped;
+# vitest 529; Playwright 52 (chromium+msedge); alembic check clean.
+# ONE REVIEW CONCLUSION WAS ITSELF WRONG AND IS CORRECTED IN THE STORY: the review first called the
+# Debug Log's "1282 passed / 1 skipped" a transcription error against the DoD's "1281 / 2".
+# Re-measuring disproved that — back-to-back runs on one commit gave 1289/2 then 1290/1 twice, the
+# split moving after `alembic upgrade head`. The pass/skip split is environment-conditional; the
+# stable invariant is the TOTAL (1283 pre-review, 1291 after the review's 8 new cases). Record the
+# total alongside the split in future stories or this non-discrepancy gets re-litigated every time.
 
 # NOTE (2026-08-25): Story 3-12 DEV COMPLETE. The final Epic 3 proof now drives the real browser
 # route tree end to end through Chat evidence targeting, a persisted draft, explicit Run optimization,
@@ -1762,7 +1776,7 @@ development_status:
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
   3-11-prove-recovery-and-idempotency: done
-  3-12-prove-the-repair-browser-journey: in-progress
+  3-12-prove-the-repair-browser-journey: done
   epic-3-retrospective: optional
 
   # Epic 4: Exact Baseline Decision and Decision Record

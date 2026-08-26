@@ -4,7 +4,7 @@ baseline_commit: 977f82b64324a5edbc1b93eb59d337b8db650375
 
 # Story 3.12: Prove the Repair Browser Journey
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -272,13 +272,23 @@ Behavioural changes worth naming, beyond the finding text:
 - `TERMINAL_RUNS` is hoisted to module scope and is now the single source for both `runPage()`'s rows and the new `terminalResult()` endpoint, so a row can no longer advertise a status its own result endpoint contradicts.
 - `--destructive-foreground` is a new governed token in `index.css`; `button.tsx` consumes it instead of raw `text-white`. Same rendered color (`#FFFFFF`), so no contrast change — the point is that the pairing is now tokenised and test-pinned.
 
-#### Outstanding after this review — evidence is NOT yet regenerated
+#### Evidence regenerated and Gate A re-run — 2026-08-26
 
-Two blockers, neither of which the patches themselves can clear:
+Both blockers cleared once PostgreSQL 18 was brought up (`docker compose up -d postgres`). Sequence followed `docs/EVIDENCE-CONVENTION.md` and `docs/GATE-A-RUNBOOK.md` §3 exactly — commit code → measure on a clean tree → generate → commit each evidence file on its own:
 
-1. **`evidence/story-3.12/repair-browser-journey.json` is stale.** Its `dataset` bindings, `results_derivation`, `protocol.measurement` provenance, and the `NFR20` removal all changed in the generator. Regenerating requires a **clean tree**, which means the code must be committed first (`docs/EVIDENCE-CONVENTION.md`: commit code → measure → generate → commit evidence separately). No commit was made — that was not part of the requested scope.
-2. **`evidence/story-1.11/gate-a-readiness-report.json` cannot be regenerated in this environment.** The readiness report needs the `-m postgres` leg (95 tests); PostgreSQL was unreachable during this session (Docker daemon not running, no compose file in the repo), so the default suite skipped 97 tests instead of deselecting them. Any readiness report generated here would under-report and must not be committed.
+| Commit | Contents |
+|---|---|
+| `4c4cadf` | all 13 patches (code, specs, stubs, generator, registry, story) |
+| `099d3b8` | `evidence/story-3.12/repair-browser-journey.json` only |
+| `22a95d3` | the regression-figure correction (dirtied the tree; the readiness generator correctly refused until it was committed) |
+| `729b23f` | `evidence/story-1.11/gate-a-readiness-report.json` only |
 
-Until both are done, `repair_browser_journey_evidence` still binds the pre-review generator output and Gate A has not been re-run.
+**Story 3.12 evidence** — regenerated at `4c4cadf`, `working_tree_dirty: false`, from a 52/52 Chromium + Edge run with zero failures, errors, or skips. Four changes from the pre-review artifact: `dataset.file_count` 2 → 4 (the two stub modules are now bound); `protocol.measurement` pins the JUnit report by repo-relative path, sha256, and `run_started`; `results_derivation` discloses the seven-keys-two-verdicts aliasing; `NFR20` removed from `requirements` and `policy`.
+
+**Gate A readiness** — regenerated at `22a95d3` from three fresh captures (pytest, vitest, streaming Playwright reporter) that all postdate the commit they bind, so no runner carries a stale-measurement marker. Verified there is no `"stale"` key anywhere in the report.
+
+- `gate_a_passed: **true**`, `blocking: **[]**`
+- All **ten** invariants pass, including `repair_browser_journey`, which now rests on **three** checks rather than two: the live Playwright proof, the bound evidence artifact, and the new `repair_browser_journey_machinery` pytest check.
+- Final counts: pytest **1290 passed / 1 skipped / 7 deselected**; `-m postgres` **95 passed / 1203 deselected / 0 skipped**; vitest **529**; Playwright **52** across `chromium` + `msedge`; `alembic check` — no new upgrade operations.
 
 **Refuted on verification (not findings).** (1) "Delete the `useEffect` in `ScenarioResults.tsx` and both specs still pass" — false: pressing Enter on `View progress` unmounts `RunsTable`, so the focused link leaves the DOM and focus falls to `body`, exactly as the Task 4 RED log recorded; `repair-journey-accessibility.spec.ts:77` does catch the real defect. Its weakness is looseness, recorded above instead. (2) `getByRole("region", { name: "Runs" })` strict-mode ambiguity — speculative and green at 52/52; Playwright deduplicates the nested identical matches today.
