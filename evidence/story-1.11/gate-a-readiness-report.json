@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-08-25",
+  "measurement_date": "2026-08-26",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -391,8 +391,8 @@
         "cases": {
           "frontend/src/index.test.ts": {
             "status": "passed",
-            "total": 4,
-            "passed": 4,
+            "total": 5,
+            "passed": 5,
             "skipped": 0,
             "failed": 0
           },
@@ -1034,6 +1034,32 @@
       "source_kind": "evidence",
       "source": "evidence/story-3.12/repair-browser-journey.json",
       "bound": true
+    },
+    {
+      "story": "3.12",
+      "check": "repair_browser_journey_machinery",
+      "description": "The evidence generator's own fail-closed guards: a failed, skipped, errored, empty, duplicated, or misnamed browser suite must refuse to produce a passing artifact.",
+      "invariant": "repair_browser_journey",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_repair_journey_evidence.py"
+        ],
+        "cases": {
+          "backend/tests/test_repair_journey_evidence.py": {
+            "status": "passed",
+            "total": 13,
+            "passed": 13,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
     }
   ],
   "ar28_invariants": {
@@ -1121,7 +1147,8 @@
       "result": "passed",
       "contributing_checks": [
         "repair_browser_journey_proof",
-        "repair_browser_journey_evidence"
+        "repair_browser_journey_evidence",
+        "repair_browser_journey_machinery"
       ],
       "blocking": []
     }
@@ -1139,21 +1166,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 1283,
-      "run_started": "2026-08-25T10:23:21.582638+07:00",
-      "sha256": "5320cd226301daa0d69a3f6eec0d5ae244a45074175ee8c5c05546aeb62bbd21"
+      "cases": 1291,
+      "run_started": "2026-08-26T11:38:03.660350+07:00",
+      "sha256": "cb858b7eeddf3c6eda7c8131970ca212a91c0f57a2c2fca6f1fc20c878d358bd"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "cases": 522,
-      "run_started": "2026-08-25T03:26:43.747Z",
-      "sha256": "364b784c824adb615f593b781f99680aded40977f82f6ac94d6b9c19ce7af216"
+      "cases": 529,
+      "run_started": "2026-08-26T04:40:59.811Z",
+      "sha256": "270348ef0f8daef841e3d9fea93bfcdac926408cc14f7b66264486c1d9d5ad63"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 52,
-      "run_started": "2026-08-25T03:23:25.353Z",
-      "sha256": "c325d01c359680365c5efbd82918e06eec25900a6db91f8f7446dfb016b0da39"
+      "run_started": "2026-08-26T04:41:02.963Z",
+      "sha256": "6905deb0e78041e9b7163879c1a6f3bef93bdbb030469cfd882080f162249a88"
     }
   },
   "version_bindings": {
@@ -1167,7 +1194,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "58fc2a684a2d13513f37b374e648abc5bfe203c0",
+      "git_commit": "22a95d3975b25801d03aed87dcd6a2b940ceaa06",
       "working_tree_dirty": false
     },
     "image": {
