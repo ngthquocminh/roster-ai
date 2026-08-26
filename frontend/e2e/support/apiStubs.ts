@@ -20,6 +20,8 @@ export {
   SCHEDULE_RUN_ID,
   SCENARIO_ID,
   SCENARIO_VERSION_ID,
+  TERMINAL_RUN_IDS,
+  TIMED_OUT_RUN_ID,
 } from "./repairJourneyStubState";
 
 type Contract = Readonly<{
@@ -149,7 +151,10 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
         has_more: false,
       });
     }
-    if (path === "/api/v1/agent/availability") {
+    // Path must match `frontend/src/api/agentAvailability.ts` exactly — the
+    // hyphenated form. A `/agent/availability` spelling never matched, so this
+    // branch was dead and every Chat open fell through to the 404 tail.
+    if (path === "/api/v1/agent-availability") {
       return json(route, { available: true, reason: null, observed_at: "2026-08-25T01:00:00Z" });
     }
     if (path === `/api/v1/conversations/${CONVERSATION_ID}/timeline`) {
@@ -211,6 +216,14 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
     if (path === `/api/v1/schedule-runs/${SCHEDULE_RUN_ID}/result`) {
       return json(route, repairJourney.nextResult());
     }
+    // The pre-terminal rows in `runPage()` need result endpoints too, or the
+    // Runs table advertises a "View results" link that 404s and
+    // `ScenarioResults`' `NON_PROMOTABLE` branch can never render.
+    const resultMatch = /^\/api\/v1\/schedule-runs\/([^/]+)\/result$/.exec(path);
+    if (resultMatch) {
+      const terminal = repairJourney.terminalResult(resultMatch[1]!);
+      if (terminal) return json(route, terminal);
+    }
     if (path === `/api/v1/scenarios/${SCENARIO_ID}`) {
       return json(route, {
         ...catalogueEntry(contract),
@@ -242,4 +255,8 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
     }
     return json(route, { detail: `Unhandled e2e API path: ${path}` }, 404);
   });
+  // Returned so a spec can drive the scripted run's phase explicitly
+  // (`repairJourney.completeRun()`) instead of depending on how many result
+  // reads the application happens to issue. Existing specs ignore it.
+  return repairJourney;
 }

@@ -6,6 +6,7 @@ import {
   installApiStubs,
   SCHEDULE_RUN_ID,
   SCENARIO_ID,
+  TIMED_OUT_RUN_ID,
 } from "./support/apiStubs";
 
 // Reused from keyboard-journey.spec.ts so the repair surfaces follow the same
@@ -28,7 +29,7 @@ async function tabTo(page: Page, locator: Locator, limit = 500) {
 
 test("keeps repair Chat, Runs, and Results axe-clean, keyboard-operable, and semantically literal", async ({ page }) => {
   test.setTimeout(180_000);
-  await installApiStubs(page);
+  const journey = await installApiStubs(page);
   await page.goto(`/scenarios/${SCENARIO_ID}?conversation=${CONVERSATION_ID}`);
 
   const composer = page.getByRole("textbox", { name: "Message" });
@@ -74,18 +75,36 @@ test("keeps repair Chat, Runs, and Results axe-clean, keyboard-operable, and sem
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(`/scenarios/${SCENARIO_ID}/runs/${SCHEDULE_RUN_ID}`);
   await expect(page.getByText("In progress", { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
+  // Route entry must move focus into the new view rather than dropping it on
+  // <body> when the link that was focused unmounts. Assert WHERE focus landed,
+  // not merely that it is somewhere: `!== document.body` also passes if focus
+  // is left on an arbitrary element.
+  await expect(page.getByRole("heading", { name: "Results" })).toBeFocused();
   await expectAxeClean(page);
 
   const refresh = page.getByRole("button", { name: "Refresh" });
   await tabTo(page, refresh);
   await expectKeyboardFocus(refresh);
   await page.keyboard.press("Enter");
+  // "In progress" is already on screen, so a bare toBeVisible() passes on its
+  // first poll before the refetch resolves. Wait for the read to complete
+  // (the button re-enables) so this actually observes the refetched state.
+  await expect(refresh).toBeEnabled();
   await expect(page.getByText("In progress", { exact: true })).toBeVisible();
+
+  journey.completeRun();
   await tabTo(page, refresh);
   await expectKeyboardFocus(refresh);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Candidate comparison" })).toBeVisible();
   await expect(page.getByText("demand: outbound:0", { exact: true })).toBeVisible();
+  await expectAxeClean(page);
+
+  // The terminal branch is a distinct render path with its own literal text
+  // (AC2's "semantic status text"); scan it too rather than only its Runs-table badge.
+  await page.goto(`/scenarios/${SCENARIO_ID}/runs/${TIMED_OUT_RUN_ID}`);
+  const outcome = page.getByRole("region", { name: "Run outcome" });
+  await expect(outcome).toContainText("Solver ceiling reached");
+  await expect(page.getByRole("heading", { name: "Results" })).toBeFocused();
   await expectAxeClean(page);
 });

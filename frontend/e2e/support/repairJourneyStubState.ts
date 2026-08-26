@@ -6,6 +6,14 @@ export const PROPOSAL_ID = "77777777-7777-4777-8777-777777777777";
 export const PROPOSAL_VERSION_ID = "88888888-8888-4888-8888-888888888888";
 export const SCHEDULE_RUN_ID = "99999999-9999-4999-8999-999999999999";
 
+/** The terminal run the journey clicks through to, proving `ScenarioResults`'
+ *  `NON_PROMOTABLE` branch (`TerminalOutcomeCard`) renders in a real browser.
+ *  `TerminalOutcomeCard` is status-independent — only the badge and `reason`
+ *  differ across the four statuses, and the per-status badge literals are
+ *  already asserted against the Runs table — so one terminal render closes the
+ *  gap without re-proving the badge four times. */
+export const TIMED_OUT_RUN_ID = "30303030-3030-4030-8030-303030303030";
+
 const AGENT_RUN_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const DRAFT_ACTIVITY_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PLANNER_ACTIVITY_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -141,9 +149,28 @@ const completedResult = {
   },
 } as const;
 
+/** Single source of truth for the terminal rows: `runPage()` renders them in
+ *  the Runs table and `terminalResult()` serves the matching result payload, so
+ *  a row can never advertise a status its own result endpoint contradicts. */
+const TERMINAL_RUNS = [
+  ["10101010-1010-4010-8010-101010101010", "solver_completed", null],
+  ["20202020-2020-4020-8020-202020202020", "solver_infeasible", "No feasible schedule"],
+  [TIMED_OUT_RUN_ID, "solver_timed_out", "Solver ceiling reached"],
+  ["40404040-4040-4040-8040-404040404040", "solver_cancelled", "Cancelled by planner"],
+  ["50505050-5050-4050-8050-505050505050", "solver_failed", "Solver failed safely"],
+] as const;
+
+export const TERMINAL_RUN_IDS: readonly string[] = TERMINAL_RUNS.map(([id]) => id);
+
 export function createRepairJourneyStubState() {
   let messageSent = false;
-  let resultCallCount = 0;
+  // Decision 4a asks for a TEST-controlled progression. A call counter is
+  // APP-controlled: any extra read the app happens to issue (a refetch on
+  // window focus, a remount, one more assertion) silently advances it and
+  // flips the page terminal early. `installApiStubs` returns this object, so
+  // the spec advances the phase itself by calling `completeRun()` — extra
+  // reads are then harmless and the sequence is a property the test owns.
+  let runPhase: "running" | "completed" = "running";
 
   return {
     acceptMessage() {
@@ -166,7 +193,11 @@ export function createRepairJourneyStubState() {
       };
     },
     timelineItems(baseItems: readonly unknown[] = []) {
-      return messageSent ? [...baseItems, draftActivity] : [...baseItems];
+      // The planner's own message is part of the persisted timeline the real
+      // `finalize_agent_run` path appends to. Omitting it made
+      // `useSendMessage.onSettled`'s invalidation erase the sent message from
+      // the UI, so the journey was measured against a shape no backend emits.
+      return messageSent ? [...baseItems, plannerActivity, draftActivity] : [...baseItems];
     },
     proposal() {
       return {
@@ -211,14 +242,7 @@ export function createRepairJourneyStubState() {
       return { schedule_run_id: SCHEDULE_RUN_ID, status: "solver_queued", resource_version: 1 };
     },
     runPage() {
-      const terminalStatuses = [
-        ["10101010-1010-4010-8010-101010101010", "solver_completed", null],
-        ["20202020-2020-4020-8020-202020202020", "solver_infeasible", "No feasible schedule"],
-        ["30303030-3030-4030-8030-303030303030", "solver_timed_out", "Solver ceiling reached"],
-        ["40404040-4040-4040-8040-404040404040", "solver_cancelled", "Cancelled by planner"],
-        ["50505050-5050-4050-8050-505050505050", "solver_failed", "Solver failed safely"],
-      ] as const;
-      const terminalRows = terminalStatuses.map(([scheduleRunId, status, reason], index) => ({
+      const terminalRows = TERMINAL_RUNS.map(([scheduleRunId, status, reason], index) => ({
         schedule_run_id: scheduleRunId,
         status,
         reason,
@@ -251,12 +275,38 @@ export function createRepairJourneyStubState() {
         matching_count: 6,
       };
     },
+    /** Advance the scripted run to its terminal state. Called by the spec, not
+     *  by a request count, so any number of intervening reads still render the
+     *  running state and the reconnect step stays deterministic. */
+    completeRun() {
+      runPhase = "completed";
+    },
     nextResult() {
-      resultCallCount += 1;
-      // Two running reads prove a fresh mount after reconnect does not depend
-      // on component state. The test's explicit Refresh is the third read and
-      // deterministically reveals the terminal result.
-      return resultCallCount <= 2 ? runningResult : completedResult;
+      return runPhase === "running" ? runningResult : completedResult;
+    },
+    /** Result payload for one of the pre-terminal rows in `runPage()`. Returns
+     *  `undefined` for an unknown id so the caller can fall through to its 404
+     *  tail rather than inventing a run. */
+    terminalResult(scheduleRunId: string) {
+      const entry = TERMINAL_RUNS.find(([id]) => id === scheduleRunId);
+      if (!entry) return undefined;
+      const [id, status, reason] = entry;
+      if (status === "solver_completed") {
+        return { ...completedResult, run: { ...completedRun, schedule_run_id: id } };
+      }
+      return {
+        run: {
+          schedule_run_id: id,
+          status,
+          reason,
+          resource_version: 3,
+          cancellation_requested: status === "solver_cancelled",
+          created_at: ACCEPTED_AT,
+          finished_at: COMPLETED_AT,
+        },
+        candidate: null,
+        comparison: null,
+      };
     },
   };
 }

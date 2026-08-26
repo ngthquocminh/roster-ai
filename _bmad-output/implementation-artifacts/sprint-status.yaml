@@ -41,7 +41,32 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-25
+last_updated: 2026-08-26
+
+# NOTE (2026-08-26): Story 3-12 CODE REVIEW COMPLETE — back to in-progress, not done.
+# Three layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) ran; 3 decision-needed
+# (all resolved), 13 patches (all applied and verified), 4 deferred to deferred-work.md,
+# 2 dismissed. The load-bearing finding: AC1's "terminal outcome" state was never rendered in a
+# browser — the stub served a result endpoint for the running run only, so ScenarioResults'
+# NON_PROMOTABLE branch (TerminalOutcomeCard) was structurally unreachable and the accessibility
+# spec stopped one keypress short of it, while the Gate A invariant advertised "terminal outcome".
+# Also fixed: the agent-availability stub matched /api/v1/agent/availability while the app calls
+# /api/v1/agent-availability, so that branch was dead and Chat 404'd for the whole journey;
+# Decision 4a's "test-controlled counter" was app-controlled (installApiStubs now returns the stub
+# state and the spec calls completeRun()); the stubbed timeline dropped the planner's own message;
+# three assertions could not fail; the evidence dataset binding omitted the two stub modules that
+# decide every asserted value; the generator's own tests were registered at no Gate A check.
+# Decisions taken: prove ONE terminal status (the card is status-independent and the per-status
+# badge literals are already asserted against the Runs table); DISCLOSE that the seven evidence
+# result keys alias two spec verdicts rather than splitting the specs seven ways; DROP the NFR20
+# claim rather than add zoom/reduced-motion coverage to three more routes (portfolio-MVP scope).
+# Verified after patching: Playwright 52/52 (chromium+msedge), Vitest 79 files / 529 tests,
+# tsc clean, changed-surface backend tests 128 passed.
+# BLOCKED, and why this is not 'done': evidence/story-3.12/repair-browser-journey.json is stale
+# (generator output changed) and needs a clean-tree regeneration, which requires committing the
+# code first per docs/EVIDENCE-CONVENTION.md; and evidence/story-1.11/gate-a-readiness-report.json
+# cannot be regenerated here because PostgreSQL was unreachable (no Docker daemon, no compose file),
+# so the -m postgres leg skipped instead of running. Gate A has NOT been re-run.
 
 # NOTE (2026-08-25): Story 3-12 DEV COMPLETE. The final Epic 3 proof now drives the real browser
 # route tree end to end through Chat evidence targeting, a persisted draft, explicit Run optimization,
@@ -1737,7 +1762,7 @@ development_status:
   3-9-continue-deterministic-work-during-model-outage: done
   3-10-prove-repair-correctness: done
   3-11-prove-recovery-and-idempotency: done
-  3-12-prove-the-repair-browser-journey: review
+  3-12-prove-the-repair-browser-journey: in-progress
   epic-3-retrospective: optional
 
   # Epic 4: Exact Baseline Decision and Decision Record

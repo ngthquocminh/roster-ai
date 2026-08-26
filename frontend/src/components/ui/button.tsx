@@ -16,8 +16,15 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+        // Solid treatment: the previous tinted form (`bg-destructive/10
+        // text-destructive`) measured 3.82:1 in a real browser. This is a
+        // SHARED variant — every `variant="destructive"` Button across Chat,
+        // Runs, Evidence, and the Fixture Catalogue renders it, not only the
+        // button whose contrast was reported. Light mode is axe-verified on
+        // those surfaces; the `dark:` arm is NOT, because no spec applies the
+        // `.dark` class and nothing in `src/` sets it today.
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/80 dark:hover:bg-destructive/90 dark:focus-visible:ring-destructive/40",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/80 dark:hover:bg-destructive/90 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

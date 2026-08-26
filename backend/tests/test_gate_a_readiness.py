@@ -117,6 +117,7 @@ def test_story_3_12_registers_live_and_evidence_proofs_and_extends_accessibility
     assert set(repair_checks) == {
         "repair_browser_journey_proof",
         "repair_browser_journey_evidence",
+        "repair_browser_journey_machinery",
     }
     assert repair_checks["repair_browser_journey_proof"].required_projects == (
         "chromium",
@@ -125,6 +126,14 @@ def test_story_3_12_registers_live_and_evidence_proofs_and_extends_accessibility
     assert repair_checks["repair_browser_journey_evidence"].evidence_path == (
         "evidence/story-3.12/repair-browser-journey.json"
     )
+    # The evidence check reads a stored `passed` flag and the generator never
+    # writes a failing artifact, so the flag outlives a journey that breaks.
+    # Story 3.11's `recovery_idempotency_report_machinery` set the precedent:
+    # no invariant may rest on a static evidence file alone.
+    machinery = repair_checks["repair_browser_journey_machinery"]
+    assert machinery.runner == "pytest"
+    assert machinery.test_files == ("backend/tests/test_repair_journey_evidence.py",)
+    assert machinery.evidence_path is None
     accessibility = next(
         check for check in GATE_A_CHECKS if check.check == "accessibility_browser_layer"
     )

@@ -506,6 +506,24 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         ),
         evidence_path="evidence/story-3.12/repair-browser-journey.json",
     ),
+    # The evidence check above reads a STORED `passed` flag, and the generator
+    # raises rather than writing a failed artifact — so a committed
+    # `passed: true` outlives a journey that later breaks. Story 3.11 set the
+    # precedent with `recovery_idempotency_report_machinery`: no invariant may
+    # rest on a static evidence file alone. This binds the parser's fail-closed
+    # guards themselves.
+    GateACheck(
+        check="repair_browser_journey_machinery",
+        story="3.12",
+        invariant="repair_browser_journey",
+        description=(
+            "The evidence generator's own fail-closed guards: a failed, "
+            "skipped, errored, empty, duplicated, or misnamed browser suite "
+            "must refuse to produce a passing artifact."
+        ),
+        runner="pytest",
+        test_files=("backend/tests/test_repair_journey_evidence.py",),
+    ),
 )
 
 

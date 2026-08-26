@@ -57,6 +57,17 @@ describe("ShiftMind design tokens", () => {
     expect(extractBlock(":root")).toContain("--evidence-surface: #EEF2FF;");
     expect(extractBlock(":root")).toContain("--evidence-border: #C7D2FE;");
     expect(extractBlock(":root")).toContain("--evidence-foreground: #1E1B4B;");
+    expect(extractBlock(":root")).toContain("--destructive-foreground: #FFFFFF;");
+  });
+
+  it("pairs the destructive surface with a governed foreground token", () => {
+    // Story 3.12 review: the solid destructive button shipped with a raw
+    // `text-white` utility and no token, so nothing tied the foreground to the
+    // palette and no test would notice if `--destructive` were re-themed.
+    expect(extractBlock("@theme inline")).toContain(
+      "--color-destructive-foreground: var(--destructive-foreground);",
+    );
+    expect(readHexToken("destructive-foreground")).toBe("#FFFFFF");
   });
 
   it("maps every ShiftMind token through Tailwind's theme namespaces", () => {

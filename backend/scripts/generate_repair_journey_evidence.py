@@ -22,9 +22,12 @@ if str(BACKEND_ROOT) not in sys.path:
 from scripts.evidence_binding import (  # noqa: E402
     REPO_ROOT,
     audit_evidence_file,
+    commit_date,
     contract_digests,
+    file_digest,
     resolve_bindings,
 )
+from scripts.gate_a_readiness import _postdates  # noqa: E402
 
 OUTPUT_RELATIVE = "evidence/story-3.12/repair-browser-journey.json"
 REQUIRED_PROJECTS = ("chromium", "msedge")
@@ -48,10 +51,16 @@ DECLARED_BINDINGS: dict[str, str] = {
         "Playwright 1.62.1 production-build browser run with @axe-core/playwright "
         "4.12.1 and the committed streaming JUnit reporter"
     ),
+    # NFR20 is deliberately absent. It covers zoom/reflow, text-spacing, and
+    # reduced-motion, none of which these specs exercise on the repair
+    # surfaces — those stay proven on Epic 1's Scenario Data surfaces only
+    # (`layout-accessibility.spec.ts`, `reduced-motion.spec.ts`,
+    # `responsive.spec.ts`, all `demandUrl`/`/`). AC2's Then clause names only
+    # keyboard operability, focus management, and semantic status text.
     "policy": (
-        "NFR18/NFR20/NFR29 and UX-DR10/UX-DR13: draft-to-comparison journey, "
-        "same-run reconnect, exact evidence targeting, axe, keyboard, focus, "
-        "and literal semantic status assertions all block release"
+        "NFR18/NFR29 and UX-DR10/UX-DR13: draft-to-comparison journey, "
+        "same-run reconnect, terminal outcome, exact evidence targeting, axe, "
+        "keyboard, focus, and literal semantic status assertions all block release"
     ),
     "application": "local frontend production build served by Vite preview",
     "solver": "not applicable — deterministic browser fixture responses; no solver run",
@@ -115,11 +124,63 @@ def parse_junit_report(path: Path) -> dict[str, dict[str, bool]]:
     return outcomes
 
 
+def junit_provenance(
+    path: Path, bindings: Mapping[str, Any], repo_root: Path = REPO_ROOT
+) -> dict[str, Any]:
+    """Pin the XML the verdict was computed from.
+
+    ``resolve_bindings`` proves only that the working tree was clean when this
+    ran — nothing tied the *measurement* to that tree, so an XML from another
+    branch, an older commit, or another machine produced identical-looking
+    "bound" evidence. Mirrors ``gate_a_readiness._xml_provenance``: a
+    repo-relative path, a sha256 (the artifacts directory is gitignored, so the
+    digest is the binding rather than an existence check), the run's own
+    timestamp, and a ``stale`` marker when the run predates the bound commit.
+    """
+    try:
+        relative = path.resolve().relative_to(repo_root).as_posix()
+    except ValueError:
+        relative = path.as_posix()
+
+    entry: dict[str, Any] = {"junit_xml": relative}
+    try:
+        entry["sha256"] = file_digest(path)
+    except OSError:
+        entry["sha256"] = "unavailable — XML could not be read for digesting"
+
+    run_started = ""
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        root = None
+    if root is not None:
+        for suite in root.iter("testsuite"):
+            run_started = suite.attrib.get("timestamp", "")
+            if run_started:
+                break
+    entry["run_started"] = run_started
+
+    commit = (bindings.get("code") or {}).get("git_commit")
+    if commit and run_started:
+        try:
+            committed = commit_date(str(commit), repo_root)
+        except Exception:  # noqa: BLE001
+            committed = ""
+        if committed and not _postdates(run_started, committed):
+            entry["stale"] = (
+                f"run started {run_started}, which predates the commit it is "
+                f"bound to ({commit} at {committed}) — these results did not "
+                "come from the tree this evidence names"
+            )
+    return entry
+
+
 def build_document(
     outcomes: Mapping[str, Mapping[str, bool]],
     *,
     bindings: Mapping[str, Any],
     measurement_date: str,
+    provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     journey_passed = all(
         outcomes.get(project, {}).get("repair-journey.spec.ts") is True
@@ -133,7 +194,7 @@ def build_document(
     result = "passed" if passed else "failed"
     return {
         "story": "3.12",
-        "requirements": ["NFR18", "NFR20", "NFR29", "UX-DR10", "UX-DR13"],
+        "requirements": ["NFR18", "NFR29", "UX-DR10", "UX-DR13"],
         "measurement_date": measurement_date,
         "environment": {
             "description": "local production frontend build exercised by Playwright",
@@ -148,6 +209,27 @@ def build_document(
             "required_specs": dict(REQUIRED_TESTS),
             "all_projects_must_pass": True,
             "skips_are_failures": True,
+            "measurement": dict(provenance or {}),
+        },
+        # Every key in `results` below reports the pass/fail of the SPEC FILE
+        # that contains its assertions — not an independent measurement. The
+        # generator reads a JUnit report, which carries one testcase per spec,
+        # so there are two verdicts here wearing seven names. Recorded rather
+        # than removed because Decision 5 asked for names that say which AC
+        # clause each proof serves; a reader must not mistake the shape for a
+        # per-assertion ledger.
+        "results_derivation": {
+            "note": (
+                "Each results key reports the pass/fail of the spec file "
+                "containing its assertions, not an independent measurement."
+            ),
+            "journey_completion": "repair-journey.spec.ts",
+            "run_id_survives_reconnect": "repair-journey.spec.ts",
+            "evidence_link_resolves": "repair-journey.spec.ts",
+            "axe_browser": "repair-journey-accessibility.spec.ts",
+            "keyboard_operable": "repair-journey-accessibility.spec.ts",
+            "focus_management": "repair-journey-accessibility.spec.ts",
+            "semantic_status_text": "repair-journey-accessibility.spec.ts",
         },
         "results": {
             "journey_completion": result if journey_passed else "failed",
@@ -175,28 +257,47 @@ def generate(
     allow_dirty: bool = False,
 ) -> dict[str, Any]:
     outcomes = parse_junit_report(junit_path)
+    # The two spec files alone do not determine what was measured: every value
+    # they assert — the run-status progression, the metric deltas, the evidence
+    # refs, the proposal shape — lives in the stub modules. Binding only the
+    # specs let those change with no drift reported, so the artifact claimed to
+    # pin a measurement it did not.
     dataset_files = tuple(
         repo_root / "frontend" / "e2e" / file_name for file_name in REQUIRED_TESTS
+    ) + (
+        repo_root / "frontend" / "e2e" / "support" / "repairJourneyStubState.ts",
+        repo_root / "frontend" / "e2e" / "support" / "apiStubs.ts",
     )
     bindings = resolve_bindings(
         DECLARED_BINDINGS,
         repo_root=repo_root,
         dataset_files=dataset_files,
         allow_dirty=allow_dirty,
+        # This generator's own output is written below; without it a second
+        # consecutive run before committing fails with DirtyTreeError.
+        # `gate_a_readiness.build_report` forwards ignore_paths for the same reason.
+        ignore_paths=frozenset({OUTPUT_RELATIVE}),
     )
     document = build_document(
         outcomes,
         bindings=bindings,
         measurement_date=measurement_date or date.today().isoformat(),
+        provenance=junit_provenance(junit_path, bindings, repo_root),
     )
     destination = repo_root / OUTPUT_RELATIVE
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = destination.with_suffix(destination.suffix + ".tmp")
-    staging.write_text(
-        json.dumps(document, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    staging.replace(destination)
+    try:
+        staging.write_text(
+            json.dumps(document, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        staging.replace(destination)
+    except OSError:
+        # Never leave a .json.tmp sibling behind — it dirties the tree and the
+        # next resolve_bindings call refuses on it.
+        staging.unlink(missing_ok=True)
+        raise
     return document
 
 
@@ -206,6 +307,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--measurement-date", default=None)
     parser.add_argument("--allow-dirty", action="store_true")
     args = parser.parse_args(argv)
+    if args.measurement_date is not None:
+        # Written verbatim into the artifact; reject a malformed value here
+        # rather than shipping an unparseable date in bound evidence.
+        try:
+            date.fromisoformat(args.measurement_date)
+        except ValueError:
+            parser.error(
+                f"--measurement-date must be ISO 8601 (YYYY-MM-DD); got {args.measurement_date!r}"
+            )
     document = generate(
         junit_path=args.junit,
         measurement_date=args.measurement_date,
