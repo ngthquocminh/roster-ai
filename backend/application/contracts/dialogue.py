@@ -30,7 +30,7 @@ TerminalReasonV1 = Literal[
     "deadline_exceeded",
     "capability_error",
     "refused",
-    "approval_unsupported",
+    "approval_not_grantable",
 ]
 
 # Decision 2 reconciles UX-DR6's refusal label with AD-14's closed eight-item

@@ -107,24 +107,7 @@ def terminal_status(outcome: AgentRunOutcomeV1) -> str:
     return {
         "timed_out": "agent_timed_out",
         "failed": "agent_failed",
-        # STOPGAP, and deliberately not `approval_required`. AD-7 makes
-        # `approval_required` a WAITING state with outgoing edges
-        # (`--> agent_running: decision recorded`, `--> agent_cancelled:
-        # rejected or expired`), but this function is the FINALISATION path:
-        # nothing in this milestone touches the row again, `claim_queued_run`
-        # only claims `agent_queued`, and `outcome.approval.pending_calls` is
-        # not persisted anywhere -- so the run would sit forever waiting on a
-        # decision that cannot be recorded. AD-7's own "rejected or expired"
-        # edge lands on `agent_cancelled`, which is terminal and truthful. The
-        # distinct reason is NOT lost: `terminal_outcome()` still reports
-        # `approval_unsupported` with its own planner-visible label.
-        # Decision 6 forbade `agent_failed`; it did not require this status.
-        # Epic 4 (AD-10, Stories 4.1-4.3) owns approval resumption and must
-        # restore the `approval_required` mapping together with a persisted
-        # pending-call payload. `test_request_path_grants_no_approval_capability_
-        # in_this_milestone` fails the moment an approval-policy capability
-        # becomes reachable, which is what reopens this decision.
-        "suspended": "agent_cancelled",
+        "suspended": "approval_required",
     }[outcome.status]
 
 
@@ -196,16 +179,10 @@ def terminal_outcome(outcome: AgentRunOutcomeV1) -> TerminalOutcomeV1 | None:
         )
     if outcome.status == "suspended":
         return TerminalOutcomeV1(
-            # `status` is the ADAPTER vocabulary (`AgentRunStatusV1`), not AD-7's
-            # run vocabulary, so "suspended" here and `agent_cancelled` on the
-            # row are not a contradiction: the adapter did suspend, and the
-            # application recorded that as a terminal cancellation because the
-            # suspension cannot be resumed. The planner-visible label comes from
-            # `reason`, which names the real cause.
             status="suspended",
-            reason="approval_unsupported",
-            detail="The turn requires approval that this workflow cannot resume yet.",
-            next_step="Review the requested action; approval execution arrives in Epic 4.",
+            reason="approval_not_grantable",
+            detail="The requested action cannot be approved from this workflow.",
+            next_step="Review the candidate and request approval from Results.",
         )
 
     # Discriminate by SOURCE, never by matching the reason string.

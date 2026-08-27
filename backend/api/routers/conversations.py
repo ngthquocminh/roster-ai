@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import json
 
 import asyncio
 from decimal import Decimal
@@ -21,6 +22,10 @@ from api.deps import (
     CapabilityComposer,
     SiteContextOpener,
     get_conversation_repository,
+    get_approval_repository,
+    get_audit_writer,
+    get_schedule_run_repository,
+    get_site_baseline_reader,
     get_agent_runtime_factory,
     get_capability_registry,
     get_projection_reader,
@@ -66,6 +71,12 @@ from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.grounding import GroundedAnswerV1
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.proposal import ProposalRepository
+from application.ports.approval import ApprovalRepository, AuditWriter
+from application.ports.schedule_run import ScheduleRunRepository
+from application.ports.site_baseline import SiteBaselineReader
+from application.use_cases.request_approval import RequestApprovalCommandV1, request_approval
+from application.contracts.agent_runtime import AgentApprovalPendingV1
+from application.capabilities.scheduling_baseline import SchedulingBaselineRequestV1
 from application.use_cases.finalize_agent_run import finalize_agent_run
 from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
 from datetime import datetime, timezone
@@ -172,6 +183,10 @@ async def execute_agent_turn(
     session: ResolvedSession = Depends(get_session),
     repository: ConversationRepository = Depends(get_conversation_repository),
     proposal_repository: ProposalRepository = Depends(get_proposal_repository),
+    approvals: ApprovalRepository = Depends(get_approval_repository),
+    audit_writer: AuditWriter = Depends(get_audit_writer),
+    schedule_runs: ScheduleRunRepository = Depends(get_schedule_run_repository),
+    baselines: SiteBaselineReader = Depends(get_site_baseline_reader),
     open_site_context: SiteContextOpener = Depends(get_site_context_opener),
     compose_capabilities: CapabilityComposer = Depends(get_capability_registry),
     projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
@@ -273,6 +288,37 @@ async def execute_agent_turn(
 
     def _finish():
         with open_site_context(session.site_id) as connection:
+            if outcome.status == "suspended":
+                pending = outcome.approval
+                if pending is None or len(pending.pending_calls) != 1:
+                    raise RuntimeError("suspended turn has no exact pending approval call")
+                call = pending.pending_calls[0]
+                if call.tool_name != "scheduling_baseline":
+                    raise RuntimeError("suspended turn requested an unsupported approval capability")
+                request = SchedulingBaselineRequestV1(**json.loads(call.tool_args_json))
+                run = schedule_runs.get_run(connection, run_id=request.schedule_run_id, site_id=claimed.site_id)
+                if run is None:
+                    raise RuntimeError("suspended turn requested a missing schedule run")
+                result = request_approval(
+                    connection,
+                    command=RequestApprovalCommandV1(
+                        site_id=claimed.site_id, actor_id=claimed.actor_id,
+                        schedule_run_id=request.schedule_run_id,
+                        expected_resource_version=run.resource_version,
+                        expected_baseline_schedule_version=request.expected_baseline_schedule_version,
+                        request_effect_key=f"agent:{claimed.agent_run_id}:{call.tool_call_id}",
+                        request_id=deps.request_id, conversation_id=claimed.conversation_id,
+                        agent_run_id=claimed.agent_run_id,
+                        pending_payload=TypeAdapter(AgentApprovalPendingV1).dump_python(pending, mode="json"),
+                    ), schedule_runs=schedule_runs, baselines=baselines,
+                    approvals=approvals, audit_writer=audit_writer, conversations=repository,
+                    approval_expiry_seconds=settings.approval_expiry_seconds,
+                    scheduling_baseline_enabled=settings.scheduling_baseline_enabled,
+                    clock=deps.clock,
+                )
+                if result.activity is None:
+                    raise RuntimeError("agent approval did not persist an activity")
+                return result.activity
             return finalize_agent_run(
                 repository,
                 proposal_repository,

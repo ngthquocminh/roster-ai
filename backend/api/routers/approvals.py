@@ -18,6 +18,7 @@ from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.session import ResolvedSession
 from application.ports.site_baseline import SiteBaselineReader
 from application.use_cases.request_approval import ApprovalRequestError, RequestApprovalCommandV1, request_approval
+from application.contracts.canonical import contract_digest
 from settings import Settings
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
@@ -37,12 +38,21 @@ def create_approval(body: ApprovalRequestIn, idempotency_key: IdempotencyKey, co
     conversation_id = schedule_runs.get_conversation_for_run(connection, run_id=body.schedule_run_id, site_id=session.site_id)
     if conversation_id is None:
         return problem_response(status=404, code="candidate_not_found", title="Candidate not found", detail="No candidate is visible in this site.")
+    operation = f"request_approval:{body.schedule_run_id}"
+    _, _, body_hash = contract_digest(body.model_dump(mode="json"))
+    stored = schedule_runs.get_idempotent_result(connection, site_id=session.site_id, actor_id=session.app_user_id, operation=operation, idempotency_key=idempotency_key)
+    if stored is not None:
+        if stored.body_hash != body_hash:
+            return problem_response(status=409, code="idempotency_key_conflict", title="Idempotency key conflict", detail="The idempotency key was already used with a different request body.")
+        return ApprovalOut.model_validate(stored.response_payload)
     try:
-        binding = request_approval(connection, command=RequestApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, schedule_run_id=body.schedule_run_id, expected_resource_version=body.expected_resource_version, expected_baseline_schedule_version=body.expected_baseline_schedule_version, request_effect_key=f"command:{session.app_user_id}:request_approval:{idempotency_key}", request_id=uuid4(), conversation_id=conversation_id), schedule_runs=schedule_runs, baselines=baselines, approvals=approvals, audit_writer=audit_writer, conversations=conversations, approval_expiry_seconds=settings.approval_expiry_seconds, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: datetime.now(timezone.utc))
+        result = request_approval(connection, command=RequestApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, schedule_run_id=body.schedule_run_id, expected_resource_version=body.expected_resource_version, expected_baseline_schedule_version=body.expected_baseline_schedule_version, request_effect_key=f"command:{session.app_user_id}:request_approval:{idempotency_key}", request_id=uuid4(), conversation_id=conversation_id), schedule_runs=schedule_runs, baselines=baselines, approvals=approvals, audit_writer=audit_writer, conversations=conversations, approval_expiry_seconds=settings.approval_expiry_seconds, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: datetime.now(timezone.utc))
     except ApprovalRequestError as exc:
         status = 404 if exc.code == "candidate_not_found" else 409 if exc.code.startswith("stale_") or exc.code == "candidate_not_promotable" else 422
         return problem_response(status=status, code=exc.code, title="Approval request could not be completed", detail="The candidate cannot be approved with the supplied binding.")
-    return _out(binding)
+    output = _out(result.binding)
+    schedule_runs._store_idempotent_result(connection, site_id=session.site_id, actor_id=session.app_user_id, operation=operation, idempotency_key=idempotency_key, body_hash=body_hash, response_payload=output.model_dump(mode="json"))
+    return output
 
 
 @router.get("/{approval_id}", response_model=ApprovalOut, responses=_RESPONSES)

@@ -77,7 +77,7 @@ def test_dialogue_contracts_have_pinned_fields_and_closed_vocabularies() -> None
         "deadline_exceeded",
         "capability_error",
         "refused",
-        "approval_unsupported",
+        "approval_not_grantable",
     )
 
 

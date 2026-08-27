@@ -452,26 +452,26 @@ Therefore:
         `__all__`.
   - [ ] **No decision fields on the activity.** Controls and outcomes are Story 4.2's.
 
-- [ ] **Task 2 — One additive migration (AC: 1, 3)**
-  - [ ] New revision with `down_revision = "c4d5e6f7a8b9"` — verify it is still head with
+- [x] **Task 2 — One additive migration (AC: 1, 3)**
+  - [x] New revision with `down_revision = "c4d5e6f7a8b9"` — verify it is still head with
         `uv run alembic heads` before writing.
-  - [ ] `approval_request` (governance): columns per Task 1; `state` CHECK listing exactly the five
+  - [x] `approval_request` (governance): columns per Task 1; `state` CHECK listing exactly the five
         states; composite FKs to `conversation`, `agent_run`, `schedule_run`, `schedule_version`
         **paired with `site_id`** (the repo-wide idiom); partial unique index on `(agent_run_id)`
         `WHERE state = 'pending' AND agent_run_id IS NOT NULL`; `UNIQUE (site_id,
         request_effect_key)`; `UNIQUE (id, site_id)`; hash regex CHECKs (`~ '^[0-9a-f]{64}$'`) and
         the `sha256` / `rfc8785-v1` literal CHECKs copied from `proposal_version`;
         `pending_payload JSONB NULL`.
-  - [ ] `site_baseline` (scheduling): `UNIQUE (site_id)`, composite FK to `schedule_version`,
+  - [x] `site_baseline` (scheduling): `UNIQUE (site_id)`, composite FK to `schedule_version`,
         `resource_version BIGINT NOT NULL DEFAULT 1`, `updated_at`, `updated_by_actor_id`.
-  - [ ] `audit_event` (evidence): append-only; `success BOOLEAN NOT NULL`; **two partial unique
+  - [x] `audit_event` (evidence): append-only; `success BOOLEAN NOT NULL`; **two partial unique
         indexes** — `(site_id, effect_key, outcome) WHERE success` and
         `(site_id, attempt_id) WHERE NOT success` — implementing AD-12's two different rules on one
         table.
-  - [ ] `ALTER TABLE agent_run ADD COLUMN status_reason VARCHAR(40) NULL` plus a CHECK admitting
+  - [x] `ALTER TABLE agent_run ADD COLUMN status_reason VARCHAR(40) NULL` plus a CHECK admitting
         exactly `approval_rejected | approval_expired | approval_stale` or NULL. **Written by Story
         4.2, created here.**
-  - [ ] RLS/grants for all three new tables copied from `f1a2b3c4d5e6:115-124`:
+  - [x] RLS/grants for all three new tables copied from `f1a2b3c4d5e6:115-124`:
         `ENABLE`/`FORCE ROW LEVEL SECURITY`, `{table}_site_isolation` policy,
         `GRANT SELECT, INSERT`, `REVOKE UPDATE, DELETE`. Then narrow column grants:
         `GRANT UPDATE (state, decided_by_actor_id, decided_at, consumed_at, resource_version) ON
@@ -480,12 +480,12 @@ Therefore:
         site_baseline TO shiftmind_runtime` (for 4.3). **`audit_event` gets no UPDATE grant at
         all** — that is AD-12's append-only rule expressed as a privilege, and Story 4.4's AC4 ("the
         normal application path cannot update or delete audit events") is proven against it.
-  - [ ] `GRANT UPDATE (status, status_reason) ON agent_run TO shiftmind_runtime`, widening
+  - [x] `GRANT UPDATE (status, status_reason) ON agent_run TO shiftmind_runtime`, widening
         `c7d6e5f4a3b2`'s single-column grant. **Without this the Story 4.2 write fails at runtime
         with a permission error, not as a test failure.**
-  - [ ] Mirror every table into `adapters/postgres/schema.py` metadata plus `ix_{table}_site_id`
+  - [x] Mirror every table into `adapters/postgres/schema.py` metadata plus `ix_{table}_site_id`
         indexes; `uv run alembic check` must be clean.
-  - [ ] Working `downgrade()` in reverse order, matching the existing files' convention.
+  - [x] Working `downgrade()` in reverse order, matching the existing files' convention.
 
 - [ ] **Task 3 — `site_baseline` reader, wired at both producers (AC: 1)**
   - [ ] `application/ports/site_baseline.py`: `SiteBaselineV1` + `SiteBaselineReader` Protocol.
@@ -787,6 +787,7 @@ owned.
 
 ### Debug Log References
 
+- 2026-08-28: Demonstrated-red for the resumed Task 3/Decision 9 boundary: the baseline reader's additional query made `test_get_scenario_context_selects_governed_latest_version_without_site_input` fail because its test connection returned a scenario row for both reads; the active old approval tripwire failed because `scheduling_baseline` is now granted; and `terminal_status(AgentRunOutcomeV1(status="suspended"))` still returned `agent_cancelled`. The test double now models an absent baseline row, the old tripwire is replaced by the configured-grant guard, and the turn maps to `approval_required`. Focused backend verification: 170 passed, 1 deselected; `alembic check` clean.
 - 2026-08-27: Red/green recorded for Task 1: `backend/tests/test_approval_contracts.py` initially failed collection because the approval contract modules did not exist; after implementation it passed. Focused verification currently green: `uv run pytest tests/test_conversation_contracts.py tests/test_capability_conformance.py tests/test_approval_contracts.py` — 71 passed. The migration head is `d4e5f6a7b8c9`.
 - 2026-08-27: Task 9 Gate A red/green: adding the approval route to the approved-path literal initially failed because the OpenAPI-derived list is alphabetically ordered; the corrected literal and runbook entry pass `test_gate_a_mutation_audit.py` (36 passed). Task 10 focused frontend verification passes: 20 tests across `ApprovalRequestCard` and `ActivityTimeline`, plus `npm run typecheck`; lint has only the repository's three existing Fast Refresh warnings.
 - 2026-08-28: Revalidated Task 1's frozen approval/audit/activity contracts with `test_approval_contracts.py` and persisted activity serialization with `test_conversation_contracts.py` — 14 passed.

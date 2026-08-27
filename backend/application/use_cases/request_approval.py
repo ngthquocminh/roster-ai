@@ -10,6 +10,7 @@ from application.capabilities.registry import PolicyInputsV1, derive_policy_vers
 from application.contracts.approval_binding import ApprovalBindingV1
 from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
 from application.contracts.canonical import contract_digest
+from application.ports.conversation import ExecutedAgentRunV1
 
 SCOPE_CONTROLS = {
     "decision": "NOT COVERED: decision:owned_by_story_4_2",
@@ -38,6 +39,10 @@ class StaleBaselineVersionError(ApprovalRequestError):
     code = "stale_baseline_version"
 
 
+class ApprovalNotGrantedError(ApprovalRequestError):
+    code = "approval_not_granted"
+
+
 @dataclass(frozen=True)
 class RequestApprovalCommandV1:
     site_id: UUID
@@ -50,6 +55,12 @@ class RequestApprovalCommandV1:
     conversation_id: UUID
     agent_run_id: UUID | None = None
     pending_payload: dict | None = None
+
+
+@dataclass(frozen=True)
+class RequestApprovalResultV1:
+    binding: ApprovalBindingV1
+    activity: ExecutedAgentRunV1 | None
 
 
 def request_approval(
@@ -65,8 +76,10 @@ def request_approval(
     scheduling_baseline_enabled: bool,
     clock: Any,
     app_version: str = "0.1.0",
-) -> ApprovalBindingV1:
+) -> RequestApprovalResultV1:
     """Build TX1. The caller owns the transaction; no repository may commit."""
+    if not scheduling_baseline_enabled:
+        raise ApprovalNotGrantedError("baseline approval is not granted by policy")
     run = schedule_runs.get_run(connection, run_id=command.schedule_run_id, site_id=command.site_id)
     if run is None:
         raise CandidateNotFoundError("the requested schedule run is not available")
@@ -117,10 +130,10 @@ def request_approval(
         worker_facts=WorkerFactsV1(), evidence_refs=(), occurred_at=now,
     ))
     if command.agent_run_id is not None:
-        conversations.pause_agent_run_for_approval(connection, claimed_agent_run_id=command.agent_run_id, binding=binding, request_id=command.request_id)
+        activity = conversations.pause_agent_run_for_approval(connection, claimed_agent_run_id=command.agent_run_id, binding=binding, request_id=command.request_id)
     else:
-        conversations.append_approval_request_activity(connection, binding=binding, actor_id=command.actor_id, request_id=command.request_id)
-    return binding
+        activity = conversations.append_approval_request_activity(connection, binding=binding, actor_id=command.actor_id, request_id=command.request_id)
+    return RequestApprovalResultV1(binding=binding, activity=activity)
 
 
-__all__ = ["RequestApprovalCommandV1", "request_approval"]
+__all__ = ["RequestApprovalCommandV1", "RequestApprovalResultV1", "request_approval"]

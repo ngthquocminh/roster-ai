@@ -8178,7 +8178,7 @@
               "deadline_exceeded",
               "capability_error",
               "refused",
-              "approval_unsupported"
+              "approval_not_grantable"
             ],
             "title": "Reason",
             "default": "invalid_output"

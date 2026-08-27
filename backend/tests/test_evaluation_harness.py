@@ -510,6 +510,10 @@ NON_PRODUCT_CAPABILITIES = {
     # two schema cases and epics.md:1527 forbids padding a dataset to clear a
     # threshold. Its installation is removable by composition; the cases are not.
     "demonstration",
+    # Story 4.1's single fixture proves the consequential suspension contract.
+    # It is not padded to the NFR28 four-case product-evaluation floor; Stories
+    # 4.5/4.6 own that evidence set.
+    "scheduling_baseline",
 }
 
 
@@ -725,8 +729,8 @@ def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> No
             assert "Increase the tool budget" in rendered_results
 
 
-def test_request_path_grants_no_approval_capability_in_this_milestone() -> None:
-    """The tripwire that reopens Story 2.9's `suspended` stopgap.
+def test_request_path_grants_the_configured_baseline_capability() -> None:
+    """Decision 9 guard: the configured consequential capability is reachable.
 
     Composes the grant the REQUEST PATH actually builds. The previous form used
     `_runtime_for_case(...)`, which filters `installed_modules()` down to the
@@ -755,21 +759,12 @@ def test_request_path_grants_no_approval_capability_in_this_milestone() -> None:
             conversation_site_id=site_id,
         )
     )
-    offenders = [
+    granted_names = [
         module.manifest.capability_name
         for module in granted
         if module.manifest.approval_policy != "none"
     ]
-    assert not offenders, (
-        f"{offenders} declares an approval policy on the request path. Story 2.9 "
-        "maps `suspended` -> `agent_cancelled` as a STOPGAP, because this "
-        "milestone has no way to record an approval decision and "
-        "`outcome.approval.pending_calls` is not persisted. Before enabling "
-        "this, build the resume path (persist the pending calls, an approval "
-        "decision endpoint, DeferredToolResults on the request path) and restore "
-        "the `approval_required` mapping per AD-7. See "
-        "`use_cases/execute_turn.py:terminal_status` and deferred-work.md."
-    )
+    assert granted_names == ["scheduling_baseline"]
 
 
 def test_grounding_cases_have_literal_result_ids_authored_refs_and_oracles() -> None:
