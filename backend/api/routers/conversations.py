@@ -61,7 +61,7 @@ from application.use_cases.execute_turn import (
 )
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import enabled_feature_policy
-from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_VERSION
+from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.grounding import GroundedAnswerV1
 from application.ports.scenario_projection import ScenarioProjectionReader
@@ -210,7 +210,7 @@ async def execute_agent_turn(
         conversation_id=claimed.conversation_id,
         scenario_id=claimed.scenario_id,
         scenario_version_id=claimed.scenario_version_id,
-        policy_version=POLICY_VERSION,
+        policy_version=POLICY_GENERATION,
         clock=lambda: datetime.now(timezone.utc),
         projection_reader=ShortTransactionScenarioProjectionReader(
             projection_reader, open_site_context, claimed.site_id

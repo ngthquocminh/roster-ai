@@ -28,6 +28,7 @@ from application.contracts.scenario_projection import (
     TaskV1,
     WorkerV1,
 )
+from adapters.postgres.site_baseline import PostgresSiteBaselineReader
 from application.ports.scenario_projection import (
     AssignmentPageV1,
     ConstraintPageV1,
@@ -553,7 +554,11 @@ class PostgresScenarioProjectionReader:
             horizon_start=horizon_start,
             site_timezone=SITE_TIMEZONE,
             horizon_minutes=horizon_minutes,
-            baseline_schedule_version=None,
+            baseline_schedule_version=(
+                str(baseline.schedule_version_id)
+                if (baseline := PostgresSiteBaselineReader().get(connection, row.site_id))
+                else None
+            ),
             projection_generated_at=datetime.now(timezone.utc),
             work_area_count=len(work_areas),
             task_count=len(tasks),

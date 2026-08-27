@@ -18,6 +18,7 @@ from adapters.postgres.schema import (
 from application.contracts.activity import (
     ActivityItemV1,
     AgentResponseActivityV1,
+    ApprovalRequestActivityV1,
     ClarificationActivityV1,
     DraftActivityV1,
     DraftReferenceV1,
@@ -27,6 +28,7 @@ from application.contracts.activity import (
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.persisted_event import PersistedEventV1
+from application.contracts.approval_binding import ApprovalBindingV1
 from application.ports.conversation import (
     AcceptedTurnV1,
     AgentRunNotQueuedError,
@@ -55,6 +57,37 @@ class UnsupportedActivityPayloadError(ValueError):
 
 
 class PostgresConversationRepository:
+    def _append_approval_activity(self, connection: Connection, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID, agent_run_id: UUID | None) -> ExecutedAgentRunV1:
+        conv = connection.execute(select(conversation).where(conversation.c.id == binding.conversation_id).with_for_update()).one_or_none()
+        if conv is None:
+            raise RuntimeError("approval conversation is no longer visible")
+        new_version = conv.resource_version + 1
+        occurred_at = binding.created_at or datetime.now(timezone.utc)
+        sequence = connection.execute(select(func.coalesce(func.max(persisted_event.c.sequence), Decimal(0)) + 1).where(persisted_event.c.stream_id == binding.conversation_id)).scalar_one()
+        activity = ApprovalRequestActivityV1(
+            activity_id=uuid4(), activity_type="approval_request", conversation_id=binding.conversation_id,
+            conversation_resource_version=new_version, scenario_id=conv.scenario_id, scenario_version_id=conv.scenario_version_id,
+            occurred_at=occurred_at, approval_id=binding.approval_id, approval_state=binding.state, agent_run_id=agent_run_id,
+            schedule_run_id=binding.schedule_run_id, candidate_schedule_version_id=binding.candidate_schedule_version_id,
+            baseline_schedule_version=binding.baseline_schedule_version, consequence_summary=binding.consequence_summary,
+            parameter_hash=binding.parameter_hash, consequence_hash=binding.consequence_hash, policy_version=binding.policy_version,
+            expires_at=binding.expires_at,
+        )
+        event = PersistedEventV1(stream_id=binding.conversation_id, sequence=sequence, event_type="approval_request", occurred_at=occurred_at, resource_version=new_version, request_id=request_id, conversation_id=binding.conversation_id, agent_run_id=agent_run_id, site_id=binding.site_id, actor_id=actor_id, payload=activity)
+        connection.execute(insert(persisted_event).values(id=activity.activity_id, site_id=binding.site_id, stream_id=event.stream_id, sequence=event.sequence, event_type=event.event_type, resource_version=event.resource_version, request_id=event.request_id, conversation_id=event.conversation_id, agent_run_id=event.agent_run_id, actor_id=event.actor_id, occurred_at=event.occurred_at, payload=_payload_to_json(activity)))
+        connection.execute(update(conversation).where(conversation.c.id == binding.conversation_id).values(resource_version=new_version))
+        return ExecutedAgentRunV1(event, new_version, "approval_required" if agent_run_id else "agent_completed")
+
+    def pause_agent_run_for_approval(self, connection: Connection, *, claimed_agent_run_id: UUID, binding: ApprovalBindingV1, request_id: UUID) -> ExecutedAgentRunV1:
+        current = connection.execute(select(agent_run.c.status, agent_run.c.id).where(agent_run.c.id == claimed_agent_run_id).with_for_update()).one_or_none()
+        if current is None or current.status != "agent_running":
+            raise AgentRunNotQueuedError("agent run is no longer running")
+        result = self._append_approval_activity(connection, binding=binding, actor_id=binding.initiated_by_actor_id, request_id=request_id, agent_run_id=claimed_agent_run_id)
+        connection.execute(update(agent_run).where(agent_run.c.id == claimed_agent_run_id).values(status="approval_required"))
+        return ExecutedAgentRunV1(result.event, result.resource_version, "approval_required")
+
+    def append_approval_request_activity(self, connection: Connection, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID) -> ExecutedAgentRunV1:
+        return self._append_approval_activity(connection, binding=binding, actor_id=actor_id, request_id=request_id, agent_run_id=None)
     def latest_terminal_outcome_for_site(
         self,
         connection: Connection,
@@ -501,6 +534,15 @@ def _payload_to_json(activity: ActivityItemV1) -> dict:
             "proposal_version_id": str(activity.proposal_version_id),
             "consequence_summary": activity.consequence_summary,
         }
+    if isinstance(activity, ApprovalRequestActivityV1):
+        return {
+            **common, "approval_id": str(activity.approval_id), "approval_state": activity.approval_state,
+            "agent_run_id": str(activity.agent_run_id) if activity.agent_run_id else None,
+            "schedule_run_id": str(activity.schedule_run_id), "candidate_schedule_version_id": str(activity.candidate_schedule_version_id),
+            "baseline_schedule_version": activity.baseline_schedule_version, "consequence_summary": activity.consequence_summary,
+            "parameter_hash": activity.parameter_hash, "consequence_hash": activity.consequence_hash,
+            "policy_version": activity.policy_version, "expires_at": activity.expires_at.isoformat(),
+        }
     from pydantic import TypeAdapter
     if isinstance(activity, AgentResponseActivityV1):
         key, value = "response", activity.response
@@ -518,6 +560,7 @@ def _activity_from_payload(value: dict) -> ActivityItemV1:
         "agent_response",
         "clarification",
         "draft",
+        "approval_request",
         "terminal_outcome",
     ):
         raise UnsupportedActivityPayloadError(
@@ -560,6 +603,15 @@ def _activity_from_payload(value: dict) -> ActivityItemV1:
             proposal_id=UUID(value["proposal_id"]),
             proposal_version_id=UUID(value["proposal_version_id"]),
             consequence_summary=value["consequence_summary"],
+        )
+    if activity_type == "approval_request":
+        return ApprovalRequestActivityV1(
+            **common, approval_id=UUID(value["approval_id"]), approval_state=value["approval_state"],
+            agent_run_id=UUID(value["agent_run_id"]) if value["agent_run_id"] else None,
+            schedule_run_id=UUID(value["schedule_run_id"]), candidate_schedule_version_id=UUID(value["candidate_schedule_version_id"]),
+            baseline_schedule_version=value["baseline_schedule_version"], consequence_summary=value["consequence_summary"],
+            parameter_hash=value["parameter_hash"], consequence_hash=value["consequence_hash"], policy_version=value["policy_version"],
+            expires_at=datetime.fromisoformat(value["expires_at"]).astimezone(timezone.utc),
         )
     return TerminalOutcomeActivityV1(
         **common,

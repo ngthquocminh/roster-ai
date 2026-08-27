@@ -300,11 +300,13 @@ agent_run = Table(
     Column("conversation_id", UUID(as_uuid=True), nullable=False),
     Column("message_id", UUID(as_uuid=True), nullable=False),
     Column("status", String(40), nullable=False, server_default=text("'agent_queued'")),
+    Column("status_reason", String(40), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
     ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_agent_run_conversation_site", ondelete="RESTRICT"),
     ForeignKeyConstraint(["message_id", "site_id"], ["message.id", "message.site_id"], name="fk_agent_run_message_site", ondelete="RESTRICT"),
     UniqueConstraint("id", "site_id", name="uq_agent_run_id_site"),
     CheckConstraint("status IN ('agent_queued','agent_running','approval_required','agent_completed','agent_timed_out','agent_cancelled','agent_failed')", name="ck_agent_run_status"),
+    CheckConstraint("status_reason IS NULL OR status_reason IN ('approval_rejected','approval_expired','approval_stale')", name="ck_agent_run_status_reason"),
 )
 
 persisted_event = Table(
@@ -502,6 +504,22 @@ schedule_assignment = Table(
     CheckConstraint("start_minute >= 0 AND end_minute > start_minute", name="ck_schedule_assignment_interval"),
 )
 
+approval_request = Table(
+    "approval_request", metadata, _id_column(), _site_id_column(),
+    Column("state", String(20), nullable=False), Column("action", String(60), nullable=False),
+    Column("initiated_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False), Column("decided_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=True),
+    Column("conversation_id", UUID(as_uuid=True), nullable=False), Column("agent_run_id", UUID(as_uuid=True), nullable=True), Column("schedule_run_id", UUID(as_uuid=True), nullable=False), Column("candidate_schedule_version_id", UUID(as_uuid=True), nullable=False), Column("baseline_schedule_version", String(100), nullable=True), Column("baseline_resource_version", BigInteger, nullable=True),
+    Column("parameter_hash", String(64), nullable=False), Column("consequence_summary", Text, nullable=False), Column("consequence_hash", String(64), nullable=False), Column("checksum_algorithm", String(20), nullable=False, server_default=text("'sha256'")), Column("checksum_schema_version", String(40), nullable=False, server_default=text("'rfc8785-v1'")), Column("policy_version", String(100), nullable=False), Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")), Column("expires_at", DateTime(timezone=True), nullable=False), Column("decided_at", DateTime(timezone=True), nullable=True), Column("consumed_at", DateTime(timezone=True), nullable=True), Column("request_effect_key", Text, nullable=False), Column("resource_version", BigInteger, nullable=False, server_default=text("1")), Column("pending_payload", JSONB, nullable=True),
+    ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_approval_request_conversation_site", ondelete="RESTRICT"), ForeignKeyConstraint(["agent_run_id", "site_id"], ["agent_run.id", "agent_run.site_id"], name="fk_approval_request_agent_run_site", ondelete="RESTRICT"), ForeignKeyConstraint(["schedule_run_id", "site_id"], ["schedule_run.id", "schedule_run.site_id"], name="fk_approval_request_run_site", ondelete="RESTRICT"), ForeignKeyConstraint(["candidate_schedule_version_id", "site_id"], ["schedule_version.id", "schedule_version.site_id"], name="fk_approval_request_candidate_site", ondelete="RESTRICT"),
+    UniqueConstraint("id", "site_id", name="uq_approval_request_id_site"), UniqueConstraint("site_id", "request_effect_key", name="uq_approval_request_effect"), CheckConstraint("state IN ('pending','consumed','rejected','expired','stale')", name="ck_approval_request_state"), CheckConstraint("action = 'promote_baseline'", name="ck_approval_request_action"), CheckConstraint("parameter_hash ~ '^[0-9a-f]{64}$'", name="ck_approval_request_parameter_hash"), CheckConstraint("consequence_hash ~ '^[0-9a-f]{64}$'", name="ck_approval_request_consequence_hash"), CheckConstraint("checksum_algorithm = 'sha256'", name="ck_approval_request_checksum_algorithm"), CheckConstraint("checksum_schema_version = 'rfc8785-v1'", name="ck_approval_request_checksum_schema_version"),
+)
+site_baseline = Table(
+    "site_baseline", metadata, _id_column(), _site_id_column(), Column("schedule_version_id", UUID(as_uuid=True), nullable=False), Column("resource_version", BigInteger, nullable=False, server_default=text("1")), Column("updated_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")), Column("updated_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False), ForeignKeyConstraint(["schedule_version_id", "site_id"], ["schedule_version.id", "schedule_version.site_id"], name="fk_site_baseline_version_site", ondelete="RESTRICT"), UniqueConstraint("id", "site_id", name="uq_site_baseline_id_site"), UniqueConstraint("site_id", name="uq_site_baseline_site"),
+)
+audit_event = Table(
+    "audit_event", metadata, _id_column(), _site_id_column(), Column("attempt_id", UUID(as_uuid=True), nullable=False), Column("request_id", UUID(as_uuid=True), nullable=False), Column("initiated_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False), Column("decided_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=True), Column("conversation_id", UUID(as_uuid=True), nullable=True), Column("agent_run_id", UUID(as_uuid=True), nullable=True), Column("approval_id", UUID(as_uuid=True), nullable=True), Column("schedule_run_id", UUID(as_uuid=True), nullable=True), Column("action", String(60), nullable=False), Column("outcome", String(40), nullable=False), Column("success", Boolean, nullable=False), Column("effect_key", Text, nullable=False), Column("before_version", String(100), nullable=True), Column("after_version", String(100), nullable=True), Column("safe_summary", Text, nullable=False), Column("parameter_hash", String(64), nullable=False), Column("consequence_hash", String(64), nullable=False), Column("policy_version", String(100), nullable=False), Column("app_version", String(100), nullable=False), Column("worker_facts", JSONB, nullable=False), Column("evidence_refs", JSONB, nullable=False), Column("occurred_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")), UniqueConstraint("id", "site_id", name="uq_audit_event_id_site"), CheckConstraint("outcome IN ('approval_requested','approval_consumed','approval_rejected','approval_expired','approval_stale')", name="ck_audit_event_outcome"),
+)
+
 job_queue = Table(
     "job_queue",
     metadata,
@@ -562,11 +580,14 @@ job_queue = Table(
     schema="workflow",
 )
 
-for _table in (run_snapshot, schedule_run, schedule_version, schedule_assignment):
+for _table in (run_snapshot, schedule_run, schedule_version, schedule_assignment, approval_request, site_baseline, audit_event):
     Index(f"ix_{_table.name}_site_id", _table.c.site_id)
 Index("ix_schedule_run_snapshot_id", schedule_run.c.run_snapshot_id)
 Index("ix_schedule_version_run_id", schedule_version.c.schedule_run_id)
 Index("ix_schedule_assignment_version_id", schedule_assignment.c.schedule_version_id)
+Index("uq_approval_request_pending_agent_run", approval_request.c.agent_run_id, unique=True, postgresql_where=text("state = 'pending' AND agent_run_id IS NOT NULL"))
+Index("uq_audit_event_success_effect", audit_event.c.site_id, audit_event.c.effect_key, audit_event.c.outcome, unique=True, postgresql_where=text("success"))
+Index("uq_audit_event_failure_attempt", audit_event.c.site_id, audit_event.c.attempt_id, unique=True, postgresql_where=text("NOT success"))
 Index("ix_job_queue_site_id", job_queue.c.site_id)
 Index(
     "ix_job_queue_leaseable",

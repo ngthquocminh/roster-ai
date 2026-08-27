@@ -11,6 +11,7 @@ import pytest
 from application.contracts.activity import (
     ActivityTypeV1,
     AgentResponseActivityV1,
+    ApprovalRequestActivityV1,
     ClarificationActivityV1,
     DraftActivityV1,
     PlannerMessageActivityV1,
@@ -309,3 +310,16 @@ def test_draft_activity_round_trips_through_storage_without_embedding_proposal()
     assert raw["proposal_id"] == str(activity.proposal_id)
     assert raw["proposal_version_id"] == str(activity.proposal_version_id)
     assert "constraints" not in raw
+
+
+def test_approval_request_activity_round_trips_through_storage() -> None:
+    activity = ApprovalRequestActivityV1(
+        activity_id=uuid4(), activity_type="approval_request", conversation_id=uuid4(),
+        conversation_resource_version=4, scenario_id=uuid4(), scenario_version_id=uuid4(),
+        occurred_at=datetime.now(timezone.utc), approval_id=uuid4(), approval_state="pending",
+        agent_run_id=uuid4(), schedule_run_id=uuid4(), candidate_schedule_version_id=uuid4(),
+        baseline_schedule_version=None, consequence_summary="Candidate version is ready for approval.",
+        parameter_hash="a" * 64, consequence_hash="b" * 64, policy_version="one-user-mvp-v1+0123456789ab",
+        expires_at=datetime.now(timezone.utc),
+    )
+    assert _activity_from_payload(_payload_to_json(activity)) == activity

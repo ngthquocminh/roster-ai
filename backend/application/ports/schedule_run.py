@@ -113,6 +113,7 @@ class IllegalTransitionError(ValueError):
 
 
 class ScheduleRunRepository(Protocol):
+    def get_conversation_for_run(self, connection: Any, *, run_id: UUID, site_id: UUID) -> UUID | None: ...
     def get_candidate(
         self,
         connection: Any,

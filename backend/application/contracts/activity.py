@@ -115,6 +115,31 @@ class RunProgressActivityV1:
 
 
 @dataclass(frozen=True)
+class ApprovalRequestActivityV1:
+    """Persisted literal view of an exact pending approval binding."""
+
+    activity_id: UUID
+    activity_type: Literal["approval_request"]
+    conversation_id: UUID
+    conversation_resource_version: int
+    scenario_id: UUID
+    scenario_version_id: UUID
+    occurred_at: datetime
+    approval_id: UUID
+    approval_state: "ApprovalStateV1"
+    agent_run_id: UUID | None
+    schedule_run_id: UUID
+    candidate_schedule_version_id: UUID
+    baseline_schedule_version: str | None
+    consequence_summary: str
+    parameter_hash: str
+    consequence_hash: str
+    policy_version: str
+    expires_at: datetime
+    schema_version: str = SCHEMA_VERSION
+
+
+@dataclass(frozen=True)
 class TerminalOutcomeActivityV1:
     """Literal non-answer state, including reason-discriminated refusal."""
 
@@ -132,6 +157,7 @@ class TerminalOutcomeActivityV1:
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.schedule_version import ScheduleRunStatusV1
+from application.contracts.approval_binding import ApprovalStateV1
 
 ActivityItemV1 = (
     PlannerMessageActivityV1
@@ -139,11 +165,12 @@ ActivityItemV1 = (
     | ClarificationActivityV1
     | DraftActivityV1
     | RunProgressActivityV1
+    | ApprovalRequestActivityV1
     | TerminalOutcomeActivityV1
 )
 
 __all__ = [
     "ActivityItemV1", "ActivityTypeV1", "AgentResponseActivityV1",
-    "ClarificationActivityV1", "DraftActivityV1", "PlannerMessageActivityV1", "RunProgressActivityV1", "SCHEMA_VERSION",
+    "ApprovalRequestActivityV1", "ClarificationActivityV1", "DraftActivityV1", "PlannerMessageActivityV1", "RunProgressActivityV1", "SCHEMA_VERSION",
     "TerminalOutcomeActivityV1",
 ]

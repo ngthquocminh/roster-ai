@@ -1790,7 +1790,7 @@ development_status:
   # (deferred-work.md:300) by restoring the approval_required mapping and persisting the
   # pending-call payload; its tripwire test is replaced by its own remediation, not weakened.
   epic-4: in-progress
-  4-1-request-approval-for-one-exact-feasible-candidate: ready-for-dev
+  4-1-request-approval-for-one-exact-feasible-candidate: in-progress
   4-2-review-and-decide-the-exact-approval: backlog
   4-3-promote-the-baseline-atomically-with-audit: backlog
   4-4-inspect-complete-decision-provenance: backlog

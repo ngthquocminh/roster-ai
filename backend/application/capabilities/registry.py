@@ -6,9 +6,25 @@ from uuid import UUID
 
 from application.capabilities.installed import installed_modules
 from application.capabilities.module import CapabilityModuleV1, validate_module
+from application.contracts.canonical import canonicalize_json
+import hashlib
 
 PLANNER_ROLE = "planner"
-POLICY_VERSION = "one-user-mvp-v1"
+POLICY_GENERATION = "one-user-mvp-v1"
+
+
+@dataclass(frozen=True)
+class PolicyInputsV1:
+    """Frozen decide-time inputs; changing this shape is a policy change."""
+
+    scheduling_baseline_enabled: bool
+
+
+def derive_policy_version(inputs: PolicyInputsV1) -> str:
+    digest = hashlib.sha256(canonicalize_json({
+        "scheduling_baseline_enabled": inputs.scheduling_baseline_enabled,
+    })).hexdigest()[:12]
+    return f"{POLICY_GENERATION}+{digest}"
 
 
 @dataclass(frozen=True)
@@ -87,6 +103,6 @@ def resolve_granted_capability(
 
 
 __all__ = [
-    "CapabilityGrantContextV1", "PLANNER_ROLE", "POLICY_VERSION",
+    "CapabilityGrantContextV1", "PLANNER_ROLE", "POLICY_GENERATION", "PolicyInputsV1", "derive_policy_version",
     "compose_granted_capabilities", "resolve_granted_capability",
 ]

@@ -18,6 +18,9 @@ from adapters.postgres.identity import PostgresIdentitySessionStore
 from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.proposal import PostgresProposalRepository
 from adapters.postgres.schedule_run import PostgresScheduleRunRepository
+from adapters.postgres.approval import PostgresApprovalRepository
+from adapters.postgres.audit import PostgresAuditWriter
+from adapters.postgres.site_baseline import PostgresSiteBaselineReader
 from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
 from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
@@ -27,6 +30,8 @@ from application.ports.proposal import ProposalRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.schedule_run import ScheduleRunRepository
+from application.ports.approval import ApprovalRepository, AuditWriter
+from application.ports.site_baseline import SiteBaselineReader
 from application.capabilities.registry import (
     CapabilityGrantContextV1,
     compose_granted_capabilities,
@@ -131,6 +136,18 @@ _schedule_run_repository: ScheduleRunRepository = PostgresScheduleRunRepository(
 
 def get_schedule_run_repository() -> ScheduleRunRepository:
     return _schedule_run_repository
+
+
+def get_approval_repository() -> ApprovalRepository:
+    return PostgresApprovalRepository()
+
+
+def get_audit_writer() -> AuditWriter:
+    return PostgresAuditWriter()
+
+
+def get_site_baseline_reader() -> SiteBaselineReader:
+    return PostgresSiteBaselineReader()
 
 
 @lru_cache(maxsize=8)

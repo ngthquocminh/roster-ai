@@ -10,6 +10,7 @@ from application.contracts.persisted_event import PersistedEventV1
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.activity import ActivityItemV1, DraftReferenceV1
+from application.contracts.approval_binding import ApprovalBindingV1
 
 
 @dataclass(frozen=True)
@@ -172,3 +173,7 @@ class ConversationRepository(Protocol):
         payload: GroundedResponseV1 | ResolvedClarificationV1 | TerminalOutcomeV1 | DraftReferenceV1,
         request_id: UUID,
     ) -> ExecutedAgentRunV1: ...
+
+    def pause_agent_run_for_approval(self, connection: Any, *, claimed_agent_run_id: UUID, binding: ApprovalBindingV1, request_id: UUID) -> ExecutedAgentRunV1: ...
+
+    def append_approval_request_activity(self, connection: Any, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID) -> ExecutedAgentRunV1: ...

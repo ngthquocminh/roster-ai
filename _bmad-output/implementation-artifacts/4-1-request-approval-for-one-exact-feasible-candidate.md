@@ -4,7 +4,7 @@ baseline_commit: ef043c0f8b19bfb4eeb1c7ece0c85ba0652a27b5
 
 # Story 4.1: Request Approval for One Exact Feasible Candidate
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -786,6 +786,8 @@ owned.
 ### Agent Model Used
 
 ### Debug Log References
+
+- 2026-08-27: Red/green recorded for Task 1: `backend/tests/test_approval_contracts.py` initially failed collection because the approval contract modules did not exist; after implementation it passed. Focused verification currently green: `uv run pytest tests/test_conversation_contracts.py tests/test_capability_conformance.py tests/test_approval_contracts.py` — 71 passed. The migration head is `d4e5f6a7b8c9`.
 
 ### Completion Notes List
 

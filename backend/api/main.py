@@ -26,6 +26,7 @@ from api.deps import get_identity_store, get_settings
 from api.problems import problem_response
 from api.routers import (
     agent_availability,
+    approvals,
     auth,
     constraints,
     conversations,
@@ -270,3 +271,4 @@ app.include_router(scenario_projection.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")
 app.include_router(proposals.router, prefix="/api/v1")
 app.include_router(schedule_runs.router, prefix="/api/v1")
+app.include_router(approvals.router, prefix="/api/v1")
