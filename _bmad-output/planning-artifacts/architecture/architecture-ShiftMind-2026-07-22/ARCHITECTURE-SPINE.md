@@ -7,7 +7,7 @@ paradigm: hexagonal modular monolith with durable workflow state machines
 scope: independently implemented epics delivering FR-1 through FR-24
 status: final
 created: 2026-07-22
-updated: 2026-07-23
+updated: 2026-08-27
 binds: [FR-1..FR-24]
 sources:
   - ../../prds/prd-ShiftMind-2026-07-21/prd.md
@@ -217,7 +217,8 @@ stateDiagram-v2
 
 - **Binds:** every state-mutating epic
 - **Prevents:** two modules owning one entity or composing incompatible partial transactions
-- **Rule:** identity owns organization/site/user/membership/session; scenario owns fixtures/versions; conversation owns messages/agent runs; scheduling owns proposals/runs/schedule versions/baseline pointer; workflow owns jobs/events; governance owns approvals/policy decisions; evidence owns snapshots/audit/provenance. Only an application orchestrator crosses owners. Atomic bundles are fixed: accept-turn = message + agent-run + event; enqueue-compute = immutable run snapshot + job + event; complete-compute = terminal run + evidence refs + event, plus candidate schedule version only for a feasible completed result; request-approval = binding + agent pause + event; promote-baseline = consumed approval + pointer to the existing candidate + audit + event. Repositories and adapters may not widen a bundle.
+- **Rule:** identity owns organization/site/user/membership/session; scenario owns fixtures/versions; conversation owns messages/agent runs; scheduling owns proposals/runs/schedule versions/baseline pointer; workflow owns jobs/events; governance owns approvals/policy decisions; evidence owns snapshots/audit/provenance. Only an application orchestrator crosses owners. Atomic bundles are fixed: accept-turn = message + agent-run + event; enqueue-compute = immutable run snapshot + job + event; complete-compute = terminal run + evidence refs + event, plus candidate schedule version only for a feasible completed result; request-approval = binding + persisted pending-call payload + agent pause + audit + event; promote-baseline = consumed approval + pointer to the existing candidate + audit + event + agent-run resume; decide-approval-rejection = terminal approval (rejected, expired, or stale) + agent cancellation carrying its literal reason + audit + event. Repositories and adapters may not widen a bundle.
+- **Amendment (2026-08-27, Epic 4 spine):** the request-approval, promote-baseline, and decide-approval-rejection entries above were widened from their 2026-07-22 form, which read `request-approval = binding + agent pause + event`, `promote-baseline = consumed approval + pointer to the existing candidate + audit + event`, and enumerated no rejection bundle. Reasons, in order: AD-12 requires an audit record for a consequential attempt, so an unaudited request-approval could not satisfy both rules; AD-7's `approval_required --> agent_running: decision recorded` edge must commit with the pointer move or a crash parks an approved run permanently; and a terminal non-consumed approval must cancel its paused run, which no existing bundle covered. Epic 4's `EAD-6` implements these; see `architecture-epic-4-2026-08-27/ARCHITECTURE-SPINE.md`.
 
 ### AD-23 — Enforced persistence and evidence roles
 
