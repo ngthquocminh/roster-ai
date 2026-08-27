@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-26
+last_updated: 2026-08-27
 
 # NOTE (2026-08-26): Story 3-12 CODE REVIEW COMPLETE — back to in-progress, not done.
 # Three layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) ran; 3 decision-needed
@@ -1764,7 +1764,7 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Governed and Recoverable Schedule Repair
-  epic-3: in-progress
+  epic-3: done
   3-1-create-and-revise-a-reversible-repair-draft: done
   3-2-produce-a-deterministic-candidate-from-an-immutable-snapshot: done
   3-3-lease-solver-jobs-with-fencing: done
@@ -1777,7 +1777,7 @@ development_status:
   3-10-prove-repair-correctness: done
   3-11-prove-recovery-and-idempotency: done
   3-12-prove-the-repair-browser-journey: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # Epic 4: Exact Baseline Decision and Decision Record
   epic-4: backlog
@@ -1830,32 +1830,34 @@ action_items:
   - epic: "1-2"
     action: "Red-then-green is the standing evidence standard from Story 3.1 onward: any story shipping a guard, conformance suite, or architecture test must demonstrate it observed failing with its structural assertion removed (the Story 2.9 standard). 19 Epic 2 findings were guards that could not go red."
     owner: "Dev / review"
-    status: open
+    status: in-progress
   - epic: "1-2"
     action: "Story creation adds a 'facts this story depends on' pass, distinct from its decisions pass — name the domain rules the story relies on and confirm each is written down somewhere citable, before writing decisions."
     owner: "Story creation"
-    status: open
+    status: done
     # 2026-08-16 — MECHANISM SHIPPED, item stays open. The pass is now a persistent
     # fact loaded on every bmad-create-story activation (_bmad/custom/bmad-create-
     # story.toml). Its "done when" is "present in every Epic 3 creation note", which
     # only the first Epic 3 stories can demonstrate — so this closes when they do,
     # not now.
+    # VERIFIED 2026-08-27 — all Epic 3 story records include the required facts pass;
+    # this action is now done.
   - epic: "1-2"
     action: "Name the two cancellations apart before Story 3.4 is created — ScheduleRun cancellation (3.4) is NOT AgentRun cancellation, which still has no producer and no owner. Cite deferred-work.md:210."
     owner: "Story creation"
-    status: open
+    status: done
   - epic: "1-2"
     action: "PREP: stand up .github/workflows CI — backend pytest (network-disabled default), postgres-marked suite, frontend npm test, typecheck, lint, build, Playwright, alembic check, test_evidence_convention.py. Flagged in the 1.11 and 2.2 reviews; still open."
     owner: "Minh"
-    status: open
+    status: done
   - epic: "1-2"
     action: "PREP: make Gate A re-runnable — a --force/stash-aware flow so gate_a_readiness.main() can run twice without DirtyTreeError, retiring the two-commit dance. See deferred-work.md:107."
     owner: "Minh"
-    status: open
+    status: done
   - epic: "1-2"
     action: "Gate A reads stored evidence as a present-tense verdict in 4 of its 20 checks. Priority: turn 1.9 (parity / mutation-denial) into live CI tests and drop evidence_path from that check — before Story 3.1 merges, because 3.1 writes into the very invariant it gates. See deferred-work.md:103 (re-framed 2026-08-17)."
     owner: "Minh"
-    status: open
+    status: done
     # RE-FRAMED 2026-08-17. This is NOT an "evidence expiry" problem, as the earlier
     # wording claimed. Evidence is a historical record — "at commit X, measurement Y
     # produced result Z" — true forever, reproduced by checking out X. The monotone
@@ -1869,3 +1871,29 @@ action_items:
     # every push, and re-measurement is scripted. 1.9 is the real gap. Do NOT build
     # subject_paths machinery across all 20 checks. Runs alongside Epic 3, does not
     # gate it.
+  # Committed during the Epic 3 retrospective (2026-08-27).
+  # Full record: _bmad-output/implementation-artifacts/epic-3-retro-2026-08-27.md
+  - epic: "3"
+    action: "Update Epic 4 Stories 4.1–4.3 to define initial-baseline establishment, baseline replacement, audit identities, approval replay, rejection, expiry, and literal state transitions."
+    owner: "John + Winston"
+    status: open
+  - epic: "3"
+    action: "Create a citable consequential-workflow design note covering approval binding, identity roles, state transitions, idempotency, and atomic promotion."
+    owner: "Winston"
+    status: open
+  - epic: "3"
+    action: "Create the Epic 4 proof matrix for initial promotion, replacement, stale/expired/rejected approvals, reconnect, replay, rollback, and audit integrity."
+    owner: "Murat"
+    status: open
+  - epic: "3"
+    action: "Require every Epic 4 contract or guard to name its production supplier or an explicit seeded proof and production gap before implementation."
+    owner: "Amelia"
+    status: open
+  - epic: "3"
+    action: "Require and record a relevant demonstrated-red case for every new Epic 4 guard or invariant."
+    owner: "Amelia + Murat"
+    status: open
+  - epic: "3"
+    action: "Reconcile sprint status and deferred-work wording with current code without erasing historical context."
+    owner: "Amelia"
+    status: open
