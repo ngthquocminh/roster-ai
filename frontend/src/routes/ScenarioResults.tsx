@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useScheduleRunResult } from "@/hooks/useScheduleRunResult";
 import { useRequestApproval } from "@/hooks/useRequestApproval";
 import { useRunApprovals } from "@/hooks/useRunApprovals";
+import { ApprovalRequestCard } from "@/features/approvals/ApprovalRequestCard";
 import { USER_ERROR_COPY } from "@/lib/errors";
 
 const NON_TERMINAL = new Set(["solver_queued", "solver_running", "cancellation_requested"]);
@@ -38,6 +39,7 @@ export function ScenarioResults() {
 
       {!query.isError && query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
       {!query.isError && query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}
+      {approvals.data?.items.map((approval) => <ApprovalRequestCard approval={approval} key={approval.approval_id} />)}
       {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && query.data.comparison ? (
         <>
           <ComparisonSummary

@@ -519,6 +519,18 @@ scratch).
 | `502` | Insight generation failed (LLM provider failure or grounding-guard rejection) |
 | `503` | LLM provider unavailable (constraint parsing) |
 
+## Approval requests
+
+- `POST /api/v1/approvals` creates a pending approval for one feasible candidate. It requires an `Idempotency-Key` header and returns the existing binding on a replay.
+- `GET /api/v1/approvals/{approval_id}` reads one visible binding.
+- `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
+
+The POST can return RFC 7807 problem codes `candidate_not_found`,
+`candidate_not_promotable`, `stale_resource_version`, `stale_baseline_version`,
+`approval_already_pending`, `idempotency_key_conflict`, `approval_not_granted`,
+or `invalid_approval_command`. Creating a request writes governance and audit
+records but never promotes the candidate or changes the baseline pointer.
+
 ## Configuration
 
 Every backend environment variable that affects this API (`ROSTERAI_DB`,

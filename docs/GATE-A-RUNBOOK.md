@@ -40,6 +40,7 @@ Approved write paths, each with the reason it does not touch governed data:
 | Path | Why it is allowed |
 |------|-------------------|
 | `POST /api/v1/auth/logout` | Session lifecycle. Touches identity storage only. |
+| `POST /api/v1/approvals` | Creates one exact pending approval binding plus append-only audit and conversation activity records; it never moves the baseline pointer. |
 | `POST /api/v1/conversations` | Story 2.3 conversation aggregate. |
 | `POST /api/v1/conversations/{id}/messages` | Appends a turn. The turn *reads* the pinned projection and never writes it. |
 | `POST /api/v1/conversations/{id}/agent-runs/{id}/execute` | Advances an agent run; writes run state and, through `finalize_agent_run`, the proposal aggregate. |

@@ -95,6 +95,7 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
         scheduling_draft_enabled=True,
         scheduling_inspect_enabled=True,
         scheduling_optimize_enabled=True,
+        scheduling_baseline_enabled=True,
         demonstration_enabled=True,
     )
     all_off = replace_dataclass(
@@ -103,6 +104,7 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
         scheduling_draft_enabled=False,
         scheduling_inspect_enabled=False,
         scheduling_optimize_enabled=False,
+        scheduling_baseline_enabled=False,
         demonstration_enabled=False,
     )
 

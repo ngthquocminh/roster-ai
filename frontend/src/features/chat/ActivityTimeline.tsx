@@ -6,6 +6,7 @@ import { EvidenceLink } from "@/components/primitives/EvidenceLink";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { DraftCard } from "./DraftCard";
+import { ApprovalRequestCard } from "@/features/approvals/ApprovalRequestCard";
 import { toSearchParams } from "@/features/evidence/locator";
 import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
 import {
@@ -293,6 +294,17 @@ function ActivityContent({
           proposalId={item.proposal_id}
         />
       );
+    case "approval_request":
+      return <ApprovalRequestCard approval={{
+        approval_id: item.approval_id,
+        state: item.approval_state,
+        schedule_run_id: item.schedule_run_id,
+        candidate_schedule_version_id: item.candidate_schedule_version_id,
+        baseline_schedule_version: item.baseline_schedule_version,
+        consequence_summary: item.consequence_summary,
+        policy_version: item.policy_version,
+        expires_at: item.expires_at,
+      }} />;
     case "terminal_outcome":
       return <TerminalOutcome isLatest={isLatest} item={item} />;
     default: {

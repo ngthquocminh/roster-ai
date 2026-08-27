@@ -255,6 +255,7 @@ def test_gate_a_write_surface_is_exactly_the_approved_paths() -> None:
     over three open write paths.
     """
     versioned = [
+        ("POST", "/api/v1/approvals"),
         ("POST", "/api/v1/auth/logout"),
         ("POST", "/api/v1/conversations"),
         (

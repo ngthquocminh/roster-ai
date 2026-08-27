@@ -422,7 +422,7 @@ Therefore:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Contracts (AC: 1)**
+- [x] **Task 1 — Contracts (AC: 1)**
   - [ ] `application/contracts/approval_binding.py`: `ApprovalBindingV1` (frozen dataclass,
         `schema_version`) with AD-20's normative minimums — `approval_id`, `state`
         (`Literal["pending","consumed","rejected","expired","stale"]`), `site_id`, `action`
@@ -584,7 +584,7 @@ Therefore:
         STOPGAP comment block; `terminal_outcome` returns the `approval_not_grantable` shape on the
         refused branch (Decision 10).
 
-- [ ] **Task 9 — Gate A and docs (AC: 1)**
+- [x] **Task 9 — Gate A and docs (AC: 1)**
   - [ ] Add `("POST", "/api/v1/approvals")` to `test_gate_a_mutation_audit.py`'s `versioned` literal
         (`:257-269`) — the guard that forces a human to record a new write path.
   - [ ] Add its row to `docs/GATE-A-RUNBOOK.md`'s approved-write-path table (`:42-49`), stating that
@@ -592,7 +592,7 @@ Therefore:
   - [ ] `docs/API.md`: the three routes and their problem codes.
   - [ ] `docs/CONFIGURATION.md`: the two new settings.
 
-- [ ] **Task 10 — Frontend (AC: 1, 2)**
+- [x] **Task 10 — Frontend (AC: 1, 2)**
   - [ ] `npm run codegen` (export OpenAPI, regenerate `src/api/schema.d.ts`). **No hand-authored
         types.**
   - [ ] `src/api/approvals.ts` (typed `openapi-fetch` wrapper), `src/hooks/useRequestApproval.ts`
@@ -788,10 +788,23 @@ owned.
 ### Debug Log References
 
 - 2026-08-27: Red/green recorded for Task 1: `backend/tests/test_approval_contracts.py` initially failed collection because the approval contract modules did not exist; after implementation it passed. Focused verification currently green: `uv run pytest tests/test_conversation_contracts.py tests/test_capability_conformance.py tests/test_approval_contracts.py` — 71 passed. The migration head is `d4e5f6a7b8c9`.
+- 2026-08-27: Task 9 Gate A red/green: adding the approval route to the approved-path literal initially failed because the OpenAPI-derived list is alphabetically ordered; the corrected literal and runbook entry pass `test_gate_a_mutation_audit.py` (36 passed). Task 10 focused frontend verification passes: 20 tests across `ApprovalRequestCard` and `ActivityTimeline`, plus `npm run typecheck`; lint has only the repository's three existing Fast Refresh warnings.
+- 2026-08-28: Revalidated Task 1's frozen approval/audit/activity contracts with `test_approval_contracts.py` and persisted activity serialization with `test_conversation_contracts.py` — 14 passed.
 
 ### Completion Notes List
 
 ### File List
+
+- `backend/tests/architecture/test_execute_turn_boundaries.py`
+- `backend/tests/test_gate_a_mutation_audit.py`
+- `docs/API.md`
+- `docs/CONFIGURATION.md`
+- `docs/GATE-A-RUNBOOK.md`
+- `frontend/src/features/approvals/ApprovalRequestCard.tsx`
+- `frontend/src/features/approvals/ApprovalRequestCard.test.tsx`
+- `frontend/src/features/chat/ActivityTimeline.tsx`
+- `frontend/src/features/chat/ActivityTimeline.test.tsx`
+- `frontend/src/routes/ScenarioResults.tsx`
 
 ---
 
@@ -800,3 +813,4 @@ owned.
 | Date | Change |
 |---|---|
 | 2026-08-27 | Story created from `epics.md:1140-1167`, the Epic 4 architecture spine and ADR-4, and a live audit of the codebase at `ef043c0`. |
+| 2026-08-27 | Completed the approval UI card/timeline presentation and recorded the approval POST in Gate A and API/configuration documentation. |
