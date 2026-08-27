@@ -762,6 +762,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Approvals */
+        get: operations["list_approvals_api_v1_approvals_get"];
+        put?: never;
+        /** Create Approval */
+        post: operations["create_approval_api_v1_approvals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/approvals/{approval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Approval */
+        get: operations["get_approval_api_v1_approvals__approval_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -769,7 +804,7 @@ export interface components {
         /** AcceptedTurnOut */
         AcceptedTurnOut: {
             /** Activity */
-            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["ApprovalRequestActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
             /** Resource Version */
             resource_version: number;
             /** Agent Run Status */
@@ -843,6 +878,135 @@ export interface components {
             };
             /** Parsed Constraint */
             parsed_constraint: string;
+        };
+        /** ApprovalListOut */
+        ApprovalListOut: {
+            /** Items */
+            items: components["schemas"]["ApprovalOut"][];
+        };
+        /** ApprovalOut */
+        ApprovalOut: {
+            /**
+             * Approval Id
+             * Format: uuid
+             */
+            approval_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "consumed" | "rejected" | "expired" | "stale";
+            /**
+             * Schedule Run Id
+             * Format: uuid
+             */
+            schedule_run_id: string;
+            /**
+             * Candidate Schedule Version Id
+             * Format: uuid
+             */
+            candidate_schedule_version_id: string;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
+            /** Consequence Summary */
+            consequence_summary: string;
+            /** Policy Version */
+            policy_version: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Resource Version */
+            resource_version: number;
+        };
+        /** ApprovalRequestActivityOut */
+        ApprovalRequestActivityOut: {
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Activity Id
+             * Format: uuid
+             */
+            activity_id: string;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Conversation Resource Version */
+            conversation_resource_version: number;
+            /**
+             * Scenario Id
+             * Format: uuid
+             */
+            scenario_id: string;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            activity_type: "approval_request";
+            /**
+             * Approval Id
+             * Format: uuid
+             */
+            approval_id: string;
+            /**
+             * Approval State
+             * @enum {string}
+             */
+            approval_state: "pending" | "consumed" | "rejected" | "expired" | "stale";
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /**
+             * Schedule Run Id
+             * Format: uuid
+             */
+            schedule_run_id: string;
+            /**
+             * Candidate Schedule Version Id
+             * Format: uuid
+             */
+            candidate_schedule_version_id: string;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
+            /** Consequence Summary */
+            consequence_summary: string;
+            /** Parameter Hash */
+            parameter_hash: string;
+            /** Consequence Hash */
+            consequence_hash: string;
+            /** Policy Version */
+            policy_version: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** ApprovalRequestIn */
+        ApprovalRequestIn: {
+            /**
+             * Schedule Run Id
+             * Format: uuid
+             */
+            schedule_run_id: string;
+            /** Expected Resource Version */
+            expected_resource_version: number;
+            /** Expected Baseline Schedule Version */
+            expected_baseline_schedule_version?: string | null;
         };
         /** AssignmentDiffOut */
         AssignmentDiffOut: {
@@ -1481,7 +1645,7 @@ export interface components {
         /** ExecutedTurnOut */
         ExecutedTurnOut: {
             /** Activity */
-            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
+            activity: components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["ApprovalRequestActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"];
             /** Resource Version */
             resource_version: number;
             /** Agent Run Status */
@@ -2465,7 +2629,7 @@ export interface components {
             /** Latest Agent Run Status */
             latest_agent_run_status: string | null;
             /** Items */
-            items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"])[];
+            items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["ApprovalRequestActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"])[];
             /** Limit */
             limit: number;
             /** Has More */
@@ -5003,6 +5167,184 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    list_approvals_api_v1_approvals_get: {
+        parameters: {
+            query: {
+                schedule_run_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalListOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    create_approval_api_v1_approvals_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRequestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_approval_api_v1_approvals__approval_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
                 };
             };
             /** @description Forbidden */

@@ -3961,6 +3961,234 @@
           }
         }
       }
+    },
+    "/api/v1/approvals": {
+      "post": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Create Approval",
+        "operationId": "create_approval_api_v1_approvals_post",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalRequestIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "List Approvals",
+        "operationId": "list_approvals_api_v1_approvals_get",
+        "parameters": [
+          {
+            "name": "schedule_run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Schedule Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalListOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
+    },
+    "/api/v1/approvals/{approval_id}": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Get Approval",
+        "operationId": "get_approval_api_v1_approvals__approval_id__get",
+        "parameters": [
+          {
+            "name": "approval_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Approval Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3982,6 +4210,9 @@
                 "$ref": "#/components/schemas/DraftActivityOut"
               },
               {
+                "$ref": "#/components/schemas/ApprovalRequestActivityOut"
+              },
+              {
                 "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             ],
@@ -3990,6 +4221,7 @@
               "propertyName": "activity_type",
               "mapping": {
                 "agent_response": "#/components/schemas/AgentResponseActivityOut",
+                "approval_request": "#/components/schemas/ApprovalRequestActivityOut",
                 "clarification": "#/components/schemas/ClarificationActivityOut",
                 "draft": "#/components/schemas/DraftActivityOut",
                 "planner_message": "#/components/schemas/PlannerMessageActivityOut",
@@ -4158,6 +4390,264 @@
           "parsed_constraint"
         ],
         "title": "AppliedConstraint"
+      },
+      "ApprovalListOut": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalOut"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ApprovalListOut"
+      },
+      "ApprovalOut": {
+        "properties": {
+          "approval_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Approval Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "consumed",
+              "rejected",
+              "expired",
+              "stale"
+            ],
+            "title": "State"
+          },
+          "schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Run Id"
+          },
+          "candidate_schedule_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Candidate Schedule Version Id"
+          },
+          "baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Schedule Version"
+          },
+          "consequence_summary": {
+            "type": "string",
+            "title": "Consequence Summary"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "resource_version": {
+            "type": "integer",
+            "title": "Resource Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approval_id",
+          "state",
+          "schedule_run_id",
+          "candidate_schedule_version_id",
+          "baseline_schedule_version",
+          "consequence_summary",
+          "policy_version",
+          "expires_at",
+          "resource_version"
+        ],
+        "title": "ApprovalOut"
+      },
+      "ApprovalRequestActivityOut": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "activity_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Activity Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "conversation_resource_version": {
+            "type": "integer",
+            "title": "Conversation Resource Version"
+          },
+          "scenario_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Id"
+          },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "activity_type": {
+            "type": "string",
+            "const": "approval_request",
+            "title": "Activity Type"
+          },
+          "approval_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Approval Id"
+          },
+          "approval_state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "consumed",
+              "rejected",
+              "expired",
+              "stale"
+            ],
+            "title": "Approval State"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Run Id"
+          },
+          "candidate_schedule_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Candidate Schedule Version Id"
+          },
+          "baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Schedule Version"
+          },
+          "consequence_summary": {
+            "type": "string",
+            "title": "Consequence Summary"
+          },
+          "parameter_hash": {
+            "type": "string",
+            "title": "Parameter Hash"
+          },
+          "consequence_hash": {
+            "type": "string",
+            "title": "Consequence Hash"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schema_version",
+          "activity_id",
+          "conversation_id",
+          "conversation_resource_version",
+          "scenario_id",
+          "scenario_version_id",
+          "occurred_at",
+          "sequence",
+          "activity_type",
+          "approval_id",
+          "approval_state",
+          "agent_run_id",
+          "schedule_run_id",
+          "candidate_schedule_version_id",
+          "baseline_schedule_version",
+          "consequence_summary",
+          "parameter_hash",
+          "consequence_hash",
+          "policy_version",
+          "expires_at"
+        ],
+        "title": "ApprovalRequestActivityOut"
+      },
+      "ApprovalRequestIn": {
+        "properties": {
+          "schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Run Id"
+          },
+          "expected_resource_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Resource Version"
+          },
+          "expected_baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Baseline Schedule Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schedule_run_id",
+          "expected_resource_version"
+        ],
+        "title": "ApprovalRequestIn"
       },
       "AssignmentDiffOut": {
         "properties": {
@@ -5655,6 +6145,9 @@
                 "$ref": "#/components/schemas/DraftActivityOut"
               },
               {
+                "$ref": "#/components/schemas/ApprovalRequestActivityOut"
+              },
+              {
                 "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
               }
             ],
@@ -5663,6 +6156,7 @@
               "propertyName": "activity_type",
               "mapping": {
                 "agent_response": "#/components/schemas/AgentResponseActivityOut",
+                "approval_request": "#/components/schemas/ApprovalRequestActivityOut",
                 "clarification": "#/components/schemas/ClarificationActivityOut",
                 "draft": "#/components/schemas/DraftActivityOut",
                 "planner_message": "#/components/schemas/PlannerMessageActivityOut",
@@ -7769,6 +8263,9 @@
                   "$ref": "#/components/schemas/DraftActivityOut"
                 },
                 {
+                  "$ref": "#/components/schemas/ApprovalRequestActivityOut"
+                },
+                {
                   "$ref": "#/components/schemas/TerminalOutcomeActivityOut"
                 }
               ],
@@ -7776,6 +8273,7 @@
                 "propertyName": "activity_type",
                 "mapping": {
                   "agent_response": "#/components/schemas/AgentResponseActivityOut",
+                  "approval_request": "#/components/schemas/ApprovalRequestActivityOut",
                   "clarification": "#/components/schemas/ClarificationActivityOut",
                   "draft": "#/components/schemas/DraftActivityOut",
                   "planner_message": "#/components/schemas/PlannerMessageActivityOut",

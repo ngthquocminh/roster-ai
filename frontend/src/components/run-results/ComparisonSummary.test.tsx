@@ -51,7 +51,7 @@ describe("ComparisonSummary", () => {
     expect(screen.getByText("Review overtime")).toBeInTheDocument();
     expect(screen.getByText("demand-1")).toBeInTheDocument();
     expect(screen.getAllByText("Not computed").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Approve as baseline" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Request approval" })).toBeEnabled();
   });
 
   it("renders a real zero coverage delta for genuinely zero demand, not 'Not computed'", () => {
