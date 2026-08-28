@@ -217,6 +217,12 @@ const TERMINAL_LABELS: Record<string, string> = {
   deadline_exceeded: "Timed out",
   capability_error: "Capability failure",
   refused: "Refusal",
+  approval_not_grantable: "Approval not available",
+  // Historical label only -- no current backend path emits this reason.
+  // `execute_turn.py`'s STOPGAP that produced it was replaced by Story 4.1
+  // with `approval_not_grantable`; the entry stays so an older persisted row
+  // replayed through a newer bundle still renders a label instead of falling
+  // through to the generic "Turn ended".
   approval_unsupported: "Approval required",
 };
 

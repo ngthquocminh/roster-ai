@@ -536,7 +536,7 @@ it.each([
     "cancelled",
     "capability_error",
     "refused",
-    "approval_unsupported",
+    "approval_not_grantable",
   ] as const).map((reason, index) => [reason === "refused" ? "refusal" : reason, {
     ...dialogueBase,
     activity_id: `77777777-7777-4777-8777-${String(index).padStart(12, "0")}`,

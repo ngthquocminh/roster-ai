@@ -4645,7 +4645,8 @@
         "type": "object",
         "required": [
           "schedule_run_id",
-          "expected_resource_version"
+          "expected_resource_version",
+          "expected_baseline_schedule_version"
         ],
         "title": "ApprovalRequestIn"
       },

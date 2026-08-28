@@ -1006,7 +1006,7 @@ export interface components {
             /** Expected Resource Version */
             expected_resource_version: number;
             /** Expected Baseline Schedule Version */
-            expected_baseline_schedule_version?: string | null;
+            expected_baseline_schedule_version: string | null;
         };
         /** AssignmentDiffOut */
         AssignmentDiffOut: {

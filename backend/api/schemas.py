@@ -208,7 +208,10 @@ class TerminalOutcomeActivityOut(ActivityCommonOut):
 class ApprovalRequestIn(BaseModel):
     schedule_run_id: UUID
     expected_resource_version: int = Field(ge=1)
-    expected_baseline_schedule_version: str | None = None
+    # No default (Decision 3): an explicit `null` asserts "expects absence"
+    # (EAD-2) and is a meaningful, distinct value from a caller who omitted
+    # the key altogether. `= None` here would silently conflate the two.
+    expected_baseline_schedule_version: str | None = Field(...)
 
 
 class ApprovalOut(BaseModel):

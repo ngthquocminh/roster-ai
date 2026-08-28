@@ -4,7 +4,7 @@ baseline_commit: ef043c0f8b19bfb4eeb1c7ece0c85ba0652a27b5
 
 # Story 4.1: Request Approval for One Exact Feasible Candidate
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -423,7 +423,7 @@ Therefore:
 ## Tasks / Subtasks
 
 - [x] **Task 1 — Contracts (AC: 1)**
-  - [ ] `application/contracts/approval_binding.py`: `ApprovalBindingV1` (frozen dataclass,
+  - [x] `application/contracts/approval_binding.py`: `ApprovalBindingV1` (frozen dataclass,
         `schema_version`) with AD-20's normative minimums — `approval_id`, `state`
         (`Literal["pending","consumed","rejected","expired","stale"]`), `site_id`, `action`
         (`Literal["promote_baseline"]`), `initiated_by_actor_id`, `decided_by_actor_id | None`,
@@ -433,7 +433,7 @@ Therefore:
         `consequence_hash`, `checksum_algorithm`, `checksum_schema_version`, `policy_version`,
         `created_at`, `expires_at`, `decided_at | None`, `consumed_at | None`,
         `request_effect_key`, `resource_version`.
-  - [ ] `application/contracts/audit_envelope.py`: `AuditEnvelopeV1` with AD-20's minimums —
+  - [x] `application/contracts/audit_envelope.py`: `AuditEnvelopeV1` with AD-20's minimums —
         `audit_id`, `attempt_id`, `request_id`, `site_id`, `initiated_by_actor_id`,
         `decided_by_actor_id | None`, `conversation_id | None`, `agent_run_id | None`,
         `approval_id | None`, `schedule_run_id | None`, `action`, `outcome`, `success: bool`,
@@ -441,16 +441,16 @@ Therefore:
         `parameter_hash`, `consequence_hash`, `policy_version`, `app_version`, `worker_facts`
         (`lease_owner`/`attempt_id`/`fencing_epoch` — all `None` on this story's paths),
         `evidence_refs`, `occurred_at`, `schema_version`.
-  - [ ] `ApprovalStateV1` and the audit `outcome` vocabulary as `Literal`s in the contracts,
+  - [x] `ApprovalStateV1` and the audit `outcome` vocabulary as `Literal`s in the contracts,
         matching EAD-6 exactly. No open `str`.
-  - [ ] `application/contracts/activity.py`: add `ApprovalRequestActivityV1` — the reserved
+  - [x] `application/contracts/activity.py`: add `ApprovalRequestActivityV1` — the reserved
         `"approval_request"` discriminant at `activity.py:18` has had no dataclass since Story 2.3
         — carrying the common activity fields plus `approval_id`, `approval_state`,
         `agent_run_id | None`, `schedule_run_id`, `candidate_schedule_version_id`,
         `baseline_schedule_version | None`, `consequence_summary`, `parameter_hash`,
         `consequence_hash`, `policy_version`, `expires_at`. Add it to the `ActivityItemV1` union and
         `__all__`.
-  - [ ] **No decision fields on the activity.** Controls and outcomes are Story 4.2's.
+  - [x] **No decision fields on the activity.** Controls and outcomes are Story 4.2's.
 
 - [x] **Task 2 — One additive migration (AC: 1, 3)**
   - [x] New revision with `down_revision = "c4d5e6f7a8b9"` — verify it is still head with
@@ -487,30 +487,30 @@ Therefore:
         indexes; `uv run alembic check` must be clean.
   - [x] Working `downgrade()` in reverse order, matching the existing files' convention.
 
-- [ ] **Task 3 — `site_baseline` reader, wired at both producers (AC: 1)**
-  - [ ] `application/ports/site_baseline.py`: `SiteBaselineV1` + `SiteBaselineReader` Protocol.
-  - [ ] `adapters/postgres/site_baseline.py`:
+- [x] **Task 3 — `site_baseline` reader, wired at both producers (AC: 1)**
+  - [x] `application/ports/site_baseline.py`: `SiteBaselineV1` + `SiteBaselineReader` Protocol.
+  - [x] `adapters/postgres/site_baseline.py`:
         `PostgresSiteBaselineReader.get(connection, site_id) -> SiteBaselineV1 | None`. Absence is
         the "no baseline" answer (EAD-2), never an error.
-  - [ ] Replace `scenario_catalogue.py:117`'s `literal(None, type_=String)` with a value from this
+  - [x] Replace `scenario_catalogue.py:117`'s `literal(None, type_=String)` with a value from this
         reader, presented as `str(schedule_version_id)`.
-  - [ ] Replace `scenario_projection.py:556`'s `baseline_schedule_version=None` from the **same**
+  - [x] Replace `scenario_projection.py:556`'s `baseline_schedule_version=None` from the **same**
         reader. **Both, in this story** — Decision 8's false-staleness trap.
-  - [ ] Test that with no row both producers return `None`, and with a seeded row both return the
-        *same* string. Observe it failing by moving only one producer.
+  - [x] Test that with no row both producers return `None`, and with a seeded row both return the
+        *same* string. Observe it failing by moving only one producer. (`test_site_baseline_reader_returns_the_same_value_for_a_seeded_row`, `test_scenario_catalogue_adapter.py`)
 
-- [ ] **Task 4 — Policy version and settings (AC: 1)**
-  - [ ] `settings.py`: `approval_expiry_seconds: int = 3600` via `_positive_int`;
+- [x] **Task 4 — Policy version and settings (AC: 1)**
+  - [x] `settings.py`: `approval_expiry_seconds: int = 3600` via `_positive_int`;
         `scheduling_baseline_enabled: bool = True` via `_flag`. Both validated at process start.
-  - [ ] `application/capabilities/registry.py`: rename `POLICY_VERSION` → `POLICY_GENERATION` (same
+  - [x] `application/capabilities/registry.py`: rename `POLICY_VERSION` → `POLICY_GENERATION` (same
         value), update `conversations.py:64,213`, add frozen `PolicyInputsV1` and
         `derive_policy_version()` per EAD-12 using `canonical.canonicalize_json`.
-  - [ ] Comment the two-meanings hazard at both `AgentDepsV1.policy_version` and the binding field.
-  - [ ] Test: changing `scheduling_baseline_enabled` changes the derived value; changing an
+  - [x] Comment the two-meanings hazard at both `AgentDepsV1.policy_version` and the binding field.
+  - [x] Test: changing `scheduling_baseline_enabled` changes the derived value; changing an
         unrelated setting (a CORS origin) does not. Both directions, both observed failing.
 
-- [ ] **Task 5 — `scheduling_baseline` capability module (AC: 1, 3)**
-  - [ ] `application/capabilities/scheduling_baseline.py` modelled on `scheduling_optimize.py` plus
+- [x] **Task 5 — `scheduling_baseline` capability module (AC: 1, 3)**
+  - [x] `application/capabilities/scheduling_baseline.py` modelled on `scheduling_optimize.py` plus
         `demonstration.py`: `SchedulingBaselineRequestV1(schedule_run_id: UUID,
         expected_baseline_schedule_version: str | None)`; a `SchedulingBaselineError` hierarchy with
         `SchedulingBaselineApprovalRequired(CapabilityApprovalRequired)`; `ERROR_CODES`;
@@ -518,133 +518,158 @@ Therefore:
         `NOT COVERED: decision:owned_by_story_4_2`; manifest with `risk_class="consequential"`,
         `permission="site_baseline:promote"`, `approval_policy="exact_action"`,
         `idempotency_semantics` naming `(agent_run_id, tool_call_id)`, and `evaluation_fixtures`.
-  - [ ] Register in `installed.py:_INSTALLED_FACTORIES`. `test_capability_conformance.py` must pass,
+  - [x] Register in `installed.py:_INSTALLED_FACTORIES`. `test_capability_conformance.py` must pass,
         including the manifest-`errors` / exception-subclass set equality.
-  - [ ] Golden fixtures under `evals/golden/scheduling_baseline/` for the suspension case, driven by
+  - [x] Golden fixtures under `evals/golden/scheduling_baseline/` for the suspension case, driven by
         the Story 2.2 harness.
-  - [ ] Handler raises approval-required on **every** call, with the Story 4.3 comment.
+  - [x] Handler raises approval-required on **every** call, with the Story 4.3 comment.
 
-- [ ] **Task 6 — `request_approval` use case: TX1 (AC: 1, 3, 4)**
-  - [ ] `application/use_cases/request_approval.py`. One transaction, one bundle, both initiators:
+- [x] **Task 6 — `request_approval` use case: TX1 (AC: 1, 3, 4)**
+  - [x] `application/use_cases/request_approval.py`. One transaction, one bundle, both initiators:
         pending binding + pending-call payload (agent path only) + `approval_required` transition
         (agent path only) + audit + persisted event.
-  - [ ] **Policy gate, before any write** (AC3): the `schedule_run` exists and is visible in this
+  - [x] **Policy gate, before any write** (AC3): the `schedule_run` exists and is visible in this
         site; `status == 'solver_completed'`; `candidate_schedule_version_id IS NOT NULL`;
         `schedule_version.solver_status IN ('OPTIMAL','FEASIBLE')`; the run's `resource_version`
         matches the pinned expected value; the supplied `expected_baseline_schedule_version` matches
         the live `site_baseline` presentation — including `null` matching absence, in **both**
         directions. Any failure raises a typed error and writes nothing.
-  - [ ] Mint `approval_id` first (EAD-6: it is the `effect_key` for all three bundles).
-  - [ ] Compute `consequence_summary` per Decision 5, then `parameter_hash` and `consequence_hash`
+  - [x] Mint `approval_id` first (EAD-6: it is the `effect_key` for all three bundles).
+  - [x] Compute `consequence_summary` per Decision 5, then `parameter_hash` and `consequence_hash`
         via `contract_digest` (SHA-256 over RFC 8785), storing algorithm and schema version beside
         each digest.
-  - [ ] `expires_at = clock() + approval_expiry_seconds`;
+  - [x] `expires_at = clock() + approval_expiry_seconds`;
         `policy_version = derive_policy_version(...)`.
-  - [ ] `initiated_by_actor_id` gets the server-derived session principal; `decided_by_actor_id`
+  - [x] `initiated_by_actor_id` gets the server-derived session principal; `decided_by_actor_id`
         stays `NULL` until a decision exists. Both fields exist structurally now (EAD-3) even though
         the one-user MVP will make them equal later.
-  - [ ] Agent path: persist `AgentApprovalPendingV1` (pending calls plus the resumable owned turn)
+  - [x] Agent path: persist `AgentApprovalPendingV1` (pending calls plus the resumable owned turn)
         as `pending_payload`, and move `agent_run` to `approval_required`. Read it back and assert
-        round-trip equality in tests.
-  - [ ] HTTP path: `command_idempotency` replay per Decision 4, returning the original binding.
-  - [ ] `SCOPE_CONTROLS` naming what this use case does not cover: `decision:owned_by_story_4_2`,
+        round-trip equality in tests. (`test_tx1_persists_the_agent_pending_payload_byte_identically_and_pauses_the_run`, real PostgreSQL)
+  - [x] HTTP path: `command_idempotency` replay per Decision 4, returning the original binding.
+  - [x] `SCOPE_CONTROLS` naming what this use case does not cover: `decision:owned_by_story_4_2`,
         `promotion:owned_by_story_4_3`, `audit:non_success_outcomes_owned_by_story_4_3`.
 
-- [ ] **Task 7 — Repositories (AC: 1, 2, 4)**
-  - [ ] `application/ports/approval.py`: `ApprovalRepository` Protocol (`create_pending`, `get`,
+- [x] **Task 7 — Repositories (AC: 1, 2, 4)**
+  - [x] `application/ports/approval.py`: `ApprovalRepository` Protocol (`create_pending`, `get`,
         `list_for_schedule_run`, `get_pending_for_agent_run`) and `AuditWriter` (`append`). Ports
         stay SQL- and transport-free.
-  - [ ] `adapters/postgres/approval.py` and `adapters/postgres/audit.py` implementing them on the
+  - [x] `adapters/postgres/approval.py` and `adapters/postgres/audit.py` implementing them on the
         caller's connection. **Repositories never commit** (*Consistency Conventions*, Transactions).
-  - [ ] The conversation-side write — the `approval_required` transition and the
+  - [x] The conversation-side write — the `approval_required` transition and the
         `ApprovalRequestActivityV1` event — goes through `ConversationRepository`, not a second
         adapter reaching into `agent_run`. Add `pause_agent_run_for_approval(...)` beside
         `finish_agent_run`; it guards `current == 'agent_running'` the same way, and it is the only
         method that may write a non-terminal status.
 
-- [ ] **Task 8 — Route wiring (AC: 1, 2, 3, 4)**
-  - [ ] `api/routers/approvals.py`: `POST ""` (Decision 3), `GET "/{approval_id}"`, `GET ""`
+- [x] **Task 8 — Route wiring (AC: 1, 2, 3, 4)**
+  - [x] `api/routers/approvals.py`: `POST ""` (Decision 3), `GET "/{approval_id}"`, `GET ""`
         filtered by `schedule_run_id`. Mount at `/api/v1` in `api/main.py`.
-  - [ ] `api/schemas.py`: `ApprovalRequestIn`, `ApprovalOut`, `ApprovalListOut`,
+  - [x] `api/schemas.py`: `ApprovalRequestIn`, `ApprovalOut`, `ApprovalListOut`,
         `ApprovalRequestActivityOut`; add the activity to **both** `ConversationActivityItemOut` and
-        `ActivityItemOut` unions.
-  - [ ] Problem mapping with distinct stable codes (AD-13): `candidate_not_found` (404),
+        `ActivityItemOut` unions. `expected_baseline_schedule_version` declared `Field(...)` with no
+        default (fixed this session — it shipped as `= None`, silently conflating an omitted key with
+        an explicit `null`; see Debug Log).
+  - [x] Problem mapping with distinct stable codes (AD-13): `candidate_not_found` (404),
         `candidate_not_promotable` (409), `stale_resource_version` (409),
         `stale_baseline_version` (409), `approval_already_pending` (409),
         `idempotency_key_conflict` (409), `approval_not_granted` (403 when the capability is not
         granted), `invalid_approval_command` (422, fixed copy — never `str(exc)`, per
         `schedule_runs.py:333-341`).
-  - [ ] Both GETs apply EAD-7: a pending binding with `now() >= expires_at` is **presented** as
+  - [x] Both GETs apply EAD-7: a pending binding with `now() >= expires_at` is **presented** as
         `expired`, offers no decision control, and the request **writes nothing**. Assert the
         no-write property with a read-only connection or a write-counting spy, not by inspection.
-  - [ ] `api/routers/conversations.py`: `execute_agent_turn`'s finalisation branches on
+        (`test_approvals_api.py` — a fake repository with no update method makes a write structurally
+        impossible, and a `write_count` spy asserts zero.)
+  - [x] `api/routers/conversations.py`: `execute_agent_turn`'s finalisation branches on
         `outcome.status == "suspended"` → `request_approval(...)`, else `finalize_agent_run(...)` as
         today. Keep the existing `AgentRunNotQueuedError` / `RuntimeError` 409 handling.
-  - [ ] `execute_turn.py`: `terminal_status` maps `"suspended"` → `"approval_required"`; delete the
+  - [x] `execute_turn.py`: `terminal_status` maps `"suspended"` → `"approval_required"`; delete the
         STOPGAP comment block; `terminal_outcome` returns the `approval_not_grantable` shape on the
         refused branch (Decision 10).
 
 - [x] **Task 9 — Gate A and docs (AC: 1)**
-  - [ ] Add `("POST", "/api/v1/approvals")` to `test_gate_a_mutation_audit.py`'s `versioned` literal
+  - [x] Add `("POST", "/api/v1/approvals")` to `test_gate_a_mutation_audit.py`'s `versioned` literal
         (`:257-269`) — the guard that forces a human to record a new write path.
-  - [ ] Add its row to `docs/GATE-A-RUNBOOK.md`'s approved-write-path table (`:42-49`), stating that
+  - [x] Add its row to `docs/GATE-A-RUNBOOK.md`'s approved-write-path table (`:42-49`), stating that
         it writes governance and evidence rows and **does not move the baseline pointer**.
-  - [ ] `docs/API.md`: the three routes and their problem codes.
-  - [ ] `docs/CONFIGURATION.md`: the two new settings.
+  - [x] `docs/API.md`: the three routes and their problem codes.
+  - [x] `docs/CONFIGURATION.md`: the two new settings.
 
 - [x] **Task 10 — Frontend (AC: 1, 2)**
-  - [ ] `npm run codegen` (export OpenAPI, regenerate `src/api/schema.d.ts`). **No hand-authored
-        types.**
-  - [ ] `src/api/approvals.ts` (typed `openapi-fetch` wrapper), `src/hooks/useRequestApproval.ts`
+  - [x] `npm run codegen` (export OpenAPI, regenerate `src/api/schema.d.ts`). **No hand-authored
+        types.** (Re-run this session after the `expected_baseline_schedule_version` schema fix.)
+  - [x] `src/api/approvals.ts` (typed `openapi-fetch` wrapper), `src/hooks/useRequestApproval.ts`
         (mutation, reusing `lib/idempotency.ts`'s key holder), `src/hooks/useRunApprovals.ts`.
-  - [ ] `src/features/approvals/ApprovalRequestCard.tsx`: literal binding facts only — approval ID,
+  - [x] `src/features/approvals/ApprovalRequestCard.tsx`: literal binding facts only — approval ID,
         state, candidate version, baseline version or "No current baseline", scenario version,
         consequence summary, policy version, expiry. Text-not-color for state
         (`EXPERIENCE.md:190`). Identifier copy buttons via the existing `IdentifierCopyButton`.
         **No approve/reject control** — Story 4.2 owns decisions, and AC2's "only currently valid
         decision controls" is satisfied by rendering none.
-  - [ ] `ActivityTimeline.tsx`: new `case "approval_request"` before the `const exhaustive: never`
+  - [x] `ActivityTimeline.tsx`: new `case "approval_request"` before the `const exhaustive: never`
         guard. The existing `activity_id` dedupe already satisfies AC2's "replay once".
-  - [ ] `ComparisonSummary.tsx` and `RunsTable.tsx` per Decision 11.
-  - [ ] `ScenarioResults.tsx`: render `ApprovalRequestCard` for the run's current binding.
-  - [ ] Vitest coverage for each: card states (pending / presented-expired), the two disabled
+        `TERMINAL_LABELS` also fixed this session to carry `approval_not_grantable` — the reason the
+        backend now actually emits after Decision 10 — alongside the historical
+        `approval_unsupported` entry it already had; the new reason had no label and silently fell
+        through to the generic "Turn ended".
+  - [x] `ComparisonSummary.tsx` and `RunsTable.tsx` per Decision 11.
+  - [x] `ScenarioResults.tsx`: render `ApprovalRequestCard` for the run's current binding.
+  - [x] Vitest coverage for each: card states (pending / presented-expired), the two disabled
         request-control reasons, replay dedupe, and the timeline's unknown-discriminant runtime
-        fallback still working.
+        fallback still working. `ComparisonSummary.test.tsx` extended this session with the two
+        disabled-reason cases, the pending/error/enabled states, and a click assertion — the existing
+        suite predated the component's `onRequestApproval`/`requestPending`/`requestError`/
+        `pendingApproval` props and did not compile against them (`tsc -b` failure caught it; `tsc
+        --noEmit` did not, see Debug Log).
 
-- [ ] **Task 11 — Proof (AC: 1, 2, 3, 4)**
-  - [ ] `backend/tests/test_approval_request.py`: TX1 on both initiator paths; every AC3 refusal
+- [x] **Task 11 — Proof (AC: 1, 2, 3, 4)**
+  - [x] `backend/tests/test_approval_request.py`: TX1 on both initiator paths; every AC3 refusal
         (missing, infeasible, timed-out, cancelled, failed, stale run version, stale baseline
         version in both directions) writes nothing; AC4 replay returns the original binding and a
         changed body conflicts; the agent-path `(agent_run_id, tool_call_id)` key admits no second
-        row.
-  - [ ] Decision 9's three replacement guards, with the old test deleted.
-  - [ ] `@pytest.mark.postgres` coverage for the migration: RLS forced on all three tables;
+        row. (This session added the missing-run, non-completed-status, no-candidate,
+        stale-resource-version, and reverse-direction stale-baseline cases as fake-repository unit
+        tests, plus the agent-path pending/pause assertion; the router-level replay/conflict/expired
+        cases moved to the new `test_approvals_api.py`, and the real-database row-admission cases to
+        `test_approval_governance_postgres.py` — see those files' own docstrings for the split
+        rationale.)
+  - [x] Decision 9's three replacement guards, with the old test deleted.
+        (`test_evaluation_harness.py::test_request_path_grants_the_configured_baseline_capability`;
+        `test_execute_turn_use_case.py`'s `suspended -> approval_required` mapping case;
+        `test_approval_governance_postgres.py`'s pending-payload round-trip.)
+  - [x] `@pytest.mark.postgres` coverage for the migration: RLS forced on all three tables;
         `audit_event` UPDATE/DELETE denied to `shiftmind_runtime`; the partial unique index refuses a
         second `pending` row for one agent run; the two audit uniqueness rules hold independently.
-  - [ ] EAD-7's purity: a GET on an overdue pending binding presents `expired`, writes nothing, and
-        leaves the stored state `pending`.
-  - [ ] **Every new guard gets a demonstrated-red note in the Debug Log** naming the mutation that
+        (New this session: `test_approval_governance_postgres.py` — this coverage did not exist
+        before; see Debug Log.)
+  - [x] EAD-7's purity: a GET on an overdue pending binding presents `expired`, writes nothing, and
+        leaves the stored state `pending`. (New this session: `test_approvals_api.py`, against a fake
+        repository with no update method at all, so a write is structurally impossible, not merely
+        unobserved.)
+  - [x] **Every new guard gets a demonstrated-red note in the Debug Log** naming the mutation that
         made it fail. A guard with no recorded red is not evidence (retro §1).
-  - [ ] Full suites before hand-off: `uv run pytest`, `uv run pytest -m postgres`,
+  - [x] Full suites before hand-off: `uv run pytest`, `uv run pytest -m postgres`,
         `uv run alembic check`, `npm test`, `npm run typecheck`, `npm run lint`, `npm run test:e2e`.
-  - [ ] **No evidence file.** No AC in this story carries a measured threshold, and
+        All green — see Debug Log for counts.
+  - [x] **No evidence file.** No AC in this story carries a measured threshold, and
         `docs/EVIDENCE-CONVENTION.md` exists to stop unmeasured files being written. Stories 4.5/4.6
         own Epic 4's evidence.
 
-- [ ] **Task 12 — Ledger reconciliation (retro §3, Amelia)**
-  - [ ] Close `deferred-work.md:300` (the `suspended` stopgap) — landed here.
-  - [ ] Close `deferred-work.md:462` (`RunsTable` `ApproveButton` sub-states) by dissolution, with
+- [x] **Task 12 — Ledger reconciliation (retro §3, Amelia)**
+  - [x] Close `deferred-work.md:300` (the `suspended` stopgap) — landed here.
+  - [x] Close `deferred-work.md:462` (`RunsTable` `ApproveButton` sub-states) by dissolution, with
         Decision 11's reasoning recorded.
-  - [ ] Update `deferred-work.md:264` (baseline pointer supply): the reader and storage land here;
+  - [x] Update `deferred-work.md:264` (baseline pointer supply): the reader and storage land here;
         **values remain Story 4.3's**.
-  - [ ] Update `deferred-work.md:486` (comparison staleness "vacuously false in production"): still
+  - [x] Update `deferred-work.md:486` (comparison staleness "vacuously false in production"): still
         vacuous after this story, because nothing writes the pointer yet. **Do not close it.**
-  - [ ] Leave `deferred-work.md:427-437` (worker/actor attribution) open and re-point it at Stories
+  - [x] Leave `deferred-work.md:427-437` (worker/actor attribution) open and re-point it at Stories
         4.3/4.4, which read the audit rows. This story adds the two structural fields
         `initiated_by_actor_id` / `decided_by_actor_id` but writes no worker-driven audit.
-  - [ ] Leave `deferred-work.md:280` (`revoked_conversation_ids` has no supplier) open. This story
-        adds no revocation source.
-  - [ ] Record in Completion Notes the EAD-9 supplier entries for the two new guards this story
+  - [x] Leave `deferred-work.md:280` (`revoked_conversation_ids` has no supplier) open. This story
+        adds no revocation source. (No edit made — confirmed still accurate as written.)
+  - [x] Record in Completion Notes the EAD-9 supplier entries for the two new guards this story
         introduces: the `scheduling_baseline` grant (real supplier: `Settings` +
         `enabled_feature_policy`) and the consequence-summary calculator (real supplier: persisted
         `schedule_version` / `schedule_assignment` rows).
@@ -791,21 +816,185 @@ owned.
 - 2026-08-27: Red/green recorded for Task 1: `backend/tests/test_approval_contracts.py` initially failed collection because the approval contract modules did not exist; after implementation it passed. Focused verification currently green: `uv run pytest tests/test_conversation_contracts.py tests/test_capability_conformance.py tests/test_approval_contracts.py` — 71 passed. The migration head is `d4e5f6a7b8c9`.
 - 2026-08-27: Task 9 Gate A red/green: adding the approval route to the approved-path literal initially failed because the OpenAPI-derived list is alphabetically ordered; the corrected literal and runbook entry pass `test_gate_a_mutation_audit.py` (36 passed). Task 10 focused frontend verification passes: 20 tests across `ApprovalRequestCard` and `ActivityTimeline`, plus `npm run typecheck`; lint has only the repository's three existing Fast Refresh warnings.
 - 2026-08-28: Revalidated Task 1's frozen approval/audit/activity contracts with `test_approval_contracts.py` and persisted activity serialization with `test_conversation_contracts.py` — 14 passed.
+- 2026-08-28 (this session — closing out Tasks 3–12): Started from a much more complete tree than the
+  checkboxes showed (Tasks 1–10 were substantially implemented; only the boxes lagged). Ran the full
+  regression suite first and found two **pre-existing, story-caused** failures, both demonstrated
+  red before the fix: `test_evidence_binding.py::test_schema_version_walks_the_migration_graph_to_the_single_head`
+  asserted the migration head literal `c4d5e6f7a8b9` — stale the moment this story's migration
+  (`d4e5f6a7b8c9`) became the real head; and `test_postgres_schema.py::test_metadata_contains_only_story_owned_tables`
+  had not been extended with `approval_request`/`site_baseline`/`audit_event`. Both are repo-wide
+  allowlist tests any story adding a table/migration must update; fixed and re-verified green.
+- 2026-08-28: **Found and fixed a live Decision 3 violation.** `api/schemas.py`'s `ApprovalRequestIn.expected_baseline_schedule_version`
+  shipped as `= None` (an ordinary optional field), silently conflating an omitted key with an
+  explicit `null` — exactly what Decision 3 says must not happen ("declare it `Field(...)` with no
+  default so Pydantic rejects omission"). Demonstrated red: `test_approvals_api.py::test_rejects_an_omitted_baseline_key_distinctly_from_an_explicit_null`
+  got back `409 idempotency_key_conflict` (the omitted-key request reached the use case as `null` and
+  collided with a prior stub) instead of `422`, against the pre-fix schema. Fixed to `Field(...)` (no
+  default); re-ran OpenAPI codegen (`npm run codegen`) so `schema.d.ts` drops the `?` on the field;
+  full backend suite re-run green afterward (no caller relied on omission).
+- 2026-08-28: **Found and fixed a missing terminal-reason label.** `ActivityTimeline.tsx`'s
+  `TERMINAL_LABELS` still only mapped the old `approval_unsupported` reason; `approval_not_grantable`
+  — the reason `execute_turn.py` actually emits today after Decision 10 — had no entry and silently
+  fell through to the generic "Turn ended" fallback. The existing pairwise-distinctness test could
+  not have caught this (the fallback string is itself unique, so distinctness alone still holds).
+  Added a dedicated test pinning the exact label
+  (`ActivityTimeline.test.tsx::"labels the real approval-not-grantable reason, not the generic fallback"`),
+  demonstrated it red against the unfixed component (asserted `getByText("Approval not available")`
+  and got the "Turn ended" DOM instead), then added the `TERMINAL_LABELS` entry and re-ran green.
+  Also swapped the stale `approval_unsupported` literal for `approval_not_grantable` in the existing
+  terminal-reason fixture lists (`ActivityTimeline.test.tsx`, `accessibility-contract.test.tsx`) so
+  coverage tracks what the backend actually emits, not a retired stopgap value.
+  `TERMINAL_LABELS.approval_unsupported` itself is left in place — historical-row compatibility, per
+  the Dev Notes' own instruction.
+  `npm run typecheck` (bare `tsc --noEmit` against the root `tsconfig.json`, which declares `"files": []`
+  and only project references) passed throughout and would have passed even with the omission bug
+  above still in place — it is effectively a no-op today. `npm run build`'s `tsc -b` is what actually
+  type-checks the tree (and is what `npm run test:e2e` runs first), and it is what caught the
+  pre-existing `ComparisonSummary.test.tsx` prop mismatch below. Flagging this gap rather than
+  quietly relying on `test:e2e` to keep catching it.
+- 2026-08-28: **Found `npm run build` (`tsc -b`) failing** — not caught by `npm run typecheck` per the
+  gap just noted. `ComparisonSummary.test.tsx` predated the component's `onRequestApproval` /
+  `requestPending` / `requestError` / `pendingApproval` props (added earlier this story) and rendered
+  it with only `comparison`; `ActivityTimeline.test.tsx` and `accessibility-contract.test.tsx` still
+  used the retired `approval_unsupported` literal where the OpenAPI type now requires
+  `approval_not_grantable` (see above). Fixed `ComparisonSummary.test.tsx` to supply the new props via
+  a `baseProps()` helper and added five new cases: enabled click-through, the two disabled reasons
+  (stale comparison; pending decision), the in-flight-disabled state, and the request-error banner
+  (Task 10's own list of required coverage). `npx tsc -b` clean afterward; `npm test`, `npm run lint`,
+  and `npm run test:e2e` (52/52) all green.
+- 2026-08-28: **Wrote the missing Task 11 proof surface** — none of it existed before this session:
+  - `test_approval_request.py` extended from 3 to 9 cases (missing run, non-`solver_completed`
+    status, `solver_completed` with no candidate row, stale resource version, stale baseline in both
+    directions, agent-path pending-payload/pause assertion), all fake-repository unit tests. Each new
+    error-path case demonstrated red first by asserting the wrong exception type against the
+    unmodified `Runs`/`_command` fixtures, confirming the fixture actually reaches the intended gate.
+  - New `test_approvals_api.py` (14 cases): router-level proofs against fake repositories — every
+    `ApprovalRequestError` subtype's problem-code mapping, the feature-not-granted 403, the
+    candidate-not-visible 404, Decision 3's omission-vs-null 422 (see above), idempotency replay and
+    conflict (Decision 4), and EAD-7's presented-expired GET (with a `write_count` spy and a fake
+    repository offering no update method, so a write is structurally impossible, not merely
+    unobserved).
+  - New `test_approval_governance_postgres.py` (15 cases, `@pytest.mark.postgres`, all against a real
+    migrated database): RLS `relrowsecurity`/`relforcerowsecurity` forced on all three new tables; a
+    live cross-site row genuinely invisible under `shiftmind_runtime`; `audit_event` UPDATE/DELETE
+    denied by grant (`has_table_privilege`) while INSERT is allowed; the partial unique index
+    (`agent_run_id) WHERE state='pending'`) rejecting a second pending row for one agent run; the
+    exact-key uniqueness rejecting a duplicate `(agent_run_id, tool_call_id)`; the two independent
+    audit uniqueness rules (same effect_key+outcome collides on success; same attempt_id collides on
+    failure regardless of effect_key; a different-outcome row for the same effect_key does NOT
+    collide, proving the two rules are independent rather than one rule keyed on effect_key alone);
+    TX1 persisted end-to-end through the real `Postgres*` adapters on both initiator paths, including
+    the pending-payload byte-identical round-trip and the `agent_run` status transition to
+    `approval_required`; and two AC3 refusal paths (stale resource version, stale/absent baseline)
+    proven to write nothing against the live tables (no `approval_request` or `audit_event` row).
+  - Every new guard above was run once against a knowingly-wrong fixture or an intentionally reverted
+    line first, observed to fail for the expected reason, then re-run green — the retro's repeated
+    "a passing assertion is insufficient unless it can be made to fail" lesson.
+  Full-suite counts after all fixes: `uv run pytest` — 1343 passed, 2 skipped, 7 deselected;
+  `uv run pytest -m postgres` — 110 passed, 1242 deselected; `uv run alembic check` — clean, single
+  head `d4e5f6a7b8c9`; `npm test` — 537 passed; `npx tsc -b` — clean; `npm run lint` — clean (only the
+  repository's three pre-existing Fast Refresh warnings); `npm run test:e2e` — 52 passed.
 
 ### Completion Notes List
 
+- **Scope of this session:** the bulk of Tasks 1–10 was already implemented when this session
+  started; the checkboxes had not kept pace. This session's real work was (a) two small but load-
+  bearing bug fixes found by actually running the full suites (Decision 3's omission-vs-null gap;
+  the missing `approval_not_grantable` label), (b) writing Task 11's entire missing proof surface
+  (no router-level or real-database test existed for this story before today), and (c) Task 12's
+  ledger reconciliation, which had not been touched.
+- **Honest gaps this story ships with** (unchanged from story creation, restated for the record):
+  no binding created in production carries a non-null `baseline_version` (nothing writes
+  `site_baseline` until Story 4.3 — proven here only with a seeded row); no decision can be recorded
+  (`pending` is the only reachable stored state; `consumed`/`rejected`/`expired`/`stale` exist in
+  schema and contract but are unreachable until 4.2/4.3 — the *presented*-expired read path is
+  reachable and proven); non-success audit is not written (Decision 10 — only `approval_requested`
+  rows exist); the approved re-invocation of `scheduling_baseline` is unreachable (the handler raises
+  unconditionally; Story 4.3 supplies the approved branch); `initiated_by_actor_id` and
+  `decided_by_actor_id` will hold the same principal once 4.2 fills the second (structural
+  distinction only, per the one-user MVP); comparison staleness stays vacuously false in production
+  (mechanism now has somewhere to read from, still no writer).
+- **EAD-9 supplier entries for this story's two new guards** (Task 12): the `scheduling_baseline`
+  grant's real supplier is `Settings.scheduling_baseline_enabled` via `enabled_feature_policy`; the
+  consequence-summary calculator's real supplier is the persisted `schedule_version` /
+  `schedule_assignment` rows read inside `request_approval` (Decision 5) — neither is a seeded-only
+  stand-in.
+- **Test-file split for Task 11**, recorded because Decision text named one file
+  (`test_approval_request.py`) and the actual proof landed across three: fake-repository use-case
+  tests stayed in `test_approval_request.py`; fake-repository router/HTTP-contract tests went to the
+  new `test_approvals_api.py` (no real database needed to prove problem codes, idempotency, or the
+  pure-read contract); real-PostgreSQL tests (RLS, grants, unique indexes, true persistence) went to
+  the new `test_approval_governance_postgres.py`. Each new file's docstring states this rationale.
+- **Gap flagged, not fixed:** `npm run typecheck` (bare `tsc --noEmit`) is effectively inert against
+  this project's root `tsconfig.json` (`"files": []`, project references only) — it did not catch
+  either the `ComparisonSummary.test.tsx` prop mismatch or the retired-literal test failures that
+  `npm run build`'s `tsc -b` caught. Both are pre-existing conditions this story exposed rather than
+  introduced; recorded here so a future story doesn't rely on `typecheck` alone.
+
 ### File List
 
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `backend/adapters/postgres/approval.py`
+- `backend/adapters/postgres/audit.py`
+- `backend/adapters/postgres/conversation.py`
+- `backend/adapters/postgres/scenario_catalogue.py`
+- `backend/adapters/postgres/scenario_projection.py`
+- `backend/adapters/postgres/schedule_run.py`
+- `backend/adapters/postgres/schema.py`
+- `backend/adapters/postgres/site_baseline.py`
+- `backend/api/deps.py`
+- `backend/api/main.py`
+- `backend/api/routers/approvals.py`
+- `backend/api/routers/conversations.py`
+- `backend/api/schemas.py`
+- `backend/application/capabilities/installed.py`
+- `backend/application/capabilities/registry.py`
+- `backend/application/capabilities/scheduling_baseline.py`
+- `backend/application/contracts/activity.py`
+- `backend/application/contracts/approval_binding.py`
+- `backend/application/contracts/audit_envelope.py`
+- `backend/application/contracts/dialogue.py`
+- `backend/application/ports/approval.py`
+- `backend/application/ports/conversation.py`
+- `backend/application/ports/schedule_run.py`
+- `backend/application/ports/site_baseline.py`
+- `backend/application/use_cases/execute_turn.py`
+- `backend/application/use_cases/request_approval.py`
+- `backend/evals/golden/scheduling_baseline/approval-required.json`
+- `backend/migrations/versions/d4e5f6a7b8c9_add_approval_governance.py`
+- `backend/settings.py`
 - `backend/tests/architecture/test_execute_turn_boundaries.py`
+- `backend/tests/test_approval_contracts.py`
+- `backend/tests/test_approval_governance_postgres.py`
+- `backend/tests/test_approval_request.py`
+- `backend/tests/test_approvals_api.py`
+- `backend/tests/test_capability_conformance.py`
+- `backend/tests/test_conversation_contracts.py`
+- `backend/tests/test_dialogue_contracts.py`
+- `backend/tests/test_evaluation_harness.py`
+- `backend/tests/test_evidence_binding.py`
+- `backend/tests/test_execute_turn_use_case.py`
 - `backend/tests/test_gate_a_mutation_audit.py`
+- `backend/tests/test_postgres_schema.py`
+- `backend/tests/test_scenario_catalogue_adapter.py`
 - `docs/API.md`
 - `docs/CONFIGURATION.md`
 - `docs/GATE-A-RUNBOOK.md`
+- `frontend/openapi.json`
+- `frontend/src/api/approvals.ts`
+- `frontend/src/api/schema.d.ts`
+- `frontend/src/components/run-results/ComparisonSummary.test.tsx`
+- `frontend/src/components/run-results/ComparisonSummary.tsx`
+- `frontend/src/components/runs/RunsTable.test.tsx`
+- `frontend/src/components/runs/RunsTable.tsx`
 - `frontend/src/features/approvals/ApprovalRequestCard.tsx`
 - `frontend/src/features/approvals/ApprovalRequestCard.test.tsx`
 - `frontend/src/features/chat/ActivityTimeline.tsx`
 - `frontend/src/features/chat/ActivityTimeline.test.tsx`
+- `frontend/src/hooks/useRequestApproval.ts`
+- `frontend/src/hooks/useRunApprovals.ts`
 - `frontend/src/routes/ScenarioResults.tsx`
+- `frontend/src/test/accessibility-contract.test.tsx`
 
 ---
 
@@ -815,3 +1004,4 @@ owned.
 |---|---|
 | 2026-08-27 | Story created from `epics.md:1140-1167`, the Epic 4 architecture spine and ADR-4, and a live audit of the codebase at `ef043c0`. |
 | 2026-08-27 | Completed the approval UI card/timeline presentation and recorded the approval POST in Gate A and API/configuration documentation. |
+| 2026-08-28 | Closed out Tasks 3–12: fixed two stale allowlist tests (migration head literal, schema table set), fixed a live Decision 3 violation (`expected_baseline_schedule_version` accepted omission as `null`), fixed a missing `approval_not_grantable` terminal label, extended `ComparisonSummary.test.tsx` for its already-shipped approval props, wrote Task 11's entire missing proof surface (`test_approvals_api.py`, `test_approval_governance_postgres.py`, and 6 new `test_approval_request.py` cases), and completed Task 12's ledger reconciliation (`deferred-work.md:264,300,427-437,462,486`). Full backend/postgres/frontend/e2e suites green. Status → review. |
