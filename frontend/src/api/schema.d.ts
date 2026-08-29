@@ -780,6 +780,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/approvals/{approval_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide Approval Route */
+        post: operations["decide_approval_route_api_v1_approvals__approval_id__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/approvals/{approval_id}": {
         parameters: {
             query?: never;
@@ -879,6 +896,16 @@ export interface components {
             /** Parsed Constraint */
             parsed_constraint: string;
         };
+        /** ApprovalDecisionIn */
+        ApprovalDecisionIn: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Expected Resource Version */
+            expected_resource_version: number;
+        };
         /** ApprovalListOut */
         ApprovalListOut: {
             /** Items */
@@ -917,6 +944,17 @@ export interface components {
             consequence_summary: string;
             /** Policy Version */
             policy_version: string;
+            /** Parameter Hash */
+            parameter_hash: string;
+            /** Consequence Hash */
+            consequence_hash: string;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
             /**
              * Expires At
              * Format: date-time
@@ -2633,6 +2671,8 @@ export interface components {
             resource_version: number;
             /** Latest Agent Run Status */
             latest_agent_run_status: string | null;
+            /** Latest Agent Run Status Reason */
+            latest_agent_run_status_reason: string | null;
             /** Items */
             items: (components["schemas"]["PlannerMessageActivityOut"] | components["schemas"]["AgentResponseActivityOut"] | components["schemas"]["ClarificationActivityOut"] | components["schemas"]["DraftActivityOut"] | components["schemas"]["ApprovalRequestActivityOut"] | components["schemas"]["TerminalOutcomeActivityOut"])[];
             /** Limit */
@@ -5268,6 +5308,15 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
         };
     };
     create_approval_api_v1_approvals_post: {
@@ -5330,6 +5379,88 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    decide_approval_route_api_v1_approvals__approval_id__decision_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalDecisionIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalOut"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
         };
     };
     get_approval_api_v1_approvals__approval_id__get: {
@@ -5381,6 +5512,15 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

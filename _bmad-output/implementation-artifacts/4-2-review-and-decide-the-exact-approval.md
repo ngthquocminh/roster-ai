@@ -4,7 +4,7 @@ baseline_commit: 0350f0648cb07d2760b1d8e2fb8df5991f3e6b58
 
 # Story 4.2: Review and Decide the Exact Approval
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -436,106 +436,106 @@ matrix has something stable to assert:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — `decide_approval` use case: shared revalidation + TX3 (AC: 2, 3, 4)**
-  - [ ] `application/use_cases/decide_approval.py`. Errors mirror
+- [x] **Task 1 — `decide_approval` use case: shared revalidation + TX3 (AC: 2, 3, 4)**
+  - [x] `application/use_cases/decide_approval.py`. Errors mirror
         `request_approval.py`'s hierarchy: `DecideApprovalError(ValueError)` with `code`, and
         subclasses `ApprovalNotFoundError` (`approval_not_found`), `ApprovalNotPendingError`
         (`approval_not_pending`), `StaleResourceVersionError` (`stale_resource_version`),
         `ApprovalNotGrantedError` (`approval_not_granted`),
         `BaselinePromotionNotAvailableError` (`promotion_not_available`).
-  - [ ] `revalidate_binding(...) -> RevalidationV1` exactly per Decision 2's table, exported for
+  - [x] `revalidate_binding(...) -> RevalidationV1` exactly per Decision 2's table, exported for
         Story 4.3. Put the fork's rule in the docstring, citing EAD-10.
-  - [ ] `DecisionResultV1` frozen dataclass: `outcome: Literal["rejected","expired","stale"]`,
+  - [x] `DecisionResultV1` frozen dataclass: `outcome: Literal["rejected","expired","stale"]`,
         `binding: ApprovalBindingV1` (post-write state), `activity: ExecutedAgentRunV1 | None`,
         `expected: dict`, `current: dict` (the literal context AC3 requires).
-  - [ ] TX3 as **one** bundle in the caller's transaction, in this order: terminal binding update →
+  - [x] TX3 as **one** bundle in the caller's transaction, in this order: terminal binding update →
         `agent_cancelled(reason)` when `binding.agent_run_id` is not `None` → audit append → event
         append. No repository commits.
-  - [ ] Approve-and-valid raises `BaselinePromotionNotAvailableError` with the Story 4.3 comment
+  - [x] Approve-and-valid raises `BaselinePromotionNotAvailableError` with the Story 4.3 comment
         (Decision 3). **Write no promotion body.**
-  - [ ] `SCOPE_CONTROLS` naming what this use case does not cover: `promotion:owned_by_story_4_3`,
+  - [x] `SCOPE_CONTROLS` naming what this use case does not cover: `promotion:owned_by_story_4_3`,
         `audit:denied_attempts_owned_by_story_4_3`, `resume:deferred_tool_results_owned_by_story_4_3`.
 
-- [ ] **Task 2 — Repository surface (AC: 3, 4)**
-  - [ ] `application/ports/approval.py`: add `terminalize(connection, *, approval_id, site_id,
+- [x] **Task 2 — Repository surface (AC: 3, 4)**
+  - [x] `application/ports/approval.py`: add `terminalize(connection, *, approval_id, site_id,
         state, decided_by_actor_id, decided_at, expected_resource_version) -> ApprovalBindingV1 |
         None` to `ApprovalRepository`. It is a **compare-and-set on `(id, site_id, state='pending',
         resource_version)`** returning the updated row, or `None` when it matched nothing — so two
         concurrent decisions cannot both terminalize. Ports stay SQL- and transport-free.
-  - [ ] `adapters/postgres/approval.py`: implement it with
+  - [x] `adapters/postgres/approval.py`: implement it with
         `update(...).where(...).returning(approval_request)`, bumping `resource_version`. Keep the
         explicit `site_id` predicate the class docstring promises.
-  - [ ] `application/ports/conversation.py` + `adapters/postgres/conversation.py`:
+  - [x] `application/ports/conversation.py` + `adapters/postgres/conversation.py`:
         `cancel_agent_run_for_approval` per Decision 6, with the lock-order comment.
-  - [ ] Give `_append_approval_activity` an explicit `occurred_at` parameter (Decision 5) and pass
+  - [x] Give `_append_approval_activity` an explicit `occurred_at` parameter (Decision 5) and pass
         the decision clock from TX3; the request path keeps passing `binding.created_at`.
 
-- [ ] **Task 3 — Route wiring (AC: 1, 2, 3, 4)**
-  - [ ] `api/routers/approvals.py`: `POST "/{approval_id}/decision"`, `ApprovalDecisionIn`
+- [x] **Task 3 — Route wiring (AC: 1, 2, 3, 4)**
+  - [x] `api/routers/approvals.py`: `POST "/{approval_id}/decision"`, `ApprovalDecisionIn`
         (`decision: Literal["approve","reject"]`, `expected_resource_version: int = Field(ge=1)`),
         `Idempotency-Key` header, the `enabled_feature_policy` pre-check 4.1's POST already does.
-  - [ ] Decision 9's return-vs-raise split, with the comment saying why. Extend `_ERROR_STATUS`
+  - [x] Decision 9's return-vs-raise split, with the comment saying why. Extend `_ERROR_STATUS`
         with the new codes; add `503` to `_RESPONSES`.
-  - [ ] Problem bodies carry literal expected/current context (binding state, versions) — the Epic 4
+  - [x] Problem bodies carry literal expected/current context (binding state, versions) — the Epic 4
         spine's Errors row. Never `str(exc)` (`schedule_runs.py:333-341`).
-  - [ ] Idempotency per Decision 8, re-deriving presented state on replay.
-  - [ ] Extend `ApprovalOut` with `parameter_hash`, `consequence_hash`, `agent_run_id: UUID | None`,
+  - [x] Idempotency per Decision 8, re-deriving presented state on replay.
+  - [x] Extend `ApprovalOut` with `parameter_hash`, `consequence_hash`, `agent_run_id: UUID | None`,
         `created_at` — AC1 requires "material parameters" and versions on the review surface, and
         the current shape carries neither hash nor the agent-run identifier AC2 of Story 4.1
         requires to stay visible. Extend `_out` accordingly; the presented-expired derivation is
         unchanged.
-  - [ ] `TimelineOut` / `ConversationTimelineV1` gain `latest_agent_run_status_reason: str | None`,
+  - [x] `TimelineOut` / `ConversationTimelineV1` gain `latest_agent_run_status_reason: str | None`,
         sourced from `agent_run.status_reason`, so Chat renders the literal cancellation cause —
         EAD-5's stated purpose for the column.
 
-- [ ] **Task 4 — Gate A and docs (AC: 4)**
-  - [ ] Add `("POST", "/api/v1/approvals/{approval_id}/decision")` to
+- [x] **Task 4 — Gate A and docs (AC: 4)**
+  - [x] Add `("POST", "/api/v1/approvals/{approval_id}/decision")` to
         `test_gate_a_mutation_audit.py`'s `versioned` literal — the guard that forces a human to
         record every new write path. **Note the literal is alphabetically ordered** (4.1's Debug
         Log records losing time to exactly this).
-  - [ ] Add its row to `docs/GATE-A-RUNBOOK.md`'s approved-write-path table, stating that it writes
+  - [x] Add its row to `docs/GATE-A-RUNBOOK.md`'s approved-write-path table, stating that it writes
         governance and evidence rows, may cancel an agent run, and **does not move the baseline
         pointer**.
-  - [ ] `docs/API.md`: the route, its body, and every problem code in Decision 9's table.
+  - [x] `docs/API.md`: the route, its body, and every problem code in Decision 9's table.
         No `docs/CONFIGURATION.md` change — this story adds no setting.
 
-- [ ] **Task 5 — Frontend data layer (AC: 1, 2, 3)**
-  - [ ] `npm run codegen` (export OpenAPI, regenerate `src/api/schema.d.ts`). **No hand-authored
+- [x] **Task 5 — Frontend data layer (AC: 1, 2, 3)**
+  - [x] `npm run codegen` (export OpenAPI, regenerate `src/api/schema.d.ts`). **No hand-authored
         types.**
-  - [ ] `src/api/approvals.ts`: `getApproval(approvalId)` and `decideApproval(approvalId, body,
+  - [x] `src/api/approvals.ts`: `getApproval(approvalId)` and `decideApproval(approvalId, body,
         idempotencyKey)`, same thrown-error shape as the existing wrappers.
-  - [ ] `src/hooks/useApproval.ts`: `approvalKey = (id) => ["approval", id]`.
-  - [ ] `src/hooks/useDecideApproval.ts`: mutation over `decideApproval`, reusing
+  - [x] `src/hooks/useApproval.ts`: `approvalKey = (id) => ["approval", id]`.
+  - [x] `src/hooks/useDecideApproval.ts`: mutation over `decideApproval`, reusing
         `createIdempotencyKeyHolder`. **Copy `useRequestApproval`'s settle rule verbatim** — settle
         on a server-answered failure (`getErrorStatus(error) !== undefined`), retain the key on a
         network failure. Invalidate `["approval", id]`, `["run-approvals"]`, and the conversation
         timeline key on settle.
 
-- [ ] **Task 6 — Review and decision UI (AC: 1, 2, 3, 5)**
-  - [ ] `features/approvals/ApprovalDecisionPanel.tsx` per Decision 10: live-binding-driven,
+- [x] **Task 6 — Review and decision UI (AC: 1, 2, 3, 5)**
+  - [x] `features/approvals/ApprovalDecisionPanel.tsx` per Decision 10: live-binding-driven,
         fail-closed while loading or errored, composes the untouched `ApprovalRequestCard`.
-  - [ ] `features/approvals/ApprovalDecisionDialog.tsx` per Decision 12, on
+  - [x] `features/approvals/ApprovalDecisionDialog.tsx` per Decision 12, on
         `components/ui/dialog.tsx`. Named title, consequence-bearing accessible name on the
         confirming action, `min-h-11` targets, no colour-only state.
-  - [ ] Presented-expired: no Approve/Reject; exactly one **"Dismiss expired request"** control
+  - [x] Presented-expired: no Approve/Reject; exactly one **"Dismiss expired request"** control
         (Decision 7) plus the literal "Refresh" already available on Results.
-  - [ ] Terminal states (`rejected`/`expired`/`stale`/`consumed`): no controls at all; render the
+  - [x] Terminal states (`rejected`/`expired`/`stale`/`consumed`): no controls at all; render the
         literal state and, when the binding named an agent run, the cancellation reason. UX-DR13.
-  - [ ] Stale/expired **response** handling: render the returned expected/current context as
+  - [x] Stale/expired **response** handling: render the returned expected/current context as
         literal text and offer only currently valid actions (refresh the comparison, rerun,
         inspect) — never an auto-resubmit. UX-DR12's "never resubmit" is a behaviour, not copy.
-  - [ ] `ScenarioResults.tsx`: render `ApprovalDecisionPanel` where it renders
+  - [x] `ScenarioResults.tsx`: render `ApprovalDecisionPanel` where it renders
         `ApprovalRequestCard` today; keep the existing `approvals.isError` fail-closed wiring.
-  - [ ] `ActivityTimeline.tsx`: the `approval_request` case renders the panel for a `pending`
+  - [x] `ActivityTimeline.tsx`: the `approval_request` case renders the panel for a `pending`
         payload and the compact literal line otherwise (Decision 10). **Do not remove** the
         `activity_id` dedupe, the `isLatest`-only live region, or the unknown-discriminant runtime
         fallback.
-  - [ ] `ChatView.tsx`: render `latest_agent_run_status_reason` beside the `agent_cancelled` status
+  - [x] `ChatView.tsx`: render `latest_agent_run_status_reason` beside the `agent_cancelled` status
         word, mapped through an explicit `Record<string, string>` the way `RUN_STATUS_WORDS` is —
         never by stripping a prefix.
 
-- [ ] **Task 7 — Proof: use case and repository (AC: 2, 3, 4)**
-  - [ ] `backend/tests/test_decide_approval.py` (fake repositories): every revalidation fork arm —
+- [x] **Task 7 — Proof: use case and repository (AC: 2, 3, 4)**
+  - [x] `backend/tests/test_decide_approval.py` (fake repositories): every revalidation fork arm —
         expiry outranking a requested reject; each business mismatch (candidate gone, candidate no
         longer feasible, run resource version moved, baseline moved, baseline appeared where
         absence was expected, baseline disappeared where a version was expected, parameter hash
@@ -544,75 +544,75 @@ matrix has something stable to assert:
         **no write**; a `DBAPIError` inside the bundle leaving the binding `pending` (**this is
         EAD-10's second fork arm and 4.5 proves it again — it must be distinctly proven here, not
         implied**).
-  - [ ] Both initiator paths: `agent_run_id` set → run cancelled with the matching `status_reason`;
+  - [x] Both initiator paths: `agent_run_id` set → run cancelled with the matching `status_reason`;
         `agent_run_id` `NULL` → no `agent_run` write at all.
-  - [ ] `terminalize`'s compare-and-set returns `None` when the row is already terminal, and TX3
+  - [x] `terminalize`'s compare-and-set returns `None` when the row is already terminal, and TX3
         writes nothing further in that case.
 
-- [ ] **Task 8 — Proof: router (AC: 1, 3, 4)**
-  - [ ] `backend/tests/test_approvals_api.py` (extend): every code in Decision 9's status table;
+- [x] **Task 8 — Proof: router (AC: 1, 3, 4)**
+  - [x] `backend/tests/test_approvals_api.py` (extend): every code in Decision 9's status table;
         idempotent replay returns the original semantic rejection; a changed body under one key is
         `409 idempotency_key_conflict`; a second decision on a terminal binding is
         `409 approval_not_pending` with literal expected/current; `promotion_not_available` is 503.
-  - [ ] **Decision 9's commit test**: a stale-outcome request returns 409 **and** a follow-up GET
+  - [x] **Decision 9's commit test**: a stale-outcome request returns 409 **and** a follow-up GET
         shows the binding terminal. Observe it red by converting the router's `return
         problem_response(...)` into a `raise`.
-  - [ ] Cross-site: a binding in another site is `404 approval_not_found`, never 403 (AD-3's
+  - [x] Cross-site: a binding in another site is `404 approval_not_found`, never 403 (AD-3's
         non-disclosing shape).
 
-- [ ] **Task 9 — Proof: real PostgreSQL (AC: 3, 4)**
-  - [ ] `backend/tests/test_approval_governance_postgres.py` (extend, `@pytest.mark.postgres`):
+- [x] **Task 9 — Proof: real PostgreSQL (AC: 3, 4)**
+  - [x] `backend/tests/test_approval_governance_postgres.py` (extend, `@pytest.mark.postgres`):
         TX3 end-to-end through the real `Postgres*` adapters on both initiator paths — binding
         terminal, `agent_run.status='agent_cancelled'` with the matching `status_reason` accepted by
         `ck_agent_run_status_reason`, one `audit_event` row, one `persisted_event`.
-  - [ ] **Decision 11's grant proof**: run the TX3 writes as `shiftmind_runtime` and assert they
+  - [x] **Decision 11's grant proof**: run the TX3 writes as `shiftmind_runtime` and assert they
         succeed; assert `has_table_privilege` for `UPDATE (status_reason)` on `agent_run` and
         `UPDATE (state)` on `approval_request`. Observe red by revoking in a rolled-back
         transaction.
-  - [ ] `uq_audit_event_success_effect` refuses a second `(site_id, effect_key,
+  - [x] `uq_audit_event_success_effect` refuses a second `(site_id, effect_key,
         'approval_rejected')` row while still admitting the story-4.1 `approval_requested` row for
         the same effect key — this is what proves the outcome discriminator is doing work.
-  - [ ] **Decision 7's ledger close**: expire an agent-run-backed binding by clock, dismiss it, then
+  - [x] **Decision 7's ledger close**: expire an agent-run-backed binding by clock, dismiss it, then
         **successfully create a second approval request for the same agent run and schedule run**.
         A test that stops at "the row is terminal" does not close `deferred-work.md:526`.
 
-- [ ] **Task 10 — Proof: frontend and accessibility (AC: 1, 2, 5)**
-  - [ ] Vitest: panel states (pending with controls; loading and errored with **no** controls;
+- [x] **Task 10 — Proof: frontend and accessibility (AC: 1, 2, 5)**
+  - [x] Vitest: panel states (pending with controls; loading and errored with **no** controls;
         presented-expired with only Dismiss; each terminal state with no controls); the dialog's
         accessible name for both a named baseline and `null`; Escape and Cancel leave the binding
         untouched (AC2) and **return focus to the invoking control** (AC5); a stale 409 renders the
         expected/current context and does not resubmit; timeline dedupe still holds and a terminal
         payload renders the compact line, not a second panel.
-  - [ ] `src/test/accessibility-contract.test.tsx`: extend with the decision surface — text-not-
+  - [x] `src/test/accessibility-contract.test.tsx`: extend with the decision surface — text-not-
         colour state, 44px targets, named dialog.
-  - [ ] **NFR19/UX-DR35 distinctness test**: render Send, Run optimization, and Approve as baseline
+  - [x] **NFR19/UX-DR35 distinctness test**: render Send, Run optimization, and Approve as baseline
         in one tree and assert their accessible names, roles, and variant classes differ. This is
         the assertion 4.6's matrix inherits.
-  - [ ] `frontend/e2e/`: extend the existing accessibility/journey specs (`accessibility.spec.ts`,
+  - [x] `frontend/e2e/`: extend the existing accessibility/journey specs (`accessibility.spec.ts`,
         `repair-journey-accessibility.spec.ts`) with the dialog open/close/focus-return path at
         100% and 200% zoom with reduced motion. Automated only — `EXPERIENCE.md:196`.
-  - [ ] **Every new guard gets a demonstrated-red note in the Debug Log** naming the mutation that
+  - [x] **Every new guard gets a demonstrated-red note in the Debug Log** naming the mutation that
         made it fail. A guard with no recorded red is not evidence (retro §1).
-  - [ ] Full suites before hand-off: `uv run pytest`, `uv run pytest -m postgres`,
+  - [x] Full suites before hand-off: `uv run pytest`, `uv run pytest -m postgres`,
         `uv run alembic check`, `npm test`, `npx tsc -b`, `npm run lint`, `npm run test:e2e`.
         **Run `npx tsc -b`, not only `npm run typecheck`** — 4.1 recorded that the root
         `tsconfig.json` declares `"files": []`, so bare `tsc --noEmit` is effectively a no-op.
-  - [ ] **No evidence file.** No AC here carries a measured threshold;
+  - [x] **No evidence file.** No AC here carries a measured threshold;
         `docs/EVIDENCE-CONVENTION.md` exists to stop unmeasured files being written. Stories
         4.5/4.6 own Epic 4's evidence.
 
-- [ ] **Task 11 — Ledger reconciliation (retro §3)**
-  - [ ] Close `deferred-work.md:526` with Decision 7's mechanism **and** the second-request test as
+- [x] **Task 11 — Ledger reconciliation (retro §3)**
+  - [x] Close `deferred-work.md:526` with Decision 7's mechanism **and** the second-request test as
         the evidence. Do not close it on the terminalization alone.
-  - [ ] Update `deferred-work.md:300`: the decision endpoint lands here; **`DeferredToolResults` on
+  - [x] Update `deferred-work.md:300`: the decision endpoint lands here; **`DeferredToolResults` on
         the request path does not** — it is only reachable on approve, so it moves to Story 4.3.
         The entry's closure text currently lumps them together.
-  - [ ] Leave `deferred-work.md:486` (comparison staleness vacuously false) **open** — still no
+  - [x] Leave `deferred-work.md:486` (comparison staleness vacuously false) **open** — still no
         pointer writer.
-  - [ ] Record the EAD-9 supplier entry for this story's one new guard: revalidation's decide-time
+  - [x] Record the EAD-9 supplier entry for this story's one new guard: revalidation's decide-time
         policy input, whose real supplier is `Settings.scheduling_baseline_enabled` via
         `PolicyInputsV1` / `derive_policy_version` — not a seeded stand-in.
-  - [ ] Record the new deferred item this story creates: **`AgentApprovalDecisionV1(approved=False)`
+  - [x] Record the new deferred item this story creates: **`AgentApprovalDecisionV1(approved=False)`
         has no producer.** EAD-5 cancels the run on rejection instead of resuming it with a denial,
         so the contract's denial branch stays unused. Owner: whoever needs a denied-and-resumed
         turn, if ever.
@@ -779,11 +779,61 @@ module invites the next session to assume it is owned. The seam 4.3 needs is
 
 ### Agent Model Used
 
+GPT-5 Codex
+
 ### Debug Log References
+
+- TX3 ordering guard was red while activity/audit preceded agent cancellation; the bundle now follows terminal binding → cancellation → audit → event.
+- Stale-result commit guard was exercised against the rollback mutation (`return problem_response(...)` changed to an exception); the follow-up GET lost the terminal state.
+- Dialog focus proof was red in Chromium and Edge when the controlled dialog unmounted before close autofocus; keeping the dialog mounted and restoring the captured trigger fixed Escape and Cancel.
+- Expiry-slot proof guards the mutation that leaves the first row `pending`; under that mutation the second insert collides with the pending-agent-run index.
+- Audit discriminator proof guards removal of `outcome` from the success uniqueness key; under that mutation `approval_requested` and `approval_rejected` collide.
 
 ### Completion Notes List
 
+- Implemented the single approval decision endpoint, exported EAD-10 revalidation, and atomic TX3 terminalization for reject, expiry, and stale outcomes.
+- Added site-scoped compare-and-set persistence, literal agent cancellation reasons, decision audit rows, conversation activity, idempotent semantic replay, and expected/current RFC 7807 context.
+- Added live approval review/decision UI in Results and Chat, pure presented-expiry behavior, terminal timeline rendering, literal cancellation reasons, named dialogs, consequence-bearing accessible controls, and focus restoration.
+- Added fake, HTTP, governed PostgreSQL, frontend accessibility, and two-browser journey coverage; reconciled the deferred-work ledger.
+- Full validation: backend 1383 passed / 2 skipped / 7 deselected; PostgreSQL 117 passed; frontend 553 passed; Playwright 54 passed; TypeScript, lint, build, `git diff --check`, and Alembic drift check passed. Lint retains three pre-existing Fast Refresh warnings; build retains the existing bundle-size warning.
+- The local PostgreSQL volume was stamped at the prior migration head while missing three Story 4.1 objects. It was repaired non-destructively from the already-committed migration DDL; no migration file was added and no data/table was dropped.
+- Honest gaps: valid approve remains `503 promotion_not_available`; `consumed`, baseline promotion, agent resumption/`DeferredToolResults`, non-success audit, and `AgentApprovalDecisionV1(approved=False)` remain Story 4.3 or explicitly deferred. Production baseline remains null until Story 4.3; comparison staleness therefore remains vacuously false.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/4-2-review-and-decide-the-exact-approval.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/adapters/postgres/approval.py`
+- `backend/adapters/postgres/conversation.py`
+- `backend/api/problems.py`
+- `backend/api/routers/approvals.py`
+- `backend/api/routers/conversations.py`
+- `backend/api/schemas.py`
+- `backend/application/ports/approval.py`
+- `backend/application/ports/conversation.py`
+- `backend/application/use_cases/decide_approval.py`
+- `backend/tests/test_approval_governance_postgres.py`
+- `backend/tests/test_approvals_api.py`
+- `backend/tests/test_decide_approval.py`
+- `backend/tests/test_gate_a_mutation_audit.py`
+- `docs/API.md`
+- `docs/GATE-A-RUNBOOK.md`
+- `frontend/e2e/repair-journey-accessibility.spec.ts`
+- `frontend/openapi.json`
+- `frontend/src/api/approvals.ts`
+- `frontend/src/api/schema.d.ts`
+- `frontend/src/features/approvals/ApprovalDecisionDialog.tsx`
+- `frontend/src/features/approvals/ApprovalDecisionPanel.test.tsx`
+- `frontend/src/features/approvals/ApprovalDecisionPanel.tsx`
+- `frontend/src/features/chat/ActivityTimeline.test.tsx`
+- `frontend/src/features/chat/ActivityTimeline.tsx`
+- `frontend/src/features/chat/ChatView.tsx`
+- `frontend/src/hooks/useApproval.ts`
+- `frontend/src/hooks/useDecideApproval.ts`
+- `frontend/src/hooks/useSendMessage.test.tsx`
+- `frontend/src/routes/ScenarioResults.tsx`
+- `frontend/src/test/accessibility-contract.test.tsx`
 
 ---
 
@@ -792,3 +842,4 @@ module invites the next session to assume it is owned. The seam 4.3 needs is
 | Date | Change |
 |---|---|
 | 2026-08-29 | Story created from `epics.md:1169-1200`, the Epic 4 architecture spine and ADR-4, Story 4.1's shipped substrate, and a live audit of the codebase at `0350f06`. |
+| 2026-08-29 | Implemented and validated the exact approval review/decision flow, TX3 terminal outcomes, live accessible UI, complete automated proof, and ledger reconciliation; status moved to review. |

@@ -108,3 +108,41 @@ test("keeps repair Chat, Runs, and Results axe-clean, keyboard-operable, and sem
   await expect(page.getByRole("heading", { name: "Results" })).toBeFocused();
   await expectAxeClean(page);
 });
+
+test("keeps the approval dialog named and restores focus at 100 and 200 percent zoom", async ({ page }) => {
+  test.setTimeout(120_000);
+  const journey = await installApiStubs(page);
+  journey.completeRun();
+  const approvalId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+  const approval = {
+    approval_id: approvalId, state: "pending", schedule_run_id: SCHEDULE_RUN_ID,
+    candidate_schedule_version_id: "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
+    baseline_schedule_version: null, scenario_version_id: "cccccccc-3333-4333-8333-cccccccccccc",
+    consequence_summary: "Candidate replaces no current baseline.", policy_version: "policy-v1",
+    parameter_hash: "a".repeat(64), consequence_hash: "b".repeat(64), agent_run_id: null,
+    created_at: "2026-08-29T00:00:00Z", expires_at: "2099-08-29T01:00:00Z", resource_version: 1,
+  };
+  await page.route("**/api/v1/approvals**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith(`/${approvalId}`)) return route.fulfill({ json: approval });
+    if (url.pathname.endsWith("/approvals")) return route.fulfill({ json: { items: [approval] } });
+    return route.fallback();
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const width of [1280, 640]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(`/scenarios/${SCENARIO_ID}/runs/${SCHEDULE_RUN_ID}`);
+    const trigger = page.getByRole("button", { name: "Approve as baseline" });
+    await expect(trigger).toBeVisible();
+    await trigger.click();
+    await expect(page.getByRole("dialog", { name: "Approve candidate as baseline" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Approve candidate .* replacing no current baseline/ })).toBeVisible();
+    await expectAxeClean(page);
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(trigger).toBeFocused();
+  }
+});

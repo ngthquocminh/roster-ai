@@ -10,15 +10,19 @@ def problem_response(
     code: str,
     title: str,
     detail: str,
+    extra: dict | None = None,
 ) -> JSONResponse:
-    return JSONResponse(
-        {
+    body = {
             "type": f"https://shiftmind.app/problems/{code}",
             "title": title,
             "status": status,
             "detail": detail,
             "code": code,
-        },
+        }
+    if extra:
+        body.update(extra)
+    return JSONResponse(
+        body,
         status_code=status,
         media_type="application/problem+json",
     )

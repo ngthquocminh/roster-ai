@@ -34,6 +34,7 @@ from adapters.postgres.schema import (
     organization,
     proposal,
     proposal_version,
+    persisted_event,
     run_snapshot,
     schedule_assignment,
     schedule_run,
@@ -52,6 +53,7 @@ from application.use_cases.request_approval import (
     StaleResourceVersionError,
     request_approval,
 )
+from application.use_cases.decide_approval import DecideApprovalCommandV1, decide_approval
 
 pytestmark = pytest.mark.postgres
 
@@ -263,6 +265,24 @@ def test_unique_effect_key_admits_no_second_row_for_the_same_tool_call(governed_
             c.execute(insert(approval_request).values(**_row()))
 
 
+def test_terminalize_is_a_site_scoped_pending_compare_and_set(governed_postgres_engine, site_ids) -> None:
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(engine, site_id=site_ids["site"], actor_id=site_ids["actor"])
+    approval_id = uuid4()
+    with engine.begin() as c:
+        c.execute(insert(approval_request).values(
+            id=approval_id, site_id=site_ids["site"], state="pending", action="promote_baseline",
+            initiated_by_actor_id=site_ids["actor"], conversation_id=ids["conversation"], schedule_run_id=ids["schedule_run"],
+            candidate_schedule_version_id=ids["candidate"], scenario_version_id=ids["scenario_version"], parameter_hash="a" * 64,
+            consequence_summary="x", consequence_hash="b" * 64, policy_version="v1", expires_at=NOW + timedelta(hours=1), request_effect_key=f"command:{approval_id}", resource_version=1,
+        ))
+        repository = PostgresApprovalRepository()
+        terminal = repository.terminalize(c, approval_id=approval_id, site_id=site_ids["site"], state="rejected", decided_by_actor_id=site_ids["actor"], decided_at=NOW, expected_resource_version=1)
+        lost = repository.terminalize(c, approval_id=approval_id, site_id=site_ids["site"], state="expired", decided_by_actor_id=site_ids["actor"], decided_at=NOW, expected_resource_version=2)
+    assert terminal is not None and terminal.state == "rejected" and terminal.resource_version == 2
+    assert lost is None
+
+
 # --- the two audit uniqueness rules hold independently (AD-12) -------------
 
 
@@ -288,7 +308,10 @@ def test_success_audit_rows_are_unique_on_site_effect_key_and_outcome(governed_p
     # A DIFFERENT outcome for the same effect key is a distinct row -- proving
     # the two rules are independent, not one rule keyed on effect_key alone.
     with engine.begin() as c:
-        c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_consumed", success=True)))
+        c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_rejected", success=True)))
+    with pytest.raises(IntegrityError):
+        with engine.begin() as c:
+            c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_rejected", success=True)))
 
 
 def test_failure_audit_rows_are_unique_on_site_and_attempt_id_regardless_of_effect_key(governed_postgres_engine, site_ids) -> None:
@@ -318,6 +341,96 @@ def _use_case_dependencies():
         scheduling_baseline_enabled=True,
         clock=lambda: NOW,
     )
+
+
+def _decision_dependencies(*, now=NOW):
+    return dict(
+        schedule_runs=PostgresScheduleRunRepository(),
+        baselines=PostgresSiteBaselineReader(),
+        approvals=PostgresApprovalRepository(),
+        audit_writer=PostgresAuditWriter(),
+        conversations=PostgresConversationRepository(),
+        scheduling_baseline_enabled=True,
+        clock=lambda: now,
+    )
+
+
+@pytest.mark.parametrize("agent_backed", [False, True])
+def test_tx3_terminal_bundle_persists_through_runtime_role_on_both_initiator_paths(
+    governed_postgres_engine, site_ids, agent_backed
+) -> None:
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2)
+    agent_run_id = _seed_agent_run(engine, site_id=site_ids["site"], conversation_id=ids["conversation"], actor_id=site_ids["actor"]) if agent_backed else None
+    request = RequestApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"], schedule_run_id=ids["schedule_run"],
+        expected_resource_version=2, expected_baseline_schedule_version=None,
+        request_effect_key=f"command:{uuid4()}", request_id=uuid4(), conversation_id=ids["conversation"],
+        agent_run_id=agent_run_id, pending_payload={"pending_calls": [], "turn": {}} if agent_backed else None,
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        pending_result = request_approval(c, command=request, **_use_case_dependencies())
+    command = DecideApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"], approval_id=pending_result.binding.approval_id,
+        decision="reject", expected_resource_version=1, request_id=uuid4(),
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        result = decide_approval(c, command=command, **_decision_dependencies())
+    with engine.connect() as c:
+        stored = c.execute(select(approval_request).where(approval_request.c.id == result.binding.approval_id)).one()
+        audits = c.execute(select(audit_event.c.outcome).where(audit_event.c.approval_id == result.binding.approval_id)).scalars().all()
+        events = c.execute(select(persisted_event.c.event_type).where(
+            persisted_event.c.stream_id == ids["conversation"],
+            persisted_event.c.event_type == "approval_request",
+        )).scalars().all()
+        if agent_run_id:
+            run = c.execute(select(agent_run.c.status, agent_run.c.status_reason).where(agent_run.c.id == agent_run_id)).one()
+            assert (run.status, run.status_reason) == ("agent_cancelled", "approval_rejected")
+    assert stored.state == "rejected" and stored.resource_version == 2
+    assert sorted(audits) == ["approval_rejected", "approval_requested"]
+    assert events.count("approval_request") == 2
+
+
+def test_runtime_role_has_the_two_tx3_update_grants(governed_postgres_engine) -> None:
+    with governed_postgres_engine.connect() as c:
+        row = c.execute(text(
+            "SELECT has_column_privilege('shiftmind_runtime','agent_run','status_reason','UPDATE') AS run_reason, "
+            "has_column_privilege('shiftmind_runtime','approval_request','state','UPDATE') AS approval_state"
+        )).one()
+    assert row.run_reason is True and row.approval_state is True
+
+
+def test_dismissing_expiry_releases_the_agent_pending_slot_for_a_second_request(
+    governed_postgres_engine, site_ids
+) -> None:
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2)
+    agent_run_id = _seed_agent_run(engine, site_id=site_ids["site"], conversation_id=ids["conversation"], actor_id=site_ids["actor"])
+    request = RequestApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"], schedule_run_id=ids["schedule_run"],
+        expected_resource_version=2, expected_baseline_schedule_version=None,
+        request_effect_key=f"tool:{agent_run_id}:call-1", request_id=uuid4(), conversation_id=ids["conversation"],
+        agent_run_id=agent_run_id, pending_payload={"pending_calls": [{"tool_call_id": "call-1"}], "turn": {}},
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        first = request_approval(c, command=request, **_use_case_dependencies())
+    command = DecideApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"], approval_id=first.binding.approval_id,
+        decision="reject", expected_resource_version=1, request_id=uuid4(),
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        expired = decide_approval(c, command=command, **_decision_dependencies(now=NOW + timedelta(hours=2)))
+    second = first.binding.__class__(**{
+        **first.binding.__dict__, "approval_id": uuid4(), "state": "pending", "decided_by_actor_id": None,
+        "decided_at": None, "created_at": NOW + timedelta(hours=2), "expires_at": NOW + timedelta(hours=3),
+        "request_effect_key": f"tool:{agent_run_id}:call-2", "resource_version": 1,
+    })
+    with site_context(engine, site_ids["site"]) as c:
+        PostgresApprovalRepository().create_pending(c, binding=second, pending_payload={"pending_calls": [{"tool_call_id": "call-2"}], "turn": {}})
+    with engine.connect() as c:
+        states = c.execute(select(approval_request.c.state).where(approval_request.c.agent_run_id == agent_run_id).order_by(approval_request.c.created_at)).scalars().all()
+    assert expired.outcome == "expired"
+    assert states == ["expired", "pending"]
 
 
 def test_tx1_persists_the_planner_path_bundle_through_the_real_adapters(governed_postgres_engine, site_ids) -> None:

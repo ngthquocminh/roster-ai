@@ -29,6 +29,7 @@ import * as proposalHooks from "@/hooks/useProposal";
 import * as reviseHooks from "@/hooks/useReviseProposal";
 import * as rejectHooks from "@/hooks/useRejectProposal";
 import * as startHooks from "@/hooks/useStartScheduleRun";
+import { ApprovalDecisionDialog } from "@/features/approvals/ApprovalDecisionDialog";
 
 async function expectAxeClean(container: HTMLElement) {
   const results = await axe(container, {
@@ -554,4 +555,22 @@ it.each([
   const { container } = render(<ActivityTimeline navigate={vi.fn()} items={[activity] as never} />);
 
   await expectAxeClean(container);
+});
+
+it("keeps the approval decision surface named, textual, and touch-sized", async () => {
+  const approval = {
+    approval_id: "11111111-1111-4111-8111-111111111111", state: "pending" as const,
+    schedule_run_id: "22222222-2222-4222-8222-222222222222",
+    candidate_schedule_version_id: "33333333-3333-4333-8333-333333333333",
+    baseline_schedule_version: "baseline-v12", scenario_version_id: "44444444-4444-4444-8444-444444444444",
+    consequence_summary: "Candidate replaces baseline-v12; the operational baseline changes only after confirmation.",
+    policy_version: "policy-v1", parameter_hash: "a".repeat(64), consequence_hash: "b".repeat(64),
+    agent_run_id: null, created_at: "2026-08-29T00:00:00Z", expires_at: "2099-08-29T00:00:00Z", resource_version: 1,
+  };
+  render(<ApprovalDecisionDialog approval={approval} decision="approve" open onOpenChange={vi.fn()} onConfirm={vi.fn()} onRestoreFocus={vi.fn()} pending={false} />);
+  const dialog = screen.getByRole("dialog", { name: "Approve candidate as baseline" });
+  expect(within(dialog).getByText(/operational baseline changes only after confirmation/)).toBeVisible();
+  expect(within(dialog).getByRole("button", { name: /Approve candidate .* replacing baseline-v12/ })).toHaveClass("min-h-11");
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveClass("min-h-11");
+  await expectAxeClean(document.body);
 });

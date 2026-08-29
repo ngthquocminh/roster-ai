@@ -415,7 +415,7 @@ def timeline(conversation_id: UUID, limit: int = Query(200, ge=1, le=200), conne
     value = repository.timeline(connection, conversation_id=conversation_id, limit=limit)
     if value is None:
         raise HTTPException(status_code=404)
-    return TimelineOut(conversation_id=value.conversation_id, resource_version=value.resource_version, latest_agent_run_status=value.latest_agent_run_status, items=[_activity(e) for e in value.events], limit=value.limit, has_more=value.has_more)
+    return TimelineOut(conversation_id=value.conversation_id, resource_version=value.resource_version, latest_agent_run_status=value.latest_agent_run_status, latest_agent_run_status_reason=value.latest_agent_run_status_reason, items=[_activity(e) for e in value.events], limit=value.limit, has_more=value.has_more)
 
 
 def _cursor_invalid() -> Response:

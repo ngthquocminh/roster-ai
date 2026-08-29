@@ -1,6 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/features/approvals/ApprovalDecisionPanel", () => ({
+  ApprovalDecisionPanel: ({ approvalId }: { approvalId: string }) => <section aria-label="Approval request"><p>State: pending</p><p>No current baseline</p><p>Live approval {approvalId}</p></section>,
+}));
+
 import { ActivityTimeline } from "./ActivityTimeline";
 import { clearEvidenceUnavailable, markEvidenceUnavailable } from "@/features/evidence/availability";
 

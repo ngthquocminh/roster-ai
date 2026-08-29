@@ -214,6 +214,11 @@ class ApprovalRequestIn(BaseModel):
     expected_baseline_schedule_version: str | None = Field(...)
 
 
+class ApprovalDecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+    expected_resource_version: int = Field(ge=1)
+
+
 class ApprovalOut(BaseModel):
     approval_id: UUID
     state: Literal["pending", "consumed", "rejected", "expired", "stale"]
@@ -223,6 +228,10 @@ class ApprovalOut(BaseModel):
     scenario_version_id: UUID
     consequence_summary: str
     policy_version: str
+    parameter_hash: str
+    consequence_hash: str
+    agent_run_id: UUID | None
+    created_at: datetime
     expires_at: datetime
     resource_version: int
 
@@ -274,6 +283,7 @@ class TimelineOut(BaseModel):
     conversation_id: UUID
     resource_version: int
     latest_agent_run_status: str | None
+    latest_agent_run_status_reason: str | None
     items: list[ConversationActivityItemOut]
     limit: int
     # The window is anchored at the newest events; `has_more` reports that

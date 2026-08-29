@@ -524,6 +524,7 @@ scratch).
 - `POST /api/v1/approvals` creates a pending approval for one feasible candidate. It requires an `Idempotency-Key` header and returns the existing binding on a replay.
 - `GET /api/v1/approvals/{approval_id}` reads one visible binding.
 - `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
+- `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. Rejection commits `200`; stale and expired terminalizations commit then return `409`; a currently valid approval returns `503 promotion_not_available` until Story 4.3 supplies promotion.
 
 The POST can return RFC 7807 problem codes with these statuses (AD-13 keeps
 denied, stale, missing, and invalid distinct):
@@ -536,6 +537,11 @@ denied, stale, missing, and invalid distinct):
 | `stale_resource_version` | 409 | The run changed since the version you pinned |
 | `stale_baseline_version` | 409 | The current baseline is not the one you expected |
 | `approval_already_pending` | 409 | A pending binding already exists for this candidate |
+| `approval_not_found` | 404 | No approval binding is visible in this site |
+| `approval_not_pending` | 409 | The binding already reached a terminal state |
+| `approval_expired` | 409 | The decision attempt committed expiry terminalization |
+| `approval_stale` | 409 | The decision attempt committed stale terminalization |
+| `promotion_not_available` | 503 | A valid approval is held for Story 4.3's promotion transaction |
 | `idempotency_key_conflict` | 409 | The key was reused with a different body |
 | `invalid_approval_command` | 422 | The command is otherwise unusable |
 
