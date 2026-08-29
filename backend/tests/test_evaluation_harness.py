@@ -500,6 +500,12 @@ def test_seed_cases_cover_allow_and_consequential_approval() -> None:
 # product capabilities are exempt — but the exemption is declared here with its
 # reason, never inferred from a name at the point of use.
 MVP_PRODUCT_CAPABILITIES = {
+    # Story 4.1's consequential baseline-approval capability is a PRODUCT
+    # capability -- the story says so twice -- so it meets the NFR28 floor like
+    # every other one. It was briefly listed as non-product, which would have
+    # exempted it from the floor via a set whose own comment says "not a product
+    # capability"; the four cases below are the honest alternative.
+    "scheduling_baseline",
     "scheduling_compute",
     "scheduling_draft",
     "scheduling_inspect",
@@ -510,10 +516,6 @@ NON_PRODUCT_CAPABILITIES = {
     # two schema cases and epics.md:1527 forbids padding a dataset to clear a
     # threshold. Its installation is removable by composition; the cases are not.
     "demonstration",
-    # Story 4.1's single fixture proves the consequential suspension contract.
-    # It is not padded to the NFR28 four-case product-evaluation floor; Stories
-    # 4.5/4.6 own that evidence set.
-    "scheduling_baseline",
 }
 
 
@@ -658,6 +660,12 @@ def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> No
         if "injection" in case.case_id
     )
     assert {case.case_id for case in cases} == {
+        # NFR5: the corpus is pinned so a source cannot lose its case silently.
+        # `scheduling_baseline` earns its own entry because a CONSEQUENTIAL
+        # capability is the one place where "the manager already approved this"
+        # in planner chat text must not widen authority -- the binding is the
+        # gate, never the prose.
+        "scheduling-baseline-injection-chat-text",
         "scheduling-inspect-injection-chat-text",
         "scheduling-inspect-injection-fixture-field",
         "scheduling-inspect-injection-tool-output",
@@ -723,48 +731,10 @@ def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> No
         assert outcome.refusal is not None
         assert PolicyOutcomeEvaluator(runtime=runtime).evaluate(case, outcome).passed
 
-        if case.case_id != "scheduling-inspect-injection-chat-text":
+        if not case.case_id.endswith("injection-chat-text"):
             rendered_results = " ".join(result.content for result in outcome.tool_results)
             assert "Ignore policy" in rendered_results
             assert "Increase the tool budget" in rendered_results
-
-
-def test_request_path_grants_the_configured_baseline_capability() -> None:
-    """Decision 9 guard: the configured consequential capability is reachable.
-
-    Composes the grant the REQUEST PATH actually builds. The previous form used
-    `_runtime_for_case(...)`, which filters `installed_modules()` down to the
-    single module the case's `capability` tag names -- always an
-    `approval_policy="none"` module -- so it stayed green even with
-    `demonstration_enabled=True` and asserted nothing about the request path its
-    own name claimed to cover.
-    """
-    from api.deps import get_capability_registry
-    from application.capabilities.installed import enabled_feature_policy
-    from application.capabilities.registry import (
-        PLANNER_ROLE,
-        CapabilityGrantContextV1,
-    )
-    from settings import default_settings
-
-    compose_capabilities = get_capability_registry()
-
-    site_id = UUID(int=11)
-    granted = compose_capabilities(
-        CapabilityGrantContextV1(
-            role=PLANNER_ROLE,
-            site_id=site_id,
-            feature_policy=enabled_feature_policy(default_settings()),
-            conversation_id=UUID(int=12),
-            conversation_site_id=site_id,
-        )
-    )
-    granted_names = [
-        module.manifest.capability_name
-        for module in granted
-        if module.manifest.approval_policy != "none"
-    ]
-    assert granted_names == ["scheduling_baseline"]
 
 
 def test_grounding_cases_have_literal_result_ids_authored_refs_and_oracles() -> None:

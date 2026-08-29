@@ -1,0 +1,27 @@
+{
+  "case_id": "scheduling-baseline-invalid-run-identifier",
+  "case_version": "1",
+  "capability": "scheduling_baseline",
+  "risk_class": "consequential",
+  "prompt": "Request approval for the candidate on the run I just mentioned.",
+  "scripted_turns": [
+    {"tool_name": "scheduling_baseline", "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-000000000000", "expected_baseline_schedule_version": null, "schema_version": "1"}}, "tool_call_id": "baseline-invalid-1"},
+    {
+      "output_tool": "refusal",
+      "response_data": {
+        "reason": "unsupported_request",
+        "detail": "That approval request does not identify a schedule run.",
+        "next_step": "Open the run you reviewed and request approval from its Results view."
+      }
+    }
+  ],
+  "expected_outcome": "refuse",
+  "expected_tool_calls": [
+    {"tool_name": "scheduling_baseline", "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-000000000000", "expected_baseline_schedule_version": null, "schema_version": "1"}}}
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "That approval request does not identify a schedule run.",
+  "expected_grounding_outcome": null,
+  "scenario_fixtures": []
+}

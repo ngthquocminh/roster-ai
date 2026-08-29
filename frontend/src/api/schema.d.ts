@@ -908,6 +908,11 @@ export interface components {
             candidate_schedule_version_id: string;
             /** Baseline Schedule Version */
             baseline_schedule_version: string | null;
+            /**
+             * Scenario Version Id
+             * Format: uuid
+             */
+            scenario_version_id: string;
             /** Consequence Summary */
             consequence_summary: string;
             /** Policy Version */
@@ -2601,7 +2606,7 @@ export interface components {
              * @default invalid_output
              * @enum {string}
              */
-            reason: "provider_error" | "invalid_output" | "budget_exhausted" | "deadline_exceeded" | "capability_error" | "refused" | "approval_not_grantable";
+            reason: "provider_error" | "invalid_output" | "budget_exhausted" | "deadline_exceeded" | "capability_error" | "refused" | "approval_unsupported" | "approval_not_grantable";
             /** Refusal Reason */
             refusal_reason?: ("unsupported_request" | "capability_unavailable" | "out_of_scope") | null;
             /**

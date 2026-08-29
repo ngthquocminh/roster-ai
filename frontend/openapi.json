@@ -4446,6 +4446,11 @@
             ],
             "title": "Baseline Schedule Version"
           },
+          "scenario_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Scenario Version Id"
+          },
           "consequence_summary": {
             "type": "string",
             "title": "Consequence Summary"
@@ -4471,6 +4476,7 @@
           "schedule_run_id",
           "candidate_schedule_version_id",
           "baseline_schedule_version",
+          "scenario_version_id",
           "consequence_summary",
           "policy_version",
           "expires_at",
@@ -8179,6 +8185,7 @@
               "deadline_exceeded",
               "capability_error",
               "refused",
+              "approval_unsupported",
               "approval_not_grantable"
             ],
             "title": "Reason",

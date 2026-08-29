@@ -22,6 +22,17 @@ class AgentDepsV1:
     conversation_id: UUID
     scenario_id: UUID
     scenario_version_id: UUID
+    # TWO MEANINGS, ONE NAME -- do not unify them (Decision 6).
+    #
+    # This is the capability-GRANT policy stamp: the `POLICY_GENERATION` string
+    # ("one-user-mvp-v1"), byte-pinned into Story 2.2's golden fixtures
+    # (`evals/report.py` hardcodes it). It is NOT the approval rulebook.
+    #
+    # `ApprovalBindingV1.policy_version` is the DERIVED consequential-policy
+    # version, `f"{POLICY_GENERATION}+{sha256(...)[:12]}"` over `PolicyInputsV1`
+    # (`capabilities/registry.py` -- `derive_policy_version`). Only the binding
+    # carries the derived value. Changing this field to the derived one would
+    # silently invalidate every pinned eval fixture.
     policy_version: str
     clock: Callable[[], datetime]
     projection_reader: ScenarioProjectionReader

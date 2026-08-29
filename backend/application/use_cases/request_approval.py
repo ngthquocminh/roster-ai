@@ -43,6 +43,20 @@ class ApprovalNotGrantedError(ApprovalRequestError):
     code = "approval_not_granted"
 
 
+class ApprovalAlreadyPendingError(ApprovalRequestError):
+    """A pending binding already exists for this candidate.
+
+    AD-14 forbids the browser being authority for a decision, so this cannot be
+    left to the client's `pendingApproval` prop -- which fails open while the
+    approvals query is loading or errored. The application check below is the
+    friendly 409; the partial unique index
+    `uq_approval_request_pending_run` is what makes duplication actually
+    impossible under concurrency, since this check is read-then-write.
+    """
+
+    code = "approval_already_pending"
+
+
 @dataclass(frozen=True)
 class RequestApprovalCommandV1:
     site_id: UUID
@@ -90,6 +104,9 @@ def request_approval(
     candidate = schedule_runs.get_candidate(connection, schedule_run_id=command.schedule_run_id, site_id=command.site_id)
     if candidate is None or candidate.feasible_solver_status not in ("OPTIMAL", "FEASIBLE") or candidate.schedule_version_id is None:
         raise CandidateNotPromotableError("the requested schedule run has no feasible candidate")
+    existing = approvals.list_for_schedule_run(connection, schedule_run_id=command.schedule_run_id, site_id=command.site_id)
+    if any(item.state == "pending" for item in existing):
+        raise ApprovalAlreadyPendingError("a decision is already pending for this candidate")
     baseline = baselines.get(connection, command.site_id)
     current_baseline = str(baseline.schedule_version_id) if baseline else None
     if current_baseline != command.expected_baseline_schedule_version:
@@ -113,7 +130,8 @@ def request_approval(
         approval_id=approval_id, state="pending", site_id=command.site_id, action="promote_baseline",
         initiated_by_actor_id=command.actor_id, decided_by_actor_id=None, conversation_id=command.conversation_id,
         agent_run_id=command.agent_run_id, schedule_run_id=command.schedule_run_id,
-        candidate_schedule_version_id=candidate.schedule_version_id, baseline_schedule_version=current_baseline,
+        candidate_schedule_version_id=candidate.schedule_version_id, scenario_version_id=candidate.scenario_version_id,
+        baseline_schedule_version=current_baseline,
         baseline_resource_version=baseline.resource_version if baseline else None, parameter_hash=parameter_hash,
         consequence_summary=summary, consequence_hash=consequence_hash, checksum_algorithm=algorithm,
         checksum_schema_version=schema, policy_version=derive_policy_version(PolicyInputsV1(scheduling_baseline_enabled)),
@@ -124,7 +142,12 @@ def request_approval(
         audit_id=uuid4(), attempt_id=uuid4(), request_id=command.request_id, site_id=command.site_id,
         initiated_by_actor_id=command.actor_id, decided_by_actor_id=None, conversation_id=command.conversation_id,
         agent_run_id=command.agent_run_id, approval_id=approval_id, schedule_run_id=command.schedule_run_id,
-        action="promote_baseline", outcome="approval_requested", success=True, effect_key=str(approval_id),
+        # AD-12 keys successful mutation audit on (site_id, effect_key, outcome).
+        # `str(approval_id)` is a UUID minted moments ago, so it can never
+        # collide and `uq_audit_event_success_effect` would guarantee nothing
+        # about the effect it names. The command's `request_effect_key` IS the
+        # effect identity -- the same value the binding is unique on.
+        action="promote_baseline", outcome="approval_requested", success=True, effect_key=command.request_effect_key,
         before_version=current_baseline, after_version=None, safe_summary=summary, parameter_hash=parameter_hash,
         consequence_hash=consequence_hash, policy_version=binding.policy_version, app_version=app_version,
         worker_facts=WorkerFactsV1(), evidence_refs=(), occurred_at=now,

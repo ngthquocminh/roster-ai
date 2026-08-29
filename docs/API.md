@@ -525,11 +525,26 @@ scratch).
 - `GET /api/v1/approvals/{approval_id}` reads one visible binding.
 - `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
 
-The POST can return RFC 7807 problem codes `candidate_not_found`,
-`candidate_not_promotable`, `stale_resource_version`, `stale_baseline_version`,
-`approval_already_pending`, `idempotency_key_conflict`, `approval_not_granted`,
-or `invalid_approval_command`. Creating a request writes governance and audit
-records but never promotes the candidate or changes the baseline pointer.
+The POST can return RFC 7807 problem codes with these statuses (AD-13 keeps
+denied, stale, missing, and invalid distinct):
+
+| Code | Status | Meaning |
+|---|---|---|
+| `approval_not_granted` | 403 | Policy does not grant baseline approval |
+| `candidate_not_found` | 404 | No candidate is visible in this site |
+| `candidate_not_promotable` | 409 | The run is not `solver_completed`, or has no feasible candidate |
+| `stale_resource_version` | 409 | The run changed since the version you pinned |
+| `stale_baseline_version` | 409 | The current baseline is not the one you expected |
+| `approval_already_pending` | 409 | A pending binding already exists for this candidate |
+| `idempotency_key_conflict` | 409 | The key was reused with a different body |
+| `invalid_approval_command` | 422 | The command is otherwise unusable |
+
+Creating a request writes governance and audit records but never promotes the
+candidate or changes the baseline pointer.
+
+A binding whose `expires_at` has passed is PRESENTED as `expired` by every read
+path, while the stored row stays `pending`; the terminal `expired` state is
+materialised only inside a decision transaction (Story 4.2). Reads never write.
 
 ## Configuration
 

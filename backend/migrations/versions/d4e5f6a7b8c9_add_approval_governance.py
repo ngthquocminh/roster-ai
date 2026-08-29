@@ -43,6 +43,7 @@ def upgrade() -> None:
         sa.Column("agent_run_id", UUID, nullable=True),
         sa.Column("schedule_run_id", UUID, nullable=False),
         sa.Column("candidate_schedule_version_id", UUID, nullable=False),
+        sa.Column("scenario_version_id", UUID, nullable=False),
         sa.Column("baseline_schedule_version", sa.String(100), nullable=True),
         sa.Column("baseline_resource_version", sa.BigInteger(), nullable=True),
         sa.Column("parameter_hash", sa.String(64), nullable=False),
@@ -71,10 +72,19 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["agent_run_id", "site_id"], ["agent_run.id", "agent_run.site_id"], name="fk_approval_request_agent_run_site", ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["schedule_run_id", "site_id"], ["schedule_run.id", "schedule_run.site_id"], name="fk_approval_request_run_site", ondelete="RESTRICT"),
         sa.ForeignKeyConstraint(["candidate_schedule_version_id", "site_id"], ["schedule_version.id", "schedule_version.site_id"], name="fk_approval_request_candidate_site", ondelete="RESTRICT"),
+        sa.ForeignKeyConstraint(["scenario_version_id", "site_id"], ["scenario_version.id", "scenario_version.site_id"], name="fk_approval_request_scenario_version_site", ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"), sa.UniqueConstraint("id", "site_id", name="uq_approval_request_id_site"),
         sa.UniqueConstraint("site_id", "request_effect_key", name="uq_approval_request_effect"),
     )
     op.create_index("uq_approval_request_pending_agent_run", "approval_request", ["agent_run_id"], unique=True, postgresql_where=sa.text("state = 'pending' AND agent_run_id IS NOT NULL"))
+    # One pending binding per candidate, on EITHER initiator path. The
+    # agent-run index above is scoped to `agent_run_id IS NOT NULL`, so it never
+    # constrains planner rows (`agent_run_id` is always NULL there) -- two POSTs
+    # with different Idempotency-Keys could mint two independently decidable
+    # bindings for one candidate. `request_approval` also checks this to return
+    # the documented 409 `approval_already_pending`, but that check is
+    # read-then-write; this index is what holds under real concurrency.
+    op.create_index("uq_approval_request_pending_run", "approval_request", ["site_id", "schedule_run_id"], unique=True, postgresql_where=sa.text("state = 'pending'"))
     op.create_table(
         "site_baseline", *_common(),
         sa.Column("schedule_version_id", UUID, nullable=False),
@@ -112,7 +122,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("REVOKE UPDATE (status, status_reason) ON agent_run FROM shiftmind_runtime")
+    # Revoke ONLY the column this migration added. `UPDATE (status)` on
+    # `agent_run` belongs to ancestor `c7d6e5f4a3b2`, which stays applied after
+    # this downgrade -- revoking the pair would strip that grant too and every
+    # claim/finalize transition would then fail under RLS.
+    op.execute("REVOKE UPDATE (status_reason) ON agent_run FROM shiftmind_runtime")
     op.drop_constraint("ck_agent_run_status_reason", "agent_run", type_="check")
     op.drop_column("agent_run", "status_reason")
     for table in ("audit_event", "site_baseline", "approval_request"):

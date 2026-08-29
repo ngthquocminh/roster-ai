@@ -20,6 +20,7 @@ from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import (
     get_approval_repository,
     get_audit_writer,
+    get_clock,
     get_conversation_repository,
     get_identity_store,
     get_schedule_run_repository,
@@ -44,6 +45,10 @@ import api.routers.approvals as approvals_router
 
 _SESSION_TOKEN = "approval-session"
 _CSRF_TOKEN = "approval-csrf"
+# A FIXED instant, injected through `get_clock`. These tests previously pinned
+# `NOW` to a literal calendar date while the router read `datetime.now()`
+# inline, so the expiry-boundary pair passed or failed purely on what time of
+# day the suite ran -- and did go red once real time passed NOW + 1h.
 NOW = datetime(2026, 8, 28, tzinfo=timezone.utc)
 
 
@@ -52,7 +57,7 @@ def _binding(**overrides):
         approval_id=uuid4(), state="pending", site_id=uuid4(), action="promote_baseline",
         initiated_by_actor_id=uuid4(), decided_by_actor_id=None, conversation_id=uuid4(),
         agent_run_id=None, schedule_run_id=uuid4(), candidate_schedule_version_id=uuid4(),
-        baseline_schedule_version=None, baseline_resource_version=None, parameter_hash="a" * 64,
+        scenario_version_id=uuid4(), baseline_schedule_version=None, baseline_resource_version=None, parameter_hash="a" * 64,
         consequence_summary="Candidate schedule version ...", consequence_hash="b" * 64,
         policy_version="one-user-mvp-v1+abc", created_at=NOW, expires_at=NOW + timedelta(hours=1),
         request_effect_key="command:test", resource_version=1,
@@ -66,17 +71,17 @@ class FakeApprovals:
         self._binding = binding
         self.write_count = 0
 
-    def get(self, _c, *, approval_id):
+    def get(self, _c, *, approval_id, site_id):
         return self._binding if self._binding and self._binding.approval_id == approval_id else None
 
-    def list_for_schedule_run(self, _c, *, schedule_run_id):
+    def list_for_schedule_run(self, _c, *, schedule_run_id, site_id):
         return (self._binding,) if self._binding and self._binding.schedule_run_id == schedule_run_id else ()
 
     def create_pending(self, _c, *, binding, pending_payload):
         self.write_count += 1
         self._binding = binding
 
-    def get_pending_for_agent_run(self, _c, *, agent_run_id):
+    def get_pending_for_agent_run(self, _c, *, agent_run_id, site_id):
         return None
 
 
@@ -142,6 +147,7 @@ def client(monkeypatch, tmp_path):
     app.dependency_overrides[get_audit_writer] = lambda: FakeAudit()
     app.dependency_overrides[get_conversation_repository] = lambda: FakeConversations()
     app.dependency_overrides[get_site_baseline_reader] = lambda: FakeBaselines()
+    app.dependency_overrides[get_clock] = lambda: NOW
     try:
         with TestClient(app) as test_client:
             yield test_client, settings, session
@@ -205,7 +211,7 @@ def test_rejects_a_request_for_a_candidate_not_visible_in_this_site(client) -> N
         (CandidateNotPromotableError("x"), 409, "candidate_not_promotable"),
         (StaleResourceVersionError("x"), 409, "stale_resource_version"),
         (StaleBaselineVersionError("x"), 409, "stale_baseline_version"),
-        (ApprovalNotGrantedError("x"), 422, "approval_not_granted"),
+        (ApprovalNotGrantedError("x"), 403, "approval_not_granted"),
     ],
 )
 def test_maps_every_policy_refusal_to_a_distinct_stable_problem_code(

@@ -71,7 +71,7 @@ def site_ids(governed_postgres_engine):
     return ids
 
 
-def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed", resource_version=2, assignment_count=1, suffix=None):
+def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed", resource_version=2, assignment_count=1, suffix=None, scenario_payload=None):
     """Build one scenario -> conversation -> proposal -> run_snapshot ->
     schedule_run(+candidate schedule_version, +assignments) chain via direct
     inserts, mirroring `finalize_run`'s own insert order without invoking the
@@ -85,7 +85,7 @@ def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed",
         c.execute(insert(scenario).values(id=ids["scenario"], site_id=site_id, fixture_id=f"fixture-{suffix}", name="Fixture"))
         c.execute(insert(scenario_version).values(
             id=ids["scenario_version"], site_id=site_id, scenario_id=ids["scenario"],
-            fixture_id=f"fixture-{suffix}", version="v1", payload={}, checksum_digest="a" * 64,
+            fixture_id=f"fixture-{suffix}", version="v1", payload=scenario_payload or {}, checksum_digest="a" * 64,
         ))
         c.execute(insert(conversation).values(
             id=ids["conversation"], site_id=site_id, scenario_id=ids["scenario"],
@@ -184,13 +184,19 @@ def test_rls_hides_a_cross_site_approval_request_row(governed_postgres_engine, s
         c.execute(insert(approval_request).values(
             id=approval_id_b, site_id=site_ids["other_site"], state="pending", action="promote_baseline",
             initiated_by_actor_id=site_ids["actor"], conversation_id=ids_b["conversation"],
-            schedule_run_id=ids_b["schedule_run"], candidate_schedule_version_id=ids_b["candidate"],
+            schedule_run_id=ids_b["schedule_run"], candidate_schedule_version_id=ids_b["candidate"], scenario_version_id=ids_b["scenario_version"],
             parameter_hash="e" * 64, consequence_summary="x", consequence_hash="f" * 64,
             policy_version="v1", expires_at=NOW + timedelta(hours=1), request_effect_key=f"command:{uuid4()}",
         ))
 
     with site_context(engine, site_ids["site"]) as c:
-        assert approvals.get(c, approval_id=approval_id_b) is None
+        # Pass the OTHER site's id deliberately. The repository now also carries
+        # an explicit `site_id` predicate, and passing this site's id would let
+        # that predicate hide the row -- proving the predicate, not RLS. Asking
+        # for the foreign row BY its own site id makes the explicit filter match,
+        # so RLS is the only thing left that can return `None`. It is still the
+        # real boundary; the predicate is defence in depth on top of it.
+        assert approvals.get(c, approval_id=approval_id_b, site_id=site_ids["other_site"]) is None
 
 
 # --- audit_event is append-only by grant, not just by convention -----------
@@ -222,7 +228,7 @@ def test_partial_index_refuses_a_second_pending_approval_for_one_agent_run(gover
         return dict(
             id=uuid4(), site_id=site_ids["site"], state="pending", action="promote_baseline",
             initiated_by_actor_id=site_ids["actor"], conversation_id=ids["conversation"], agent_run_id=agent_run_id,
-            schedule_run_id=ids["schedule_run"], candidate_schedule_version_id=ids["candidate"],
+            schedule_run_id=ids["schedule_run"], candidate_schedule_version_id=ids["candidate"], scenario_version_id=ids["scenario_version"],
             parameter_hash="a" * 64, consequence_summary="x", consequence_hash="b" * 64,
             policy_version="v1", expires_at=NOW + timedelta(hours=1), request_effect_key=effect_key,
         )
@@ -244,7 +250,7 @@ def test_unique_effect_key_admits_no_second_row_for_the_same_tool_call(governed_
         return dict(
             id=uuid4(), site_id=site_ids["site"], state="pending", action="promote_baseline",
             initiated_by_actor_id=site_ids["actor"], conversation_id=ids["conversation"],
-            schedule_run_id=ids["schedule_run"], candidate_schedule_version_id=ids["candidate"],
+            schedule_run_id=ids["schedule_run"], candidate_schedule_version_id=ids["candidate"], scenario_version_id=ids["scenario_version"],
             parameter_hash="a" * 64, consequence_summary="x", consequence_hash="b" * 64,
             policy_version="v1", expires_at=NOW + timedelta(hours=1), request_effect_key=effect_key,
         )
@@ -414,3 +420,120 @@ def test_site_baseline_reader_returns_the_same_value_for_a_seeded_row(governed_p
         result = reader.get(c, site_ids["site"])
     assert result is not None
     assert result.schedule_version_id == ids["candidate"]
+
+
+def test_both_baseline_producers_return_the_same_value_for_absence_and_for_a_seeded_row(
+    governed_postgres_engine, site_ids
+) -> None:
+    """Decision 8's whole point: BOTH producers move to the one reader together.
+
+    `calculate_comparison` compares the run snapshot's frozen value (sourced
+    from the CATALOGUE) against the projection's current value. Moving only one
+    of the two producers to `site_baseline` creates permanent false staleness the
+    moment Story 4.3 writes a pointer -- the frozen side would be a real version
+    and the current side `None` forever.
+
+    Observed failing by reverting either producer to its old hardcoded `None`
+    (`literal(None, type_=String)` in the catalogue, or the literal `None` on
+    `ScenarioOverviewV1`): the absence case still passes, and this seeded case
+    is the one that catches it.
+    """
+    from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
+    from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
+
+    engine = governed_postgres_engine
+    # The projection parses the fixture payload, so `{}` (enough for every other
+    # proof here) is not enough for `get_overview`. A one-row Scenario Range is
+    # the minimum that reaches the baseline field this test is about, and it has
+    # to be seeded at INSERT time -- `scenario_version` rows are immutable by
+    # database trigger (Story 1.1's governed history).
+    # `other_site` deliberately: `site_baseline` is UNIQUE per site
+    # (`uq_site_baseline_site`) and the seeded-row test above already claims the
+    # primary site's single row, so the absence half of this proof could never
+    # hold there. This test owns its site's baseline outright.
+    test_site = site_ids["other_site"]
+    ids = _seed_candidate_run(
+        engine, site_id=test_site, actor_id=site_ids["actor"],
+        scenario_payload={"Scenario Range": [{"PeriodStartDate": "2026-01-01T00:00:00", "PeriodEndDate": "2026-01-02T00:00:00"}]},
+    )
+    catalogue = PostgresScenarioCatalogueReader()
+    projection = PostgresScenarioProjectionReader()
+
+    # 1) No row: absence is the real "no baseline" state (EAD-2), and both
+    #    producers must report it identically.
+    with site_context(engine, test_site) as c:
+        context_absent = catalogue.get_scenario_context(c, ids["scenario"])
+        overview_absent = projection.get_overview(c, ids["scenario"])
+    assert context_absent is not None and overview_absent is not None
+    assert context_absent.baseline_schedule_version is None
+    assert overview_absent.baseline_schedule_version is None
+
+    # 2) Seeded row: both must return the SAME non-null string.
+    with engine.begin() as c:
+        c.execute(insert(site_baseline).values(
+            id=uuid4(), site_id=test_site, schedule_version_id=ids["candidate"],
+            updated_by_actor_id=site_ids["actor"],
+        ))
+
+    with site_context(engine, test_site) as c:
+        context_seeded = catalogue.get_scenario_context(c, ids["scenario"])
+        overview_seeded = projection.get_overview(c, ids["scenario"])
+    assert context_seeded is not None and overview_seeded is not None
+    assert context_seeded.baseline_schedule_version == str(ids["candidate"])
+    # The agreement itself -- the assertion the false-staleness trap needs.
+    assert overview_seeded.baseline_schedule_version == context_seeded.baseline_schedule_version
+
+
+def test_downgrade_removes_this_migration_without_revoking_an_ancestor_grant(
+    fresh_postgres_database_url: str,
+) -> None:
+    """Task 2's "working `downgrade()`", proven one step rather than to base.
+
+    A full downgrade to base is blocked at ancestor `c4d5e6f7a8b9`
+    (deliberately irreversible), so nothing else exercises THIS migration's
+    reversal. The bug it guards: `REVOKE UPDATE (status, status_reason) ON
+    agent_run` also strips the `UPDATE (status)` grant created by ancestor
+    `c7d6e5f4a3b2`, which stays applied -- after which every claim/finalize
+    transition fails under RLS.
+
+    Observed failing by restoring the paired revoke.
+    """
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import create_engine, inspect
+
+    # alembic.ini lives at the REPO root, one level above `backend/`.
+    config = Config(str(Path(__file__).resolve().parents[2] / "alembic.ini"))
+    engine = create_engine(fresh_postgres_database_url)
+    try:
+        with engine.begin() as c:
+            config.attributes["connection"] = c
+            command.upgrade(config, "head")
+        assert "approval_request" in set(inspect(engine).get_table_names())
+
+        with engine.begin() as c:
+            config.attributes["connection"] = c
+            command.downgrade(config, "c4d5e6f7a8b9")
+
+        tables = set(inspect(engine).get_table_names())
+        assert {"approval_request", "site_baseline", "audit_event"}.isdisjoint(tables)
+
+        with engine.connect() as c:
+            # The ancestor's grant must survive this migration's reversal.
+            assert c.execute(text(
+                "SELECT has_column_privilege('shiftmind_runtime', 'agent_run', 'status', 'UPDATE')"
+            )).scalar_one() is True
+            # ...and the column this migration added is gone with it.
+            assert "status_reason" not in {
+                col["name"] for col in inspect(engine).get_columns("agent_run")
+            }
+
+        # And it goes back up cleanly.
+        with engine.begin() as c:
+            config.attributes["connection"] = c
+            command.upgrade(config, "head")
+        assert "approval_request" in set(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()

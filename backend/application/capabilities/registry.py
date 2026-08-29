@@ -1,7 +1,7 @@
 """Application-owned capability grant composition (AD-2/AD-5)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from uuid import UUID
 
 from application.capabilities.installed import installed_modules
@@ -21,9 +21,14 @@ class PolicyInputsV1:
 
 
 def derive_policy_version(inputs: PolicyInputsV1) -> str:
-    digest = hashlib.sha256(canonicalize_json({
-        "scheduling_baseline_enabled": inputs.scheduling_baseline_enabled,
-    })).hexdigest()[:12]
+    """EAD-12: derive from the WHOLE frozen input set, never a hand-listed subset.
+
+    `asdict(inputs)` is load-bearing. Hashing a hand-written literal here would
+    mean adding a field to `PolicyInputsV1` silently did NOT change
+    `policy_version` -- the exact opposite of Decision 6's "enumerating it is the
+    load-bearing act; adding a field later is a deliberate, reviewable change".
+    """
+    digest = hashlib.sha256(canonicalize_json(asdict(inputs))).hexdigest()[:12]
     return f"{POLICY_GENERATION}+{digest}"
 
 

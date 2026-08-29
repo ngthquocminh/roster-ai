@@ -307,6 +307,10 @@ function ActivityContent({
         schedule_run_id: item.schedule_run_id,
         candidate_schedule_version_id: item.candidate_schedule_version_id,
         baseline_schedule_version: item.baseline_schedule_version,
+        scenario_version_id: item.scenario_version_id,
+        // AC2: "the same agent-run and approval identifiers remain visible".
+        // The activity carries this; dropping it here lost half of that.
+        agent_run_id: item.agent_run_id,
         consequence_summary: item.consequence_summary,
         policy_version: item.policy_version,
         expires_at: item.expires_at,

@@ -39,7 +39,7 @@ export function ScenarioResults() {
 
       {!query.isError && query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
       {!query.isError && query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}
-      {approvals.data?.items.map((approval) => <ApprovalRequestCard approval={approval} key={approval.approval_id} />)}
+      {!query.isError ? approvals.data?.items.map((approval) => <ApprovalRequestCard approval={approval} key={approval.approval_id} />) : null}
       {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && query.data.comparison ? (
         <>
           <ComparisonSummary
@@ -51,7 +51,15 @@ export function ScenarioResults() {
             })}
             requestPending={requestApproval.isPending}
             requestError={requestApproval.isError}
-            pendingApproval={Boolean(approvals.data?.items.some((item) => item.state === "pending"))}
+            // FAIL CLOSED. `approvals.data` is `undefined` while the query is
+            // loading and after it errors, so deriving this from `.some(...)`
+            // alone left the control ENABLED whenever pending-state was
+            // unknown. AD-14 already forbids the client cache being authority
+            // for a decision; the server-side guard
+            // (`approval_already_pending` + `uq_approval_request_pending_run`)
+            // is the real one, and this must not invite the 409.
+            pendingApproval={!approvals.isSuccess || approvals.data.items.some((item) => item.state === "pending")}
+            approvalsUnavailable={approvals.isError}
           />
           <section aria-labelledby="candidate-schedule-heading" className="rounded-xl border p-4">
             <h3 className="font-semibold" id="candidate-schedule-heading">Candidate schedule</h3>

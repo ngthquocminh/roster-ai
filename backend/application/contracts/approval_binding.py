@@ -27,6 +27,11 @@ class ApprovalBindingV1:
     agent_run_id: UUID | None
     schedule_run_id: UUID
     candidate_schedule_version_id: UUID
+    # Pinned at TX1 alongside the candidate. Decision 5 already quotes it in the
+    # consequence summary; carrying it structurally is what lets the Results
+    # surface render the scenario version Task 10 requires without re-reading
+    # the run.
+    scenario_version_id: UUID
     baseline_schedule_version: str | None
     baseline_resource_version: int | None
     parameter_hash: str

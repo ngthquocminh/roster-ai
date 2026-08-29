@@ -76,9 +76,21 @@ class PostgresConversationRepository:
         event = PersistedEventV1(stream_id=binding.conversation_id, sequence=sequence, event_type="approval_request", occurred_at=occurred_at, resource_version=new_version, request_id=request_id, conversation_id=binding.conversation_id, agent_run_id=agent_run_id, site_id=binding.site_id, actor_id=actor_id, payload=activity)
         connection.execute(insert(persisted_event).values(id=activity.activity_id, site_id=binding.site_id, stream_id=event.stream_id, sequence=event.sequence, event_type=event.event_type, resource_version=event.resource_version, request_id=event.request_id, conversation_id=event.conversation_id, agent_run_id=event.agent_run_id, actor_id=event.actor_id, occurred_at=event.occurred_at, payload=_payload_to_json(activity)))
         connection.execute(update(conversation).where(conversation.c.id == binding.conversation_id).values(resource_version=new_version))
-        return ExecutedAgentRunV1(event, new_version, "approval_required" if agent_run_id else "agent_completed")
+        # `None`, never a fabricated "agent_completed": on the planner path there
+        # is no agent run in scope, and the conversation may in fact have one
+        # currently `agent_running`. The agent path's real status is written by
+        # `pause_agent_run_for_approval`, which owns that transition.
+        return ExecutedAgentRunV1(event, new_version, "approval_required" if agent_run_id else None)
 
     def pause_agent_run_for_approval(self, connection: Connection, *, claimed_agent_run_id: UUID, binding: ApprovalBindingV1, request_id: UUID) -> ExecutedAgentRunV1:
+        # LOCK ORDER: conversation, THEN agent_run -- the same order
+        # `finish_agent_run` takes. Locking `agent_run` first here (and reaching
+        # `conversation` inside `_append_approval_activity`) is the textbook ABBA
+        # shape against that method, and PostgreSQL resolves it by aborting one
+        # transaction with a deadlock error that no handler catches.
+        conv = connection.execute(select(conversation.c.id).where(conversation.c.id == binding.conversation_id).with_for_update()).one_or_none()
+        if conv is None:
+            raise RuntimeError("approval conversation is no longer visible")
         current = connection.execute(select(agent_run.c.status, agent_run.c.id).where(agent_run.c.id == claimed_agent_run_id).with_for_update()).one_or_none()
         if current is None or current.status != "agent_running":
             raise AgentRunNotQueuedError("agent run is no longer running")

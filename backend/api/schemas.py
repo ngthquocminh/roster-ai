@@ -220,6 +220,7 @@ class ApprovalOut(BaseModel):
     schedule_run_id: UUID
     candidate_schedule_version_id: UUID
     baseline_schedule_version: str | None
+    scenario_version_id: UUID
     consequence_summary: str
     policy_version: str
     expires_at: datetime

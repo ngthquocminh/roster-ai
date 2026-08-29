@@ -61,7 +61,10 @@ class ConversationTimelineV1:
 class AcceptedTurnV1:
     event: PersistedEventV1
     resource_version: int
-    agent_run_status: str
+    # `None` when the activity was appended OUTSIDE any agent run -- the
+    # planner-initiated approval path has no agent run in scope, and naming a
+    # status there would be a fabricated value inside a typed contract.
+    agent_run_status: str | None
 
 
 @dataclass(frozen=True)
@@ -81,7 +84,10 @@ class ClaimedAgentRunV1:
 class ExecutedAgentRunV1:
     event: PersistedEventV1
     resource_version: int
-    agent_run_status: str
+    # `None` when the activity was appended OUTSIDE any agent run -- the
+    # planner-initiated approval path has no agent run in scope, and naming a
+    # status there would be a fabricated value inside a typed contract.
+    agent_run_status: str | None
 
 
 class AgentRunNotQueuedError(ValueError):

@@ -74,9 +74,18 @@ from application.ports.proposal import ProposalRepository
 from application.ports.approval import ApprovalRepository, AuditWriter
 from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.site_baseline import SiteBaselineReader
-from application.use_cases.request_approval import RequestApprovalCommandV1, request_approval
+from application.use_cases.request_approval import (
+    ApprovalRequestError,
+    CandidateNotFoundError,
+    RequestApprovalCommandV1,
+    request_approval,
+)
 from application.contracts.agent_runtime import AgentApprovalPendingV1
-from application.capabilities.scheduling_baseline import SchedulingBaselineRequestV1
+from application.capabilities.scheduling_baseline import (
+    CAPABILITY_NAME as SCHEDULING_BASELINE_CAPABILITY,
+    SchedulingBaselineRequestV1,
+    scheduling_baseline_module,
+)
 from application.use_cases.finalize_agent_run import finalize_agent_run
 from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
 from datetime import datetime, timezone
@@ -293,29 +302,66 @@ async def execute_agent_turn(
                 if pending is None or len(pending.pending_calls) != 1:
                     raise RuntimeError("suspended turn has no exact pending approval call")
                 call = pending.pending_calls[0]
-                if call.tool_name != "scheduling_baseline":
+                if call.tool_name != SCHEDULING_BASELINE_CAPABILITY:
                     raise RuntimeError("suspended turn requested an unsupported approval capability")
-                request = SchedulingBaselineRequestV1(**json.loads(call.tool_args_json))
-                run = schedule_runs.get_run(connection, run_id=request.schedule_run_id, site_id=claimed.site_id)
-                if run is None:
-                    raise RuntimeError("suspended turn requested a missing schedule run")
-                result = request_approval(
-                    connection,
-                    command=RequestApprovalCommandV1(
-                        site_id=claimed.site_id, actor_id=claimed.actor_id,
-                        schedule_run_id=request.schedule_run_id,
-                        expected_resource_version=run.resource_version,
-                        expected_baseline_schedule_version=request.expected_baseline_schedule_version,
-                        request_effect_key=f"agent:{claimed.agent_run_id}:{call.tool_call_id}",
-                        request_id=deps.request_id, conversation_id=claimed.conversation_id,
-                        agent_run_id=claimed.agent_run_id,
-                        pending_payload=TypeAdapter(AgentApprovalPendingV1).dump_python(pending, mode="json"),
-                    ), schedule_runs=schedule_runs, baselines=baselines,
-                    approvals=approvals, audit_writer=audit_writer, conversations=repository,
-                    approval_expiry_seconds=settings.approval_expiry_seconds,
-                    scheduling_baseline_enabled=settings.scheduling_baseline_enabled,
-                    clock=deps.clock,
+                # `tool_args_json` is the WHOLE tool-argument object, and
+                # `capability_tools._tool_schema` nests the request under the
+                # module's declared `request_argument` -- so the JSON is
+                # `{"<request_argument>": {...}}`, never the request's own fields.
+                # Unwrap that envelope, then validate through the same TypeAdapter
+                # the tool path uses (`capability_tools.py`): the request type is a
+                # plain frozen dataclass with no coercion, so `**kwargs` would leave
+                # `schedule_run_id` a `str` and push an uncoerced value into TX1.
+                envelope = json.loads(call.tool_args_json)
+                request_argument = scheduling_baseline_module().request_argument
+                if not isinstance(envelope, dict) or request_argument not in envelope:
+                    raise RuntimeError("suspended turn carries no request argument")
+                request = TypeAdapter(SchedulingBaselineRequestV1).validate_python(
+                    envelope[request_argument]
                 )
+                try:
+                    run = schedule_runs.get_run(connection, run_id=request.schedule_run_id, site_id=claimed.site_id)
+                    if run is None:
+                        raise CandidateNotFoundError("the requested schedule run is not available")
+                    result = request_approval(
+                        connection,
+                        command=RequestApprovalCommandV1(
+                            site_id=claimed.site_id, actor_id=claimed.actor_id,
+                            schedule_run_id=request.schedule_run_id,
+                            expected_resource_version=run.resource_version,
+                            expected_baseline_schedule_version=request.expected_baseline_schedule_version,
+                            request_effect_key=f"tool:{claimed.agent_run_id}:{call.tool_call_id}",
+                            request_id=deps.request_id, conversation_id=claimed.conversation_id,
+                            agent_run_id=claimed.agent_run_id,
+                            pending_payload=TypeAdapter(AgentApprovalPendingV1).dump_python(pending, mode="json"),
+                        ), schedule_runs=schedule_runs, baselines=baselines,
+                        approvals=approvals, audit_writer=audit_writer, conversations=repository,
+                        approval_expiry_seconds=settings.approval_expiry_seconds,
+                        scheduling_baseline_enabled=settings.scheduling_baseline_enabled,
+                        clock=deps.clock,
+                    )
+                except ApprovalRequestError:
+                    # Decision 10: a policy-refused request creates NO binding, no
+                    # audit row, and no pause. `ApprovalRequestError` subclasses
+                    # `ValueError`, so without this branch it escaped `_finish`
+                    # entirely and left the run stuck at `agent_running` -- which
+                    # `claim_queued_run` can never reclaim. The turn lands on AD-7's
+                    # own "rejected or expired" edge (terminal and truthful) and
+                    # `agent_run.status_reason` stays NULL, because per EAD-5 that
+                    # column names a BINDING outcome and no binding ever existed.
+                    logger.info(
+                        "agent approval refused for run %s; finalizing as cancelled",
+                        agent_run_id,
+                    )
+                    return finalize_agent_run(
+                        repository,
+                        proposal_repository,
+                        connection,
+                        claimed=claimed,
+                        status="agent_cancelled",
+                        payload=activity_payload(outcome, deps),
+                        request_id=deps.request_id,
+                    )
                 if result.activity is None:
                     raise RuntimeError("agent approval did not persist an activity")
                 return result.activity

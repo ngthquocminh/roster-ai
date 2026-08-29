@@ -1,0 +1,19 @@
+{
+  "case_id": "scheduling-baseline-expected-baseline-pinned",
+  "case_version": "1",
+  "capability": "scheduling_baseline",
+  "risk_class": "consequential",
+  "prompt": "Request approval for the reviewed candidate against the baseline currently in place.",
+  "scripted_turns": [
+    {"tool_name": "scheduling_baseline", "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-00000000000a", "expected_baseline_schedule_version": "11111111-1111-1111-1111-111111111111", "schema_version": "1"}}, "tool_call_id": "baseline-pinned-1"}
+  ],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [
+    {"tool_name": "scheduling_baseline", "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-00000000000a", "expected_baseline_schedule_version": "11111111-1111-1111-1111-111111111111", "schema_version": "1"}}}
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "suspended",
+  "expected_visible_text": "",
+  "expected_grounding_outcome": null,
+  "scenario_fixtures": []
+}

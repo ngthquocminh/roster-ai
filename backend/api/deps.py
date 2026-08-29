@@ -6,6 +6,7 @@ be exercised without a real (slow) solve.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Callable, ContextManager, Iterator
 from uuid import UUID
@@ -144,6 +145,18 @@ def get_approval_repository() -> ApprovalRepository:
 
 def get_audit_writer() -> AuditWriter:
     return PostgresAuditWriter()
+
+
+def get_clock() -> datetime:
+    """The one clock the pure approval read paths derive expiry against.
+
+    EAD-7 keeps those reads pure, but "pure" still has to compare `expires_at`
+    against *some* now. Taking it as a dependency is what lets a test pin the
+    instant instead of racing the wall clock: calling `datetime.now` inline
+    inside the router made the expiry-boundary tests pass or fail purely on
+    what time of day the suite happened to run.
+    """
+    return datetime.now(timezone.utc)
 
 
 def get_site_baseline_reader() -> SiteBaselineReader:

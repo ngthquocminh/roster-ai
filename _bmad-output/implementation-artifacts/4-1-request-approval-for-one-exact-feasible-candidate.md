@@ -4,7 +4,7 @@ baseline_commit: ef043c0f8b19bfb4eeb1c7ece0c85ba0652a27b5
 
 # Story 4.1: Request Approval for One Exact Feasible Candidate
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -674,6 +674,49 @@ Therefore:
         `enabled_feature_policy`) and the consequence-summary calculator (real supplier: persisted
         `schedule_version` / `schedule_assignment` rows).
 
+### Review Findings
+
+Adversarial code review 2026-08-28 (Blind Hunter + Edge Case Hunter + Acceptance Auditor; all three
+layers completed). Baseline `ef043c0f`, 3227 diff lines excluding generated artifacts. Every finding
+below was re-verified against the live code by the reviewer before rating; subagent severities were
+discarded per workflow. Both `decision-needed` findings were resolved by Minh at review on 2026-08-28
+and promoted to patches (see the two RESOLVED AT REVIEW bullets below).
+Backend suite on this branch: **1 failed**, 1343 passed, 1 skipped.
+Frontend: 537/537, `tsc` clean.
+
+- [x] [Review][Patch] Duplicate concurrent pending approvals are unguarded on the planner path; `approval_already_pending` is documented in `docs/API.md:530` with zero producers. **RESOLVED AT REVIEW 2026-08-28 -> both homes:** add a partial unique index on `(site_id, schedule_run_id) WHERE state='pending'` to this story's migration AND an application-level pre-check in `request_approval` returning 409 `approval_already_pending`. Editing the single additive migration is in scope because nothing is hosted yet. [backend/migrations/versions/d4e5f6a7b8c9_add_approval_governance.py, backend/application/use_cases/request_approval.py, backend/api/routers/approvals.py]
+- [x] [Review][Patch] `scheduling_baseline` was added to `NON_PRODUCT_CAPABILITIES`, whose comment defines membership as "not a product capability", contradicting the story's own "first `consequential`-risk PRODUCT capability". **RESOLVED AT REVIEW 2026-08-28 -> ship the four cases now:** remove `scheduling_baseline` from `NON_PRODUCT_CAPABILITIES` and author the three additional evaluation cases so the NFR28 four-case floor holds with no exemption and no ledger debt. [backend/tests/test_evaluation_harness.py:513-517, backend/evals/golden/scheduling_baseline/]
+
+- [x] [Review][Patch] Agent-path tool-args envelope is never unwrapped — every agent-initiated approval raises `TypeError` and strands the run at `agent_running` [backend/api/routers/conversations.py:298]
+- [x] [Review][Patch] `ApprovalRequestError` (a `ValueError`) escapes `_finish`; Decision 10's `approval_not_grantable` refusal landing is absent, so every policy refusal inside an agent turn is a 500 that wedges the run [backend/api/routers/conversations.py:288-352]
+- [x] [Review][Patch] `approval_unsupported` was replaced in the closed `TerminalReasonV1` vocabulary rather than added alongside `approval_not_grantable`, so pre-4.1 persisted rows fail validation and take the whole timeline/SSE read down [backend/application/contracts/dialogue.py:33]
+- [x] [Review][Patch] Backend suite is red: expiry presentation reads wall clock with no injected seam, and both expiry tests are anchored to a hardcoded `NOW` [backend/api/routers/approvals.py:30, backend/tests/test_approvals_api.py:47,295,312]
+- [x] [Review][Patch] `useRequestApproval` retains its idempotency key on error (`settle()` runs only in `onSuccess`), so following the UI's own "refresh and retry" instruction after a 409 produces permanent `idempotency_key_conflict` [frontend/src/hooks/useRequestApproval.ts:11]
+- [x] [Review][Patch] No wiring-level test exercises the agent initiator path at all; Decision 9 guard 2 asserts against a hand-made dict rather than an `AgentApprovalPendingV1` serialization — this is why the envelope defect shipped [backend/tests/test_approval_governance_postgres.py:342]
+- [x] [Review][Patch] The Story 2.9 tripwire was renamed and relaxed to an allowlist in place, which Decision 9 names and forbids; the ledger closure claims it was "deleted and replaced with three guards in `test_approval_request.py`", which is false [backend/tests/test_evaluation_harness.py:732, _bmad-output/implementation-artifacts/deferred-work.md:300]
+- [x] [Review][Patch] HTTP `request_effect_key` hardcodes `request_approval` instead of interpolating the run-scoped `operation`, deviating from Decision 4 and colliding across runs on a reused key (unhandled `IntegrityError` → 500) [backend/api/routers/approvals.py:41,49]
+- [x] [Review][Patch] Agent-path `request_effect_key` uses an `agent:` prefix where Decision 4 fixes `tool:{agent_run_id}:{tool_call_id}`; both proofs assert the spec prefix, so neither can catch the deviation [backend/api/routers/conversations.py:309, backend/tests/test_approval_governance_postgres.py:238,349]
+- [x] [Review][Patch] ABBA deadlock: `pause_agent_run_for_approval` locks `agent_run` then `conversation`; `finish_agent_run` locks `conversation` then `agent_run` [backend/adapters/postgres/conversation.py:61,82,419,427]
+- [x] [Review][Patch] `derive_policy_version` hashes a hand-written literal instead of `asdict(inputs)`, so adding a field to `PolicyInputsV1` would silently not change `policy_version` — defeating Decision 6's load-bearing enumeration [backend/application/capabilities/registry.py:23-27]
+- [x] [Review][Patch] `approval_not_granted` carries two statuses: 403 at the pre-check and 422 from the use-case mapping; Task 8 fixes it at 403 and the test pins the unreachable 422 [backend/api/routers/approvals.py:36,51, backend/tests/test_approvals_api.py:208]
+- [x] [Review][Patch] Audit `effect_key` is a freshly minted `uuid4()`, so `uq_audit_event_success_effect (site_id, effect_key, outcome)` can never collide; the command's real effect identity is never written to the envelope [backend/application/use_cases/request_approval.py:98,127]
+- [x] [Review][Patch] Approval read paths carry no site predicate, resting cross-site isolation on RLS alone, unlike every sibling repository [backend/adapters/postgres/approval.py:43,46,49]
+- [x] [Review][Patch] A replayed POST returns the payload frozen at creation, bypassing `_out`'s expiry derivation, so POST and GET report contradictory `state` for the same binding [backend/api/routers/approvals.py:47]
+- [x] [Review][Patch] Two concurrent POSTs with one `Idempotency-Key` both miss the stored-result check and the loser hits an unhandled `IntegrityError` → 500 rather than a replay or a 409 [backend/api/routers/approvals.py:43-54]
+- [x] [Review][Patch] `pendingApproval` fails open while the approvals query is loading or errored, and `approvals.isError` is never rendered; approval cards also render when the result read failed [frontend/src/routes/ScenarioResults.tsx:42,52]
+- [x] [Review][Patch] `ApprovalRequestCard` omits the scenario version Task 10 requires (and `ApprovalOut` carries no such field), and the timeline discards `agent_run_id`, which AC2 requires to remain visible [frontend/src/features/approvals/ApprovalRequestCard.tsx:28-38, frontend/src/features/chat/ActivityTimeline.tsx:303-313]
+- [x] [Review][Patch] `downgrade()` revokes `UPDATE (status)` on `agent_run`, a grant owned by still-applied ancestor `c7d6e5f4a3b2`, breaking every claim/finalize transition after a downgrade [backend/migrations/versions/d4e5f6a7b8c9_add_approval_governance.py:115]
+- [x] [Review][Patch] Decision 8's both-producer agreement — the whole point of Task 3 — has no seeded-row test, so the false-staleness trap it exists to prevent is unguarded [backend/tests/test_scenario_catalogue_adapter.py:105, backend/adapters/postgres/scenario_projection.py:557-561]
+- [x] [Review][Patch] The router reaches into `schedule_runs._store_idempotent_result`, a private method absent from the port; Decision 4 said to follow `enqueue_compute.py:126-146`, where the pair is used from inside the use case [backend/api/routers/approvals.py:54]
+- [x] [Review][Patch] Both adapters construct `PostgresSiteBaselineReader()` inline rather than taking the `SiteBaselineReader` port this same diff adds, defeating the `dependency_overrides` seam and adding an unconditional SELECT to two hot read paths [backend/adapters/postgres/scenario_catalogue.py:135, backend/adapters/postgres/scenario_projection.py:557]
+- [x] [Review][Patch] Task 4's negative-direction policy-version test (an unrelated setting must not change the derived value) is absent, and is unfalsifiable given the current signature [backend/tests/test_approval_contracts.py:47-50]
+- [x] [Review][Patch] The planner path fabricates `agent_run_status="agent_completed"` inside a typed contract for a conversation that may have no agent run [backend/adapters/postgres/conversation.py:76]
+- [x] [Review][Patch] Task 4's two-meanings-one-name comment landed at only one of the two required sites [backend/application/capabilities/deps.py:25]
+- [x] [Review][Patch] `sprint-status.yaml` is modified in the diff but absent from the Dev Agent Record File List [_bmad-output/implementation-artifacts/sprint-status.yaml]
+- [x] [Review][Patch] Completion Notes overstate the consequence-summary supplier: `request_approval` reads `len(candidate.assignments)` off the version payload; no `schedule_assignment` row is read on this path [backend/application/use_cases/request_approval.py:102, backend/adapters/postgres/schedule_run.py:98-106]
+
+- [x] [Review][Defer] **An `approval_required` agent run has no exit edge, and an expired-but-still-`pending` row permanently blocks its agent run's single pending slot** [backend/application/use_cases/execute_turn.py:terminal_status, backend/adapters/postgres/schema.py] — deferred, owned by Story 4.2. Nothing transitions `state` to `expired` in storage (EAD-7 materialises it only inside a decision-attempt transaction), so `uq_approval_request_pending_agent_run` keeps counting the dead row and `get_pending_for_agent_run` keeps returning it, while the read side presents it as expired and makes the blockage invisible. The reserved `status_reason` values are never written by any code in this story. This sits inside the story's declared `decision:owned_by_story_4_2` scope control, but the permanent-slot-block consequence is new and should be closed together with the decision endpoint.
+
 ---
 
 ## Dev Notes
@@ -916,9 +959,14 @@ owned.
   (mechanism now has somewhere to read from, still no writer).
 - **EAD-9 supplier entries for this story's two new guards** (Task 12): the `scheduling_baseline`
   grant's real supplier is `Settings.scheduling_baseline_enabled` via `enabled_feature_policy`; the
-  consequence-summary calculator's real supplier is the persisted `schedule_version` /
-  `schedule_assignment` rows read inside `request_approval` (Decision 5) — neither is a seeded-only
-  stand-in.
+  consequence-summary calculator's real supplier is the persisted `schedule_version` row read
+  inside `request_approval` (Decision 5) — neither is a seeded-only stand-in.
+  **CORRECTED AT CODE REVIEW 2026-08-29:** this entry originally also named
+  `schedule_assignment` rows. It does not read them: `request_approval` takes
+  `len(candidate.assignments)` from `ScheduleVersionV1`, which
+  `PostgresScheduleRunRepository.get_candidate` hydrates from `schedule_version.payload` alone. The
+  count is still an assignment-side fact carrying no demand family (`docs/DOMAIN-MODEL.md` §2), so
+  Decision 5 holds; only the named supplier was wrong.
 - **Test-file split for Task 11**, recorded because Decision text named one file
   (`test_approval_request.py`) and the actual proof landed across three: fake-repository use-case
   tests stayed in `test_approval_request.py`; fake-repository router/HTTP-contract tests went to the
@@ -934,6 +982,7 @@ owned.
 ### File List
 
 - `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `backend/adapters/postgres/approval.py`
 - `backend/adapters/postgres/audit.py`
 - `backend/adapters/postgres/conversation.py`

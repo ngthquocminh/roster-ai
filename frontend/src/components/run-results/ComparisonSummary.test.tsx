@@ -53,6 +53,29 @@ function baseProps() {
 }
 
 describe("ComparisonSummary", () => {
+  it("disables the request when pending-state is unknown, and says why", () => {
+    // The approvals read failed, so we do NOT know whether a decision is
+    // already pending. Enabling the control here was the practical route to a
+    // duplicate binding: AD-14 forbids the client cache being authority, and
+    // the server-side guard should never be reached by a control we knew we
+    // could not justify enabling.
+    render(
+      <ComparisonSummary
+        comparison={comparison()}
+        {...baseProps()}
+        pendingApproval
+        approvalsUnavailable
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Request approval" })).toBeDisabled();
+    expect(
+      screen.getByText(/Existing approvals couldn't be loaded/),
+    ).toBeInTheDocument();
+    // It must not claim a pending decision it cannot see.
+    expect(screen.queryByText("A decision is already pending.")).not.toBeInTheDocument();
+  });
+
+
   it("renders all decision fields, genuine absence, and an enabled approval", () => {
     render(<ComparisonSummary comparison={comparison()} {...baseProps()} />);
     expect(screen.getByText("worker-1")).toBeInTheDocument();

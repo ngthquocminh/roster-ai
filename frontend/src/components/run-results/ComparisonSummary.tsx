@@ -21,12 +21,14 @@ function IdList({ label, values }: Readonly<{ label: string; values: string[] }>
   return <div><dt className="text-muted-foreground">{label}</dt><dd>{values.length ? values.join(", ") : "None"}</dd></div>;
 }
 
-export function ComparisonSummary({ comparison, onRequestApproval, requestPending, requestError, pendingApproval }: Readonly<{
+export function ComparisonSummary({ comparison, onRequestApproval, requestPending, requestError, pendingApproval, approvalsUnavailable = false }: Readonly<{
   comparison: Comparison;
   onRequestApproval: () => void;
   requestPending: boolean;
   requestError: boolean;
   pendingApproval: boolean;
+  /** The approvals read failed, so pending-state is unknown rather than absent. */
+  approvalsUnavailable?: boolean;
 }>) {
   const candidate = comparison.candidate_metrics;
   const baseline = comparison.baseline_metrics;
@@ -44,7 +46,12 @@ export function ComparisonSummary({ comparison, onRequestApproval, requestPendin
         <div className="space-y-1">
           <Button className="min-h-11" disabled={comparison.stale || pendingApproval || requestPending} onClick={onRequestApproval} type="button" variant="outline">Request approval</Button>
           {comparison.stale ? <p className="text-xs text-muted-foreground">Comparison is stale — refresh before requesting approval.</p> : null}
-          {pendingApproval ? <p className="text-xs text-muted-foreground">A decision is already pending.</p> : null}
+          {/* Text, never colour alone (EXPERIENCE.md Accessibility Floor), and
+              the unknown case says so rather than borrowing the pending copy —
+              "already pending" would be a claim we cannot support when the read
+              failed. */}
+          {approvalsUnavailable ? <p className="text-xs text-muted-foreground">Existing approvals couldn&apos;t be loaded — reload before requesting approval.</p> : null}
+          {pendingApproval && !approvalsUnavailable ? <p className="text-xs text-muted-foreground">A decision is already pending.</p> : null}
           {requestError ? <InlineAlert title="Approval request not created" description="Try again after refreshing the comparison." variant="destructive" /> : null}
         </div>
       </div>

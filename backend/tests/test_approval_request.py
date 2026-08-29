@@ -47,8 +47,9 @@ class Baselines:
 
 
 class Approvals:
-    def __init__(self): self.binding = None
-    def create_pending(self, _c, *, binding, pending_payload): self.binding = binding
+    def __init__(self, existing=()): self.binding = None; self.pending_payload = None; self.existing = tuple(existing)
+    def create_pending(self, _c, *, binding, pending_payload): self.binding = binding; self.pending_payload = pending_payload
+    def list_for_schedule_run(self, _c, *, schedule_run_id, site_id): return self.existing
 
 
 class Audit:
@@ -153,3 +154,113 @@ def _catch(error_type, runs, **kwargs):
     with pytest.raises(error_type):
         request_approval(None, command=command, schedule_runs=runs, baselines=baselines, approvals=approvals, audit_writer=audit, conversations=conversations, approval_expiry_seconds=3600, scheduling_baseline_enabled=scheduling_baseline_enabled, clock=lambda: NOW)
     return None, approvals, audit, conversations
+
+
+# --- Decision 9: the Story 2.9 tripwire's own remediation ---------------------
+#
+# `test_request_path_grants_no_approval_capability_in_this_milestone`
+# (test_evaluation_harness.py) asserted that NO granted module declared an
+# approval policy, and its message spelled out what had to exist before that
+# could change: persist the pending calls, an approval decision endpoint,
+# `DeferredToolResults` on the request path, and "restore the
+# `approval_required` mapping per AD-7".
+#
+# Decision 9 requires that test be DELETED and replaced by the guard its own
+# message describes -- explicitly NOT relaxed to an allowlist and left standing,
+# which "converts a tripwire into decoration". It has been deleted; these three
+# guards are the replacement. Each names the mutation that makes it fail.
+
+
+def test_a_suspended_turn_finalises_as_approval_required_not_agent_cancelled() -> None:
+    """Guard 1: the AD-7 mapping the stopgap owed.
+
+    Fails if `"suspended": "agent_cancelled"` is restored in
+    `execute_turn.terminal_status`.
+    """
+    from application.contracts.agent_runtime import AgentRunOutcomeV1
+    from application.use_cases.execute_turn import terminal_status
+
+    assert terminal_status(AgentRunOutcomeV1(status="suspended")) == "approval_required"
+
+
+def test_tx1_persists_the_pending_calls_and_owned_turn_byte_identically() -> None:
+    """Guard 2: `outcome.approval.pending_calls` and `.turn` survive the write.
+
+    Asserted against a REAL `AgentApprovalPendingV1` serialization rather than a
+    hand-made dict: the claim is that the CONTRACT round-trips, and a dict
+    literal would only prove that JSON round-trips.
+
+    Fails if `pending_payload` stops being threaded through
+    `RequestApprovalCommandV1` into `create_pending`.
+    """
+    from pydantic import TypeAdapter
+
+    from application.contracts.agent_runtime import (
+        AgentApprovalPendingV1,
+        AgentMessageV1,
+        AgentToolCallProposalV1,
+        AgentTurnV1,
+    )
+
+    pending = AgentApprovalPendingV1(
+        pending_calls=(
+            AgentToolCallProposalV1(
+                tool_call_id="call-1",
+                tool_name="scheduling_baseline",
+                tool_args_json='{"request": {"schedule_run_id": "00000000-0000-0000-0000-000000000009", "expected_baseline_schedule_version": null}}',
+            ),
+        ),
+        turn=AgentTurnV1(messages=(AgentMessageV1(role="user"),)),
+    )
+    payload = TypeAdapter(AgentApprovalPendingV1).dump_python(pending, mode="json")
+
+    runs = Runs()
+    approvals, audit, conversations = Approvals(), Audit(), Conversations()
+    command = _command(runs, agent_run_id=uuid4(), pending_payload=payload)
+    request_approval(
+        None, command=command, schedule_runs=runs, baselines=Baselines(),
+        approvals=approvals, audit_writer=audit, conversations=conversations,
+        approval_expiry_seconds=3600, scheduling_baseline_enabled=True,
+        clock=lambda: NOW,
+    )
+
+    assert approvals.pending_payload == payload
+    assert TypeAdapter(AgentApprovalPendingV1).validate_python(approvals.pending_payload) == pending
+
+
+def test_scheduling_baseline_is_the_only_granted_module_declaring_an_approval_policy() -> None:
+    """Guard 3: a THIRD consequential capability cannot arrive without persistence.
+
+    The tripwire's real successor. Not an allowlist bolted onto the old
+    assertion: it fails on ANY module the request path grants that declares a
+    non-`none` approval policy and is not `scheduling_baseline`, so the next
+    consequential capability still has to come back through review.
+
+    Fails under `DEMONSTRATION_ENABLED=true`.
+    """
+    from uuid import UUID
+
+    from api.deps import get_capability_registry
+    from application.capabilities.installed import enabled_feature_policy
+    from application.capabilities.registry import PLANNER_ROLE, CapabilityGrantContextV1
+    from settings import default_settings
+
+    site_id = UUID(int=11)
+    granted = get_capability_registry()(
+        CapabilityGrantContextV1(
+            role=PLANNER_ROLE, site_id=site_id,
+            feature_policy=enabled_feature_policy(default_settings()),
+            conversation_id=UUID(int=12), conversation_site_id=site_id,
+        )
+    )
+    consequential = sorted(
+        module.manifest.capability_name
+        for module in granted
+        if module.manifest.approval_policy != "none"
+    )
+    assert consequential == ["scheduling_baseline"], (
+        f"{consequential} declare an approval policy on the request path. Every "
+        "consequential capability needs its own persisted pending-call payload "
+        "and a decision path that can drain it; adding one without that repeats "
+        "the Story 2.9 stopgap. See Decision 9 and deferred-work.md."
+    )
