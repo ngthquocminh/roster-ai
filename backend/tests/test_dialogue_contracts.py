@@ -77,7 +77,12 @@ def test_dialogue_contracts_have_pinned_fields_and_closed_vocabularies() -> None
         "deadline_exceeded",
         "capability_error",
         "refused",
+        # RETAINED for historical rows. Epic 2/3 persisted `approval_unsupported`
+        # under the Story 2.9 stopgap and `_activity_from_payload` validates
+        # every stored payload through this Literal -- dropping the member made
+        # those rows undecodable and took the whole timeline down with them.
         "approval_unsupported",
+        "approval_not_grantable",
     )
 
 

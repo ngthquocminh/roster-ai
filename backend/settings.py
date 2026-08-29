@@ -131,6 +131,8 @@ class Settings:
     scheduling_draft_enabled: bool = True
     scheduling_inspect_enabled: bool = True
     scheduling_optimize_enabled: bool = True
+    approval_expiry_seconds: int = 3600
+    scheduling_baseline_enabled: bool = True
     demonstration_enabled: bool = False
 
 
@@ -367,6 +369,12 @@ def default_settings() -> Settings:
         os.environ.get("SCHEDULING_OPTIMIZE_ENABLED"),
         True,
     )
+    approval_expiry_seconds = _positive_int(
+        "APPROVAL_EXPIRY_SECONDS", os.environ.get("APPROVAL_EXPIRY_SECONDS"), 3600
+    )
+    scheduling_baseline_enabled = _flag(
+        "SCHEDULING_BASELINE_ENABLED", os.environ.get("SCHEDULING_BASELINE_ENABLED"), True
+    )
     demonstration_enabled = _flag(
         "DEMONSTRATION_ENABLED", os.environ.get("DEMONSTRATION_ENABLED"), False
     )
@@ -415,5 +423,7 @@ def default_settings() -> Settings:
         scheduling_draft_enabled=scheduling_draft_enabled,
         scheduling_inspect_enabled=scheduling_inspect_enabled,
         scheduling_optimize_enabled=scheduling_optimize_enabled,
+        approval_expiry_seconds=approval_expiry_seconds,
+        scheduling_baseline_enabled=scheduling_baseline_enabled,
         demonstration_enabled=demonstration_enabled,
     )

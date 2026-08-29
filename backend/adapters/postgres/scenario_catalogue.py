@@ -6,16 +6,15 @@ from uuid import UUID
 from sqlalchemy import (
     Connection,
     Numeric,
-    String,
     and_,
     cast,
     func,
-    literal,
     nulls_last,
     select,
 )
 
 from adapters.postgres.schema import scenario, scenario_version
+from adapters.postgres.site_baseline import PostgresSiteBaselineReader
 from application.ports.scenario_catalogue import (
     FixtureCatalogueEntry,
     ScenarioContext,
@@ -113,9 +112,6 @@ class PostgresScenarioCatalogueReader:
                 scenario_version.c.checksum_schema_version,
                 scenario_version.c.checksum_digest,
                 scenario.c.site_id,
-                literal(None, type_=String).label(
-                    "baseline_schedule_version"
-                ),
             )
             .select_from(self._scenario_version_join())
             .where(scenario.c.id == scenario_id)
@@ -137,5 +133,9 @@ class PostgresScenarioCatalogueReader:
             checksum_schema_version=row.checksum_schema_version,
             checksum_digest=row.checksum_digest,
             site_id=row.site_id,
-            baseline_schedule_version=row.baseline_schedule_version,
+            baseline_schedule_version=(
+                str(baseline.schedule_version_id)
+                if (baseline := PostgresSiteBaselineReader().get(connection, row.site_id))
+                else None
+            ),
         )

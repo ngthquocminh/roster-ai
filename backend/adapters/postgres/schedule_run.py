@@ -17,6 +17,7 @@ from adapters.postgres.schema import (
     schedule_assignment,
     schedule_run,
     schedule_version,
+    proposal,
 )
 from adapters.postgres.conversation import UnsupportedActivityPayloadError
 from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
@@ -81,6 +82,12 @@ _FINALIZE_EXPECTED_STATUSES = {
 
 
 class PostgresScheduleRunRepository:
+    def get_conversation_for_run(self, connection: Connection, *, run_id: UUID, site_id: UUID) -> UUID | None:
+        return connection.execute(
+            select(proposal.c.conversation_id)
+            .select_from(schedule_run.join(run_snapshot, (run_snapshot.c.id == schedule_run.c.run_snapshot_id) & (run_snapshot.c.site_id == schedule_run.c.site_id)).join(proposal, (proposal.c.id == run_snapshot.c.proposal_id) & (proposal.c.site_id == run_snapshot.c.site_id)))
+            .where(schedule_run.c.id == run_id, schedule_run.c.site_id == site_id)
+        ).scalar_one_or_none()
     def get_candidate(
         self,
         connection: Connection,

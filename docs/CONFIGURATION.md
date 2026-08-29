@@ -29,6 +29,8 @@ local backend.
 | `OPENROUTER_API_KEY` | Required if `LLM_PROVIDER=openrouter` | *(none)* | OpenRouter API key. |
 | `OPENROUTER_MODEL` | Optional | `openai/gpt-oss-20b:free` | Model slug passed to OpenRouter (distinct from `LLM_MODEL` because `LLM_MODEL`'s default is a Gemini-only model ID, not a valid OpenRouter slug). |
 | `CORS_ORIGINS` | Optional | `http://localhost:5173,http://localhost:4173` | Comma-separated list of browser origins allowed to call the API. |
+| `APPROVAL_EXPIRY_SECONDS` | Optional | `3600` | Positive lifetime, in seconds, snapshotted into a newly requested approval. |
+| `SCHEDULING_BASELINE_ENABLED` | Optional | `true` | Enables the consequential baseline-approval capability. |
 
 ### Required vs optional settings
 

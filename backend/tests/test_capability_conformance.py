@@ -61,6 +61,10 @@ _PROBE_ARGS = {
         "idempotency_key": "conformance-run",
     },
     "shiftmind_demonstration": {"label": "alpha", "repeat": 1},
+    "scheduling_baseline": {
+        "schedule_run_id": str(UUID(int=9)),
+        "expected_baseline_schedule_version": None,
+    },
 }
 
 

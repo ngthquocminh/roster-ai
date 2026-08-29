@@ -26,13 +26,15 @@ class _Result:
 
 
 class _Connection:
-    def __init__(self, rows):
+    def __init__(self, rows, follow_up_rows=None):
         self._rows = rows
+        self._follow_up_rows = follow_up_rows
         self.statements = []
 
     def execute(self, statement):
         self.statements.append(statement)
-        return _Result(self._rows)
+        rows = self._rows if len(self.statements) == 1 else self._follow_up_rows
+        return _Result(rows or [])
 
 
 def _catalogue_row(
@@ -100,8 +102,9 @@ def test_list_fixture_versions_maps_frozen_entries_and_defines_stable_order() ->
 
 def test_get_scenario_context_selects_governed_latest_version_without_site_input() -> None:
     row = _catalogue_row(fixture_version="v2")
-    row.baseline_schedule_version = None
-    connection = _Connection([row])
+    # The new baseline read is independent of the catalogue row.  Returning no
+    # baseline row must still publish the valid no-baseline state.
+    connection = _Connection([row], follow_up_rows=[])
 
     context = PostgresScenarioCatalogueReader().get_scenario_context(
         connection,

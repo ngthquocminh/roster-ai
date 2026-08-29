@@ -128,6 +128,24 @@ const refusal = {
   },
 };
 
+const approvalRequest = {
+  ...item,
+  activity_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  activity_type: "approval_request" as const,
+  sequence: "5",
+  approval_id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+  approval_state: "pending" as const,
+  agent_run_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+  schedule_run_id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+  candidate_schedule_version_id: "12121212-1212-1212-1212-121212121212",
+  baseline_schedule_version: null,
+  consequence_summary: "Candidate is ready for review.",
+  parameter_hash: "a".repeat(64),
+  consequence_hash: "b".repeat(64),
+  policy_version: "one-user-mvp-v1+abcdef",
+  expires_at: "2999-08-27T12:00:00Z",
+};
+
 function renderedIds() {
   return screen
     .getAllByRole("listitem")
@@ -135,6 +153,12 @@ function renderedIds() {
 }
 
 describe("ActivityTimeline", () => {
+  it("renders an approval request once from its persisted activity", () => {
+    render(<ActivityTimeline navigate={vi.fn()} items={[approvalRequest, approvalRequest]} />);
+    expect(screen.getAllByRole("region", { name: "Approval request" })).toHaveLength(1);
+    expect(screen.getByText("State: pending")).toBeInTheDocument();
+    expect(screen.getByText("No current baseline")).toBeInTheDocument();
+  });
   it("builds the jump only from the persisted locator and activity scenario", () => {
     const navigate = vi.fn();
     render(<ActivityTimeline items={[agentResponse]} navigate={navigate} />);
@@ -371,7 +395,7 @@ describe("ActivityTimeline", () => {
       "deadline_exceeded",
       "capability_error",
       "refused",
-      "approval_unsupported",
+      "approval_not_grantable",
     ] as const;
     // `detail` is IDENTICAL across every reason on purpose. The previous form
     // interpolated the reason into the detail string and then asserted the
@@ -400,6 +424,23 @@ describe("ActivityTimeline", () => {
           ?.textContent ?? "",
     );
     expect(new Set(rendered).size).toBe(reasons.length);
+  });
+
+  it("labels the real approval-not-grantable reason, not the generic fallback", () => {
+    // The pairwise-distinctness test above would still pass if this reason
+    // fell through to the unmapped-reason fallback ("Turn ended") -- that
+    // string is unique too, so it would never collide with the others. This
+    // test pins the actual label so a missing `TERMINAL_LABELS` entry for a
+    // real backend reason is caught here rather than passing silently.
+    const notGrantable = {
+      ...refusal,
+      outcome: { ...refusal.outcome, status: "failed" as const, reason: "approval_not_grantable" as const },
+    };
+
+    render(<ActivityTimeline navigate={vi.fn()} items={[notGrantable]} />);
+
+    expect(screen.getByText("Approval not available")).toBeInTheDocument();
+    expect(screen.queryByText(/Turn ended/)).not.toBeInTheDocument();
   });
 
   it("labels a refusal by its model-selected reason, not one shared label", () => {

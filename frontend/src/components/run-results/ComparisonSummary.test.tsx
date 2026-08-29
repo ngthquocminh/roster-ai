@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { axe } from "jest-axe";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ScheduleRunResult } from "@/api/scheduleRuns";
 import { ComparisonSummary } from "./ComparisonSummary";
@@ -42,16 +43,79 @@ function comparison(stale = false): NonNullable<ScheduleRunResult["comparison"]>
   } as NonNullable<ScheduleRunResult["comparison"]>;
 }
 
+function baseProps() {
+  return {
+    onRequestApproval: vi.fn(),
+    requestPending: false,
+    requestError: false,
+    pendingApproval: false,
+  };
+}
+
 describe("ComparisonSummary", () => {
-  it("renders all decision fields, genuine absence, and a disabled approval", () => {
-    render(<ComparisonSummary comparison={comparison()} />);
+  it("disables the request when pending-state is unknown, and says why", () => {
+    // The approvals read failed, so we do NOT know whether a decision is
+    // already pending. Enabling the control here was the practical route to a
+    // duplicate binding: AD-14 forbids the client cache being authority, and
+    // the server-side guard should never be reached by a control we knew we
+    // could not justify enabling.
+    render(
+      <ComparisonSummary
+        comparison={comparison()}
+        {...baseProps()}
+        pendingApproval
+        approvalsUnavailable
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Request approval" })).toBeDisabled();
+    expect(
+      screen.getByText(/Existing approvals couldn't be loaded/),
+    ).toBeInTheDocument();
+    // It must not claim a pending decision it cannot see.
+    expect(screen.queryByText("A decision is already pending.")).not.toBeInTheDocument();
+  });
+
+
+  it("renders all decision fields, genuine absence, and an enabled approval", () => {
+    render(<ComparisonSummary comparison={comparison()} {...baseProps()} />);
     expect(screen.getByText("worker-1")).toBeInTheDocument();
     expect(screen.getByText(/Cost delta/)).toBeInTheDocument();
     expect(screen.getByText(/Overtime delta/)).toBeInTheDocument();
     expect(screen.getByText("Review overtime")).toBeInTheDocument();
     expect(screen.getByText("demand-1")).toBeInTheDocument();
     expect(screen.getAllByText("Not computed").length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Approve as baseline" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Request approval" })).toBeEnabled();
+  });
+
+  it("calls onRequestApproval when the enabled control is clicked", async () => {
+    const props = baseProps();
+    const user = userEvent.setup();
+    render(<ComparisonSummary comparison={comparison()} {...props} />);
+    await user.click(screen.getByRole("button", { name: "Request approval" }));
+    expect(props.onRequestApproval).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the control with a visible reason when the comparison is stale", () => {
+    render(<ComparisonSummary comparison={comparison(true)} {...baseProps()} />);
+    expect(screen.getByRole("button", { name: "Request approval" })).toBeDisabled();
+    expect(screen.getByText("Comparison is stale — refresh before requesting approval.")).toBeInTheDocument();
+  });
+
+  it("disables the control with a visible reason when a decision is already pending", () => {
+    render(<ComparisonSummary comparison={comparison()} {...baseProps()} pendingApproval />);
+    expect(screen.getByRole("button", { name: "Request approval" })).toBeDisabled();
+    expect(screen.getByText("A decision is already pending.")).toBeInTheDocument();
+  });
+
+  it("disables the control while the request is in flight", () => {
+    render(<ComparisonSummary comparison={comparison()} {...baseProps()} requestPending />);
+    expect(screen.getByRole("button", { name: "Request approval" })).toBeDisabled();
+  });
+
+  it("surfaces a request failure without hiding the frozen comparison", () => {
+    render(<ComparisonSummary comparison={comparison()} {...baseProps()} requestError />);
+    expect(screen.getByText("Approval request not created")).toBeInTheDocument();
+    expect(screen.getByText(/Cost delta/)).toBeInTheDocument();
   });
 
   it("renders a real zero coverage delta for genuinely zero demand, not 'Not computed'", () => {
@@ -70,20 +134,20 @@ describe("ComparisonSummary", () => {
       interval_coverage_served_minutes: [],
     };
 
-    render(<ComparisonSummary comparison={zeroDemand} />);
+    render(<ComparisonSummary comparison={zeroDemand} {...baseProps()} />);
 
     expect(screen.getByText(/Coverage required delta/).nextElementSibling).toHaveTextContent("0.00");
     expect(screen.getByText(/Coverage served delta/).nextElementSibling).toHaveTextContent("0.00");
   });
 
   it("keeps historical numbers visible under the stale warning", () => {
-    render(<ComparisonSummary comparison={comparison(true)} />);
+    render(<ComparisonSummary comparison={comparison(true)} {...baseProps()} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/baseline-v1.*baseline-v2/i);
     expect(screen.getByText(/Cost delta/)).toBeInTheDocument();
   });
 
   it("meets the automated accessibility floor", async () => {
-    const { container } = render(<ComparisonSummary comparison={comparison(true)} />);
+    const { container } = render(<ComparisonSummary comparison={comparison(true)} {...baseProps()} />);
     expect(await axe(container)).toHaveNoViolations();
   });
 });

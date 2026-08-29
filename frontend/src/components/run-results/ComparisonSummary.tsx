@@ -1,7 +1,7 @@
 import type { ScheduleRunResult } from "@/api/scheduleRuns";
 import { IdentifierCopyButton } from "@/components/primitives/IdentifierCopyButton";
-import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { Button } from "@/components/ui/button";
+import { InlineAlert } from "@/components/primitives/InlineAlert";
 
 type Comparison = NonNullable<ScheduleRunResult["comparison"]>;
 type Pair = [string, number];
@@ -21,7 +21,15 @@ function IdList({ label, values }: Readonly<{ label: string; values: string[] }>
   return <div><dt className="text-muted-foreground">{label}</dt><dd>{values.length ? values.join(", ") : "None"}</dd></div>;
 }
 
-export function ComparisonSummary({ comparison }: Readonly<{ comparison: Comparison }>) {
+export function ComparisonSummary({ comparison, onRequestApproval, requestPending, requestError, pendingApproval, approvalsUnavailable = false }: Readonly<{
+  comparison: Comparison;
+  onRequestApproval: () => void;
+  requestPending: boolean;
+  requestError: boolean;
+  pendingApproval: boolean;
+  /** The approvals read failed, so pending-state is unknown rather than absent. */
+  approvalsUnavailable?: boolean;
+}>) {
   const candidate = comparison.candidate_metrics;
   const baseline = comparison.baseline_metrics;
   const objectiveNames = Array.from(new Set([
@@ -35,7 +43,17 @@ export function ComparisonSummary({ comparison }: Readonly<{ comparison: Compari
     <section aria-labelledby="comparison-heading" className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-xl font-semibold" id="comparison-heading">Candidate comparison</h3>
-        <Button className="min-h-11" disabled title="Approval is not available yet" type="button" variant="outline">Approve as baseline</Button>
+        <div className="space-y-1">
+          <Button className="min-h-11" disabled={comparison.stale || pendingApproval || requestPending} onClick={onRequestApproval} type="button" variant="outline">Request approval</Button>
+          {comparison.stale ? <p className="text-xs text-muted-foreground">Comparison is stale — refresh before requesting approval.</p> : null}
+          {/* Text, never colour alone (EXPERIENCE.md Accessibility Floor), and
+              the unknown case says so rather than borrowing the pending copy —
+              "already pending" would be a claim we cannot support when the read
+              failed. */}
+          {approvalsUnavailable ? <p className="text-xs text-muted-foreground">Existing approvals couldn&apos;t be loaded — reload before requesting approval.</p> : null}
+          {pendingApproval && !approvalsUnavailable ? <p className="text-xs text-muted-foreground">A decision is already pending.</p> : null}
+          {requestError ? <InlineAlert title="Approval request not created" description="Try again after refreshing the comparison." variant="destructive" /> : null}
+        </div>
       </div>
 
       {comparison.stale ? <InlineAlert title="Historical comparison" description={`Expected baseline ${comparison.expected_baseline_schedule_version ?? "none"}; current baseline ${comparison.current_baseline_schedule_version ?? "none"}. The frozen numbers remain visible below.`} /> : null}

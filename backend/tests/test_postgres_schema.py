@@ -33,6 +33,9 @@ EXPECTED_TABLES = {
     "schedule_version",
     "schedule_assignment",
     "workflow.job_queue",
+    "approval_request",
+    "site_baseline",
+    "audit_event",
 }
 SITE_OWNED_TABLES = {
     "scenario",
@@ -52,6 +55,9 @@ SITE_OWNED_TABLES = {
     "schedule_version",
     "schedule_assignment",
     "workflow.job_queue",
+    "approval_request",
+    "site_baseline",
+    "audit_event",
 }
 
 

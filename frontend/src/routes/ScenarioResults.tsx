@@ -7,6 +7,9 @@ import { ProgressCard } from "@/components/runs/ProgressCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useScheduleRunResult } from "@/hooks/useScheduleRunResult";
+import { useRequestApproval } from "@/hooks/useRequestApproval";
+import { useRunApprovals } from "@/hooks/useRunApprovals";
+import { ApprovalRequestCard } from "@/features/approvals/ApprovalRequestCard";
 import { USER_ERROR_COPY } from "@/lib/errors";
 
 const NON_TERMINAL = new Set(["solver_queued", "solver_running", "cancellation_requested"]);
@@ -16,6 +19,8 @@ const KNOWN_RUN_STATUSES = new Set([...NON_TERMINAL, ...NON_PROMOTABLE, "solver_
 export function ScenarioResults() {
   const { runId = "", scenarioId = "" } = useParams();
   const query = useScheduleRunResult(runId);
+  const requestApproval = useRequestApproval();
+  const approvals = useRunApprovals(runId);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -34,9 +39,28 @@ export function ScenarioResults() {
 
       {!query.isError && query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
       {!query.isError && query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}
+      {!query.isError ? approvals.data?.items.map((approval) => <ApprovalRequestCard approval={approval} key={approval.approval_id} />) : null}
       {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && query.data.comparison ? (
         <>
-          <ComparisonSummary comparison={query.data.comparison} />
+          <ComparisonSummary
+            comparison={query.data.comparison}
+            onRequestApproval={() => requestApproval.mutate({
+              schedule_run_id: runId,
+              expected_resource_version: query.data.run.resource_version,
+              expected_baseline_schedule_version: query.data.comparison.current_baseline_schedule_version,
+            })}
+            requestPending={requestApproval.isPending}
+            requestError={requestApproval.isError}
+            // FAIL CLOSED. `approvals.data` is `undefined` while the query is
+            // loading and after it errors, so deriving this from `.some(...)`
+            // alone left the control ENABLED whenever pending-state was
+            // unknown. AD-14 already forbids the client cache being authority
+            // for a decision; the server-side guard
+            // (`approval_already_pending` + `uq_approval_request_pending_run`)
+            // is the real one, and this must not invite the 409.
+            pendingApproval={!approvals.isSuccess || approvals.data.items.some((item) => item.state === "pending")}
+            approvalsUnavailable={approvals.isError}
+          />
           <section aria-labelledby="candidate-schedule-heading" className="rounded-xl border p-4">
             <h3 className="font-semibold" id="candidate-schedule-heading">Candidate schedule</h3>
             {query.data.candidate.assignments.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{query.data.candidate.assignments.map((assignment) => <li key={assignment.record_id}>{assignment.worker_id} · {assignment.task_id} · minutes {assignment.start_minute}–{assignment.end_minute}</li>)}</ul> : <p className="mt-2 text-sm">No assignments</p>}

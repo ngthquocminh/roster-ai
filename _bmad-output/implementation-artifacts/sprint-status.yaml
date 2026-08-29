@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-27
+last_updated: 2026-08-29
 
 # NOTE (2026-08-26): Story 3-12 CODE REVIEW COMPLETE — back to in-progress, not done.
 # Three layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) ran; 3 decision-needed
@@ -1780,8 +1780,17 @@ development_status:
   epic-3-retrospective: done
 
   # Epic 4: Exact Baseline Decision and Decision Record
-  epic-4: backlog
-  4-1-request-approval-for-one-exact-feasible-candidate: backlog
+  # NOTE (2026-08-27): Epic 4 opened. Its preparation package is complete and citable before
+  # Story 4.1 creation, as the Epic 3 retro required: the Epic 4 architecture spine
+  # (EAD-1..EAD-12) and ADR-4 landed at ef043c0, and parent AD-22 was amended rather than
+  # diverged from. Story 4.1 is the epic's foundation: it lands the single additive migration
+  # for approval_request, site_baseline, audit_event and agent_run.status_reason, the
+  # ApprovalBindingV1/AuditEnvelopeV1 contracts, the first consequential product capability,
+  # and TX1 on both initiator paths. It also closes the Story 2.9 `suspended` stopgap
+  # (deferred-work.md:300) by restoring the approval_required mapping and persisting the
+  # pending-call payload; its tripwire test is replaced by its own remediation, not weakened.
+  epic-4: in-progress
+  4-1-request-approval-for-one-exact-feasible-candidate: done
   4-2-review-and-decide-the-exact-approval: backlog
   4-3-promote-the-baseline-atomically-with-audit: backlog
   4-4-inspect-complete-decision-provenance: backlog

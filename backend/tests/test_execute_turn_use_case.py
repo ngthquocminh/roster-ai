@@ -272,8 +272,8 @@ def test_a_draft_citation_without_a_trusted_result_fails_closed() -> None:
         # rather than parking the row in a waiting state nothing can leave.
         (
             AgentRunOutcomeV1(status="suspended"),
-            "agent_cancelled",
-            "approval_unsupported",
+            "approval_required",
+            "approval_not_grantable",
         ),
         (
             AgentRunOutcomeV1(

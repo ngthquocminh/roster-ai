@@ -30,7 +30,16 @@ TerminalReasonV1 = Literal[
     "deadline_exceeded",
     "capability_error",
     "refused",
+    # RETAINED, not replaced. Epic 2/3 persisted `approval_unsupported` rows
+    # under the Story 2.9 stopgap, and `_activity_from_payload` validates every
+    # stored payload through `TypeAdapter(TerminalOutcomeV1)`. Dropping the
+    # member made those rows undecodable and took the WHOLE timeline and SSE
+    # replay down, not just the offending row. It has no producer any more --
+    # Story 4.1 replaced it with `approval_not_grantable` below -- but it stays
+    # in the vocabulary for as long as historical rows can carry it, which is
+    # why `ActivityTimeline.TERMINAL_LABELS` still names it too.
     "approval_unsupported",
+    "approval_not_grantable",
 ]
 
 # Decision 2 reconciles UX-DR6's refusal label with AD-14's closed eight-item

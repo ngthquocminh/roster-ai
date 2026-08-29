@@ -1,0 +1,21 @@
+{
+  "case_id": "scheduling-baseline-approval-required",
+  "case_version": "1",
+  "capability": "scheduling_baseline",
+  "risk_class": "consequential",
+  "prompt": "Request approval for the reviewed feasible candidate.",
+  "scripted_turns": [{
+    "tool_name": "scheduling_baseline",
+    "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-000000000009", "expected_baseline_schedule_version": null}},
+    "tool_call_id": "baseline-approval-required"
+  }],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [{
+    "tool_name": "scheduling_baseline",
+    "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-000000000009", "expected_baseline_schedule_version": null}}
+  }],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "suspended",
+  "expected_visible_text": "",
+  "scenario_fixtures": []
+}

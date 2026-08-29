@@ -6,6 +6,7 @@ import { EvidenceLink } from "@/components/primitives/EvidenceLink";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { DraftCard } from "./DraftCard";
+import { ApprovalRequestCard } from "@/features/approvals/ApprovalRequestCard";
 import { toSearchParams } from "@/features/evidence/locator";
 import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
 import {
@@ -216,6 +217,12 @@ const TERMINAL_LABELS: Record<string, string> = {
   deadline_exceeded: "Timed out",
   capability_error: "Capability failure",
   refused: "Refusal",
+  approval_not_grantable: "Approval not available",
+  // Historical label only -- no current backend path emits this reason.
+  // `execute_turn.py`'s STOPGAP that produced it was replaced by Story 4.1
+  // with `approval_not_grantable`; the entry stays so an older persisted row
+  // replayed through a newer bundle still renders a label instead of falling
+  // through to the generic "Turn ended".
   approval_unsupported: "Approval required",
 };
 
@@ -293,6 +300,21 @@ function ActivityContent({
           proposalId={item.proposal_id}
         />
       );
+    case "approval_request":
+      return <ApprovalRequestCard approval={{
+        approval_id: item.approval_id,
+        state: item.approval_state,
+        schedule_run_id: item.schedule_run_id,
+        candidate_schedule_version_id: item.candidate_schedule_version_id,
+        baseline_schedule_version: item.baseline_schedule_version,
+        scenario_version_id: item.scenario_version_id,
+        // AC2: "the same agent-run and approval identifiers remain visible".
+        // The activity carries this; dropping it here lost half of that.
+        agent_run_id: item.agent_run_id,
+        consequence_summary: item.consequence_summary,
+        policy_version: item.policy_version,
+        expires_at: item.expires_at,
+      }} />;
     case "terminal_outcome":
       return <TerminalOutcome isLatest={isLatest} item={item} />;
     default: {

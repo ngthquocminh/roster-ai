@@ -232,10 +232,11 @@ describe("RunsTable", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("renders a disabled, clearly-labelled Approve control for completed runs (Epic 4 owns the command)", () => {
+  it("links completed runs to the reviewed approval surface", () => {
     renderTable([run({ status: "solver_completed" })]);
-    const approve = screen.getByRole("button", { name: "Approve as baseline" });
-    expect(approve).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Review for approval" })).toHaveAttribute(
+      "href", "/scenarios/scenario-1/runs/11111111-1111-1111-1111-111111111111",
+    );
   });
 
   it("provides a separate, labelled copy control for the run id", () => {

@@ -157,17 +157,6 @@ function RetryButton({ run }: Readonly<{ run: ScheduleRunSummary }>) {
   );
 }
 
-//: Epic 4 owns the real approval command (AD-10/Story 4.1); no route exists
-//: yet. Rendering it disabled keeps the control visibly named (AC1) without
-//: fabricating a working command Story 3.7 does not own.
-function ApproveButton() {
-  return (
-    <Button className="min-h-11" disabled title="Approval is not available yet" type="button" variant="outline">
-      Approve as baseline
-    </Button>
-  );
-}
-
 function RunActions({ run, scenarioId }: Readonly<{ run: ScheduleRunSummary; scenarioId: string }>) {
   return (
     <div className="flex flex-wrap items-start gap-2">
@@ -180,7 +169,11 @@ function RunActions({ run, scenarioId }: Readonly<{ run: ScheduleRunSummary; sce
         </Button>
       ) : null}
       {RETRYABLE.has(run.status) ? <RetryButton run={run} /> : null}
-      {run.status === "solver_completed" ? <ApproveButton /> : null}
+      {run.status === "solver_completed" ? (
+        <Button asChild className="min-h-11" size="sm" variant="outline">
+          <Link to={`/scenarios/${scenarioId}/runs/${run.schedule_run_id}`}>Review for approval</Link>
+        </Button>
+      ) : null}
     </div>
   );
 }

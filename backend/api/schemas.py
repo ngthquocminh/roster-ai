@@ -164,6 +164,21 @@ class DraftActivityOut(ActivityCommonOut):
     consequence_summary: str
 
 
+class ApprovalRequestActivityOut(ActivityCommonOut):
+    activity_type: Literal["approval_request"]
+    approval_id: UUID
+    approval_state: Literal["pending", "consumed", "rejected", "expired", "stale"]
+    agent_run_id: UUID | None
+    schedule_run_id: UUID
+    candidate_schedule_version_id: UUID
+    baseline_schedule_version: str | None
+    consequence_summary: str
+    parameter_hash: str
+    consequence_hash: str
+    policy_version: str
+    expires_at: datetime
+
+
 class RunProgressActivityOut(BaseModel):
     schema_version: str
     activity_id: UUID
@@ -190,11 +205,38 @@ class TerminalOutcomeActivityOut(ActivityCommonOut):
     outcome: TerminalOutcomeV1
 
 
+class ApprovalRequestIn(BaseModel):
+    schedule_run_id: UUID
+    expected_resource_version: int = Field(ge=1)
+    # No default (Decision 3): an explicit `null` asserts "expects absence"
+    # (EAD-2) and is a meaningful, distinct value from a caller who omitted
+    # the key altogether. `= None` here would silently conflate the two.
+    expected_baseline_schedule_version: str | None = Field(...)
+
+
+class ApprovalOut(BaseModel):
+    approval_id: UUID
+    state: Literal["pending", "consumed", "rejected", "expired", "stale"]
+    schedule_run_id: UUID
+    candidate_schedule_version_id: UUID
+    baseline_schedule_version: str | None
+    scenario_version_id: UUID
+    consequence_summary: str
+    policy_version: str
+    expires_at: datetime
+    resource_version: int
+
+
+class ApprovalListOut(BaseModel):
+    items: list[ApprovalOut]
+
+
 ConversationActivityItemOut = Annotated[
     PlannerMessageActivityOut
     | AgentResponseActivityOut
     | ClarificationActivityOut
     | DraftActivityOut
+    | ApprovalRequestActivityOut
     | TerminalOutcomeActivityOut,
     Field(discriminator="activity_type"),
 ]
@@ -205,6 +247,7 @@ ActivityItemOut = Annotated[
     | AgentResponseActivityOut
     | ClarificationActivityOut
     | DraftActivityOut
+    | ApprovalRequestActivityOut
     | RunProgressActivityOut
     | TerminalOutcomeActivityOut,
     Field(discriminator="activity_type"),
