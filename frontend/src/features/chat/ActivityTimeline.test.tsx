@@ -1,6 +1,18 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The panel reads the LIVE binding over the network, which is its own unit's
+// concern (`ApprovalDecisionPanel.test.tsx`). This stub deliberately renders
+// only the id it was handed: a stub that hardcoded the strings the assertions
+// below look for would make them assertions about the stub, not the timeline.
+vi.mock("@/features/approvals/ApprovalDecisionPanel", () => ({
+  ApprovalDecisionPanel: ({ approvalId }: { approvalId: string }) => (
+    <section aria-label="Approval request">
+      <p>Live approval {approvalId}</p>
+    </section>
+  ),
+}));
+
 import { ActivityTimeline } from "./ActivityTimeline";
 import { clearEvidenceUnavailable, markEvidenceUnavailable } from "@/features/evidence/availability";
 
@@ -156,8 +168,39 @@ describe("ActivityTimeline", () => {
   it("renders an approval request once from its persisted activity", () => {
     render(<ActivityTimeline navigate={vi.fn()} items={[approvalRequest, approvalRequest]} />);
     expect(screen.getAllByRole("region", { name: "Approval request" })).toHaveLength(1);
-    expect(screen.getByText("State: pending")).toBeInTheDocument();
-    expect(screen.getByText("No current baseline")).toBeInTheDocument();
+    expect(screen.getByText(/Live approval dddddddd-dddd-dddd-dddd-dddddddddddd/)).toBeInTheDocument();
+  });
+
+  it.each(["rejected", "expired", "stale", "consumed"] as const)(
+    "renders a terminal %s payload as a compact line, never a second panel",
+    (state) => {
+      render(
+        <ActivityTimeline
+          navigate={vi.fn()}
+          items={[{ ...approvalRequest, activity_id: "13131313-1313-1313-1313-131313131313", approval_state: state }]}
+        />,
+      );
+      expect(screen.getByText(`Approval ${state} · dddddddd-dddd-dddd-dddd-dddddddddddd`)).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Approval request" })).not.toBeInTheDocument();
+    },
+  );
+
+  it("stops rendering the live panel on the superseded pending activity once a decision arrives", () => {
+    // TX1 appends a `pending` activity; TX3 appends a SECOND one carrying the
+    // terminal state with a fresh `activity_id`. Dedupe is keyed on event
+    // identity (UX-DR6), so both survive -- and before this rule the older
+    // event went on mounting a live panel above the newer terminal line.
+    const terminal = {
+      ...approvalRequest,
+      activity_id: "14141414-1414-1414-1414-141414141414",
+      sequence: "6",
+      approval_state: "rejected" as const,
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[approvalRequest, terminal]} />);
+    expect(renderedIds()).toHaveLength(2);
+    expect(screen.queryByRole("region", { name: "Approval request" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Approval pending · dddddddd/)).toBeInTheDocument();
+    expect(screen.getByText(/Approval rejected · dddddddd/)).toBeInTheDocument();
   });
   it("builds the jump only from the persisted locator and activity scenario", () => {
     const navigate = vi.fn();

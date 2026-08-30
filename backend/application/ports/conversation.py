@@ -55,6 +55,7 @@ class ConversationTimelineV1:
     events: tuple[PersistedEventV1, ...]
     limit: int
     has_more: bool
+    latest_agent_run_status_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -182,4 +183,5 @@ class ConversationRepository(Protocol):
 
     def pause_agent_run_for_approval(self, connection: Any, *, claimed_agent_run_id: UUID, binding: ApprovalBindingV1, request_id: UUID) -> ExecutedAgentRunV1: ...
 
-    def append_approval_request_activity(self, connection: Any, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID) -> ExecutedAgentRunV1: ...
+    def append_approval_request_activity(self, connection: Any, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID, agent_run_id: UUID | None = None, occurred_at: Any = None, agent_run_status: str | None = None) -> ExecutedAgentRunV1: ...
+    def cancel_agent_run_for_approval(self, connection: Any, *, agent_run_id: UUID, binding: ApprovalBindingV1, reason: str) -> None: ...

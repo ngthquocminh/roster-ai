@@ -6,7 +6,7 @@ import { EvidenceLink } from "@/components/primitives/EvidenceLink";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { DraftCard } from "./DraftCard";
-import { ApprovalRequestCard } from "@/features/approvals/ApprovalRequestCard";
+import { ApprovalDecisionPanel } from "@/features/approvals/ApprovalDecisionPanel";
 import { toSearchParams } from "@/features/evidence/locator";
 import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
 import {
@@ -277,7 +277,8 @@ function ActivityContent({
   item,
   navigate,
   isLatest = false,
-}: Readonly<{ item: Activity; navigate: NavigateFunction; isLatest?: boolean }>) {
+  isCurrentApproval = true,
+}: Readonly<{ item: Activity; navigate: NavigateFunction; isLatest?: boolean; isCurrentApproval?: boolean }>) {
   switch (item.activity_type) {
     case "planner_message":
       return (
@@ -301,20 +302,17 @@ function ActivityContent({
         />
       );
     case "approval_request":
-      return <ApprovalRequestCard approval={{
-        approval_id: item.approval_id,
-        state: item.approval_state,
-        schedule_run_id: item.schedule_run_id,
-        candidate_schedule_version_id: item.candidate_schedule_version_id,
-        baseline_schedule_version: item.baseline_schedule_version,
-        scenario_version_id: item.scenario_version_id,
-        // AC2: "the same agent-run and approval identifiers remain visible".
-        // The activity carries this; dropping it here lost half of that.
-        agent_run_id: item.agent_run_id,
-        consequence_summary: item.consequence_summary,
-        policy_version: item.policy_version,
-        expires_at: item.expires_at,
-      }} />;
+      // Decision 10 suppressed a panel on TERMINAL payloads, which stopped TX3's
+      // event rendering a second card -- but not the mirror case: TX1's event
+      // keeps its `pending` payload forever, so after a decision it went on
+      // mounting a live panel (reading "Terminal approval state: rejected")
+      // directly above TX3's compact line. The panel belongs to the NEWEST
+      // activity for this approval, and only while that payload is `pending`;
+      // every superseded activity renders as history. Dedupe stays keyed on
+      // `activity_id` (UX-DR6) -- these are two distinct events, not one.
+      return isCurrentApproval && item.approval_state === "pending"
+        ? <ApprovalDecisionPanel approvalId={item.approval_id} />
+        : <p className="text-sm">Approval {item.approval_state} · {item.approval_id}</p>;
     case "terminal_outcome":
       return <TerminalOutcome isLatest={isLatest} item={item} />;
     default: {
@@ -347,6 +345,14 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
   // that re-delivers an already-rendered activity must not produce a second
   // card, and a reorder must not merge two distinct ones.
   const unique = [...new Map(items.map((item) => [item.activity_id, item])).values()];
+  // Persisted order is oldest-first, so the last write wins = the newest
+  // activity for each approval. See the `approval_request` case below.
+  const currentApprovalActivity = new Map<string, string>();
+  for (const item of unique) {
+    if (item.activity_type === "approval_request") {
+      currentApprovalActivity.set(item.approval_id, item.activity_id);
+    }
+  }
   if (!unique.length) {
     return (
       <EmptyState explanation="Start a new conversation about this scenario—for example, ask about coverage, demand, or constraints." />
@@ -361,6 +367,10 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
           key={item.activity_id}
         >
           <ActivityContent
+            isCurrentApproval={
+              item.activity_type !== "approval_request" ||
+              currentApprovalActivity.get(item.approval_id) === item.activity_id
+            }
             isLatest={index === unique.length - 1}
             item={item}
             navigate={navigate}

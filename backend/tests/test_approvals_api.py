@@ -40,6 +40,15 @@ from application.use_cases.request_approval import (
     StaleBaselineVersionError,
     StaleResourceVersionError,
 )
+from application.ports.conversation import AgentRunNotQueuedError
+from application.use_cases.decide_approval import (
+    ApprovalNotFoundError as DecisionApprovalNotFoundError,
+    ApprovalNotGrantedError as DecisionApprovalNotGrantedError,
+    ApprovalNotPendingError,
+    BaselinePromotionNotAvailableError,
+    DecisionResultV1,
+    StaleResourceVersionError as DecisionStaleResourceVersionError,
+)
 from settings import default_settings
 import api.routers.approvals as approvals_router
 
@@ -84,6 +93,12 @@ class FakeApprovals:
     def get_pending_for_agent_run(self, _c, *, agent_run_id, site_id):
         return None
 
+    def terminalize(self, _c, **kwargs):
+        if self._binding is None or self._binding.state != "pending" or self._binding.resource_version != kwargs["expected_resource_version"]:
+            return None
+        self._binding = replace(self._binding, state=kwargs["state"], decided_by_actor_id=kwargs["decided_by_actor_id"], decided_at=kwargs["decided_at"], resource_version=self._binding.resource_version + 1)
+        return self._binding
+
 
 class FakeAudit:
     def __init__(self): self.items = []
@@ -93,6 +108,7 @@ class FakeAudit:
 class FakeConversations:
     def append_approval_request_activity(self, _c, **kw): return None
     def pause_agent_run_for_approval(self, _c, **kw): return None
+    def cancel_agent_run_for_approval(self, _c, **kw): return None
 
 
 class FakeBaselines:
@@ -177,6 +193,161 @@ def _body(*, schedule_run_id=None, expected_resource_version=2, expected_baselin
         "expected_resource_version": expected_resource_version,
         "expected_baseline_schedule_version": expected_baseline_schedule_version,
     }
+
+
+def test_decision_stale_response_returns_409_after_the_terminal_write(client, monkeypatch):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    approvals = FakeApprovals(binding)
+    app.dependency_overrides[get_approval_repository] = lambda: approvals
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    def terminal(*_a, **kwargs):
+        updated = approvals.terminalize(None, approval_id=binding.approval_id, site_id=session.site_id, state="stale", decided_by_actor_id=session.app_user_id, decided_at=NOW, expected_resource_version=binding.resource_version)
+        return DecisionResultV1("stale", updated, None, {"policy_version": "old"}, {"policy_version": "new"})
+    monkeypatch.setattr(approvals_router, "decide_approval", terminal)
+    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="decide-stale"), json={"decision": "approve", "expected_resource_version": 1})
+    assert response.status_code == 409 and response.json()["code"] == "approval_stale"
+    assert approvals._binding.state == "stale"
+
+
+def test_decision_replay_returns_its_original_terminal_binding(client, monkeypatch):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    approvals = FakeApprovals(binding)
+    runs = FakeSchedulingRuns()
+    app.dependency_overrides[get_approval_repository] = lambda: approvals
+    app.dependency_overrides[get_schedule_run_repository] = lambda: runs
+    def terminal(*_a, **_kwargs):
+        updated = approvals.terminalize(None, approval_id=binding.approval_id, site_id=session.site_id, state="rejected", decided_by_actor_id=session.app_user_id, decided_at=NOW, expected_resource_version=1)
+        return DecisionResultV1("rejected", updated, None, {}, {})
+    monkeypatch.setattr(approvals_router, "decide_approval", terminal)
+    body = {"decision": "reject", "expected_resource_version": 1}
+    first = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="decide-replay"), json=body)
+    second = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="decide-replay"), json=body)
+    assert first.status_code == second.status_code == 200
+    assert second.json()["state"] == "rejected"
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "code", "has_context"),
+    [
+        (DecisionApprovalNotFoundError("x"), 404, "approval_not_found", False),
+        (ApprovalNotPendingError("x", expected={"state": "pending"}, current={"state": "rejected"}), 409, "approval_not_pending", True),
+        (DecisionStaleResourceVersionError("x", expected={"resource_version": 1}, current={"resource_version": 2}), 409, "stale_resource_version", True),
+        (DecisionApprovalNotGrantedError("x"), 403, "approval_not_granted", False),
+        (BaselinePromotionNotAvailableError("x"), 503, "promotion_not_available", False),
+    ],
+)
+def test_decision_maps_every_command_refusal_with_literal_context(client, monkeypatch, error, status, code, has_context):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    monkeypatch.setattr(approvals_router, "decide_approval", lambda *_a, **_k: (_ for _ in ()).throw(error))
+    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key=f"map-{code}"), json={"decision": "approve", "expected_resource_version": 1})
+    body = response.json()
+    assert response.status_code == status and body["code"] == code
+    # AD-13's literal expected/current is carried WHERE THERE IS ANY. The three
+    # codes without it describe a condition with no versions to compare, and an
+    # always-emitted `{}` is not "no context" to a JSON client -- it is an empty
+    # object, truthy in JavaScript, which the decision panel rendered verbatim.
+    if has_context:
+        assert body["expected"] and body["current"]
+    else:
+        assert "expected" not in body and "current" not in body
+
+
+def test_decision_conflicts_when_one_idempotency_key_is_reused_with_a_changed_body(client, monkeypatch):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    approvals = FakeApprovals(binding); runs = FakeSchedulingRuns()
+    app.dependency_overrides[get_approval_repository] = lambda: approvals
+    app.dependency_overrides[get_schedule_run_repository] = lambda: runs
+    def terminal(*_a, **_k):
+        updated = approvals.terminalize(None, approval_id=binding.approval_id, site_id=session.site_id, state="rejected", decided_by_actor_id=session.app_user_id, decided_at=NOW, expected_resource_version=1)
+        return DecisionResultV1("rejected", updated, None, {}, {})
+    monkeypatch.setattr(approvals_router, "decide_approval", terminal)
+    first = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="decision-conflict"), json={"decision": "reject", "expected_resource_version": 1})
+    second = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="decision-conflict"), json={"decision": "approve", "expected_resource_version": 1})
+    assert first.status_code == 200
+    assert second.status_code == 409 and second.json()["code"] == "idempotency_key_conflict"
+
+
+def test_decision_expiry_returns_409_and_the_committed_terminal_state(client, monkeypatch):
+    """`approval_expired` is Decision 9's only OTHER committed-then-refused code.
+
+    It is the code Decision 7's whole dismissal mechanism returns, so it needs
+    its own mapping test rather than riding on `approval_stale`'s.
+    """
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    approvals = FakeApprovals(binding)
+    app.dependency_overrides[get_approval_repository] = lambda: approvals
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+
+    def terminal(*_a, **_kwargs):
+        updated = approvals.terminalize(None, approval_id=binding.approval_id, site_id=session.site_id, state="expired", decided_by_actor_id=session.app_user_id, decided_at=NOW, expected_resource_version=binding.resource_version)
+        return DecisionResultV1("expired", updated, None, {"expires_at": "2026-08-29T00:00:00+00:00"}, {"now": "2026-08-29T02:00:00+00:00"})
+
+    monkeypatch.setattr(approvals_router, "decide_approval", terminal)
+    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="decide-expired"), json={"decision": "reject", "expected_resource_version": 1})
+    assert response.status_code == 409 and response.json()["code"] == "approval_expired"
+    assert response.json()["expected"] == {"expires_at": "2026-08-29T00:00:00+00:00"}
+    assert approvals._binding.state == "expired"
+
+
+@pytest.mark.parametrize("body", [{"decision": "maybe", "expected_resource_version": 1}, {"decision": "approve", "expected_resource_version": 0}, {"expected_resource_version": 1}])
+def test_decision_refuses_a_command_outside_the_closed_body_shape(client, body):
+    """Decision 1: `decision` is a required closed literal, never a boolean, and
+    `expected_resource_version` is `ge=1`. FastAPI answers all three with 422."""
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="bad-body"), json=body)
+    assert response.status_code == 422
+
+
+def test_decision_details_are_specific_per_code(client, monkeypatch):
+    """Decision 3 fixes 503's literal detail and warns against confusing it with
+    the 409 "your binding is no longer valid" family. One shared sentence made
+    `promotion_not_available` -- where the approval IS valid -- say the opposite."""
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    monkeypatch.setattr(approvals_router, "decide_approval", lambda *_a, **_k: (_ for _ in ()).throw(BaselinePromotionNotAvailableError("x")))
+    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="detail-503"), json={"decision": "approve", "expected_resource_version": 1})
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Baseline promotion is not available yet."
+    # Nothing was written, so there is no expected/current to publish -- and an
+    # always-present `{}` renders as literal noise in the client.
+    assert "expected" not in response.json()
+
+
+def test_an_uncancellable_agent_run_is_a_typed_conflict_not_a_500(client, monkeypatch):
+    """`cancel_agent_run_for_approval` raises `AgentRunNotQueuedError` when the
+    run left `approval_required`. It is not a `DecideApprovalError`, so before
+    this arm the global handler turned it into an untyped 500."""
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    monkeypatch.setattr(approvals_router, "decide_approval", lambda *_a, **_k: (_ for _ in ()).throw(AgentRunNotQueuedError("agent run is no longer awaiting approval")))
+    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="run-conflict"), json={"decision": "reject", "expected_resource_version": 1})
+    assert response.status_code == 409 and response.json()["code"] == "agent_run_not_cancellable"
+
+
+def test_decision_does_not_disclose_a_cross_site_binding(client):
+    test_client, settings, session = client
+    binding = _binding(site_id=uuid4())
+    class CrossSiteApprovals(FakeApprovals):
+        def get(self, _c, *, approval_id, site_id):
+            return self._binding if self._binding.approval_id == approval_id and self._binding.site_id == site_id else None
+    app.dependency_overrides[get_approval_repository] = lambda: CrossSiteApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="cross-site-decision"), json={"decision": "reject", "expected_resource_version": 1})
+    assert response.status_code == 404 and response.json()["code"] == "approval_not_found"
 
 
 def test_rejects_a_request_when_the_feature_is_not_granted(client) -> None:

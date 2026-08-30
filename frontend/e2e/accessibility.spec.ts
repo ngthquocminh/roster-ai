@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { expectAxeClean } from "./support/accessibility";
-import { installApiStubs, SCENARIO_ID } from "./support/apiStubs";
+import { installApiStubs, SCENARIO_ID, SCHEDULE_RUN_ID } from "./support/apiStubs";
 
 // Filter values are real IDs/enum values from data/contract/sample_tiny_input.projection-v1.json
 // (not placeholders) so apiStubs.ts's filter matching renders a genuinely filtered, non-empty
@@ -47,5 +47,54 @@ for (const viewport of [
       // exercise — is axe-clean too, not just assumed clean because the pre-hide scan passed.
       await expectAxeClean(page);
     }
+  });
+}
+
+// The full WCAG axe configuration over the approval REVIEW surface. The repair
+// journey spec covers the dialog's naming and focus return; this covers the
+// panel's three states in the same configuration the rest of Gate A is held to,
+// including the terminal state, which has no interactive control at all and so
+// is the one most likely to regress into colour-only meaning.
+for (const [name, state, expectedText] of [
+  ["pending", "pending", "Approve as baseline"],
+  ["presented-expired", "pending-overdue", "Dismiss expired request"],
+  ["terminal", "rejected", "Terminal approval state: rejected"],
+] as const) {
+  test(`keeps the ${name} approval review surface axe-clean`, async ({ page }) => {
+    test.setTimeout(120_000);
+    const journey = await installApiStubs(page);
+    journey.completeRun();
+    const approvalId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+    const overdue = state === "pending-overdue";
+    const approval = {
+      approval_id: approvalId,
+      state: overdue ? "pending" : state,
+      schedule_run_id: SCHEDULE_RUN_ID,
+      candidate_schedule_version_id: "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
+      baseline_schedule_version: "baseline-v12",
+      scenario_version_id: "cccccccc-3333-4333-8333-cccccccccccc",
+      consequence_summary: "Candidate replaces baseline-v12.",
+      policy_version: "policy-v1",
+      agent_run_id: null,
+      created_at: "2026-08-29T00:00:00Z",
+      expires_at: overdue ? "2020-01-01T00:00:00Z" : "2099-08-29T01:00:00Z",
+      resource_version: 1,
+    };
+    await page.route("**/api/v1/approvals**", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith(`/${approvalId}`)) return route.fulfill({ json: approval });
+      if (url.pathname.endsWith("/approvals")) return route.fulfill({ json: { items: [approval] } });
+      return route.fallback();
+    });
+
+    await page.goto(`/scenarios/${SCENARIO_ID}/runs/${SCHEDULE_RUN_ID}`);
+    await expect(page.getByText(expectedText)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Refresh" })).toBeEnabled();
+    // Scoped to the review surface, the way the column-chooser scan above is
+    // scoped to its menu. The enclosing Results page carries a pre-existing
+    // outline-button contrast violation on its own Refresh control
+    // (`deferred-work.md`), which is not this story's and would otherwise mask
+    // every result here.
+    await expectAxeClean(page, "[data-approval-panel]");
   });
 }

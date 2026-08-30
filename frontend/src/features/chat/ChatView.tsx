@@ -39,6 +39,12 @@ const RUN_STATUS_WORDS: Record<string, string> = {
   approval_required: "waiting for approval",
 };
 
+const CANCELLATION_REASONS: Record<string, string> = {
+  approval_rejected: "approval rejected",
+  approval_expired: "approval expired",
+  approval_stale: "approval became stale",
+};
+
 const AGENT_UNAVAILABLE_DESCRIPTION_ID = "agent-unavailable-description";
 
 function runStatusLabel(status: string): string {
@@ -264,6 +270,9 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
               {timeline.data.latest_agent_run_status ? (
                 <p className="text-sm text-muted-foreground">
                   {runStatusLabel(timeline.data.latest_agent_run_status)}
+                  {timeline.data.latest_agent_run_status === "agent_cancelled" && timeline.data.latest_agent_run_status_reason
+                    ? ` — ${CANCELLATION_REASONS[timeline.data.latest_agent_run_status_reason] ?? timeline.data.latest_agent_run_status_reason}`
+                    : ""}
                 </p>
               ) : null}
             </>

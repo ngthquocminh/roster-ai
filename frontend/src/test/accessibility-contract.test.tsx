@@ -29,6 +29,27 @@ import * as proposalHooks from "@/hooks/useProposal";
 import * as reviseHooks from "@/hooks/useReviseProposal";
 import * as rejectHooks from "@/hooks/useRejectProposal";
 import * as startHooks from "@/hooks/useStartScheduleRun";
+import { ApprovalDecisionDialog } from "@/features/approvals/ApprovalDecisionDialog";
+
+const decisionMocks = vi.hoisted(() => ({
+  approval: {
+    approval_id: "55555555-5555-4555-8555-555555555555", state: "pending" as const,
+    schedule_run_id: "66666666-6666-4666-8666-666666666666",
+    candidate_schedule_version_id: "77777777-7777-4777-8777-777777777777",
+    baseline_schedule_version: "baseline-v12", scenario_version_id: "88888888-8888-4888-8888-888888888888",
+    consequence_summary: "Candidate replaces baseline-v12.", policy_version: "policy-v1",
+    agent_run_id: null, created_at: "2026-08-29T00:00:00Z", expires_at: "2099-08-29T00:00:00Z",
+    resource_version: 1,
+  },
+}));
+vi.mock("@/hooks/useApproval", () => ({
+  approvalKey: (id: string) => ["approval", id],
+  useApproval: () => ({ isSuccess: true, isPending: false, isError: false, data: decisionMocks.approval }),
+}));
+vi.mock("@/hooks/useDecideApproval", () => ({
+  useDecideApproval: () => ({ isPending: false, isError: false, isSuccess: false, error: null, data: undefined, mutate: vi.fn() }),
+}));
+const decisionApproval = decisionMocks.approval;
 
 async function expectAxeClean(container: HTMLElement) {
   const results = await axe(container, {
@@ -554,4 +575,60 @@ it.each([
   const { container } = render(<ActivityTimeline navigate={vi.fn()} items={[activity] as never} />);
 
   await expectAxeClean(container);
+});
+
+it("keeps the approval decision surface named, textual, and touch-sized", async () => {
+  const approval = {
+    approval_id: "11111111-1111-4111-8111-111111111111", state: "pending" as const,
+    schedule_run_id: "22222222-2222-4222-8222-222222222222",
+    candidate_schedule_version_id: "33333333-3333-4333-8333-333333333333",
+    baseline_schedule_version: "baseline-v12", scenario_version_id: "44444444-4444-4444-8444-444444444444",
+    consequence_summary: "Candidate replaces baseline-v12; the operational baseline changes only after confirmation.",
+    policy_version: "policy-v1",
+    agent_run_id: null, created_at: "2026-08-29T00:00:00Z", expires_at: "2099-08-29T00:00:00Z", resource_version: 1,
+  };
+  render(<ApprovalDecisionDialog approval={approval} decision="approve" open onOpenChange={vi.fn()} onConfirm={vi.fn()} onRestoreFocus={vi.fn()} pending={false} />);
+  const dialog = screen.getByRole("dialog", { name: "Approve candidate as baseline" });
+  expect(within(dialog).getByText(/operational baseline changes only after confirmation/)).toBeVisible();
+  expect(within(dialog).getByRole("button", { name: /Approve candidate .* replacing baseline-v12/ })).toHaveClass("min-h-11");
+  expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveClass("min-h-11");
+  await expectAxeClean(document.body);
+});
+
+it("keeps Send, Run optimization, and Approve as baseline discontinuous across authority levels (NFR19, UX-DR35)", async () => {
+  // The REAL three controls, in one tree. A previous version of this assertion
+  // lived in the panel's own test and rendered synthetic `<Button>Send</Button>`
+  // and `<Button variant="outline">Run optimization</Button>` -- buttons whose
+  // variants the test itself chose, so it could not fail if a real control's
+  // treatment changed. It also picked the wrong variant for Run optimization,
+  // which DraftCard ships as `secondary`.
+  mockProposal();
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { Composer } = await import("@/features/chat/Composer");
+  const { ApprovalDecisionPanel } = await import("@/features/approvals/ApprovalDecisionPanel");
+
+  render(
+    <>
+      <Composer isPending={false} onSend={async () => undefined} scenarioId={accessibleProposal.scenario_id} />
+      <DraftCard proposalId={accessibleProposal.proposal_id} />
+      <ApprovalDecisionPanel approvalId={decisionApproval.approval_id} />
+    </>,
+  );
+
+  const send = screen.getByRole("button", { name: /^send$/i });
+  const run = screen.getByRole("button", { name: "Run optimization" });
+  const approve = screen.getByRole("button", { name: "Approve as baseline" });
+
+  // Language: three distinct accessible names, none a prefix of another.
+  const names = [send, run, approve].map((node) => node.textContent?.trim());
+  expect(new Set(names).size).toBe(3);
+
+  // Visual treatment: three distinct variants, read off the real components.
+  const variants = [send, run, approve].map((node) => node.getAttribute("data-variant"));
+  expect(new Set(variants).size).toBe(3);
+  // Consequence: only the baseline-moving control carries the destructive
+  // treatment, and it is the only one of the three behind a confirmation.
+  expect(approve.getAttribute("data-variant")).toBe("destructive");
+  expect(send.getAttribute("data-variant")).not.toBe("destructive");
+  expect(run.getAttribute("data-variant")).not.toBe("destructive");
 });

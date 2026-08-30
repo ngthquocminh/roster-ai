@@ -35,6 +35,12 @@ export const PLANNER_MESSAGE_ACCEPTED = "planner_message_accepted";
 export const AGENT_RESPONSE = "agent_response";
 export const CLARIFICATION = "clarification";
 export const TERMINAL_OUTCOME = "terminal_outcome";
+/** Story 4.1 persists this discriminant and Story 4.2 appends a SECOND one
+ * carrying the terminal state. Without a listener the approval lifecycle never
+ * reached the live timeline at all -- exactly the failure the comment above
+ * describes -- so a decision made elsewhere left stale controls on screen until
+ * a poll or refocus. */
+export const APPROVAL_REQUEST = "approval_request";
 
 /** Every named frame the server can emit. Iterated on both attach and detach so
  * the two lists cannot drift — a new discriminant is added in ONE place. */
@@ -43,6 +49,7 @@ export const STREAMED_ACTIVITY_EVENTS = [
   AGENT_RESPONSE,
   CLARIFICATION,
   TERMINAL_OUTCOME,
+  APPROVAL_REQUEST,
 ] as const;
 
 /** Consecutive failed connections before giving up on the stream. Bounded so a

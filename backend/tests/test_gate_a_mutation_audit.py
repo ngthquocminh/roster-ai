@@ -256,6 +256,7 @@ def test_gate_a_write_surface_is_exactly_the_approved_paths() -> None:
     """
     versioned = [
         ("POST", "/api/v1/approvals"),
+        ("POST", "/api/v1/approvals/{approval_id}/decision"),
         ("POST", "/api/v1/auth/logout"),
         ("POST", "/api/v1/conversations"),
         (

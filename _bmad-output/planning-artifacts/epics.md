@@ -1184,7 +1184,7 @@ So that I cannot confuse running optimization with replacing the operational bas
 **Then** the approval remains pending and no baseline effect occurs
 **And** approval is never encoded as ordinary text or inferred from rendering. (FR18, AR10, AR14)
 
-**Given** the candidate, baseline, parameters, consequence hash, membership, policy, or expiry no longer matches
+**Given** the candidate, baseline, parameters, consequence hash, the initiating actor's active membership in the bound site, policy, or expiry no longer matches
 **When** the planner attempts approval
 **Then** the request becomes stale or expired with literal expected/current context, the action is disabled/rejected, and no silent rebase or resubmission occurs
 **And** the planner is offered only refresh, revise, rerun, inspect, or return actions that are currently valid. (FR18, UX-DR12, UX-DR13)
@@ -1209,7 +1209,7 @@ So that the operational baseline and its authoritative decision record cannot di
 
 **Given** a valid pending approval
 **When** Approve as baseline is processed
-**Then** current actor/site/membership, policy, binding hashes, candidate feasibility/version, baseline version, expiry, and idempotency are revalidated inside the command transaction
+**Then** the deciding actor/site/active membership is re-resolved from the authenticated server session as the command-admission guard, and the shared command-transaction revalidation checks that the initiating actor identified by the binding still has an active membership in the binding's site, plus policy, binding hashes, candidate feasibility/version, baseline version, expiry, and idempotency
 **And** a client boolean or prior UI state is never sufficient authorization. (FR18, NFR8)
 
 **Given** all revalidation passes
