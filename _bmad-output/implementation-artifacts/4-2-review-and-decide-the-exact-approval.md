@@ -713,6 +713,113 @@ Code review 2026-08-30 (`/bmad-code-review 4.2`), three adversarial layers again
 
 **Environment note, not a story finding:** the two `tests/test_openrouter_provider.py` failures under the full suite are pre-existing test-order pollution — they pass in isolation and fail identically with this story's new test files excluded.
 
+### Review Retrospective Input — carry into the Epic 4 retrospective
+
+**The four decision-grade findings above were not four problems. They were two
+shapes, and both were authored INTO this file at story creation and only found
+after implementation.** That is the pattern the Epic 1–2 retro already named once
+(§3.2, action A1); this is its second occurrence, in a different form.
+
+**Shape 1 — restatement drift (3 of 4).** The same fact is written in the Facts
+table, in a Decision, in a Task and in Traps. That redundancy is deliberate and
+load-bearing: it is what makes the story self-contained for a dev agent with no
+prior context. But **nothing checks the copies against each other**, and each
+copy is a place to drift:
+
+| Finding | Source of truth | The copy that drifted |
+|---|---|---|
+| D1 | Decision 6 cancels the agent run | Task 9 demanded a second approval request *for that same run* — unreachable, 400 lines apart in one file |
+| D3 | AC1 asks for the material parameters | Task 3 paraphrased it as "AC1 requires `parameter_hash`" — drove two fields into the published contract, read by nothing |
+| D4 | Decision 10's goal: don't duplicate the card | Decision 10's own mechanism covered one of the two directions |
+
+**Shape 2 — undefined term propagation (1 of 4).** "membership" travelled
+`epics.md` AC3 → EAD-10 → ADR-4 → Decision 2 with no tier pinning *whose*, and
+two sibling ACs then gave it two different readings (4.2 AC3 "no longer matches"
+= snapshot; 4.3 AC1 "current actor/site/membership" = deciding actor). The Epic 4
+architecture review noticed the adjacent divergence (`review-adversary.md:50-53`)
+and resolved it by naming ownership — the referent was never pinned.
+
+**What the story file already knew how to do, and did inconsistently.** Decision 7
+flags its own interpretation in as many words — *"This is the story's one
+interpretation of a spine sentence, and it is deliberate … Recorded as Open
+Question 1 for Winston"* — and raises it. Decision 2 faced the identical
+situation and interpreted silently; Decision 10 shipped an incomplete mechanism
+silently. Same file, three standards.
+
+**Second net missed too.** The dev hit at least two of these (D1's impossible
+task, worked around with a direct insert; D3's fields added and never rendered,
+task still ticked `[x]`) and escalated neither. The Dev Agent Record has a
+"Debug Log References" and an "honest gaps" list; neither mentions the
+contradiction.
+
+**Action already taken, for the retro to assess rather than propose.** Three
+authoring rules were added to `_bmad/custom/bmad-create-story.toml` (commit
+`2cf598f`) and load on every story creation from 4.3 onward: a Task cites a
+Decision rather than re-arguing it; a Decision states what its mechanism does
+NOT cover; and a self-consistency pass before freezing, distinct from the
+existing facts pass. **The retro's job is to judge whether they held across
+4.3–4.6, not to re-derive the diagnosis.** They cannot be enforced by test —
+every available assertion is a proxy, the same reason the domain-model citation
+test was built and deliberately dropped (`action_items`, epic 1-2).
+
+**What they do not cover.** Shape 2 is cross-document: `epics.md`, the
+architecture spine and ADR-4 all predate story creation, so no
+`bmad-create-story` fact can reach the tier where the undefined word originates.
+That half is still open and is the retro's to own.
+
+---
+
+## What Story 4.3 inherits from this story
+
+**Read this before writing 4.3's decisions.** Story 4.3 adds TX2 as the approve
+branch of *this* story's endpoint; it writes no route, no reject path and no
+second revalidation (EAD-10). Five concrete inheritances, each verified against
+the merged code:
+
+1. **Import `revalidate_binding`; do not rewrite it.**
+   `application/use_cases/decide_approval.py`. It is the single implementation of
+   EAD-10's fork and is exported for exactly this. A second revalidation is the
+   shape EAD-10 forbids by name.
+
+2. **Terminalizing outcomes are RETURNED, never raised.**
+   `get_site_context` commits when the handler returns and rolls back when an
+   exception escapes it, so a stale/expired outcome — which already wrote a
+   terminal binding, an audit row, an event and possibly a cancelled run — must
+   come back as a value and the router must `return problem_response(...)`.
+   Proven by `test_a_409_expiry_response_commits_the_terminal_row_through_the_real_route`
+   (`test_approval_governance_postgres.py`), which is the only test in the repo
+   running the decision route inside a real transaction. Do not weaken it.
+
+3. **Delete `promotion_not_available` from THREE places in the change that lands TX2.**
+   `_ERROR_STATUS`, `_DECISION_DETAIL` (both `api/routers/approvals.py`) and the
+   `503` entry in `_DECISION_RESPONSES`. Also remove
+   `BaselinePromotionNotAvailableError` and the `SCOPE_CONTROLS["promotion"]`
+   entry, and drop the 503 row from `docs/API.md`. Missing any one leaves a
+   published contract advertising a status the route can no longer emit.
+
+4. **`DecisionResultV1.activity` carries a stated `agent_run_status`, not an inferred one.**
+   `_append_approval_activity` takes it as an explicit argument because the
+   caller knows what it just wrote and the adapter does not. TX3 passes
+   `agent_cancelled`. **TX2 must pass `agent_running`** — it resumes the run
+   rather than terminalizing it — and must not fall back to the
+   `approval_required` default, which describes the state before the transaction.
+
+5. **Membership: the referent is now pinned; read it before revalidating anything.**
+   The deciding actor's membership is enforced at the session layer
+   (`auth.resolve_session` INNER JOINs `membership … revoked_at IS NULL`, so a
+   revoked member is 401 before any route body runs) and must NOT be
+   reimplemented in `revalidate_binding` — terminalizing on behalf of an actor
+   who has lost access lets a revoked actor mutate governance state, where the
+   correct answer is refusal. The **initiating** actor's membership is a
+   different, reachable question, declared in `SCOPE_CONTROLS["membership"]` and
+   answered into the architecture at commit `32d9320`. TX2 is where it bites,
+   because TX2 is where the baseline actually moves.
+
+**Also still true and easy to lose:** this story adds **no** migration (4.1 owns
+every Epic 4 table and already granted the columns), `consumed_at` is TX2's
+field and is deliberately left `NULL` by TX3, and the audit `effect_key` is
+`binding.request_effect_key` — never a fresh `uuid4()`, which is the defect 4.1's
+review caught.
 ---
 
 ## Dev Notes

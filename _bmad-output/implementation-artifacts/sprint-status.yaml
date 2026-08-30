@@ -1802,6 +1802,19 @@ development_status:
   # run's and its schedule run's pending slots -- via a single "Dismiss expired request" control
   # that issues the ordinary decision command and receives the literal approval_expired outcome.
   4-2-review-and-decide-the-exact-approval: done
+  # NOTE (2026-08-30): BEFORE CREATING 4.3 -- read "## What Story 4.3 inherits from this story"
+  # in 4-2-review-and-decide-the-exact-approval.md. Five verified inheritances, each of which a
+  # from-scratch reading of the epic would get wrong: (1) IMPORT revalidate_binding, never write a
+  # second one (EAD-10 forbids it by name); (2) terminalizing outcomes are RETURNED, never raised
+  # -- get_site_context commits on return and rolls back on an escaping exception, and the only
+  # test proving it runs the route inside a real transaction; (3) landing TX2 must DELETE
+  # promotion_not_available from _ERROR_STATUS, _DECISION_DETAIL and _DECISION_RESPONSES' 503,
+  # plus BaselinePromotionNotAvailableError, SCOPE_CONTROLS["promotion"] and the docs/API.md row;
+  # (4) DecisionResultV1.activity carries a STATED agent_run_status -- TX3 passes agent_cancelled,
+  # TX2 must pass agent_running, never the approval_required default; (5) membership's referent is
+  # pinned as of 32d9320 -- the deciding actor is enforced at the session layer and must NOT be
+  # rechecked in revalidate_binding; the INITIATING actor is the open one and TX2 is where it
+  # bites. 4.3 adds no migration and no second route.
   4-3-promote-the-baseline-atomically-with-audit: backlog
   4-4-inspect-complete-decision-provenance: backlog
   4-5-prove-approval-and-audit-invariants: backlog
@@ -1846,6 +1859,26 @@ action_items:
     # from code: PostgresScenarioProjectionReader.get_baseline_assignments returns
     # (), so the assignment side is structurally empty and staffed_minutes cannot
     # return non-zero against the real projection until Epic 3 supplies a source.
+  - epic: "4"
+    action: "Story creation must not let a Task restate a Decision or an AC -- it cites one ('per Decision 6') and never re-argues it -- and a Decision that states a mechanism must state in one sentence what that mechanism does NOT cover. Three of Story 4.2's four decision-grade findings were a restatement that had drifted from its source INSIDE THE SAME FILE."
+    owner: "Story creation"
+    status: in-progress
+    # 2026-08-30 -- MECHANISM SHIPPED, item stays open, mirroring the epic 1-2
+    # facts-pass entry below. Three authoring rules now load on every
+    # bmad-create-story activation (_bmad/custom/bmad-create-story.toml, commit
+    # 2cf598f): Task cites rather than re-argues; a Decision declares its own
+    # blind spot; and a self-consistency pass before freezing, distinct from the
+    # existing facts pass. Its "done when" is "no restatement-drift finding in
+    # any of 4.3-4.6", which only those stories can demonstrate -- so this closes
+    # at the Epic 4 retro, not now. Deliberately NOT backed by a test: every
+    # available assertion is a proxy, the same reason the domain-model citation
+    # test was built and dropped (see the 1-2 entry above).
+    # DOES NOT COVER the second shape. "membership" reached Story 4.2 undefined
+    # through epics.md AC3 -> EAD-10 -> ADR-4, all of which predate story
+    # creation, so no bmad-create-story fact can reach the tier where the word
+    # originates. That half is unowned and is the Epic 4 retro's to assign.
+    # Full diagnosis: "### Review Retrospective Input" in
+    # 4-2-review-and-decide-the-exact-approval.md.
   - epic: "1-2"
     action: "Red-then-green is the standing evidence standard from Story 3.1 onward: any story shipping a guard, conformance suite, or architecture test must demonstrate it observed failing with its structural assertion removed (the Story 2.9 standard). 19 Epic 2 findings were guards that could not go red."
     owner: "Dev / review"
