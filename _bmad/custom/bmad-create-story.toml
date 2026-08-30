@@ -22,9 +22,24 @@
 #
 # Retro action A3 ("a facts this story depends on pass, distinct from the
 # decisions pass") is the literal fact below.
+#
+# The last three facts come from Story 4.2's code review (2026-08-30). All four
+# of that story's decision-grade findings were authored INTO the story file and
+# only surfaced after implementation, in two shapes: a restatement drifting from
+# its source inside the same file (three of four), and an undefined term
+# propagated across four documents without anyone pinning its referent (one).
+#
+# Same restraint as above: these are authoring rules, not assertions. No test
+# enforces them, because every available test would enforce a proxy -- a story
+# can cite a Decision and still cite the wrong one. They are loaded at
+# activation for the same reason the domain model is: so a story that did not
+# think to look for the rule cannot miss it.
 
 persistent_facts = [
   "file:{project-root}/docs/DOMAIN-MODEL.md",
   "Any story touching a metric, demand row, or assignment MUST cite docs/DOMAIN-MODEL.md in its context or facts section, and MUST NOT re-derive the family/unit rule from adapter code.",
   "Before writing a story's decisions, run a 'facts this story depends on' pass: name the domain rules the story relies on and confirm each is written down somewhere citable. A rule that exists only in someone's head becomes a decision-grade review finding after implementation, which is the most expensive place to resolve it.",
+  "A Task states WHAT to do and CITES why -- 'per Decision 6', 'per AC3'. It never restates the reasoning in its own words. A paraphrased rationale is a second copy of the reasoning with nothing checking it against the first, and it drifts: Story 4.2's Task 3 justified two new API fields as 'AC1 requires material parameters', which AC1 does not ask for, and shipped both into the published contract read by nothing; its Task 9 restated a ledger sentence and hardened it into a proof that Decision 6, 400 lines earlier in the same file, had already made unreachable.",
+  "A Decision that states a mechanism MUST also state, in one sentence, what that mechanism does NOT cover. Writing the sentence is what surfaces the gap while it is still free to fix. Story 4.2's Decision 10 named its goal ('otherwise TX3's event would duplicate the request's card') and a mechanism that blocked only one of the two directions -- the new terminal event could not render a panel, but the original pending event kept its stale payload and went on rendering one.",
+  "Before freezing a story, run a self-consistency pass over the file itself, distinct from the facts pass above: does any Task's proof describe a state the Decisions make unreachable, and does any Task restate a Decision or an AC rather than cite it? Three of Story 4.2's four decision-grade review findings were a restatement that had drifted from its source inside the same file. The file is deliberately redundant so it can be self-contained for a dev agent; nothing checks the copies against each other.",
 ]
