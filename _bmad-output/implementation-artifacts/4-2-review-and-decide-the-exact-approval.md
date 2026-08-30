@@ -186,7 +186,7 @@ EAD-10's fork:
 | Category | Checks | Outcome |
 |---|---|---|
 | **Expiry** | `clock() >= binding.expires_at` | terminalize `expired` (TX3), reason `approval_expired`. **Checked first** — EAD-7 says an overdue binding runs TX3 with `approval_expired` *instead of its requested outcome*, so expiry outranks every other verdict including a requested reject. |
-| **Business mismatch** | candidate row still exists, is still `OPTIMAL`/`FEASIBLE`, still belongs to this site; `schedule_run.resource_version` unchanged since TX1; live `site_baseline` presentation equals `binding.baseline_schedule_version` **in both directions** (`null` matching absence); `baseline_resource_version` unchanged; recomputed `parameter_hash` and `consequence_hash` equal the stored ones; the actor resolves to a live membership in this site; `derive_policy_version(PolicyInputsV1(...))` equals `binding.policy_version` | terminalize `stale` (TX3), reason `approval_stale` |
+| **Business mismatch** | candidate row still exists, is still `OPTIMAL`/`FEASIBLE`, still belongs to this site; `schedule_run.resource_version` unchanged since TX1; live `site_baseline` presentation equals `binding.baseline_schedule_version` **in both directions** (`null` matching absence); `baseline_resource_version` unchanged; the **initiating actor** named by `binding.initiated_by_actor_id` still has an active (`revoked_at IS NULL`) membership in `binding.site_id`, supplied by a server-owned membership reader in this command transaction; recomputed `parameter_hash` and `consequence_hash` equal the stored ones; `derive_policy_version(PolicyInputsV1(...))` equals `binding.policy_version` | terminalize `stale` (TX3), reason `approval_stale` |
 | **Command-level refusal** | `binding.state != "pending"`; `expected_resource_version != binding.resource_version` | **no write at all** — 409 problem with literal expected/current. A caller who is simply out of date must not be able to kill a live binding. |
 | **Valid** | none of the above | proceed to the requested decision |
 | **Write fault** | any `DBAPIError` inside the bundle | let it propagate → the transaction rolls back → binding stays `pending` for an honest retry. **Never** convert a write fault into `stale`. |
@@ -313,20 +313,20 @@ that records an expiry which is already true is not a decision about the candida
 reading leaves `:526` open, and `:526` names this story as the owner that must close it. Recorded
 as Open Question 1 for Winston: overrule before Story 4.3 if this reading is wrong.
 
-**Open Question 2 for Winston (raised at code review 2026-08-30) — whose membership?** EAD-10 lists
-"membership" among the business mismatches that terminalize a binding to `stale`, and this story's
-Decision 2 rendered that as "the actor". Neither says **which** actor, and the two sibling ACs point
-different ways: 4.2 AC3 says "…membership … **no longer matches**", which reads as a TX1 snapshot
-compared against the live world like every other item in that list; Story 4.3 AC1 says "**current**
-actor/site/membership … revalidated inside the command transaction", which is the deciding actor.
-The deciding-actor reading is enforced one layer up and cannot reach `revalidate_binding` —
-`auth.resolve_session` INNER JOINs `membership … revoked_at IS NULL`, so a revoked member gets 401
-at `get_session` — and implementing it would be actively wrong: terminalizing a binding on behalf of
-an actor who has lost access lets a revoked actor mutate governance state, where the correct answer
-is to refuse. The **initiating** actor's membership, snapshotted at TX1, IS reachable and is **not
-implemented**; it is recorded in `decide_approval.SCOPE_CONTROLS` under `membership`. It matters at
-TX2, where the baseline actually moves. Winston: pin the referent before Story 4.3 imports this
-function.
+**Resolved Architecture Decision 2A (Winston, 2026-08-30) — membership means the initiating
+actor's current membership in the bound site.** EAD-10 does not refer to the deciding actor and does
+not impose separation of duties. The binding snapshots the server-owned identifiers
+`initiated_by_actor_id` and `site_id` at TX1. The shared `revalidate_binding` imported by Story 4.3
+must use those values with a server-owned transactional membership reader and require an active row
+(`revoked_at IS NULL`) inside the command transaction. Absence is a business mismatch and takes TX3
+as `stale` / `approval_stale`, with expected/current membership context and zero baseline effect.
+
+The deciding actor remains a separate admission guard: `auth.resolve_session` INNER JOINs active
+membership before the route runs. A revoked or wrong-site deciding actor receives the existing
+authentication/non-disclosing refusal and performs no approval mutation; `revalidate_binding` must
+not convert that denial into staleness. The current implementation does not yet supply the initiating
+membership reader, so its `SCOPE_CONTROLS["membership"]` remains an honest implementation gap owned
+by Story 4.3, not an open architecture question.
 
 **Proof this actually closes it** — CORRECTED AT CODE REVIEW 2026-08-30. The ledger's own sentence
 ("a second approval request **for an agent run** whose first binding expired undecided") was written
