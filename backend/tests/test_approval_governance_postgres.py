@@ -18,7 +18,15 @@ from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from pydantic import TypeAdapter
 
-from api.deps import site_context
+from dataclasses import replace
+
+from fastapi.testclient import TestClient
+
+from api.auth_security import SESSION_COOKIE_NAME, hash_secret
+from api.deps import get_clock, get_identity_store, get_settings, site_context
+from api.main import app
+from application.ports.session import ResolvedSession
+from settings import default_settings
 from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditWriter
 from adapters.postgres.conversation import PostgresConversationRepository
@@ -400,7 +408,7 @@ def test_runtime_role_has_the_two_tx3_update_grants(governed_postgres_engine) ->
     assert row.run_reason is True and row.approval_state is True
 
 
-def test_dismissing_expiry_releases_the_agent_pending_slot_for_a_second_request(
+def test_dismissing_expiry_releases_the_schedule_run_slot_for_a_real_second_request(
     governed_postgres_engine, site_ids
 ) -> None:
     engine = governed_postgres_engine
@@ -420,16 +428,33 @@ def test_dismissing_expiry_releases_the_agent_pending_slot_for_a_second_request(
     )
     with site_context(engine, site_ids["site"]) as c:
         expired = decide_approval(c, command=command, **_decision_dependencies(now=NOW + timedelta(hours=2)))
-    second = first.binding.__class__(**{
-        **first.binding.__dict__, "approval_id": uuid4(), "state": "pending", "decided_by_actor_id": None,
-        "decided_at": None, "created_at": NOW + timedelta(hours=2), "expires_at": NOW + timedelta(hours=3),
-        "request_effect_key": f"tool:{agent_run_id}:call-2", "resource_version": 1,
-    })
-    with site_context(engine, site_ids["site"]) as c:
-        PostgresApprovalRepository().create_pending(c, binding=second, pending_payload={"pending_calls": [{"tool_call_id": "call-2"}], "turn": {}})
+    # The ORIGINAL agent run cannot host a second approval and never could:
+    # EAD-5 terminalizes it here, and `pause_agent_run_for_approval` claims only
+    # `agent_running`. Asserting that is what keeps the ledger honest -- the slot
+    # `uq_approval_request_pending_agent_run` guards is released onto a run that
+    # is, by design, finished.
     with engine.connect() as c:
-        states = c.execute(select(approval_request.c.state).where(approval_request.c.agent_run_id == agent_run_id).order_by(approval_request.c.created_at)).scalars().all()
+        cancelled = c.execute(select(agent_run.c.status, agent_run.c.status_reason).where(agent_run.c.id == agent_run_id)).one()
+    assert (cancelled.status, cancelled.status_reason) == ("agent_cancelled", "approval_expired")
+
+    # The slot that matters in production is `uq_approval_request_pending_run`
+    # on (site_id, schedule_run_id), and the way a planner actually refills it is
+    # `request_approval` -- NOT a raw `create_pending`. Driving the real use case
+    # is what exercises Trap 8's blocker: `ApprovalAlreadyPendingError` counts
+    # overdue rows too (`request_approval.py`, `any(state == "pending")`). A
+    # direct insert proves the partial index, and nothing else.
+    second_request = RequestApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"], schedule_run_id=ids["schedule_run"],
+        expected_resource_version=2, expected_baseline_schedule_version=None,
+        request_effect_key=f"command:{uuid4()}", request_id=uuid4(), conversation_id=ids["conversation"],
+        agent_run_id=None, pending_payload=None,
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        second = request_approval(c, command=second_request, **_use_case_dependencies())
+    with engine.connect() as c:
+        states = c.execute(select(approval_request.c.state).where(approval_request.c.schedule_run_id == ids["schedule_run"]).order_by(approval_request.c.created_at)).scalars().all()
     assert expired.outcome == "expired"
+    assert second.binding.state == "pending"
     assert states == ["expired", "pending"]
 
 
@@ -650,3 +675,116 @@ def test_downgrade_removes_this_migration_without_revoking_an_ancestor_grant(
         assert "approval_request" in set(inspect(engine).get_table_names())
     finally:
         engine.dispose()
+
+
+# --- Decision 9: returning commits, raising rolls back ---------------------
+#
+# Every other decision-route test overrides `get_site_context` with
+# `lambda: object()` -- no transaction at all -- so none of them can observe
+# whether a 409 response COMMITTED the terminal bundle or discarded it. The
+# story calls this "the single most dangerous line"; this is the only place it
+# is actually proven, because it needs a real transaction and a real route.
+
+_SESSION_TOKEN = "governance-session"
+_CSRF_TOKEN = "governance-csrf"
+
+
+@pytest.fixture()
+def decision_http_client(governed_postgres_engine, site_ids):
+    restricted = governed_postgres_engine.url.set(
+        username="shiftmind_login", password="shiftmind_login"
+    ).render_as_string(hide_password=False)
+    settings = replace(
+        default_settings(), database_url=restricted, scheduling_baseline_enabled=True
+    )
+    session = ResolvedSession(
+        app_user_id=site_ids["actor"],
+        site_id=site_ids["site"],
+        csrf_token_hash=hash_secret(_CSRF_TOKEN),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+
+    class _Store:
+        def resolve_session(self, token_hash):
+            return session if token_hash == hash_secret(_SESSION_TOKEN) else None
+
+    previous = dict(app.dependency_overrides)
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_identity_store] = lambda: _Store()
+    try:
+        with TestClient(app) as client:
+            yield client, settings
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
+
+
+def _governance_headers(settings, *, key):
+    return {
+        "Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}",
+        "Origin": settings.app_base_url,
+        "X-CSRF-Token": _CSRF_TOKEN,
+        "Idempotency-Key": key,
+    }
+
+
+def test_a_409_expiry_response_commits_the_terminal_row_through_the_real_route(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    """The route RETURNS a problem response, so `get_site_context` commits.
+
+    Mutation that must turn this red: change the terminalizing branch's
+    `return problem_response(...)` to `raise HTTPException(status_code=409)`.
+    The status assertion still passes -- and the follow-up GET then reports
+    `pending`, because the exception rolled TX3 back.
+    """
+    client, settings = decision_http_client
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+    )
+    # `site_ids` is module-scoped, so an earlier test in this file may have left
+    # a `site_baseline` row behind. Read the live pointer rather than assuming
+    # absence -- TX1 refuses on a baseline mismatch before anything else runs.
+    with site_context(engine, site_ids["site"]) as c:
+        live_baseline = PostgresSiteBaselineReader().get(c, site_ids["site"])
+    request = RequestApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"], schedule_run_id=ids["schedule_run"],
+        expected_resource_version=2,
+        expected_baseline_schedule_version=str(live_baseline.schedule_version_id) if live_baseline else None,
+        request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+        conversation_id=ids["conversation"], agent_run_id=None, pending_payload=None,
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        pending_binding = request_approval(c, command=request, **_use_case_dependencies()).binding
+
+    # Past `expires_at`, so revalidation terminalizes to `expired` (EAD-7 runs
+    # TX3 with `approval_expired` instead of the requested reject).
+    app.dependency_overrides[get_clock] = lambda: NOW + timedelta(hours=2)
+
+    response = client.post(
+        f"/api/v1/approvals/{pending_binding.approval_id}/decision",
+        headers=_governance_headers(settings, key="commit-guard"),
+        json={"decision": "reject", "expected_resource_version": 1},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "approval_expired"
+
+    # The row survived the refusing response -- read on a SEPARATE transaction,
+    # which is the only way to tell a commit from an uncommitted write.
+    follow_up = client.get(
+        f"/api/v1/approvals/{pending_binding.approval_id}",
+        headers={
+            "Cookie": f"{SESSION_COOKIE_NAME}={_SESSION_TOKEN}",
+            "Origin": settings.app_base_url,
+        },
+    )
+    assert follow_up.status_code == 200
+    assert follow_up.json()["state"] == "expired"
+    with engine.connect() as c:
+        stored = c.execute(
+            select(approval_request.c.state, approval_request.c.decided_at).where(
+                approval_request.c.id == pending_binding.approval_id
+            )
+        ).one()
+    assert stored.state == "expired" and stored.decided_at is not None

@@ -944,10 +944,6 @@ export interface components {
             consequence_summary: string;
             /** Policy Version */
             policy_version: string;
-            /** Parameter Hash */
-            parameter_hash: string;
-            /** Consequence Hash */
-            consequence_hash: string;
             /** Agent Run Id */
             agent_run_id: string | null;
             /**
@@ -2056,6 +2052,14 @@ export interface components {
             detail: string;
             /** Code */
             code: string;
+            /** Expected */
+            expected?: {
+                [key: string]: unknown;
+            } | null;
+            /** Current */
+            current?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ProposalOut */
         ProposalOut: {
@@ -5308,15 +5312,6 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
-            /** @description Service Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetailsV1"];
-                };
-            };
         };
     };
     create_approval_api_v1_approvals_post: {
@@ -5372,15 +5367,6 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetailsV1"];
-                };
-            };
-            /** @description Service Unavailable */
-            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5512,15 +5498,6 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetailsV1"];
-                };
-            };
-            /** @description Service Unavailable */
-            503: {
                 headers: {
                     [name: string]: unknown;
                 };

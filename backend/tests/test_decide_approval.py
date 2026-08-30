@@ -143,3 +143,50 @@ def test_database_fault_before_terminal_write_leaves_binding_pending() -> None:
     with pytest.raises(DBAPIError):
         decide(runs, approvals, audit, conversations, command)
     assert approvals.binding.state == "pending" and not audit.items and not conversations.items
+
+
+@pytest.mark.parametrize("fault_at", ["cancel", "audit", "event"])
+def test_a_write_fault_inside_the_bundle_propagates_and_is_never_converted_to_stale(fault_at) -> None:
+    """EAD-10's SECOND fork arm, proven where a mis-implementation would live.
+
+    Faulting `terminalize` -- the bundle's first statement -- proves only that a
+    failure before any write leaves nothing behind. The arm that actually
+    matters is a fault AFTER the terminal row is written: the rule is that it
+    propagates so the transaction rolls the whole bundle back, and that it is
+    NEVER caught and re-reported as a business `stale`. Each of the three
+    remaining bundle members is faulted in turn.
+    """
+    runs, approvals, audit, conversations, command = pending(agent_run_id=uuid4())
+
+    def fail(*_a, **_k):
+        raise DBAPIError("INSERT", {}, RuntimeError("database unavailable"))
+
+    if fault_at == "cancel":
+        conversations.cancel_agent_run_for_approval = fail
+    elif fault_at == "audit":
+        audit.append = fail
+    else:
+        conversations.append_approval_request_activity = fail
+
+    # Propagates as DBAPIError -- not swallowed, not returned as a
+    # `DecisionResultV1(outcome="stale")`.
+    with pytest.raises(DBAPIError):
+        decide(runs, approvals, audit, conversations, command)
+
+
+def test_agent_path_reports_the_status_it_actually_wrote() -> None:
+    """The activity must not claim `approval_required` for a cancelled run.
+
+    `DecisionResultV1.activity` is part of the surface Story 4.3 imports.
+    """
+    runs, approvals, audit, conversations, command = pending(agent_run_id=uuid4())
+    decide(runs, approvals, audit, conversations, command)
+    event = next(kw for kind, kw in conversations.items if kind == "event")
+    assert event["agent_run_status"] == "agent_cancelled"
+
+
+def test_planner_path_states_no_agent_run_status() -> None:
+    runs, approvals, audit, conversations, command = pending()
+    decide(runs, approvals, audit, conversations, command)
+    event = next(kw for kind, kw in conversations.items if kind == "event")
+    assert event["agent_run_status"] is None

@@ -56,8 +56,15 @@ class UnsupportedActivityPayloadError(ValueError):
     """
 
 
+#: EAD-5's closed vocabulary, mirroring `ck_agent_run_status_reason`
+#: (`schema.py`). Approval outcomes are the only path into `agent_cancelled`
+#: (ADR-4 D6); this set is what keeps `cancel_agent_run_for_approval` from
+#: becoming a general cancellation API.
+APPROVAL_CANCELLATION_REASONS = frozenset({"approval_rejected", "approval_expired", "approval_stale"})
+
+
 class PostgresConversationRepository:
-    def _append_approval_activity(self, connection: Connection, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID, agent_run_id: UUID | None, occurred_at: datetime | None = None) -> ExecutedAgentRunV1:
+    def _append_approval_activity(self, connection: Connection, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID, agent_run_id: UUID | None, occurred_at: datetime | None = None, agent_run_status: str | None = None) -> ExecutedAgentRunV1:
         conv = connection.execute(select(conversation).where(conversation.c.id == binding.conversation_id).with_for_update()).one_or_none()
         if conv is None:
             raise RuntimeError("approval conversation is no longer visible")
@@ -80,7 +87,14 @@ class PostgresConversationRepository:
         # is no agent run in scope, and the conversation may in fact have one
         # currently `agent_running`. The agent path's real status is written by
         # `pause_agent_run_for_approval`, which owns that transition.
-        return ExecutedAgentRunV1(event, new_version, "approval_required" if agent_run_id else None)
+        #
+        # `agent_run_status` is explicit because the caller knows the status it
+        # just wrote and this method does not. TX3 cancels the run BEFORE
+        # appending its activity, so defaulting to "approval_required" here
+        # reported a status the same transaction had already replaced.
+        if agent_run_status is None and agent_run_id is not None:
+            agent_run_status = "approval_required"
+        return ExecutedAgentRunV1(event, new_version, agent_run_status)
 
     def pause_agent_run_for_approval(self, connection: Connection, *, claimed_agent_run_id: UUID, binding: ApprovalBindingV1, request_id: UUID) -> ExecutedAgentRunV1:
         # LOCK ORDER: conversation, THEN agent_run -- the same order
@@ -98,12 +112,18 @@ class PostgresConversationRepository:
         connection.execute(update(agent_run).where(agent_run.c.id == claimed_agent_run_id).values(status="approval_required"))
         return ExecutedAgentRunV1(result.event, result.resource_version, "approval_required")
 
-    def append_approval_request_activity(self, connection: Connection, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID, agent_run_id: UUID | None = None, occurred_at: datetime | None = None) -> ExecutedAgentRunV1:
-        return self._append_approval_activity(connection, binding=binding, actor_id=actor_id, request_id=request_id, agent_run_id=agent_run_id, occurred_at=occurred_at or binding.created_at)
+    def append_approval_request_activity(self, connection: Connection, *, binding: ApprovalBindingV1, actor_id: UUID, request_id: UUID, agent_run_id: UUID | None = None, occurred_at: datetime | None = None, agent_run_status: str | None = None) -> ExecutedAgentRunV1:
+        return self._append_approval_activity(connection, binding=binding, actor_id=actor_id, request_id=request_id, agent_run_id=agent_run_id, occurred_at=occurred_at or binding.created_at, agent_run_status=agent_run_status)
 
     def cancel_agent_run_for_approval(self, connection: Connection, *, agent_run_id: UUID, binding: ApprovalBindingV1, reason: str) -> None:
         # LOCK ORDER: conversation, THEN agent_run. Approval terminalization is
         # deliberately the sole new path into cancellation, not a general API.
+        if reason not in APPROVAL_CANCELLATION_REASONS:
+            # Decision 6: this method accepts ONLY the three closed reasons.
+            # `ck_agent_run_status_reason` would otherwise reject the write at
+            # runtime as a database error rather than as a test failure, which
+            # is exactly the shape Trap 3 warns about.
+            raise ValueError(f"approval cancellation reason must be one of {sorted(APPROVAL_CANCELLATION_REASONS)}")
         conv = connection.execute(select(conversation.c.id).where(conversation.c.id == binding.conversation_id).with_for_update()).one_or_none()
         if conv is None:
             raise RuntimeError("approval conversation is no longer visible")
@@ -111,6 +131,7 @@ class PostgresConversationRepository:
         if current is None or current.status != "approval_required":
             raise AgentRunNotQueuedError("agent run is no longer awaiting approval")
         connection.execute(update(agent_run).where(agent_run.c.id == agent_run_id).values(status="agent_cancelled", status_reason=reason))
+
     def latest_terminal_outcome_for_site(
         self,
         connection: Connection,

@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-29
+last_updated: 2026-08-30
 
 # NOTE (2026-08-26): Story 3-12 CODE REVIEW COMPLETE — back to in-progress, not done.
 # Three layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) ran; 3 decision-needed
@@ -1801,7 +1801,7 @@ development_status:
   # deferred-work.md:526 -- the overdue-but-pending binding that permanently blocks its agent
   # run's and its schedule run's pending slots -- via a single "Dismiss expired request" control
   # that issues the ordinary decision command and receives the literal approval_expired outcome.
-  4-2-review-and-decide-the-exact-approval: review
+  4-2-review-and-decide-the-exact-approval: done
   4-3-promote-the-baseline-atomically-with-audit: backlog
   4-4-inspect-complete-decision-provenance: backlog
   4-5-prove-approval-and-audit-invariants: backlog

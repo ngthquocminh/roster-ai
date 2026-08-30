@@ -11,6 +11,8 @@ export type ApprovalRequestCardItem = {
   agent_run_id?: string | null;
   consequence_summary: string;
   policy_version: string;
+  /** AC1's "requested at" context. Optional: replayed activity payloads predate it. */
+  created_at?: string | null;
   expires_at: string;
 };
 
@@ -37,6 +39,7 @@ export function ApprovalRequestCard({ approval, now = new Date() }: Readonly<{
         <div><dt className="text-muted-foreground">Scenario version</dt><dd><IdentifierCopyButton identifierType="Scenario version" value={approval.scenario_version_id} /></dd></div>
         {approval.agent_run_id ? <div><dt className="text-muted-foreground">Agent run ID</dt><dd><IdentifierCopyButton identifierType="Agent run ID" value={approval.agent_run_id} /></dd></div> : null}
         <div><dt className="text-muted-foreground">Policy version</dt><dd>{approval.policy_version}</dd></div>
+        {approval.created_at ? <div><dt className="text-muted-foreground">Requested at</dt><dd>{new Date(approval.created_at).toLocaleString()}</dd></div> : null}
         <div><dt className="text-muted-foreground">Expires at</dt><dd>{new Date(approval.expires_at).toLocaleString()}</dd></div>
       </dl>
       <p className="text-sm">{approval.consequence_summary}</p>

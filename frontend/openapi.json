@@ -4042,16 +4042,6 @@
               }
             },
             "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetailsV1"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         }
       },
@@ -4123,16 +4113,6 @@
               }
             },
             "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetailsV1"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         }
       }
@@ -4310,16 +4290,6 @@
               }
             },
             "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetailsV1"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         }
       }
@@ -4616,14 +4586,6 @@
             "type": "string",
             "title": "Policy Version"
           },
-          "parameter_hash": {
-            "type": "string",
-            "title": "Parameter Hash"
-          },
-          "consequence_hash": {
-            "type": "string",
-            "title": "Consequence Hash"
-          },
           "agent_run_id": {
             "anyOf": [
               {
@@ -4661,8 +4623,6 @@
           "scenario_version_id",
           "consequence_summary",
           "policy_version",
-          "parameter_hash",
-          "consequence_hash",
           "agent_run_id",
           "created_at",
           "expires_at",
@@ -7078,6 +7038,30 @@
           "code": {
             "type": "string",
             "title": "Code"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
           }
         },
         "type": "object",

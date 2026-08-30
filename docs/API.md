@@ -526,6 +526,20 @@ scratch).
 - `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
 - `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. Rejection commits `200`; stale and expired terminalizations commit then return `409`; a currently valid approval returns `503 promotion_not_available` until Story 4.3 supplies promotion.
 
+Problem bodies on the decision route carry AD-13's literal `expected` and
+`current` objects **when there is context to carry** — a version, state, or
+policy the caller can compare. Codes describing a condition with nothing to
+compare (`approval_not_found`, `approval_not_granted`, `promotion_not_available`)
+omit both keys rather than publishing an empty object; both fields are declared
+optional on `ProblemDetailsV1` and generated into the client types.
+
+`ApprovalOut` publishes the identifiers, versions, consequence summary,
+`created_at` and `expires_at` that the review surface renders. It deliberately
+does **not** publish `parameter_hash` / `consequence_hash`: AC1 asks for the
+material parameters themselves, which the run, candidate and baseline versions
+already are, and provenance reads the digests from `audit_event`, which carries
+both.
+
 The POST can return RFC 7807 problem codes with these statuses (AD-13 keeps
 denied, stale, missing, and invalid distinct):
 
@@ -542,6 +556,7 @@ denied, stale, missing, and invalid distinct):
 | `approval_expired` | 409 | The decision attempt committed expiry terminalization |
 | `approval_stale` | 409 | The decision attempt committed stale terminalization |
 | `promotion_not_available` | 503 | A valid approval is held for Story 4.3's promotion transaction |
+| `agent_run_not_cancellable` | 409 | The agent run awaiting this approval left `approval_required`; nothing was written |
 | `idempotency_key_conflict` | 409 | The key was reused with a different body |
 | `invalid_approval_command` | 422 | The command is otherwise unusable |
 

@@ -94,6 +94,12 @@ class ProblemDetailsV1(BaseModel):
     status: int
     detail: str
     code: str
+    # AD-13 requires stale/expired/conflict problems to carry literal
+    # expected/current context. Declaring it here is what publishes it into
+    # `openapi.json` and the generated client types -- without these two the
+    # frontend reads the fields through an unchecked cast.
+    expected: dict | None = None
+    current: dict | None = None
 
 
 class ConversationCreateIn(BaseModel):
@@ -228,8 +234,13 @@ class ApprovalOut(BaseModel):
     scenario_version_id: UUID
     consequence_summary: str
     policy_version: str
-    parameter_hash: str
-    consequence_hash: str
+    # `agent_run_id` serves AC2 ("the same agent-run and approval identifiers
+    # remain visible"); `created_at` is the review surface's "requested at".
+    # `parameter_hash`/`consequence_hash` are deliberately NOT published here:
+    # AC1 asks for the material parameters themselves -- which the card already
+    # renders as the run, candidate and baseline versions -- not for the digest
+    # sealing them. Provenance (Story 4.4) reads the hashes from `audit_event`,
+    # which carries both, so nothing needs them on this read model.
     agent_run_id: UUID | None
     created_at: datetime
     expires_at: datetime

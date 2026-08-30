@@ -4,7 +4,7 @@ baseline_commit: 0350f0648cb07d2760b1d8e2fb8df5991f3e6b58
 
 # Story 4.2: Review and Decide the Exact Approval
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -313,10 +313,33 @@ that records an expiry which is already true is not a decision about the candida
 reading leaves `:526` open, and `:526` names this story as the owner that must close it. Recorded
 as Open Question 1 for Winston: overrule before Story 4.3 if this reading is wrong.
 
-**Proof this actually closes it** (the ledger states the test): drive TX1 for an agent-run-backed
-binding, advance the injected clock past `expires_at`, dismiss, then **successfully create a second
-approval request for the same agent run and the same schedule run**. A test that only asserts the
-row went terminal does not close `:526`.
+**Open Question 2 for Winston (raised at code review 2026-08-30) — whose membership?** EAD-10 lists
+"membership" among the business mismatches that terminalize a binding to `stale`, and this story's
+Decision 2 rendered that as "the actor". Neither says **which** actor, and the two sibling ACs point
+different ways: 4.2 AC3 says "…membership … **no longer matches**", which reads as a TX1 snapshot
+compared against the live world like every other item in that list; Story 4.3 AC1 says "**current**
+actor/site/membership … revalidated inside the command transaction", which is the deciding actor.
+The deciding-actor reading is enforced one layer up and cannot reach `revalidate_binding` —
+`auth.resolve_session` INNER JOINs `membership … revoked_at IS NULL`, so a revoked member gets 401
+at `get_session` — and implementing it would be actively wrong: terminalizing a binding on behalf of
+an actor who has lost access lets a revoked actor mutate governance state, where the correct answer
+is to refuse. The **initiating** actor's membership, snapshotted at TX1, IS reachable and is **not
+implemented**; it is recorded in `decide_approval.SCOPE_CONTROLS` under `membership`. It matters at
+TX2, where the baseline actually moves. Winston: pin the referent before Story 4.3 imports this
+function.
+
+**Proof this actually closes it** — CORRECTED AT CODE REVIEW 2026-08-30. The ledger's own sentence
+("a second approval request **for an agent run** whose first binding expired undecided") was written
+before EAD-5's cancellation semantics existed and cannot hold: Decision 6 terminalizes that run to
+`agent_cancelled`, and `pause_agent_run_for_approval` claims only `agent_running`. The agent-run
+slot `uq_approval_request_pending_agent_run` guards is therefore released onto a run that is, by
+design, finished — closed-as-designed, not closed-as-fixed. The slot that matters in production is
+`uq_approval_request_pending_run` on `(site_id, schedule_run_id)`. So: drive TX1 for an
+agent-run-backed binding, advance the injected clock past `expires_at`, dismiss, assert the run is
+terminal `agent_cancelled('approval_expired')`, then **drive a real `request_approval` for the same
+schedule run** — planner path, or a fresh agent run. Going through the use case is the point: it is
+what exercises Trap 8's blocker. A test that only asserts the row went terminal, or that inserts the
+second binding with `create_pending`, does not close `:526`.
 
 ### Decision 8 — Idempotency: `command_idempotency` for replay, the binding's own state for exactly-once
 
@@ -385,6 +408,14 @@ Therefore:
 - **The timeline's terminal events do not render a second panel.** When the activity payload's
   `approval_state` is not `pending`, render a compact literal line — "Approval rejected · {id}" —
   and nothing else. Otherwise TX3's event would duplicate the request's card in the timeline.
+  **CORRECTED AT CODE REVIEW 2026-08-30: this mechanism only blocked one direction.** TX1's event
+  keeps its `pending` payload forever, so after a decision it went on mounting a live panel —
+  reading "Terminal approval state: rejected" — directly above TX3's compact line, which is the
+  duplication this bullet exists to prevent. The condition is therefore **two** things: the panel
+  renders only for the **newest** `approval_request` activity of that `approval_id` **and** only
+  while that payload is `pending`; every superseded activity renders as the compact line. Dedupe
+  stays keyed on `activity_id` (UX-DR6) — these are two genuinely distinct events, and collapsing
+  them by `approval_id` would merge what the dedupe comment explicitly warns must stay separate.
 - **Fail closed, exactly as `ScenarioResults` already does for `pendingApproval`:** while the live
   query is loading or errored, render **no** controls and say why. `!query.isSuccess` gates the
   controls; do not use `query.data?.state === "pending"` alone, which is `undefined`-falsy in a
@@ -479,11 +510,17 @@ matrix has something stable to assert:
   - [x] Problem bodies carry literal expected/current context (binding state, versions) — the Epic 4
         spine's Errors row. Never `str(exc)` (`schedule_runs.py:333-341`).
   - [x] Idempotency per Decision 8, re-deriving presented state on replay.
-  - [x] Extend `ApprovalOut` with `parameter_hash`, `consequence_hash`, `agent_run_id: UUID | None`,
-        `created_at` — AC1 requires "material parameters" and versions on the review surface, and
-        the current shape carries neither hash nor the agent-run identifier AC2 of Story 4.1
-        requires to stay visible. Extend `_out` accordingly; the presented-expired derivation is
-        unchanged.
+  - [x] Extend `ApprovalOut` with `agent_run_id: UUID | None` and `created_at` — AC2 of Story 4.1
+        requires the agent-run identifier to stay visible, and `created_at` is the review surface's
+        "requested at". Extend `_out` accordingly and RENDER both on `ApprovalRequestCard`; the
+        presented-expired derivation is unchanged. **CORRECTED AT CODE REVIEW 2026-08-30:** this
+        task originally also added `parameter_hash` and `consequence_hash` on the stated grounds
+        that *"AC1 requires 'material parameters' … on the review surface"*. That rationale is
+        wrong. AC1 asks the surface to show the material parameters **themselves** — the run,
+        candidate and baseline versions, which the card already renders — not the digest sealing
+        them; a planner does not verify a sha256 by eye. Both hashes were published into
+        `openapi.json` and `schema.d.ts` and read by nothing, and provenance (Story 4.4) reads them
+        from `audit_event`, which carries both. They are removed from `ApprovalOut`.
   - [x] `TimelineOut` / `ConversationTimelineV1` gain `latest_agent_run_status_reason: str | None`,
         sourced from `agent_run.status_reason`, so Chat renders the literal cancellation cause —
         EAD-5's stated purpose for the column.
@@ -572,9 +609,19 @@ matrix has something stable to assert:
   - [x] `uq_audit_event_success_effect` refuses a second `(site_id, effect_key,
         'approval_rejected')` row while still admitting the story-4.1 `approval_requested` row for
         the same effect key — this is what proves the outcome discriminator is doing work.
-  - [x] **Decision 7's ledger close**: expire an agent-run-backed binding by clock, dismiss it, then
-        **successfully create a second approval request for the same agent run and schedule run**.
-        A test that stops at "the row is terminal" does not close `deferred-work.md:526`.
+  - [x] **Decision 7's ledger close** — CORRECTED AT CODE REVIEW 2026-08-30. As first written this
+        task demanded a second approval request **for the same agent run**, which Decision 6 makes
+        unreachable: TX3 terminalizes that run to `agent_cancelled`, and
+        `pause_agent_run_for_approval` claims only `agent_running`. The two statements contradicted
+        each other and the implementation satisfied the letter by inserting the second binding with
+        `create_pending`, bypassing `request_approval` entirely. The real close: expire an
+        agent-run-backed binding by clock, dismiss it, assert the run is terminal
+        `agent_cancelled('approval_expired')`, then **drive a real `request_approval` for the same
+        schedule run on the planner path**. That releases and refills
+        `uq_approval_request_pending_run` — the slot that matters in production — and it is what
+        exercises Trap 8's blocker (`ApprovalAlreadyPendingError` counts overdue rows,
+        `request_approval.py`). A test that stops at "the row is terminal", or that inserts the
+        second binding directly, does not close `deferred-work.md:526`.
 
 - [x] **Task 10 — Proof: frontend and accessibility (AC: 1, 2, 5)**
   - [x] Vitest: panel states (pending with controls; loading and errored with **no** controls;
@@ -616,6 +663,55 @@ matrix has something stable to assert:
         has no producer.** EAD-5 cancels the run on rejection instead of resuming it with a denial,
         so the contract's denial branch stays unused. Owner: whoever needs a denied-and-resumed
         turn, if ever.
+
+### Review Findings
+
+Code review 2026-08-30 (`/bmad-code-review 4.2`), three adversarial layers against
+`0350f06..92ad4f7`. 4 decision-needed, 24 patch, 3 deferred, 3 dismissed as noise. All resolved 2026-08-30; two further items were found while patching and are recorded in `deferred-work.md` (the missing `approval_request` SSE listener, fixed; and a pre-existing Results-page contrast violation, deferred).
+
+**Decision-needed — RESOLVED 2026-08-30.** D1 → (a) re-drive the proof through `request_approval` and correct the spec/ledger wording. D2 → (b) pin the deciding-actor reading, enforce at the session layer, raise Open Question 2 for Winston. D3 → (a) render `created_at`, remove both hashes from `ApprovalOut`, correct the Task 3 rationale. D4 → (a) panel only for the newest activity of an approval, dedupe still keyed on `activity_id`.
+
+- [x] [Review][Decision] `deferred-work.md:526` is marked CLOSED on a proof production cannot reproduce, and the deadlock persists on the agent path — TX3 sets the run to `agent_cancelled`, but `pause_agent_run_for_approval` claims only `agent_running` (`adapters/postgres/conversation.py:97`), so no second approval can ever be created for that agent run in production. `test_dismissing_expiry_releases_the_agent_pending_slot_for_a_second_request` manufactures the second binding with `PostgresApprovalRepository().create_pending(...)` directly, bypassing `request_approval` — so Trap 8's blocker (`ApprovalAlreadyPendingError` counts overdue rows, `request_approval.py:107-109`) is never exercised. Options: (a) re-drive the proof through `request_approval` for a NEW agent run on the same schedule run, (b) narrow the ledger claim to the `uq_approval_request_pending_run` slot only, (c) reopen `:526`.
+- [x] [Review][Decision] `revalidate_binding` omits the membership check Decision 2 and AC3 enumerate [`backend/application/use_cases/decide_approval.py:61-79`] — `get_session` (`api/deps.py:196`) re-resolves membership per request and returns 401/403 first, which is defensible under AD-3, but that is a DIFFERENT outcome from the `stale` terminalization AC3 names. Story 4.3 imports this function verbatim and inherits the gap. Options: (a) add the membership arm to `revalidate_binding`, (b) record session-level resolution as satisfying AC3 and amend Decision 2.
+- [x] [Review][Decision] AC1's "material parameters" are transported but rendered nowhere — Task 3 added `parameter_hash`, `consequence_hash`, `created_at` to `ApprovalOut`/`openapi.json`/`schema.d.ts` explicitly because "AC1 requires 'material parameters' and versions on the review surface", but `ApprovalRequestCard.tsx` is unchanged and renders none of them, and `ApprovalDecisionDialog` renders only `consequence_summary`. Options: (a) render them on the card, (b) accept the existing version fields as AC1's "material parameters" and drop the Task 3 justification.
+- [x] [Review][Decision] After any decision the timeline renders the same approval twice — TX1's `pending` event still mounts a full `ApprovalDecisionPanel` (now showing "Terminal approval state: rejected") directly above TX3's "Approval rejected · {id}" line, because dedup is keyed on `activity_id` and TX3 mints a fresh one [`frontend/src/features/chat/ActivityTimeline.tsx:303-306`, `:338`]. Decision 10's stated intent ("Otherwise TX3's event would duplicate the request's card") is only half met. Options: (a) dedup by `approval_id` keeping the newest, (b) render the panel only for the newest approval activity, (c) accept — the duplication is a line, not a second card.
+
+**Patch — unambiguous fixes**
+
+- [x] [Review][Patch] A successful dismissal and the by-design 503 both render "The approval changed. Refresh, rerun, or inspect…" — the single undifferentiated `mutation.isError` branch never discriminates on status/code, so `409 approval_expired` (the dismissal succeeding, per EAD-7) and `503 promotion_not_available` (every valid approve) both tell the planner the opposite of what happened [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:22`]
+- [x] [Review][Patch] `Expected: {}` / `Current: {}` render as literal noise — `DecideApprovalError` defaults both to `{}` and the router always passes them; `{}` is truthy in JS so the guard never suppresses them [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:22`, `backend/application/use_cases/decide_approval.py:30-33`]
+- [x] [Review][Patch] `AgentRunNotQueuedError` / `RuntimeError` from `cancel_agent_run_for_approval` escape the route as HTTP 500 and roll back a compare-and-set that already won, re-blocking the slot — the route catches only `DecideApprovalError` [`backend/api/routers/approvals.py`, `backend/adapters/postgres/conversation.py:110-111`]
+- [x] [Review][Patch] Decision 3's mandated literal detail "Baseline promotion is not available yet." is never emitted — every `DecideApprovalError` gets `detail="The approval is no longer valid for this decision."`, which is factually wrong for `promotion_not_available` (the approval IS valid) and for `approval_not_granted` [`backend/api/routers/approvals.py:115-116`]
+- [x] [Review][Patch] Decision 9's commit guard proves nothing — `test_decision_stale_response_returns_409_after_the_terminal_write` monkeypatches `approvals_router.decide_approval`, overrides `get_site_context` to `lambda: object()` (no transaction), and asserts on an in-memory fake with no follow-up GET; Task 8 required "a follow-up GET shows the binding terminal" [`backend/tests/test_approvals_api.py:161`, `:197-209`]
+- [x] [Review][Patch] The `DBAPIError` fork arm is proven at the weakest point — the fault is injected into `terminalize`, the bundle's FIRST statement, before any write; nothing faults at the audit or event append, which is exactly where a "convert a write fault into stale" bug would live [`backend/tests/test_decide_approval.py`]
+- [x] [Review][Patch] `approval_expired` (409) and `invalid_approval_command` (422) have no router test, though Task 8 required every code in Decision 9's table — `approval_expired` is the code Decision 7's entire mechanism returns [`backend/tests/test_approvals_api.py`]
+- [x] [Review][Patch] `ActivityTimeline.test.tsx` mocks `ApprovalDecisionPanel` with a stub hardcoding `State: pending` / `No current baseline` — the exact two strings the surviving assertion checks, so it now tests the mock's literals; and Task 10's terminal-line test was never written despite the task being checked [`frontend/src/features/chat/ActivityTimeline.test.tsx:4-6`, `:160-164`]
+- [x] [Review][Patch] The NFR19/UX-DR35 distinctness test is self-fulfilling — it renders synthetic Send and Run optimization buttons whose variants the test itself picks, then asserts only that three `data-variant` values differ; real components, accessible names, and roles are never involved, and Story 4.6 inherits this [`frontend/src/features/approvals/ApprovalDecisionPanel.test.tsx`]
+- [x] [Review][Patch] Keyboard focus lands on `<body>` after a confirmed decision — the panel flips to its terminal branch, unmounting the trigger, and `onCloseAutoFocus` is `preventDefault`ed onto a detached node; two overlapping bare `setTimeout` focus calls compound it. Escape and Cancel are tested; confirm is not [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:13,16-21`, `ApprovalDecisionDialog.tsx:7`]
+- [x] [Review][Patch] No polite live region announces the decision outcome — the only `role="status"` is on the error branch; the success path renders a plain paragraph, so the durable pending→rejected transition is silent to a screen reader (Decision 12, `EXPERIENCE.md:189`, UX-DR32) [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:22`]
+- [x] [Review][Patch] "Dismiss expired request" has no `disabled={mutation.isPending}` and no confirmation — two clicks issue two mutations sharing one unsettled idempotency key [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:22`]
+- [x] [Review][Patch] One `createIdempotencyKeyHolder` per panel is shared across approve / reject / dismiss — a transport failure deliberately retains the key, so the next DIFFERENT decision reuses it and gets `409 idempotency_key_conflict`; the key identifies a component instance, not an intent [`frontend/src/hooks/useDecideApproval.ts:8-9`]
+- [x] [Review][Patch] `useApproval` is never invalidated by the conversation stream — a decision made in another session leaves live Approve/Reject controls on a stale binding, against UX-DR13 [`frontend/src/hooks/useApproval.ts`, `frontend/src/hooks/useDecideApproval.ts`]
+- [x] [Review][Patch] `presentedExpired` is computed from `new Date()` once per render with no timer and no refetch policy — crossing `expires_at` while the panel is mounted keeps offering Approve/Reject [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:12`, `frontend/src/hooks/useApproval.ts`]
+- [x] [Review][Patch] A closing reject dialog momentarily re-renders as the approve dialog — `decision ?? "approve"` and `open={decision !== null}` flip in the same commit while Radix keeps `DialogContent` mounted through the exit [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:22`, `ApprovalDecisionDialog.tsx:5-7`]
+- [x] [Review][Patch] `cancel_agent_run_for_approval` takes `reason: str` unvalidated — Decision 6 says it accepts only the three closed reasons, and Trap 3 warns any other literal is a runtime `ck_agent_run_status_reason` failure, not a test failure; the comment is present, the mechanism is not [`backend/adapters/postgres/conversation.py:103-112`]
+- [x] [Review][Patch] `_append_approval_activity` reports `agent_run_status="approval_required"` for a run TX3 just set to `agent_cancelled` — latent today because the router discards `result.activity`, but `DecisionResultV1.activity` is the shared surface Story 4.3 imports [`backend/adapters/postgres/conversation.py:87`, `backend/application/use_cases/decide_approval.py:105`]
+- [x] [Review][Patch] `expected` / `current` are injected at runtime but absent from the published contract — `ProblemDetailsV1`, `openapi.json`, `schema.d.ts` and the new `docs/API.md` rows declare none of it, so the panel reads them through an unchecked cast; and `body.update(extra)` runs after the reserved members, so a caller passing `type`/`title`/`status`/`code` silently corrupts the problem document [`backend/api/problems.py:13-19`, `backend/api/schemas.py`]
+- [x] [Review][Patch] Decision 10's mandated `!query.isSuccess` gate was not used — the panel gates on `query.isPending` then `query.isError || !query.data`, the exact falsy shape Decision 10 named and forbade; `isSuccess` is never exercised by the panel test [`frontend/src/features/approvals/ApprovalDecisionPanel.tsx:10-11`]
+- [x] [Review][Patch] `ChatView`'s `CANCELLATION_REASONS` rendering has no test, and the raw-value fallback would ship a wire literal unnoticed [`frontend/src/features/chat/ChatView.tsx:42-46,273-275`]
+- [x] [Review][Patch] `accessibility.spec.ts` was not extended though Task 10 named both specs — only `repair-journey-accessibility.spec.ts` changed. (The 1280/640 viewport pair IS a legitimate 200%-zoom proxy, matching `layout-accessibility.spec.ts:85`.) [`frontend/e2e/accessibility.spec.ts`]
+- [x] [Review][Patch] `503` is published on `POST /api/v1/approvals` and both GET routes via the shared `_RESPONSES`, none of which can emit it [`backend/api/routers/approvals.py:24`, `frontend/openapi.json`]
+- [x] [Review][Patch] Missing blank line between `cancel_agent_run_for_approval` and `latest_terminal_outcome_for_site` [`backend/adapters/postgres/conversation.py:112-113`]
+
+**Deferred — real, not actionable in this story**
+
+- [x] [Review][Defer] The decision endpoint has no actor-level authorization; the requester can decide their own approval [`backend/api/routers/approvals.py:97-98`] — deferred, pre-existing: no story owns separation of duties
+- [x] [Review][Defer] Candidate drift is not revalidated: `scenario_version_id` and the candidate assignment count build the consequence summary at TX1 but are never compared at decide time [`backend/application/use_cases/decide_approval.py:66-79`] — deferred, beyond Decision 2's enumerated checks
+- [x] [Review][Defer] `ScenarioResults` discards the list payload and issues one GET per approval; a single failure erases an approval the list already returned [`frontend/src/routes/ScenarioResults.tsx:42`] — deferred, a consequence of Decision 10's live-binding mandate
+
+**Dismissed as noise (3):** the terminal timeline line "dropping AC2 identifiers" (Decision 10 mandates exactly that line "and nothing else", and the identifiers stay on the live panel); the `503` path storing no idempotency record (nothing was written, so re-execution is a genuinely new command); `cancel_agent_run_for_approval` splitting Decision 6's bundle (the net writes are correct — `_append_approval_activity` does bump `conversation.resource_version`).
+
+**Environment note, not a story finding:** the two `tests/test_openrouter_provider.py` failures under the full suite are pre-existing test-order pollution — they pass in isolation and fail identically with this story's new test files excluded.
 
 ---
 
@@ -796,6 +892,7 @@ GPT-5 Codex
 - Added live approval review/decision UI in Results and Chat, pure presented-expiry behavior, terminal timeline rendering, literal cancellation reasons, named dialogs, consequence-bearing accessible controls, and focus restoration.
 - Added fake, HTTP, governed PostgreSQL, frontend accessibility, and two-browser journey coverage; reconciled the deferred-work ledger.
 - Full validation: backend 1383 passed / 2 skipped / 7 deselected; PostgreSQL 117 passed; frontend 553 passed; Playwright 54 passed; TypeScript, lint, build, `git diff --check`, and Alembic drift check passed. Lint retains three pre-existing Fast Refresh warnings; build retains the existing bundle-size warning.
+- **Re-validated after code review 2026-08-30:** backend **1395 passed / 2 skipped / 7 deselected** (full suite including PostgreSQL; 118 `postgres`-marked); frontend **571 passed** across 82 files; Playwright **60 passed**; TypeScript, lint, build and `git diff --check` clean, with the same three pre-existing Fast Refresh warnings and the same bundle-size warning. Two new guards were observed failing under mutation before being trusted: the Decision 9 commit guard (mutated to return the right status and code without terminalizing — only the persistence assertion catches it) and the Decision 7 ledger close (mutated so TX3 leaves the row `pending` — the second `request_approval` then raises `ApprovalAlreadyPendingError`, which is Trap 8's blocker and which the previous direct-insert test never reached).
 - The local PostgreSQL volume was stamped at the prior migration head while missing three Story 4.1 objects. It was repaired non-destructively from the already-committed migration DDL; no migration file was added and no data/table was dropped.
 - Honest gaps: valid approve remains `503 promotion_not_available`; `consumed`, baseline promotion, agent resumption/`DeferredToolResults`, non-success audit, and `AgentApprovalDecisionV1(approved=False)` remain Story 4.3 or explicitly deferred. Production baseline remains null until Story 4.3; comparison staleness therefore remains vacuously false.
 
@@ -843,3 +940,4 @@ GPT-5 Codex
 |---|---|
 | 2026-08-29 | Story created from `epics.md:1169-1200`, the Epic 4 architecture spine and ADR-4, Story 4.1's shipped substrate, and a live audit of the codebase at `0350f06`. |
 | 2026-08-29 | Implemented and validated the exact approval review/decision flow, TX3 terminal outcomes, live accessible UI, complete automated proof, and ledger reconciliation; status moved to review. |
+| 2026-08-30 | Code review: 4 decision-needed resolved, 24 patches applied, 3 deferred, 3 dismissed. Corrected Task 9 / Decision 7 (the ledger's proof demanded an unreachable state), Decision 2 (membership referent, Open Question 2 raised), Task 3 (AC1 rationale; both hashes removed from `ApprovalOut`), and Decision 10 (panel now belongs to the newest activity). Status moved to done. |

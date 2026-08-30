@@ -119,7 +119,7 @@ test("keeps the approval dialog named and restores focus at 100 and 200 percent 
     candidate_schedule_version_id: "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb",
     baseline_schedule_version: null, scenario_version_id: "cccccccc-3333-4333-8333-cccccccccccc",
     consequence_summary: "Candidate replaces no current baseline.", policy_version: "policy-v1",
-    parameter_hash: "a".repeat(64), consequence_hash: "b".repeat(64), agent_run_id: null,
+    agent_run_id: null,
     created_at: "2026-08-29T00:00:00Z", expires_at: "2099-08-29T01:00:00Z", resource_version: 1,
   };
   await page.route("**/api/v1/approvals**", async (route) => {

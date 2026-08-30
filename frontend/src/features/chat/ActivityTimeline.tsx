@@ -277,7 +277,8 @@ function ActivityContent({
   item,
   navigate,
   isLatest = false,
-}: Readonly<{ item: Activity; navigate: NavigateFunction; isLatest?: boolean }>) {
+  isCurrentApproval = true,
+}: Readonly<{ item: Activity; navigate: NavigateFunction; isLatest?: boolean; isCurrentApproval?: boolean }>) {
   switch (item.activity_type) {
     case "planner_message":
       return (
@@ -301,7 +302,15 @@ function ActivityContent({
         />
       );
     case "approval_request":
-      return item.approval_state === "pending"
+      // Decision 10 suppressed a panel on TERMINAL payloads, which stopped TX3's
+      // event rendering a second card -- but not the mirror case: TX1's event
+      // keeps its `pending` payload forever, so after a decision it went on
+      // mounting a live panel (reading "Terminal approval state: rejected")
+      // directly above TX3's compact line. The panel belongs to the NEWEST
+      // activity for this approval, and only while that payload is `pending`;
+      // every superseded activity renders as history. Dedupe stays keyed on
+      // `activity_id` (UX-DR6) -- these are two distinct events, not one.
+      return isCurrentApproval && item.approval_state === "pending"
         ? <ApprovalDecisionPanel approvalId={item.approval_id} />
         : <p className="text-sm">Approval {item.approval_state} · {item.approval_id}</p>;
     case "terminal_outcome":
@@ -336,6 +345,14 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
   // that re-delivers an already-rendered activity must not produce a second
   // card, and a reorder must not merge two distinct ones.
   const unique = [...new Map(items.map((item) => [item.activity_id, item])).values()];
+  // Persisted order is oldest-first, so the last write wins = the newest
+  // activity for each approval. See the `approval_request` case below.
+  const currentApprovalActivity = new Map<string, string>();
+  for (const item of unique) {
+    if (item.activity_type === "approval_request") {
+      currentApprovalActivity.set(item.approval_id, item.activity_id);
+    }
+  }
   if (!unique.length) {
     return (
       <EmptyState explanation="Start a new conversation about this scenario—for example, ask about coverage, demand, or constraints." />
@@ -350,6 +367,10 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
           key={item.activity_id}
         >
           <ActivityContent
+            isCurrentApproval={
+              item.activity_type !== "approval_request" ||
+              currentApprovalActivity.get(item.approval_id) === item.activity_id
+            }
             isLatest={index === unique.length - 1}
             item={item}
             navigate={navigate}

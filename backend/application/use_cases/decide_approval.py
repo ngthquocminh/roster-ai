@@ -20,6 +20,19 @@ SCOPE_CONTROLS = {
     "promotion": "NOT COVERED: promotion:owned_by_story_4_3",
     "audit": "NOT COVERED: audit:denied_attempts_owned_by_story_4_3",
     "resume": "NOT COVERED: resume:deferred_tool_results_owned_by_story_4_3",
+    # EAD-10 lists "membership" among the business mismatches, but never says
+    # whose. Read as the DECIDING actor's -- the reading Story 4.3 AC1 states
+    # literally ("current actor/site/membership") -- it is already enforced one
+    # layer up and cannot reach here: `auth.resolve_session` INNER JOINs
+    # `membership ... revoked_at IS NULL`, so a revoked member gets 401 at
+    # `get_session` before any route body runs. Terminalizing a binding to
+    # `stale` on behalf of an actor who has lost access would also be wrong --
+    # it would let a revoked actor mutate governance state, where the correct
+    # answer is to refuse. The alternative reading (the INITIATING actor's
+    # membership, snapshotted at TX1) IS reachable and is NOT implemented; it
+    # is Open Question 2 for Winston and matters at TX2, where the baseline
+    # actually moves.
+    "membership": "NOT COVERED: membership:deciding_actor_enforced_at_session_layer; initiating_actor_open_question_2",
 }
 
 class DecideApprovalError(ValueError):
@@ -102,7 +115,9 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
     if terminal.agent_run_id is not None:
         conversations.cancel_agent_run_for_approval(connection, agent_run_id=terminal.agent_run_id, binding=terminal, reason=reason)
     audit_writer.append(connection, AuditEnvelopeV1(audit_id=uuid4(), attempt_id=uuid4(), request_id=command.request_id, site_id=command.site_id, initiated_by_actor_id=terminal.initiated_by_actor_id, decided_by_actor_id=command.actor_id, conversation_id=terminal.conversation_id, agent_run_id=terminal.agent_run_id, approval_id=terminal.approval_id, schedule_run_id=terminal.schedule_run_id, action=terminal.action, outcome=f"approval_{outcome}", success=True, effect_key=terminal.request_effect_key, before_version=terminal.baseline_schedule_version, after_version=None, safe_summary=terminal.consequence_summary, parameter_hash=terminal.parameter_hash, consequence_hash=terminal.consequence_hash, policy_version=terminal.policy_version, app_version=app_version, worker_facts=WorkerFactsV1(), evidence_refs=(), occurred_at=now))
-    activity = conversations.append_approval_request_activity(connection, binding=terminal, actor_id=command.actor_id, request_id=command.request_id, agent_run_id=terminal.agent_run_id, occurred_at=now)
+    # `agent_run_status` is stated, not inferred: the cancellation above already
+    # replaced `approval_required`, and Story 4.3 consumes this value.
+    activity = conversations.append_approval_request_activity(connection, binding=terminal, actor_id=command.actor_id, request_id=command.request_id, agent_run_id=terminal.agent_run_id, occurred_at=now, agent_run_status="agent_cancelled" if terminal.agent_run_id is not None else None)
     return DecisionResultV1(outcome, terminal, activity, check.expected, check.current)
 
 __all__ = ["DecideApprovalCommandV1", "DecisionResultV1", "revalidate_binding", "decide_approval"]

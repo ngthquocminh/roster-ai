@@ -573,3 +573,52 @@ describe("ChatView", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Chat" })).toBeInTheDocument();
   });
 });
+
+describe("ChatView cancellation reasons", () => {
+  // `status_reason` exists so reconnect renders the literal outcome WITHOUT
+  // replaying events (EAD-5). Nothing asserted that it reached the screen, and
+  // the raw-value fallback would have shipped a wire literal unnoticed.
+  it.each([
+    ["approval_rejected", "approval rejected"],
+    ["approval_expired", "approval expired"],
+    ["approval_stale", "approval became stale"],
+  ])("renders %s as planner-facing words beside the cancelled status", (reason, words) => {
+    mockTimeline.mockReturnValue({
+      data: {
+        conversation_id: NEWER,
+        resource_version: 4,
+        latest_agent_run_status: "agent_cancelled",
+        latest_agent_run_status_reason: reason,
+        items: [activity("11111111-1111-1111-1111-111111111111", "Check coverage", "1")],
+        limit: 200,
+        has_more: false,
+      },
+      error: null, isError: false, isPending: false, refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByText(new RegExp(words))).toBeInTheDocument();
+    // The raw wire value must never be what the planner reads.
+    expect(screen.queryByText(new RegExp(reason))).not.toBeInTheDocument();
+  });
+
+  it("shows no reason suffix for a run that is not cancelled", () => {
+    mockTimeline.mockReturnValue({
+      data: {
+        conversation_id: NEWER,
+        resource_version: 4,
+        latest_agent_run_status: "agent_queued",
+        latest_agent_run_status_reason: "approval_rejected",
+        items: [activity("11111111-1111-1111-1111-111111111111", "Check coverage", "1")],
+        limit: 200,
+        has_more: false,
+      },
+      error: null, isError: false, isPending: false, refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.queryByText(/approval rejected/)).not.toBeInTheDocument();
+  });
+});
