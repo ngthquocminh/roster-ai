@@ -35,7 +35,7 @@ from application.ports.scenario_projection import (
     WorkerPageV1,
 )
 from application.scheduling.candidate_metrics import calculate_candidate_metrics
-from application.scheduling.comparison import ComparisonIntegrityError, calculate_comparison
+from application.scheduling.comparison import BaselineSupplyUnavailableError, ComparisonIntegrityError, calculate_comparison
 from engine.governed_adapter import GovernedSchedulerAdapter
 
 
@@ -88,6 +88,17 @@ class _Reader:
         return self._page(self.baseline, query, AssignmentPageV1)
 
 
+def test_non_null_frozen_baseline_with_empty_supply_fails_closed() -> None:
+    reader = _Reader(current_baseline="baseline-v1")
+    with pytest.raises(BaselineSupplyUnavailableError) as raised:
+        calculate_comparison(
+            reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
+            scenario_version_id=reader.version_id, site_id=reader.site_id,
+            expected_baseline_schedule_version="baseline-v1",
+        )
+    assert raised.value.baseline_schedule_version == "baseline-v1"
+
+
 def _candidate(reader: _Reader) -> ScheduleVersionV1:
     assignment = AssignmentV1("candidate-a", "worker-1", "task-1", "shift-1", 0, 1)
     required = tuple((row.record_id, 1.0) for row in reader.demand)
@@ -112,7 +123,7 @@ def test_empty_baseline_is_real_net_new_comparison_and_detects_staleness() -> No
     result = calculate_comparison(
         reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
-        expected_baseline_schedule_version="baseline-v1",
+        expected_baseline_schedule_version=None,
     )
 
     assert result.stale is True
@@ -150,7 +161,7 @@ def test_candidate_metric_drift_raises_integrity_error() -> None:
         calculate_comparison(
             reader, object(), candidate=candidate, scenario_id=reader.scenario_id,
             scenario_version_id=reader.version_id, site_id=reader.site_id,
-            expected_baseline_schedule_version="baseline-v1",
+            expected_baseline_schedule_version=None,
         )
 
 
@@ -163,7 +174,7 @@ def test_large_drain_completes_without_raising() -> None:
     result = calculate_comparison(
         reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
-        expected_baseline_schedule_version="baseline-v1",
+        expected_baseline_schedule_version=None,
     )
 
     assert result.candidate_metrics.assignment_count == 1
@@ -177,7 +188,7 @@ def test_interval_coverage_tuples_are_real_values_not_a_not_computed_placeholder
     result = calculate_comparison(
         reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
-        expected_baseline_schedule_version="baseline-v1",
+        expected_baseline_schedule_version=None,
     )
 
     assert result.candidate_metrics.interval_coverage_required_minutes
@@ -216,7 +227,8 @@ def test_assignment_diff_flips_from_red_to_green_on_a_baseline_mutation() -> Non
 def test_second_fetch_reports_stale_but_still_describes_the_original_inputs() -> None:
     """Trap 5 guard: a baseline move between two fetches must surface as
     `stale`, never as a silently-rebased comparison wearing the same shape."""
-    reader = _Reader(current_baseline="baseline-v1")
+    baseline = (AssignmentV1("baseline-a", "worker-1", "task-1", "shift-1", 0, 1),)
+    reader = _Reader(baseline=baseline, current_baseline="baseline-v1")
     candidate = _candidate(reader)
 
     first = calculate_comparison(
@@ -354,6 +366,6 @@ def test_solve_time_and_comparison_time_metrics_agree_on_a_real_fixture() -> Non
     result = calculate_comparison(
         reader, object(), candidate=candidate, scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
-        expected_baseline_schedule_version="baseline-v1",
+        expected_baseline_schedule_version=None,
     )
     assert result.candidate_metrics.assignment_count == solve_metrics.assignment_count

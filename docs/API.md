@@ -524,12 +524,12 @@ scratch).
 - `POST /api/v1/approvals` creates a pending approval for one feasible candidate. It requires an `Idempotency-Key` header and returns the existing binding on a replay.
 - `GET /api/v1/approvals/{approval_id}` reads one visible binding.
 - `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
-- `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. Rejection commits `200`; stale and expired terminalizations commit then return `409`; a currently valid approval returns `503 promotion_not_available` until Story 4.3 supplies promotion.
+- `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. A valid approval atomically returns `200 consumed`, moves the baseline pointer once, records `approval_consumed`, and resumes an approval-backed agent run after commit. Rejection commits `200`; stale and expired terminalizations commit then return `409`.
 
 Problem bodies on the decision route carry AD-13's literal `expected` and
 `current` objects **when there is context to carry** — a version, state, or
 policy the caller can compare. Codes describing a condition with nothing to
-compare (`approval_not_found`, `approval_not_granted`, `promotion_not_available`)
+compare (`approval_not_found`, `approval_not_granted`)
 omit both keys rather than publishing an empty object; both fields are declared
 optional on `ProblemDetailsV1` and generated into the client types.
 
@@ -555,13 +555,31 @@ denied, stale, missing, and invalid distinct):
 | `approval_not_pending` | 409 | The binding already reached a terminal state |
 | `approval_expired` | 409 | The decision attempt committed expiry terminalization |
 | `approval_stale` | 409 | The decision attempt committed stale terminalization |
-| `promotion_not_available` | 503 | A valid approval is held for Story 4.3's promotion transaction |
 | `agent_run_not_cancellable` | 409 | The agent run awaiting this approval left `approval_required`; nothing was written |
+| `stale_baseline_version` | 409 | The site baseline moved while the approval was being consumed; the whole promotion bundle rolled back and the binding stays `pending` |
+| `approval_payload_unreadable` | 500 | An agent-backed binding's stored `pending_payload` is absent or does not carry exactly one pending call, so the resumed turn cannot be driven; the promotion rolled back |
 | `idempotency_key_conflict` | 409 | The key was reused with a different body |
 | `invalid_approval_command` | 422 | The command is otherwise unusable |
 
+Pre-write `approval_not_pending` and `stale_resource_version` refusals against a
+binding resolved in the current site append an authoritative `approval_denied`
+row (`success=false`) keyed independently by `(site_id, attempt_id)`. Missing or
+cross-site bindings and the feature-policy pre-check write no denial row.
+
 Creating a request writes governance and audit records but never promotes the
 candidate or changes the baseline pointer.
+
+Approving one **does** move the pointer, and that has a documented effect on run
+results. A completed run's result freezes the baseline pointer that was live when
+it was snapshotted, and the authoritative baseline **assignment** supply is not
+wired yet, so from the first promotion onward the baseline half of the comparison
+cannot be computed. The result endpoint does **not** fail for this: it returns
+`200` with `comparison: null` and a literal `comparison_unavailable_reason`, so
+the run, the candidate schedule, and any pending approval on it stay readable and
+actionable. `current_baseline_schedule_version` is carried on the result itself
+(not only on the comparison) so a new approval can still be requested while the
+comparison is unavailable. An unreadable baseline is never rendered as an empty
+one — the comparison is withheld, not fabricated.
 
 A binding whose `expires_at` has passed is PRESENTED as `expired` by every read
 path, while the stored row stays `pending`; the terminal `expired` state is

@@ -41,7 +41,65 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-30
+last_updated: 2026-08-31
+
+# NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
+# first and only story that moves the site baseline pointer, and the first to reach
+# ApprovalRequestState=consumed. It owns TX2 ONLY, as the approve branch of Story 4.2's single
+# decision endpoint (EAD-10): no second route, no second reject path, no second revalidation.
+#
+# MEASURED AT CREATION (946b5ec, clean tree): site_baseline has been READ-ONLY since 4.1 — there is
+# no writer anywhere. `_to_deferred_results` (agent/runtime.py:407) is fully implemented with ZERO
+# producers, so this is the first story to supply AgentTurnRequestV1.approvals.
+# `uq_audit_event_failure_attempt` has existed unused since 4.1. `get_baseline_assignments` returns
+# `_apply_query((), ...)` — a HARDCODED empty tuple, not an empty fixture. `evals/golden/
+# scheduling_baseline/` already holds 4 cases, meeting NFR28's per-capability floor.
+#
+# THE LOAD-BEARING FINDING, made at creation rather than at review: "raise it and let the router
+# catch it" DOES NOT ROLL BACK. `get_site_context` is a generator dependency and rolls back only
+# when an exception escapes the ENDPOINT; a route that catches and returns a problem response
+# commits everything written before the failure. Story 4.2's Decision 9 relies on exactly that to
+# COMMIT TX3 — but the same mechanism makes the shipped `except AgentRunNotQueuedError` arm's
+# comment ("Nothing is committed ... rolls the whole bundle back") FALSE: `terminalize` runs before
+# `cancel_agent_run_for_approval`, so that arm today commits a terminal binding with no audit row,
+# no event, and the run still `approval_required`. Its test monkeypatches `decide_approval` away and
+# asserts only status and code. Decision 5 fixes it with a registered exception handler and owes a
+# real-transaction demonstrated-red in BOTH directions.
+#
+# TWELVE DECISIONS, the four most consequential:
+# (1) TX2 lives in a new `use_cases/promote_baseline.py`; `decide_approval`'s existing
+#     `BaselinePromotionNotAvailableError` raise is replaced by the call, and `promotion_not_available`
+#     is deleted from THREE places plus docs/API.md (Story 4.2's inheritance item 3, verbatim).
+# (2) The initiating-actor membership arm lands in the SHARED `revalidate_binding` via a new
+#     MembershipReader port — closing the ledger item EAD-10's 32d9320 amendment assigned here by
+#     name. Because the function is shared, this CHANGES STORY 4.2's behaviour: a reject against a
+#     revoked initiator now stales. That must be asserted, not discovered.
+# (3) AC4's "denied" is answered with ONE new closed-vocabulary member (`approval_denied`) and one
+#     additive migration — settling Story 4.1's Open Question 1, carried unanswered through 4.2.
+#     Only PRE-WRITE refusals get a denial row; post-write failures roll back, so a row written
+#     inside them rolls back too. Only one member ships: `approval_failed` would have no writer.
+# (4) EAD-8's fail-closed comparison guard MUST land in this story, because this story is what makes
+#     it necessary: the first promotion turns `calculate_comparison`'s honest empty baseline into a
+#     false "every assignment is net-new" claim. It also discharges deferred-work's
+#     "comparison staleness is vacuously false in production" entry, whose owner is this story.
+#
+# THE RESUME IS IN SCOPE AND BOUNDED (EAD-5/EAD-6 both put "run resume" inside TX2): the status
+# write to `agent_running` (with `status_reason` cleared) is transactional; exactly one resumed turn
+# is driven after commit through the EXISTING execute_turn seam, which gains one optional
+# `approvals` parameter. A failing resumed turn cannot touch the committed promotion. The
+# planner-initiated path has `agent_run_id IS NULL` and resumes nothing — that is the guard, never
+# "a pending payload exists".
+#
+# HONEST GAPS RAISED RATHER THAN PAPERED OVER: a write fault inside TX2 writes NO audit row (needs a
+# second connection; Owner: Story 4.5, whose AC2 names it); the baseline assignment supply stays
+# hardcoded empty and EAD-8 refuses instead; separation of duties stays unowned;
+# AgentApprovalDecisionV1(approved=False) still has no producer.
+#
+# NO EVIDENCE FILE (no AC carries a measured threshold; 4.5/4.6 own Epic 4's evidence) and NO NEW
+# GOLDEN CASE. No new Gate A write path — but GATE-A-RUNBOOK.md:44's "it never moves the baseline
+# pointer" becomes FALSE and must be corrected. RE-DERIVE TEST BASELINES at Task 1: 4.2 recorded
+# backend 1395/2/7, frontend 571 across 82 files, Playwright 60 — and 3.12's review found the
+# pass/skip SPLIT environment-conditional while the TOTAL is the stable invariant.
 
 # NOTE (2026-08-26): Story 3-12 CODE REVIEW COMPLETE — back to in-progress, not done.
 # Three layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) ran; 3 decision-needed
@@ -1814,8 +1872,13 @@ development_status:
   # TX2 must pass agent_running, never the approval_required default; (5) membership's referent is
   # pinned as of 32d9320 -- the deciding actor is enforced at the session layer and must NOT be
   # rechecked in revalidate_binding; the INITIATING actor is the open one and TX2 is where it
-  # bites. 4.3 adds no migration and no second route.
-  4-3-promote-the-baseline-atomically-with-audit: backlog
+  # bites. 4.3 adds no second route.
+  # CORRECTED 2026-08-30 at 4.3 creation: this note originally also read "4.3 adds no migration",
+  # which was Story 4.2's expectation and not a spine rule. 4.3 DOES land one additive migration --
+  # AC4 and FR21 require authoritative evidence for DENIED attempts and ck_audit_event_outcome
+  # admits only five members, none of which can express one. EAD-1 gives 4.1 the migration that
+  # CREATES the tables; 4.2 Decision 11 explicitly permits a later additive one.
+  4-3-promote-the-baseline-atomically-with-audit: done
   4-4-inspect-complete-decision-provenance: backlog
   4-5-prove-approval-and-audit-invariants: backlog
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog

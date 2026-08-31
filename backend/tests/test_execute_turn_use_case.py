@@ -17,6 +17,7 @@ from application.contracts.activity import (
 )
 from application.contracts.agent_runtime import (
     AgentBudgetV1,
+    AgentApprovalDecisionV1,
     AgentMessageRoleV1,
     AgentMessageV1,
     AgentPartKindV1,
@@ -110,6 +111,15 @@ def test_execute_turn_rehydrates_visible_bounded_owned_history() -> None:
         ("assistant", "Earlier answer. 45 minutes"),
     ]
     assert all("Follow-up question" not in (part.text or "") for message in messages for part in message.parts)
+
+
+def test_execute_turn_forwards_server_owned_approval_decisions() -> None:
+    runtime = _Runtime()
+    approval = AgentApprovalDecisionV1(tool_call_id="call-1", approved=True)
+    execute_turn(
+        runtime, _deps(), prompt="", calculation_results=[], approvals=(approval,)
+    )
+    assert runtime.request.approvals == (approval,)
 
 
 def test_rehydrated_history_is_capped_at_one_hundred_activities() -> None:

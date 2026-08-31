@@ -59,6 +59,7 @@ for (const [name, state, expectedText] of [
   ["pending", "pending", "Approve as baseline"],
   ["presented-expired", "pending-overdue", "Dismiss expired request"],
   ["terminal", "rejected", "Terminal approval state: rejected"],
+  ["post-promotion-terminal", "consumed", "promoted bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb replacing baseline-v12"],
 ] as const) {
   test(`keeps the ${name} approval review surface axe-clean`, async ({ page }) => {
     test.setTimeout(120_000);

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import insert, select, text, update
+from sqlalchemy import func, insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from pydantic import TypeAdapter
 
@@ -23,7 +23,7 @@ from dataclasses import replace
 from fastapi.testclient import TestClient
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
-from api.deps import get_clock, get_identity_store, get_settings, site_context
+from api.deps import get_approval_repository, get_clock, get_identity_store, get_settings, get_site_baseline_writer, site_context
 from api.main import app
 from application.ports.session import ResolvedSession
 from settings import default_settings
@@ -31,7 +31,8 @@ from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditWriter
 from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.schedule_run import PostgresScheduleRunRepository
-from adapters.postgres.site_baseline import PostgresSiteBaselineReader
+from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
+from adapters.postgres.membership import PostgresMembershipReader
 from adapters.postgres.schema import (
     agent_run,
     app_user,
@@ -39,6 +40,7 @@ from adapters.postgres.schema import (
     audit_event,
     conversation,
     message,
+    membership,
     organization,
     proposal,
     proposal_version,
@@ -70,14 +72,16 @@ NOW = datetime(2026, 8, 28, tzinfo=timezone.utc)
 
 @pytest.fixture(scope="module")
 def site_ids(governed_postgres_engine):
-    ids = {name: uuid4() for name in ("org", "site", "other_site", "actor")}
+    ids = {name: uuid4() for name in ("org", "site", "other_site", "tx2_site", "actor")}
     with governed_postgres_engine.begin() as c:
         c.execute(insert(organization).values(id=ids["org"], name="Approval Governance Org"))
         c.execute(insert(site), [
             {"id": ids["site"], "organization_id": ids["org"], "name": "A"},
             {"id": ids["other_site"], "organization_id": ids["org"], "name": "B"},
+            {"id": ids["tx2_site"], "organization_id": ids["org"], "name": "TX2"},
         ])
         c.execute(insert(app_user).values(id=ids["actor"], idp_subject="approval-actor", email="approval-actor@example.test"))
+        c.execute(insert(membership).values(id=uuid4(), app_user_id=ids["actor"], site_id=ids["site"]))
     return ids
 
 
@@ -313,26 +317,26 @@ def test_success_audit_rows_are_unique_on_site_effect_key_and_outcome(governed_p
         with engine.begin() as c:
             c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_requested", success=True)))
 
-    # A DIFFERENT outcome for the same effect key is a distinct row -- proving
-    # the two rules are independent, not one rule keyed on effect_key alone.
+    # The requested and consumed rows deliberately share the binding effect
+    # key; outcome is the disambiguator, and a second pointer-effect row loses.
     with engine.begin() as c:
-        c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_rejected", success=True)))
+        c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_consumed", success=True)))
     with pytest.raises(IntegrityError):
         with engine.begin() as c:
-            c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_rejected", success=True)))
+            c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=effect_key, outcome="approval_consumed", success=True)))
 
 
 def test_failure_audit_rows_are_unique_on_site_and_attempt_id_regardless_of_effect_key(governed_postgres_engine, site_ids) -> None:
     engine = governed_postgres_engine
     attempt_id = uuid4()
     with engine.begin() as c:
-        c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=str(uuid4()), outcome="approval_rejected", success=False, attempt_id=attempt_id)))
+        c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=str(uuid4()), outcome="approval_denied", success=False, attempt_id=attempt_id)))
 
     # Same attempt_id, a DIFFERENT effect_key -- still collides, because the
     # failure rule is keyed on (site_id, attempt_id) alone, not effect_key.
     with pytest.raises(IntegrityError):
         with engine.begin() as c:
-            c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=str(uuid4()), outcome="approval_expired", success=False, attempt_id=attempt_id)))
+            c.execute(insert(audit_event).values(_audit_row(site_id=site_ids["site"], actor_id=site_ids["actor"], effect_key=str(uuid4()), outcome="approval_denied", success=False, attempt_id=attempt_id)))
 
 
 # --- TX1 persisted end-to-end through the real adapters --------------------
@@ -355,12 +359,71 @@ def _decision_dependencies(*, now=NOW):
     return dict(
         schedule_runs=PostgresScheduleRunRepository(),
         baselines=PostgresSiteBaselineReader(),
+        baseline_writer=PostgresSiteBaselineWriter(),
+        memberships=PostgresMembershipReader(),
         approvals=PostgresApprovalRepository(),
         audit_writer=PostgresAuditWriter(),
         conversations=PostgresConversationRepository(),
         scheduling_baseline_enabled=True,
         clock=lambda: now,
     )
+
+
+def test_tx2_repository_surface_consumes_promotes_reads_payload_and_resumes(
+    governed_postgres_engine, site_ids
+) -> None:
+    engine = governed_postgres_engine
+    tx2_site = site_ids["tx2_site"]
+    tx2_actor = site_ids["actor"]
+    ids = _seed_candidate_run(
+        engine, site_id=tx2_site, actor_id=tx2_actor, resource_version=2
+    )
+    agent_run_id = _seed_agent_run(
+        engine,
+        site_id=tx2_site,
+        conversation_id=ids["conversation"],
+        actor_id=tx2_actor,
+    )
+    payload = {"pending_calls": [{"tool_call_id": "call-promote"}], "turn": {"messages": []}}
+    request = RequestApprovalCommandV1(
+        site_id=tx2_site, actor_id=tx2_actor, schedule_run_id=ids["schedule_run"],
+        expected_resource_version=2, expected_baseline_schedule_version=None,
+        request_effect_key=f"tool:{agent_run_id}:call-promote", request_id=uuid4(),
+        conversation_id=ids["conversation"], agent_run_id=agent_run_id, pending_payload=payload,
+    )
+    with site_context(engine, tx2_site) as c:
+        pending_binding = request_approval(c, command=request, **_use_case_dependencies()).binding
+        approvals = PostgresApprovalRepository()
+        assert approvals.get_pending_payload(
+            c, approval_id=pending_binding.approval_id, site_id=tx2_site
+        ) == payload
+        consumed = approvals.consume(
+            c,
+            approval_id=pending_binding.approval_id,
+            site_id=tx2_site,
+            decided_by_actor_id=tx2_actor,
+            decided_at=NOW,
+            expected_resource_version=pending_binding.resource_version,
+        )
+        assert consumed is not None and consumed.state == "consumed" and consumed.consumed_at == NOW
+        writer = PostgresSiteBaselineWriter()
+        first = writer.promote(
+            c, site_id=tx2_site, schedule_version_id=ids["candidate"],
+            actor_id=tx2_actor, occurred_at=NOW, expected_resource_version=None,
+        )
+        assert first is not None and first.resource_version == 1
+        second = writer.promote(
+            c, site_id=tx2_site, schedule_version_id=ids["candidate"],
+            actor_id=tx2_actor, occurred_at=NOW, expected_resource_version=1,
+        )
+        assert second is not None and second.resource_version == 2
+        activity = PostgresConversationRepository().resume_agent_run_for_approval(
+            c, agent_run_id=agent_run_id, binding=consumed,
+            request_id=uuid4(), occurred_at=NOW,
+        )
+        assert activity.agent_run_status == "agent_running"
+        status = c.execute(select(agent_run.c.status, agent_run.c.status_reason).where(agent_run.c.id == agent_run_id)).one()
+        assert status.status == "agent_running" and status.status_reason is None
 
 
 @pytest.mark.parametrize("agent_backed", [False, True])
@@ -788,3 +851,411 @@ def test_a_409_expiry_response_commits_the_terminal_row_through_the_real_route(
             )
         ).one()
     assert stored.state == "expired" and stored.decided_at is not None
+
+
+@pytest.mark.parametrize("agent_backed", [False, True])
+def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
+    governed_postgres_engine, site_ids, agent_backed
+) -> None:
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+    )
+    with engine.connect() as c:
+        versions_before = [dict(row._mapping) for row in c.execute(
+            select(schedule_version).where(schedule_version.c.site_id == site_ids["site"]).order_by(schedule_version.c.id)
+        )]
+    agent_run_id = _seed_agent_run(
+        engine, site_id=site_ids["site"], conversation_id=ids["conversation"],
+        actor_id=site_ids["actor"],
+    ) if agent_backed else None
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+    payload = {
+        "pending_calls": [{
+            "tool_call_id": "call-promote", "tool_name": "scheduling_baseline",
+            "tool_args_json": "{}",
+        }],
+        "turn": {"messages": []},
+    } if agent_backed else None
+    request = RequestApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"],
+        schedule_run_id=ids["schedule_run"], expected_resource_version=2,
+        expected_baseline_schedule_version=str(live.schedule_version_id) if live else None,
+        request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+        conversation_id=ids["conversation"], agent_run_id=agent_run_id,
+        pending_payload=payload,
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        pending_binding = request_approval(c, command=request, **_use_case_dependencies()).binding
+        result = decide_approval(
+            c,
+            command=DecideApprovalCommandV1(
+                site_id=site_ids["site"], actor_id=site_ids["actor"],
+                approval_id=pending_binding.approval_id, decision="approve",
+                expected_resource_version=pending_binding.resource_version,
+                request_id=uuid4(),
+            ),
+            **_decision_dependencies(),
+        )
+        assert result.outcome == "consumed"
+    with engine.connect() as c:
+        stored = c.execute(select(approval_request).where(approval_request.c.id == pending_binding.approval_id)).one()
+        baseline = c.execute(select(site_baseline).where(site_baseline.c.site_id == site_ids["site"])).one()
+        audits = c.execute(select(audit_event).where(
+            audit_event.c.approval_id == pending_binding.approval_id,
+            audit_event.c.outcome == "approval_consumed",
+        )).all()
+        events = c.execute(select(persisted_event).where(
+            persisted_event.c.conversation_id == ids["conversation"],
+            persisted_event.c.event_type == "approval_request",
+        )).all()
+        assert stored.state == "consumed" and stored.consumed_at is not None
+        assert baseline.schedule_version_id == ids["candidate"]
+        assert len(audits) == 1 and audits[0].effect_key == pending_binding.request_effect_key
+        assert len(events) == 2
+        if agent_run_id is not None:
+            run = c.execute(select(agent_run.c.status, agent_run.c.status_reason).where(agent_run.c.id == agent_run_id)).one()
+            assert run.status == "agent_running" and run.status_reason is None
+        versions_after = [dict(row._mapping) for row in c.execute(
+            select(schedule_version).where(schedule_version.c.site_id == site_ids["site"]).order_by(schedule_version.c.id)
+        )]
+        assert versions_after == versions_before
+
+
+def test_approve_route_replays_once_rejects_conflicts_and_audits_denials(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    client, settings = decision_http_client
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        pending_binding = request_approval(
+            c,
+            command=RequestApprovalCommandV1(
+                site_id=site_ids["site"], actor_id=site_ids["actor"],
+                schedule_run_id=ids["schedule_run"], expected_resource_version=2,
+                expected_baseline_schedule_version=str(live.schedule_version_id) if live else None,
+                request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+                conversation_id=ids["conversation"],
+            ),
+            **_use_case_dependencies(),
+        ).binding
+    url = f"/api/v1/approvals/{pending_binding.approval_id}/decision"
+    body = {"decision": "approve", "expected_resource_version": 1}
+    app.dependency_overrides[get_clock] = lambda: NOW
+    first = client.post(url, headers=_governance_headers(settings, key="approve-replay"), json=body)
+    replay = client.post(url, headers=_governance_headers(settings, key="approve-replay"), json=body)
+    conflict = client.post(
+        url, headers=_governance_headers(settings, key="approve-replay"),
+        json={"decision": "reject", "expected_resource_version": 1},
+    )
+    denied = client.post(url, headers=_governance_headers(settings, key="approve-new-key"), json=body)
+    assert first.status_code == 200, first.json()
+    assert replay.status_code == 200, replay.json()
+    assert first.json() == replay.json() and first.json()["state"] == "consumed"
+    assert conflict.status_code == 409 and conflict.json()["code"] == "idempotency_key_conflict"
+    assert denied.status_code == 409 and denied.json()["code"] == "approval_not_pending"
+
+    second_ids = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        second_binding = request_approval(
+            c,
+            command=RequestApprovalCommandV1(
+                site_id=site_ids["site"], actor_id=site_ids["actor"],
+                schedule_run_id=second_ids["schedule_run"], expected_resource_version=2,
+                expected_baseline_schedule_version=str(live.schedule_version_id),
+                request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+                conversation_id=second_ids["conversation"],
+            ),
+            **_use_case_dependencies(),
+        ).binding
+    second_url = f"/api/v1/approvals/{second_binding.approval_id}/decision"
+    for key in ("stale-version-1", "stale-version-2"):
+        stale = client.post(
+            second_url, headers=_governance_headers(settings, key=key),
+            json={"decision": "approve", "expected_resource_version": 99},
+        )
+        assert stale.status_code == 409 and stale.json()["code"] == "stale_resource_version"
+    with engine.connect() as c:
+        assert c.execute(select(func.count()).select_from(audit_event).where(
+            audit_event.c.approval_id == pending_binding.approval_id,
+            audit_event.c.outcome == "approval_consumed",
+        )).scalar_one() == 1
+        denial_rows = c.execute(select(audit_event).where(
+            audit_event.c.approval_id == pending_binding.approval_id,
+            audit_event.c.outcome == "approval_denied",
+        )).all()
+        assert len(denial_rows) == 1 and denial_rows[0].success is False
+        stale_denials = c.execute(select(audit_event).where(
+            audit_event.c.approval_id == second_binding.approval_id,
+            audit_event.c.outcome == "approval_denied",
+        )).all()
+        assert len(stale_denials) == 2
+        assert len({row.attempt_id for row in stale_denials}) == 2
+        baseline = c.execute(select(site_baseline).where(site_baseline.c.site_id == site_ids["site"])).one()
+        assert baseline.schedule_version_id == ids["candidate"]
+
+
+def test_runtime_privileges_keep_versions_immutable_and_allow_baseline_cas(
+    governed_postgres_engine,
+) -> None:
+    with governed_postgres_engine.connect() as c:
+        privileges = c.execute(text(
+            "SELECT "
+            "has_table_privilege('shiftmind_runtime','schedule_version','UPDATE') AS version_update, "
+            "has_table_privilege('shiftmind_runtime','schedule_version','DELETE') AS version_delete, "
+            "has_table_privilege('shiftmind_runtime','site_baseline','INSERT') AS baseline_insert, "
+            "has_column_privilege('shiftmind_runtime','site_baseline','schedule_version_id','UPDATE') AS baseline_update"
+        )).one()
+    assert privileges.version_update is False and privileges.version_delete is False
+    assert privileges.baseline_insert is True and privileges.baseline_update is True
+
+
+def test_baseline_insert_grant_guard_was_demonstrated_red_by_transactional_revoke(
+    governed_postgres_engine, site_ids
+) -> None:
+    """Mutation proof: removing INSERT makes the runtime write fail; rollback restores it."""
+    with pytest.raises(DBAPIError):
+        with governed_postgres_engine.begin() as c:
+            c.execute(text("REVOKE INSERT ON site_baseline FROM shiftmind_runtime"))
+            c.execute(text("SET LOCAL ROLE shiftmind_runtime"))
+            c.execute(text("SET LOCAL app.site_id = :site_id"), {"site_id": str(site_ids["site"])})
+            c.execute(insert(site_baseline).values(
+                id=uuid4(), site_id=site_ids["site"], schedule_version_id=uuid4(),
+                updated_by_actor_id=site_ids["actor"], resource_version=1,
+            ))
+
+
+def test_not_found_and_policy_precheck_write_no_denial_audit_without_telemetry(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    client, settings = decision_http_client
+    with governed_postgres_engine.connect() as c:
+        before = c.execute(select(func.count()).select_from(audit_event).where(
+            audit_event.c.site_id == site_ids["site"], audit_event.c.outcome == "approval_denied",
+        )).scalar_one()
+    body = {"decision": "approve", "expected_resource_version": 1}
+    missing = client.post(
+        f"/api/v1/approvals/{uuid4()}/decision",
+        headers=_governance_headers(settings, key="missing-no-audit"), json=body,
+    )
+    disabled = replace(settings, scheduling_baseline_enabled=False)
+    app.dependency_overrides[get_settings] = lambda: disabled
+    policy = client.post(
+        f"/api/v1/approvals/{uuid4()}/decision",
+        headers=_governance_headers(settings, key="policy-no-audit"), json=body,
+    )
+    assert missing.status_code == 404 and missing.json()["code"] == "approval_not_found"
+    assert policy.status_code == 403 and policy.json()["code"] == "approval_not_granted"
+    with governed_postgres_engine.connect() as c:
+        after = c.execute(select(func.count()).select_from(audit_event).where(
+            audit_event.c.site_id == site_ids["site"], audit_event.c.outcome == "approval_denied",
+        )).scalar_one()
+    # Decision 7's two deliberately UNAUDITED arms write nothing. This is the
+    # negative direction only -- AC4's observability clause is proven separately,
+    # against a live failing exporter, in the test below.
+    assert after == before
+
+
+def test_authoritative_audit_survives_a_failing_span_exporter(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    """AC4: observability being disabled or broken cannot remove the record.
+
+    The previous coverage asserted this by COMMENT ("no telemetry exporter is
+    involved"), which is the assumption the requirement exists to rule out. Audit
+    is PostgreSQL and telemetry is OTel, so the independence is asserted here the
+    way `test_manual_run_result_and_evidence_survive_a_failing_span_exporter`
+    already does it: with an exporter that really raises in-process, and with
+    `calls` asserted so the case cannot pass vacuously.
+    """
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter
+
+    class _RaisingExporter(SpanExporter):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def export(self, _spans):
+            self.calls += 1
+            raise RuntimeError("simulated exporter failure")
+
+        def shutdown(self) -> None:
+            return None
+
+    exporter = _RaisingExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer(__name__)
+
+    client, settings = decision_http_client
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        binding = request_approval(
+            c,
+            command=RequestApprovalCommandV1(
+                site_id=site_ids["site"], actor_id=site_ids["actor"],
+                schedule_run_id=ids["schedule_run"], expected_resource_version=2,
+                expected_baseline_schedule_version=str(live.schedule_version_id) if live else None,
+                request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+                conversation_id=ids["conversation"],
+            ),
+            **_use_case_dependencies(),
+        ).binding
+    url = f"/api/v1/approvals/{binding.approval_id}/decision"
+    app.dependency_overrides[get_clock] = lambda: NOW
+
+    # A span ends -- and the exporter raises -- on both sides of each command.
+    with tracer.start_as_current_span("before-denial"):
+        pass
+    denial = client.post(
+        url, headers=_governance_headers(settings, key="otel-denial"),
+        json={"decision": "approve", "expected_resource_version": 99},
+    )
+    with tracer.start_as_current_span("between"):
+        pass
+    success = client.post(
+        url, headers=_governance_headers(settings, key="otel-success"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    with tracer.start_as_current_span("after-success"):
+        pass
+
+    assert denial.status_code == 409 and denial.json()["code"] == "stale_resource_version"
+    assert success.status_code == 200 and success.json()["state"] == "consumed"
+    # The exporter really ran and really failed; without this the case is vacuous.
+    assert exporter.calls >= 3
+    with governed_postgres_engine.connect() as c:
+        rows = c.execute(
+            select(audit_event.c.outcome, audit_event.c.success).where(
+                audit_event.c.approval_id == binding.approval_id
+            )
+        ).all()
+        baseline_row = c.execute(
+            select(site_baseline).where(site_baseline.c.site_id == site_ids["site"])
+        ).one()
+    outcomes = {(row.outcome, row.success) for row in rows}
+    assert ("approval_denied", False) in outcomes
+    assert ("approval_consumed", True) in outcomes
+    assert baseline_row.schedule_version_id == ids["candidate"]
+    provider.shutdown()
+
+
+def test_lost_promotion_cas_escapes_route_and_rolls_back_the_real_transaction(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    client, settings = decision_http_client
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2)
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        binding = request_approval(c, command=RequestApprovalCommandV1(
+            site_id=site_ids["site"], actor_id=site_ids["actor"], schedule_run_id=ids["schedule_run"],
+            expected_resource_version=2,
+            expected_baseline_schedule_version=str(live.schedule_version_id) if live else None,
+            request_effect_key=f"command:{uuid4()}", request_id=uuid4(), conversation_id=ids["conversation"],
+        ), **_use_case_dependencies()).binding
+    class _LostWriter:
+        def promote(self, *_a, **_k): return None
+    app.dependency_overrides[get_site_baseline_writer] = lambda: _LostWriter()
+    app.dependency_overrides[get_clock] = lambda: NOW
+    response = client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_governance_headers(settings, key="lost-cas"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    assert response.status_code == 409 and response.json()["code"] == "stale_baseline_version"
+    with engine.connect() as c:
+        stored = c.execute(select(approval_request.c.state, approval_request.c.consumed_at).where(approval_request.c.id == binding.approval_id)).one()
+        count = c.execute(select(func.count()).select_from(audit_event).where(
+            audit_event.c.approval_id == binding.approval_id,
+            audit_event.c.outcome == "approval_consumed",
+        )).scalar_one()
+    assert stored.state == "pending" and stored.consumed_at is None and count == 0
+
+
+def test_lost_consume_cas_escapes_route_without_partial_commit(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    client, settings = decision_http_client
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2)
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        binding = request_approval(c, command=RequestApprovalCommandV1(
+            site_id=site_ids["site"], actor_id=site_ids["actor"], schedule_run_id=ids["schedule_run"],
+            expected_resource_version=2,
+            expected_baseline_schedule_version=str(live.schedule_version_id) if live else None,
+            request_effect_key=f"command:{uuid4()}", request_id=uuid4(), conversation_id=ids["conversation"],
+        ), **_use_case_dependencies()).binding
+
+    real = PostgresApprovalRepository()
+
+    class _LostConsumeRepository:
+        def __getattr__(self, name):
+            return getattr(real, name)
+
+        def consume(self, *_a, **_k):
+            return None
+
+    app.dependency_overrides[get_approval_repository] = lambda: _LostConsumeRepository()
+    app.dependency_overrides[get_clock] = lambda: NOW
+    response = client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_governance_headers(settings, key="lost-consume"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    assert response.status_code == 409 and response.json()["code"] == "approval_not_pending"
+    with engine.connect() as c:
+        stored = c.execute(select(approval_request.c.state).where(approval_request.c.id == binding.approval_id)).scalar_one()
+        consumed_audits = c.execute(select(func.count()).select_from(audit_event).where(
+            audit_event.c.approval_id == binding.approval_id,
+            audit_event.c.outcome == "approval_consumed",
+        )).scalar_one()
+    assert stored == "pending" and consumed_audits == 0
+
+
+def test_uncancellable_agent_run_escapes_route_and_rolls_back_terminalization(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    client, settings = decision_http_client
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2)
+    agent_run_id = _seed_agent_run(engine, site_id=site_ids["site"], conversation_id=ids["conversation"], actor_id=site_ids["actor"])
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        binding = request_approval(c, command=RequestApprovalCommandV1(
+            site_id=site_ids["site"], actor_id=site_ids["actor"], schedule_run_id=ids["schedule_run"],
+            expected_resource_version=2,
+            expected_baseline_schedule_version=str(live.schedule_version_id) if live else None,
+            request_effect_key=f"tool:{agent_run_id}:call-rollback", request_id=uuid4(), conversation_id=ids["conversation"],
+            agent_run_id=agent_run_id, pending_payload={"pending_calls": [{"tool_call_id": "call-rollback"}], "turn": {}},
+        ), **_use_case_dependencies()).binding
+    with engine.begin() as c:
+        c.execute(update(agent_run).where(agent_run.c.id == agent_run_id).values(status="agent_running"))
+    app.dependency_overrides[get_clock] = lambda: NOW
+    response = client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_governance_headers(settings, key="uncancellable"),
+        json={"decision": "reject", "expected_resource_version": 1},
+    )
+    assert response.status_code == 409 and response.json()["code"] == "agent_run_not_cancellable"
+    with engine.connect() as c:
+        stored = c.execute(select(approval_request.c.state).where(approval_request.c.id == binding.approval_id)).scalar_one()
+        count = c.execute(select(func.count()).select_from(audit_event).where(
+            audit_event.c.approval_id == binding.approval_id,
+            audit_event.c.outcome == "approval_rejected",
+        )).scalar_one()
+    assert stored == "pending" and count == 0

@@ -6,6 +6,7 @@ be exercised without a real (slow) solve.
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Callable, ContextManager, Iterator
@@ -21,7 +22,8 @@ from adapters.postgres.proposal import PostgresProposalRepository
 from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditWriter
-from adapters.postgres.site_baseline import PostgresSiteBaselineReader
+from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
+from adapters.postgres.membership import PostgresMembershipReader
 from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
 from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
@@ -32,7 +34,8 @@ from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.approval import ApprovalRepository, AuditWriter
-from application.ports.site_baseline import SiteBaselineReader
+from application.ports.site_baseline import SiteBaselineReader, SiteBaselineWriter
+from application.ports.membership import MembershipReader
 from application.capabilities.registry import (
     CapabilityGrantContextV1,
     compose_granted_capabilities,
@@ -163,6 +166,14 @@ def get_site_baseline_reader() -> SiteBaselineReader:
     return PostgresSiteBaselineReader()
 
 
+def get_site_baseline_writer() -> SiteBaselineWriter:
+    return PostgresSiteBaselineWriter()
+
+
+def get_membership_reader() -> MembershipReader:
+    return PostgresMembershipReader()
+
+
 @lru_cache(maxsize=8)
 def _oidc_provider(
     name: str,
@@ -253,14 +264,34 @@ def site_context(engine: Engine, site_id: UUID | str) -> Iterator[Connection]:
                 pass
 
 
+@dataclass
+class PostCommitActions:
+    """Request-owned work that runs synchronously after the command commits."""
+
+    actions: list[Callable[[], None]] = field(default_factory=list)
+
+    def add(self, action: Callable[[], None]) -> None:
+        self.actions.append(action)
+
+    def run(self) -> None:
+        for action in self.actions:
+            action()
+
+
+def get_post_commit_actions() -> PostCommitActions:
+    return PostCommitActions()
+
+
 def get_site_context(
     session: ResolvedSession = Depends(get_session),
     settings: Settings = Depends(get_settings),
+    post_commit: PostCommitActions = Depends(get_post_commit_actions),
 ) -> Iterator[Connection]:
     """Yield the sole supported site-scoped PostgreSQL transaction."""
     engine = _site_context_engine(settings.database_url)
     with site_context(engine, session.site_id) as connection:
         yield connection
+    post_commit.run()
 
 
 #: Opens one site-scoped transaction on demand. See `get_site_context_opener`.

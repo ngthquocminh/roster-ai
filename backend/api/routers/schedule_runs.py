@@ -51,7 +51,7 @@ from application.capabilities.scheduling_optimize import (
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.schedule_version import RUN_EVENT_TYPES
 from application.ports.scenario_projection import ScenarioProjectionReader
-from application.scheduling.comparison import ComparisonIntegrityError, calculate_comparison
+from application.scheduling.comparison import BaselineSupplyUnavailableError, ComparisonIntegrityError, calculate_comparison
 from application.ports.schedule_run import (
     ScheduleRunRepository,
     ScheduleRunSummaryV1,
@@ -592,6 +592,27 @@ def get_schedule_run_result(
             site_id=session.site_id,
             expected_baseline_schedule_version=snapshot.baseline_schedule_version,
         )
+    except BaselineSupplyUnavailableError as exc:
+        # EAD-8 refuses the COMPARISON, not the result. Returning a problem here
+        # would 409 the whole resource, and every block on the Results page is
+        # gated on the result query succeeding -- so the schedule, the evidence,
+        # and the pending approval's own controls would all disappear with it.
+        # Worse, the refusal is permanent: the baseline assignment supply is not
+        # wired (Decision 9), so from the first promotion onward every completed
+        # run snapshotted afterwards freezes a non-null baseline and would 409
+        # forever, making the site's first successful promotion its last.
+        # The guard itself is unchanged; only the failure BOUNDARY moved.
+        return ScheduleRunResultOut(
+            run=run_out,
+            candidate=ScheduleVersionOut.model_validate(candidate, from_attributes=True),
+            comparison=None,
+            comparison_unavailable_reason=(
+                "Assignments for baseline schedule version "
+                f"{exc.baseline_schedule_version} are not authoritatively readable, "
+                "so this candidate cannot be compared against it."
+            ),
+            current_baseline_schedule_version=exc.current_baseline_schedule_version,
+        )
     except ComparisonIntegrityError:
         # Only the recomputation's own declared failure gets this specific,
         # user-facing code. Anything else (a driver error, an unrelated bug)
@@ -608,6 +629,9 @@ def get_schedule_run_result(
         run=run_out,
         candidate=ScheduleVersionOut.model_validate(candidate, from_attributes=True),
         comparison=ComparisonOut.model_validate(comparison, from_attributes=True),
+        # Mirrored from the comparison so clients have ONE source for the value
+        # regardless of whether the comparison itself survived.
+        current_baseline_schedule_version=comparison.current_baseline_schedule_version,
     )
 
 

@@ -76,7 +76,7 @@ describe("ApprovalDecisionPanel", () => {
   it.each(["rejected", "expired", "stale", "consumed"])("renders terminal %s without controls", (state) => {
     mocks.query = { isPending: false, isError: false, isSuccess: true, data: { ...approval, state } };
     render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
-    expect(screen.getByText(`Terminal approval state: ${state}`)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(`Terminal approval state: ${state}`))).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve as baseline" })).not.toBeInTheDocument();
   });
 
@@ -90,7 +90,7 @@ describe("ApprovalDecisionPanel", () => {
   it("never renders an empty expected/current object as literal noise", () => {
     // `{}` is truthy in JavaScript, so the previous guard rendered `Expected: {}`
     // on every refusal that carries no version context.
-    mocks.mutation = { isPending: false, isError: true, isSuccess: false, mutate: vi.fn(), error: { code: "promotion_not_available", status: 503, expected: {}, current: {} } };
+    mocks.mutation = { isPending: false, isError: true, isSuccess: false, mutate: vi.fn(), error: { code: "approval_not_pending", status: 409, expected: {}, current: {} } };
     render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
     expect(screen.queryByText(/Expected:/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Current:/)).not.toBeInTheDocument();
@@ -99,13 +99,11 @@ describe("ApprovalDecisionPanel", () => {
   it.each([
     ["approval_expired", 409, /had already expired/, /baseline did not change/],
     ["approval_stale", 409, /closed as stale/, /baseline did not change/],
-    ["promotion_not_available", 503, /not available yet/, /still pending/],
     ["approval_not_pending", 409, /changed elsewhere/, /Refresh/],
   ])("tells the planner what actually happened for %s", (code, status, headline, detail) => {
-    // Two of this endpoint's DESIGNED outcomes arrive as HTTP failures: the
-    // dismissal succeeding (409 approval_expired) and every valid approve until
-    // Story 4.3 (503). One undifferentiated "The approval changed" branch
-    // reported both as the opposite of what the server did.
+    // Terminalizing stale/expired outcomes arrive as HTTP failures even though
+    // the governance state changed. One undifferentiated branch reported the
+    // opposite of what the server did.
     mocks.mutation = { isPending: false, isError: true, isSuccess: false, mutate: vi.fn(), error: { code, status, expected: {}, current: {} } };
     render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
     const live = screen.getByRole("status", { name: "Approval decision status" });
@@ -119,6 +117,51 @@ describe("ApprovalDecisionPanel", () => {
     const live = screen.getByRole("status", { name: "Approval decision status" });
     expect(live).toHaveAttribute("aria-live", "polite");
     expect(live).toHaveTextContent(/Approval rejected/);
+  });
+
+  it("names the promoted candidate and the baseline it replaced", () => {
+    mocks.mutation = { isPending: false, isError: false, isSuccess: true, error: null, data: { ...approval, state: "consumed", baseline_schedule_version: "baseline-v12" }, mutate: vi.fn() };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.getByRole("status", { name: "Approval decision status" }))
+      .toHaveTextContent(`${approval.candidate_schedule_version_id} is now the operational baseline, replacing baseline-v12`);
+  });
+
+  it("describes the moved pointer in the consumed terminal state", () => {
+    mocks.query = { isPending: false, isError: false, isSuccess: true, data: { ...approval, state: "consumed", baseline_schedule_version: "baseline-v12" } };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.getByText(/promoted .* replacing baseline-v12/)).toBeInTheDocument();
+  });
+
+  it("says an agent-backed consumed approval RESUMED its run, never that it was cancelled", () => {
+    // TX2 sets the run to `agent_running` on the approve edge (AD-7's "decision
+    // recorded"); only the non-promoting terminal outcomes cancel it. Every
+    // other fixture in this file pins `agent_run_id: null`, so the clause that
+    // claimed a cancellation here was never exercised.
+    mocks.query = { isPending: false, isError: false, isSuccess: true, data: { ...approval, state: "consumed", agent_run_id: "run-1", baseline_schedule_version: "baseline-v12" } };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.queryByText(/agent run was cancelled/)).not.toBeInTheDocument();
+    expect(screen.getByText(/agent run was resumed/)).toBeInTheDocument();
+  });
+
+  it("still reports a cancelled run for the non-promoting terminal outcomes", () => {
+    mocks.query = { isPending: false, isError: false, isSuccess: true, data: { ...approval, state: "rejected", agent_run_id: "run-1" } };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.getByText(/agent run was cancelled/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ["stale_baseline_version", /operational baseline changed/],
+    ["approval_payload_unreadable", /saved agent context could not be read/],
+  ])("gives %s its own recovery copy instead of the generic retry advice", (code, expected) => {
+    // Both are new 409/500 codes this story introduces. Falling to the default
+    // arm told the planner to "try again", which cannot succeed -- the baseline
+    // moved, so the pinned version will fail revalidation every time -- and
+    // dropped the literal expected/current context the backend attaches.
+    mocks.query = { isPending: false, isError: false, isSuccess: true, data: approval };
+    mocks.mutation = { isPending: false, isError: true, isSuccess: false, error: { status: 409, code }, mutate: vi.fn() };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.getByText(expected)).toBeInTheDocument();
+    expect(screen.queryByText(/The decision could not be submitted/)).not.toBeInTheDocument();
   });
 
   it("disables the expiry dismissal while its decision is in flight", () => {

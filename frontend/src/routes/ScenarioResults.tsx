@@ -22,6 +22,11 @@ export function ScenarioResults() {
   const requestApproval = useRequestApproval();
   const approvals = useRunApprovals(runId);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // An unavailable baseline comparison is no longer an ERROR: the server returns
+  // 200 with `comparison: null` and a literal reason, so the schedule, evidence,
+  // and any pending approval stay readable. Only genuine transport/server
+  // failures reach `query.isError`.
+  const comparisonUnavailable = query.data?.comparison_unavailable_reason ?? null;
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -36,6 +41,14 @@ export function ScenarioResults() {
 
       {query.isPending ? <div aria-label="Loading results" className="space-y-3"><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div> : null}
       {query.isError ? <InlineAlert action={<Button onClick={() => { void query.refetch(); }} type="button" variant="outline">Retry</Button>} description={USER_ERROR_COPY.connection.description} title={USER_ERROR_COPY.connection.title} variant="destructive" /> : null}
+
+      {comparisonUnavailable ? (
+        <InlineAlert
+          description={comparisonUnavailable}
+          title="Baseline comparison unavailable"
+          variant="destructive"
+        />
+      ) : null}
 
       {!query.isError && query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
       {!query.isError && query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}
@@ -71,7 +84,33 @@ export function ScenarioResults() {
           </section>
         </>
       ) : null}
-      {!query.isError && query.data?.run.status === "solver_completed" && (!query.data.candidate || !query.data.comparison) ? <InlineAlert description="The completed run did not return verifiable candidate evidence." title="Result unavailable" variant="destructive" /> : null}
+      {/* The candidate schedule is independent of the comparison, so it renders
+          whenever a refused comparison is the ONLY thing missing. Without this
+          branch a promoted site showed nothing at all for every later run. */}
+      {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && comparisonUnavailable ? (
+        <section aria-labelledby="candidate-only-heading" className="rounded-xl border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="font-semibold" id="candidate-only-heading">Candidate schedule</h3>
+            <Button
+              className="min-h-11"
+              disabled={requestApproval.isPending || !approvals.isSuccess || approvals.data.items.some((item) => item.state === "pending")}
+              onClick={() => requestApproval.mutate({
+                schedule_run_id: runId,
+                expected_resource_version: query.data.run.resource_version,
+                // Sourced from the RESULT, not the comparison: the comparison is
+                // exactly what is missing here, and the approval request is
+                // parameterised on this value.
+                expected_baseline_schedule_version: query.data.current_baseline_schedule_version ?? null,
+              })}
+              type="button"
+            >
+              Request approval
+            </Button>
+          </div>
+          {query.data.candidate.assignments.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{query.data.candidate.assignments.map((assignment) => <li key={assignment.record_id}>{assignment.worker_id} · {assignment.task_id} · minutes {assignment.start_minute}–{assignment.end_minute}</li>)}</ul> : <p className="mt-2 text-sm">No assignments</p>}
+        </section>
+      ) : null}
+      {!query.isError && query.data?.run.status === "solver_completed" && !comparisonUnavailable && (!query.data.candidate || !query.data.comparison) ? <InlineAlert description="The completed run did not return verifiable candidate evidence." title="Result unavailable" variant="destructive" /> : null}
       {!query.isError && query.data && !KNOWN_RUN_STATUSES.has(query.data.run.status) ? <InlineAlert description="This run reported a status this page does not recognize yet." title="Unrecognized run status" variant="destructive" /> : null}
     </section>
   );

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -19,4 +20,17 @@ class SiteBaselineReader(Protocol):
     def get(self, connection: Connection, site_id: UUID) -> SiteBaselineV1 | None: ...
 
 
-__all__ = ["SiteBaselineReader", "SiteBaselineV1"]
+class SiteBaselineWriter(Protocol):
+    def promote(
+        self,
+        connection: Connection,
+        *,
+        site_id: UUID,
+        schedule_version_id: UUID,
+        actor_id: UUID,
+        occurred_at: datetime,
+        expected_resource_version: int | None,
+    ) -> SiteBaselineV1 | None: ...
+
+
+__all__ = ["SiteBaselineReader", "SiteBaselineV1", "SiteBaselineWriter"]

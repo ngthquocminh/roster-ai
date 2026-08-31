@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -23,9 +24,11 @@ from api.deps import (
     get_clock,
     get_conversation_repository,
     get_identity_store,
+    get_membership_reader,
     get_schedule_run_repository,
     get_settings,
     get_site_baseline_reader,
+    get_site_baseline_writer,
     get_site_context,
 )
 from api.main import app
@@ -45,10 +48,10 @@ from application.use_cases.decide_approval import (
     ApprovalNotFoundError as DecisionApprovalNotFoundError,
     ApprovalNotGrantedError as DecisionApprovalNotGrantedError,
     ApprovalNotPendingError,
-    BaselinePromotionNotAvailableError,
     DecisionResultV1,
     StaleResourceVersionError as DecisionStaleResourceVersionError,
 )
+from application.use_cases.promote_baseline import BaselineConcurrentlyMovedError
 from settings import default_settings
 import api.routers.approvals as approvals_router
 
@@ -163,6 +166,8 @@ def client(monkeypatch, tmp_path):
     app.dependency_overrides[get_audit_writer] = lambda: FakeAudit()
     app.dependency_overrides[get_conversation_repository] = lambda: FakeConversations()
     app.dependency_overrides[get_site_baseline_reader] = lambda: FakeBaselines()
+    app.dependency_overrides[get_site_baseline_writer] = lambda: object()
+    app.dependency_overrides[get_membership_reader] = lambda: object()
     app.dependency_overrides[get_clock] = lambda: NOW
     try:
         with TestClient(app) as test_client:
@@ -210,6 +215,67 @@ def test_decision_stale_response_returns_409_after_the_terminal_write(client, mo
     assert approvals._binding.state == "stale"
 
 
+def test_valid_approve_returns_the_consumed_binding(client, monkeypatch):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    approvals = FakeApprovals(binding)
+    app.dependency_overrides[get_approval_repository] = lambda: approvals
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+
+    def consumed(*_a, **_kwargs):
+        updated = replace(
+            binding, state="consumed", decided_by_actor_id=session.app_user_id,
+            decided_at=NOW, consumed_at=NOW, resource_version=2,
+        )
+        approvals._binding = updated
+        return DecisionResultV1("consumed", updated, None, {}, {})
+
+    monkeypatch.setattr(approvals_router, "decide_approval", consumed)
+    response = test_client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_headers(settings, key="decide-consumed"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    assert response.status_code == 200 and response.json()["state"] == "consumed"
+
+
+def test_rollback_conflict_maps_stale_baseline_with_literal_context(client, monkeypatch):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    error = BaselineConcurrentlyMovedError(
+        "lost baseline CAS",
+        expected={"baseline_schedule_version": "baseline-v12"},
+        current={"baseline_schedule_version": "baseline-v13"},
+    )
+    monkeypatch.setattr(
+        approvals_router, "decide_approval",
+        lambda *_a, **_k: (_ for _ in ()).throw(error),
+    )
+    response = test_client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_headers(settings, key="lost-baseline"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "stale_baseline_version"
+    assert response.json()["expected"] == {"baseline_schedule_version": "baseline-v12"}
+    assert response.json()["current"] == {"baseline_schedule_version": "baseline-v13"}
+
+
+def test_approval_openapi_has_no_temporary_promotion_503_contract(client):
+    test_client, _settings, _session = client
+    document = test_client.get("/openapi.json").json()
+    approval_paths = {
+        path: operations for path, operations in document["paths"].items()
+        if path.startswith("/api/v1/approvals")
+    }
+    rendered = str(approval_paths)
+    assert "promotion_not_available" not in rendered
+    assert all("503" not in operation.get("responses", {}) for operations in approval_paths.values() for operation in operations.values())
+
+
 def test_decision_replay_returns_its_original_terminal_binding(client, monkeypatch):
     test_client, settings, session = client
     binding = _binding(site_id=session.site_id)
@@ -235,7 +301,6 @@ def test_decision_replay_returns_its_original_terminal_binding(client, monkeypat
         (ApprovalNotPendingError("x", expected={"state": "pending"}, current={"state": "rejected"}), 409, "approval_not_pending", True),
         (DecisionStaleResourceVersionError("x", expected={"resource_version": 1}, current={"resource_version": 2}), 409, "stale_resource_version", True),
         (DecisionApprovalNotGrantedError("x"), 403, "approval_not_granted", False),
-        (BaselinePromotionNotAvailableError("x"), 503, "promotion_not_available", False),
     ],
 )
 def test_decision_maps_every_command_refusal_with_literal_context(client, monkeypatch, error, status, code, has_context):
@@ -306,23 +371,6 @@ def test_decision_refuses_a_command_outside_the_closed_body_shape(client, body):
     app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
     response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="bad-body"), json=body)
     assert response.status_code == 422
-
-
-def test_decision_details_are_specific_per_code(client, monkeypatch):
-    """Decision 3 fixes 503's literal detail and warns against confusing it with
-    the 409 "your binding is no longer valid" family. One shared sentence made
-    `promotion_not_available` -- where the approval IS valid -- say the opposite."""
-    test_client, settings, session = client
-    binding = _binding(site_id=session.site_id)
-    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
-    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
-    monkeypatch.setattr(approvals_router, "decide_approval", lambda *_a, **_k: (_ for _ in ()).throw(BaselinePromotionNotAvailableError("x")))
-    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="detail-503"), json={"decision": "approve", "expected_resource_version": 1})
-    assert response.status_code == 503
-    assert response.json()["detail"] == "Baseline promotion is not available yet."
-    # Nothing was written, so there is no expected/current to publish -- and an
-    # always-present `{}` renders as literal noise in the client.
-    assert "expected" not in response.json()
 
 
 def test_an_uncancellable_agent_run_is_a_typed_conflict_not_a_500(client, monkeypatch):
@@ -516,3 +564,172 @@ def test_list_filters_by_schedule_run_id(client) -> None:
 
     assert [item["approval_id"] for item in matching.json()["items"]] == [str(binding.approval_id)]
     assert other.json()["items"] == []
+
+
+# --------------------------------------------------------------------------
+# `_drive_resumed_turn`: the post-commit resume drive (Decision 8).
+#
+# This ran with ZERO coverage: every route-level approve test produces
+# `resume is None` (planner path), and the end-to-end promotion test calls
+# `decide_approval` directly, bypassing the router and the dependency teardown.
+# It is also the one place in the app that executes AFTER the response has been
+# sent, where a raised exception cannot become a response and instead tears down
+# the connection mid-body while abandoning the run.
+# --------------------------------------------------------------------------
+
+
+class _Row:
+    def __init__(self, scenario_id, membership_id):
+        self.scenario_id = scenario_id
+        self.membership_id = membership_id
+
+
+class _Connection:
+    def __init__(self, row=None, error=None):
+        self._row = row
+        self._error = error
+
+    def execute(self, *_args, **_kwargs):
+        if self._error is not None:
+            raise self._error
+        return self
+
+    def one(self):
+        return self._row
+
+
+class _SiteContext:
+    """Stands in for `get_site_context_opener`'s context manager."""
+
+    def __init__(self, connection):
+        self._connection = connection
+
+    def __call__(self, _site_id):
+        return self
+
+    def __enter__(self):
+        return self._connection
+
+    def __exit__(self, *_exc):
+        return False
+
+
+def _resume_fixtures(*, row=None, query_error=None):
+    from application.use_cases.promote_baseline import ResumeRequestV1
+
+    binding = _binding(state="consumed")
+    binding = replace(binding, agent_run_id=uuid4(), conversation_id=uuid4())
+    resume = ResumeRequestV1(
+        agent_run_id=binding.agent_run_id, tool_call_id="call-1", history=None
+    )
+    connection = _Connection(
+        row=row if row is not None else _Row(uuid4(), uuid4()), error=query_error
+    )
+    return binding, resume, _SiteContext(connection)
+
+
+def _drive(monkeypatch, *, binding, resume, opener, outcome=None, turn_error=None,
+           finalize_error=None, settings=None):
+    """Call the real `_drive_resumed_turn` with the collaborators faked out."""
+    from api.routers import approvals as module
+
+    recorded: dict = {}
+
+    def _execute_turn(*_args, **kwargs):
+        recorded["approvals"] = kwargs.get("approvals")
+        if turn_error is not None:
+            raise turn_error
+        return outcome
+
+    def _finalize(*_args, **kwargs):
+        recorded["status"] = kwargs.get("status")
+        if finalize_error is not None:
+            raise finalize_error
+
+    monkeypatch.setattr(module, "execute_turn", _execute_turn)
+    monkeypatch.setattr(module, "finalize_agent_run", _finalize)
+    # `terminal_status` is deliberately NOT mocked: its `"suspended" ->
+    # "approval_required"` mapping IS the hazard under test, and stubbing it
+    # would make the assertion below pass no matter what the code does.
+    monkeypatch.setattr(module, "activity_payload", lambda *_a, **_k: {})
+    monkeypatch.setattr(module, "failed_outcome_for_exception",
+                        lambda _exc: SimpleNamespace(status="failed"))
+
+    module._drive_resumed_turn(
+        resume=resume, binding=binding,
+        settings=settings if settings is not None else _settings_stub(),
+        runtime_factory=lambda **_k: object(),
+        compose_capabilities=lambda _ctx: (),
+        projection_reader=object(), conversations=object(), proposals=object(),
+        open_site_context=opener,
+    )
+    return recorded
+
+
+def _settings_stub():
+    from settings import default_settings
+
+    return replace(default_settings(), scheduling_baseline_enabled=True)
+
+
+def test_the_resumed_turn_forwards_the_server_owned_approval_for_the_exact_call(monkeypatch) -> None:
+    binding, resume, opener = _resume_fixtures()
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      outcome=SimpleNamespace(status="timed_out"))
+
+    decision, = recorded["approvals"]
+    assert decision.tool_call_id == "call-1"
+    # The decision is SERVER-owned and derived from the persisted binding, never
+    # from a client boolean (AC1).
+    assert decision.approved is True
+    assert recorded["status"] == "agent_timed_out"
+
+
+def test_a_resumed_turn_that_defers_again_is_refused_instead_of_parked(monkeypatch) -> None:
+    """Decision 8 covers ONE resumed turn; a second deferral must not strand it.
+
+    Mutation that must turn this red: delete the `ResumedTurnSuspendedError`
+    raise. `terminal_status` then maps `suspended` to `approval_required` -- a
+    status meaning "a binding is pending" -- while the resume path creates no
+    binding, so `get_pending_for_agent_run` reports none and `claim_queued_run`
+    never reclaims it. The run waits forever for an approval that cannot exist.
+    """
+    binding, resume, opener = _resume_fixtures()
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      outcome=SimpleNamespace(status="suspended"))
+
+    assert recorded["status"] == "agent_failed"
+    assert recorded["status"] != "approval_required"
+
+
+def test_a_failing_resumed_turn_still_finalizes_the_run(monkeypatch) -> None:
+    binding, resume, opener = _resume_fixtures()
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      turn_error=RuntimeError("provider down"))
+
+    assert recorded["status"] == "agent_failed"
+
+
+def test_setup_failure_after_commit_is_contained_and_never_escapes(monkeypatch) -> None:
+    """The promotion is already durable; this runs after the response was sent.
+
+    An escape here cannot be rendered (Starlette: "response already started") and
+    would tear down the connection mid-body. Containment is the contract.
+    """
+    from sqlalchemy.exc import NoResultFound
+
+    binding, resume, opener = _resume_fixtures(query_error=NoResultFound("membership revoked"))
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      outcome=SimpleNamespace(status="timed_out"))
+
+    # Nothing was finalized because the claim could not be built -- but nothing
+    # raised either. The run is left for Epic 3's recovery sweep.
+    assert "status" not in recorded
+
+
+def test_a_failing_finalize_after_commit_is_contained_and_never_escapes(monkeypatch) -> None:
+    binding, resume, opener = _resume_fixtures()
+
+    _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+           outcome=SimpleNamespace(status="timed_out"),
+           finalize_error=AgentRunNotQueuedError("run left agent_running"))

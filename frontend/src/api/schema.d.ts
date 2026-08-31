@@ -2423,11 +2423,25 @@ export interface components {
             /** Matching Count */
             matching_count: number;
         };
-        /** ScheduleRunResultOut */
+        /**
+         * ScheduleRunResultOut
+         * @description A completed run's result. The comparison is a PART, not the whole.
+         *
+         *     EAD-8 makes the baseline comparison refusable (an unreadable baseline
+         *     assignment supply must never render as "the baseline is empty"), but that
+         *     refusal is scoped to the comparison alone: the run, the candidate schedule,
+         *     and any pending approval on it remain readable and actionable. Expressing a
+         *     sub-computation's refusal as a whole-resource failure would take the
+         *     schedule, the evidence, and the approval controls down with it.
+         */
         ScheduleRunResultOut: {
             run: components["schemas"]["ScheduleRunOut"];
             candidate: components["schemas"]["ScheduleVersionOut"] | null;
             comparison: components["schemas"]["ComparisonOut"] | null;
+            /** Comparison Unavailable Reason */
+            comparison_unavailable_reason?: string | null;
+            /** Current Baseline Schedule Version */
+            current_baseline_schedule_version?: string | null;
         };
         /** ScheduleRunStartIn */
         ScheduleRunStartIn: {
@@ -5438,8 +5452,8 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
-            /** @description Service Unavailable */
-            503: {
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

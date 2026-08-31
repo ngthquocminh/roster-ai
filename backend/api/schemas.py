@@ -445,9 +445,27 @@ class ComparisonOut(BaseModel):
 
 
 class ScheduleRunResultOut(BaseModel):
+    """A completed run's result. The comparison is a PART, not the whole.
+
+    EAD-8 makes the baseline comparison refusable (an unreadable baseline
+    assignment supply must never render as "the baseline is empty"), but that
+    refusal is scoped to the comparison alone: the run, the candidate schedule,
+    and any pending approval on it remain readable and actionable. Expressing a
+    sub-computation's refusal as a whole-resource failure would take the
+    schedule, the evidence, and the approval controls down with it.
+    """
+
     run: ScheduleRunOut
     candidate: ScheduleVersionOut | None
     comparison: ComparisonOut | None
+    #: Literal, planner-facing reason the comparison is absent for a run that is
+    #: otherwise complete. `None` whenever `comparison` is present, or whenever
+    #: the run simply has not produced one yet.
+    comparison_unavailable_reason: str | None = None
+    #: The LIVE site baseline pointer. Normally read off the comparison; carried
+    #: here so a refused comparison still leaves a well-formed approval request
+    #: possible (it is the binding's `expected_baseline_schedule_version`).
+    current_baseline_schedule_version: str | None = None
 
 
 class ScheduleRunSummaryOut(BaseModel):

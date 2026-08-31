@@ -132,6 +132,34 @@ class PostgresConversationRepository:
             raise AgentRunNotQueuedError("agent run is no longer awaiting approval")
         connection.execute(update(agent_run).where(agent_run.c.id == agent_run_id).values(status="agent_cancelled", status_reason=reason))
 
+    def resume_agent_run_for_approval(self, connection: Connection, *, agent_run_id: UUID, binding: ApprovalBindingV1, request_id: UUID, occurred_at: datetime) -> ExecutedAgentRunV1:
+        # LOCK ORDER: conversation, THEN agent_run, matching every other
+        # approval transition and avoiding the ABBA shape fixed in Story 4.1.
+        conv = connection.execute(
+            select(conversation.c.id).where(conversation.c.id == binding.conversation_id).with_for_update()
+        ).one_or_none()
+        if conv is None:
+            raise RuntimeError("approval conversation is no longer visible")
+        current = connection.execute(
+            select(agent_run.c.status).where(agent_run.c.id == agent_run_id).with_for_update()
+        ).one_or_none()
+        if current is None or current.status != "approval_required":
+            raise AgentRunNotQueuedError("agent run is no longer awaiting approval")
+        connection.execute(
+            update(agent_run).where(agent_run.c.id == agent_run_id).values(
+                status="agent_running", status_reason=None
+            )
+        )
+        return self._append_approval_activity(
+            connection,
+            binding=binding,
+            actor_id=binding.decided_by_actor_id,
+            request_id=request_id,
+            agent_run_id=agent_run_id,
+            occurred_at=occurred_at,
+            agent_run_status="agent_running",
+        )
+
     def latest_terminal_outcome_for_site(
         self,
         connection: Connection,

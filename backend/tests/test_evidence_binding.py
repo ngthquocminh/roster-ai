@@ -321,7 +321,7 @@ def test_code_binding_is_derived_live_not_copied():
 
 def test_schema_version_walks_the_migration_graph_to_the_single_head():
     head = resolve_alembic_head(REPO_ROOT / "backend" / "migrations" / "versions")
-    assert head == "d4e5f6a7b8c9"
+    assert head == "e5f6a7b8c9d0"
 
 
 def test_alembic_head_resolution_needs_no_database(tmp_path, monkeypatch):
