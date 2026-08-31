@@ -988,6 +988,102 @@ stub.
 
 ---
 
+## What Story 4.4 inherits from this story
+
+**Read this before writing 4.4's decisions.** Story 4.4 projects decision
+provenance from what TX2 wrote. Eight concrete inheritances, each verified against
+the merged code at `2a6f472` — five of them are post-review corrections that did
+not exist when this story was created, so the story's own body above (written at
+`946b5ec`) is NOT a reliable guide to them.
+
+1. **The before/after pair is real now — and `before_version` is legitimately
+   `None` on a first promotion.** The `approval_consumed` row sets
+   `before_version = binding.baseline_schedule_version` and `after_version =
+   str(binding.candidate_schedule_version_id)` (`promote_baseline.py`). This is the
+   repository's first non-`None` `after_version`; every earlier audit row sets it
+   `None`. EAD-2's *expects absence* means a null `before_version` is the valid
+   "there was no baseline" state, **not** missing data — do not render it as a gap
+   or backfill it.
+
+2. **`effect_key` is NO LONGER a unique handle on a promotion — filter by outcome
+   and `success`.** Up to three rows now share one `(site_id, effect_key)`: TX1's
+   `approval_requested`, TX2's `approval_consumed`, and *any number* of
+   `approval_denied` rows, because the denial arm writes
+   `effect_key=denied.request_effect_key` — the binding's own key
+   (`api/routers/approvals.py`). Only `uq_audit_event_success_effect` on
+   `(site_id, effect_key, outcome)` is unique, and only for `success=True` rows;
+   denials are unique on `(site_id, attempt_id)` instead. **A provenance query
+   joining on `effect_key` alone will silently pick up refused attempts and
+   present them as decisions.** This is the single most likely 4.4 defect.
+
+3. **`ck_audit_event_outcome` admits SIX outcomes, not five.** `approval_denied`
+   was added by migration `e5f6a7b8c9d0` **and** to
+   `adapters/postgres/schema.py`'s declarative CHECK. Those two drifted apart in
+   this story and the review caught it; if 4.4 adds an outcome, change both in the
+   same commit — no test compares them, and `alembic check` does not diff CHECK
+   constraints.
+
+4. **A completed run can legitimately have `comparison: null`.** `GET
+   /schedule-runs/{run_id}/result` now returns `200` with `comparison=null`,
+   a literal `comparison_unavailable_reason`, and `current_baseline_schedule_version`
+   whenever the frozen baseline is non-null and its assignment supply is
+   unreadable — which, because the supply is a hardcoded `()`, is **every
+   completed run snapshotted after the first promotion**. Treating a null
+   comparison as an error or as "no result" re-creates the one-way door this
+   story's review removed. Read the baseline version from the **result**, not from
+   the comparison.
+
+5. **Three `ApprovalNotPendingError` sites exist, and they are discriminated by
+   TYPE, never by wire code.** All three publish `approval_not_pending`: the
+   admission check (pre-write — audited, returned), `ConcurrentDecisionError`
+   (TX3's CAS closer; wrote nothing — audited, returned), and
+   `PostWriteApprovalNotPendingError` (TX2's consume CAS — **escapes** so the
+   bundle rolls back). The story body above says "two sites"; that is an
+   undercount, corrected at review. If 4.4 touches the router's `except
+   DecideApprovalError` arm, `exc.code` is not sufficient to tell them apart.
+
+6. **Rollback-required codes are rendered in `api/main.py`, not in the router.**
+   `PostWriteApprovalNotPendingError`, `BaselineConcurrentlyMovedError`,
+   `ApprovalPayloadUnreadableError` (500) and `AgentRunNotQueuedError` are
+   deliberately absent from `_DECISION_DETAIL`, and all but
+   `stale_baseline_version` from `_ERROR_STATUS` — they must escape the endpoint
+   for `get_site_context` to roll back. **`stale_baseline_version` IS in
+   `_ERROR_STATUS`, for the other route**: the create path raises
+   `StaleBaselineVersionError` as an ordinary pre-write refusal. One wire code,
+   two routes, two mechanisms; removing that entry demotes the create route's 409
+   to a 422, which the existing parametrised test catches.
+
+7. **Nothing in the post-commit stage may raise.** `PostCommitActions`
+   (`api/deps.py`) runs after `site_context` commits — which FastAPI executes
+   *after* the response is sent, so an escape there cannot be rendered
+   ("response already started") and tears down the connection mid-body.
+   `_drive_resumed_turn` funnels every failure into a terminal run status or a
+   logged containment. If 4.4 adds post-commit work, it inherits that rule.
+
+8. **The 200 is on the wire before TX2 commits.** Pre-existing
+   (`get_site_context`'s shape, every command route), but this story is what put
+   the baseline pointer behind it, and 4.4 is what will project provenance from
+   that response. A commit failure after the response means the planner was told a
+   promotion happened that did not. Deferred with no owner —
+   `deferred-work.md`, carried into the Epic 4 retro. **Do not build a provenance
+   claim that assumes the client's 200 proves durability.**
+
+**Also gone, so do not look for them:** `promotion_not_available`,
+`BaselinePromotionNotAvailableError`, `SCOPE_CONTROLS["promotion"]`,
+`SCOPE_CONTROLS["membership"]`, the 503 row in `_DECISION_RESPONSES` (which now
+carries a **500** for `approval_payload_unreadable`), and `getErrorDetail` in
+`frontend/src/lib/errors.ts`.
+
+**Still open, and still unowned:** `AgentApprovalDecisionV1(approved=False)` has no
+producer; the baseline assignment supply is unwired; separation of duties is
+unowned (`initiated_by_actor_id` and `decided_by_actor_id` hold the same principal
+in practice); `agent_cancelled`'s semantics are undefined. Chained approvals are
+now explicitly **refused** on the resume path — a resumed turn that defers again
+finalises `agent_failed` rather than stranding the run, so 4.4 must not assume an
+agent can request a second approval mid-resume.
+
+---
+
 ## Dev Agent Record
 
 ### Agent Model Used
