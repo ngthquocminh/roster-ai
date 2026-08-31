@@ -57,6 +57,15 @@ function decisionFeedback(
       return { tone: "blocked", message: "This approval changed elsewhere. Refresh, rerun, or inspect the current result before deciding again.", expected, current };
     case "agent_run_not_cancellable":
       return { tone: "blocked", message: "The agent run awaiting this approval changed. Refresh before deciding again.", expected, current };
+    // The baseline moved under the decision, so the whole promotion rolled back
+    // and the binding is still pending. Retrying with the SAME pinned version is
+    // guaranteed to fail revalidation, so the copy must send the planner to a
+    // refresh, never to a retry — and it carries the literal versions the
+    // backend attaches, which the default arm would have dropped.
+    case "stale_baseline_version":
+      return { tone: "blocked", message: "The operational baseline changed while this decision was being applied, so nothing was promoted. Refresh to see the current baseline before deciding again.", expected, current };
+    case "approval_payload_unreadable":
+      return { tone: "blocked", message: "This approval's saved agent context could not be read, so nothing was promoted. Start a new request for this candidate.", expected, current };
     case "idempotency_key_conflict":
       return { tone: "blocked", message: "That decision was already submitted with different details. Refresh before deciding again." };
     default:
@@ -200,7 +209,12 @@ export function ApprovalDecisionPanel({ approvalId }: Readonly<{ approvalId: str
           {approval.state === "consumed"
             ? `; promoted ${approval.candidate_schedule_version_id}${approval.baseline_schedule_version ? ` replacing ${approval.baseline_schedule_version}` : " replacing no previous baseline"}.`
             : ""}
-          {approval.agent_run_id ? "; associated agent run was cancelled." : ""}
+          {/* A CONSUMED binding RESUMED its run (TX2 sets `agent_running`); only
+              the non-promoting terminal outcomes cancel it. Guarding this clause
+              on `agent_run_id` alone stated the opposite of what happened on the
+              one transition this story exists to introduce. */}
+          {approval.agent_run_id && approval.state !== "consumed" ? "; associated agent run was cancelled." : ""}
+          {approval.agent_run_id && approval.state === "consumed" ? " The associated agent run was resumed." : ""}
         </p>
       )}
       <ApprovalDecisionDialog

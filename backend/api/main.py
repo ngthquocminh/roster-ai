@@ -26,7 +26,7 @@ from api.deps import get_identity_store, get_settings
 from api.problems import problem_response
 from application.ports.conversation import AgentRunNotQueuedError
 from application.use_cases.decide_approval import PostWriteApprovalNotPendingError
-from application.use_cases.promote_baseline import BaselineConcurrentlyMovedError
+from application.use_cases.promote_baseline import ApprovalPayloadUnreadableError, BaselineConcurrentlyMovedError
 from api.routers import (
     agent_availability,
     approvals,
@@ -58,22 +58,47 @@ app = FastAPI(title="ShiftMind API", version="0.1.0", lifespan=lifespan)
 
 @app.exception_handler(PostWriteApprovalNotPendingError)
 @app.exception_handler(BaselineConcurrentlyMovedError)
+@app.exception_handler(ApprovalPayloadUnreadableError)
 @app.exception_handler(AgentRunNotQueuedError)
 async def rollback_required_decision_problem(request: Request, exc: Exception):
-    """Render only after the endpoint exception has unwound its transaction."""
+    """Render only after the endpoint exception has unwound its transaction.
+
+    These are the failures that must ESCAPE the decision endpoint rather than be
+    caught and returned: `get_site_context` rolls back only when an exception
+    leaves the endpoint function, so rendering here — after the dependency has
+    unwound — is what makes TX2 atomic. This module is also the SINGLE source of
+    status and copy for these codes; `routers/approvals.py` deliberately omits
+    them from its own maps so the wire contract cannot drift between the two.
+    """
+    if not request.url.path.startswith("/api/v1/"):
+        # `AgentRunNotQueuedError` is a conversation-layer exception with other
+        # producers. Without this guard, any future escape from an unversioned
+        # route would render approval-flavoured copy for an unrelated failure.
+        return await versioned_unhandled_problem(request, exc)
+    status = 409
     if isinstance(exc, PostWriteApprovalNotPendingError):
         code, detail = "approval_not_pending", "The approval already reached a terminal state."
         expected, current = exc.expected, exc.current
     elif isinstance(exc, BaselineConcurrentlyMovedError):
         code, detail = "stale_baseline_version", "The site baseline changed while the approval was being consumed."
         expected, current = exc.expected, exc.current
+    elif isinstance(exc, ApprovalPayloadUnreadableError):
+        # A data-integrity fault, not a conflict the planner can resolve by
+        # refreshing — so it is honestly a 500, with a stable code rather than
+        # the generic `internal_error` a bare RuntimeError would have produced.
+        status = 500
+        code = "approval_payload_unreadable"
+        detail = "The approval's stored agent payload could not be read; the promotion was rolled back."
+        expected, current = exc.expected, exc.current
     else:
+        # Reached on BOTH the reject edge (cancel) and the approve edge (resume),
+        # so the copy must not claim a cancellation was attempted.
         code = "agent_run_not_cancellable"
-        detail = "The agent run awaiting this approval is no longer in a cancellable state."
+        detail = "The agent run awaiting this approval is no longer in the expected state."
         expected = {"agent_run_status": "approval_required"}
         current = {"agent_run_status": "changed"}
     return problem_response(
-        status=409, code=code, title="Approval decision could not be completed",
+        status=status, code=code, title="Approval decision could not be completed",
         detail=detail, extra={"expected": expected, "current": current},
     )
 

@@ -30,6 +30,12 @@ from application.contracts.capability_manifest import IncompleteManifestError
 from application.capabilities.scheduling_draft import SchedulingDraftResultV1
 from application.contracts.proposal import ProposalV1
 
+#: Upper bound on messages handed to a provider as prior history. Applies to
+#: BOTH rehydrated activity history and an already-owned `AgentTurnV1` replayed
+#: on the approval resume path -- an unbounded persisted transcript is the one
+#: way this bound could otherwise be bypassed.
+HISTORY_MESSAGE_BOUND = 100
+
 
 def resolve_draft_citation(
     outcome: AgentRunOutcomeV1, trusted_by_id: dict[str, object]
@@ -70,7 +76,17 @@ def execute_turn(
     outcome = runtime.run_turn(
         AgentTurnRequestV1(
             prompt=prompt,
-            history=history if isinstance(history, AgentTurnV1) else rehydrate_history(history),
+            # An already-owned `AgentTurnV1` (the approval resume path supplies the
+            # persisted `pending_payload` turn) skips rehydration because it is
+            # already in owned form -- but it must NOT skip the bound.
+            # `rehydrate_history` caps at the last 100 activities, and a resumed
+            # turn replaying an unbounded persisted transcript would be the one
+            # path in the app that can hand a provider an arbitrarily long history.
+            history=(
+                replace(history, messages=history.messages[-HISTORY_MESSAGE_BOUND:])
+                if isinstance(history, AgentTurnV1)
+                else rehydrate_history(history)
+            ),
             approvals=approvals,
         )
     )
@@ -296,7 +312,7 @@ def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
     their provenance envelope belongs to Epic 4 (AD-12).
     """
     messages: list[AgentMessageV1] = []
-    for activity in activities[-100:]:
+    for activity in activities[-HISTORY_MESSAGE_BOUND:]:
         if isinstance(activity, PlannerMessageActivityV1):
             role, text = "user", activity.text
         elif isinstance(activity, AgentResponseActivityV1):

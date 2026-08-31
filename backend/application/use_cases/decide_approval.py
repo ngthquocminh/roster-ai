@@ -29,6 +29,16 @@ class StaleResourceVersionError(DecideApprovalError): code = "stale_resource_ver
 class ApprovalNotGrantedError(DecideApprovalError): code = "approval_not_granted"
 class PostWriteApprovalNotPendingError(ApprovalNotPendingError):
     """A consume CAS lost after TX2 was entered; must escape for rollback."""
+class ConcurrentDecisionError(ApprovalNotPendingError):
+    """TX3's terminalize CAS lost to a concurrent decision.
+
+    Distinct from the admission check (which observes a non-pending binding
+    before doing anything) and from `PostWriteApprovalNotPendingError` (which
+    must escape so TX2 rolls back). This one wrote nothing, so its transaction is
+    healthy and the router may audit the denial and RETURN. All three carry the
+    same `approval_not_pending` wire code by design -- the planner's situation is
+    identical -- so the router must discriminate on type, never on the code.
+    """
 
 @dataclass(frozen=True)
 class RevalidationV1:
@@ -88,6 +98,9 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
     binding = approvals.get(connection, approval_id=command.approval_id, site_id=command.site_id)
     if binding is None: raise ApprovalNotFoundError("approval is not visible in this site")
     if binding.state != "pending":
+        # ADMISSION CHECK -- pre-write. Nothing has been written, so the router
+        # catches this, writes the Decision 7 denial audit row, and RETURNS so
+        # both commit. Contrast the two CAS closers below/in TX2.
         raise ApprovalNotPendingError("approval is no longer pending", expected={"state": "pending"}, current={"state": binding.state, "resource_version": binding.resource_version})
     if binding.resource_version != command.expected_resource_version:
         raise StaleResourceVersionError("approval resource version changed", expected={"resource_version": command.expected_resource_version}, current={"resource_version": binding.resource_version, "state": binding.state})
@@ -117,7 +130,10 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
         outcome = check.outcome
     terminal = approvals.terminalize(connection, approval_id=binding.approval_id, site_id=command.site_id, state=outcome, decided_by_actor_id=command.actor_id, decided_at=now, expected_resource_version=binding.resource_version)
     if terminal is None:
-        raise ApprovalNotPendingError("approval is no longer pending", expected={"state": "pending", "resource_version": binding.resource_version}, current={"state": "terminal_or_changed"})
+        # TX3 CAS closer -- the compare-and-set matched no row, so this wrote
+        # NOTHING and the transaction is healthy. Audited and returned like the
+        # admission check, not escaped like TX2's consume closer.
+        raise ConcurrentDecisionError("approval is no longer pending", expected={"state": "pending", "resource_version": binding.resource_version}, current={"state": "terminal_or_changed"})
     reason = f"approval_{outcome}"
     if terminal.agent_run_id is not None:
         conversations.cancel_agent_run_for_approval(connection, agent_run_id=terminal.agent_run_id, binding=terminal, reason=reason)

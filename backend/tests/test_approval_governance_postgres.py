@@ -1058,9 +1058,99 @@ def test_not_found_and_policy_precheck_write_no_denial_audit_without_telemetry(
         after = c.execute(select(func.count()).select_from(audit_event).where(
             audit_event.c.site_id == site_ids["site"], audit_event.c.outcome == "approval_denied",
         )).scalar_one()
-    # No telemetry exporter is involved: the authoritative count comes from
-    # PostgreSQL and remains unchanged on the two intentionally unaudited arms.
+    # Decision 7's two deliberately UNAUDITED arms write nothing. This is the
+    # negative direction only -- AC4's observability clause is proven separately,
+    # against a live failing exporter, in the test below.
     assert after == before
+
+
+def test_authoritative_audit_survives_a_failing_span_exporter(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    """AC4: observability being disabled or broken cannot remove the record.
+
+    The previous coverage asserted this by COMMENT ("no telemetry exporter is
+    involved"), which is the assumption the requirement exists to rule out. Audit
+    is PostgreSQL and telemetry is OTel, so the independence is asserted here the
+    way `test_manual_run_result_and_evidence_survive_a_failing_span_exporter`
+    already does it: with an exporter that really raises in-process, and with
+    `calls` asserted so the case cannot pass vacuously.
+    """
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter
+
+    class _RaisingExporter(SpanExporter):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def export(self, _spans):
+            self.calls += 1
+            raise RuntimeError("simulated exporter failure")
+
+        def shutdown(self) -> None:
+            return None
+
+    exporter = _RaisingExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = provider.get_tracer(__name__)
+
+    client, settings = decision_http_client
+    engine = governed_postgres_engine
+    ids = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        binding = request_approval(
+            c,
+            command=RequestApprovalCommandV1(
+                site_id=site_ids["site"], actor_id=site_ids["actor"],
+                schedule_run_id=ids["schedule_run"], expected_resource_version=2,
+                expected_baseline_schedule_version=str(live.schedule_version_id) if live else None,
+                request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+                conversation_id=ids["conversation"],
+            ),
+            **_use_case_dependencies(),
+        ).binding
+    url = f"/api/v1/approvals/{binding.approval_id}/decision"
+    app.dependency_overrides[get_clock] = lambda: NOW
+
+    # A span ends -- and the exporter raises -- on both sides of each command.
+    with tracer.start_as_current_span("before-denial"):
+        pass
+    denial = client.post(
+        url, headers=_governance_headers(settings, key="otel-denial"),
+        json={"decision": "approve", "expected_resource_version": 99},
+    )
+    with tracer.start_as_current_span("between"):
+        pass
+    success = client.post(
+        url, headers=_governance_headers(settings, key="otel-success"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    with tracer.start_as_current_span("after-success"):
+        pass
+
+    assert denial.status_code == 409 and denial.json()["code"] == "stale_resource_version"
+    assert success.status_code == 200 and success.json()["state"] == "consumed"
+    # The exporter really ran and really failed; without this the case is vacuous.
+    assert exporter.calls >= 3
+    with governed_postgres_engine.connect() as c:
+        rows = c.execute(
+            select(audit_event.c.outcome, audit_event.c.success).where(
+                audit_event.c.approval_id == binding.approval_id
+            )
+        ).all()
+        baseline_row = c.execute(
+            select(site_baseline).where(site_baseline.c.site_id == site_ids["site"])
+        ).one()
+    outcomes = {(row.outcome, row.success) for row in rows}
+    assert ("approval_denied", False) in outcomes
+    assert ("approval_consumed", True) in outcomes
+    assert baseline_row.schedule_version_id == ids["candidate"]
+    provider.shutdown()
 
 
 def test_lost_promotion_cas_escapes_route_and_rolls_back_the_real_transaction(

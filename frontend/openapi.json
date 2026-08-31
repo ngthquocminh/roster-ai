@@ -4207,6 +4207,16 @@
               }
             },
             "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         }
       }
@@ -7905,6 +7915,28 @@
                 "type": "null"
               }
             ]
+          },
+          "comparison_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Unavailable Reason"
+          },
+          "current_baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Baseline Schedule Version"
           }
         },
         "type": "object",
@@ -7913,7 +7945,8 @@
           "candidate",
           "comparison"
         ],
-        "title": "ScheduleRunResultOut"
+        "title": "ScheduleRunResultOut",
+        "description": "A completed run's result. The comparison is a PART, not the whole.\n\nEAD-8 makes the baseline comparison refusable (an unreadable baseline\nassignment supply must never render as \"the baseline is empty\"), but that\nrefusal is scoped to the comparison alone: the run, the candidate schedule,\nand any pending approval on it remain readable and actionable. Expressing a\nsub-computation's refusal as a whole-resource failure would take the\nschedule, the evidence, and the approval controls down with it."
       },
       "ScheduleRunStartIn": {
         "properties": {

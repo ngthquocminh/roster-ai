@@ -59,6 +59,10 @@ class PostgresApprovalRepository:
         return _binding(row) if row else None
 
     def get_pending_payload(self, connection: Connection, *, approval_id, site_id):
+        # NO `state = 'pending'` predicate, deliberately: TX2 calls this AFTER
+        # `consume` has already flipped the row to `consumed`, so filtering on
+        # pending would return `None` for every successful promotion. The name
+        # refers to the `pending_payload` COLUMN, not to the binding's state.
         return connection.execute(
             select(approval_request.c.pending_payload).where(
                 approval_request.c.id == approval_id,

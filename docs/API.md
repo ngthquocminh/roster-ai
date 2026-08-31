@@ -556,7 +556,8 @@ denied, stale, missing, and invalid distinct):
 | `approval_expired` | 409 | The decision attempt committed expiry terminalization |
 | `approval_stale` | 409 | The decision attempt committed stale terminalization |
 | `agent_run_not_cancellable` | 409 | The agent run awaiting this approval left `approval_required`; nothing was written |
-| `baseline_supply_unavailable` | 409 | A frozen non-null baseline exists, but its assignments are not authoritatively readable; the comparison fails closed and names that version |
+| `stale_baseline_version` | 409 | The site baseline moved while the approval was being consumed; the whole promotion bundle rolled back and the binding stays `pending` |
+| `approval_payload_unreadable` | 500 | An agent-backed binding's stored `pending_payload` is absent or does not carry exactly one pending call, so the resumed turn cannot be driven; the promotion rolled back |
 | `idempotency_key_conflict` | 409 | The key was reused with a different body |
 | `invalid_approval_command` | 422 | The command is otherwise unusable |
 
@@ -567,6 +568,18 @@ cross-site bindings and the feature-policy pre-check write no denial row.
 
 Creating a request writes governance and audit records but never promotes the
 candidate or changes the baseline pointer.
+
+Approving one **does** move the pointer, and that has a documented effect on run
+results. A completed run's result freezes the baseline pointer that was live when
+it was snapshotted, and the authoritative baseline **assignment** supply is not
+wired yet, so from the first promotion onward the baseline half of the comparison
+cannot be computed. The result endpoint does **not** fail for this: it returns
+`200` with `comparison: null` and a literal `comparison_unavailable_reason`, so
+the run, the candidate schedule, and any pending approval on it stay readable and
+actionable. `current_baseline_schedule_version` is carried on the result itself
+(not only on the comparison) so a new approval can still be requested while the
+comparison is unavailable. An unreadable baseline is never rendered as an empty
+one — the comparison is withheld, not fabricated.
 
 A binding whose `expires_at` has passed is PRESENTED as `expired` by every read
 path, while the stored row stays `pending`; the terminal `expired` state is

@@ -132,6 +132,38 @@ describe("ApprovalDecisionPanel", () => {
     expect(screen.getByText(/promoted .* replacing baseline-v12/)).toBeInTheDocument();
   });
 
+  it("says an agent-backed consumed approval RESUMED its run, never that it was cancelled", () => {
+    // TX2 sets the run to `agent_running` on the approve edge (AD-7's "decision
+    // recorded"); only the non-promoting terminal outcomes cancel it. Every
+    // other fixture in this file pins `agent_run_id: null`, so the clause that
+    // claimed a cancellation here was never exercised.
+    mocks.query = { isPending: false, isError: false, isSuccess: true, data: { ...approval, state: "consumed", agent_run_id: "run-1", baseline_schedule_version: "baseline-v12" } };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.queryByText(/agent run was cancelled/)).not.toBeInTheDocument();
+    expect(screen.getByText(/agent run was resumed/)).toBeInTheDocument();
+  });
+
+  it("still reports a cancelled run for the non-promoting terminal outcomes", () => {
+    mocks.query = { isPending: false, isError: false, isSuccess: true, data: { ...approval, state: "rejected", agent_run_id: "run-1" } };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.getByText(/agent run was cancelled/)).toBeInTheDocument();
+  });
+
+  it.each([
+    ["stale_baseline_version", /operational baseline changed/],
+    ["approval_payload_unreadable", /saved agent context could not be read/],
+  ])("gives %s its own recovery copy instead of the generic retry advice", (code, expected) => {
+    // Both are new 409/500 codes this story introduces. Falling to the default
+    // arm told the planner to "try again", which cannot succeed -- the baseline
+    // moved, so the pinned version will fail revalidation every time -- and
+    // dropped the literal expected/current context the backend attaches.
+    mocks.query = { isPending: false, isError: false, isSuccess: true, data: approval };
+    mocks.mutation = { isPending: false, isError: true, isSuccess: false, error: { status: 409, code }, mutate: vi.fn() };
+    render(<ApprovalDecisionPanel approvalId={approval.approval_id} />);
+    expect(screen.getByText(expected)).toBeInTheDocument();
+    expect(screen.queryByText(/The decision could not be submitted/)).not.toBeInTheDocument();
+  });
+
   it("disables the expiry dismissal while its decision is in flight", () => {
     mocks.query = { isPending: false, isError: false, isSuccess: true, data: { ...approval, expires_at: "2020-01-01T00:00:00Z" } };
     mocks.mutation = { isPending: true, isError: false, isSuccess: false, error: null, mutate: vi.fn() };

@@ -1,6 +1,7 @@
 """Request, inspect, and decide exact baseline-approval bindings."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -14,7 +15,7 @@ from api.problems import problem_response
 from api.schemas import ApprovalDecisionIn, ApprovalListOut, ApprovalOut, ApprovalRequestIn, ProblemDetailsV1
 from application.capabilities.installed import enabled_feature_policy
 from application.ports.approval import ApprovalRepository, AuditWriter
-from application.ports.conversation import AgentRunNotQueuedError, ConversationRepository
+from application.ports.conversation import ConversationRepository
 from application.ports.conversation import ClaimedAgentRunV1
 from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.session import ResolvedSession
@@ -37,16 +38,49 @@ from adapters.postgres.short_transaction_projection import ShortTransactionScena
 from adapters.postgres.schema import conversation, membership
 from settings import Settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/approvals", tags=["approvals"])
+
+
+class ResumedTurnSuspendedError(RuntimeError):
+    """A resumed turn deferred a second approval; Decision 8 covers only one.
+
+    `terminal_status` maps a suspended outcome to `approval_required` -- a status
+    whose entire meaning is "a binding is pending on this run". The resume path
+    creates no binding, so finalising a second suspension that way parks the run
+    in a state `get_pending_for_agent_run` reports as empty and `claim_queued_run`
+    never reclaims: stranded permanently, silently. Refusing the chain keeps the
+    run terminal and honest. If a later story needs chained approvals, the
+    binding-creating branch in `conversations.py` becomes a shared helper -- it is
+    not copied here (EAD-5: no second resume mechanism).
+    """
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=40)]
 _RESPONSES = {403: {"model": ProblemDetailsV1}, 404: {"model": ProblemDetailsV1}, 409: {"model": ProblemDetailsV1}, 422: {"model": ProblemDetailsV1}}
-_DECISION_RESPONSES = _RESPONSES
+#: The decision route additionally publishes 500: `approval_payload_unreadable`
+#: is a stable, documented code (an agent-backed binding whose stored payload
+#: cannot drive the resumed turn), not the generic unhandled-error shape, so it
+#: belongs in the contract rather than surfacing as an undeclared status.
+_DECISION_RESPONSES = {**_RESPONSES, 500: {"model": ProblemDetailsV1}}
 
 #: Status per stable problem code (AD-13). `approval_not_granted` is 403 at BOTH
 #: sites -- the router's feature-policy pre-check and the use case's own
 #: `ApprovalNotGrantedError` describe the identical condition, and Task 8 fixes
 #: it at 403, so mapping the second one to 422 published two statuses for one
 #: state.
+#: NOTE: `agent_run_not_cancellable` is deliberately ABSENT. It is never rendered
+#: by this module -- `AgentRunNotQueuedError` must ESCAPE the endpoint so the
+#: request dependency rolls TX2 back, and `api/main.py`'s
+#: `rollback_required_decision_problem` is its single source of status and copy.
+#: The same applies to the post-write `approval_not_pending`
+#: (`PostWriteApprovalNotPendingError`) and to `approval_payload_unreadable`.
+#:
+#: `stale_baseline_version` DOES belong here, but for the OTHER route: the CREATE
+#: path raises `StaleBaselineVersionError` as an ordinary pre-write refusal it
+#: catches and returns. The decision path's same-named code comes from
+#: `BaselineConcurrentlyMovedError`, which escapes and is rendered in `main.py`.
+#: One wire code, two routes, two mechanisms -- deleting this entry silently
+#: demoted the create route's refusal to a 422.
 _ERROR_STATUS = {
     "candidate_not_found": 404,
     "approval_not_granted": 403,
@@ -56,7 +90,6 @@ _ERROR_STATUS = {
     "stale_baseline_version": 409,
     "approval_not_found": 404,
     "approval_not_pending": 409,
-    "agent_run_not_cancellable": 409,
 }
 
 #: Detail per decision-route problem code. `approval_not_granted` is a policy
@@ -66,7 +99,6 @@ _DECISION_DETAIL = {
     "approval_not_found": "No approval is visible in this site.",
     "approval_not_pending": "The approval already reached a terminal state.",
     "stale_resource_version": "The approval changed since the version you pinned.",
-    "agent_run_not_cancellable": "The agent run awaiting this approval is no longer in a cancellable state.",
 }
 _DECISION_DETAIL_FALLBACK = "The approval is no longer valid for this decision."
 
@@ -93,15 +125,39 @@ def _out(binding, now: datetime) -> ApprovalOut:
 
 def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_capabilities,
                         projection_reader, conversations, proposals, open_site_context) -> None:
-    """Drive one already-resumed run after TX2 has committed."""
-    with open_site_context(binding.site_id) as connection:
-        context = connection.execute(
-            select(conversation.c.scenario_id, membership.c.id.label("membership_id"))
-            .join(membership, (membership.c.site_id == conversation.c.site_id)
-                  & (membership.c.app_user_id == binding.initiated_by_actor_id)
-                  & membership.c.revoked_at.is_(None))
-            .where(conversation.c.id == binding.conversation_id)
-        ).one()
+    """Drive one already-resumed run after TX2 has committed.
+
+    NOTHING HERE MAY RAISE. This runs in the request's post-commit stage, which
+    FastAPI executes after the response has already been sent; an exception at
+    this point cannot become a response (Starlette raises "Caught handled
+    exception, but response already started") and would tear the connection down
+    mid-body while abandoning the run in `agent_running`. The promotion itself is
+    already durable by then -- consumed binding, moved pointer, audit row -- so a
+    failure here must degrade the TURN, never the transaction that preceded it.
+
+    Setup failure is the one case that cannot be finalised: `deps` and the claim
+    are built from the query below, so without it there is nothing to finalise
+    through. That leaves the run `agent_running` for Epic 3's recovery sweep --
+    the same documented outcome as the initial-turn route (`conversations.py`).
+    """
+    try:
+        with open_site_context(binding.site_id) as connection:
+            context = connection.execute(
+                select(conversation.c.scenario_id, membership.c.id.label("membership_id"))
+                .join(membership, (membership.c.site_id == conversation.c.site_id)
+                      & (membership.c.app_user_id == binding.initiated_by_actor_id)
+                      & membership.c.revoked_at.is_(None))
+                .where(conversation.c.id == binding.conversation_id)
+            ).one()
+    except Exception:  # noqa: BLE001
+        # `.one()` raises `NoResultFound` if the initiating actor's membership was
+        # revoked between TX2's commit and this read -- revalidation proved it
+        # active inside the transaction, so this is a genuine race, not a guard.
+        logger.exception(
+            "resumed turn setup failed for agent run %s; run left non-terminal for recovery",
+            resume.agent_run_id,
+        )
+        return
     raw_results: list[object] = []
     request_id = uuid4()
     deps = AgentDepsV1(
@@ -136,13 +192,29 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
             history=resume.history,
             approvals=(AgentApprovalDecisionV1(tool_call_id=resume.tool_call_id, approved=True),),
         )
+        if outcome.status == "suspended":
+            raise ResumedTurnSuspendedError(
+                "a resumed turn requested a second approval; chaining is not supported"
+            )
     except Exception as exc:  # noqa: BLE001
+        logger.exception("resumed turn failed for agent run %s; finalizing as terminal",
+                         resume.agent_run_id)
         outcome = failed_outcome_for_exception(exc)
-    with open_site_context(binding.site_id) as connection:
-        finalize_agent_run(
-            conversations, proposals, connection, claimed=claimed,
-            status=terminal_status(outcome), payload=activity_payload(outcome, deps),
-            request_id=request_id,
+    try:
+        with open_site_context(binding.site_id) as connection:
+            finalize_agent_run(
+                conversations, proposals, connection, claimed=claimed,
+                status=terminal_status(outcome), payload=activity_payload(outcome, deps),
+                request_id=request_id,
+            )
+    except Exception:  # noqa: BLE001
+        # `finish_agent_run` raises if the run left `agent_running` under us, and
+        # `activity_payload` is evaluated here too. Either way the promotion has
+        # committed and the response is sent; the only correct action left is to
+        # record it loudly rather than crash a response already on the wire.
+        logger.exception(
+            "resumed turn for agent run %s could not be finalized; run left non-terminal",
+            resume.agent_run_id,
         )
 
 
@@ -209,7 +281,23 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
     except DecideApprovalError as exc:
         if isinstance(exc, (PostWriteApprovalNotPendingError, BaselineConcurrentlyMovedError)):
             raise
-        if exc.code in {"approval_not_pending", "stale_resource_version"}:
+        # Decision 7 enumerates the denial-audit refusals by CODE, but the code is
+        # not unique to a raise site: `approval_not_pending` is raised from THREE
+        # places, not the two the story states -- the admission check, TX2's
+        # consume-CAS closer (`PostWriteApprovalNotPendingError`, re-raised above),
+        # and TX3's terminalize-CAS closer (`ConcurrentDecisionError`). Matching on
+        # the code alone audited the third by accident. Discriminate by TYPE so
+        # each site's participation is a decision rather than a coincidence.
+        #
+        # `ConcurrentDecisionError` IS audited, deliberately: it is a denied
+        # consequential attempt against a binding resolved in this site, and
+        # `terminalize` returning `None` means nothing was written, so the
+        # transaction is healthy and the row commits. That satisfies FR21 on the
+        # same terms as the admission-check denial; it extends Decision 7's
+        # enumeration by one site rather than contradicting its rule.
+        if exc.code in {"approval_not_pending", "stale_resource_version"} and not isinstance(
+            exc, PostWriteApprovalNotPendingError
+        ):
             denied = approvals.get(connection, approval_id=approval_id, site_id=session.site_id)
             if denied is not None:
                 audit_writer.append(connection, AuditEnvelopeV1(

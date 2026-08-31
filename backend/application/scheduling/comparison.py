@@ -37,10 +37,23 @@ class ComparisonIntegrityError(ValueError):
 
 
 class BaselineSupplyUnavailableError(ValueError):
-    """A real frozen baseline exists but its assignments cannot be read."""
+    """A real frozen baseline exists but its assignments cannot be read.
 
-    def __init__(self, baseline_schedule_version: str):
+    Carries the LIVE baseline alongside the frozen one. The comparison is what
+    normally publishes `current_baseline_schedule_version`, and the approval
+    request is parameterised on it -- so a caller that degrades to "no
+    comparison" still needs this value to offer a well-formed next approval.
+    Without it, refusing the comparison would also silently remove the ability
+    to request one.
+    """
+
+    def __init__(
+        self,
+        baseline_schedule_version: str,
+        current_baseline_schedule_version: str | None = None,
+    ):
         self.baseline_schedule_version = baseline_schedule_version
+        self.current_baseline_schedule_version = current_baseline_schedule_version
         super().__init__("authoritative baseline assignment supply is unavailable")
 
 
@@ -179,7 +192,9 @@ def calculate_comparison(
     workers = cast(tuple[WorkerV1, ...], drain_projection_group(reader.get_workers, connection, scenario_id, **drain_args))
     baseline = cast(tuple[AssignmentV1, ...], drain_projection_group(reader.get_baseline_assignments, connection, scenario_id, **drain_args))
     if expected_baseline_schedule_version is not None and not baseline:
-        raise BaselineSupplyUnavailableError(expected_baseline_schedule_version)
+        raise BaselineSupplyUnavailableError(
+            expected_baseline_schedule_version, overview.baseline_schedule_version
+        )
     facts = _facts(workers, tasks, demand, overview.horizon_minutes)
 
     recomputed_candidate, _ = calculate_candidate_metrics(

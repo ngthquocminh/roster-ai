@@ -2,6 +2,15 @@
 
 Revision ID: e5f6a7b8c9d0
 Revises: d4e5f6a7b8c9
+
+DOWNGRADE IS ONE-WAY IN PRACTICE. Restoring the five-member CHECK validates
+against existing rows, so it fails with "check constraint is violated by some
+row" once any `approval_denied` row exists — which the decision route writes on
+every refused attempt. `audit_event` is append-only and `DELETE` is revoked from
+`shiftmind_runtime`; deleting authoritative audit evidence to satisfy a schema
+rollback is not something this migration will do silently. To downgrade past
+this revision, the denial rows must first be dealt with deliberately, as an
+explicit operational decision with its own record.
 """
 from typing import Sequence, Union
 

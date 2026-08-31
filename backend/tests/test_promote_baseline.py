@@ -9,6 +9,7 @@ from sqlalchemy.exc import DBAPIError
 from application.ports.site_baseline import SiteBaselineV1
 from application.use_cases.decide_approval import ApprovalNotPendingError
 from application.use_cases.promote_baseline import (
+    ApprovalPayloadUnreadableError,
     BaselineConcurrentlyMovedError,
     promote_baseline,
 )
@@ -90,3 +91,63 @@ def test_agent_path_resumes_while_planner_path_never_writes_an_agent_run() -> No
     planner_values = _tx()
     _promote(planner_values)
     assert [kind for kind, _ in planner_values[3].items] == ["event"]
+
+
+def test_agent_path_resumes_the_consumed_binding_and_returns_a_usable_resume_request() -> None:
+    """The default suite must prove the resume CONTRACT, not just the call.
+
+    The `agent_run_status="agent_running"` and cleared `status_reason` live in the
+    PostgreSQL adapter and are asserted in the `@pytest.mark.postgres` suite,
+    which is deselected by default -- so the deselected run proved nothing about
+    what TX2 hands the resume, which is this use case's own responsibility.
+    """
+    agent_run_id = uuid4()
+    values = _tx(agent_run_id=agent_run_id)
+    result = _promote(values)
+    _, approvals, _, conversations, _, _ = values
+    (kind, kwargs), = conversations.items
+    assert kind == "resume"
+    assert kwargs["agent_run_id"] == agent_run_id
+    # The CONSUMED binding, never the pre-consume one: the activity this writes
+    # reports the state the same transaction just produced.
+    assert kwargs["binding"].state == "consumed"
+    assert kwargs["binding"].consumed_at is not None
+    # EAD-5 drives the run to terminal through the existing seam, so TX2 must
+    # hand the route the exact call to approve and the owned history to replay.
+    assert result.resume is not None
+    assert result.resume.agent_run_id == agent_run_id
+    assert result.resume.tool_call_id == "call-1"
+    assert result.resume.history is not None
+
+
+def test_planner_path_produces_no_resume_request_at_all() -> None:
+    # Trap 7: the guard is `agent_run_id is not None`, never "a payload exists".
+    result = _promote(_tx())
+    assert result.resume is None
+
+
+@pytest.mark.parametrize(
+    ("payload", "reason"),
+    [
+        (None, "absent"),
+        ({"pending_calls": [], "turn": {"messages": []}}, "zero calls"),
+        ({"turn": {"messages": []}, "pending_calls": [
+            {"tool_call_id": "a", "tool_name": "scheduling_baseline", "tool_args_json": "{}"},
+            {"tool_call_id": "b", "tool_name": "scheduling_baseline", "tool_args_json": "{}"},
+        ]}, "two calls"),
+        ({"not": "a payload"}, "malformed"),
+    ],
+)
+def test_an_unusable_agent_payload_is_typed_and_rolls_the_bundle_back(payload, reason) -> None:
+    """`agent_run_id IS NOT NULL` does not imply a usable `pending_payload`.
+
+    The column is nullable and no CHECK ties the two together, so this is a
+    reachable data state. It must raise a TYPED, documented error rather than a
+    bare `RuntimeError`/`ValidationError` surfacing as an undeclared 500 -- and
+    like every post-write failure it must escape so TX2 rolls back whole.
+    """
+    values = _tx(agent_run_id=uuid4())
+    values[1].get_pending_payload = lambda *_a, **_k: payload
+    with pytest.raises(ApprovalPayloadUnreadableError) as raised:
+        _promote(values)
+    assert raised.value.code == "approval_payload_unreadable", reason

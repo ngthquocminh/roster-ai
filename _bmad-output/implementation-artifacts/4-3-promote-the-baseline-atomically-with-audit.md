@@ -4,7 +4,7 @@ baseline_commit: 946b5ec1c4c5e1f84623d77910c2a584ec2dcd1d
 
 # Story 4.3: Promote the Baseline Atomically with Audit
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -729,6 +729,87 @@ must still be re-run per AR28.
         (Decision 8); the baseline assignment supply stays unwired (Decision 9); separation of
         duties stays unowned; `agent_cancelled`'s undefined semantics stay for the Epic 4 retro.
 
+### Review Findings
+
+Adversarial code review 2026-08-31, three layers (Blind Hunter, Edge Case Hunter, Acceptance
+Auditor) over `946b5ec..a1aff00`. Severity set at triage from the consequence to the planner,
+not inherited from the review layers. 23 findings kept, 3 dismissed as noise.
+
+- [x] [Review][Patch] **RESOLVED 2026-08-31 — Option A: split the failure boundary.** The result route returns `200` with `comparison: null` plus a stated reason instead of `409`; the frontend renders that reason where the comparison block would be and keeps the schedule, evidence, and approval panel rendering; `expected_baseline_schedule_version` is surfaced from the run snapshot so the request-approval control survives a null comparison. **`BaselineSupplyUnavailableError` and its firing condition are unchanged — EAD-8's fail-closed guarantee is preserved exactly.** Rejected: narrowing the guard (invents a partial-comparison contract shape nothing else uses); accepting the one-way door (ships an epic whose headline capability works once); wiring a real supply (out of scope per the spine's Deferred table, and blocked on Story 3.8's wage and selected-shift prerequisites). Original finding follows. **The first successful promotion permanently 409s the result endpoint for every completed run snapshotted afterwards, and hides the approval panel that would allow a second one** — `scenario_catalogue.py:136` freezes the live `site_baseline` pointer into every new run snapshot; `create_run_snapshot.py:41,110` carries it; `schedule_runs.py:592` passes it to `calculate_comparison`; the new guard at `comparison.py:181` raises whenever it is non-null and the supply is empty; and `scenario_projection.py:643` returns a hardcoded `()` on every call. So from the first promotion onward, every subsequently created run returns `409 baseline_supply_unavailable` — permanently, site-wide. `ScenarioResults.tsx:43` then gates the approval panels on `!query.isError`, so a run whose result 409s can never have its pending approval decided from the UI, and `ComparisonSummary` (which carries `onRequestApproval`) is gated on `query.data.comparison`. Epic 4's own loop — approve, promote, approve again — is a one-way door after one use, which blocks Stories 4.4–4.6. **The refusal itself is Decision 9 working as specified; its blast radius is not stated anywhere.** Sources: blind+edge, both CONFIRMED, independently re-verified at triage. **Options:** (a) narrow the guard so it fails only the baseline half of the comparison and still returns the candidate half; (b) have the result route degrade to a comparison-unavailable payload instead of a whole-response 409, keeping the approval panel reachable; (c) wire a real supply (explicitly out of scope — needs Story 3.8's wage and selected-shift prerequisites); (d) accept the one-way door for this story and give 4.4 the unblock by name.
+- [x] [Review][Patch] **RESOLVED 2026-08-31 — Option A: refuse chained approvals explicitly.** After `execute_turn` returns in `_drive_resumed_turn`, and inside the existing `try`, a `suspended` outcome raises a typed error; the `except Exception` already at `approvals.py:139` converts it through `failed_outcome_for_exception`, so the run finalizes `agent_failed` with a stable reason instead of being written to `approval_required` with no binding. Rejected: replicating `conversations.py:300-347`'s ~50-line suspended branch (a second approval-creation path in a second router is exactly what EAD-5's "no new resume mechanism" forbids, and it enables approval chaining no epic decision sanctions — revisit as a shared helper if a later story needs it); dropping the capability from the resumed turn's grant (changes capability composition, a spine-level concern). Original finding follows. **A resumed turn that requests approval again parks the agent run in `approval_required` with no binding, unrecoverable** — `_drive_resumed_turn` calls `finalize_agent_run(..., status=terminal_status(outcome), ...)` unconditionally (`approvals.py:141-146`), and `terminal_status` maps `"suspended" → "approval_required"` (`execute_turn.py:113-117`). The resumed turn is granted the same capability set (`approvals.py:124-129`), so it can call `scheduling_baseline` a second time. The sibling route has a dedicated `if outcome.status == "suspended":` branch that creates the TX1 binding (`conversations.py:300-318`); the resume path has none. Result: `agent_run.status = 'approval_required'` with no `approval_request` row, so `get_pending_for_agent_run` returns `None`, `claim_queued_run` only claims `agent_queued`, and the run is stuck forever with no reclaim path. Sources: blind+edge, both CONFIRMED. **Options:** (a) replicate the suspended branch so a resumed turn can request a second approval; (b) refuse chained approvals explicitly — finalize as `agent_failed` with a stable reason; (c) reject the suspension at the runtime boundary so it cannot arise. EAD-5 and Decision 8 do not settle whether a resumed turn may suspend again.
+
+- [x] [Review][Patch] Post-commit resume runs after the response is already sent, and three regions are unguarded — a failure strands the run in `agent_running` forever and raises `RuntimeError: Caught handled exception, but response already started` [backend/api/routers/approvals.py:97-146]
+- [x] [Review][Patch] The entire post-commit resume mechanism has zero automated coverage — no test references `_drive_resumed_turn`, `post_commit`, or `PostCommitActions`; all route-level approve tests produce `resume is None`, and the end-to-end promotion test calls `decide_approval` directly, bypassing the router [backend/api/routers/approvals.py:94-146, backend/api/deps.py:266-294]
+- [x] [Review][Patch] A consumed, agent-backed binding tells the planner its agent run "was cancelled" when TX2 resumed it — the clause is guarded on `agent_run_id` alone, unconditional on state [frontend/src/features/approvals/ApprovalDecisionPanel.tsx:203]
+- [x] [Review][Patch] `stale_baseline_version` — the new 409 this story introduces — is not a case in `decisionFeedback`, so it falls to the default "try again" copy, which cannot succeed, and the `expected`/`current` context the backend attaches is dropped [frontend/src/features/approvals/ApprovalDecisionPanel.tsx:48-64]
+- [x] [Review][Patch] `schema.py` still declares the five-member `ck_audit_event_outcome` the migration just widened to six; no drift check exists, so a future `--autogenerate` would emit a migration dropping `approval_denied` [backend/adapters/postgres/schema.py:520]
+- [x] [Review][Patch] `agent_run_id IS NOT NULL` does not imply `pending_payload IS NOT NULL`, and a zero/multi pending-call payload raises a bare `RuntimeError` — both produce an untyped 500 undeclared in `_DECISION_RESPONSES`. Also add a comment at `get_pending_payload` noting the absent `state` filter is deliberate (it is called after `consume`) [backend/application/use_cases/promote_baseline.py:116-121, backend/adapters/postgres/approval.py:61-68]
+- [x] [Review][Patch] A third `ApprovalNotPendingError` site writes a denial audit row past Decision 7's stated boundary — the router discriminates on `exc.code`, not the raise site, so TX3's post-revalidation `terminalize`-returned-`None` closer also audits. **The story undercounts: there are three sites, not two**; Task 3's "make the two sites explicit at their raise points" is unmet and the admission-check site carries no comment [backend/api/routers/approvals.py:212, backend/application/use_cases/decide_approval.py:91,119]
+- [x] [Review][Patch] `baseline_supply_unavailable` is documented in the approvals decision-route problem table, a route that cannot emit it — it is raised only by `GET /schedule-runs/{id}/result`. This is the same defect class Task 8 was cleaning up [docs/API.md:558]
+- [x] [Review][Patch] The `baseline_supply_unavailable` alert's only action is a Retry that provably cannot succeed, and no copy says the condition is not transient — UX-DR13 requires exposing only currently valid actions [frontend/src/routes/ScenarioResults.tsx:39]
+- [x] [Review][Patch] The insert fork swallows every `IntegrityError`, so an FK or NOT NULL violation is reported to the planner as `409 stale_baseline_version` ("the baseline moved") when nothing moved; the constraint name is never inspected [backend/adapters/postgres/site_baseline.py:27-40]
+- [x] [Review][Patch] The rollback handler duplicates the router's status/detail maps, leaving `_ERROR_STATUS["agent_run_not_cancellable"]`, `_DECISION_DETAIL["agent_run_not_cancellable"]` and the `AgentRunNotQueuedError` import unreachable — two sources of truth for one wire contract [backend/api/routers/approvals.py:17,59,69, backend/api/main.py:59-78]
+- [x] [Review][Patch] The `AgentRunNotQueuedError` handler is registered app-wide with no `/api/v1/` guard (unlike its three siblings) and hardcodes cancellation wording that is wrong on the approve path, where the operation was a *resume* [backend/api/main.py:61,70-73]
+- [x] [Review][Patch] `execute_turn` took a second signature change the story forbade ("No other signature change") — `history` was widened to `| AgentTurnV1`, and that branch bypasses `rehydrate_history`'s 100-activity bound, named in the story's own "What must not break" column [backend/application/use_cases/execute_turn.py:66-77]
+- [x] [Review][Patch] AC4's observability clause is asserted by a comment, not a test — the test disables the *feature policy*, never telemetry, and asserts the opposite direction (zero rows on unaudited arms, not "every row is still written"). A live-exporter precedent exists at `tests/architecture/test_model_outage_boundaries.py:556-570` [backend/tests/test_approval_governance_postgres.py:1035-1063]
+- [x] [Review][Patch] Task 9's stated resume assertions (`agent_run_status="agent_running"`, cleared `status_reason`) live only in the `@pytest.mark.postgres` file, which is deselected from the default suite; `test_promote_baseline.py` stubs the method to return `None` and asserts only that it was called [backend/tests/test_promote_baseline.py:40,86-89]
+- [x] [Review][Patch] Three documentation corrections: the ledger closes the candidate-drift entry citing `test_runtime_role_preserves_schedule_versions_but_can_move_the_baseline`, which does not exist (the real name is `test_runtime_privileges_keep_versions_immutable_and_allow_baseline_cas`); `promote_baseline`'s module docstring states Decision 5's rule but never the mechanism (a generator dependency rolls back only when the exception escapes the endpoint) that Trap 1 calls the story's most dangerous line; and the migration's `downgrade` is one-way once any `approval_denied` row exists, undocumented [deferred-work.md:544, backend/application/use_cases/promote_baseline.py:1-6, backend/migrations/versions/e5f6a7b8c9d0_add_approval_denied_audit_outcome.py]
+
+- [x] [Review][Defer] A legitimately empty `OPTIMAL`/`FEASIBLE` baseline is indistinguishable from an unreadable supply [backend/application/scheduling/comparison.py:181] — deferred, coupled to the one-way-door decision above
+- [x] [Review][Defer] `approval_denied` audit rows are unbounded and not idempotency-suppressed [backend/api/routers/approvals.py:212-230] — deferred, the story deliberately specifies this behaviour
+- [x] [Review][Defer] The 200 is sent to the client before TX2 commits [backend/api/deps.py:285-294] — deferred, pre-existing dependency shape
+
+#### Review patch results — 2026-08-31
+
+All 18 patch items applied. Suites after the patches:
+
+| Suite | Result |
+|---|---|
+| `uv run pytest` | **1431 passed**, 2 skipped, 7 deselected, 0 failed |
+| `uv run pytest -m postgres` | **129 passed**, 0 failed |
+| `uv run --project backend alembic check` | *No new upgrade operations detected* |
+| `npx vitest run` | **579 passed** across 83 files, 0 failed |
+| `npx tsc -b` | clean (exit 0) |
+| `npm run lint` | 3 pre-existing `only-export-components` warnings, none from this change |
+| `npm run test:e2e` | **62 passed**, 0 failed |
+
+The three backend failures 4.2/4.3 recorded as pre-existing did not reproduce in
+this environment; the suite is fully green rather than green-with-known-failures.
+
+**Demonstrated red** (retro §1 — a guard with no recorded red is not evidence):
+
+- **D2's chained-approval refusal.** Deleting the `ResumedTurnSuspendedError`
+  raise turns `test_a_resumed_turn_that_defers_again_is_refused_instead_of_parked`
+  red with `assert 'approval_required' == 'agent_failed'` — the exact stranding
+  this guard exists to prevent. `terminal_status` is deliberately NOT mocked in
+  that test; stubbing it would have made the assertion vacuous, which is how the
+  original defect survived.
+- **D1's failure boundary.** Restoring the `409 problem_response` turns both
+  `test_result_route_reports_unreadable_baseline_with_literal_version` (backend)
+  and `keeps the run usable when only the baseline comparison is unavailable`
+  (Vitest) red; the Vitest case additionally pins that no impossible **Retry**
+  action is offered.
+- **`_ERROR_STATUS` narrowing.** Removing `stale_baseline_version` — which looked
+  dead from the decision route — turned
+  `test_maps_every_policy_refusal_to_a_distinct_stable_problem_code[error3-…]`
+  red, catching that the CREATE route still raises it as a pre-write refusal. The
+  entry was restored with the two-routes/two-mechanisms reason recorded inline.
+  Found by the existing suite during this patch pass, not by inspection.
+
+**Notes on two patches that changed the finding rather than confirming it:**
+
+- The third `ApprovalNotPendingError` site is now `ConcurrentDecisionError` and is
+  **deliberately kept** in the denial audit: it is a denied consequential attempt
+  against a resolved binding whose `terminalize` CAS wrote nothing, so the
+  transaction is healthy and FR21 applies on the same terms as the admission
+  check. The defect was that the router discriminated on `exc.code` (making the
+  behaviour accidental), not the behaviour itself. Decision 7's enumeration is
+  extended by one site, with the reason recorded at both the raise site and the
+  router.
+- `getErrorDetail` was **deleted** rather than kept: D1 removed its only caller,
+  and shipping it unused would be exactly the dead-vocabulary pattern the retro
+  names as this repo's most expensive.
+
 ---
 
 ## Dev Notes
@@ -962,6 +1043,8 @@ GPT-5.4 (Codex)
 - `_bmad-output/implementation-artifacts/deferred-work.md`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 - `backend/adapters/postgres/approval.py`
+- `backend/adapters/postgres/schema.py` *(review patch: `ck_audit_event_outcome` widened to match the migration)*
+- `backend/api/schemas.py` *(review patch: `ScheduleRunResultOut` gains `comparison_unavailable_reason` and `current_baseline_schedule_version`)*
 - `backend/adapters/postgres/conversation.py`
 - `backend/adapters/postgres/membership.py`
 - `backend/adapters/postgres/site_baseline.py`

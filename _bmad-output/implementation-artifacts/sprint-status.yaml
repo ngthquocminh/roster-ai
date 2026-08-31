@@ -1878,7 +1878,7 @@ development_status:
   # AC4 and FR21 require authoritative evidence for DENIED attempts and ck_audit_event_outcome
   # admits only five members, none of which can express one. EAD-1 gives 4.1 the migration that
   # CREATES the tables; 4.2 Decision 11 explicitly permits a later additive one.
-  4-3-promote-the-baseline-atomically-with-audit: review
+  4-3-promote-the-baseline-atomically-with-audit: done
   4-4-inspect-complete-decision-provenance: backlog
   4-5-prove-approval-and-audit-invariants: backlog
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog

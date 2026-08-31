@@ -3,6 +3,45 @@
 Unlike TX3's business-terminal outcomes, any failure after the first write must
 escape the endpoint so the request dependency rolls the entire bundle back.
 This module therefore never converts write faults into returned problem data.
+
+WHY THE MECHANISM IS NOT SYMMETRIC WITH TX3'S
+---------------------------------------------
+`get_site_context` is a GENERATOR dependency: `with site_context(...) as
+connection: yield connection`. FastAPI throws into it at the `yield` only when an
+exception propagates out of the ENDPOINT FUNCTION. So:
+
+* A route that catches an exception and ``return``s a problem response resumes
+  the generator normally, and `engine.begin()`'s ``__exit__`` COMMITS everything
+  written before the failure. At the database this is indistinguishable from
+  success. TX3 depends on exactly that -- a `stale`/`expired` outcome has already
+  written a terminal binding it must keep (Story 4.2 Decision 9).
+* TX2 must never keep a partial bundle (FR19, NFR9, AR10, AR22), so its
+  post-write failures are RAISED and left to escape. They are rendered by
+  `api/main.py`'s registered handler, which runs after the dependency has
+  unwound -- the rollback has already happened by the time the body is written.
+
+"Raise it and catch it in the router" does NOT achieve this, and
+``connection.rollback()`` inside an except arm does not either: `engine.begin()`
+would commit a fresh empty transaction on exit, so it "works" only by accident.
+
+Per-failure-mode table:
+
+===============================================  ==========================
+Situation                                        Result
+===============================================  ==========================
+`consume` returns None (concurrent decision)     raise, escape -> 409, rollback
+`promote` returns None / IntegrityError          raise, escape -> 409, rollback
+any DBAPIError inside the bundle                 propagate -> rollback
+resume finds the run outside approval_required   escape -> 409, rollback
+pending payload absent or not exactly one call   escape -> 500, rollback
+every write succeeded                            RETURN -> the bundle commits
+===============================================  ==========================
+
+Pre-write refusals (`approval_not_pending` from the admission check,
+`stale_resource_version`, `approval_not_found`, `idempotency_key_conflict`) are
+detected before any write, so the transaction is healthy and the router keeps
+catching and returning them -- which is also what lets the denial audit row
+commit.
 """
 from __future__ import annotations
 
@@ -11,7 +50,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from application.contracts.agent_runtime import AgentApprovalPendingV1, AgentTurnV1
 from application.contracts.approval_binding import ApprovalBindingV1
@@ -29,6 +68,22 @@ SCOPE_CONTROLS = {
 
 class BaselineConcurrentlyMovedError(DecideApprovalError):
     code = "stale_baseline_version"
+
+
+class ApprovalPayloadUnreadableError(DecideApprovalError):
+    """An agent-backed binding's `pending_payload` cannot drive a resumed turn.
+
+    `agent_run_id IS NOT NULL` does NOT imply `pending_payload IS NOT NULL`:
+    `RequestApprovalCommandV1` declares them as two independent optionals, the
+    column is nullable, and no CHECK ties them together. A missing payload, or
+    one that does not carry exactly one pending call, is a server-side data
+    integrity fault -- not a concurrency conflict and not planner error -- so it
+    gets an honest 500 with a stable code instead of a bare `RuntimeError`
+    surfacing as an undeclared generic `internal_error`. Like every other
+    post-write failure it must escape, so TX2 rolls back whole.
+    """
+
+    code = "approval_payload_unreadable"
 
 
 @dataclass(frozen=True)
@@ -116,9 +171,26 @@ def promote_baseline(
         payload = approvals.get_pending_payload(
             connection, approval_id=binding.approval_id, site_id=binding.site_id
         )
-        pending = TypeAdapter(AgentApprovalPendingV1).validate_python(payload)
+        if payload is None:
+            raise ApprovalPayloadUnreadableError(
+                "agent-backed approval has no pending payload to resume from",
+                expected={"pending_payload": "present"},
+                current={"pending_payload": "absent"},
+            )
+        try:
+            pending = TypeAdapter(AgentApprovalPendingV1).validate_python(payload)
+        except ValidationError as exc:
+            raise ApprovalPayloadUnreadableError(
+                "agent-backed approval payload does not match the owned contract",
+                expected={"pending_payload": "AgentApprovalPendingV1"},
+                current={"pending_payload": "unreadable"},
+            ) from exc
         if len(pending.pending_calls) != 1:
-            raise RuntimeError("approval pending payload must contain exactly one call")
+            raise ApprovalPayloadUnreadableError(
+                "approval pending payload must contain exactly one call",
+                expected={"pending_calls": 1},
+                current={"pending_calls": len(pending.pending_calls)},
+            )
         activity = conversations.resume_agent_run_for_approval(
             connection, agent_run_id=binding.agent_run_id, binding=consumed,
             request_id=request_id, occurred_at=occurred_at,
@@ -132,6 +204,7 @@ def promote_baseline(
 
 
 __all__ = [
+    "ApprovalPayloadUnreadableError",
     "BaselineConcurrentlyMovedError",
     "PromotionResultV1",
     "ResumeRequestV1",

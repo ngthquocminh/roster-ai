@@ -263,14 +263,27 @@ def test_result_route_reports_unreadable_baseline_with_literal_version(client, m
         def get_run(self, *_args, **_kwargs): return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
         def get_candidate(self, *_args, **_kwargs): return candidate
         def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version="baseline-v1")
-    def _raise(*_args, **_kwargs): raise BaselineSupplyUnavailableError("baseline-v1")
+    def _raise(*_args, **_kwargs): raise BaselineSupplyUnavailableError("baseline-v1", "baseline-v2")
     app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
     app.dependency_overrides[get_projection_reader] = lambda: object()
     monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", _raise)
     response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
-    assert response.status_code == 409
-    assert response.json()["code"] == "baseline_supply_unavailable"
-    assert response.json()["detail"] == "Assignments for baseline schedule version baseline-v1 are not authoritatively readable."
+    # EAD-8 refuses the COMPARISON, not the resource. A 409 here would take the
+    # run, the candidate schedule, and the pending approval's controls down with
+    # it -- and because the baseline assignment supply is unwired, it would do so
+    # permanently for every completed run snapshotted after the first promotion,
+    # making a site's first successful promotion its last.
+    assert response.status_code == 200
+    body = response.json()
+    assert body["comparison"] is None
+    assert body["candidate"] is not None, "the candidate must survive a refused comparison"
+    assert body["comparison_unavailable_reason"] == (
+        "Assignments for baseline schedule version baseline-v1 are not "
+        "authoritatively readable, so this candidate cannot be compared against it."
+    )
+    # Carried so a NEW approval can still be requested while the comparison --
+    # normally the only publisher of this value -- is unavailable.
+    assert body["current_baseline_schedule_version"] == "baseline-v2"
 
 
 def test_result_route_lets_an_unrelated_bug_surface_as_the_generic_internal_error(

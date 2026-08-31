@@ -64,12 +64,6 @@ export function getErrorCode(error: unknown): string | undefined {
   return typeof code === "string" ? code : undefined;
 }
 
-export function getErrorDetail(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null) return undefined;
-  const detail = (error as { detail?: unknown }).detail;
-  return typeof detail === "string" ? detail : undefined;
-}
-
 /**
  * Statuses where retrying re-issues a request that cannot succeed: the
  * scenario doesn't exist (404), or the id itself is malformed (422, a

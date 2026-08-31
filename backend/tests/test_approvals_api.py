@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -563,3 +564,172 @@ def test_list_filters_by_schedule_run_id(client) -> None:
 
     assert [item["approval_id"] for item in matching.json()["items"]] == [str(binding.approval_id)]
     assert other.json()["items"] == []
+
+
+# --------------------------------------------------------------------------
+# `_drive_resumed_turn`: the post-commit resume drive (Decision 8).
+#
+# This ran with ZERO coverage: every route-level approve test produces
+# `resume is None` (planner path), and the end-to-end promotion test calls
+# `decide_approval` directly, bypassing the router and the dependency teardown.
+# It is also the one place in the app that executes AFTER the response has been
+# sent, where a raised exception cannot become a response and instead tears down
+# the connection mid-body while abandoning the run.
+# --------------------------------------------------------------------------
+
+
+class _Row:
+    def __init__(self, scenario_id, membership_id):
+        self.scenario_id = scenario_id
+        self.membership_id = membership_id
+
+
+class _Connection:
+    def __init__(self, row=None, error=None):
+        self._row = row
+        self._error = error
+
+    def execute(self, *_args, **_kwargs):
+        if self._error is not None:
+            raise self._error
+        return self
+
+    def one(self):
+        return self._row
+
+
+class _SiteContext:
+    """Stands in for `get_site_context_opener`'s context manager."""
+
+    def __init__(self, connection):
+        self._connection = connection
+
+    def __call__(self, _site_id):
+        return self
+
+    def __enter__(self):
+        return self._connection
+
+    def __exit__(self, *_exc):
+        return False
+
+
+def _resume_fixtures(*, row=None, query_error=None):
+    from application.use_cases.promote_baseline import ResumeRequestV1
+
+    binding = _binding(state="consumed")
+    binding = replace(binding, agent_run_id=uuid4(), conversation_id=uuid4())
+    resume = ResumeRequestV1(
+        agent_run_id=binding.agent_run_id, tool_call_id="call-1", history=None
+    )
+    connection = _Connection(
+        row=row if row is not None else _Row(uuid4(), uuid4()), error=query_error
+    )
+    return binding, resume, _SiteContext(connection)
+
+
+def _drive(monkeypatch, *, binding, resume, opener, outcome=None, turn_error=None,
+           finalize_error=None, settings=None):
+    """Call the real `_drive_resumed_turn` with the collaborators faked out."""
+    from api.routers import approvals as module
+
+    recorded: dict = {}
+
+    def _execute_turn(*_args, **kwargs):
+        recorded["approvals"] = kwargs.get("approvals")
+        if turn_error is not None:
+            raise turn_error
+        return outcome
+
+    def _finalize(*_args, **kwargs):
+        recorded["status"] = kwargs.get("status")
+        if finalize_error is not None:
+            raise finalize_error
+
+    monkeypatch.setattr(module, "execute_turn", _execute_turn)
+    monkeypatch.setattr(module, "finalize_agent_run", _finalize)
+    # `terminal_status` is deliberately NOT mocked: its `"suspended" ->
+    # "approval_required"` mapping IS the hazard under test, and stubbing it
+    # would make the assertion below pass no matter what the code does.
+    monkeypatch.setattr(module, "activity_payload", lambda *_a, **_k: {})
+    monkeypatch.setattr(module, "failed_outcome_for_exception",
+                        lambda _exc: SimpleNamespace(status="failed"))
+
+    module._drive_resumed_turn(
+        resume=resume, binding=binding,
+        settings=settings if settings is not None else _settings_stub(),
+        runtime_factory=lambda **_k: object(),
+        compose_capabilities=lambda _ctx: (),
+        projection_reader=object(), conversations=object(), proposals=object(),
+        open_site_context=opener,
+    )
+    return recorded
+
+
+def _settings_stub():
+    from settings import default_settings
+
+    return replace(default_settings(), scheduling_baseline_enabled=True)
+
+
+def test_the_resumed_turn_forwards_the_server_owned_approval_for_the_exact_call(monkeypatch) -> None:
+    binding, resume, opener = _resume_fixtures()
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      outcome=SimpleNamespace(status="timed_out"))
+
+    decision, = recorded["approvals"]
+    assert decision.tool_call_id == "call-1"
+    # The decision is SERVER-owned and derived from the persisted binding, never
+    # from a client boolean (AC1).
+    assert decision.approved is True
+    assert recorded["status"] == "agent_timed_out"
+
+
+def test_a_resumed_turn_that_defers_again_is_refused_instead_of_parked(monkeypatch) -> None:
+    """Decision 8 covers ONE resumed turn; a second deferral must not strand it.
+
+    Mutation that must turn this red: delete the `ResumedTurnSuspendedError`
+    raise. `terminal_status` then maps `suspended` to `approval_required` -- a
+    status meaning "a binding is pending" -- while the resume path creates no
+    binding, so `get_pending_for_agent_run` reports none and `claim_queued_run`
+    never reclaims it. The run waits forever for an approval that cannot exist.
+    """
+    binding, resume, opener = _resume_fixtures()
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      outcome=SimpleNamespace(status="suspended"))
+
+    assert recorded["status"] == "agent_failed"
+    assert recorded["status"] != "approval_required"
+
+
+def test_a_failing_resumed_turn_still_finalizes_the_run(monkeypatch) -> None:
+    binding, resume, opener = _resume_fixtures()
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      turn_error=RuntimeError("provider down"))
+
+    assert recorded["status"] == "agent_failed"
+
+
+def test_setup_failure_after_commit_is_contained_and_never_escapes(monkeypatch) -> None:
+    """The promotion is already durable; this runs after the response was sent.
+
+    An escape here cannot be rendered (Starlette: "response already started") and
+    would tear down the connection mid-body. Containment is the contract.
+    """
+    from sqlalchemy.exc import NoResultFound
+
+    binding, resume, opener = _resume_fixtures(query_error=NoResultFound("membership revoked"))
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      outcome=SimpleNamespace(status="timed_out"))
+
+    # Nothing was finalized because the claim could not be built -- but nothing
+    # raised either. The run is left for Epic 3's recovery sweep.
+    assert "status" not in recorded
+
+
+def test_a_failing_finalize_after_commit_is_contained_and_never_escapes(monkeypatch) -> None:
+    binding, resume, opener = _resume_fixtures()
+
+    _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+           outcome=SimpleNamespace(status="timed_out"),
+           finalize_error=AgentRunNotQueuedError("run left agent_running"))
