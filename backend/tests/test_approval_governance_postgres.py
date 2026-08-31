@@ -28,11 +28,12 @@ from api.main import app
 from application.ports.session import ResolvedSession
 from settings import default_settings
 from adapters.postgres.approval import PostgresApprovalRepository
-from adapters.postgres.audit import PostgresAuditWriter
+from adapters.postgres.audit import PostgresAuditReader, PostgresAuditWriter
 from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
 from adapters.postgres.membership import PostgresMembershipReader
+from application.queries.decision_provenance import query_decision_provenance
 from adapters.postgres.schema import (
     agent_run,
     app_user,
@@ -55,6 +56,7 @@ from adapters.postgres.schema import (
     site_baseline,
 )
 from application.contracts.schedule_version import ScheduleVersionV1
+from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
 from application.contracts.scenario_projection import AssignmentV1
 from application.use_cases.request_approval import (
     CandidateNotPromotableError,
@@ -118,10 +120,21 @@ def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed",
             id=ids["proposal_version"], site_id=site_id, proposal_id=ids["proposal"],
             version_ordinal=1, payload={}, canonical_hash="b" * 64,
         ))
+        snapshot = RunSnapshotV1(
+            snapshot_id=ids["run_snapshot"], schedule_run_id=ids["schedule_run"],
+            scenario_id=ids["scenario"], scenario_version_id=ids["scenario_version"],
+            checksum_algorithm="sha256", checksum_schema_version="v1",
+            checksum_digest="a" * 64, baseline_schedule_version=None,
+            proposal_id=ids["proposal"], proposal_version_id=ids["proposal_version"],
+            proposal_resource_version=1, solver_config=GovernedSolverConfigV1(),
+            component_versions=(("test", "1"),), accepted_at=NOW,
+        )
         c.execute(insert(run_snapshot).values(
             id=ids["run_snapshot"], site_id=site_id, scenario_id=ids["scenario"],
             scenario_version_id=ids["scenario_version"], proposal_id=ids["proposal"],
-            proposal_version_id=ids["proposal_version"], payload={}, canonical_hash="c" * 64,
+            proposal_version_id=ids["proposal_version"],
+            payload=TypeAdapter(RunSnapshotV1).dump_python(snapshot, mode="json"),
+            canonical_hash=snapshot.canonical_hash,
             accepted_at=NOW,
         ))
         # `candidate_schedule_version_id` and the FK it carries can only be set
@@ -222,12 +235,26 @@ def test_audit_event_denies_update_and_delete_to_the_runtime_role(governed_postg
             text(
                 "SELECT has_table_privilege('shiftmind_runtime', 'audit_event', 'UPDATE') AS can_update, "
                 "has_table_privilege('shiftmind_runtime', 'audit_event', 'DELETE') AS can_delete, "
-                "has_table_privilege('shiftmind_runtime', 'audit_event', 'INSERT') AS can_insert"
+                "has_table_privilege('shiftmind_runtime', 'audit_event', 'SELECT') AS can_select, "
+                "has_table_privilege('shiftmind_runtime', 'audit_event', 'INSERT') AS can_insert, "
+                "has_column_privilege('shiftmind_runtime', 'approval_request', 'state', 'UPDATE') AS can_update_approval_state"
             )
         ).one()
     assert row.can_update is False
     assert row.can_delete is False
+    assert row.can_select is True
     assert row.can_insert is True
+    assert row.can_update_approval_state is True
+
+
+def test_runtime_role_is_refused_when_it_attempts_to_mutate_audit(governed_postgres_engine, site_ids) -> None:
+    for statement in (
+        "UPDATE audit_event SET safe_summary = safe_summary WHERE false",
+        "DELETE FROM audit_event WHERE false",
+    ):
+        with pytest.raises(DBAPIError):
+            with site_context(governed_postgres_engine, site_ids["site"]) as connection:
+                connection.execute(text(statement))
 
 
 # --- partial unique indexes -------------------------------------------------
@@ -791,6 +818,28 @@ def _governance_headers(settings, *, key):
     }
 
 
+def test_provenance_foreign_and_absent_runs_have_byte_identical_404s(
+    governed_postgres_engine, site_ids, decision_http_client
+) -> None:
+    client, settings = decision_http_client
+    foreign = _seed_candidate_run(
+        governed_postgres_engine, site_id=site_ids["other_site"], actor_id=site_ids["actor"],
+    )
+    headers = _governance_headers(settings, key="unused-by-get")
+    foreign_response = client.get(
+        "/api/v1/approvals/provenance",
+        params={"schedule_run_id": str(foreign["schedule_run"])}, headers=headers,
+    )
+    absent_response = client.get(
+        "/api/v1/approvals/provenance",
+        params={"schedule_run_id": str(uuid4())}, headers=headers,
+    )
+
+    assert foreign_response.status_code == absent_response.status_code == 404
+    assert foreign_response.content == absent_response.content
+    assert foreign_response.json()["code"] == "schedule_run_not_found"
+
+
 def test_a_409_expiry_response_commits_the_terminal_row_through_the_real_route(
     governed_postgres_engine, site_ids, decision_http_client
 ) -> None:
@@ -899,6 +948,18 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
             **_decision_dependencies(),
         )
         assert result.outcome == "consumed"
+    with site_context(engine, site_ids["site"]) as c:
+        provenance = query_decision_provenance(
+            c, schedule_run_id=ids["schedule_run"], site_id=site_ids["site"],
+            schedule_runs=PostgresScheduleRunRepository(),
+            approvals=PostgresApprovalRepository(), audit_reader=PostgresAuditReader(),
+            conversations=PostgresConversationRepository(),
+            baselines=PostgresSiteBaselineReader(), clock=lambda: NOW,
+        )
+    assert provenance is not None
+    promotion = next(item for item in provenance.items if item.item_type == "baseline_promotion")
+    assert promotion.after_version == str(ids["candidate"])
+    assert promotion.before_version == (str(live.schedule_version_id) if live else None)
     with engine.connect() as c:
         stored = c.execute(select(approval_request).where(approval_request.c.id == pending_binding.approval_id)).one()
         baseline = c.execute(select(site_baseline).where(site_baseline.c.site_id == site_ids["site"])).one()

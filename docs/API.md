@@ -524,6 +524,11 @@ scratch).
 - `POST /api/v1/approvals` creates a pending approval for one feasible candidate. It requires an `Idempotency-Key` header and returns the existing binding on a replay.
 - `GET /api/v1/approvals/{approval_id}` reads one visible binding.
 - `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
+- `GET /api/v1/approvals/provenance?schedule_run_id={id}` reads the complete, site-scoped
+  decision path for a run. It replays committed run, conversation, approval, audit, and current
+  baseline records without writing or recomputing any figure. This is the authoritative reader
+  for the audit `parameter_hash` and `consequence_hash` named below; protected missing and
+  cross-site runs both return the same `schedule_run_not_found` response.
 - `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. A valid approval atomically returns `200 consumed`, moves the baseline pointer once, records `approval_consumed`, and resumes an approval-backed agent run after commit. Rejection commits `200`; stale and expired terminalizations commit then return `409`.
 
 Problem bodies on the decision route carry AD-13's literal `expected` and
@@ -568,6 +573,12 @@ cross-site bindings and the feature-policy pre-check write no denial row.
 
 Creating a request writes governance and audit records but never promotes the
 candidate or changes the baseline pointer.
+
+The provenance GET has one RFC 7807 problem code:
+
+| Code | Status | Meaning |
+|---|---|---|
+| `schedule_run_not_found` | 404 | No schedule run with that identifier is visible in the current site |
 
 Approving one **does** move the pointer, and that has a documented effect on run
 results. A completed run's result freezes the baseline pointer that was live when

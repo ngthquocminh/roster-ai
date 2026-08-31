@@ -4,7 +4,7 @@ baseline_commit: e9449142a2019bc2067c4554bd544c3d4ca17def
 
 # Story 4.4: Inspect Complete Decision Provenance
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -462,99 +462,99 @@ path. Provenance is a pull-on-open read; the live surface is Chat's stream, whic
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-derive the baselines before touching anything (retro §3)**
-  - [ ] Record backend total collected/passed/failed/skipped, `-m postgres` collected and passed,
+- [x] **Task 1 — Re-derive the baselines before touching anything (retro §3)**
+  - [x] Record backend total collected/passed/failed/skipped, `-m postgres` collected and passed,
         frontend files and tests, and Playwright count, **at `e944914`, before any edit**.
-  - [ ] Story 4.3's post-review Completion Notes record backend 1426 passed / 3 failed / 7 skipped;
+  - [x] Story 4.3's post-review Completion Notes record backend 1426 passed / 3 failed / 7 skipped;
         PostgreSQL 127 passed / 1 failed; frontend 575 passed; Playwright 62 passed. **These are
         inherited, not verified** — 2.7, 2.8, and 3.12 each found an inherited baseline stale.
         Record the total alongside the split; the total is the stable invariant.
-  - [ ] The three known backend failures are **external and pre-existing** (two live OpenRouter
+  - [x] The three known backend failures are **external and pre-existing** (two live OpenRouter
         cases on a retired free model slug; one temporary-database cleanup fixture importing the
         wrong conftest). Do not attribute them to this story and do not fix them here.
 
-- [ ] **Task 2 — Close the `AuditOutcomeV1` drift (AC: 1; Decision 11)**
-  - [ ] Add `"approval_denied"` to `AuditOutcomeV1` (`application/contracts/audit_envelope.py:12`).
-  - [ ] Add a test asserting `set(get_args(AuditOutcomeV1))` equals the members parsed from
+- [x] **Task 2 — Close the `AuditOutcomeV1` drift (AC: 1; Decision 11)**
+  - [x] Add `"approval_denied"` to `AuditOutcomeV1` (`application/contracts/audit_envelope.py:12`).
+  - [x] Add a test asserting `set(get_args(AuditOutcomeV1))` equals the members parsed from
         `ck_audit_event_outcome` on `adapters/postgres/schema.py`'s `audit_event` table.
-  - [ ] **Demonstrated-red:** remove `"approval_denied"` from the Literal and observe the new
+  - [x] **Demonstrated-red:** remove `"approval_denied"` from the Literal and observe the new
         assertion fail. Record it.
 
-- [ ] **Task 3 — `AuditReader` port and PostgreSQL adapter (AC: 1, 4; Decision 2)**
-  - [ ] Declare `AuditReader` beside `AuditWriter` in `application/ports/approval.py`, with
+- [x] **Task 3 — `AuditReader` port and PostgreSQL adapter (AC: 1, 4; Decision 2)**
+  - [x] Declare `AuditReader` beside `AuditWriter` in `application/ports/approval.py`, with
         `list_for_schedule_run` only.
-  - [ ] Implement `PostgresAuditReader` in `adapters/postgres/audit.py`, ordered by
+  - [x] Implement `PostgresAuditReader` in `adapters/postgres/audit.py`, ordered by
         `(occurred_at, id)`, with an **explicit `site_id` predicate on the statement** — RLS is
         defence in depth, not the only check, matching every other repository in `adapters/postgres/`.
-  - [ ] Register `get_audit_reader` in `api/deps.py` beside `get_audit_writer` (`:149`).
-  - [ ] The adapter has **no** update or delete method (Decision 2's "does not cover").
+  - [x] Register `get_audit_reader` in `api/deps.py` beside `get_audit_writer` (`:149`).
+  - [x] The adapter has **no** update or delete method (Decision 2's "does not cover").
 
-- [ ] **Task 4 — Provenance contracts (AC: 1, 2; Decisions 6, 8, 9)**
-  - [ ] Create `application/contracts/decision_provenance.py`: `DecisionProvenanceV1` plus the
+- [x] **Task 4 — Provenance contracts (AC: 1, 2; Decisions 6, 8, 9)**
+  - [x] Create `application/contracts/decision_provenance.py`: `DecisionProvenanceV1` plus the
         nine item dataclasses from Decision 6, each frozen, each carrying the full identifier base.
-  - [ ] `SCOPE_CONTROLS` in that module records, as data:
+  - [x] `SCOPE_CONTROLS` in that module records, as data:
         `membership:agent_run_bound_conversation_events`,
         `tool_proposals:approval_triggering_call_only`,
         `comparison:linked_by_reference_never_recomputed`,
         `payload:identity_only_never_turn`,
         `audit_evidence_refs:empty_at_every_write_site`.
-  - [ ] Mirror the union in `api/schemas.py` as `DecisionProvenanceItemOut` with
+  - [x] Mirror the union in `api/schemas.py` as `DecisionProvenanceItemOut` with
         `Field(discriminator="item_type")`, following `ConversationActivityItemOut`
         (`api/schemas.py:254-262`). Map fields **one by one**, per Decision 10.
 
-- [ ] **Task 5 — The projection (AC: 1, 3; Decisions 3, 4, 5, 7, 8)**
-  - [ ] Create `application/queries/decision_provenance.py` (and `application/queries/__init__.py`).
-  - [ ] Implement Decision 4's membership rule and Decision 5's ordering, composing ports only —
+- [x] **Task 5 — The projection (AC: 1, 3; Decisions 3, 4, 5, 7, 8)**
+  - [x] Create `application/queries/decision_provenance.py` (and `application/queries/__init__.py`).
+  - [x] Implement Decision 4's membership rule and Decision 5's ordering, composing ports only —
         **no `sqlalchemy` import, no calculator call, no `calculate_comparison`.**
-  - [ ] Apply `_out`'s EAD-7 presented-expired rule to every projected binding (Decision 3);
+  - [x] Apply `_out`'s EAD-7 presented-expired rule to every projected binding (Decision 3);
         import or extract it rather than writing a second copy of the comparison.
-  - [ ] Attribute per Decision 7: `actor_id` labelled "initiated by"; `worker_facts` as a distinct
+  - [x] Attribute per Decision 7: `actor_id` labelled "initiated by"; `worker_facts` as a distinct
         optional block; `decided_by_actor_id` only on decision and audit items.
-  - [ ] Return `None` for a run not visible in this site, so the router can render the
+  - [x] Return `None` for a run not visible in this site, so the router can render the
         non-disclosing 404 (Decision 12).
 
-- [ ] **Task 6 — Evidence links (AC: 1, 2)**
-  - [ ] Project `EvidenceRefV1` tuples onto their items from the two real suppliers:
+- [x] **Task 6 — Evidence links (AC: 1, 2)**
+  - [x] Project `EvidenceRefV1` tuples onto their items from the two real suppliers:
         `ScheduleVersionV1.evidence_refs` (the candidate — the only supply with a non-null
         `producing_run_version`, set at `finalize_schedule_run.py:82`) and
         `GroundedClaimV1.evidence_refs` on `agent_response` activities.
-  - [ ] `audit_event.evidence_refs` is `()` at **all four** write sites
+  - [x] `audit_event.evidence_refs` is `()` at **all four** write sites
         (`request_approval.py:153`, `decide_approval.py:140`, `promote_baseline.py:161`,
         `approvals.py:316`). Project it faithfully as empty, record it in `SCOPE_CONTROLS`, and
         open a ledger entry against NFR32's "immutable evidence references" clause. **Do not
         backfill it by editing a write path** — this story writes nothing (Decision 3).
 
-- [ ] **Task 7 — The route (AC: 1, 4; Decisions 1, 12)**
-  - [ ] Add `GET /approvals/provenance` to `api/routers/approvals.py`, **inserted above
+- [x] **Task 7 — The route (AC: 1, 4; Decisions 1, 12)**
+  - [x] Add `GET /approvals/provenance` to `api/routers/approvals.py`, **inserted above
         `@router.get("/{approval_id}")` at `:337`**, with `schedule_run_id: UUID = Query()`.
-  - [ ] 404 `schedule_run_not_found` with the existing non-disclosing copy for an absent **or**
+  - [x] 404 `schedule_run_not_found` with the existing non-disclosing copy for an absent **or**
         foreign run — the two must be byte-identical.
-  - [ ] **Demonstrated-red:** move the route below `/{approval_id}` and observe the request answer
+  - [x] **Demonstrated-red:** move the route below `/{approval_id}` and observe the request answer
         `422` instead of `200`. Record it — this is the trap the decision exists for.
-  - [ ] Regenerate types with `npm run codegen` (never hand-author `schema.d.ts`); confirm
+  - [x] Regenerate types with `npm run codegen` (never hand-author `schema.d.ts`); confirm
         `openapi.json` changed.
 
-- [ ] **Task 8 — Backend tests for the projection (AC: 1, 3)**
-  - [ ] Fake-port use-case tests in `backend/tests/test_decision_provenance.py`: membership,
+- [x] **Task 8 — Backend tests for the projection (AC: 1, 3)**
+  - [x] Fake-port use-case tests in `backend/tests/test_decision_provenance.py`: membership,
         ordering including the same-timestamp tie-break, presented-expired, planner-initiated
         (no `tool_proposal`) vs agent-initiated (exactly one), a rejected-then-re-requested run
         producing one timeline, and a run with zero approvals.
-  - [ ] Router/HTTP-contract tests in `backend/tests/test_approvals_api.py`.
-  - [ ] Real-PostgreSQL tests in `backend/tests/test_approval_governance_postgres.py`
+  - [x] Router/HTTP-contract tests in `backend/tests/test_approvals_api.py`.
+  - [x] Real-PostgreSQL tests in `backend/tests/test_approval_governance_postgres.py`
         (`@pytest.mark.postgres`) driving a full request → run → approve → promote cycle and
         asserting the timeline links before/after versions from `audit_event`.
 
-- [ ] **Task 9 — AR15 disclosure guard (AC: 2; Decisions 9, 10)**
-  - [ ] Architecture test: no provenance output type declares a field named `tool_args_json`,
+- [x] **Task 9 — AR15 disclosure guard (AC: 2; Decisions 9, 10)**
+  - [x] Architecture test: no provenance output type declares a field named `tool_args_json`,
         `turn`, `payload`, `content`, `history`, `prompt`, or `completion`.
-  - [ ] Route test: seed a binding whose `pending_payload` carries a distinctive marker string in
+  - [x] Route test: seed a binding whose `pending_payload` carries a distinctive marker string in
         both `tool_args_json` and a `turn` text part; assert the marker appears **nowhere** in the
         serialized response body.
-  - [ ] **Demonstrated-red:** add `tool_args_json` to the `tool_proposal` item and observe both
+  - [x] **Demonstrated-red:** add `tool_args_json` to the `tool_proposal` item and observe both
         assertions fail. Record it.
 
-- [ ] **Task 10 — AC4 proof (AC: 4; Decision 12)**
-  - [ ] `@pytest.mark.postgres`: as `shiftmind_runtime`, assert
+- [x] **Task 10 — AC4 proof (AC: 4; Decision 12)**
+  - [x] `@pytest.mark.postgres`: as `shiftmind_runtime`, assert
         `has_table_privilege('audit_event','UPDATE')` and `...,'DELETE')` are both false while
         `SELECT` and `INSERT` are true — and, as the contrast that keeps the assertion meaningful,
         that `has_column_privilege('approval_request','state','UPDATE')` is **true** (the
@@ -562,59 +562,59 @@ path. Provenance is a pull-on-open read; the live surface is Chat's stream, whic
         a column-only grant does not satisfy `has_table_privilege`, so testing both sides with the
         table-level function would report "false, false" and prove a uniformly locked schema
         rather than the real distinction.
-  - [ ] Attempt an `UPDATE` and a `DELETE` on `audit_event` as `shiftmind_runtime` and assert both
+  - [x] Attempt an `UPDATE` and a `DELETE` on `audit_event` as `shiftmind_runtime` and assert both
         are refused.
-  - [ ] Cross-site: a provenance query for a run in another site returns the same 404 body as an
+  - [x] Cross-site: a provenance query for a run in another site returns the same 404 body as an
         absent run.
 
-- [ ] **Task 11 — AC3 proof (AC: 3; Decision 12)**
-  - [ ] Import assertion in `tests/architecture/`: `application/queries/decision_provenance.py`
+- [x] **Task 11 — AC3 proof (AC: 3; Decision 12)**
+  - [x] Import assertion in `tests/architecture/`: `application/queries/decision_provenance.py`
         imports nothing from `agent/`, `llm/`, or a provider module, and calls no calculator.
-  - [ ] Route test with the model provider forced to fail: provenance for a previously completed,
+  - [x] Route test with the model provider forced to fail: provenance for a previously completed,
         promoted run returns the full timeline including audit rows and evidence refs.
-  - [ ] **Demonstrated-red:** import a provider module into the query module and observe the
+  - [x] **Demonstrated-red:** import a provider module into the query module and observe the
         architecture assertion fail. Record it.
 
-- [ ] **Task 12 — Frontend (AC: 2; Decision 13)**
-  - [ ] `frontend/src/api/provenance.ts` (thin typed `openapi-fetch` wrapper) and
+- [x] **Task 12 — Frontend (AC: 2; Decision 13)**
+  - [x] `frontend/src/api/provenance.ts` (thin typed `openapi-fetch` wrapper) and
         `frontend/src/hooks/useRunProvenance.ts` with an exported `runProvenanceKey`, matching
         `useRunApprovals.ts`.
-  - [ ] `frontend/src/features/provenance/ProvenanceTimeline.tsx`: an ordered list of items,
+  - [x] `frontend/src/features/provenance/ProvenanceTimeline.tsx`: an ordered list of items,
         each with literal outcome text, stable identifiers using the identifier copy control,
         `EvidenceLink` reusing `toSearchParams` / `rememberOrigin` from
         `features/evidence/locator.ts` and `origin.ts`, before/after versions on the promotion
         item, and safe details inside a Collapsible (`DESIGN.md:140`).
-  - [ ] Mount it in `ScenarioResults.tsx` with its **own** query and its own scoped `InlineAlert`
+  - [x] Mount it in `ScenarioResults.tsx` with its **own** query and its own scoped `InlineAlert`
         (Decision 13). Add `runProvenanceKey` to `useDecideApproval.ts`'s invalidations.
-  - [ ] Co-located Vitest tests asserting accessible names and roles, the independent failure
+  - [x] Co-located Vitest tests asserting accessible names and roles, the independent failure
         boundary in **both** directions, and that a marker string planted in a mocked
         `pending_payload`-derived field never renders.
 
-- [ ] **Task 13 — Automated accessibility (AC: 2)**
-  - [ ] Extend `frontend/e2e/accessibility.spec.ts` to sweep the Results view with the Provenance
+- [x] **Task 13 — Automated accessibility (AC: 2)**
+  - [x] Extend `frontend/e2e/accessibility.spec.ts` to sweep the Results view with the Provenance
         timeline present, expanded and collapsed, at 100% and 200% zoom.
-  - [ ] Status is **text, not colour alone** (UX-DR13); the timeline is a real list with a heading;
+  - [x] Status is **text, not colour alone** (UX-DR13); the timeline is a real list with a heading;
         long identifiers must not force page-level horizontal scroll.
-  - [ ] No manual assistive-technology verification — automated coverage is the only accepted
+  - [x] No manual assistive-technology verification — automated coverage is the only accepted
         proof (`EXPERIENCE.md:196`).
 
-- [ ] **Task 14 — Documentation and ledger reconciliation (retro §3)**
-  - [ ] `docs/API.md`: add the provenance read to the *Approval requests* section, state that it
+- [x] **Task 14 — Documentation and ledger reconciliation (retro §3)**
+  - [x] `docs/API.md`: add the provenance read to the *Approval requests* section, state that it
         is the reader `:540` already names for the hashes, and list its one problem code.
-  - [ ] `deferred-work.md`: close the identity-model entry at `:443` per Decision 7 and re-point
+  - [x] `deferred-work.md`: close the identity-model entry at `:443` per Decision 7 and re-point
         its residual to Epic 5; open three new entries — the tool-transcript gap (Owner: Epic 5),
         the unimplemented `comparison` `ActivityTypeV1` discriminant, and `audit_event.evidence_refs`
         being empty at every write site.
-  - [ ] `docs/GATE-A-RUNBOOK.md`: no change expected — verify, do not assume.
-  - [ ] **No evidence file.** This story has no measured threshold, so
+  - [x] `docs/GATE-A-RUNBOOK.md`: no change expected — verify, do not assume.
+  - [x] **No evidence file.** This story has no measured threshold, so
         `docs/EVIDENCE-CONVENTION.md` has nothing to bind. Say so in Completion Notes.
 
-- [ ] **Task 15 — Full verification**
-  - [ ] Backend suite, `-m postgres` suite, `npx tsc -b`, `npm run lint`, `npm test`, Playwright,
+- [x] **Task 15 — Full verification**
+  - [x] Backend suite, `-m postgres` suite, `npx tsc -b`, `npm run lint`, `npm test`, Playwright,
         Alembic check, and the architecture/changed-surface tests.
-  - [ ] `npx tsc -b` is what actually type-checks the tree; `npm run typecheck` is inert because
+  - [x] `npx tsc -b` is what actually type-checks the tree; `npm run typecheck` is inert because
         the root `tsconfig.json` declares `"files": []` (Story 4.3 Trap 13).
-  - [ ] Report totals against Task 1's re-derived baselines, not against 4.3's recorded numbers.
+  - [x] Report totals against Task 1's re-derived baselines, not against 4.3's recorded numbers.
 
 ---
 
@@ -827,11 +827,132 @@ is a spine change. Answering either inside 4.4 silently widens its scope.
 
 ### Agent Model Used
 
+OpenAI Codex (GPT-5)
+
 ### Debug Log References
+
+- 2026-08-31 — Task 1 baseline at implementation start (HEAD `63dc6ff`, whose only delta from
+  code baseline `e944914` is the already-committed Story 4.4 planning/status artifacts): backend
+  default collected 1,440 total / 1,433 selected, with 1,432 passed, 0 failed, 1 skipped, and 7
+  live deselected; dedicated `-m postgres` collected and actually ran 129 marked tests, with 129
+  passed, 0 failed, and 0 skipped (PostgreSQL container healthy); frontend Vitest 83 files / 579
+  tests passed; Playwright `--list` enumerated 62 tests in 9 files. The inherited three external
+  failures did not reproduce in the default non-live run and are not attributed to this story.
+- 2026-08-31 — Task 2 demonstrated-red: with the production Literal still missing
+  `approval_denied`, `test_audit_outcome_contract_matches_the_database_check` failed and reported
+  that exact extra database member. After adding the member, the focused file passed 6/6; the
+  backend regression gate passed 1,432 with 2 skipped and 7 live deselected (1,441 total).
+- 2026-08-31 — Task 3 red began as an import failure because `PostgresAuditReader` did not
+  exist. Green proves explicit run/site filtering, deterministic audit ordering, typed JSONB
+  rehydration, and the dependency seam; full backend regression passed 1,433 with 2 skipped and
+  7 live deselected (1,442 total).
+- 2026-08-31 — Task 4 red began with the absent provenance contract module. Green proves the
+  nine-member union, full common identifier base, five scope-control declarations, and API
+  discriminator; full backend regression passed 1,434 with 2 skipped and 7 live deselected
+  (1,443 total).
+- 2026-08-31 — Task 5 red began with the absent `application.queries` package. The focused
+  projection/route files passed 38 tests; full backend regression passed 1,435 with 2 skipped
+  and 7 live deselected (1,444 total).
+- 2026-08-31 — Task 6 directly exercised both persisted evidence suppliers: candidate refs kept
+  a non-null producing run version and grounded-claim refs kept their claim locator. Full backend
+  regression passed 1,436 with 2 skipped and 7 live deselected (1,445 total).
+- 2026-08-31 — Task 7 demonstrated-red: after mutating router registration so
+  `/approvals/{approval_id}` preceded `/approvals/provenance`, the provenance request returned
+  422 instead of 200. Restoring literal-first order passed the focused 40 tests. `npm run codegen`
+  regenerated both OpenAPI artifacts; full backend regression passed 1,437 with 2 skipped and
+  7 live deselected (1,446 total).
+- 2026-08-31 — Task 8 focused fake-port tests passed 5/5 and the real PostgreSQL full-cycle
+  projection passed 2/2 initiator variants, including persisted promotion before/after links.
+  Full backend regression passed 1,438 with 2 skipped and 7 live deselected (1,447 total).
+- 2026-08-31 — Task 9 demonstrated-red: temporarily adding `tool_args_json` to the tool item
+  made both the forbidden-field architecture assertion and the route marker assertion fail.
+  Restored identity-only output passed both guards; full backend regression passed 1,441 with
+  2 skipped and 7 live deselected (1,450 total).
+- 2026-08-31 — Task 10 PostgreSQL proof actually ran 3 focused marked tests (3 passed, 0 skipped):
+  privilege truth table, refused UPDATE/DELETE attempts, and byte-identical foreign/absent 404.
+  Full backend regression passed 1,443 with 2 skipped and 7 live deselected (1,452 total).
+- 2026-08-31 — Task 11 demonstrated-red: temporarily importing `llm` into the query made the AST
+  architecture guard fail. After restoration, the outage route and boundary tests passed 5/5;
+  full backend regression passed 1,444 with 2 skipped and 7 live deselected (1,453 total).
+- 2026-08-31 — Tasks 12-13: focused frontend tests passed 7/7, then the full Vitest suite passed
+  581 tests in 84 files. The automated accessibility sweep exercised provenance collapsed and
+  expanded at 100% and 200% zoom. Full Playwright initially exposed a prohibited `aria-label`
+  on an untyped identifier container (64 passed / 2 failed); adding the semantic `group` role,
+  rebuilding, and rerunning made all 66 tests pass across Chromium and Edge.
+- 2026-08-31 — Task 15 final gates: backend default collected 1,453 total / 1,446 selected and
+  finished 1,444 passed, 2 skipped, 0 failed, 7 deselected. With the PostgreSQL service healthy,
+  the dedicated marker run collected and **actually ran 131** tests: 131 passed, 0 skipped,
+  0 failed, 1,322 deselected. TypeScript build and lint passed (three inherited Fast Refresh
+  warnings), architecture/changed-surface passed 99/99, Alembic reported no upgrade operations,
+  and Playwright passed 66/66.
 
 ### Completion Notes List
 
+- Task 2 closed the existing audit outcome contract drift and bound the Python Literal directly
+  to the PostgreSQL CHECK vocabulary so future drift fails in the default suite.
+- Task 3 added the sole new read port and a SELECT-only PostgreSQL adapter; no writer method,
+  migration, schema object, or audit mutation was introduced.
+- Task 4 added frozen application contracts and their explicit Pydantic response mirror without
+  widening any persisted vocabulary.
+- Task 5 added the pure port-composed projection, including closed membership, deterministic
+  cross-stream ordering, presented expiry, three-role attribution, and non-disclosing absence.
+- Task 6 replays candidate, claim, and empty audit evidence exactly as persisted and records the
+  audit-local evidence gap with its later-story owner; no write site was changed.
+- Task 7 added the run-keyed GET above the dynamic UUID route, explicit one-by-one response
+  mapping, and the established non-disclosing schedule-run 404.
+- Task 8 covers the projection matrix across fake ports, HTTP routing, and the real committed
+  PostgreSQL request/decision/promotion chain.
+- Task 9 proves the pending payload's arguments and transcript cannot cross the provenance API;
+  only tool identity is projected.
+- Task 10 proves AC4 against the live database role and RLS-backed route, not against skipped or
+  fake tests.
+- Task 11 proves the historical provenance path remains database-only and complete when the model
+  provider is unavailable.
+- Task 12 adds the independently queried Results timeline with literal outcomes, copyable stable
+  identifiers, governed evidence navigation, promotion before/after versions, and allowlisted
+  collapsible detail; a planted private payload marker is absent from the DOM.
+- Task 13 proves list/heading/status semantics and no page-level overflow at both required zooms
+  through automated axe coverage; no manual assistive-technology claim is made.
+- Task 14 documents the pure provenance read and its sole problem code, closes the identity-model
+  question, and records the tool-transcript, comparison-discriminant, and audit-evidence gaps with
+  later owners. `docs/GATE-A-RUNBOOK.md` is unchanged.
+- Task 15 completed every requested gate against the re-derived Task 1 baselines. No evidence file
+  was created because this story has no measured threshold to bind.
+
 ### File List
+
+- backend/application/contracts/audit_envelope.py
+- backend/tests/test_approval_contracts.py
+- backend/application/ports/approval.py
+- backend/adapters/postgres/audit.py
+- backend/api/deps.py
+- backend/tests/test_decision_provenance.py
+- backend/application/contracts/decision_provenance.py
+- backend/api/schemas.py
+- backend/application/contracts/approval_binding.py
+- backend/api/routers/approvals.py
+- backend/application/queries/__init__.py
+- backend/application/queries/decision_provenance.py
+- _bmad-output/implementation-artifacts/deferred-work.md
+- backend/tests/test_approvals_api.py
+- backend/tests/test_approval_governance_postgres.py
+- frontend/openapi.json
+- frontend/src/api/schema.d.ts
+- frontend/src/api/provenance.ts
+- frontend/src/components/ui/collapsible.tsx
+- frontend/src/components/primitives/IdentifierCopyButton.tsx
+- frontend/src/features/provenance/ProvenanceTimeline.tsx
+- frontend/src/features/provenance/ProvenanceTimeline.test.tsx
+- frontend/src/hooks/useRunProvenance.ts
+- frontend/src/hooks/useDecideApproval.ts
+- frontend/src/routes/ScenarioResults.tsx
+- frontend/src/routes/ScenarioResultsWorkspace.test.tsx
+- frontend/e2e/accessibility.spec.ts
+- frontend/e2e/support/apiStubs.ts
+- docs/API.md
+- backend/tests/architecture/test_provenance_boundaries.py
+- _bmad-output/implementation-artifacts/4-4-inspect-complete-decision-provenance.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ---
 
@@ -840,3 +961,4 @@ is a spine change. Answering either inside 4.4 silently widens its scope.
 | Date | Change |
 |---|---|
 | 2026-08-31 | Story created from `epics.md:1230-1256`, the Epic 4 architecture spine (EAD-3, EAD-7, EAD-8, EAD-9, EAD-11, Structural Seed), ADR-4 D2/D3/D8 and its Consequences, Story 4.3's Dev Notes, Review Findings and Open Questions, and a live audit of the codebase at `e944914`. |
+| 2026-08-31 | Implemented the read-only decision provenance projection, API, Results timeline, accessibility coverage, documentation, ledger reconciliation, and full verification; moved to review. |

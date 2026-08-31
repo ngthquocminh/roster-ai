@@ -11,6 +11,7 @@ from application.contracts.evidence_ref import EvidenceRefV1
 SCHEMA_VERSION = "1"
 AuditOutcomeV1 = Literal[
     "approval_requested", "approval_consumed", "approval_rejected", "approval_expired", "approval_stale",
+    "approval_denied",
 ]
 
 

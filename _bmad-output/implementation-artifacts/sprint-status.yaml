@@ -1938,7 +1938,7 @@ development_status:
   # PostgreSQL 127 passed / 1 failed; frontend 575 passed; Playwright 60->62 passed. Re-derive at
   # Task 1 before attributing any failure to this story. The three backend failures are external
   # and pre-existing (two retired-slug OpenRouter cases, one conftest-import fixture).
-  4-4-inspect-complete-decision-provenance: ready-for-dev
+  4-4-inspect-complete-decision-provenance: review
   4-5-prove-approval-and-audit-invariants: backlog
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
   epic-4-retrospective: optional

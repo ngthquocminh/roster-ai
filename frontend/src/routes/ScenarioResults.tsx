@@ -10,6 +10,8 @@ import { useScheduleRunResult } from "@/hooks/useScheduleRunResult";
 import { useRequestApproval } from "@/hooks/useRequestApproval";
 import { useRunApprovals } from "@/hooks/useRunApprovals";
 import { ApprovalDecisionPanel } from "@/features/approvals/ApprovalDecisionPanel";
+import { ProvenanceTimeline } from "@/features/provenance/ProvenanceTimeline";
+import { useRunProvenance } from "@/hooks/useRunProvenance";
 import { USER_ERROR_COPY } from "@/lib/errors";
 
 const NON_TERMINAL = new Set(["solver_queued", "solver_running", "cancellation_requested"]);
@@ -21,6 +23,7 @@ export function ScenarioResults() {
   const query = useScheduleRunResult(runId);
   const requestApproval = useRequestApproval();
   const approvals = useRunApprovals(runId);
+  const provenance = useRunProvenance(runId);
   const headingRef = useRef<HTMLHeadingElement>(null);
   // An unavailable baseline comparison is no longer an ERROR: the server returns
   // 200 with `comparison: null` and a literal reason, so the schedule, evidence,
@@ -112,6 +115,12 @@ export function ScenarioResults() {
       ) : null}
       {!query.isError && query.data?.run.status === "solver_completed" && !comparisonUnavailable && (!query.data.candidate || !query.data.comparison) ? <InlineAlert description="The completed run did not return verifiable candidate evidence." title="Result unavailable" variant="destructive" /> : null}
       {!query.isError && query.data && !KNOWN_RUN_STATUSES.has(query.data.run.status) ? <InlineAlert description="This run reported a status this page does not recognize yet." title="Unrecognized run status" variant="destructive" /> : null}
+      <section aria-labelledby="decision-provenance-heading" className="rounded-xl border p-4">
+        <h3 className="font-semibold" id="decision-provenance-heading">Decision provenance</h3>
+        {provenance.isPending ? <div aria-label="Loading decision provenance" className="mt-3"><Skeleton className="h-28 w-full" /></div> : null}
+        {provenance.isError ? <div className="mt-3"><InlineAlert action={<Button onClick={() => { void provenance.refetch(); }} type="button" variant="outline">Retry provenance</Button>} description="The decision record could not be loaded. Results remain available." title="Decision provenance unavailable" variant="destructive" /></div> : null}
+        {provenance.data ? <div className="mt-3"><ProvenanceTimeline provenance={provenance.data} scenarioId={scenarioId} /></div> : null}
+      </section>
     </section>
   );
 }

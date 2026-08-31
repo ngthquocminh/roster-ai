@@ -38,8 +38,8 @@ export function IdentifierCopyButton({
   };
 
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="font-mono text-xs" title={value}>{value}</span>
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+      <span className="min-w-0 break-all font-mono text-xs" title={value}>{value}</span>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>

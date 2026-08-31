@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import re
 from dataclasses import fields
 from typing import get_args
+
+from sqlalchemy import CheckConstraint
 
 from application.contracts.activity import ActivityItemV1
 from application.contracts.approval_binding import ApprovalBindingV1, ApprovalStateV1
 from application.contracts.audit_envelope import AuditEnvelopeV1, AuditOutcomeV1
 from application.capabilities.registry import PolicyInputsV1, derive_policy_version
+from adapters.postgres.schema import audit_event
 
 
 def test_approval_binding_is_the_frozen_ad20_contract() -> None:
@@ -35,8 +39,19 @@ def test_audit_envelope_is_the_frozen_ad20_contract() -> None:
     ]
     assert get_args(AuditOutcomeV1) == (
         "approval_requested", "approval_consumed", "approval_rejected",
-        "approval_expired", "approval_stale",
+        "approval_expired", "approval_stale", "approval_denied",
     )
+
+
+def test_audit_outcome_contract_matches_the_database_check() -> None:
+    constraint = next(
+        item
+        for item in audit_event.constraints
+        if isinstance(item, CheckConstraint) and item.name == "ck_audit_event_outcome"
+    )
+    database_outcomes = set(re.findall(r"'([^']+)'", str(constraint.sqltext)))
+
+    assert set(get_args(AuditOutcomeV1)) == database_outcomes
 
 
 def test_activity_union_includes_approval_request_payload() -> None:
