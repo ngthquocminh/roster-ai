@@ -16,25 +16,6 @@ from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
 from application.contracts.canonical import contract_digest
 from application.ports.conversation import ExecutedAgentRunV1
 
-SCOPE_CONTROLS = {
-    "promotion": "NOT COVERED: promotion:owned_by_story_4_3",
-    "audit": "NOT COVERED: audit:denied_attempts_owned_by_story_4_3",
-    "resume": "NOT COVERED: resume:deferred_tool_results_owned_by_story_4_3",
-    # EAD-10 lists "membership" among the business mismatches, but never says
-    # whose. Read as the DECIDING actor's -- the reading Story 4.3 AC1 states
-    # literally ("current actor/site/membership") -- it is already enforced one
-    # layer up and cannot reach here: `auth.resolve_session` INNER JOINs
-    # `membership ... revoked_at IS NULL`, so a revoked member gets 401 at
-    # `get_session` before any route body runs. Terminalizing a binding to
-    # `stale` on behalf of an actor who has lost access would also be wrong --
-    # it would let a revoked actor mutate governance state, where the correct
-    # answer is to refuse. The alternative reading (the INITIATING actor's
-    # membership, snapshotted at TX1) IS reachable and is NOT implemented; it
-    # is Open Question 2 for Winston and matters at TX2, where the baseline
-    # actually moves.
-    "membership": "NOT COVERED: membership:deciding_actor_enforced_at_session_layer; initiating_actor_open_question_2",
-}
-
 class DecideApprovalError(ValueError):
     code = "invalid_approval_command"
 
@@ -46,7 +27,8 @@ class ApprovalNotFoundError(DecideApprovalError): code = "approval_not_found"
 class ApprovalNotPendingError(DecideApprovalError): code = "approval_not_pending"
 class StaleResourceVersionError(DecideApprovalError): code = "stale_resource_version"
 class ApprovalNotGrantedError(DecideApprovalError): code = "approval_not_granted"
-class BaselinePromotionNotAvailableError(DecideApprovalError): code = "promotion_not_available"
+class PostWriteApprovalNotPendingError(ApprovalNotPendingError):
+    """A consume CAS lost after TX2 was entered; must escape for rollback."""
 
 @dataclass(frozen=True)
 class RevalidationV1:
@@ -56,11 +38,13 @@ class RevalidationV1:
 
 @dataclass(frozen=True)
 class DecisionResultV1:
-    outcome: Literal["rejected", "expired", "stale"]
+    outcome: Literal["consumed", "rejected", "expired", "stale"]
     binding: ApprovalBindingV1
     activity: ExecutedAgentRunV1 | None
     expected: dict
     current: dict
+    baseline: Any = None
+    resume: Any = None
 
 @dataclass(frozen=True)
 class DecideApprovalCommandV1:
@@ -71,8 +55,11 @@ class DecideApprovalCommandV1:
     expected_resource_version: int
     request_id: UUID
 
-def revalidate_binding(connection: Any, *, binding: ApprovalBindingV1, schedule_runs: Any, baselines: Any, now: datetime, scheduling_baseline_enabled: bool) -> RevalidationV1:
-    """EAD-10's fixed fork: expiry first, then business mismatch; write faults propagate."""
+def revalidate_binding(connection: Any, *, binding: ApprovalBindingV1, schedule_runs: Any, baselines: Any, memberships: Any, now: datetime, scheduling_baseline_enabled: bool) -> RevalidationV1:
+    """EAD-10's fixed fork: expiry first, then one business-mismatch arm.
+
+    Transactional/infrastructure read faults propagate as the second arm.
+    """
     if binding.expires_at is not None and now >= binding.expires_at:
         return RevalidationV1("expired", {"expires_at": binding.expires_at.isoformat()}, {"now": now.isoformat()})
     candidate = schedule_runs.get_candidate(connection, schedule_run_id=binding.schedule_run_id, site_id=binding.site_id)
@@ -83,15 +70,20 @@ def revalidate_binding(connection: Any, *, binding: ApprovalBindingV1, schedule_
     _, _, parameter_hash = contract_digest(parameter)
     current_baseline = str(baseline.schedule_version_id) if baseline else None
     current_policy = derive_policy_version(PolicyInputsV1(scheduling_baseline_enabled))
+    active_initiator = memberships.has_active_membership(
+        connection,
+        app_user_id=binding.initiated_by_actor_id,
+        site_id=binding.site_id,
+    )
     valid_candidate = candidate is not None and candidate.schedule_version_id == binding.candidate_schedule_version_id and candidate.feasible_solver_status in ("OPTIMAL", "FEASIBLE")
     # The TX1 run version is part of the signed parameter digest; the binding's
     # own resource version is unrelated and must never be used as a proxy.
-    valid = valid_candidate and run is not None and current_baseline == binding.baseline_schedule_version and (baseline.resource_version if baseline else None) == binding.baseline_resource_version and parameter_hash == binding.parameter_hash and consequence_hash == binding.consequence_hash and current_policy == binding.policy_version
+    valid = active_initiator and valid_candidate and run is not None and current_baseline == binding.baseline_schedule_version and (baseline.resource_version if baseline else None) == binding.baseline_resource_version and parameter_hash == binding.parameter_hash and consequence_hash == binding.consequence_hash and current_policy == binding.policy_version
     if valid:
         return RevalidationV1(None, {}, {})
-    return RevalidationV1("stale", {"candidate_schedule_version_id": str(binding.candidate_schedule_version_id), "baseline_schedule_version": binding.baseline_schedule_version, "parameter_hash": binding.parameter_hash, "consequence_hash": binding.consequence_hash, "policy_version": binding.policy_version}, {"candidate_schedule_version_id": str(candidate.schedule_version_id) if candidate else None, "baseline_schedule_version": current_baseline, "parameter_hash": parameter_hash, "consequence_hash": consequence_hash, "policy_version": current_policy})
+    return RevalidationV1("stale", {"candidate_schedule_version_id": str(binding.candidate_schedule_version_id), "baseline_schedule_version": binding.baseline_schedule_version, "parameter_hash": binding.parameter_hash, "consequence_hash": binding.consequence_hash, "policy_version": binding.policy_version, "initiating_actor_membership": "active"}, {"candidate_schedule_version_id": str(candidate.schedule_version_id) if candidate else None, "baseline_schedule_version": current_baseline, "parameter_hash": parameter_hash, "consequence_hash": consequence_hash, "policy_version": current_policy, "initiating_actor_membership": "active" if active_initiator else "revoked_or_absent"})
 
-def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approvals: Any, schedule_runs: Any, baselines: Any, audit_writer: Any, conversations: Any, scheduling_baseline_enabled: bool, clock: Any, app_version: str = "0.1.0") -> DecisionResultV1:
+def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approvals: Any, schedule_runs: Any, baselines: Any, baseline_writer: Any, memberships: Any, audit_writer: Any, conversations: Any, scheduling_baseline_enabled: bool, clock: Any, app_version: str = "0.1.0") -> DecisionResultV1:
     if not scheduling_baseline_enabled: raise ApprovalNotGrantedError("baseline approval is not granted by policy")
     binding = approvals.get(connection, approval_id=command.approval_id, site_id=command.site_id)
     if binding is None: raise ApprovalNotFoundError("approval is not visible in this site")
@@ -100,11 +92,26 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
     if binding.resource_version != command.expected_resource_version:
         raise StaleResourceVersionError("approval resource version changed", expected={"resource_version": command.expected_resource_version}, current={"resource_version": binding.resource_version, "state": binding.state})
     now = clock()
-    check = revalidate_binding(connection, binding=binding, schedule_runs=schedule_runs, baselines=baselines, now=now, scheduling_baseline_enabled=scheduling_baseline_enabled)
+    check = revalidate_binding(connection, binding=binding, schedule_runs=schedule_runs, baselines=baselines, memberships=memberships, now=now, scheduling_baseline_enabled=scheduling_baseline_enabled)
     if check.outcome is None:
         if command.decision == "approve":
-            # Story 4.3 owns TX2; do not write a speculative promotion body.
-            raise BaselinePromotionNotAvailableError("Baseline promotion is not available yet.")
+            from application.use_cases.promote_baseline import promote_baseline
+            try:
+                promoted = promote_baseline(
+                    connection, binding=binding, actor_id=command.actor_id,
+                    request_id=command.request_id, approvals=approvals,
+                    baseline_writer=baseline_writer, audit_writer=audit_writer,
+                    conversations=conversations, occurred_at=now,
+                    app_version=app_version,
+                )
+            except ApprovalNotPendingError as exc:
+                raise PostWriteApprovalNotPendingError(
+                    str(exc), expected=exc.expected, current=exc.current
+                ) from exc
+            return DecisionResultV1(
+                "consumed", promoted.binding, promoted.activity, {}, {},
+                promoted.baseline, promoted.resume,
+            )
         outcome: Literal["rejected", "expired", "stale"] = "rejected"
     else:
         outcome = check.outcome

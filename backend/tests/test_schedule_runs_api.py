@@ -31,7 +31,7 @@ from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.session import ResolvedSession
 from application.contracts.comparison import AssignmentDiffV1, ComparisonV1
 from application.contracts.schedule_version import MetricSetV1, ScheduleVersionV1
-from application.scheduling.comparison import ComparisonIntegrityError
+from application.scheduling.comparison import BaselineSupplyUnavailableError, ComparisonIntegrityError
 from application.use_cases.cancel_schedule_run import (
     CancelScheduleRunError,
     IdempotencyKeyConflictError,
@@ -249,6 +249,28 @@ def test_result_route_reports_comparison_integrity_failure_as_a_distinct_problem
 
     assert response.status_code == 500
     assert response.json()["code"] == "comparison_calculation_failed"
+
+
+def test_result_route_reports_unreadable_baseline_with_literal_version(client, monkeypatch) -> None:
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+    class _Repository:
+        def get_run(self, *_args, **_kwargs): return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+        def get_candidate(self, *_args, **_kwargs): return candidate
+        def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version="baseline-v1")
+    def _raise(*_args, **_kwargs): raise BaselineSupplyUnavailableError("baseline-v1")
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", _raise)
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+    assert response.status_code == 409
+    assert response.json()["code"] == "baseline_supply_unavailable"
+    assert response.json()["detail"] == "Assignments for baseline schedule version baseline-v1 are not authoritatively readable."
 
 
 def test_result_route_lets_an_unrelated_bug_surface_as_the_generic_internal_error(

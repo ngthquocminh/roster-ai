@@ -5,6 +5,7 @@ from dataclasses import replace
 
 from application.contracts.agent_runtime import (
     AgentMessageV1,
+    AgentApprovalDecisionV1,
     AgentPartV1,
     AgentRunOutcomeV1,
     AgentTurnRequestV1,
@@ -62,11 +63,16 @@ def execute_turn(
     *,
     prompt: str,
     calculation_results: list[object],
-    history: tuple[ActivityItemV1, ...] = (),
+    history: tuple[ActivityItemV1, ...] | AgentTurnV1 = (),
+    approvals: tuple[AgentApprovalDecisionV1, ...] = (),
 ) -> AgentRunOutcomeV1:
     """Run outside a database transaction, then bind claims to raw tool results."""
     outcome = runtime.run_turn(
-        AgentTurnRequestV1(prompt=prompt, history=rehydrate_history(history))
+        AgentTurnRequestV1(
+            prompt=prompt,
+            history=history if isinstance(history, AgentTurnV1) else rehydrate_history(history),
+            approvals=approvals,
+        )
     )
     if outcome.status != "completed":
         return outcome

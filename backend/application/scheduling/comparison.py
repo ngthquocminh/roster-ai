@@ -27,12 +27,21 @@ from application.scheduling.hard_constraints import validate_hard_constraints
 SCOPE_CONTROLS = (
     "COVERS: candidate and baseline metrics are recomputed from version-pinned projection rows.",
     "NOT COVERED: comparisons over a scenario exceeding 2000 rows in any one group.",
-    "NOT COVERED: non-empty production baselines need authoritative wages and selected shift windows; projection workers expose neither today.",
+    "COVERS: a pinned non-null baseline with no authoritative assignment supply fails closed.",
+    "NOT COVERED: wiring non-empty production baselines; authoritative wages and selected shift windows are also unavailable today.",
 )
 
 
 class ComparisonIntegrityError(ValueError):
     """Persisted candidate evidence disagrees with deterministic recomputation."""
+
+
+class BaselineSupplyUnavailableError(ValueError):
+    """A real frozen baseline exists but its assignments cannot be read."""
+
+    def __init__(self, baseline_schedule_version: str):
+        self.baseline_schedule_version = baseline_schedule_version
+        super().__init__("authoritative baseline assignment supply is unavailable")
 
 
 def _facts(workers: tuple[WorkerV1, ...], tasks: tuple[TaskV1, ...], demand: tuple[DemandIntervalV1, ...], horizon_minutes: int) -> ValidationFactsV1:
@@ -169,6 +178,8 @@ def calculate_comparison(
     demand = cast(tuple[DemandIntervalV1, ...], drain_projection_group(reader.get_demand, connection, scenario_id, **drain_args))
     workers = cast(tuple[WorkerV1, ...], drain_projection_group(reader.get_workers, connection, scenario_id, **drain_args))
     baseline = cast(tuple[AssignmentV1, ...], drain_projection_group(reader.get_baseline_assignments, connection, scenario_id, **drain_args))
+    if expected_baseline_schedule_version is not None and not baseline:
+        raise BaselineSupplyUnavailableError(expected_baseline_schedule_version)
     facts = _facts(workers, tasks, demand, overview.horizon_minutes)
 
     recomputed_candidate, _ = calculate_candidate_metrics(
@@ -236,4 +247,4 @@ def calculate_comparison(
     )
 
 
-__all__ = ["SCOPE_CONTROLS", "ComparisonIntegrityError", "calculate_comparison"]
+__all__ = ["SCOPE_CONTROLS", "BaselineSupplyUnavailableError", "ComparisonIntegrityError", "calculate_comparison"]

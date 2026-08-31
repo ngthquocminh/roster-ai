@@ -1,0 +1,139 @@
+"""TX2: consume, promote, audit, event, and resume in the caller transaction.
+
+Unlike TX3's business-terminal outcomes, any failure after the first write must
+escape the endpoint so the request dependency rolls the entire bundle back.
+This module therefore never converts write faults into returned problem data.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+from uuid import UUID, uuid4
+
+from pydantic import TypeAdapter
+
+from application.contracts.agent_runtime import AgentApprovalPendingV1, AgentTurnV1
+from application.contracts.approval_binding import ApprovalBindingV1
+from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
+from application.ports.conversation import ExecutedAgentRunV1
+from application.ports.site_baseline import SiteBaselineV1
+from application.use_cases.decide_approval import DecideApprovalError, PostWriteApprovalNotPendingError
+
+SCOPE_CONTROLS = {
+    "audit": "NOT COVERED: audit:write_fault_outcomes_owned_by_story_4_5",
+    "baseline_supply": "NOT COVERED: baseline_supply:guarded_by_ead_8_not_wired",
+    "resume": "NOT COVERED: resume:denied_decisions_have_no_producer",
+}
+
+
+class BaselineConcurrentlyMovedError(DecideApprovalError):
+    code = "stale_baseline_version"
+
+
+@dataclass(frozen=True)
+class ResumeRequestV1:
+    agent_run_id: UUID
+    tool_call_id: str
+    history: AgentTurnV1
+
+
+@dataclass(frozen=True)
+class PromotionResultV1:
+    binding: ApprovalBindingV1
+    baseline: SiteBaselineV1
+    activity: ExecutedAgentRunV1 | None
+    resume: ResumeRequestV1 | None
+
+
+def promote_baseline(
+    connection: Any,
+    *,
+    binding: ApprovalBindingV1,
+    actor_id: UUID,
+    request_id: UUID,
+    approvals: Any,
+    baseline_writer: Any,
+    audit_writer: Any,
+    conversations: Any,
+    occurred_at: datetime,
+    app_version: str = "0.1.0",
+) -> PromotionResultV1:
+    """Execute TX2 after the caller's shared revalidation returned valid."""
+    if binding.state != "pending":
+        raise AssertionError("promote_baseline requires a pending validated binding")
+    consumed = approvals.consume(
+        connection,
+        approval_id=binding.approval_id,
+        site_id=binding.site_id,
+        decided_by_actor_id=actor_id,
+        decided_at=occurred_at,
+        expected_resource_version=binding.resource_version,
+    )
+    if consumed is None:
+        # Post-write-path concurrency closer: this exception must escape the
+        # endpoint even though the admission check uses the same error type.
+        raise PostWriteApprovalNotPendingError(
+            "approval is no longer pending",
+            expected={"state": "pending", "resource_version": binding.resource_version},
+            current={"state": "terminal_or_changed"},
+        )
+    baseline = baseline_writer.promote(
+        connection,
+        site_id=binding.site_id,
+        schedule_version_id=binding.candidate_schedule_version_id,
+        actor_id=actor_id,
+        occurred_at=occurred_at,
+        expected_resource_version=binding.baseline_resource_version,
+    )
+    if baseline is None:
+        raise BaselineConcurrentlyMovedError(
+            "the site baseline moved concurrently",
+            expected={"baseline_resource_version": binding.baseline_resource_version},
+            current={"baseline_resource_version": "changed"},
+        )
+    audit_writer.append(connection, AuditEnvelopeV1(
+        audit_id=uuid4(), attempt_id=uuid4(), request_id=request_id,
+        site_id=binding.site_id, initiated_by_actor_id=binding.initiated_by_actor_id,
+        decided_by_actor_id=actor_id, conversation_id=binding.conversation_id,
+        agent_run_id=binding.agent_run_id, approval_id=binding.approval_id,
+        schedule_run_id=binding.schedule_run_id, action=binding.action,
+        outcome="approval_consumed", success=True, effect_key=binding.request_effect_key,
+        before_version=binding.baseline_schedule_version,
+        after_version=str(binding.candidate_schedule_version_id),
+        safe_summary=binding.consequence_summary, parameter_hash=binding.parameter_hash,
+        consequence_hash=binding.consequence_hash, policy_version=binding.policy_version,
+        app_version=app_version, worker_facts=WorkerFactsV1(), evidence_refs=(),
+        occurred_at=occurred_at,
+    ))
+    resume = None
+    if binding.agent_run_id is None:
+        activity = conversations.append_approval_request_activity(
+            connection, binding=consumed, actor_id=actor_id, request_id=request_id,
+            agent_run_id=None, occurred_at=occurred_at, agent_run_status=None,
+        )
+    else:
+        payload = approvals.get_pending_payload(
+            connection, approval_id=binding.approval_id, site_id=binding.site_id
+        )
+        pending = TypeAdapter(AgentApprovalPendingV1).validate_python(payload)
+        if len(pending.pending_calls) != 1:
+            raise RuntimeError("approval pending payload must contain exactly one call")
+        activity = conversations.resume_agent_run_for_approval(
+            connection, agent_run_id=binding.agent_run_id, binding=consumed,
+            request_id=request_id, occurred_at=occurred_at,
+        )
+        resume = ResumeRequestV1(
+            agent_run_id=binding.agent_run_id,
+            tool_call_id=pending.pending_calls[0].tool_call_id,
+            history=pending.turn,
+        )
+    return PromotionResultV1(consumed, baseline, activity, resume)
+
+
+__all__ = [
+    "BaselineConcurrentlyMovedError",
+    "PromotionResultV1",
+    "ResumeRequestV1",
+    "promote_baseline",
+]

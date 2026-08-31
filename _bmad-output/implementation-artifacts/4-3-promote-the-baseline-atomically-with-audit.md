@@ -4,7 +4,7 @@ baseline_commit: 946b5ec1c4c5e1f84623d77910c2a584ec2dcd1d
 
 # Story 4.3: Promote the Baseline Atomically with Audit
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -521,151 +521,151 @@ must still be re-run per AR28.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Membership reader and the shared revalidation arm (AC: 1)**
-  - [ ] `application/ports/membership.py`: `MembershipReader` Protocol per Decision 2. SQL- and
+- [x] **Task 1 — Membership reader and the shared revalidation arm (AC: 1)**
+  - [x] `application/ports/membership.py`: `MembershipReader` Protocol per Decision 2. SQL- and
         transport-free.
-  - [ ] `adapters/postgres/membership.py`: `PostgresMembershipReader`, explicit `site_id`
+  - [x] `adapters/postgres/membership.py`: `PostgresMembershipReader`, explicit `site_id`
         predicate, `revoked_at IS NULL`.
-  - [ ] `api/deps.py`: `get_membership_reader`; wire it into the decision route and through
+  - [x] `api/deps.py`: `get_membership_reader`; wire it into the decision route and through
         `decide_approval` into `revalidate_binding`.
-  - [ ] Add the arm to `revalidate_binding`'s `valid = …` conjunction and to the `stale`
+  - [x] Add the arm to `revalidate_binding`'s `valid = …` conjunction and to the `stale`
         expected/current context, per Decision 2. Update the function docstring's fork
         description.
-  - [ ] Delete `SCOPE_CONTROLS["membership"]` from `decide_approval.py` (Decision 2).
+  - [x] Delete `SCOPE_CONTROLS["membership"]` from `decide_approval.py` (Decision 2).
 
-- [ ] **Task 2 — Repository surface for TX2 (AC: 2, 3)**
-  - [ ] `application/ports/approval.py` + `adapters/postgres/approval.py`: `consume` per
+- [x] **Task 2 — Repository surface for TX2 (AC: 2, 3)**
+  - [x] `application/ports/approval.py` + `adapters/postgres/approval.py`: `consume` per
         Decision 3, and `get_pending_payload` per Decision 8.
-  - [ ] `application/ports/site_baseline.py` + `adapters/postgres/site_baseline.py`:
+  - [x] `application/ports/site_baseline.py` + `adapters/postgres/site_baseline.py`:
         `SiteBaselineWriter.promote` per Decision 4. Keep the existing reader untouched.
-  - [ ] `application/ports/conversation.py` + `adapters/postgres/conversation.py`:
+  - [x] `application/ports/conversation.py` + `adapters/postgres/conversation.py`:
         `resume_agent_run_for_approval` per Decision 8, with the lock-order comment and the
         `status_reason=None` clear.
-  - [ ] `api/deps.py`: `get_site_baseline_writer`.
+  - [x] `api/deps.py`: `get_site_baseline_writer`.
 
-- [ ] **Task 3 — `promote_baseline`: TX2 (AC: 1, 2, 3)**
-  - [ ] `application/use_cases/promote_baseline.py`. `PromotionResultV1` frozen dataclass:
+- [x] **Task 3 — `promote_baseline`: TX2 (AC: 1, 2, 3)**
+  - [x] `application/use_cases/promote_baseline.py`. `PromotionResultV1` frozen dataclass:
         `binding: ApprovalBindingV1` (post-consume), `baseline: SiteBaselineV1`,
         `activity: ExecutedAgentRunV1 | None`, `resume: ResumeRequestV1 | None` (the
         `agent_run_id` + `tool_call_id` + owned history the route needs after commit).
-  - [ ] `BaselineConcurrentlyMovedError(DecideApprovalError)` with `code =
+  - [x] `BaselineConcurrentlyMovedError(DecideApprovalError)` with `code =
         "stale_baseline_version"` (Decision 5).
-  - [ ] The bundle, in this order, all in the caller's transaction, no repository commits:
+  - [x] The bundle, in this order, all in the caller's transaction, no repository commits:
         `consume` → `promote` → audit append → activity append → `resume_agent_run_for_approval`
         when `binding.agent_run_id is not None`.
-  - [ ] Every failure mode follows Decision 5's table. Put that table's rule in the module
+  - [x] Every failure mode follows Decision 5's table. Put that table's rule in the module
         docstring and say **why** the mechanism is not symmetric with TX3's.
-  - [ ] Make the two `ApprovalNotPendingError` sites explicit at their raise points: the
+  - [x] Make the two `ApprovalNotPendingError` sites explicit at their raise points: the
         admission-check one is pre-write and is caught in the router (Decision 7 audits it); the
         `consume`-returned-`None` one is post-write and must escape (Decision 5).
-  - [ ] Audit envelope exactly per Decision 6.
-  - [ ] `SCOPE_CONTROLS` naming what TX2 does not cover:
+  - [x] Audit envelope exactly per Decision 6.
+  - [x] `SCOPE_CONTROLS` naming what TX2 does not cover:
         `audit:write_fault_outcomes_owned_by_story_4_5`,
         `baseline_supply:guarded_by_ead_8_not_wired`,
         `resume:denied_decisions_have_no_producer`.
 
-- [ ] **Task 4 — Wire TX2 into the one endpoint and retire the 503 (AC: 1, 2, 3, 4)**
-  - [ ] `decide_approval.py`: replace the `BaselinePromotionNotAvailableError` raise with the
+- [x] **Task 4 — Wire TX2 into the one endpoint and retire the 503 (AC: 1, 2, 3, 4)**
+  - [x] `decide_approval.py`: replace the `BaselinePromotionNotAvailableError` raise with the
         `promote_baseline(...)` call (Decision 1). Widen `DecisionResultV1.outcome` to include
         `"consumed"`, or return the promotion result alongside it — whichever keeps
         `DecisionResultV1`'s existing three-value contract honest for TX3 callers.
-  - [ ] Delete `BaselinePromotionNotAvailableError` and `SCOPE_CONTROLS["promotion"]`.
-  - [ ] `api/routers/approvals.py`: remove `promotion_not_available` from `_ERROR_STATUS`, from
+  - [x] Delete `BaselinePromotionNotAvailableError` and `SCOPE_CONTROLS["promotion"]`.
+  - [x] `api/routers/approvals.py`: remove `promotion_not_available` from `_ERROR_STATUS`, from
         `_DECISION_DETAIL`, and remove the `503` entry from `_DECISION_RESPONSES` — **all three**
         (Story 4.2 inheritance item 3).
-  - [ ] `api/main.py`: register the rollback-required exception handler per Decision 5, emitting
+  - [x] `api/main.py`: register the rollback-required exception handler per Decision 5, emitting
         the same `problem_response(...)` shape and stable codes. **Move the existing
         `except AgentRunNotQueuedError` arm out of the route into it and correct its comment** —
         as shipped it claims a rollback the mechanism does not produce, and it lets a partial TX3
         commit (terminal binding, no audit, no event, run still `approval_required`).
-  - [ ] Denial audit on the `except DecideApprovalError` arm, for the two **pre-write** codes
+  - [x] Denial audit on the `except DecideApprovalError` arm, for the two **pre-write** codes
         Decision 7 names and no others, then `return problem_response(...)`.
-  - [ ] Post-commit resume drive per Decision 8, on the existing background-thread shape.
-  - [ ] Idempotency is unchanged: the existing `_store_idempotent_result` path stores the `200`
+  - [x] Post-commit resume drive per Decision 8, on the existing background-thread shape.
+  - [x] Idempotency is unchanged: the existing `_store_idempotent_result` path stores the `200`
         `ApprovalOut`, and a replay re-derives presented state. Assert AC3 against it rather than
         adding a second mechanism.
 
-- [ ] **Task 5 — The resumed turn (AC: 2)**
-  - [ ] `execute_turn` gains `approvals: tuple[AgentApprovalDecisionV1, ...] = ()`, passed into
+- [x] **Task 5 — The resumed turn (AC: 2)**
+  - [x] `execute_turn` gains `approvals: tuple[AgentApprovalDecisionV1, ...] = ()`, passed into
         the `AgentTurnRequestV1` it already constructs (Decision 8). No other signature change.
-  - [ ] The route builds `AgentApprovalDecisionV1(tool_call_id=…, approved=True)` from the
+  - [x] The route builds `AgentApprovalDecisionV1(tool_call_id=…, approved=True)` from the
         persisted `pending_payload`'s single pending call, and supplies that payload's owned
         `AgentTurnV1` as history.
-  - [ ] Finalise through the existing `finalize_agent_run` path; a failing resumed turn must not
+  - [x] Finalise through the existing `finalize_agent_run` path; a failing resumed turn must not
         touch the committed promotion.
 
-- [ ] **Task 6 — EAD-8 fail-closed comparison guard (AC: 2)**
-  - [ ] `application/scheduling/comparison.py`: `BaselineSupplyUnavailableError` per Decision 9,
+- [x] **Task 6 — EAD-8 fail-closed comparison guard (AC: 2)**
+  - [x] `application/scheduling/comparison.py`: `BaselineSupplyUnavailableError` per Decision 9,
         plus the `SCOPE_CONTROLS` update.
-  - [ ] `api/routers/schedule_runs.py`: map it to `409 baseline_supply_unavailable` with literal
+  - [x] `api/routers/schedule_runs.py`: map it to `409 baseline_supply_unavailable` with literal
         context naming the unreadable version. Never `str(exc)`.
-  - [ ] Frontend: render the literal reason where the comparison would be; offer only currently
+  - [x] Frontend: render the literal reason where the comparison would be; offer only currently
         valid actions.
 
-- [ ] **Task 7 — Migration (AC: 4)**
-  - [ ] One additive migration widening `ck_audit_event_outcome` with `approval_denied`
+- [x] **Task 7 — Migration (AC: 4)**
+  - [x] One additive migration widening `ck_audit_event_outcome` with `approval_denied`
         (Decision 7/11). Drop and recreate the named constraint; `downgrade` restores the
         five-member form.
-  - [ ] `uv run alembic check` from the repository root: zero operations, exactly one new file.
+  - [x] `uv run alembic check` from the repository root: zero operations, exactly one new file.
 
-- [ ] **Task 8 — Docs and Gate A (AC: 2, 4)**
-  - [ ] `docs/GATE-A-RUNBOOK.md`: correct the decision-route row per Decision 12.
-  - [ ] `docs/API.md`: drop the three `promotion_not_available` / 503 references
+- [x] **Task 8 — Docs and Gate A (AC: 2, 4)**
+  - [x] `docs/GATE-A-RUNBOOK.md`: correct the decision-route row per Decision 12.
+  - [x] `docs/API.md`: drop the three `promotion_not_available` / 503 references
         (`:527`, `:532`, `:558`); document the `200 consumed` response, the new
         `baseline_supply_unavailable` code, and the denial-audit behaviour.
-  - [ ] No `docs/CONFIGURATION.md` change — this story adds no setting.
+  - [x] No `docs/CONFIGURATION.md` change — this story adds no setting.
 
-- [ ] **Task 9 — Proof: use case and revalidation (AC: 1, 2, 3)**
-  - [ ] `backend/tests/test_promote_baseline.py` (fake repositories): first promotion into an
+- [x] **Task 9 — Proof: use case and revalidation (AC: 1, 2, 3)**
+  - [x] `backend/tests/test_promote_baseline.py` (fake repositories): first promotion into an
         absent baseline (insert, `resource_version = 1`); replacement against an exact existing
         baseline (CAS); `consume` returning `None` → `ApprovalNotPendingError`, **no pointer
         write**; `promote` returning `None` → `BaselineConcurrentlyMovedError` and **nothing
         committed**; a `DBAPIError` at the **audit** append and again at the **event** append —
         not only at the first statement, which is the weak point 4.2's review caught.
-  - [ ] Both initiator paths: `agent_run_id` set → run resumed to `agent_running` with
+  - [x] Both initiator paths: `agent_run_id` set → run resumed to `agent_running` with
         `status_reason` cleared and the activity carrying `agent_run_status="agent_running"`;
         `agent_run_id` `None` → **no `agent_run` write at all**.
-  - [ ] `test_decide_approval.py` (extend): the membership arm — active initiator passes;
+  - [x] `test_decide_approval.py` (extend): the membership arm — active initiator passes;
         revoked and absent initiators terminalize to `stale` on **both** an approve and a
         **reject** attempt (Decision 2's cross-story consequence).
-  - [ ] Every 4.2 revalidation test still passes with the new argument threaded through.
+  - [x] Every 4.2 revalidation test still passes with the new argument threaded through.
 
-- [ ] **Task 10 — Proof: real PostgreSQL (AC: 1, 2, 3, 4)**
-  - [ ] `backend/tests/test_approval_governance_postgres.py` (extend, `@pytest.mark.postgres`):
+- [x] **Task 10 — Proof: real PostgreSQL (AC: 1, 2, 3, 4)**
+  - [x] `backend/tests/test_approval_governance_postgres.py` (extend, `@pytest.mark.postgres`):
         TX2 end-to-end through the real `Postgres*` adapters on both initiator paths — binding
         `consumed` with `consumed_at` set, `site_baseline` row present and pointing at the
         candidate, exactly one `approval_consumed` audit row, exactly one `persisted_event`.
-  - [ ] **Decision 6's uniqueness proof:** a second `(site_id, effect_key, 'approval_consumed')`
+  - [x] **Decision 6's uniqueness proof:** a second `(site_id, effect_key, 'approval_consumed')`
         row is refused by `uq_audit_event_success_effect` while the story-4.1
         `approval_requested` row **for the same effect key** is still admitted.
-  - [ ] **AC2's "prior schedule versions remain unchanged":** assert
+  - [x] **AC2's "prior schedule versions remain unchanged":** assert
         `has_table_privilege` shows **no** `UPDATE`/`DELETE` on `schedule_version` for
         `shiftmind_runtime`, and assert the pre-promotion version rows are byte-identical after.
         Prove it by grant, not by re-reading a row nothing tried to change.
-  - [ ] **Decision 4's grant proof:** run the `site_baseline` insert and CAS as
+  - [x] **Decision 4's grant proof:** run the `site_baseline` insert and CAS as
         `shiftmind_runtime` and assert both succeed; assert `has_table_privilege` for `INSERT`
         and for `UPDATE (schedule_version_id)`. Observe red by revoking in a rolled-back
         transaction.
-  - [ ] **AC3:** replay the same `Idempotency-Key` and body after a successful promotion →
+  - [x] **AC3:** replay the same `Idempotency-Key` and body after a successful promotion →
         original semantic `200`, and **still exactly one** audit row, one event, one pointer
         `resource_version`. A different body under the same key → `409
         idempotency_key_conflict`. A new key against the now-`consumed` binding → `409
         approval_not_pending` with literal expected/current.
-  - [ ] **AC4's denial rows:** `approval_not_pending` and `stale_resource_version` each write one
+  - [x] **AC4's denial rows:** `approval_not_pending` and `stale_resource_version` each write one
         `success=False`, `outcome='approval_denied'` row; two denials write two rows with
         distinct `attempt_id`s; a duplicated `attempt_id` is refused by
         `uq_audit_event_failure_attempt`. `approval_not_found` and the feature-policy pre-check
         write **none** (Decision 7).
-  - [ ] **AC4's observability clause:** with telemetry export disabled, every row above is still
+  - [x] **AC4's observability clause:** with telemetry export disabled, every row above is still
         written. Audit is PostgreSQL and telemetry is OTel — assert the independence rather than
         assuming it.
 
-- [ ] **Task 11 — Proof: router, comparison guard, and frontend (AC: 1, 2, 4)**
-  - [ ] `backend/tests/test_approvals_api.py` (extend): a valid approve is `200` with
+- [x] **Task 11 — Proof: router, comparison guard, and frontend (AC: 1, 2, 4)**
+  - [x] `backend/tests/test_approvals_api.py` (extend): a valid approve is `200` with
         `state: "consumed"`; `promotion_not_available` and `503` no longer appear in
         `openapi.json` for any approvals route; `stale_baseline_version` is `409` with literal
         context.
-  - [ ] **Decision 5's rollback guard, through the real route and a real transaction** (this
+  - [x] **Decision 5's rollback guard, through the real route and a real transaction** (this
         belongs in `test_approval_governance_postgres.py`, beside
         `test_a_409_expiry_response_commits_the_terminal_row_through_the_real_route`, which is
         its mirror and the only existing test that runs the decision route inside a real
@@ -674,58 +674,58 @@ must still be re-run per AR28.
         row exists, and no audit row was written. **Observe it red by catching the error in the
         route and returning `problem_response(...)`** — the mutation that reproduces the
         inherited defect Decision 5 names.
-  - [ ] **The same guard for the corrected `AgentRunNotQueuedError` path:** a decision whose run
+  - [x] **The same guard for the corrected `AgentRunNotQueuedError` path:** a decision whose run
         left `approval_required` leaves the binding `pending` with no audit row. This is the
         assertion 4.2's monkeypatched test could not make.
-  - [ ] `calculate_comparison`: with a non-null frozen baseline and the empty supply →
+  - [x] `calculate_comparison`: with a non-null frozen baseline and the empty supply →
         `BaselineSupplyUnavailableError`; with a `None` frozen baseline → unchanged behaviour;
         `stale` becomes reachable once the pointer moves (Decision 9).
-  - [ ] Vitest: the `consumed` feedback message; the removed `promotion_not_available` branch;
+  - [x] Vitest: the `consumed` feedback message; the removed `promotion_not_available` branch;
         the comparison's fail-closed literal; existing panel, dialog, focus-restoration, live
         region, timeline dedupe, and **the NFR19/UX-DR35 distinctness test** all still green.
-  - [ ] `frontend/e2e/`: extend the existing approval accessibility coverage with the
+  - [x] `frontend/e2e/`: extend the existing approval accessibility coverage with the
         post-promotion terminal state. Automated only — `EXPERIENCE.md:196`.
-  - [ ] **Every new guard gets a demonstrated-red note in the Debug Log** naming the mutation
+  - [x] **Every new guard gets a demonstrated-red note in the Debug Log** naming the mutation
         that made it fail. A guard with no recorded red is not evidence (retro §1).
-  - [ ] `npm run codegen` before any frontend type work. **No hand-authored types.**
-  - [ ] Full suites before hand-off: `uv run pytest`, `uv run pytest -m postgres`,
+  - [x] `npm run codegen` before any frontend type work. **No hand-authored types.**
+  - [x] Full suites before hand-off: `uv run pytest`, `uv run pytest -m postgres`,
         `uv run alembic check`, `npm test`, `npx tsc -b`, `npm run lint`, `npm run test:e2e`.
         **`npx tsc -b`, not `npm run typecheck`** — the root `tsconfig.json` declares
         `"files": []`.
 
-- [ ] **Task 12 — No evidence file, and say so**
-  - [ ] No AC here carries a measured threshold, and NFR35's four rows belong to Stories 1.4,
+- [x] **Task 12 — No evidence file, and say so**
+  - [x] No AC here carries a measured threshold, and NFR35's four rows belong to Stories 1.4,
         1.5, 2.4 and 3.5 (AD-26). Stories 4.5/4.6 own Epic 4's evidence.
         `docs/EVIDENCE-CONVENTION.md` exists to stop unmeasured files being written — do not
         write one. Record the reasoning in Completion Notes.
-  - [ ] **No new golden case.** `evals/golden/scheduling_baseline/` already holds four
+  - [x] **No new golden case.** `evals/golden/scheduling_baseline/` already holds four
         (`approval-required`, `expected-baseline-pinned`, `injection-chat-text`,
         `invalid-run-identifier`), meeting NFR28's per-capability floor; the Release Gate table
         names Stories 4.5–4.6 as Epic 4's contributors. Do not pad
         (`epics.md:1527`). Confirm the count rather than assuming it.
 
-- [ ] **Task 13 — Ledger reconciliation (retro §3)**
-  - [ ] **Close** the initiating-actor membership entry (4.2 review, owner Story 4.3) on
+- [x] **Task 13 — Ledger reconciliation (retro §3)**
+  - [x] **Close** the initiating-actor membership entry (4.2 review, owner Story 4.3) on
         Decision 2's supplier plus the active/revoked/absent fixtures.
-  - [ ] **Close** "comparison staleness is vacuously false in production" (owner Story 4.3) on
+  - [x] **Close** "comparison staleness is vacuously false in production" (owner Story 4.3) on
         the **pointer movement**, per Decision 9 — not on the guard.
-  - [ ] **Re-point, do not close,** the candidate-drift entry (`scenario_version_id` and
+  - [x] **Re-point, do not close,** the candidate-drift entry (`scenario_version_id` and
         assignment count never re-read at decide time), whose revisit trigger names this story:
         either confirm `schedule_version` immutability and close it as not-a-defect **recording
         that immutability where it can be cited** (Task 10's grant assertion is that record), or
         state plainly why it stays open.
-  - [ ] **Record the new deferred item this story creates:** a write fault inside TX2 leaves no
+  - [x] **Record the new deferred item this story creates:** a write fault inside TX2 leaves no
         audit row, because a second connection would be required. **Owner: Story 4.5**
         (its AC2 names database failure during the promotion bundle).
-  - [ ] **Record, as found-and-fixed, the partial-commit defect on the inherited
+  - [x] **Record, as found-and-fixed, the partial-commit defect on the inherited
         `AgentRunNotQueuedError` arm** (Decision 5) — the SSE-listener precedent from 4.2's
         review: recorded in the ledger rather than only in this story, because the failure mode
         is structural (a returned problem response silently commits) and nothing mechanically
         fails when a route forgets.
-  - [ ] **Record the EAD-9 supplier entry:** the baseline pointer's production supplier is
+  - [x] **Record the EAD-9 supplier entry:** the baseline pointer's production supplier is
         `site_baseline`, written by this story — the spine's table already predicts
         *"real once 4.1 lands"*; confirm it is now real in both directions (read and write).
-  - [ ] **Leave open:** `AgentApprovalDecisionV1(approved=False)` still has no producer
+  - [x] **Leave open:** `AgentApprovalDecisionV1(approved=False)` still has no producer
         (Decision 8); the baseline assignment supply stays unwired (Decision 9); separation of
         duties stays unowned; `agent_cancelled`'s undefined semantics stay for the Epic 4 retro.
 
@@ -911,21 +911,94 @@ stub.
 
 ### Agent Model Used
 
-_To be completed by the dev agent._
+GPT-5.4 (Codex)
 
 ### Debug Log References
 
-_To be completed by the dev agent. Every new guard needs a demonstrated-red note naming the
-mutation that made it fail._
+- Membership revalidation: adding the required dependency before updating the fakes made all 24
+  decision-use-case cases fail on the unexpected `memberships` argument; active/revoked/absent
+  fixtures then made the shared fork green for approve and reject.
+- Consume/promotion rollback: mutating the route to catch and return the lost-CAS problem made the
+  real transaction retain the consumed row. Both the baseline-CAS and consume-CAS tests now require
+  the exception to unwind the dependency before the 409 is rendered.
+- Agent-run rollback: returning the inherited `AgentRunNotQueuedError` response inside the route
+  committed a partial terminalization; the real-route test now proves pending state and zero audit.
+- Runtime grants: transactionally revoking `site_baseline INSERT` makes the runtime-role write fail;
+  the transaction rolls back the mutation and the shipped insert/CAS proof passes.
+- Deferred decisions: omitting `approvals` from `execute_turn` made the resumed-turn test observe an
+  empty tuple; forwarding the persisted approved call made it green.
+- Comparison supply: deleting the new empty-supply guard made a pinned non-null baseline return a
+  fabricated empty comparison; the backend 409 and frontend literal-only recovery tests caught it.
+- Frontend terminal state: the consumed-copy test failed against the generic “baseline did not
+  change” text, and the query-invalidation test failed until comparison and scenario keys were added.
+- Full-suite mutations caught two integration omissions: detached `BackgroundTasks` violated the
+  architecture guard, and the old migration-head assertion rejected `e5f6a7b8c9d0`. Both are fixed.
 
 ### Completion Notes List
 
-_To be completed by the dev agent, including the honest gaps listed above and the re-derived
-test baselines._
+- Implemented TX2 as one caller-owned transaction: consume binding, insert/CAS `site_baseline`,
+  append the authoritative audit/event, and resume approval-backed runs. Rollback-required errors
+  render only after dependency unwind; resumed turns run through a synchronous post-commit queue.
+- Added the initiating actor's active-membership supplier to the one shared revalidation fork,
+  denial audit rows, idempotent replay protection, and the EAD-8 fail-closed comparison guard.
+- Regenerated OpenAPI types and updated the Results/approval UI with literal baseline-supply errors,
+  version-specific consumed copy, cache invalidation, and automated terminal-state accessibility.
+- Added the single `approval_denied` migration, updated API/Gate A docs, and reconciled the deferred
+  ledger. No setting, route, dependency, evidence file, or golden case was added.
+- No evidence file is warranted because this story has no measured threshold. The scheduling
+  baseline golden set remains exactly four cases, meeting the existing per-capability floor.
+- Re-derived pre-change baselines: backend 1402 passed / 3 failed / 7 skipped; PostgreSQL 117 passed /
+  1 failed; frontend 571 passed; Playwright 60 passed. Final: backend 1426 passed / the same 3 failed /
+  7 skipped; PostgreSQL 127 passed / the same 1 failed; frontend 575 passed; Playwright 62 passed.
+  The three backend failures remain external/pre-existing: two live OpenRouter cases use a retired
+  free model slug, and the temporary-database cleanup warning fixture imports the wrong conftest.
+- `npx tsc -b`, lint, Alembic check, architecture/changed-surface tests, and all Story 4.3 tests pass.
+  Gate A report generation correctly refused without fresh JUnit XML and a clean committed tree;
+  no unmeasured or unbound report was written.
 
 ### File List
 
-_To be completed by the dev agent._
+- `_bmad-output/implementation-artifacts/4-3-promote-the-baseline-atomically-with-audit.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/adapters/postgres/approval.py`
+- `backend/adapters/postgres/conversation.py`
+- `backend/adapters/postgres/membership.py`
+- `backend/adapters/postgres/site_baseline.py`
+- `backend/api/deps.py`
+- `backend/api/main.py`
+- `backend/api/routers/approvals.py`
+- `backend/api/routers/schedule_runs.py`
+- `backend/application/ports/approval.py`
+- `backend/application/ports/conversation.py`
+- `backend/application/ports/membership.py`
+- `backend/application/ports/site_baseline.py`
+- `backend/application/scheduling/comparison.py`
+- `backend/application/use_cases/decide_approval.py`
+- `backend/application/use_cases/execute_turn.py`
+- `backend/application/use_cases/promote_baseline.py`
+- `backend/migrations/versions/e5f6a7b8c9d0_add_approval_denied_audit_outcome.py`
+- `backend/tests/test_approval_governance_postgres.py`
+- `backend/tests/test_approvals_api.py`
+- `backend/tests/test_decide_approval.py`
+- `backend/tests/test_evidence_binding.py`
+- `backend/tests/test_execute_turn_use_case.py`
+- `backend/tests/test_promote_baseline.py`
+- `backend/tests/test_schedule_comparison.py`
+- `backend/tests/test_schedule_runs_api.py`
+- `docs/API.md`
+- `docs/GATE-A-RUNBOOK.md`
+- `frontend/e2e/accessibility.spec.ts`
+- `frontend/openapi.json`
+- `frontend/src/api/schema.d.ts`
+- `frontend/src/features/approvals/ApprovalDecisionPanel.test.tsx`
+- `frontend/src/features/approvals/ApprovalDecisionPanel.tsx`
+- `frontend/src/hooks/useConversationStream.test.tsx`
+- `frontend/src/hooks/useDecideApproval.test.tsx`
+- `frontend/src/hooks/useDecideApproval.ts`
+- `frontend/src/lib/errors.ts`
+- `frontend/src/routes/ScenarioResults.tsx`
+- `frontend/src/routes/ScenarioResultsWorkspace.test.tsx`
 
 ---
 
@@ -934,3 +1007,4 @@ _To be completed by the dev agent._
 | Date | Change |
 |---|---|
 | 2026-08-30 | Story created from `epics.md:1202-1228`, the Epic 4 architecture spine (including the `32d9320` membership amendment), ADR-4, Story 4.2's inheritance section and review retrospective, and a live audit of the codebase at `946b5ec`. |
+| 2026-08-31 | Implemented atomic baseline promotion, approval consumption/audit, post-commit agent resume, membership revalidation, fail-closed comparison supply, migration, frontend terminal behavior, documentation, ledger reconciliation, and complete automated proof. Status moved to review. |

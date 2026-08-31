@@ -31,6 +31,8 @@ export function useDecideApproval(id: string) {
       void queryClient.invalidateQueries({ queryKey: approvalKey(id) });
       void queryClient.invalidateQueries({ queryKey: ["run-approvals"] });
       void queryClient.invalidateQueries({ queryKey: ["conversation-timeline"] });
+      void queryClient.invalidateQueries({ queryKey: ["scheduleRunResult"] });
+      void queryClient.invalidateQueries({ queryKey: ["scenario-projection"] });
     },
   });
 }

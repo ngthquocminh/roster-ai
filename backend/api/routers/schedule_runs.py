@@ -51,7 +51,7 @@ from application.capabilities.scheduling_optimize import (
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.schedule_version import RUN_EVENT_TYPES
 from application.ports.scenario_projection import ScenarioProjectionReader
-from application.scheduling.comparison import ComparisonIntegrityError, calculate_comparison
+from application.scheduling.comparison import BaselineSupplyUnavailableError, ComparisonIntegrityError, calculate_comparison
 from application.ports.schedule_run import (
     ScheduleRunRepository,
     ScheduleRunSummaryV1,
@@ -591,6 +591,16 @@ def get_schedule_run_result(
             scenario_version_id=candidate.scenario_version_id,
             site_id=session.site_id,
             expected_baseline_schedule_version=snapshot.baseline_schedule_version,
+        )
+    except BaselineSupplyUnavailableError as exc:
+        return problem_response(
+            status=409,
+            code="baseline_supply_unavailable",
+            title="Baseline comparison unavailable",
+            detail=(
+                "Assignments for baseline schedule version "
+                f"{exc.baseline_schedule_version} are not authoritatively readable."
+            ),
         )
     except ComparisonIntegrityError:
         # Only the recomputation's own declared failure gets this specific,

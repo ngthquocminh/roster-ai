@@ -23,9 +23,11 @@ from api.deps import (
     get_clock,
     get_conversation_repository,
     get_identity_store,
+    get_membership_reader,
     get_schedule_run_repository,
     get_settings,
     get_site_baseline_reader,
+    get_site_baseline_writer,
     get_site_context,
 )
 from api.main import app
@@ -45,10 +47,10 @@ from application.use_cases.decide_approval import (
     ApprovalNotFoundError as DecisionApprovalNotFoundError,
     ApprovalNotGrantedError as DecisionApprovalNotGrantedError,
     ApprovalNotPendingError,
-    BaselinePromotionNotAvailableError,
     DecisionResultV1,
     StaleResourceVersionError as DecisionStaleResourceVersionError,
 )
+from application.use_cases.promote_baseline import BaselineConcurrentlyMovedError
 from settings import default_settings
 import api.routers.approvals as approvals_router
 
@@ -163,6 +165,8 @@ def client(monkeypatch, tmp_path):
     app.dependency_overrides[get_audit_writer] = lambda: FakeAudit()
     app.dependency_overrides[get_conversation_repository] = lambda: FakeConversations()
     app.dependency_overrides[get_site_baseline_reader] = lambda: FakeBaselines()
+    app.dependency_overrides[get_site_baseline_writer] = lambda: object()
+    app.dependency_overrides[get_membership_reader] = lambda: object()
     app.dependency_overrides[get_clock] = lambda: NOW
     try:
         with TestClient(app) as test_client:
@@ -210,6 +214,67 @@ def test_decision_stale_response_returns_409_after_the_terminal_write(client, mo
     assert approvals._binding.state == "stale"
 
 
+def test_valid_approve_returns_the_consumed_binding(client, monkeypatch):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    approvals = FakeApprovals(binding)
+    app.dependency_overrides[get_approval_repository] = lambda: approvals
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+
+    def consumed(*_a, **_kwargs):
+        updated = replace(
+            binding, state="consumed", decided_by_actor_id=session.app_user_id,
+            decided_at=NOW, consumed_at=NOW, resource_version=2,
+        )
+        approvals._binding = updated
+        return DecisionResultV1("consumed", updated, None, {}, {})
+
+    monkeypatch.setattr(approvals_router, "decide_approval", consumed)
+    response = test_client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_headers(settings, key="decide-consumed"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    assert response.status_code == 200 and response.json()["state"] == "consumed"
+
+
+def test_rollback_conflict_maps_stale_baseline_with_literal_context(client, monkeypatch):
+    test_client, settings, session = client
+    binding = _binding(site_id=session.site_id)
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
+    error = BaselineConcurrentlyMovedError(
+        "lost baseline CAS",
+        expected={"baseline_schedule_version": "baseline-v12"},
+        current={"baseline_schedule_version": "baseline-v13"},
+    )
+    monkeypatch.setattr(
+        approvals_router, "decide_approval",
+        lambda *_a, **_k: (_ for _ in ()).throw(error),
+    )
+    response = test_client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_headers(settings, key="lost-baseline"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "stale_baseline_version"
+    assert response.json()["expected"] == {"baseline_schedule_version": "baseline-v12"}
+    assert response.json()["current"] == {"baseline_schedule_version": "baseline-v13"}
+
+
+def test_approval_openapi_has_no_temporary_promotion_503_contract(client):
+    test_client, _settings, _session = client
+    document = test_client.get("/openapi.json").json()
+    approval_paths = {
+        path: operations for path, operations in document["paths"].items()
+        if path.startswith("/api/v1/approvals")
+    }
+    rendered = str(approval_paths)
+    assert "promotion_not_available" not in rendered
+    assert all("503" not in operation.get("responses", {}) for operations in approval_paths.values() for operation in operations.values())
+
+
 def test_decision_replay_returns_its_original_terminal_binding(client, monkeypatch):
     test_client, settings, session = client
     binding = _binding(site_id=session.site_id)
@@ -235,7 +300,6 @@ def test_decision_replay_returns_its_original_terminal_binding(client, monkeypat
         (ApprovalNotPendingError("x", expected={"state": "pending"}, current={"state": "rejected"}), 409, "approval_not_pending", True),
         (DecisionStaleResourceVersionError("x", expected={"resource_version": 1}, current={"resource_version": 2}), 409, "stale_resource_version", True),
         (DecisionApprovalNotGrantedError("x"), 403, "approval_not_granted", False),
-        (BaselinePromotionNotAvailableError("x"), 503, "promotion_not_available", False),
     ],
 )
 def test_decision_maps_every_command_refusal_with_literal_context(client, monkeypatch, error, status, code, has_context):
@@ -306,23 +370,6 @@ def test_decision_refuses_a_command_outside_the_closed_body_shape(client, body):
     app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
     response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="bad-body"), json=body)
     assert response.status_code == 422
-
-
-def test_decision_details_are_specific_per_code(client, monkeypatch):
-    """Decision 3 fixes 503's literal detail and warns against confusing it with
-    the 409 "your binding is no longer valid" family. One shared sentence made
-    `promotion_not_available` -- where the approval IS valid -- say the opposite."""
-    test_client, settings, session = client
-    binding = _binding(site_id=session.site_id)
-    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
-    app.dependency_overrides[get_schedule_run_repository] = lambda: FakeSchedulingRuns()
-    monkeypatch.setattr(approvals_router, "decide_approval", lambda *_a, **_k: (_ for _ in ()).throw(BaselinePromotionNotAvailableError("x")))
-    response = test_client.post(f"/api/v1/approvals/{binding.approval_id}/decision", headers=_headers(settings, key="detail-503"), json={"decision": "approve", "expected_resource_version": 1})
-    assert response.status_code == 503
-    assert response.json()["detail"] == "Baseline promotion is not available yet."
-    # Nothing was written, so there is no expected/current to publish -- and an
-    # always-present `{}` renders as literal noise in the client.
-    assert "expected" not in response.json()
 
 
 def test_an_uncancellable_agent_run_is_a_typed_conflict_not_a_500(client, monkeypatch):

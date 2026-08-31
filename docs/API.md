@@ -524,12 +524,12 @@ scratch).
 - `POST /api/v1/approvals` creates a pending approval for one feasible candidate. It requires an `Idempotency-Key` header and returns the existing binding on a replay.
 - `GET /api/v1/approvals/{approval_id}` reads one visible binding.
 - `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
-- `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. Rejection commits `200`; stale and expired terminalizations commit then return `409`; a currently valid approval returns `503 promotion_not_available` until Story 4.3 supplies promotion.
+- `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. A valid approval atomically returns `200 consumed`, moves the baseline pointer once, records `approval_consumed`, and resumes an approval-backed agent run after commit. Rejection commits `200`; stale and expired terminalizations commit then return `409`.
 
 Problem bodies on the decision route carry AD-13's literal `expected` and
 `current` objects **when there is context to carry** — a version, state, or
 policy the caller can compare. Codes describing a condition with nothing to
-compare (`approval_not_found`, `approval_not_granted`, `promotion_not_available`)
+compare (`approval_not_found`, `approval_not_granted`)
 omit both keys rather than publishing an empty object; both fields are declared
 optional on `ProblemDetailsV1` and generated into the client types.
 
@@ -555,10 +555,15 @@ denied, stale, missing, and invalid distinct):
 | `approval_not_pending` | 409 | The binding already reached a terminal state |
 | `approval_expired` | 409 | The decision attempt committed expiry terminalization |
 | `approval_stale` | 409 | The decision attempt committed stale terminalization |
-| `promotion_not_available` | 503 | A valid approval is held for Story 4.3's promotion transaction |
 | `agent_run_not_cancellable` | 409 | The agent run awaiting this approval left `approval_required`; nothing was written |
+| `baseline_supply_unavailable` | 409 | A frozen non-null baseline exists, but its assignments are not authoritatively readable; the comparison fails closed and names that version |
 | `idempotency_key_conflict` | 409 | The key was reused with a different body |
 | `invalid_approval_command` | 422 | The command is otherwise unusable |
+
+Pre-write `approval_not_pending` and `stale_resource_version` refusals against a
+binding resolved in the current site append an authoritative `approval_denied`
+row (`success=false`) keyed independently by `(site_id, attempt_id)`. Missing or
+cross-site bindings and the feature-policy pre-check write no denial row.
 
 Creating a request writes governance and audit records but never promotes the
 candidate or changes the baseline pointer.

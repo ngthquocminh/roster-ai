@@ -10,7 +10,7 @@ import { useScheduleRunResult } from "@/hooks/useScheduleRunResult";
 import { useRequestApproval } from "@/hooks/useRequestApproval";
 import { useRunApprovals } from "@/hooks/useRunApprovals";
 import { ApprovalDecisionPanel } from "@/features/approvals/ApprovalDecisionPanel";
-import { USER_ERROR_COPY } from "@/lib/errors";
+import { getErrorCode, getErrorDetail, USER_ERROR_COPY } from "@/lib/errors";
 
 const NON_TERMINAL = new Set(["solver_queued", "solver_running", "cancellation_requested"]);
 const NON_PROMOTABLE = new Set(["solver_infeasible", "solver_timed_out", "solver_cancelled", "solver_failed"]);
@@ -22,6 +22,7 @@ export function ScenarioResults() {
   const requestApproval = useRequestApproval();
   const approvals = useRunApprovals(runId);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const baselineSupplyUnavailable = getErrorCode(query.error) === "baseline_supply_unavailable";
 
   useEffect(() => {
     headingRef.current?.focus();
@@ -35,7 +36,7 @@ export function ScenarioResults() {
       </div>
 
       {query.isPending ? <div aria-label="Loading results" className="space-y-3"><Skeleton className="h-24 w-full" /><Skeleton className="h-48 w-full" /></div> : null}
-      {query.isError ? <InlineAlert action={<Button onClick={() => { void query.refetch(); }} type="button" variant="outline">Retry</Button>} description={USER_ERROR_COPY.connection.description} title={USER_ERROR_COPY.connection.title} variant="destructive" /> : null}
+      {query.isError ? <InlineAlert action={<Button onClick={() => { void query.refetch(); }} type="button" variant="outline">Retry</Button>} description={baselineSupplyUnavailable ? (getErrorDetail(query.error) ?? "The promoted baseline cannot be compared until its assignments are readable.") : USER_ERROR_COPY.connection.description} title={baselineSupplyUnavailable ? "Baseline comparison unavailable" : USER_ERROR_COPY.connection.title} variant="destructive" /> : null}
 
       {!query.isError && query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
       {!query.isError && query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}

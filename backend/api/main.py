@@ -24,6 +24,9 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import get_identity_store, get_settings
 from api.problems import problem_response
+from application.ports.conversation import AgentRunNotQueuedError
+from application.use_cases.decide_approval import PostWriteApprovalNotPendingError
+from application.use_cases.promote_baseline import BaselineConcurrentlyMovedError
 from api.routers import (
     agent_availability,
     approvals,
@@ -51,6 +54,28 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ShiftMind API", version="0.1.0", lifespan=lifespan)
+
+
+@app.exception_handler(PostWriteApprovalNotPendingError)
+@app.exception_handler(BaselineConcurrentlyMovedError)
+@app.exception_handler(AgentRunNotQueuedError)
+async def rollback_required_decision_problem(request: Request, exc: Exception):
+    """Render only after the endpoint exception has unwound its transaction."""
+    if isinstance(exc, PostWriteApprovalNotPendingError):
+        code, detail = "approval_not_pending", "The approval already reached a terminal state."
+        expected, current = exc.expected, exc.current
+    elif isinstance(exc, BaselineConcurrentlyMovedError):
+        code, detail = "stale_baseline_version", "The site baseline changed while the approval was being consumed."
+        expected, current = exc.expected, exc.current
+    else:
+        code = "agent_run_not_cancellable"
+        detail = "The agent run awaiting this approval is no longer in a cancellable state."
+        expected = {"agent_run_status": "approval_required"}
+        current = {"agent_run_status": "changed"}
+    return problem_response(
+        status=409, code=code, title="Approval decision could not be completed",
+        detail=detail, extra={"expected": expected, "current": current},
+    )
 
 
 @app.exception_handler(RequestValidationError)

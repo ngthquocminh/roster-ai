@@ -45,6 +45,23 @@ it("keeps the workspace shell and peer tabs available when Results fetch fails",
   expect(screen.getByRole("heading", { name: "Fixture A" })).toBeInTheDocument();
 });
 
+it("renders the fail-closed baseline supply reason and only a retry action", async () => {
+  vi.mocked(getScheduleRunResult).mockRejectedValue({
+    status: 409,
+    code: "baseline_supply_unavailable",
+    detail: "Assignments for baseline schedule version baseline-v1 are not authoritatively readable.",
+  });
+  const router = createMemoryRouter([{
+    path: "/scenarios/:scenarioId", Component: ScenarioWorkspace,
+    children: [{ path: "runs/:runId", Component: ScenarioResults }],
+  }], { initialEntries: [`/scenarios/${scenarioId}/runs/${runId}`] });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>);
+  expect(await screen.findByText("Baseline comparison unavailable")).toBeInTheDocument();
+  expect(screen.getByText(/baseline-v1 are not authoritatively readable/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Request approval" })).not.toBeInTheDocument();
+});
+
 it("shows an alert for a run status this page does not recognize", async () => {
   vi.mocked(getScheduleRunResult).mockResolvedValue({
     run: {

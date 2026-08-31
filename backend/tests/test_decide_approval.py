@@ -10,9 +10,7 @@ from sqlalchemy.exc import DBAPIError
 from application.contracts.schedule_version import ScheduleVersionV1
 from application.ports.schedule_run import ScheduleRunViewV1
 from application.ports.site_baseline import SiteBaselineV1
-from application.use_cases.decide_approval import (
-    BaselinePromotionNotAvailableError, DecideApprovalCommandV1, decide_approval,
-)
+from application.use_cases.decide_approval import DecideApprovalCommandV1, decide_approval
 from application.use_cases.request_approval import RequestApprovalCommandV1, request_approval
 
 NOW = datetime(2026, 8, 29, tzinfo=timezone.utc)
@@ -28,6 +26,10 @@ class Baselines:
     def __init__(self, value=None): self.value = value
     def get(self, *_a): return self.value
 
+class Memberships:
+    def __init__(self, active=True): self.active = active; self.calls = []
+    def has_active_membership(self, _c, **kw): self.calls.append(kw); return self.active
+
 class Approvals:
     def __init__(self): self.binding = None; self.terminalized = 0
     def create_pending(self, _c, *, binding, pending_payload): self.binding = binding
@@ -36,6 +38,13 @@ class Approvals:
     def terminalize(self, _c, **kw):
         if self.binding.state != "pending" or self.binding.resource_version != kw["expected_resource_version"]: return None
         self.terminalized += 1; self.binding = replace(self.binding, state=kw["state"], decided_by_actor_id=kw["decided_by_actor_id"], decided_at=kw["decided_at"], resource_version=self.binding.resource_version + 1); return self.binding
+    def consume(self, _c, **kw):
+        if self.binding.state != "pending" or self.binding.resource_version != kw["expected_resource_version"]: return None
+        self.binding = replace(self.binding, state="consumed", decided_by_actor_id=kw["decided_by_actor_id"], decided_at=kw["decided_at"], consumed_at=kw["decided_at"], resource_version=self.binding.resource_version + 1); return self.binding
+    def get_pending_payload(self, *_a, **_k): return {"pending_calls": [{"tool_call_id": "call-1"}], "turn": {}}
+
+class BaselineWriter:
+    def promote(self, _c, **kw): return SiteBaselineV1(kw["site_id"], kw["schedule_version_id"], 1)
 
 class Audit:
     def __init__(self): self.items = []
@@ -55,8 +64,26 @@ def pending(*, agent_run_id=None, baseline=None):
     audit.items.clear(); conversations.items.clear()
     return runs, approvals, audit, conversations, command
 
-def decide(runs, approvals, audit, conversations, command, *, decision="reject", now=NOW, baseline=None, enabled=True):
-    return decide_approval(None, command=DecideApprovalCommandV1(site_id=command.site_id, actor_id=command.actor_id, approval_id=approvals.binding.approval_id, decision=decision, expected_resource_version=approvals.binding.resource_version, request_id=uuid4()), approvals=approvals, schedule_runs=runs, baselines=Baselines(baseline), audit_writer=audit, conversations=conversations, scheduling_baseline_enabled=enabled, clock=lambda: now)
+def decide(runs, approvals, audit, conversations, command, *, decision="reject", now=NOW, baseline=None, enabled=True, memberships=None):
+    return decide_approval(None, command=DecideApprovalCommandV1(site_id=command.site_id, actor_id=command.actor_id, approval_id=approvals.binding.approval_id, decision=decision, expected_resource_version=approvals.binding.resource_version, request_id=uuid4()), approvals=approvals, schedule_runs=runs, baselines=Baselines(baseline), baseline_writer=BaselineWriter(), memberships=memberships or Memberships(), audit_writer=audit, conversations=conversations, scheduling_baseline_enabled=enabled, clock=lambda: now)
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+@pytest.mark.parametrize("active", [False, None])
+def test_inactive_or_absent_initiator_membership_terminalizes_stale(decision, active) -> None:
+    runs, approvals, audit, conversations, command = pending()
+    memberships = Memberships(active)
+    result = decide(
+        runs, approvals, audit, conversations, command,
+        decision=decision, memberships=memberships,
+    )
+    assert result.outcome == "stale"
+    assert result.expected["initiating_actor_membership"] == "active"
+    assert result.current["initiating_actor_membership"] == "revoked_or_absent"
+    assert memberships.calls == [{
+        "app_user_id": approvals.binding.initiated_by_actor_id,
+        "site_id": command.site_id,
+    }]
 
 def test_reject_terminalizes_once_and_records_audit_and_event() -> None:
     runs, approvals, audit, conversations, command = pending()
@@ -71,10 +98,11 @@ def test_expiry_outranks_requested_reject_and_clears_pending_slot() -> None:
     assert result.outcome == "expired" and approvals.binding.state == "expired"
     assert audit.items[0].outcome == "approval_expired"
 
-def test_valid_approve_is_explicitly_unavailable_without_a_write() -> None:
+def test_valid_approve_consumes_and_promotes() -> None:
     runs, approvals, audit, conversations, command = pending()
-    with pytest.raises(BaselinePromotionNotAvailableError): decide(runs, approvals, audit, conversations, command, decision="approve")
-    assert approvals.binding.state == "pending" and not audit.items and not conversations.items
+    result = decide(runs, approvals, audit, conversations, command, decision="approve")
+    assert result.outcome == "consumed" and approvals.binding.state == "consumed"
+    assert audit.items[0].outcome == "approval_consumed"
 
 def test_changed_candidate_terminalizes_stale() -> None:
     runs, approvals, audit, conversations, command = pending()

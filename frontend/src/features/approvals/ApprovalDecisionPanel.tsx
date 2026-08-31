@@ -19,20 +19,26 @@ type Feedback = Readonly<{
 /**
  * What the server actually did, in the planner's words.
  *
- * A single `isError` branch is wrong here, because two of this endpoint's
- * designed outcomes arrive as HTTP failures. `409 approval_expired` is the
- * dismissal *succeeding* (EAD-7 runs TX3 with `approval_expired` instead of the
- * requested outcome), and `503 promotion_not_available` is every valid approve
- * until Story 4.3 lands — nothing changed at all. Reporting either as "the
- * approval changed" told the planner the opposite of what happened.
+ * A single `isError` branch is wrong here because terminalizing stale and
+ * expired outcomes arrive as HTTP failures even though the governance state
+ * changed. Reporting either as "the approval changed elsewhere" tells the
+ * planner the opposite of what happened.
  */
 function decisionFeedback(
   isSuccess: boolean,
   state: string | undefined,
+  candidateVersion: string | undefined,
+  priorBaselineVersion: string | null | undefined,
   isError: boolean,
   error: unknown,
 ): Feedback | null {
   if (isSuccess) {
+    if (state === "consumed") {
+      const replacement = priorBaselineVersion
+        ? `replacing ${priorBaselineVersion}`
+        : "replacing no previous baseline";
+      return { tone: "outcome", message: `Candidate ${candidateVersion ?? "schedule"} is now the operational baseline, ${replacement}.` };
+    }
     return { tone: "outcome", message: `Approval ${state ?? "decided"}. The operational baseline did not change.` };
   }
   if (!isError) return null;
@@ -44,8 +50,6 @@ function decisionFeedback(
       return { tone: "outcome", message: "This approval had already expired, so it was closed. The operational baseline did not change." };
     case "approval_stale":
       return { tone: "outcome", message: "This approval no longer matched the current plan, so it was closed as stale. The operational baseline did not change.", expected, current };
-    case "promotion_not_available":
-      return { tone: "blocked", message: "Baseline promotion is not available yet. The approval is still pending and nothing changed." };
     case "approval_not_granted":
       return { tone: "blocked", message: "Current policy does not grant baseline approval." };
     case "approval_not_pending":
@@ -108,7 +112,14 @@ export function ApprovalDecisionPanel({ approvalId }: Readonly<{ approvalId: str
 
   const approval = query.data;
   const presentedExpired = approval.state === "pending" && new Date(approval.expires_at).getTime() <= now;
-  const feedback = decisionFeedback(mutation.isSuccess, mutation.data?.state, mutation.isError, mutation.error);
+  const feedback = decisionFeedback(
+    mutation.isSuccess,
+    mutation.data?.state,
+    mutation.data?.candidate_schedule_version_id,
+    mutation.data?.baseline_schedule_version,
+    mutation.isError,
+    mutation.error,
+  );
 
   const restoreFocus = () => {
     setTimeout(() => {
@@ -186,6 +197,9 @@ export function ApprovalDecisionPanel({ approvalId }: Readonly<{ approvalId: str
       ) : (
         <p className="text-sm">
           Terminal approval state: {approval.state}
+          {approval.state === "consumed"
+            ? `; promoted ${approval.candidate_schedule_version_id}${approval.baseline_schedule_version ? ` replacing ${approval.baseline_schedule_version}` : " replacing no previous baseline"}.`
+            : ""}
           {approval.agent_run_id ? "; associated agent run was cancelled." : ""}
         </p>
       )}

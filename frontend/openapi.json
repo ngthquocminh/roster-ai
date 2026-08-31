@@ -4207,16 +4207,6 @@
               }
             },
             "description": "Unprocessable Entity"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetailsV1"
-                }
-              }
-            },
-            "description": "Service Unavailable"
           }
         }
       }

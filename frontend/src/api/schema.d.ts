@@ -5438,15 +5438,6 @@ export interface operations {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
                 };
             };
-            /** @description Service Unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProblemDetailsV1"];
-                };
-            };
         };
     };
     get_approval_api_v1_approvals__approval_id__get: {

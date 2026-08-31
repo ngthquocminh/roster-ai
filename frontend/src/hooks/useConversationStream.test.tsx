@@ -11,8 +11,10 @@ import { ReconnectBanner } from "@/components/primitives/ReconnectBanner";
 import { ActivityTimeline } from "@/features/chat/ActivityTimeline";
 import { useConversationTimeline } from "@/hooks/useConversationTimeline";
 import {
+  APPROVAL_REQUEST,
   cursorStorageKey,
   PLANNER_MESSAGE_ACCEPTED,
+  STREAMED_ACTIVITY_EVENTS,
   useConversationStream,
   type EventSourceLike,
 } from "./useConversationStream";
@@ -24,6 +26,10 @@ const SCENARIO = "33333333-3333-3333-3333-333333333333";
 const VERSION = "44444444-4444-4444-4444-444444444444";
 const EXISTING = "aaaaaaaa-1111-1111-1111-111111111111";
 const ARRIVING = "bbbbbbbb-2222-2222-2222-222222222222";
+
+it("subscribes to the persisted approval lifecycle discriminant", () => {
+  expect(STREAMED_ACTIVITY_EVENTS).toContain(APPROVAL_REQUEST);
+});
 
 function activity(activityId: string, text: string, sequence: string) {
   return {

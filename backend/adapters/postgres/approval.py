@@ -58,10 +58,27 @@ class PostgresApprovalRepository:
         row = connection.execute(select(approval_request).where(approval_request.c.agent_run_id == agent_run_id, approval_request.c.site_id == site_id, approval_request.c.state == "pending")).one_or_none()
         return _binding(row) if row else None
 
+    def get_pending_payload(self, connection: Connection, *, approval_id, site_id):
+        return connection.execute(
+            select(approval_request.c.pending_payload).where(
+                approval_request.c.id == approval_id,
+                approval_request.c.site_id == site_id,
+            )
+        ).scalar_one_or_none()
+
     def terminalize(self, connection: Connection, *, approval_id, site_id, state, decided_by_actor_id, decided_at, expected_resource_version):
         row = connection.execute(update(approval_request).where(
             approval_request.c.id == approval_id, approval_request.c.site_id == site_id,
             approval_request.c.state == "pending", approval_request.c.resource_version == expected_resource_version,
         ).values(state=state, decided_by_actor_id=decided_by_actor_id, decided_at=decided_at,
                  resource_version=approval_request.c.resource_version + 1).returning(approval_request)).one_or_none()
+        return _binding(row) if row else None
+
+    def consume(self, connection: Connection, *, approval_id, site_id, decided_by_actor_id, decided_at, expected_resource_version):
+        row = connection.execute(update(approval_request).where(
+            approval_request.c.id == approval_id, approval_request.c.site_id == site_id,
+            approval_request.c.state == "pending", approval_request.c.resource_version == expected_resource_version,
+        ).values(state="consumed", decided_by_actor_id=decided_by_actor_id, decided_at=decided_at,
+                 consumed_at=decided_at, resource_version=approval_request.c.resource_version + 1)
+          .returning(approval_request)).one_or_none()
         return _binding(row) if row else None
