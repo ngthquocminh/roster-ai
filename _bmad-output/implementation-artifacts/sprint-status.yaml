@@ -2082,7 +2082,7 @@ development_status:
   # PostgreSQL 127 passed / 1 failed; frontend 575 passed; Playwright 62 passed. Re-derive at
   # Task 1 before attributing any failure to this story. The three backend failures were recorded
   # as external and pre-existing.
-  4-5-prove-approval-and-audit-invariants: in-progress
+  4-5-prove-approval-and-audit-invariants: review
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
   epic-4-retrospective: optional
 

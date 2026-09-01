@@ -4,7 +4,7 @@ baseline_commit: 9460a57
 
 # Story 4.5: Prove Approval and Audit Invariants
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -446,100 +446,100 @@ it rather than restructuring someone else's test.
   - Baselines inherited from Story 4.4 and **not verified**: backend 1426 passed / 3 failed / 7 skipped; PostgreSQL 127 passed / 1 failed; frontend 575 passed; Playwright 62 passed. The three backend failures were recorded as external and pre-existing (two retired-slug OpenRouter cases, one conftest-import fixture). **Re-derive before attributing any failure to this story.**
   - Acceptance boundary: no code is written until the numbers are in the Debug Log.
 
-- [ ] **Task 2 — Read the files this story asserts against** (Decision 1)
-  - [ ] `application/use_cases/decide_approval.py`, `promote_baseline.py`, `request_approval.py`; `api/routers/approvals.py`; `api/deps.py`; `adapters/postgres/approval.py`, `site_baseline.py`, `audit.py`; `adapters/postgres/scenario_projection.py` — `_resolve_items` and the six `resolve_*` methods.
-  - [ ] `tests/test_approval_governance_postgres.py` in full — it already carries every helper this story reuses (`_seed_candidate_run`, `_seed_agent_run`, `decision_http_client`, `_governance_headers`, `_use_case_dependencies`, `_decision_dependencies`, `_audit_row`, `site_ids`) and the two delegating-wrapper fault-injection tests Decision 4 builds on.
-  - [ ] `backend/evals/recovery_idempotency_report.py` and `tests/test_recovery_idempotency_report.py` — the shape Decision 11 mirrors.
+- [x] **Task 2 — Read the files this story asserts against** (Decision 1)
+  - [x] `application/use_cases/decide_approval.py`, `promote_baseline.py`, `request_approval.py`; `api/routers/approvals.py`; `api/deps.py`; `adapters/postgres/approval.py`, `site_baseline.py`, `audit.py`; `adapters/postgres/scenario_projection.py` — `_resolve_items` and the six `resolve_*` methods.
+  - [x] `tests/test_approval_governance_postgres.py` in full — it already carries every helper this story reuses (`_seed_candidate_run`, `_seed_agent_run`, `decision_http_client`, `_governance_headers`, `_use_case_dependencies`, `_decision_dependencies`, `_audit_row`, `site_ids`) and the two delegating-wrapper fault-injection tests Decision 4 builds on.
+  - [x] `backend/evals/recovery_idempotency_report.py` and `tests/test_recovery_idempotency_report.py` — the shape Decision 11 mirrors.
   - Acceptance boundary: the File List records which of these were read, not merely opened.
 
-- [ ] **Task 3 — Create `backend/tests/test_approval_audit_invariants_postgres.py`** (AC1; Decisions 3, 13)
-  - [ ] `pytestmark = pytest.mark.postgres`. Import the existing helpers from `tests/test_approval_governance_postgres.py` rather than re-writing them; extend the helpers in place if a keyword is missing (permitted by Decision 1).
-  - [ ] One test per row of Decision 3's table. Each asserts the four facts together: binding state, `agent_run.status` + `status_reason`, the exact `(outcome, success)` audit row set for that `approval_id`, and that `site_baseline` is byte-for-byte unchanged where the row says "zero baseline effect".
-  - [ ] Obligation 1 (initial promotion): `baseline_version = null` against an empty `site_baseline`; assert the row is **inserted**, one `approval_consumed` audit row, one event.
-  - [ ] Obligation 2 (replacement): approve naming the exact current baseline; assert the CAS succeeded and prior `schedule_version` rows are unchanged in count and content.
-  - [ ] Obligation 5 (idempotent replay): replay across **both** AD-8 key shapes — the HTTP body-hash command key and the agent `(agent_run_id, tool_call_id)` effect key. Assert the original semantic result, no second audit row, no second pointer movement; then assert an altered body on the same key returns 409 `idempotency_key_conflict`.
-  - [ ] Obligation 4, backend half (Decision 2): drive every pure read path over an overdue pending binding — the GET, the provenance read, and the idempotent-replay lookup — and assert afterwards that the binding's stored `state` is still `pending`, `audit_event` count for that approval is unchanged, and no new `persisted_event` row exists.
+- [x] **Task 3 — Create `backend/tests/test_approval_audit_invariants_postgres.py`** (AC1; Decisions 3, 13)
+  - [x] `pytestmark = pytest.mark.postgres`. Import the existing helpers from `tests/test_approval_governance_postgres.py` rather than re-writing them; extend the helpers in place if a keyword is missing (permitted by Decision 1).
+  - [x] One test per row of Decision 3's table. Each asserts the four facts together: binding state, `agent_run.status` + `status_reason`, the exact `(outcome, success)` audit row set for that `approval_id`, and that `site_baseline` is byte-for-byte unchanged where the row says "zero baseline effect".
+  - [x] Obligation 1 (initial promotion): `baseline_version = null` against an empty `site_baseline`; assert the row is **inserted**, one `approval_consumed` audit row, one event.
+  - [x] Obligation 2 (replacement): approve naming the exact current baseline; assert the CAS succeeded and prior `schedule_version` rows are unchanged in count and content.
+  - [x] Obligation 5 (idempotent replay): replay across **both** AD-8 key shapes — the HTTP body-hash command key and the agent `(agent_run_id, tool_call_id)` effect key. Assert the original semantic result, no second audit row, no second pointer movement; then assert an altered body on the same key returns 409 `idempotency_key_conflict`.
+  - [x] Obligation 4, backend half (Decision 2): drive every pure read path over an overdue pending binding — the GET, the provenance read, and the idempotent-replay lookup — and assert afterwards that the binding's stored `state` is still `pending`, `audit_event` count for that approval is unchanged, and no new `persisted_event` row exists.
   - Acceptance boundary: every assertion in this module is demonstrated-red once — weaken the guard or corrupt the fixture, observe the failure, restore, and record the RED→GREEN line in Debug Log References. A guard that cannot be made to fail by a relevant mutation does not count.
 
-- [ ] **Task 4 — Prove the EAD-10 fork on both arms distinctly** (AC1, AC2; Decisions 3, 4)
-  - [ ] Business arm: assert that every mismatch fixture in Decision 3's table terminalizes the binding and **never** leaves it `pending`.
-  - [ ] Write-fault arm: assert the binding is left `pending` and **never** terminalized.
-  - [ ] Add one test asserting the two arms are disjoint over the same starting fixture — the same binding, one path per arm, different terminal facts.
+- [x] **Task 4 — Prove the EAD-10 fork on both arms distinctly** (AC1, AC2; Decisions 3, 4)
+  - [x] Business arm: assert that every mismatch fixture in Decision 3's table terminalizes the binding and **never** leaves it `pending`.
+  - [x] Write-fault arm: assert the binding is left `pending` and **never** terminalized.
+  - [x] Add one test asserting the two arms are disjoint over the same starting fixture — the same binding, one path per arm, different terminal facts.
   - Acceptance boundary: a test that only exercises one arm does not satisfy this task; the spine requires both proven distinctly.
 
-- [ ] **Task 5 — Inject a genuine mid-bundle infrastructure fault and prove retry-once** (AC2; Decisions 4, 5)
-  - [ ] Build the delegating wrapper described in Decision 4 — `__getattr__` forwarding to the real adapter, one method raising a real driver-level error.
-  - [ ] Four nodes, one per TX2 write: approval consumption, baseline pointer, audit, event. Inject through `app.dependency_overrides` on the matching `get_*` dependency.
-  - [ ] After each fault assert: binding `pending`, `site_baseline` unchanged, zero `audit_event` rows for that approval from the faulted attempt, agent run still `approval_required`.
-  - [ ] Then remove the override and replay the identical request with the same `Idempotency-Key`; assert it completes exactly once and produces the same row set a first-attempt success produces.
+- [x] **Task 5 — Inject a genuine mid-bundle infrastructure fault and prove retry-once** (AC2; Decisions 4, 5)
+  - [x] Build the delegating wrapper described in Decision 4 — `__getattr__` forwarding to the real adapter, one method raising a real driver-level error.
+  - [x] Four nodes, one per TX2 write: approval consumption, baseline pointer, audit, event. Inject through `app.dependency_overrides` on the matching `get_*` dependency.
+  - [x] After each fault assert: binding `pending`, `site_baseline` unchanged, zero `audit_event` rows for that approval from the faulted attempt, agent run still `approval_required`.
+  - [x] Then remove the override and replay the identical request with the same `Idempotency-Key`; assert it completes exactly once and produces the same row set a first-attempt success produces.
   - Acceptance boundary: the fault must be observed to have fired (assert the wrapper's call counter, the way the exporter test asserts `exporter.calls`), or the case passes vacuously.
 
-- [ ] **Task 6 — Prove evidence-locator resolution over audit rows and provenance items** (AC3; Decisions 6, 7, 8, 13)
-  - [ ] Seed a candidate through `_seed_candidate_run(..., scenario_payload=..., evidence_ref_records=...)` with a payload real enough that at least one ref in a populated group resolves `resolved`.
-  - [ ] Drive all five outcomes named by AC3 — promoted, rejected, expired, stale, denied — read each resulting `audit_event.evidence_refs` back through `PostgresAuditReader`, and resolve every ref by group per Decision 6.
-  - [ ] Assert the expected outcome **per group** per Decision 7; assert `locks` / `baseline-assignments` refs report `not_found` and state in a comment that this is structural.
-  - [ ] Build the `version_mismatch` case per Decision 8 by inserting a superseding `scenario_version` row. Never an orphan `uuid4()`.
-  - [ ] Assert the AC3 identity clause in both directions: a row whose attempt resolved a candidate carries **exactly** that candidate's `evidence_refs`, asserted non-empty first (Decision 13); and a row whose candidate is absent carries `()` **asserted as absence** — drive the denial arm's `ValidationError` path so the empty set is observed, not assumed.
+- [x] **Task 6 — Prove evidence-locator resolution over audit rows and provenance items** (AC3; Decisions 6, 7, 8, 13)
+  - [x] Seed a candidate through `_seed_candidate_run(..., scenario_payload=..., evidence_ref_records=...)` with a payload real enough that at least one ref in a populated group resolves `resolved`.
+  - [x] Drive all five outcomes named by AC3 — promoted, rejected, expired, stale, denied — read each resulting `audit_event.evidence_refs` back through `PostgresAuditReader`, and resolve every ref by group per Decision 6.
+  - [x] Assert the expected outcome **per group** per Decision 7; assert `locks` / `baseline-assignments` refs report `not_found` and state in a comment that this is structural.
+  - [x] Build the `version_mismatch` case per Decision 8 by inserting a superseding `scenario_version` row. Never an orphan `uuid4()`.
+  - [x] Assert the AC3 identity clause in both directions: a row whose attempt resolved a candidate carries **exactly** that candidate's `evidence_refs`, asserted non-empty first (Decision 13); and a row whose candidate is absent carries `()` **asserted as absence** — drive the denial arm's `ValidationError` path so the empty set is observed, not assumed.
   - Acceptance boundary: no blanket "every ref resolved" assertion anywhere in this task.
 
-- [ ] **Task 7 — Extend the telemetry-independence proof to rejection and stale, and add the disabled arm** (AC4; Decision 9)
-  - [ ] Extend `test_authoritative_audit_survives_a_failing_span_exporter`'s pattern to cover `rejected`, `expired` and `stale` attempts. Keep the `exporter.calls >= N` assertion so no case can pass vacuously.
-  - [ ] Add the disabled arm as an import-absence assertion over the approval, promotion and audit modules, following Story 3.9's precedent rather than inventing a settings flag.
-  - [ ] Mark the CloudWatch half `NOT COVERED: diagnosis:cloudwatch_owned_by_epic_6` in the ledger and in Completion Notes. Do not build a double.
-  - [ ] Record the AC4 wording defect as **Epic 4 retrospective input** per Decision 9 — do not edit `epics.md`.
+- [x] **Task 7 — Extend the telemetry-independence proof to rejection and stale, and add the disabled arm** (AC4; Decision 9)
+  - [x] Extend `test_authoritative_audit_survives_a_failing_span_exporter`'s pattern to cover `rejected`, `expired` and `stale` attempts. Keep the `exporter.calls >= N` assertion so no case can pass vacuously.
+  - [x] Add the disabled arm as an import-absence assertion over the approval, promotion and audit modules, following Story 3.9's precedent rather than inventing a settings flag.
+  - [x] Mark the CloudWatch half `NOT COVERED: diagnosis:cloudwatch_owned_by_epic_6` in the ledger and in Completion Notes. Do not build a double.
+  - [x] Record the AC4 wording defect as **Epic 4 retrospective input** per Decision 9 — do not edit `epics.md`.
   - Acceptance boundary: the existing approve/denial coverage is extended or reused, never duplicated into a parallel module.
 
-- [ ] **Task 8 — Prove audit integrity under concurrency** (AC1, AC4; obligation 7)
-  - [ ] Assert both uniqueness rules hold across the **whole** outcome vocabulary, not just the two members already covered: success on `(site_id, effect_key, outcome)`, non-success on `(site_id, attempt_id)`.
-  - [ ] Assert the three identity roles are distinguishable in every envelope written by TX1, TX2, TX3 and the denial arm — `initiated_by_actor_id`, `decided_by_actor_id`, and the worker facts, per spine EAD-3.
-  - [ ] Assert the two pre-existing, deliberately-unsuppressed shapes are **stable, not regressed**: repeated denials write repeated rows with distinct `attempt_id`s (`deferred-work.md:572`), and each carries the candidate's full `evidence_refs` (`deferred-work.md:625`). These are specified behaviour — prove them, do not fix them.
+- [x] **Task 8 — Prove audit integrity under concurrency** (AC1, AC4; obligation 7)
+  - [x] Assert both uniqueness rules hold across the **whole** outcome vocabulary, not just the two members already covered: success on `(site_id, effect_key, outcome)`, non-success on `(site_id, attempt_id)`.
+  - [x] Assert the three identity roles are distinguishable in every envelope written by TX1, TX2, TX3 and the denial arm — `initiated_by_actor_id`, `decided_by_actor_id`, and the worker facts, per spine EAD-3.
+  - [x] Assert the two pre-existing, deliberately-unsuppressed shapes are **stable, not regressed**: repeated denials write repeated rows with distinct `attempt_id`s (`deferred-work.md:572`), and each carries the candidate's full `evidence_refs` (`deferred-work.md:625`). These are specified behaviour — prove them, do not fix them.
   - Acceptance boundary: a test that only re-proves what `test_approval_governance_postgres.py` already covers adds nothing; assert the members and roles it does not.
 
-- [ ] **Task 9 — Add the positive scope control** (Decision 12)
-  - [ ] Add `"audit_evidence_refs:mirrors_targeted_candidate"` to `SCOPE_CONTROLS` in `application/contracts/decision_provenance.py`.
-  - [ ] Update the exact-set assertion in `tests/test_decision_provenance.py` in the same commit.
-  - [ ] Close `deferred-work.md:623` citing this story.
+- [x] **Task 9 — Add the positive scope control** (Decision 12)
+  - [x] Add `"audit_evidence_refs:mirrors_targeted_candidate"` to `SCOPE_CONTROLS` in `application/contracts/decision_provenance.py`.
+  - [x] Update the exact-set assertion in `tests/test_decision_provenance.py` in the same commit.
+  - [x] Close `deferred-work.md:623` citing this story.
   - Acceptance boundary: this is the story's only production line. If a second one appears, escalate per Decision 1.
 
-- [ ] **Task 10 — Write `backend/evals/approval_audit_report.py`** (AC1–AC4; Decision 11)
-  - [ ] `PROOF_NODES`, `FAILURE_MODE_GATES`, `DECLARED_BINDINGS`, `measure_approval_audit_suite()`, `write_approval_audit_report()`, `main()` — the `recovery_idempotency_report.py` shape.
-  - [ ] `_junit_outcome()` requiring `tests > 0`, `executed > 0`, zero failures, zero errors, zero skips.
-  - [ ] Never raise mid-loop: a failed or timed-out node is a recorded `False` verdict and the remaining nodes still run.
-  - [ ] Emit a top-level `passed` boolean per Decision 10, alongside `result` and `release_blocking`.
-  - [ ] Refuse to write when a declared binding is missing or the verdict shape is incomplete — `ValueError`, no file.
+- [x] **Task 10 — Write `backend/evals/approval_audit_report.py`** (AC1–AC4; Decision 11)
+  - [x] `PROOF_NODES`, `FAILURE_MODE_GATES`, `DECLARED_BINDINGS`, `measure_approval_audit_suite()`, `write_approval_audit_report()`, `main()` — the `recovery_idempotency_report.py` shape.
+  - [x] `_junit_outcome()` requiring `tests > 0`, `executed > 0`, zero failures, zero errors, zero skips.
+  - [x] Never raise mid-loop: a failed or timed-out node is a recorded `False` verdict and the remaining nodes still run.
+  - [x] Emit a top-level `passed` boolean per Decision 10, alongside `result` and `release_blocking`.
+  - [x] Refuse to write when a declared binding is missing or the verdict shape is incomplete — `ValueError`, no file.
   - Acceptance boundary: the failure path is reachable and tested, not dead code.
 
-- [ ] **Task 11 — Write `backend/tests/test_approval_audit_report.py`** (Decisions 10, 11)
-  - [ ] Four cases mirroring `test_recovery_idempotency_report.py`: all-pass writes `passed: true` / `release_blocking: false`; one failing gate writes `passed: false` / `release_blocking: true` with a `failures` dict and **still writes the file**; an incomplete verdict shape raises `ValueError` and writes nothing; a missing declared binding raises `ValueError` naming the key and writes nothing.
-  - [ ] Add a case proving `_junit_outcome` refuses an all-skipped report — this is the check the whole Gate A registration rests on.
-  - [ ] All writes go to `tmp_path` with `allow_dirty=True`.
+- [x] **Task 11 — Write `backend/tests/test_approval_audit_report.py`** (Decisions 10, 11)
+  - [x] Four cases mirroring `test_recovery_idempotency_report.py`: all-pass writes `passed: true` / `release_blocking: false`; one failing gate writes `passed: false` / `release_blocking: true` with a `failures` dict and **still writes the file**; an incomplete verdict shape raises `ValueError` and writes nothing; a missing declared binding raises `ValueError` naming the key and writes nothing.
+  - [x] Add a case proving `_junit_outcome` refuses an all-skipped report — this is the check the whole Gate A registration rests on.
+  - [x] All writes go to `tmp_path` with `allow_dirty=True`.
   - Acceptance boundary: `assert not output.exists()` on both refusal cases.
 
-- [ ] **Task 12 — Register the Gate A invariant and both checks** (AC1, AC4; Decision 10)
-  - [ ] Add the `Invariant` to `NFR29_GATES` in `backend/scripts/gate_a_checks.py`. Not to `AR28_INVARIANTS`.
-  - [ ] Add the evidence `GateACheck` and the separate machinery `GateACheck`. Two checks, never one — `__post_init__` rejects the combination.
-  - [ ] Add `"evidence/story-4.5/approval-audit-invariants.json"` to the **exact-set assertion** in `tests/test_gate_a_readiness.py`, with a comment saying why, in the style of the two entries already there. Its docstring says "Adding a fourth is a decision, not a detail" — this is such a decision.
-  - [ ] Confirm `test_every_invariant_has_at_least_one_contributing_check` and `test_registry_covers_more_than_the_four_evidence_files` pass, and confirm they were seen to fail first with only the evidence check registered.
+- [x] **Task 12 — Register the Gate A invariant and both checks** (AC1, AC4; Decision 10)
+  - [x] Add the `Invariant` to `NFR29_GATES` in `backend/scripts/gate_a_checks.py`. Not to `AR28_INVARIANTS`.
+  - [x] Add the evidence `GateACheck` and the separate machinery `GateACheck`. Two checks, never one — `__post_init__` rejects the combination.
+  - [x] Add `"evidence/story-4.5/approval-audit-invariants.json"` to the **exact-set assertion** in `tests/test_gate_a_readiness.py`, with a comment saying why, in the style of the two entries already there. Its docstring says "Adding a fourth is a decision, not a detail" — this is such a decision.
+  - [x] Confirm `test_every_invariant_has_at_least_one_contributing_check` and `test_registry_covers_more_than_the_four_evidence_files` pass, and confirm they were seen to fail first with only the evidence check registered.
   - Acceptance boundary: the registry additions are demonstrated-red through both existing guards.
 
-- [ ] **Task 13 — Generate the evidence file in the convention's order** (NFR27; `docs/EVIDENCE-CONVENTION.md`)
-  - [ ] `git commit` the code. Confirm `git status --porcelain` is empty.
-  - [ ] Run the measurement — `python -m evals.approval_audit_report` from `backend/`.
-  - [ ] Generate through `resolve_bindings()`; supply only the seven declared keys and never `dataset`, `scenario`, `code` or `image`.
-  - [ ] `uv run --frozen pytest tests/test_evidence_convention.py -q`.
-  - [ ] `git commit` the evidence **on its own**, and make sure the commit it binds to touches at least one code file.
+- [x] **Task 13 — Generate the evidence file in the convention's order** (NFR27; `docs/EVIDENCE-CONVENTION.md`)
+  - [x] `git commit` the code. Confirm `git status --porcelain` is empty.
+  - [x] Run the measurement — `python -m evals.approval_audit_report` from `backend/`.
+  - [x] Generate through `resolve_bindings()`; supply only the seven declared keys and never `dataset`, `scenario`, `code` or `image`.
+  - [x] `uv run --frozen pytest tests/test_evidence_convention.py -q`.
+  - [x] `git commit` the evidence **on its own**, and make sure the commit it binds to touches at least one code file.
   - Acceptance boundary: no hand-typed field anywhere in the artifact, and no docs-only commit between the code commit and the evidence commit.
 
-- [ ] **Task 14 — Reconcile the planning record** (Decisions 5, 9, 12, 13)
-  - [ ] Close `deferred-work.md:623` (Decision 12) and `:627` (Decision 13), citing this story.
-  - [ ] Re-point `:564` per Decision 5 with the AC-versus-ledger mismatch stated.
-  - [ ] Record `NOT COVERED: diagnosis:cloudwatch_owned_by_epic_6` and the AC4 wording defect as retrospective input (Decision 9).
-  - [ ] Confirm `:572`, `:574` and `:625` are left open and untouched, and say so.
+- [x] **Task 14 — Reconcile the planning record** (Decisions 5, 9, 12, 13)
+  - [x] Close `deferred-work.md:623` (Decision 12) and `:627` (Decision 13), citing this story.
+  - [x] Re-point `:564` per Decision 5 with the AC-versus-ledger mismatch stated.
+  - [x] Record `NOT COVERED: diagnosis:cloudwatch_owned_by_epic_6` and the AC4 wording defect as retrospective input (Decision 9).
+  - [x] Confirm `:572`, `:574` and `:625` are left open and untouched, and say so.
   - Acceptance boundary: no ledger entry is deleted; closure is recorded beside the original wording, per the file's own convention.
 
-- [ ] **Task 15 — Run every suite and record the deltas**
-  - [ ] `uv run --frozen pytest -q`, `uv run --frozen pytest -m postgres -q`, `uv run --frozen pytest tests/test_evidence_convention.py -q`.
-  - [ ] Confirm the CI floors in `.github/workflows/ci.yml` still hold. They are floors and ceilings, so added tests never redden them — do **not** edit the numbers.
+- [x] **Task 15 — Run every suite and record the deltas**
+  - [x] `uv run --frozen pytest -q`, `uv run --frozen pytest -m postgres -q`, `uv run --frozen pytest tests/test_evidence_convention.py -q`.
+  - [x] Confirm the CI floors in `.github/workflows/ci.yml` still hold. They are floors and ceilings, so added tests never redden them — do **not** edit the numbers.
   - Acceptance boundary: any failure is attributed against Task 1's re-derived baseline, never against Story 4.4's inherited one.
 
 ---
@@ -708,6 +708,8 @@ Follow Tasks 1–15 in order with demonstrated RED→GREEN proof for every new a
 - 2026-09-01 RED→GREEN (audit integrity): repeated-denial proof first failed on the 40-character idempotency-key boundary and then on the serialized `WorkerFactsV1` shape; bounded keys and exact structural keys produced 1 passed.
 - 2026-09-01 RED→GREEN (Gate A): with the new invariant and no checks, `test_every_invariant_has_at_least_one_contributing_check` failed on `approval_and_audit_invariants`; restored evidence check made it pass. With evidence only, `test_registry_covers_more_than_the_four_evidence_files` failed; restoring the separate machinery check produced 2 passed.
 - 2026-09-01 pre-evidence regression: 1471 passed, 2 skipped, 7 deselected; the three observed failures were all story-owned and resolved except the intentional registered-evidence-file absence, which remains red until Task 13 generates the artifact in convention order.
+- 2026-09-01 Task 13: clean code commit `d3f73915f05d009f1e35a538b27147959869ff81`; generator completed every named node with `passed: true`; `test_evidence_convention.py` → 80 passed; evidence-only commit `c8d7cc7`.
+- 2026-09-01 Task 15 final: default → 1482 passed, 1 skipped, 7 deselected; PostgreSQL → 147 passed, 1343 deselected; evidence convention → 80 passed. Deltas from Task 1: +27 default passes, +16 PostgreSQL passes, +6 evidence-convention passes, zero new failures.
 
 ### Completion Notes List
 
@@ -720,6 +722,7 @@ Follow Tasks 1–15 in order with demonstrated RED→GREEN proof for every new a
 
 - Read: `backend/application/use_cases/decide_approval.py`, `promote_baseline.py`, `request_approval.py`; `backend/api/routers/approvals.py`, `backend/api/deps.py`; `backend/adapters/postgres/approval.py`, `site_baseline.py`, `audit.py`, `scenario_projection.py`; `backend/tests/test_approval_governance_postgres.py`; `backend/evals/recovery_idempotency_report.py`; `backend/tests/test_recovery_idempotency_report.py`.
 - Added: `backend/tests/test_approval_audit_invariants_postgres.py`, `backend/tests/test_approval_audit_report.py`, `backend/evals/approval_audit_report.py`.
+- Generated: `evidence/story-4.5/approval-audit-invariants.json` (through `resolve_bindings()`, bound to code commit `d3f7391`).
 - Modified: `backend/application/contracts/decision_provenance.py`, `backend/tests/test_decision_provenance.py`, `backend/tests/test_approval_governance_postgres.py`, `backend/scripts/gate_a_checks.py`, `backend/tests/test_gate_a_readiness.py`, `_bmad-output/implementation-artifacts/deferred-work.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file.
 
 ---
@@ -729,3 +732,4 @@ Follow Tasks 1–15 in order with demonstrated RED→GREEN proof for every new a
 | Date | Change |
 |---|---|
 | 2026-09-01 | Story created. Thirteen decisions recorded; proof matrix bound to the Epic 4 spine's seven verification obligations. |
+| 2026-09-01 | Implemented and verified approval/audit proof matrix; generated separately bound evidence; status moved to review. |
