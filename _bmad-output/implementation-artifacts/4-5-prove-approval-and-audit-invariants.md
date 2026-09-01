@@ -4,7 +4,7 @@ baseline_commit: 9460a57
 
 # Story 4.5: Prove Approval and Audit Invariants
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -440,9 +440,9 @@ it rather than restructuring someone else's test.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-derive the baselines before writing anything** (Decision 1)
-  - [ ] Run, from `backend/`: `uv run --frozen pytest -q`, then `uv run --frozen pytest -m postgres -q`, then `uv run --frozen pytest tests/test_evidence_convention.py -q`. Record all three counts in Debug Log References.
-  - [ ] Run `npm test` and `npx playwright test` counts only if a frontend or e2e file is touched; per Decision 1 the frontend diff is zero, so record "not run — zero-line frontend diff" instead of a number.
+- [x] **Task 1 — Re-derive the baselines before writing anything** (Decision 1)
+  - [x] Run, from `backend/`: `uv run --frozen pytest -q`, then `uv run --frozen pytest -m postgres -q`, then `uv run --frozen pytest tests/test_evidence_convention.py -q`. Record all three counts in Debug Log References.
+  - [x] Run `npm test` and `npx playwright test` counts only if a frontend or e2e file is touched; per Decision 1 the frontend diff is zero, so record "not run — zero-line frontend diff" instead of a number.
   - Baselines inherited from Story 4.4 and **not verified**: backend 1426 passed / 3 failed / 7 skipped; PostgreSQL 127 passed / 1 failed; frontend 575 passed; Playwright 62 passed. The three backend failures were recorded as external and pre-existing (two retired-slug OpenRouter cases, one conftest-import fixture). **Re-derive before attributing any failure to this story.**
   - Acceptance boundary: no code is written until the numbers are in the Debug Log.
 
@@ -691,13 +691,36 @@ structural convergence is unaffected.
 
 ### Agent Model Used
 
+GPT-5 Codex
+
 ### Implementation Plan
+
+Follow Tasks 1–15 in order with demonstrated RED→GREEN proof for every new assertion, exactly one production-line change, a code commit before measurement, and a separately generated evidence commit.
 
 ### Debug Log References
 
+- 2026-09-01 Task 1 baseline (`backend/`): `uv run --frozen pytest -q` → 1455 passed, 1 skipped, 7 deselected, 0 failed in 143.65s.
+- 2026-09-01 Task 1 PostgreSQL baseline (`backend/`): `uv run --frozen pytest -m postgres -q` → 131 passed, 1332 deselected, 0 failed in 40.46s.
+- 2026-09-01 Task 1 evidence baseline (`backend/`): `uv run --frozen pytest tests/test_evidence_convention.py -q` → 74 passed, 0 failed in 2.93s.
+- Frontend and Playwright: not run — zero-line frontend diff.
+- 2026-09-01 RED→GREEN (report binding): report tests first failed because the declared PostgreSQL proof module did not exist; after adding it, the resolver bound the dataset. A second RED exposed duplicate dataset paths; deduplicating by test file produced 5 passed.
+- 2026-09-01 RED→GREEN (proof matrix): the first matrix run failed on the real membership schema (`revoked_at`, not a derived status), the closed evidence-group vocabulary, and explicit resolver arguments. Correcting the fixtures produced 14 passed; expanded matrix/report/exporter run produced 21 passed.
+- 2026-09-01 RED→GREEN (audit integrity): repeated-denial proof first failed on the 40-character idempotency-key boundary and then on the serialized `WorkerFactsV1` shape; bounded keys and exact structural keys produced 1 passed.
+- 2026-09-01 RED→GREEN (Gate A): with the new invariant and no checks, `test_every_invariant_has_at_least_one_contributing_check` failed on `approval_and_audit_invariants`; restored evidence check made it pass. With evidence only, `test_registry_covers_more_than_the_four_evidence_files` failed; restoring the separate machinery check produced 2 passed.
+- 2026-09-01 pre-evidence regression: 1471 passed, 2 skipped, 7 deselected; the three observed failures were all story-owned and resolved except the intentional registered-evidence-file absence, which remains red until Task 13 generates the artifact in convention order.
+
 ### Completion Notes List
 
+- Implemented Epic 4's PostgreSQL proof matrix, genuine DBAPI fault injection with retry-once, direct evidence-locator resolution, telemetry independence, audit uniqueness/identity/repeated-denial guards, skip-safe report generator, and two-part Gate A registration.
+- Added exactly one production line: `audit_evidence_refs:mirrors_targeted_candidate`. Frontend diff remains zero lines.
+- NOT COVERED: `diagnosis:cloudwatch_owned_by_epic_6`; no local CloudWatch subject or double was introduced. Epic 4 retrospective input records the AC4 wording defect.
+- Honest gaps retained: TX2 infrastructure failures leave no durable server-side attempt row; locks/baseline-assignments remain structurally `not_found`; baseline assignment supply remains guarded; repeated denial rows and the response-before-commit window remain unchanged.
+
 ### File List
+
+- Read: `backend/application/use_cases/decide_approval.py`, `promote_baseline.py`, `request_approval.py`; `backend/api/routers/approvals.py`, `backend/api/deps.py`; `backend/adapters/postgres/approval.py`, `site_baseline.py`, `audit.py`, `scenario_projection.py`; `backend/tests/test_approval_governance_postgres.py`; `backend/evals/recovery_idempotency_report.py`; `backend/tests/test_recovery_idempotency_report.py`.
+- Added: `backend/tests/test_approval_audit_invariants_postgres.py`, `backend/tests/test_approval_audit_report.py`, `backend/evals/approval_audit_report.py`.
+- Modified: `backend/application/contracts/decision_provenance.py`, `backend/tests/test_decision_provenance.py`, `backend/tests/test_approval_governance_postgres.py`, `backend/scripts/gate_a_checks.py`, `backend/tests/test_gate_a_readiness.py`, `_bmad-output/implementation-artifacts/deferred-work.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file.
 
 ---
 
