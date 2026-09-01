@@ -488,22 +488,6 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         runner="pytest",
         test_files=("backend/tests/test_recovery_idempotency_report.py",),
     ),
-    # ---------------------------------------------------------------- 4.5
-    GateACheck(
-        check="approval_and_audit_invariants_proof",
-        story="4.5",
-        invariant="approval_and_audit_invariants",
-        description="Exact PostgreSQL approval/audit proof matrix bound to a generated release verdict.",
-        evidence_path="evidence/story-4.5/approval-audit-invariants.json",
-    ),
-    GateACheck(
-        check="approval_audit_report_machinery",
-        story="4.5",
-        invariant="approval_and_audit_invariants",
-        description="Live machinery guard: skipped PostgreSQL proof nodes cannot be reported as passing.",
-        runner="pytest",
-        test_files=("backend/tests/test_approval_audit_report.py",),
-    ),
     # ---------------------------------------------------------------- 3.12
     GateACheck(
         check="repair_browser_journey_proof",
@@ -544,6 +528,22 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         ),
         runner="pytest",
         test_files=("backend/tests/test_repair_journey_evidence.py",),
+    ),
+    # ---------------------------------------------------------------- 4.5
+    GateACheck(
+        check="approval_and_audit_invariants_proof",
+        story="4.5",
+        invariant="approval_and_audit_invariants",
+        description="Exact PostgreSQL approval/audit proof matrix bound to a generated release verdict.",
+        evidence_path="evidence/story-4.5/approval-audit-invariants.json",
+    ),
+    GateACheck(
+        check="approval_audit_report_machinery",
+        story="4.5",
+        invariant="approval_and_audit_invariants",
+        description="Live machinery guard: skipped PostgreSQL proof nodes cannot be reported as passing.",
+        runner="pytest",
+        test_files=("backend/tests/test_approval_audit_report.py",),
     ),
 )
 

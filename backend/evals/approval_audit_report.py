@@ -14,32 +14,71 @@ from xml.etree import ElementTree
 from scripts.evidence_binding import REPO_ROOT, resolve_bindings
 
 
+_MATRIX = "tests/test_approval_audit_invariants_postgres.py"
+_GOVERNANCE = "tests/test_approval_governance_postgres.py"
+
+#: Every AC1 fixture in Decision 3's table is a NAMED node, so a regression is
+#: attributable to a fixture rather than to "the approval suite". Two nodes
+#: deliberately live outside the PostgreSQL matrix:
+#:
+#: * `changed_policy` -- `derive_policy_version` takes exactly one input,
+#:   `scheduling_baseline_enabled`, and `decide_approval` refuses the request
+#:   outright when it is false, short-circuiting before `revalidate_binding`
+#:   ever runs. The policy-mismatch arm therefore has no real-route path, and a
+#:   PostgreSQL case could only fake it by rewriting the binding's own stored
+#:   `policy_version` -- proving strictly less than the fake node below.
+#: * `repeated_decision` -- already proven against the real route and a real
+#:   transaction by Story 4.2's suite; re-writing it here would add nothing.
 PROOF_NODES = {
-    "initial_promotion": "tests/test_approval_audit_invariants_postgres.py::test_initial_promotion_is_exactly_once",
-    "replacement": "tests/test_approval_audit_invariants_postgres.py::test_replacement_is_exactly_once",
-    "mismatch": "tests/test_approval_audit_invariants_postgres.py::test_business_mismatch_terminalizes_stale",
-    "expiry": "tests/test_approval_audit_invariants_postgres.py::test_expiry_terminalizes_expired",
-    "rejection": "tests/test_approval_audit_invariants_postgres.py::test_rejection_terminalizes_rejected",
-    "replay": "tests/test_approval_audit_invariants_postgres.py::test_command_replay_is_idempotent",
-    "overdue_reads": "tests/test_approval_audit_invariants_postgres.py::test_overdue_reads_are_pure",
-    "fault_consume": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[consume]",
-    "fault_baseline": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[baseline]",
-    "fault_audit": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[audit]",
-    "fault_event": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[event]",
-    "evidence_resolution": "tests/test_approval_audit_invariants_postgres.py::test_audit_evidence_refs_resolve_by_group",
-    "version_mismatch": "tests/test_approval_audit_invariants_postgres.py::test_superseding_scenario_version_reports_version_mismatch",
-    "telemetry_independence": "tests/test_approval_governance_postgres.py::test_authoritative_audit_survives_a_failing_span_exporter",
-    "audit_integrity": "tests/test_approval_audit_invariants_postgres.py::test_audit_uniqueness_covers_the_closed_outcome_vocabulary",
+    "initial_promotion": f"{_MATRIX}::test_initial_promotion_is_exactly_once",
+    "replacement": f"{_MATRIX}::test_replacement_is_exactly_once",
+    "mismatch": f"{_MATRIX}::test_business_mismatch_terminalizes_stale",
+    "altered_parameter": f"{_MATRIX}::test_altered_parameter_terminalizes_stale",
+    "changed_baseline": f"{_MATRIX}::test_changed_baseline_terminalizes_stale",
+    "replaced_candidate": f"{_MATRIX}::test_replaced_candidate_terminalizes_stale",
+    "changed_policy": "tests/test_decide_approval.py::test_every_non_baseline_business_mismatch_terminalizes_stale[policy_version]",
+    "repeated_decision": f"{_GOVERNANCE}::test_approve_route_replays_once_rejects_conflicts_and_audits_denials",
+    "expiry": f"{_MATRIX}::test_expiry_terminalizes_expired",
+    "rejection": f"{_MATRIX}::test_rejection_terminalizes_rejected",
+    "replay": f"{_MATRIX}::test_command_replay_is_idempotent",
+    "overdue_reads": f"{_MATRIX}::test_overdue_reads_are_pure",
+    "fault_consume": f"{_MATRIX}::test_faulted_tx2_rolls_back_and_retries_once[consume]",
+    "fault_baseline": f"{_MATRIX}::test_faulted_tx2_rolls_back_and_retries_once[baseline]",
+    "fault_audit": f"{_MATRIX}::test_faulted_tx2_rolls_back_and_retries_once[audit]",
+    "fault_event_resume": f"{_MATRIX}::test_faulted_tx2_rolls_back_and_retries_once[event_resume]",
+    "fault_event_activity": f"{_MATRIX}::test_faulted_tx2_rolls_back_and_retries_once[event_activity]",
+    "evidence_resolution": f"{_MATRIX}::test_audit_evidence_refs_resolve_by_group",
+    "evidence_rejected": f"{_MATRIX}::test_every_audit_outcome_carries_resolvable_evidence_refs[rejected]",
+    "evidence_expired": f"{_MATRIX}::test_every_audit_outcome_carries_resolvable_evidence_refs[expired]",
+    "evidence_stale": f"{_MATRIX}::test_every_audit_outcome_carries_resolvable_evidence_refs[stale]",
+    "evidence_denied": f"{_MATRIX}::test_every_audit_outcome_carries_resolvable_evidence_refs[denied]",
+    "evidence_absent": f"{_MATRIX}::test_denial_whose_candidate_is_absent_carries_an_empty_set",
+    "version_mismatch": f"{_MATRIX}::test_superseding_scenario_version_reports_version_mismatch",
+    "telemetry_independence": f"{_GOVERNANCE}::test_authoritative_audit_survives_a_failing_span_exporter",
+    "telemetry_disabled": f"{_MATRIX}::test_approval_audit_path_has_no_telemetry_import_dependency",
+    "audit_integrity": f"{_MATRIX}::test_audit_uniqueness_covers_the_closed_outcome_vocabulary",
+    "repeated_denials": f"{_MATRIX}::test_repeated_denials_keep_distinct_attempts_full_refs_and_identity_roles",
 }
 
 FAILURE_MODE_GATES = {
     "initial promotion": ("initial_promotion",),
     "replacement": ("replacement",),
-    "stale/expired/rejected": ("mismatch", "expiry", "rejection"),
+    "stale/expired/rejected": (
+        "mismatch", "altered_parameter", "changed_baseline", "replaced_candidate",
+        "changed_policy", "repeated_decision", "expiry", "rejection",
+    ),
     "reconnect": ("overdue_reads",),
     "idempotent replay": ("replay",),
-    "rollback": ("fault_consume", "fault_baseline", "fault_audit", "fault_event"),
-    "audit integrity": ("evidence_resolution", "version_mismatch", "telemetry_independence", "audit_integrity"),
+    "rollback": (
+        "fault_consume", "fault_baseline", "fault_audit",
+        "fault_event_resume", "fault_event_activity",
+    ),
+    "audit integrity": (
+        "evidence_resolution", "evidence_rejected", "evidence_expired",
+        "evidence_stale", "evidence_denied", "evidence_absent", "version_mismatch",
+        "telemetry_independence", "telemetry_disabled", "audit_integrity",
+        "repeated_denials",
+    ),
 }
 
 DECLARED_BINDINGS = {
