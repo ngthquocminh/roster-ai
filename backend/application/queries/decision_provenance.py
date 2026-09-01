@@ -17,14 +17,26 @@ from application.contracts.decision_provenance import (
     RunProgressProvenanceV1, SolverRunProvenanceV1, ToolProposalProvenanceV1,
 )
 
+#: Decision 5's cross-stream order. Every rank is DISTINCT: `occurred_at` ties are
+#: the normal case -- TX1/TX2/TX3 each write binding, audit, and event against one
+#: application clock -- so two item types sharing a rank fall through to `_sort_id`,
+#: which reads a different field per type and therefore compares unrelated UUIDs as
+#: strings. A decision precedes the audit that records it.
 _SOURCE_RANK = {
     "solver_run": 0, "run_progress": 1, "draft": 2, "evidence_claim": 3,
     "tool_proposal": 4, "approval_request": 5, "approval_decision": 6,
-    "audit_record": 6, "baseline_promotion": 7,
+    "audit_record": 7, "baseline_promotion": 8,
 }
 _COMPARISON_UNAVAILABLE = (
     "Comparison unavailable: the frozen baseline schedule has no authoritative "
     "assignment supply; it is linked by reference and never recomputed."
+)
+#: Deliberately distinct from the EAD-8 reason. A run that produced no candidate has
+#: nothing to compare at all, which is a different fact from a frozen baseline whose
+#: assignment supply cannot be read; reusing the EAD-8 text would misexplain it.
+_COMPARISON_NO_CANDIDATE = (
+    "Comparison unavailable: this run produced no candidate schedule version, so "
+    "there is no comparison to link."
 )
 
 
@@ -49,6 +61,7 @@ def _common(*, occurred_at, item_type, site_id, schedule_run_id,
 
 
 def _sort_id(item) -> str:
+    """Last-resort tie-break WITHIN one item type; distinct ranks separate the types."""
     for name in (
         "audit_id", "approval_id", "schedule_version_id", "request_id",
         "attempt_id", "schedule_run_id",
@@ -59,9 +72,13 @@ def _sort_id(item) -> str:
     return ""
 
 
+def _audit_ids(audit) -> tuple[UUID | None, UUID | None]:
+    return (audit.request_id, audit.attempt_id) if audit is not None else (None, None)
+
+
 def query_decision_provenance(
     connection: Any, *, schedule_run_id: UUID, site_id: UUID,
-    schedule_runs, approvals, audit_reader, conversations, baselines, clock,
+    schedule_runs, approvals, audit_reader, conversations, clock,
 ) -> DecisionProvenanceV1 | None:
     """Return a port-composed snapshot; absence and foreign-site denial are identical."""
     run = schedule_runs.get_run(connection, run_id=schedule_run_id, site_id=site_id)
@@ -82,22 +99,38 @@ def query_decision_provenance(
     ) or ()
     now = clock()
     items: list[Any] = []
-    scenario_version_id = getattr(snapshot, "scenario_version_id", None)
+    # Read one by one off the typed contracts. A defaulted `getattr` would turn a
+    # future rename into a null on the one surface whose value is that a null means
+    # "the row never carried one" (Decision 10).
+    scenario_version_id = snapshot.scenario_version_id if snapshot is not None else None
+    baseline_version = snapshot.baseline_schedule_version if snapshot is not None else None
+    accepted_at = snapshot.accepted_at if snapshot is not None else None
+    candidate_id = candidate.schedule_version_id if candidate is not None else None
+    candidate_refs = candidate.evidence_refs if candidate is not None else ()
+    candidate_metrics = candidate.metrics if candidate is not None else None
     first_actor = run_events[0].actor_id if run_events else None
-    candidate_id = getattr(candidate, "schedule_version_id", None)
-    baseline_version = getattr(snapshot, "baseline_schedule_version", None)
+
+    # Two independent reasons a comparison cannot be shown, and they are not the same
+    # fact. EAD-8 refuses recomputation against a frozen baseline; a run with no
+    # candidate has nothing to compare in the first place. Reporting the second case
+    # as `available` claims a comparison that does not exist.
+    comparison_reason = (
+        _COMPARISON_UNAVAILABLE if baseline_version is not None
+        else _COMPARISON_NO_CANDIDATE if candidate_id is None
+        else None
+    )
     items.append(SolverRunProvenanceV1(**_common(
-        occurred_at=getattr(snapshot, "accepted_at", None) or run.created_at,
+        occurred_at=accepted_at or run.created_at,
         item_type="solver_run", site_id=site_id, schedule_run_id=schedule_run_id,
         actor_id=first_actor, initiated_by_actor_id=first_actor,
         schedule_version_id=candidate_id, scenario_version_id=scenario_version_id,
-        evidence_refs=getattr(candidate, "evidence_refs", ()),
+        evidence_refs=candidate_refs,
     ), status=run.status, reason=run.reason,
         baseline_schedule_version=baseline_version,
         candidate_schedule_version_id=candidate_id,
-        comparison_status="unavailable" if baseline_version is not None else "available",
-        comparison_reason=_COMPARISON_UNAVAILABLE if baseline_version is not None else None,
-        metrics=getattr(candidate, "metrics", None)))
+        comparison_status="unavailable" if comparison_reason else "available",
+        comparison_reason=comparison_reason,
+        metrics=candidate_metrics))
 
     for event in run_events:
         payload = event.payload
@@ -112,7 +145,6 @@ def query_decision_provenance(
 
     bound_agent_runs = {binding.agent_run_id for binding in bindings if binding.agent_run_id}
     conversation_ids = {binding.conversation_id for binding in bindings}
-    seen_events: set[tuple[UUID, object]] = set()
     for conversation_id in sorted(conversation_ids, key=str):
         timeline = conversations.timeline(connection, conversation_id=conversation_id, limit=10_000)
         if timeline is None:
@@ -120,23 +152,21 @@ def query_decision_provenance(
         for event in timeline.events:
             if event.agent_run_id not in bound_agent_runs:
                 continue
-            event_key = (event.stream_id, event.sequence)
-            if event_key in seen_events:
-                continue
-            seen_events.add(event_key)
             payload = event.payload
+            if not isinstance(payload, (DraftActivityV1, AgentResponseActivityV1)):
+                continue
             common = _common(
                 occurred_at=event.occurred_at, item_type="draft", site_id=site_id,
                 schedule_run_id=schedule_run_id, actor_id=event.actor_id,
                 initiated_by_actor_id=event.actor_id, request_id=event.request_id,
                 conversation_id=event.conversation_id, agent_run_id=event.agent_run_id,
-                scenario_version_id=getattr(payload, "scenario_version_id", scenario_version_id),
+                scenario_version_id=payload.scenario_version_id,
             )
             if isinstance(payload, DraftActivityV1):
                 items.append(DraftProvenanceV1(**common, proposal_id=payload.proposal_id,
                     proposal_version_id=payload.proposal_version_id,
                     consequence_summary=payload.consequence_summary))
-            elif isinstance(payload, AgentResponseActivityV1):
+            else:
                 for claim in payload.response.claims:
                     claim_common = {**common, "item_type": "evidence_claim",
                                     "evidence_refs": claim.evidence_refs}
@@ -144,16 +174,25 @@ def query_decision_provenance(
                         **claim_common, claim=claim.metric, value=claim.value, unit=claim.unit,
                     ))
 
-    audits_by_approval = {audit.approval_id: audit for audit in audits if audit.approval_id}
+    # Keyed by OUTCOME, not by approval alone. One approval accumulates several audit
+    # rows -- requested, then consumed/rejected, plus any denials -- so a last-wins map
+    # per approval stamps the request item with the identifiers of whichever operation
+    # came last: a well-formed identifier belonging to a different request, which is
+    # exactly the question a reviewer opens provenance to answer. `setdefault` keeps
+    # the earliest row of a repeated outcome; the adapter returns audits ordered.
+    audits_by_outcome: dict[tuple[UUID, str], Any] = {}
+    for audit in audits:
+        if audit.approval_id is not None:
+            audits_by_outcome.setdefault((audit.approval_id, audit.outcome), audit)
     state_outcome = {
         "consumed": "approval_consumed", "rejected": "approval_rejected",
         "expired": "approval_expired", "stale": "approval_stale",
     }
     for binding in bindings:
-        audit = audits_by_approval.get(binding.approval_id)
-        request_id = audit.request_id if audit else None
-        attempt_id = audit.attempt_id if audit else None
         state = presented_approval_state(binding, now)
+        request_id, attempt_id = _audit_ids(
+            audits_by_outcome.get((binding.approval_id, "approval_requested"))
+        )
         items.append(ApprovalRequestProvenanceV1(**_common(
             occurred_at=binding.created_at, item_type="approval_request", site_id=site_id,
             schedule_run_id=schedule_run_id, actor_id=binding.initiated_by_actor_id,
@@ -184,12 +223,16 @@ def query_decision_provenance(
                     scenario_version_id=binding.scenario_version_id,
                 ), tool_name=call.tool_name))
         if state in state_outcome and binding.decided_at is not None:
+            decision_request_id, decision_attempt_id = _audit_ids(
+                audits_by_outcome.get((binding.approval_id, state_outcome[state]))
+            )
             items.append(ApprovalDecisionProvenanceV1(**_common(
                 occurred_at=binding.decided_at, item_type="approval_decision", site_id=site_id,
                 schedule_run_id=schedule_run_id, actor_id=binding.initiated_by_actor_id,
                 initiated_by_actor_id=binding.initiated_by_actor_id,
-                decided_by_actor_id=binding.decided_by_actor_id, request_id=request_id,
-                attempt_id=attempt_id, conversation_id=binding.conversation_id,
+                decided_by_actor_id=binding.decided_by_actor_id,
+                request_id=decision_request_id, attempt_id=decision_attempt_id,
+                conversation_id=binding.conversation_id,
                 agent_run_id=binding.agent_run_id, approval_id=binding.approval_id,
                 schedule_version_id=binding.candidate_schedule_version_id,
                 scenario_version_id=binding.scenario_version_id,
@@ -223,11 +266,10 @@ def query_decision_provenance(
                 evidence_refs=audit.evidence_refs,
             ), before_version=audit.before_version, after_version=audit.after_version))
 
-    # Read current baseline once as Decision 4 requires; the immutable audit pair is the
-    # timeline's before/after source, so no current value is substituted into history.
-    baselines.get(connection, site_id)
+    # Ranks are distinct, so `_sort_id` only ever separates two items of the SAME
+    # type, where its field preference is consistent.
     items.sort(key=lambda item: (
-        item.occurred_at, _SOURCE_RANK[item.item_type], _sort_id(item), item.item_type,
+        item.occurred_at, _SOURCE_RANK[item.item_type], _sort_id(item),
     ))
     return DecisionProvenanceV1(schedule_run_id, site_id, tuple(items))
 

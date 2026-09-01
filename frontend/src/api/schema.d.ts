@@ -2778,8 +2778,11 @@ export interface components {
             evidence_refs: components["schemas"]["EvidenceRefV1"][];
             /** Schema Version */
             schema_version: string;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "solver_queued" | "solver_running" | "cancellation_requested" | "solver_completed" | "solver_infeasible" | "solver_timed_out" | "solver_cancelled" | "solver_failed";
             /** Reason */
             reason: string | null;
             /** Resource Version */
@@ -3133,8 +3136,11 @@ export interface components {
             evidence_refs: components["schemas"]["EvidenceRefV1"][];
             /** Schema Version */
             schema_version: string;
-            /** Status */
-            status: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "solver_queued" | "solver_running" | "cancellation_requested" | "solver_completed" | "solver_infeasible" | "solver_timed_out" | "solver_cancelled" | "solver_failed";
             /** Reason */
             reason: string | null;
             /** Baseline Schedule Version */

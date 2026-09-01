@@ -593,3 +593,7 @@ rather than folded in.
   Populating it is a write-path decision and Story 4.4 is read-only. **Owner/revisit trigger:
   decide before Story 4.5 is created**, because 4.5 AC3 must not prove evidence integrity
   vacuously against a structurally empty audit field.
+
+## Deferred from: code review of story-4.4 (2026-09-01)
+
+- **The provenance projection's 10,000-item event cap is silent.** Both `schedule_runs.events_after` and `conversations.timeline` are called with `limit=10_000` (`backend/application/queries/decision_provenance.py:81, :117`), so a run whose combined run and conversation streams exceed that bound is truncated with no signal in the response. — **Deferred reason: this is the specified design, half-built rather than wrong.** Story 4.4 Decision 5's *does not cover* clause anticipates the case and prescribes the remedy — "a cap with a stated `has_more`, not a cursor contract" — so the cap itself is correct and only the declared `has_more` is missing. No current run approaches the bound, and adding the field widens `DecisionProvenanceOut`, which is a published contract. **Owner/revisit trigger: the first run measured above ~1,000 timeline items**, or any story that adds paging to a provenance or activity read.

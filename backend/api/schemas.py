@@ -16,7 +16,7 @@ from application.contracts.proposal import (
 from application.contracts.scenario_projection import LockV1
 from application.contracts.audit_envelope import AuditOutcomeV1, WorkerFactsV1
 from application.contracts.evidence_ref import EvidenceRefV1
-from application.contracts.schedule_version import MetricSetV1
+from application.contracts.schedule_version import MetricSetV1, ScheduleRunStatusV1
 
 
 class ScenarioCreate(BaseModel):
@@ -278,7 +278,7 @@ class ProvenanceCommonOut(BaseModel):
 
 class SolverRunProvenanceOut(ProvenanceCommonOut):
     item_type: Literal["solver_run"]
-    status: str
+    status: ScheduleRunStatusV1
     reason: str | None
     baseline_schedule_version: str | None
     candidate_schedule_version_id: UUID | None
@@ -289,7 +289,7 @@ class SolverRunProvenanceOut(ProvenanceCommonOut):
 
 class RunProgressProvenanceOut(ProvenanceCommonOut):
     item_type: Literal["run_progress"]
-    status: str
+    status: ScheduleRunStatusV1
     reason: str | None
     resource_version: int
 

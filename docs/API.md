@@ -525,8 +525,9 @@ scratch).
 - `GET /api/v1/approvals/{approval_id}` reads one visible binding.
 - `GET /api/v1/approvals?schedule_run_id={id}` lists bindings for a run.
 - `GET /api/v1/approvals/provenance?schedule_run_id={id}` reads the complete, site-scoped
-  decision path for a run. It replays committed run, conversation, approval, audit, and current
-  baseline records without writing or recomputing any figure. This is the authoritative reader
+  decision path for a run. It replays committed run, conversation, approval, and audit records
+  without writing or recomputing any figure; the before/after baseline versions come from the
+  immutable audit pair, never from the current baseline row. This is the authoritative reader
   for the audit `parameter_hash` and `consequence_hash` named below; protected missing and
   cross-site runs both return the same `schedule_run_not_found` response.
 - `POST /api/v1/approvals/{approval_id}/decision` accepts `{ "decision": "approve" | "reject", "expected_resource_version": number }` with an `Idempotency-Key`. A valid approval atomically returns `200 consumed`, moves the baseline pointer once, records `approval_consumed`, and resumes an approval-backed agent run after commit. Rejection commits `200`; stale and expired terminalizations commit then return `409`.

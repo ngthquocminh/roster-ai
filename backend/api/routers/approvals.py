@@ -409,13 +409,12 @@ def get_provenance(
     approvals: ApprovalRepository = Depends(get_approval_repository),
     audit_reader: AuditReader = Depends(get_audit_reader),
     conversations: ConversationRepository = Depends(get_conversation_repository),
-    baselines: SiteBaselineReader = Depends(get_site_baseline_reader),
     now: datetime = Depends(get_clock),
 ):
     result = query_decision_provenance(
         connection, schedule_run_id=schedule_run_id, site_id=session.site_id,
         schedule_runs=schedule_runs, approvals=approvals, audit_reader=audit_reader,
-        conversations=conversations, baselines=baselines, clock=lambda: now,
+        conversations=conversations, clock=lambda: now,
     )
     if result is None:
         return problem_response(

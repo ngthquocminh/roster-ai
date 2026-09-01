@@ -9451,6 +9451,16 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "solver_queued",
+              "solver_running",
+              "cancellation_requested",
+              "solver_completed",
+              "solver_infeasible",
+              "solver_timed_out",
+              "solver_cancelled",
+              "solver_failed"
+            ],
             "title": "Status"
           },
           "reason": {
@@ -10368,6 +10378,16 @@
           },
           "status": {
             "type": "string",
+            "enum": [
+              "solver_queued",
+              "solver_running",
+              "cancellation_requested",
+              "solver_completed",
+              "solver_infeasible",
+              "solver_timed_out",
+              "solver_cancelled",
+              "solver_failed"
+            ],
             "title": "Status"
           },
           "reason": {

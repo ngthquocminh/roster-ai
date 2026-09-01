@@ -953,13 +953,30 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
             c, schedule_run_id=ids["schedule_run"], site_id=site_ids["site"],
             schedule_runs=PostgresScheduleRunRepository(),
             approvals=PostgresApprovalRepository(), audit_reader=PostgresAuditReader(),
-            conversations=PostgresConversationRepository(),
-            baselines=PostgresSiteBaselineReader(), clock=lambda: NOW,
+            conversations=PostgresConversationRepository(), clock=lambda: NOW,
         )
     assert provenance is not None
     promotion = next(item for item in provenance.items if item.item_type == "baseline_promotion")
     assert promotion.after_version == str(ids["candidate"])
     assert promotion.before_version == (str(live.schedule_version_id) if live else None)
+    # This approval carries TWO audit rows -- `approval_requested` at TX1 and
+    # `approval_consumed` at TX2. Each item must be stamped from the audit that
+    # actually records it; taking the last row per approval silently gave the
+    # request item the consumption's identifiers.
+    requested_audit = next(
+        item for item in provenance.items
+        if item.item_type == "audit_record" and item.outcome == "approval_requested"
+    )
+    consumed_audit = next(
+        item for item in provenance.items
+        if item.item_type == "audit_record" and item.outcome == "approval_consumed"
+    )
+    request_item = next(item for item in provenance.items if item.item_type == "approval_request")
+    decision_item = next(item for item in provenance.items if item.item_type == "approval_decision")
+    assert request_item.request_id == requested_audit.request_id
+    assert request_item.attempt_id == requested_audit.attempt_id
+    assert decision_item.request_id == consumed_audit.request_id
+    assert decision_item.attempt_id == consumed_audit.attempt_id
     with engine.connect() as c:
         stored = c.execute(select(approval_request).where(approval_request.c.id == pending_binding.approval_id)).one()
         baseline = c.execute(select(site_baseline).where(site_baseline.c.site_id == site_ids["site"])).one()

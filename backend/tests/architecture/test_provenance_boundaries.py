@@ -29,16 +29,20 @@ def test_provenance_query_has_no_provider_or_calculator_dependency() -> None:
     source = Path(decision_provenance.__file__).parents[1] / "queries" / "decision_provenance.py"
     text = source.read_text(encoding="utf-8")
     tree = ast.parse(text)
-    imports = {
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-        for alias in node.names
-    }
+    # `ast.ImportFrom.names` holds the imported SYMBOLS, not the module -- collecting
+    # only those makes the guard blind to `from sqlalchemy import select` and
+    # `from llm.gemini import GeminiProvider`, which are the realistic violations.
+    # The module lives on `node.module`, so both node kinds are read explicitly.
+    imports: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.add(node.module)
     calls = {
-        node.func.id
+        node.func.id if isinstance(node.func, ast.Name) else node.func.attr
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
     }
     assert not {name for name in imports if name.startswith(("agent", "llm", "sqlalchemy"))}
     assert not {name for name in calls if name.startswith("calculate_")}
