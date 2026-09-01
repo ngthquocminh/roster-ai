@@ -4,7 +4,7 @@ baseline_commit: 9460a57
 
 # Story 4.5: Prove Approval and Audit Invariants
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -770,3 +770,4 @@ Follow Tasks 1–15 in order with demonstrated RED→GREEN proof for every new a
 |---|---|
 | 2026-09-01 | Story created. Thirteen decisions recorded; proof matrix bound to the Epic 4 spine's seven verification obligations. |
 | 2026-09-01 | Implemented and verified approval/audit proof matrix; generated separately bound evidence; status moved to review. |
+| 2026-09-01 | Code review: nine findings applied; proof matrix bound to 28 named gates; evidence rebound to `f9ea3e2`. Status moved to done. |
