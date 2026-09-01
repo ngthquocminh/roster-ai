@@ -118,6 +118,8 @@ def promote_baseline(
     """Execute TX2 after the caller's shared revalidation returned valid."""
     if binding.state != "pending":
         raise AssertionError("promote_baseline requires a pending validated binding")
+    if candidate is None:
+        raise AssertionError("promote_baseline requires the candidate revalidation resolved")
     consumed = approvals.consume(
         connection,
         approval_id=binding.approval_id,

@@ -4,7 +4,7 @@ baseline_commit: 90ccf73
 
 # Story 4.4a: Supply Audit Evidence References
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -392,6 +392,30 @@ All three keep their own owners and triggers.
         accident; stop and find it.
   - [x] Report totals against Task 1's re-derived baselines, not against 4.4's recorded numbers.
 
+
+### Review Findings
+
+Adversarial code review, 2026-09-01, three parallel layers (Blind Hunter, Edge Case
+Hunter, Acceptance Auditor) against `defee46` vs `baseline_commit` `90ccf73`. All four
+ACs verified met on their main clause; every new identity guard was independently
+mutation-tested and genuinely fails. Findings below are the residue.
+
+- [x] [Review][Patch] **RESOLVED 2026-09-01 → option (c).** Trap 4 is unmitigated — the new denial-site `get_candidate` can raise past the denial write** — `api/routers/approvals.py:369-371` issues the read unguarded inside the `except DecideApprovalError` handler. `get_site_context` yields inside `with site_context(engine, …)` (`api/deps.py:296`), so an escape unwinds the transaction: the FR21 `approval_denied` row is lost and the planner gets a 500 instead of the defined 409. **Correction to two of the three review layers: this arm was *not* previously I/O-free** — it already calls `approvals.get` at `:368`, so the DB-fault half of this risk is pre-existing. What is genuinely new is the *validation*-failure half: `get_candidate` runs `TypeAdapter(ScheduleVersionV1).validate_python(row.payload)` (`adapters/postgres/schedule_run.py:106`), so stored-payload drift becomes a way to lose a denial row. Trap 4 names this and forbids it; Decision 2's "Does not cover" paragraph accepts the mirror-image fault on the *expired* path as correct second-arm behaviour. The two cannot both be right, and the code distinguishes neither. Options: (a) wrap the denial-site read in `try/except Exception → ()` so the 409 and the row always commit, honouring Trap 4 and accepting that a read fault becomes silent honest-absence; (b) leave as-is, accepting Decision 2's reading uniformly and amending Trap 4 in the record; (c) narrow the guard to `ValidationError` only, keeping genuine DB faults escaping. No test injects a raising `get_candidate` at this site under any option. **Resolution: (c)** — catch only `ValidationError` at the denial-site read and write `()`; let genuine DB faults escape unchanged. Rationale: payload drift is permanent (retry cannot heal it, so the denial row must still be written), while a DB fault is transient and the un-idempotent denial arm re-writes a correct row on retry — so each failure mode gets the response that actually helps. Add a test injecting each of the two.
+- [x] [Review][Patch] **RESOLVED 2026-09-01 → option (a).** The timeline now renders the identical evidence-ref list on up to four items with colliding accessible names, and both new fixtures hide it** — after this story a promoted run emits the same tuple on `solver_run` (`queries/decision_provenance.py:127`), on *each* `audit_record` (`:251`), and on `baseline_promotion` (`:266`); `ProvenanceTimeline.tsx:109` renders `item.evidence_refs` for all of them and `EvidenceLink` derives its accessible name purely from ref content. A proposal resolving 40 entities therefore paints ~160 identically-named buttons inside one `<ol aria-label="Decision provenance">`. The duplication itself is *declared* — the story and `sprint-status.yaml`'s 4.4a note both anticipate audit-sourced items rendering links. What is not declared is the name collision, and both new fixtures dodge it by inventing `record_id: "audit-demand-1"` (`ProvenanceTimeline.test.tsx:29`, `e2e/support/apiStubs.ts:230`) — a value production cannot produce, since production copies the candidate's own refs verbatim. So the Playwright axe sweep Task 7 leans on never sees the real shape. Options: (a) accept and hand it to Story 4.6's state matrix, ledgering the fixture unrepresentativeness; (b) make the fixtures production-shaped (same `record_id` across items) and let the a11y sweep judge the real page now; (c) distinguish the accessible name per item type in `EvidenceLink`/`ProvenanceTimeline` — but Trap 9 forbids touching the projection, so this is a frontend-only change. **Resolution: (a)** — make both fixtures production-shaped and ledger the volume question for Story 4.6. **Severity corrected during triage:** this is *not* an axe violation (duplicate accessible names break no rule, and `id={originElementId(origin)}` is unique per item), and per-item structure does give screen readers context — so the a11y half of the Blind Hunter's `High` does not hold. What holds is that the fixtures prove a page production cannot produce.
+- [x] [Review][Patch] The `else ()` branch of the terminal audit write is exercised but never asserted — AC1's honest-absence clause has no demonstrated-red at this site [backend/tests/test_decide_approval.py:129-131]
+- [x] [Review][Patch] Two tautological assertions restate their own fixtures and cannot fail under any production mutation [backend/tests/test_approvals_api.py:379, backend/tests/test_decide_approval.py:123]
+- [x] [Review][Patch] Decision 3's targeted-vs-consulted comment sits above `worker_facts=`, not above the `evidence_refs=` line it describes [backend/api/routers/approvals.py:385-388]
+- [x] [Review][Patch] `promote_baseline` dereferences the new `candidate` parameter with no precondition while its sibling write site guards; add the `AssertionError` beside the existing `binding.state` one [backend/application/use_cases/promote_baseline.py:118-119, :162]
+- [x] [Review][Patch] The only live-PostgreSQL populated evidence row points at a fresh `uuid4()` rather than the seeded `ids["scenario_version"]`, so Story 4.5's AC3 would resolve it `not_found` by construction [backend/tests/test_approval_governance_postgres.py:912-916]
+- [x] [Review][Patch] The added denial sentence is a 126-char unwrapped line in a file that wraps at ~78 [docs/API.md:574]
+- [x] [Review][Patch] `getByRole("Details")` weakened to `getAllByRole(...)[0]`, silently retargeting to whichever fixture item happens to be first; the new `audit_record` item's own Details control is untested [frontend/src/features/provenance/ProvenanceTimeline.test.tsx:46]
+- [x] [Review][Defer] `SCOPE_CONTROLS` lost a negative control with no positive one replacing it [backend/application/contracts/decision_provenance.py:13-18] — deferred, AC4 asked only for the removal
+- [x] [Review][Defer] Denial rows are not idempotency-guarded, so a retry loop on one terminal binding appends a new row per attempt — now carrying a full ref tuple each [backend/api/routers/approvals.py:365-392] — deferred, pre-existing since Story 4.1
+- [x] [Review][Defer] The promotion-site guard inherits its evidence fixture from `test_decide_approval.Runs`; emptying that fixture makes this guard vacuous with nothing failing to signal it [backend/tests/test_promote_baseline.py:66] — deferred, compliant with Decision 4's letter (identity, not non-emptiness)
+
+**Dismissed as noise (5):** `RevalidationV1.candidate: Any` under-typing (Decision 2 specifies `Any`, and every port in that module is `Any`); "consulted vs targeted" being indistinguishable in the data (Decision 3's own declared *Does not cover*, already an Honest Gap); a `stale` row attaching a different candidate's refs (unreachable — `uq_schedule_version_run` plus `.one_or_none()` make a run's candidate singular and immutable); audit-row size growth (the story's intended effect); and the recorded baseline skip count not reproducing (1,453 passed / 1 skipped measured vs 1,452 / 2 recorded, same 1,461 collected — an environment-dependent skip, not a regression).
+
+
 ---
 
 ## Dev Notes
@@ -589,3 +613,4 @@ GPT-5 Codex
 |---|---|
 | 2026-09-01 | Story created from `epics.md:1258-1284`, `sprint-change-proposal-2026-09-01.md`, the Epic 4 spine (EAD-7, EAD-9, EAD-10), Story 4.4's Dev Notes, Review Findings and Open Question 1, and a live audit of the codebase at `8ebc34f`. |
 | 2026-09-01 | Implemented candidate evidence-reference carriage at all four audit write sites, live JSONB/provenance/rendering proof, scope and ledger closure, documentation, and full verification; status moved to review. |
+| 2026-09-01 | Adversarial code review (Blind Hunter, Edge Case Hunter, Acceptance Auditor). Two decisions resolved — D1 → option (c), a narrow `ValidationError` guard at the denial-site read; D2 → option (a), production-shaped provenance fixtures. All nine patches applied, three findings deferred to the ledger, five dismissed. Status moved to done. |

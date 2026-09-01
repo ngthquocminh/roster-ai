@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { expect, it } from "vitest";
@@ -9,6 +9,11 @@ import { ProvenanceTimeline } from "./ProvenanceTimeline";
 const scenarioId = "11111111-1111-4111-8111-111111111111";
 const runId = "22222222-2222-4222-8222-222222222222";
 const versionId = "33333333-3333-4333-8333-333333333333";
+// Production shape: `query_decision_provenance` copies ONE tuple -- the
+// candidate's -- onto every audit-sourced item, so `audit_record` and
+// `baseline_promotion` carry byte-identical references. Giving each fixture
+// item its own record id would prove a page production cannot produce.
+const auditRefs = [{ scenario_version_id: versionId, checksum_algorithm: "sha256", checksum_schema_version: "rfc8785-v1", checksum_digest: "c".repeat(64), producing_run_version: "run-v1", baseline_schedule_version: null, group: "demand", record_id: "audit-demand-1", field: null, start_minute: null, end_minute: null, schema_version: "v1" }];
 const common = {
   occurred_at: "2026-08-31T01:00:00Z", site_id: "site-1", actor_id: null,
   initiated_by_actor_id: null, decided_by_actor_id: null, request_id: null,
@@ -26,8 +31,8 @@ it("renders an ordered, literal, inspectable timeline without leaking planted pa
       { ...common, item_type: "tool_proposal", tool_call_id: "tool-call-1", tool_name: "solve_schedule", pending_payload: marker },
       { ...common, item_type: "approval_decision", approval_id: "approval-1", outcome: "approval_rejected", state: "rejected" },
       { ...common, item_type: "evidence_claim", claim: "Persisted coverage", value: 42, unit: "minutes", evidence_refs: [{ scenario_version_id: versionId, checksum_algorithm: "sha256", checksum_schema_version: "rfc8785-v1", checksum_digest: "a".repeat(64), producing_run_version: null, baseline_schedule_version: null, group: "demand", record_id: "demand-1", field: "amount", start_minute: 0, end_minute: 60, schema_version: "v1" }] },
-      { ...common, item_type: "audit_record", audit_id: "audit-1", action: "approval_decision", outcome: "approval_consumed", success: true, safe_summary: "Promoted", parameter_hash: "a".repeat(64), consequence_hash: "b".repeat(64), policy_version: "policy-v1", app_version: "test", worker_facts: {}, evidence_refs: [{ scenario_version_id: versionId, checksum_algorithm: "sha256", checksum_schema_version: "rfc8785-v1", checksum_digest: "c".repeat(64), producing_run_version: "run-v1", baseline_schedule_version: null, group: "demand", record_id: "audit-demand-1", field: null, start_minute: null, end_minute: null, schema_version: "v1" }] },
-      { ...common, item_type: "baseline_promotion", before_version: "baseline-before", after_version: "baseline-after" },
+      { ...common, item_type: "audit_record", audit_id: "audit-1", action: "approval_decision", outcome: "approval_consumed", success: true, safe_summary: "Promoted", parameter_hash: "a".repeat(64), consequence_hash: "b".repeat(64), policy_version: "policy-v1", app_version: "test", worker_facts: {}, evidence_refs: auditRefs },
+      { ...common, item_type: "baseline_promotion", before_version: "baseline-before", after_version: "baseline-after", evidence_refs: auditRefs },
     ],
   } as unknown as RunProvenance;
 
@@ -38,12 +43,18 @@ it("renders an ordered, literal, inspectable timeline without leaking planted pa
   expect(screen.getByText("Approval decision: approval_rejected")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Copy tool call identifier tool-call-1" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Evidence: demand demand-1, amount, 0–60 minutes/ })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Evidence: demand audit-demand-1/ })).toBeInTheDocument();
+  // Two items, one tuple: the duplication is the real rendering, asserted rather
+  // than dodged by giving each fixture item a distinct record id.
+  expect(screen.getAllByRole("button", { name: /Evidence: demand audit-demand-1/ })).toHaveLength(2);
   expect(screen.getByText("Before")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Copy promoted baseline version baseline-after" })).toBeInTheDocument();
   expect(screen.queryByText(marker)).not.toBeInTheDocument();
 
-  const [details] = screen.getAllByRole("button", { name: "Details" });
+  // Both the claim and the audit row carry their own collapsible; target the
+  // claim's by its own list item rather than by position in the fixture array.
+  expect(screen.getAllByRole("button", { name: "Details" })).toHaveLength(2);
+  const claimItem = screen.getByText("Evidence claim: Persisted coverage").closest("li") as HTMLElement;
+  const details = within(claimItem).getByRole("button", { name: "Details" });
   expect(details).toHaveAttribute("aria-expanded", "false");
   await userEvent.click(details);
   expect(details).toHaveAttribute("aria-expanded", "true");

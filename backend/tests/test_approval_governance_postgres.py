@@ -88,7 +88,7 @@ def site_ids(governed_postgres_engine):
     return ids
 
 
-def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed", resource_version=2, assignment_count=1, suffix=None, scenario_payload=None, evidence_refs=()):
+def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed", resource_version=2, assignment_count=1, suffix=None, scenario_payload=None, evidence_ref_records=()):
     """Build one scenario -> conversation -> proposal -> run_snapshot ->
     schedule_run(+candidate schedule_version, +assignments) chain via direct
     inserts, mirroring `finalize_run`'s own insert order without invoking the
@@ -98,6 +98,18 @@ def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed",
         "scenario", "scenario_version", "conversation", "message", "proposal",
         "proposal_version", "run_snapshot", "schedule_run", "candidate",
     )}
+    # Bind every reference to the `scenario_version` row this helper actually
+    # inserts, and to that row's stored checksum. A ref minted from a free
+    # `uuid4()` round-trips through JSONB perfectly well but resolves
+    # `not_found` by construction, which would hand Story 4.5's AC3 the only
+    # populated real-PostgreSQL row it has and make it unprovable.
+    evidence_refs = tuple(
+        EvidenceRefV1(
+            ids["scenario_version"], "sha256", "v1", "a" * 64,
+            "run-v1", None, group, record_id, field, start_minute, end_minute,
+        )
+        for group, record_id, field, start_minute, end_minute in evidence_ref_records
+    )
     with engine.begin() as c:
         c.execute(insert(scenario).values(id=ids["scenario"], site_id=site_id, fixture_id=f"fixture-{suffix}", name="Fixture"))
         c.execute(insert(scenario_version).values(
@@ -909,14 +921,13 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
     governed_postgres_engine, site_ids, agent_backed
 ) -> None:
     engine = governed_postgres_engine
-    scenario_version_id = uuid4()
-    evidence_ref = EvidenceRefV1(
-        scenario_version_id, "sha256", "rfc8785-v1", "e" * 64,
-        "run-v1", "baseline-v1", "demand", "demand-1", "amount", 0, 60,
-    )
     ids = _seed_candidate_run(
         engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2,
-        evidence_refs=(evidence_ref,),
+        evidence_ref_records=(("demand", "demand-1", "amount", 0, 60),),
+    )
+    evidence_ref = EvidenceRefV1(
+        ids["scenario_version"], "sha256", "v1", "a" * 64,
+        "run-v1", None, "demand", "demand-1", "amount", 0, 60,
     )
     with engine.connect() as c:
         versions_before = [dict(row._mapping) for row in c.execute(
@@ -976,13 +987,21 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
     assert len(consequential) == 2
     assert all(row.evidence_refs == candidate.evidence_refs for row in consequential)
     round_tripped = consequential[0].evidence_refs[0]
-    assert round_tripped.scenario_version_id == evidence_ref.scenario_version_id
+    # The locator points at a `scenario_version` row that exists in this site,
+    # so Story 4.5's AC3 can resolve it rather than proving `not_found`.
+    assert round_tripped.scenario_version_id == ids["scenario_version"]
+    with engine.connect() as vc:
+        seeded_version = vc.execute(select(scenario_version.c.id, scenario_version.c.checksum_digest).where(
+            scenario_version.c.id == round_tripped.scenario_version_id
+        )).one_or_none()
+    assert seeded_version is not None
+    assert round_tripped.checksum_digest == seeded_version.checksum_digest
     assert round_tripped.producing_run_version == "run-v1"
     assert (
         round_tripped.checksum_algorithm,
         round_tripped.checksum_schema_version,
         round_tripped.checksum_digest,
-    ) == ("sha256", "rfc8785-v1", "e" * 64)
+    ) == ("sha256", "v1", "a" * 64)
     promotion = next(item for item in provenance.items if item.item_type == "baseline_promotion")
     assert promotion.after_version == str(ids["candidate"])
     assert promotion.before_version == (str(live.schedule_version_id) if live else None)

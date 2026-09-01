@@ -120,7 +120,7 @@ def test_expired_attempt_audits_the_candidate_that_resolves_in_the_transaction()
     )
 
     assert result.outcome == "expired"
-    assert runs.get_candidate(None) is runs.candidate
+    assert runs.candidate.evidence_refs != ()
     assert audit.items[0].evidence_refs == runs.candidate.evidence_refs
 
 def test_valid_approve_consumes_and_promotes() -> None:
@@ -134,6 +134,10 @@ def test_changed_candidate_terminalizes_stale() -> None:
     runs.candidate = None
     assert decide(runs, approvals, audit, conversations, command, decision="approve").outcome == "stale"
     assert approvals.binding.state == "stale" and audit.items[0].outcome == "approval_stale"
+    # AC1's other half: a candidate that does not resolve writes an ASSERTED empty
+    # set, not an unlooked-at one. Reverting the write site to an unguarded
+    # `candidate.evidence_refs` raises here instead of silently passing.
+    assert audit.items[0].evidence_refs == ()
 
 def test_agent_path_cancels_with_the_literal_reason() -> None:
     runs, approvals, audit, conversations, command = pending(agent_run_id=uuid4())

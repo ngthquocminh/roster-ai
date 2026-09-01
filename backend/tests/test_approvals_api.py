@@ -16,6 +16,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter, ValidationError
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import (
@@ -132,10 +133,11 @@ class FakeSchedulingRuns:
 
     _UNSET = object()
 
-    def __init__(self, *, conversation_id=_UNSET, raises=None, candidate=None):
+    def __init__(self, *, conversation_id=_UNSET, raises=None, candidate=None, candidate_raises=None):
         self.conversation_id = uuid4() if conversation_id is self._UNSET else conversation_id
         self.raises = raises
         self.candidate = candidate
+        self.candidate_raises = candidate_raises
         self.candidate_calls = []
         self.stored: dict[str, IdempotentScheduleRunResultV1] = {}
 
@@ -149,6 +151,8 @@ class FakeSchedulingRuns:
 
     def get_candidate(self, _c, **kwargs):
         self.candidate_calls.append(kwargs)
+        if self.candidate_raises is not None:
+            raise self.candidate_raises
         return self.candidate
 
     def get_idempotent_result(self, _c, *, site_id, actor_id, operation, idempotency_key):
@@ -375,8 +379,88 @@ def test_prewrite_denial_audits_target_candidate_refs_or_honest_absence(
         "site_id": session.site_id,
     }]
     assert audit.items[0].evidence_refs == ((evidence_ref,) if candidate_resolves else ())
-    if not candidate_resolves:
-        assert runs.candidate is None
+
+
+def _validation_error() -> ValidationError:
+    """A real pydantic error, built the way the adapter produces one.
+
+    `PostgresScheduleRunRepository.get_candidate` rehydrates the stored payload
+    with `TypeAdapter(ScheduleVersionV1).validate_python`, so a `schedule_version`
+    row that no longer matches the contract raises exactly this type.
+    """
+    try:
+        TypeAdapter(int).validate_python("not-an-int")
+    except ValidationError as exc:
+        return exc
+    raise AssertionError("expected a ValidationError")
+
+
+def _denial_setup(monkeypatch, session, runs, audit):
+    binding = _binding(site_id=session.site_id, state="rejected")
+    runs.binding = binding
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_schedule_run_repository] = lambda: runs
+    app.dependency_overrides[get_audit_writer] = lambda: audit
+    monkeypatch.setattr(
+        approvals_router,
+        "decide_approval",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            ApprovalNotPendingError(
+                "already terminal", expected={"state": "pending"},
+                current={"state": "rejected"},
+            )
+        ),
+    )
+    return binding
+
+
+def test_unreadable_candidate_payload_still_commits_the_denial_row_and_the_409(client, monkeypatch):
+    """A payload that no longer validates is PERMANENT -- a retry cannot heal it.
+
+    Losing the FR21 denial row to it would be permanent too, so the refusal is
+    recorded with honest absence and the mapped 409 still goes out.
+    """
+    test_client, settings, session = client
+    runs = FakeSchedulingRuns(candidate_raises=_validation_error())
+    audit = FakeAudit()
+    binding = _denial_setup(monkeypatch, session, runs, audit)
+
+    response = test_client.post(
+        f"/api/v1/approvals/{binding.approval_id}/decision",
+        headers=_headers(settings, key="denial-refs-unreadable"),
+        json={"decision": "approve", "expected_resource_version": 1},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "approval_not_pending"
+    assert len(runs.candidate_calls) == 1
+    assert [item.outcome for item in audit.items] == ["approval_denied"]
+    assert audit.items[0].evidence_refs == ()
+
+
+def test_a_transactional_candidate_fault_escapes_so_the_retry_writes_a_real_row(client, monkeypatch):
+    """The guard is deliberately narrow.
+
+    An infrastructure fault is transient, and this arm stores no idempotent
+    result, so letting it escape means the client's retry re-enters here and
+    writes a denial row carrying the real references -- strictly better than
+    committing an absence that is indistinguishable from a resolved-to-nothing
+    candidate.
+    """
+    test_client, settings, session = client
+    runs = FakeSchedulingRuns(candidate_raises=RuntimeError("connection reset"))
+    audit = FakeAudit()
+    binding = _denial_setup(monkeypatch, session, runs, audit)
+
+    with pytest.raises(RuntimeError, match="connection reset"):
+        test_client.post(
+            f"/api/v1/approvals/{binding.approval_id}/decision",
+            headers=_headers(settings, key="denial-refs-fault"),
+            json={"decision": "approve", "expected_resource_version": 1},
+        )
+
+    assert len(runs.candidate_calls) == 1
+    assert audit.items == []
 
 
 def test_decision_conflicts_when_one_idempotency_key_is_reused_with_a_changed_body(client, monkeypatch):
