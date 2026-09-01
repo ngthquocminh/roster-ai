@@ -10,11 +10,18 @@ from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy import Connection, select
 from sqlalchemy.exc import IntegrityError
 
-from api.deps import AgentRuntimeFactory, CapabilityComposer, PostCommitActions, SiteContextOpener, get_agent_runtime_factory, get_approval_repository, get_audit_writer, get_capability_registry, get_clock, get_conversation_repository, get_membership_reader, get_post_commit_actions, get_projection_reader, get_proposal_repository, get_schedule_run_repository, get_session, get_settings, get_site_baseline_reader, get_site_baseline_writer, get_site_context, get_site_context_opener
+from api.deps import AgentRuntimeFactory, CapabilityComposer, PostCommitActions, SiteContextOpener, get_agent_runtime_factory, get_approval_repository, get_audit_reader, get_audit_writer, get_capability_registry, get_clock, get_conversation_repository, get_membership_reader, get_post_commit_actions, get_projection_reader, get_proposal_repository, get_schedule_run_repository, get_session, get_settings, get_site_baseline_reader, get_site_baseline_writer, get_site_context, get_site_context_opener
 from api.problems import problem_response
-from api.schemas import ApprovalDecisionIn, ApprovalListOut, ApprovalOut, ApprovalRequestIn, ProblemDetailsV1
+from api.schemas import (
+    ApprovalDecisionIn, ApprovalListOut, ApprovalOut, ApprovalRequestIn,
+    ApprovalDecisionProvenanceOut, ApprovalRequestProvenanceOut,
+    AuditRecordProvenanceOut, BaselinePromotionProvenanceOut,
+    DecisionProvenanceOut, DraftProvenanceOut, EvidenceClaimProvenanceOut,
+    ProblemDetailsV1, RunProgressProvenanceOut, SolverRunProvenanceOut,
+    ToolProposalProvenanceOut,
+)
 from application.capabilities.installed import enabled_feature_policy
-from application.ports.approval import ApprovalRepository, AuditWriter
+from application.ports.approval import ApprovalRepository, AuditReader, AuditWriter
 from application.ports.conversation import ConversationRepository
 from application.ports.conversation import ClaimedAgentRunV1
 from application.ports.schedule_run import ScheduleRunRepository
@@ -29,6 +36,14 @@ from application.use_cases.promote_baseline import BaselineConcurrentlyMovedErro
 from application.contracts.canonical import contract_digest
 from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
 from application.contracts.agent_runtime import AgentApprovalDecisionV1, AgentBudgetV1
+from application.contracts.approval_binding import presented_approval_state
+from application.contracts.decision_provenance import (
+    ApprovalDecisionProvenanceV1, ApprovalRequestProvenanceV1,
+    AuditRecordProvenanceV1, BaselinePromotionProvenanceV1,
+    DraftProvenanceV1, EvidenceClaimProvenanceV1, RunProgressProvenanceV1,
+    SolverRunProvenanceV1, ToolProposalProvenanceV1,
+)
+from application.queries.decision_provenance import query_decision_provenance
 from application.contracts.grounding import GroundedAnswerV1
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
@@ -62,6 +77,7 @@ _RESPONSES = {403: {"model": ProblemDetailsV1}, 404: {"model": ProblemDetailsV1}
 #: cannot drive the resumed turn), not the generic unhandled-error shape, so it
 #: belongs in the contract rather than surfacing as an undeclared status.
 _DECISION_RESPONSES = {**_RESPONSES, 500: {"model": ProblemDetailsV1}}
+_PROVENANCE_RESPONSES = {404: {"model": ProblemDetailsV1}}
 
 #: Status per stable problem code (AD-13). `approval_not_granted` is 403 at BOTH
 #: sites -- the router's feature-policy pre-check and the use case's own
@@ -119,8 +135,58 @@ def _out(binding, now: datetime) -> ApprovalOut:
     # EAD-7: a read that observes `now() >= expires_at` PRESENTS the binding as
     # expired and writes nothing. The terminal `expired` state materialises only
     # inside a decision-attempt transaction, which Story 4.2 owns.
-    state = "expired" if binding.state == "pending" and binding.expires_at <= now else binding.state
+    state = presented_approval_state(binding, now)
     return ApprovalOut(approval_id=binding.approval_id, state=state, schedule_run_id=binding.schedule_run_id, candidate_schedule_version_id=binding.candidate_schedule_version_id, baseline_schedule_version=binding.baseline_schedule_version, scenario_version_id=binding.scenario_version_id, consequence_summary=binding.consequence_summary, policy_version=binding.policy_version, agent_run_id=binding.agent_run_id, created_at=binding.created_at, expires_at=binding.expires_at, resource_version=binding.resource_version)
+
+
+def _provenance_item_out(item):
+    common = dict(
+        occurred_at=item.occurred_at, item_type=item.item_type, site_id=item.site_id,
+        actor_id=item.actor_id, initiated_by_actor_id=item.initiated_by_actor_id,
+        decided_by_actor_id=item.decided_by_actor_id, request_id=item.request_id,
+        attempt_id=item.attempt_id, conversation_id=item.conversation_id,
+        agent_run_id=item.agent_run_id, tool_call_id=item.tool_call_id,
+        approval_id=item.approval_id, job_attempt_id=item.job_attempt_id,
+        schedule_run_id=item.schedule_run_id, audit_id=item.audit_id,
+        schedule_version_id=item.schedule_version_id,
+        scenario_version_id=item.scenario_version_id,
+        evidence_refs=item.evidence_refs, schema_version=item.schema_version,
+    )
+    if isinstance(item, SolverRunProvenanceV1):
+        return SolverRunProvenanceOut(**common, status=item.status, reason=item.reason,
+            baseline_schedule_version=item.baseline_schedule_version,
+            candidate_schedule_version_id=item.candidate_schedule_version_id,
+            comparison_status=item.comparison_status, comparison_reason=item.comparison_reason,
+            metrics=item.metrics)
+    if isinstance(item, RunProgressProvenanceV1):
+        return RunProgressProvenanceOut(**common, status=item.status, reason=item.reason,
+                                        resource_version=item.resource_version)
+    if isinstance(item, DraftProvenanceV1):
+        return DraftProvenanceOut(**common, proposal_id=item.proposal_id,
+                                  proposal_version_id=item.proposal_version_id,
+                                  consequence_summary=item.consequence_summary)
+    if isinstance(item, EvidenceClaimProvenanceV1):
+        return EvidenceClaimProvenanceOut(**common, claim=item.claim, value=item.value,
+                                          unit=item.unit)
+    if isinstance(item, ToolProposalProvenanceV1):
+        return ToolProposalProvenanceOut(**common, tool_name=item.tool_name)
+    if isinstance(item, ApprovalRequestProvenanceV1):
+        return ApprovalRequestProvenanceOut(**common, state=item.state,
+            consequence_summary=item.consequence_summary, parameter_hash=item.parameter_hash,
+            consequence_hash=item.consequence_hash, policy_version=item.policy_version,
+            expires_at=item.expires_at)
+    if isinstance(item, ApprovalDecisionProvenanceV1):
+        return ApprovalDecisionProvenanceOut(**common, outcome=item.outcome, state=item.state)
+    if isinstance(item, AuditRecordProvenanceV1):
+        return AuditRecordProvenanceOut(**common, action=item.action, outcome=item.outcome,
+            success=item.success, safe_summary=item.safe_summary,
+            parameter_hash=item.parameter_hash, consequence_hash=item.consequence_hash,
+            policy_version=item.policy_version, app_version=item.app_version,
+            worker_facts=item.worker_facts)
+    if isinstance(item, BaselinePromotionProvenanceV1):
+        return BaselinePromotionProvenanceOut(**common, before_version=item.before_version,
+                                              after_version=item.after_version)
+    raise TypeError(f"unsupported provenance item: {type(item).__name__}")
 
 
 def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_capabilities,
@@ -332,6 +398,34 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
             proposals=proposals, open_site_context=open_site_context,
         ))
     return output
+
+
+@router.get("/provenance", response_model=DecisionProvenanceOut, responses=_PROVENANCE_RESPONSES)
+def get_provenance(
+    schedule_run_id: UUID = Query(),
+    connection: Connection = Depends(get_site_context),
+    session: ResolvedSession = Depends(get_session),
+    schedule_runs: ScheduleRunRepository = Depends(get_schedule_run_repository),
+    approvals: ApprovalRepository = Depends(get_approval_repository),
+    audit_reader: AuditReader = Depends(get_audit_reader),
+    conversations: ConversationRepository = Depends(get_conversation_repository),
+    now: datetime = Depends(get_clock),
+):
+    result = query_decision_provenance(
+        connection, schedule_run_id=schedule_run_id, site_id=session.site_id,
+        schedule_runs=schedule_runs, approvals=approvals, audit_reader=audit_reader,
+        conversations=conversations, clock=lambda: now,
+    )
+    if result is None:
+        return problem_response(
+            status=404, code="schedule_run_not_found", title="Schedule run not found",
+            detail="No schedule run with that identifier is visible in this site.",
+        )
+    return DecisionProvenanceOut(
+        schedule_run_id=result.schedule_run_id, site_id=result.site_id,
+        items=[_provenance_item_out(item) for item in result.items],
+        schema_version=result.schema_version,
+    )
 
 
 @router.get("/{approval_id}", response_model=ApprovalOut, responses=_RESPONSES)

@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-08-31
+last_updated: 2026-09-01
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -1879,7 +1879,66 @@ development_status:
   # admits only five members, none of which can express one. EAD-1 gives 4.1 the migration that
   # CREATES the tables; 4.2 Decision 11 explicitly permits a later additive one.
   4-3-promote-the-baseline-atomically-with-audit: done
-  4-4-inspect-complete-decision-provenance: backlog
+  # NOTE (2026-08-31): Story 4.4 created. It is the epic's FIRST READ-ONLY STORY and writes
+  # NOTHING -- no migration, table, ActivityTypeV1 member, persisted_event, audit row, setting or
+  # dependency. Scope: one query module (application/queries/decision_provenance.py -- the
+  # Structural Seed's name, which 4.3 explicitly refused to stub), one contract module, one new
+  # read port (AuditReader, beside AuditWriter -- audit_event has been WRITE-ONLY since 4.1), one
+  # GET on the EXISTING approvals router, one contract-drift fix, one Results section.
+  #
+  # THIRTEEN DECISIONS ARE RECORDED IN THE STORY. Five a fresh reading would get wrong:
+  # (1) THE ROUTE MUST BE REGISTERED ABOVE `GET /approvals/{approval_id}` (approvals.py:337).
+  #     FastAPI matches in registration order, so `/approvals/provenance` declared after it is
+  #     swallowed by the UUID path parameter and answers 422. Demonstrated-red required.
+  # (2) TWO OF AC1'S TEN ITEMS HAVE NO PERSISTED SUPPLY and are declared ABSENT, not fabricated.
+  #     (a) There is NO tool_call table; `tool_call_id` appears in adapters/** and use_cases/**
+  #     at exactly two lines, both in promote_baseline.py reading approval_request.pending_payload
+  #     -- so the ONLY persisted tool proposal is the approval-triggering call. Owner: Epic 5.
+  #     (b) ActivityTypeV1 declares EIGHT discriminants but ActivityItemV1 unions SEVEN --
+  #     `comparison` has no dataclass, no producer, no consumer; and EAD-8 refuses recomputation
+  #     after the first promotion (scenario_projection.py:644 returns a literal ()). Provenance
+  #     links the comparison BY REFERENCE and MUST NOT call calculate_comparison.
+  # (3) pending_payload IS THE HONEYPOT. It is the only persisted tool call, which makes it feel
+  #     like AC1's answer -- and its AgentTurnV1 carries tool_args_json and tool_result content,
+  #     exactly the "sensitive tool payloads" AC2 forbids. Project tool_name + tool_call_id ONLY.
+  # (4) `AuditOutcomeV1` IS DRIFTED THREE WAYS at e944914: the DB CHECK has six members, schema.py
+  #     :520 has six (4.3's review patch), the contract Literal at audit_envelope.py:12 has FIVE,
+  #     and approvals.py:309 already writes the sixth. It is a plain dataclass so nothing raised.
+  #     4.4 is where it bites, because provenance publishes `outcome` into a generated TS union.
+  # (5) DECISION 7 CLOSES deferred-work.md:443 (the identity-model entry re-pointed to "Stories
+  #     4.3/4.4"). It is decided by RENDERING, not migration: actor_id is labelled "initiated by"
+  #     per EAD-3, the executor appears only through worker_facts, decided_by_actor_id only on
+  #     decision/audit items, and no system-user row is created. The residual enqueue-vs-cancel
+  #     actor_id inconsistency is re-pointed to Epic 5.
+  #
+  # AC3 AND AC4 ARE PROVEN, NOT BUILT. AC3: every source is a database row and the query module
+  # imports nothing from agent/, llm/ or a provider -- assert the import boundary. AC4: RLS is
+  # already FORCEd and _secure() grants audit_event SELECT+INSERT then REVOKEs UPDATE, DELETE with
+  # NO column-level re-grant (unlike approval_request and site_baseline at :117-118). Prove with
+  # has_table_privilege for audit_event and has_column_privilege for the approval_request contrast
+  # -- a column-only grant does NOT satisfy has_table_privilege, so using the table-level function
+  # on both sides reports "false, false" and proves nothing.
+  #
+  # OTHER TRAPS: persisted_event.sequence is PER-STREAM and cannot order a merged conversation +
+  # run timeline; same-timestamp items are the NORMAL case (TX1/TX2/TX3 each write three rows
+  # against one clock) so the tie-break is load-bearing; PostgresAuditWriter stores worker_facts
+  # and evidence_refs through TypeAdapter dump_python(mode="json") so the reader must reverse
+  # that; audit_event has no schedule_run_id index (note it, do not add one in a read story);
+  # audit_event.evidence_refs is () at ALL FOUR write sites, so NFR32's evidence clause is met
+  # from candidate and claim suppliers -- do NOT backfill it by editing a write path.
+  #
+  # FRONTEND: the Provenance section owns its OWN query and its OWN failure boundary, asserted in
+  # BOTH directions. Story 4.3's most expensive review finding was one failing query removing the
+  # whole Results page; a one-directional test passes while the new failure mode ships.
+  #
+  # NO EVIDENCE FILE (no measured threshold), NO GOLDEN CASE (no capability, no model-facing
+  # surface). Total golden cases stays 21. Do not pad.
+  #
+  # BASELINES INHERITED FROM 4.3, NOT VERIFIED: backend 1426 passed / 3 failed / 7 skipped;
+  # PostgreSQL 127 passed / 1 failed; frontend 575 passed; Playwright 60->62 passed. Re-derive at
+  # Task 1 before attributing any failure to this story. The three backend failures are external
+  # and pre-existing (two retired-slug OpenRouter cases, one conftest-import fixture).
+  4-4-inspect-complete-decision-provenance: done
   4-5-prove-approval-and-audit-invariants: backlog
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
   epic-4-retrospective: optional

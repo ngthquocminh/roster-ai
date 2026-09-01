@@ -213,6 +213,25 @@ export async function installApiStubs(page: Page, options?: { fixture?: FixtureK
     if (path === "/api/v1/schedule-runs") {
       return json(route, repairJourney.runPage());
     }
+    if (path === "/api/v1/approvals/provenance") {
+      const common = {
+        occurred_at: "2026-08-31T01:00:00Z", site_id: SITE_ID,
+        actor_id: null, initiated_by_actor_id: null, decided_by_actor_id: null,
+        request_id: null, attempt_id: null, conversation_id: CONVERSATION_ID,
+        agent_run_id: null, tool_call_id: null, approval_id: null,
+        job_attempt_id: null, schedule_run_id: SCHEDULE_RUN_ID, audit_id: null,
+        schedule_version_id: null, scenario_version_id: SCENARIO_VERSION_ID,
+        evidence_refs: [], schema_version: "v1",
+      };
+      return json(route, {
+        schedule_run_id: SCHEDULE_RUN_ID, site_id: SITE_ID, schema_version: "v1",
+        items: [
+          { ...common, item_type: "approval_decision", approval_id: "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa", decided_by_actor_id: "planner-with-a-deliberately-long-stable-identifier-that-must-wrap-without-scrolling", outcome: "approval_consumed", state: "consumed" },
+          { ...common, item_type: "audit_record", audit_id: "dddddddd-4444-4444-8444-dddddddddddd", action: "approval_decision", outcome: "approval_consumed", success: true, safe_summary: "Approval was consumed and the candidate became the baseline.", parameter_hash: "a".repeat(64), consequence_hash: "b".repeat(64), policy_version: "policy-v1", app_version: "e2e", worker_facts: { lease_owner: null, attempt_id: null, fencing_epoch: null } },
+          { ...common, item_type: "baseline_promotion", schedule_version_id: "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb", before_version: "baseline-v12", after_version: "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb" },
+        ],
+      });
+    }
     if (path === `/api/v1/schedule-runs/${SCHEDULE_RUN_ID}/result`) {
       return json(route, repairJourney.nextResult());
     }

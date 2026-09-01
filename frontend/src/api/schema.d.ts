@@ -797,6 +797,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/approvals/provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Provenance */
+        get: operations["get_provenance_api_v1_approvals_provenance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/approvals/{approval_id}": {
         parameters: {
             query?: never;
@@ -905,6 +922,66 @@ export interface components {
             decision: "approve" | "reject";
             /** Expected Resource Version */
             expected_resource_version: number;
+        };
+        /** ApprovalDecisionProvenanceOut */
+        ApprovalDecisionProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "approval_decision";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "approval_requested" | "approval_consumed" | "approval_rejected" | "approval_expired" | "approval_stale" | "approval_denied";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "consumed" | "rejected" | "expired" | "stale";
         };
         /** ApprovalListOut */
         ApprovalListOut: {
@@ -1047,6 +1124,74 @@ export interface components {
             /** Expected Baseline Schedule Version */
             expected_baseline_schedule_version: string | null;
         };
+        /** ApprovalRequestProvenanceOut */
+        ApprovalRequestProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "approval_request";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "consumed" | "rejected" | "expired" | "stale";
+            /** Consequence Summary */
+            consequence_summary: string;
+            /** Parameter Hash */
+            parameter_hash: string;
+            /** Consequence Hash */
+            consequence_hash: string;
+            /** Policy Version */
+            policy_version: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
         /** AssignmentDiffOut */
         AssignmentDiffOut: {
             /** Added Worker Ids */
@@ -1118,6 +1263,76 @@ export interface components {
             /** Matching Count */
             matching_count: number;
         };
+        /** AuditRecordProvenanceOut */
+        AuditRecordProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "audit_record";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /** Action */
+            action: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "approval_requested" | "approval_consumed" | "approval_rejected" | "approval_expired" | "approval_stale" | "approval_denied";
+            /** Success */
+            success: boolean;
+            /** Safe Summary */
+            safe_summary: string;
+            /** Parameter Hash */
+            parameter_hash: string;
+            /** Consequence Hash */
+            consequence_hash: string;
+            /** Policy Version */
+            policy_version: string;
+            /** App Version */
+            app_version: string;
+            worker_facts: components["schemas"]["WorkerFactsV1"];
+        };
         /** AuthSessionOut */
         AuthSessionOut: {
             /**
@@ -1149,6 +1364,60 @@ export interface components {
             start_minute: number;
             /** End Minute */
             end_minute: number;
+        };
+        /** BaselinePromotionProvenanceOut */
+        BaselinePromotionProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "baseline_promotion";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /** Before Version */
+            before_version: string | null;
+            /** After Version */
+            after_version: string;
         };
         /**
          * ClaimArgumentsV1
@@ -1392,6 +1661,23 @@ export interface components {
             /** Resource Version */
             resource_version: number;
         };
+        /** DecisionProvenanceOut */
+        DecisionProvenanceOut: {
+            /**
+             * Schedule Run Id
+             * Format: uuid
+             */
+            schedule_run_id: string;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Items */
+            items: (components["schemas"]["SolverRunProvenanceOut"] | components["schemas"]["RunProgressProvenanceOut"] | components["schemas"]["DraftProvenanceOut"] | components["schemas"]["EvidenceClaimProvenanceOut"] | components["schemas"]["ToolProposalProvenanceOut"] | components["schemas"]["ApprovalRequestProvenanceOut"] | components["schemas"]["ApprovalDecisionProvenanceOut"] | components["schemas"]["AuditRecordProvenanceOut"] | components["schemas"]["BaselinePromotionProvenanceOut"])[];
+            /** Schema Version */
+            schema_version: string;
+        };
         /** DemandIntervalOut */
         DemandIntervalOut: {
             /** Record Id */
@@ -1583,6 +1869,68 @@ export interface components {
              */
             schema_version: string;
         };
+        /** DraftProvenanceOut */
+        DraftProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "draft";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /**
+             * Proposal Version Id
+             * Format: uuid
+             */
+            proposal_version_id: string;
+            /** Consequence Summary */
+            consequence_summary: string;
+        };
         /**
          * EntityCandidateV1
          * @description TRUSTED candidate resolved against the governed scenario projection.
@@ -1611,6 +1959,62 @@ export interface components {
              * @default 1
              */
             schema_version: string;
+        };
+        /** EvidenceClaimProvenanceOut */
+        EvidenceClaimProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "evidence_claim";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /** Claim */
+            claim: string;
+            /** Value */
+            value: number | string | null;
+            /** Unit */
+            unit: string | null;
         };
         /** EvidenceRefOut */
         EvidenceRefOut: {
@@ -1981,6 +2385,77 @@ export interface components {
              */
             schema_version: string;
         };
+        /**
+         * MetricSetV1
+         * @description Minute-, currency-, and count-valued candidate metrics.
+         */
+        MetricSetV1: {
+            /**
+             * Interval Coverage Required Minutes
+             * @default []
+             */
+            interval_coverage_required_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Interval Coverage Served Minutes
+             * @default []
+             */
+            interval_coverage_served_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Function Coverage Required Minutes
+             * @default []
+             */
+            function_coverage_required_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Function Coverage Served Minutes
+             * @default []
+             */
+            function_coverage_served_minutes: [
+                string,
+                number
+            ][];
+            /**
+             * Overtime Minutes
+             * @default 0
+             */
+            overtime_minutes: number;
+            /**
+             * Total Cost
+             * @default 0
+             */
+            total_cost: number;
+            /**
+             * Objective Components
+             * @default []
+             */
+            objective_components: [
+                string,
+                number
+            ][];
+            /**
+             * Assignment Count
+             * @default 0
+             */
+            assignment_count: number;
+            /**
+             * Member Count
+             * @default 0
+             */
+            member_count: number;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+        };
         /** OverrideOut */
         OverrideOut: {
             /** Id */
@@ -2253,6 +2728,65 @@ export interface components {
             occurred_at: string;
             /** Sequence */
             sequence: string;
+        };
+        /** RunProgressProvenanceOut */
+        RunProgressProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "run_progress";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "solver_queued" | "solver_running" | "cancellation_requested" | "solver_completed" | "solver_infeasible" | "solver_timed_out" | "solver_cancelled" | "solver_failed";
+            /** Reason */
+            reason: string | null;
+            /** Resource Version */
+            resource_version: number;
         };
         /** ScenarioContextOut */
         ScenarioContextOut: {
@@ -2553,6 +3087,75 @@ export interface components {
              */
             schema_version: string;
         };
+        /** SolverRunProvenanceOut */
+        SolverRunProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "solver_run";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "solver_queued" | "solver_running" | "cancellation_requested" | "solver_completed" | "solver_infeasible" | "solver_timed_out" | "solver_cancelled" | "solver_failed";
+            /** Reason */
+            reason: string | null;
+            /** Baseline Schedule Version */
+            baseline_schedule_version: string | null;
+            /** Candidate Schedule Version Id */
+            candidate_schedule_version_id: string | null;
+            /**
+             * Comparison Status
+             * @enum {string}
+             */
+            comparison_status: "available" | "unavailable";
+            /** Comparison Reason */
+            comparison_reason: string | null;
+            metrics: components["schemas"]["MetricSetV1"] | null;
+        };
         /** TaskPageOut */
         TaskPageOut: {
             /**
@@ -2698,6 +3301,58 @@ export interface components {
             /** Has More */
             has_more: boolean;
         };
+        /** ToolProposalProvenanceOut */
+        ToolProposalProvenanceOut: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            item_type: "tool_proposal";
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
+            /** Actor Id */
+            actor_id: string | null;
+            /** Initiated By Actor Id */
+            initiated_by_actor_id: string | null;
+            /** Decided By Actor Id */
+            decided_by_actor_id: string | null;
+            /** Request Id */
+            request_id: string | null;
+            /** Attempt Id */
+            attempt_id: string | null;
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Agent Run Id */
+            agent_run_id: string | null;
+            /** Tool Call Id */
+            tool_call_id: string | null;
+            /** Approval Id */
+            approval_id: string | null;
+            /** Job Attempt Id */
+            job_attempt_id: string | null;
+            /** Schedule Run Id */
+            schedule_run_id: string | null;
+            /** Audit Id */
+            audit_id: string | null;
+            /** Schedule Version Id */
+            schedule_version_id: string | null;
+            /** Scenario Version Id */
+            scenario_version_id: string | null;
+            /** Evidence Refs */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /** Schema Version */
+            schema_version: string;
+            /** Tool Name */
+            tool_name: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -2710,6 +3365,20 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WorkerFactsV1 */
+        WorkerFactsV1: {
+            /** Lease Owner */
+            lease_owner?: string | null;
+            /** Attempt Id */
+            attempt_id?: string | null;
+            /** Fencing Epoch */
+            fencing_epoch?: number | null;
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
         };
         /** WorkerPageOut */
         WorkerPageOut: {
@@ -5459,6 +6128,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+        };
+    };
+    get_provenance_api_v1_approvals_provenance_get: {
+        parameters: {
+            query: {
+                schedule_run_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionProvenanceOut"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetailsV1"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -21,3 +21,9 @@ class ApprovalRepository(Protocol):
 
 class AuditWriter(Protocol):
     def append(self, connection: Any, envelope: AuditEnvelopeV1) -> None: ...
+
+
+class AuditReader(Protocol):
+    def list_for_schedule_run(
+        self, connection: Any, *, schedule_run_id: UUID, site_id: UUID,
+    ) -> tuple[AuditEnvelopeV1, ...]: ...

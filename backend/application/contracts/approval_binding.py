@@ -13,6 +13,13 @@ ApprovalStateV1 = Literal["pending", "consumed", "rejected", "expired", "stale"]
 ApprovalActionV1 = Literal["promote_baseline"]
 
 
+def presented_approval_state(binding: "ApprovalBindingV1", now: datetime) -> ApprovalStateV1:
+    """Present overdue pending rows as expired without mutating persisted state."""
+    if binding.state == "pending" and binding.expires_at is not None and now >= binding.expires_at:
+        return "expired"
+    return binding.state
+
+
 @dataclass(frozen=True)
 class ApprovalBindingV1:
     """One-time exact-action approval state; it never grants a broad authority."""
@@ -51,4 +58,4 @@ class ApprovalBindingV1:
     schema_version: str = SCHEMA_VERSION
 
 
-__all__ = ["ApprovalActionV1", "ApprovalBindingV1", "ApprovalStateV1", "SCHEMA_VERSION"]
+__all__ = ["ApprovalActionV1", "ApprovalBindingV1", "ApprovalStateV1", "SCHEMA_VERSION", "presented_approval_state"]

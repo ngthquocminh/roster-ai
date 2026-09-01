@@ -14,6 +14,9 @@ from application.contracts.proposal import (
     ResolvedEntityV1,
 )
 from application.contracts.scenario_projection import LockV1
+from application.contracts.audit_envelope import AuditOutcomeV1, WorkerFactsV1
+from application.contracts.evidence_ref import EvidenceRefV1
+from application.contracts.schedule_version import MetricSetV1, ScheduleRunStatusV1
 
 
 class ScenarioCreate(BaseModel):
@@ -249,6 +252,116 @@ class ApprovalOut(BaseModel):
 
 class ApprovalListOut(BaseModel):
     items: list[ApprovalOut]
+
+
+class ProvenanceCommonOut(BaseModel):
+    occurred_at: datetime
+    item_type: str
+    site_id: UUID
+    actor_id: UUID | None
+    initiated_by_actor_id: UUID | None
+    decided_by_actor_id: UUID | None
+    request_id: UUID | None
+    attempt_id: UUID | None
+    conversation_id: UUID | None
+    agent_run_id: UUID | None
+    tool_call_id: str | None
+    approval_id: UUID | None
+    job_attempt_id: UUID | None
+    schedule_run_id: UUID | None
+    audit_id: UUID | None
+    schedule_version_id: UUID | None
+    scenario_version_id: UUID | None
+    evidence_refs: tuple[EvidenceRefV1, ...]
+    schema_version: str
+
+
+class SolverRunProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["solver_run"]
+    status: ScheduleRunStatusV1
+    reason: str | None
+    baseline_schedule_version: str | None
+    candidate_schedule_version_id: UUID | None
+    comparison_status: Literal["available", "unavailable"]
+    comparison_reason: str | None
+    metrics: MetricSetV1 | None
+
+
+class RunProgressProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["run_progress"]
+    status: ScheduleRunStatusV1
+    reason: str | None
+    resource_version: int
+
+
+class DraftProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["draft"]
+    proposal_id: UUID
+    proposal_version_id: UUID
+    consequence_summary: str
+
+
+class EvidenceClaimProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["evidence_claim"]
+    claim: str
+    value: float | int | str | None
+    unit: str | None
+
+
+class ToolProposalProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["tool_proposal"]
+    tool_name: str
+
+
+class ApprovalRequestProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["approval_request"]
+    state: Literal["pending", "consumed", "rejected", "expired", "stale"]
+    consequence_summary: str
+    parameter_hash: str
+    consequence_hash: str
+    policy_version: str
+    expires_at: datetime
+
+
+class ApprovalDecisionProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["approval_decision"]
+    outcome: AuditOutcomeV1
+    state: Literal["consumed", "rejected", "expired", "stale"]
+
+
+class AuditRecordProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["audit_record"]
+    action: str
+    outcome: AuditOutcomeV1
+    success: bool
+    safe_summary: str
+    parameter_hash: str
+    consequence_hash: str
+    policy_version: str
+    app_version: str
+    worker_facts: WorkerFactsV1
+
+
+class BaselinePromotionProvenanceOut(ProvenanceCommonOut):
+    item_type: Literal["baseline_promotion"]
+    before_version: str | None
+    after_version: str
+
+
+DecisionProvenanceItemOut = Annotated[
+    SolverRunProvenanceOut | RunProgressProvenanceOut | DraftProvenanceOut
+    | EvidenceClaimProvenanceOut | ToolProposalProvenanceOut
+    | ApprovalRequestProvenanceOut | ApprovalDecisionProvenanceOut
+    | AuditRecordProvenanceOut | BaselinePromotionProvenanceOut,
+    Field(discriminator="item_type"),
+]
+
+
+class DecisionProvenanceOut(BaseModel):
+    schedule_run_id: UUID
+    site_id: UUID
+    items: list[DecisionProvenanceItemOut]
+    schema_version: str
 
 
 ConversationActivityItemOut = Annotated[

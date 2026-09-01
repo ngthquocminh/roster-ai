@@ -4,6 +4,7 @@ import { decideApproval, type ApprovalDecision } from "@/api/approvals";
 import { createIdempotencyKeyHolder } from "@/lib/idempotency";
 import { getErrorStatus } from "@/lib/errors";
 import { approvalKey } from "./useApproval";
+import { runProvenanceKey } from "./useRunProvenance";
 
 /**
  * One idempotency key per INTENT, not per panel (AD-8).
@@ -30,6 +31,7 @@ export function useDecideApproval(id: string) {
       if (!error || getErrorStatus(error) !== undefined) holderFor(variables.decision).settle();
       void queryClient.invalidateQueries({ queryKey: approvalKey(id) });
       void queryClient.invalidateQueries({ queryKey: ["run-approvals"] });
+      void queryClient.invalidateQueries({ queryKey: runProvenanceKey() });
       void queryClient.invalidateQueries({ queryKey: ["conversation-timeline"] });
       void queryClient.invalidateQueries({ queryKey: ["scheduleRunResult"] });
       void queryClient.invalidateQueries({ queryKey: ["scenario-projection"] });

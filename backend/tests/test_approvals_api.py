@@ -20,10 +20,12 @@ from fastapi.testclient import TestClient
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import (
     get_approval_repository,
+    get_audit_reader,
     get_audit_writer,
     get_clock,
     get_conversation_repository,
     get_identity_store,
+    get_llm_provider,
     get_membership_reader,
     get_schedule_run_repository,
     get_settings,
@@ -33,6 +35,8 @@ from api.deps import (
 )
 from api.main import app
 from application.contracts.approval_binding import ApprovalBindingV1
+from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
+from application.contracts.evidence_ref import EvidenceRefV1
 from application.ports.schedule_run import IdempotentScheduleRunResultV1
 from application.ports.session import ResolvedSession
 from application.use_cases.request_approval import (
@@ -79,8 +83,9 @@ def _binding(**overrides):
 
 
 class FakeApprovals:
-    def __init__(self, binding=None):
+    def __init__(self, binding=None, pending_payload=None):
         self._binding = binding
+        self._pending_payload = pending_payload
         self.write_count = 0
 
     def get(self, _c, *, approval_id, site_id):
@@ -95,6 +100,9 @@ class FakeApprovals:
 
     def get_pending_for_agent_run(self, _c, *, agent_run_id, site_id):
         return None
+
+    def get_pending_payload(self, _c, *, approval_id, site_id):
+        return self._pending_payload
 
     def terminalize(self, _c, **kwargs):
         if self._binding is None or self._binding.state != "pending" or self._binding.resource_version != kwargs["expected_resource_version"]:
@@ -514,6 +522,144 @@ def test_conflicts_on_a_changed_body_under_the_same_idempotency_key(client) -> N
     assert first.status_code == 200
     assert second.status_code == 409
     assert second.json()["code"] == "idempotency_key_conflict"
+
+
+def test_provenance_literal_route_precedes_the_approval_id_route(client) -> None:
+    test_client, settings, session = client
+    run_id = uuid4()
+
+    class ProvenanceRuns:
+        def get_run(self, *_args, **_kwargs):
+            return SimpleNamespace(schedule_run_id=run_id, status="solver_completed",
+                                   reason=None, created_at=NOW)
+        def load_snapshot(self, *_args, **_kwargs):
+            return SimpleNamespace(snapshot_id=uuid4(), scenario_version_id=uuid4(),
+                                   baseline_schedule_version=None, accepted_at=NOW)
+        def get_candidate(self, *_args, **_kwargs): return None
+        def events_after(self, *_args, **_kwargs): return ()
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: ProvenanceRuns()
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals()
+    app.dependency_overrides[get_audit_reader] = lambda: SimpleNamespace(
+        list_for_schedule_run=lambda *_args, **_kwargs: (),
+    )
+
+    response = test_client.get(
+        "/api/v1/approvals/provenance",
+        params={"schedule_run_id": str(run_id)},
+        headers=_auth_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["schedule_run_id"] == str(run_id)
+    assert response.json()["site_id"] == str(session.site_id)
+
+
+def test_provenance_route_never_serializes_pending_payload_content(client) -> None:
+    test_client, settings, session = client
+    run_id, agent_run_id, conversation_id = uuid4(), uuid4(), uuid4()
+    marker = "NEVER-LEAK-PENDING-PAYLOAD-4-4"
+    binding = _binding(
+        site_id=session.site_id, schedule_run_id=run_id, agent_run_id=agent_run_id,
+        conversation_id=conversation_id,
+    )
+    pending_payload = {
+        "pending_calls": [{
+            "tool_call_id": "call-1", "tool_name": "scheduling_baseline",
+            "tool_args_json": f'{{"secret":"{marker}"}}',
+        }],
+        "turn": {"messages": [{
+            "role": "user", "parts": [{"kind": "text", "text": marker}],
+        }]},
+    }
+
+    class ProvenanceRuns:
+        def get_run(self, *_args, **_kwargs):
+            return SimpleNamespace(schedule_run_id=run_id, status="solver_completed",
+                                   reason=None, created_at=NOW)
+        def load_snapshot(self, *_args, **_kwargs):
+            return SimpleNamespace(snapshot_id=uuid4(), scenario_version_id=binding.scenario_version_id,
+                                   baseline_schedule_version=None, accepted_at=NOW)
+        def get_candidate(self, *_args, **_kwargs): return None
+        def events_after(self, *_args, **_kwargs): return ()
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: ProvenanceRuns()
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding, pending_payload)
+    app.dependency_overrides[get_audit_reader] = lambda: SimpleNamespace(
+        list_for_schedule_run=lambda *_args, **_kwargs: (),
+    )
+    app.dependency_overrides[get_conversation_repository] = lambda: SimpleNamespace(
+        timeline=lambda *_args, **_kwargs: SimpleNamespace(events=()),
+    )
+
+    response = test_client.get(
+        "/api/v1/approvals/provenance", params={"schedule_run_id": str(run_id)},
+        headers=_auth_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert marker not in response.text
+    tool = next(item for item in response.json()["items"] if item["item_type"] == "tool_proposal")
+    assert set(tool) >= {"tool_name", "tool_call_id"}
+
+
+def test_provenance_survives_provider_failure_with_audit_and_evidence(client) -> None:
+    test_client, settings, session = client
+    run_id, candidate_id, scenario_version_id = uuid4(), uuid4(), uuid4()
+    approval_id, actor_id = uuid4(), session.app_user_id
+    evidence = EvidenceRefV1(
+        scenario_version_id, "sha256", "v1", "e" * 64, "run-v1", None,
+        "demand", "row-1",
+    )
+    binding = _binding(
+        approval_id=approval_id, state="consumed", site_id=session.site_id,
+        schedule_run_id=run_id, candidate_schedule_version_id=candidate_id,
+        scenario_version_id=scenario_version_id, decided_by_actor_id=actor_id,
+        decided_at=NOW, consumed_at=NOW,
+    )
+    audit = AuditEnvelopeV1(
+        uuid4(), uuid4(), uuid4(), session.site_id, actor_id, actor_id,
+        binding.conversation_id, None, approval_id, run_id, "promote_baseline",
+        "approval_consumed", True, "effect", None, str(candidate_id), "safe",
+        "a" * 64, "b" * 64, "policy", "app", WorkerFactsV1(), (), NOW,
+    )
+
+    class ProvenanceRuns:
+        def get_run(self, *_args, **_kwargs):
+            return SimpleNamespace(schedule_run_id=run_id, status="solver_completed",
+                                   reason=None, created_at=NOW)
+        def load_snapshot(self, *_args, **_kwargs):
+            return SimpleNamespace(snapshot_id=uuid4(), scenario_version_id=scenario_version_id,
+                                   baseline_schedule_version=None, accepted_at=NOW)
+        def get_candidate(self, *_args, **_kwargs):
+            return SimpleNamespace(schedule_version_id=candidate_id,
+                                   evidence_refs=(evidence,), metrics=None)
+        def events_after(self, *_args, **_kwargs): return ()
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: ProvenanceRuns()
+    app.dependency_overrides[get_approval_repository] = lambda: FakeApprovals(binding)
+    app.dependency_overrides[get_audit_reader] = lambda: SimpleNamespace(
+        list_for_schedule_run=lambda *_args, **_kwargs: (audit,),
+    )
+    app.dependency_overrides[get_conversation_repository] = lambda: SimpleNamespace(
+        timeline=lambda *_args, **_kwargs: SimpleNamespace(events=()),
+    )
+    app.dependency_overrides[get_llm_provider] = lambda: (_ for _ in ()).throw(
+        RuntimeError("provider unavailable")
+    )
+
+    response = test_client.get(
+        "/api/v1/approvals/provenance", params={"schedule_run_id": str(run_id)},
+        headers=_auth_headers(settings),
+    )
+
+    assert response.status_code == 200
+    items = response.json()["items"]
+    assert {item["item_type"] for item in items} >= {
+        "solver_run", "approval_request", "approval_decision", "audit_record",
+        "baseline_promotion",
+    }
+    assert next(item for item in items if item["item_type"] == "solver_run")["evidence_refs"][0]["record_id"] == "row-1"
 
 
 def test_get_presents_an_overdue_pending_binding_as_expired_and_writes_nothing(client) -> None:

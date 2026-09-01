@@ -442,6 +442,12 @@ rather than folded in.
   writes no worker-driven audit row, so the identity-model decision this entry asks for is still
   open. **Owner: Stories 4.3/4.4**, which read these rows and decide how a worker-initiated
   transition should attribute itself.
+  — **CLOSED 2026-08-31 (Story 4.4).** Provenance now renders the initiating human principal,
+  the deciding principal, and audit worker facts as distinct fields, so the reader no longer
+  conflates ownership with execution. The remaining persisted-event inconsistency — enqueue
+  transitions inherit the proposal creator while cancellation carries the session actor — is
+  narrower than the identity model and remains deferred. **Residual owner: Epic 5**, when worker
+  execution and its transcript become first-class production surfaces.
 
 - **The SSE events route publishes a self-contradictory 200 schema: `{"type": "string", "$ref": RunProgressActivityOut}`.** Getting the frame payload into `components.schemas` — so Story 3.7 has a generated TypeScript type instead of a hand-authored one — requires naming the model on the response, but FastAPI first writes `{"type": "string"}` for any non-`JSONResponse` `response_class` (`fastapi/openapi/utils.py:394`) and then deep-merges the declared response over it. Every combination of `model` and explicit `content` produces the same sibling pair, so it cannot be removed through the `responses` dict. Practically harmless today: `openapi-typescript` resolves the `$ref` and ignores the sibling, and the generated `RunProgressActivityOut` interface is correct and complete. The real fix is FastAPI's native SSE support, which this version already has (`route.stream_item_field`, `_SSE_EVENT_SCHEMA`): it requires the handler to be an `AsyncIterator[RunProgressActivityOut]` endpoint with `EventSourceResponse`, which conflicts with returning `JSONResponse` problem bodies from the same handler for 400/404 — a route restructure, not a patch. The same restructure would fix the pre-existing sibling defect on `/conversations/{id}/events`. [backend/api/routers/schedule_runs.py:47-70] — deferred at code review of story-3.5 (2026-08-21), MVP scope.
 
@@ -566,3 +572,28 @@ rather than folded in.
 - **`approval_denied` audit rows are unbounded and not idempotency-suppressed.** The denial arm writes with a fresh `attempt_id` (`backend/api/routers/approvals.py:212-230`), and `uq_audit_event_failure_attempt` is partial on `(site_id, attempt_id) WHERE NOT success`, so it never collides. The arm sits before any `_store_idempotent_result` call, so a client replaying the same `Idempotency-Key` after a 409 falls through `get_idempotent_result` and writes another row. Any authenticated site member can therefore append rows without bound to an append-only table from which `DELETE` is revoked. — **Deferred reason: this is the specified behaviour, not a deviation.** Decision 7 and Task 10 both require two denials to write two rows with distinct `attempt_id`s, and FR21 requires evidence for every denied consequential attempt; suppressing repeats would weaken the audit guarantee. Bounding it is a rate-limiting/retention policy question no epic decision currently answers. **Owner/revisit trigger: the first story that adds request rate limiting or an audit retention policy**, or any measured growth complaint on `audit_event`.
 
 - **The HTTP 200 is sent to the client before the command transaction commits.** FastAPI runs `await response(scope, receive, send)` inside the dependency exit stack, so `get_site_context`'s `with site_context(...)` — and therefore `engine.begin()`'s COMMIT — exits only afterwards (`backend/api/deps.py:285-294`). A commit failure after the response is flushed (serialization failure, connection loss, failover) tells the planner the baseline moved when nothing was written and the binding is still `pending`. — **Deferred reason: pre-existing and not this story's.** This is the shape of `get_site_context` for every site-scoped route in the application and predates Epic 4; Story 4.3 neither introduced nor altered it. The endpoint-raises-to-rollback contract the story does rely on was verified correct — it covers exceptions, just not commit failure. Changing it means restructuring the shared dependency so the response is produced after commit, which affects every command route. **Owner/revisit trigger: the first story that requires an at-most-once external effect keyed on a commit**, or an explicit durability requirement on command responses.
+
+## Deferred from: implementation of story-4-4-inspect-complete-decision-provenance (2026-08-31)
+
+- **The agent's complete tool transcript is not persisted.** Provenance can replay the identity
+  of the one approval-triggering tool proposal but cannot reconstruct other tool calls or their
+  results without inventing them from `pending_payload`. Story 4.4 deliberately exposes no raw
+  tool arguments or model transcript. **Owner/revisit trigger: Epic 5 (Story 5.1)**, where tool
+  execution becomes a governed persisted capability.
+
+- **The declared `comparison` activity discriminant has no persisted implementation.** The
+  provenance reader links the candidate and baseline versions and faithfully reports the stored
+  comparison availability; it does not create an activity, calculate a comparison, or choose the
+  future write contract. **Owner/revisit trigger: the story that implements the existing
+  `ActivityTypeV1` comparison member.**
+
+- **`audit_event.evidence_refs` is empty at every production write site.** Provenance faithfully
+  replays the empty tuple; immutable evidence remains available from the candidate schedule and
+  grounded-claim suppliers, but NFR32's audit-local evidence clause is not independently met.
+  Populating it is a write-path decision and Story 4.4 is read-only. **Owner/revisit trigger:
+  decide before Story 4.5 is created**, because 4.5 AC3 must not prove evidence integrity
+  vacuously against a structurally empty audit field.
+
+## Deferred from: code review of story-4.4 (2026-09-01)
+
+- **The provenance projection's 10,000-item event cap is silent.** Both `schedule_runs.events_after` and `conversations.timeline` are called with `limit=10_000` (`backend/application/queries/decision_provenance.py:81, :117`), so a run whose combined run and conversation streams exceed that bound is truncated with no signal in the response. — **Deferred reason: this is the specified design, half-built rather than wrong.** Story 4.4 Decision 5's *does not cover* clause anticipates the case and prescribes the remedy — "a cap with a stated `has_more`, not a cursor contract" — so the cap itself is correct and only the declared `has_more` is missing. No current run approaches the bound, and adding the field widens `DecisionProvenanceOut`, which is a published contract. **Owner/revisit trigger: the first run measured above ~1,000 timeline items**, or any story that adds paging to a provenance or activity read.

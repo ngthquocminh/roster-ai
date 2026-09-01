@@ -4221,6 +4221,59 @@
         }
       }
     },
+    "/api/v1/approvals/provenance": {
+      "get": {
+        "tags": [
+          "approvals"
+        ],
+        "summary": "Get Provenance",
+        "operationId": "get_provenance_api_v1_approvals_provenance_get",
+        "parameters": [
+          {
+            "name": "schedule_run_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Schedule Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionProvenanceOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetailsV1"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/approvals/{approval_id}": {
       "get": {
         "tags": [
@@ -4518,6 +4571,250 @@
         ],
         "title": "ApprovalDecisionIn"
       },
+      "ApprovalDecisionProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "approval_decision",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "approval_requested",
+              "approval_consumed",
+              "approval_rejected",
+              "approval_expired",
+              "approval_stale",
+              "approval_denied"
+            ],
+            "title": "Outcome"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "consumed",
+              "rejected",
+              "expired",
+              "stale"
+            ],
+            "title": "State"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "outcome",
+          "state"
+        ],
+        "title": "ApprovalDecisionProvenanceOut"
+      },
       "ApprovalListOut": {
         "properties": {
           "items": {
@@ -4802,6 +5099,264 @@
         ],
         "title": "ApprovalRequestIn"
       },
+      "ApprovalRequestProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "approval_request",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "consumed",
+              "rejected",
+              "expired",
+              "stale"
+            ],
+            "title": "State"
+          },
+          "consequence_summary": {
+            "type": "string",
+            "title": "Consequence Summary"
+          },
+          "parameter_hash": {
+            "type": "string",
+            "title": "Parameter Hash"
+          },
+          "consequence_hash": {
+            "type": "string",
+            "title": "Consequence Hash"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "state",
+          "consequence_summary",
+          "parameter_hash",
+          "consequence_hash",
+          "policy_version",
+          "expires_at"
+        ],
+        "title": "ApprovalRequestProvenanceOut"
+      },
       "AssignmentDiffOut": {
         "properties": {
           "added_worker_ids": {
@@ -4975,6 +5530,278 @@
         ],
         "title": "AssignmentPageOut"
       },
+      "AuditRecordProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "audit_record",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "approval_requested",
+              "approval_consumed",
+              "approval_rejected",
+              "approval_expired",
+              "approval_stale",
+              "approval_denied"
+            ],
+            "title": "Outcome"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "safe_summary": {
+            "type": "string",
+            "title": "Safe Summary"
+          },
+          "parameter_hash": {
+            "type": "string",
+            "title": "Parameter Hash"
+          },
+          "consequence_hash": {
+            "type": "string",
+            "title": "Consequence Hash"
+          },
+          "policy_version": {
+            "type": "string",
+            "title": "Policy Version"
+          },
+          "app_version": {
+            "type": "string",
+            "title": "App Version"
+          },
+          "worker_facts": {
+            "$ref": "#/components/schemas/WorkerFactsV1"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "action",
+          "outcome",
+          "success",
+          "safe_summary",
+          "parameter_hash",
+          "consequence_hash",
+          "policy_version",
+          "app_version",
+          "worker_facts"
+        ],
+        "title": "AuditRecordProvenanceOut"
+      },
       "AuthSessionOut": {
         "properties": {
           "app_user_id": {
@@ -5032,6 +5859,243 @@
           "end_minute"
         ],
         "title": "AvailabilityWindowOut"
+      },
+      "BaselinePromotionProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "baseline_promotion",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "before_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Version"
+          },
+          "after_version": {
+            "type": "string",
+            "title": "After Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "before_version",
+          "after_version"
+        ],
+        "title": "BaselinePromotionProvenanceOut"
       },
       "ClaimArgumentsV1": {
         "properties": {
@@ -5598,6 +6662,81 @@
         ],
         "title": "ConversationOut"
       },
+      "DecisionProvenanceOut": {
+        "properties": {
+          "schedule_run_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Schedule Run Id"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "items": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/SolverRunProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/RunProgressProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/DraftProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/EvidenceClaimProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/ToolProposalProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/ApprovalRequestProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/ApprovalDecisionProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/AuditRecordProvenanceOut"
+                },
+                {
+                  "$ref": "#/components/schemas/BaselinePromotionProvenanceOut"
+                }
+              ],
+              "discriminator": {
+                "propertyName": "item_type",
+                "mapping": {
+                  "approval_decision": "#/components/schemas/ApprovalDecisionProvenanceOut",
+                  "approval_request": "#/components/schemas/ApprovalRequestProvenanceOut",
+                  "audit_record": "#/components/schemas/AuditRecordProvenanceOut",
+                  "baseline_promotion": "#/components/schemas/BaselinePromotionProvenanceOut",
+                  "draft": "#/components/schemas/DraftProvenanceOut",
+                  "evidence_claim": "#/components/schemas/EvidenceClaimProvenanceOut",
+                  "run_progress": "#/components/schemas/RunProgressProvenanceOut",
+                  "solver_run": "#/components/schemas/SolverRunProvenanceOut",
+                  "tool_proposal": "#/components/schemas/ToolProposalProvenanceOut"
+                }
+              }
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "schedule_run_id",
+          "site_id",
+          "items",
+          "schema_version"
+        ],
+        "title": "DecisionProvenanceOut"
+      },
       "DemandIntervalOut": {
         "properties": {
           "record_id": {
@@ -6024,6 +7163,243 @@
         "title": "DraftConstraintV1",
         "description": "TRUSTED, resolved and validated reversible solver input."
       },
+      "DraftProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "draft",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "proposal_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Id"
+          },
+          "proposal_version_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Proposal Version Id"
+          },
+          "consequence_summary": {
+            "type": "string",
+            "title": "Consequence Summary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "proposal_id",
+          "proposal_version_id",
+          "consequence_summary"
+        ],
+        "title": "DraftProvenanceOut"
+      },
       "EntityCandidateV1": {
         "properties": {
           "group": {
@@ -6070,6 +7446,261 @@
         "type": "object",
         "title": "EntityCandidateV1",
         "description": "TRUSTED candidate resolved against the governed scenario projection."
+      },
+      "EvidenceClaimProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "evidence_claim",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "claim": {
+            "type": "string",
+            "title": "Claim"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "claim",
+          "value",
+          "unit"
+        ],
+        "title": "EvidenceClaimProvenanceOut"
       },
       "EvidenceRefOut": {
         "properties": {
@@ -6912,6 +8543,128 @@
         "type": "object",
         "title": "MetricSetOut"
       },
+      "MetricSetV1": {
+        "properties": {
+          "interval_coverage_required_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Interval Coverage Required Minutes",
+            "default": []
+          },
+          "interval_coverage_served_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Interval Coverage Served Minutes",
+            "default": []
+          },
+          "function_coverage_required_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Function Coverage Required Minutes",
+            "default": []
+          },
+          "function_coverage_served_minutes": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Function Coverage Served Minutes",
+            "default": []
+          },
+          "overtime_minutes": {
+            "type": "number",
+            "title": "Overtime Minutes",
+            "default": 0.0
+          },
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost",
+            "default": 0.0
+          },
+          "objective_components": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Objective Components",
+            "default": []
+          },
+          "assignment_count": {
+            "type": "integer",
+            "title": "Assignment Count",
+            "default": 0
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count",
+            "default": 0
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "MetricSetV1",
+        "description": "Minute-, currency-, and count-valued candidate metrics."
+      },
       "OverrideOut": {
         "properties": {
           "id": {
@@ -7500,6 +9253,258 @@
           "sequence"
         ],
         "title": "RunProgressActivityOut"
+      },
+      "RunProgressProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "run_progress",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "solver_queued",
+              "solver_running",
+              "cancellation_requested",
+              "solver_completed",
+              "solver_infeasible",
+              "solver_timed_out",
+              "solver_cancelled",
+              "solver_failed"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "resource_version": {
+            "type": "integer",
+            "title": "Resource Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "status",
+          "reason",
+          "resource_version"
+        ],
+        "title": "RunProgressProvenanceOut"
       },
       "ScenarioContextOut": {
         "properties": {
@@ -8176,6 +10181,310 @@
         ],
         "title": "ScheduleVersionOut"
       },
+      "SolverRunProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "solver_run",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "solver_queued",
+              "solver_running",
+              "cancellation_requested",
+              "solver_completed",
+              "solver_infeasible",
+              "solver_timed_out",
+              "solver_cancelled",
+              "solver_failed"
+            ],
+            "title": "Status"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "baseline_schedule_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Schedule Version"
+          },
+          "candidate_schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Schedule Version Id"
+          },
+          "comparison_status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable"
+            ],
+            "title": "Comparison Status"
+          },
+          "comparison_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Reason"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricSetV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "status",
+          "reason",
+          "baseline_schedule_version",
+          "candidate_schedule_version_id",
+          "comparison_status",
+          "comparison_reason",
+          "metrics"
+        ],
+        "title": "SolverRunProvenanceOut"
+      },
       "TaskPageOut": {
         "properties": {
           "schema_version": {
@@ -8517,6 +10826,231 @@
         ],
         "title": "TimelineOut"
       },
+      "ToolProposalProvenanceOut": {
+        "properties": {
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "item_type": {
+            "type": "string",
+            "const": "tool_proposal",
+            "title": "Item Type"
+          },
+          "site_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Site Id"
+          },
+          "actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Id"
+          },
+          "initiated_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initiated By Actor Id"
+          },
+          "decided_by_actor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By Actor Id"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "agent_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Run Id"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "job_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Attempt Id"
+          },
+          "schedule_run_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Run Id"
+          },
+          "audit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Audit Id"
+          },
+          "schedule_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule Version Id"
+          },
+          "scenario_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Version Id"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version"
+          },
+          "tool_name": {
+            "type": "string",
+            "title": "Tool Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "occurred_at",
+          "item_type",
+          "site_id",
+          "actor_id",
+          "initiated_by_actor_id",
+          "decided_by_actor_id",
+          "request_id",
+          "attempt_id",
+          "conversation_id",
+          "agent_run_id",
+          "tool_call_id",
+          "approval_id",
+          "job_attempt_id",
+          "schedule_run_id",
+          "audit_id",
+          "schedule_version_id",
+          "scenario_version_id",
+          "evidence_refs",
+          "schema_version",
+          "tool_name"
+        ],
+        "title": "ToolProposalProvenanceOut"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -8556,6 +11090,51 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkerFactsV1": {
+        "properties": {
+          "lease_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Owner"
+          },
+          "attempt_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attempt Id"
+          },
+          "fencing_epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fencing Epoch"
+          },
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          }
+        },
+        "type": "object",
+        "title": "WorkerFactsV1"
       },
       "WorkerPageOut": {
         "properties": {

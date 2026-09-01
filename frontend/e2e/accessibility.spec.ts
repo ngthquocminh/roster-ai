@@ -99,3 +99,29 @@ for (const [name, state, expectedText] of [
     await expectAxeClean(page, "[data-approval-panel]");
   });
 }
+
+for (const zoom of [100, 200] as const) {
+  test(`keeps decision provenance axe-clean, inspectable, and contained at ${zoom}% zoom`, async ({ page }) => {
+    test.setTimeout(120_000);
+    const journey = await installApiStubs(page);
+    journey.completeRun();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(`/scenarios/${SCENARIO_ID}/runs/${SCHEDULE_RUN_ID}`);
+    if (zoom === 200) await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
+
+    const provenance = page.getByRole("region", { name: "Decision provenance" });
+    await expect(provenance).toBeVisible();
+    await expect(provenance.getByRole("list", { name: "Decision provenance" })).toBeVisible();
+    await expect(provenance.getByText("Approval decision: approval_consumed")).toBeVisible();
+    await expectAxeClean(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const details = provenance.getByRole("button", { name: "Details" });
+    await expect(details).toHaveAttribute("aria-expanded", "false");
+    await details.click();
+    await expect(details).toHaveAttribute("aria-expanded", "true");
+    await expect(provenance.getByText("Approval was consumed and the candidate became the baseline.")).toBeVisible();
+    await expectAxeClean(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+}
