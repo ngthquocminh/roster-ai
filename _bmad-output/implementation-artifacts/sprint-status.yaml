@@ -1995,7 +1995,7 @@ development_status:
   # references, so the Provenance section renders evidence links on audit-sourced items where it
   # renders none today. Story 4.6's state matrix must expect it. AuditOutcomeV1's three-way drift
   # is already closed (audit_envelope.py:12-15 now carries all six members) -- no action.
-  4-4a-supply-audit-evidence-references: ready-for-dev
+  4-4a-supply-audit-evidence-references: review
   4-5-prove-approval-and-audit-invariants: backlog
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
   epic-4-retrospective: optional

@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import DBAPIError
 
+from application.contracts.evidence_ref import EvidenceRefV1
 from application.contracts.schedule_version import ScheduleVersionV1
 from application.ports.schedule_run import ScheduleRunViewV1
 from application.ports.site_baseline import SiteBaselineV1
@@ -17,7 +18,18 @@ NOW = datetime(2026, 8, 29, tzinfo=timezone.utc)
 
 class Runs:
     def __init__(self):
-        self.run_id = uuid4(); self.candidate = ScheduleVersionV1(schedule_version_id=uuid4(), schedule_run_id=self.run_id, scenario_id=uuid4(), scenario_version_id=uuid4(), feasible_solver_status="FEASIBLE", assignments=())
+        self.run_id = uuid4()
+        evidence_ref = EvidenceRefV1(
+            scenario_version_id=uuid4(),
+            checksum_algorithm="sha256",
+            checksum_schema_version="rfc8785-v1",
+            checksum_digest="a" * 64,
+            producing_run_version="run-v1",
+            baseline_schedule_version=None,
+            group="demand",
+            record_id="demand-1",
+        )
+        self.candidate = ScheduleVersionV1(schedule_version_id=uuid4(), schedule_run_id=self.run_id, scenario_id=uuid4(), scenario_version_id=evidence_ref.scenario_version_id, feasible_solver_status="FEASIBLE", assignments=(), evidence_refs=(evidence_ref,))
         self.run = ScheduleRunViewV1(self.run_id, "solver_completed", None, 2, False)
     def get_run(self, *_a, **_k): return self.run
     def get_candidate(self, *_a, **_k): return self.candidate
@@ -97,6 +109,19 @@ def test_expiry_outranks_requested_reject_and_clears_pending_slot() -> None:
     result = decide(runs, approvals, audit, conversations, command, now=NOW + timedelta(hours=2))
     assert result.outcome == "expired" and approvals.binding.state == "expired"
     assert audit.items[0].outcome == "approval_expired"
+
+
+def test_expired_attempt_audits_the_candidate_that_resolves_in_the_transaction() -> None:
+    runs, approvals, audit, conversations, command = pending()
+
+    result = decide(
+        runs, approvals, audit, conversations, command,
+        now=NOW + timedelta(hours=2),
+    )
+
+    assert result.outcome == "expired"
+    assert runs.get_candidate(None) is runs.candidate
+    assert audit.items[0].evidence_refs == runs.candidate.evidence_refs
 
 def test_valid_approve_consumes_and_promotes() -> None:
     runs, approvals, audit, conversations, command = pending()

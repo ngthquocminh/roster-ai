@@ -587,12 +587,12 @@ rather than folded in.
   future write contract. **Owner/revisit trigger: the story that implements the existing
   `ActivityTypeV1` comparison member.**
 
-- **`audit_event.evidence_refs` is empty at every production write site.** Provenance faithfully
+- **CLOSED by Story 4.4a — Supply Audit Evidence References.** ~~`audit_event.evidence_refs` is empty at every production write site. Provenance faithfully
   replays the empty tuple; immutable evidence remains available from the candidate schedule and
   grounded-claim suppliers, but NFR32's audit-local evidence clause is not independently met.
   Populating it is a write-path decision and Story 4.4 is read-only. **Owner/revisit trigger:
   decide before Story 4.5 is created**, because 4.5 AC3 must not prove evidence integrity
-  vacuously against a structurally empty audit field.
+  vacuously against a structurally empty audit field.~~
 
   **DECIDED 2026-09-01 (`sprint-change-proposal-2026-09-01.md`). Owner/revisit trigger: Story 4.4a,
   which closes this entry and removes `SCOPE_CONTROLS[4]` in the same commit (its AC4).** The

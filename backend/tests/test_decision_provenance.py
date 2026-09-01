@@ -98,7 +98,6 @@ def test_provenance_contract_is_closed_and_carries_every_identifier_slot() -> No
         "tool_proposals:approval_triggering_call_only",
         "comparison:linked_by_reference_never_recomputed",
         "payload:identity_only_never_turn",
-        "audit_evidence_refs:empty_at_every_write_site",
     }
     assert DecisionProvenanceItemOut.__metadata__[0].discriminator == "item_type"
 
@@ -279,7 +278,8 @@ def _binding(*, site_id, run_id, conversation_id, actor_id, candidate_id, scenar
 
 
 def _audit(*, site_id, run_id, conversation_id, actor_id, approval_id, outcome, occurred_at,
-           request_id=None, attempt_id=None, after_version=None, audit_id=None):
+           request_id=None, attempt_id=None, after_version=None, audit_id=None,
+           evidence_refs=()):
     return AuditEnvelopeV1(
         audit_id=audit_id or uuid4(), attempt_id=attempt_id or uuid4(),
         request_id=request_id or uuid4(),
@@ -289,8 +289,40 @@ def _audit(*, site_id, run_id, conversation_id, actor_id, approval_id, outcome, 
         effect_key="effect", before_version=None, after_version=after_version,
         safe_summary="safe", parameter_hash="a" * 64, consequence_hash="b" * 64,
         policy_version="policy", app_version="app", worker_facts=WorkerFactsV1(),
-        evidence_refs=(), occurred_at=occurred_at,
+        evidence_refs=evidence_refs, occurred_at=occurred_at,
     )
+
+
+def test_audit_record_and_baseline_promotion_replay_audit_evidence_refs() -> None:
+    site_id, run_id, conversation_id, actor_id = uuid4(), uuid4(), uuid4(), uuid4()
+    scenario_version_id, candidate_id, approval_id = uuid4(), uuid4(), uuid4()
+    now = datetime(2026, 8, 31, tzinfo=timezone.utc)
+    evidence_ref = EvidenceRefV1(
+        scenario_version_id, "sha256", "rfc8785-v1", "e" * 64,
+        "run-v1", None, "demand", "demand-1",
+    )
+    binding = _binding(
+        site_id=site_id, run_id=run_id, conversation_id=conversation_id,
+        actor_id=actor_id, candidate_id=candidate_id,
+        scenario_version_id=scenario_version_id, state="consumed",
+        approval_id=approval_id, created_at=now,
+        expires_at=now.replace(year=2027), decided_at=now,
+    )
+    audit = _audit(
+        site_id=site_id, run_id=run_id, conversation_id=conversation_id,
+        actor_id=actor_id, approval_id=approval_id, outcome="approval_consumed",
+        occurred_at=now, after_version=str(candidate_id),
+        evidence_refs=(evidence_ref,),
+    )
+
+    result = _run_query(
+        run_id=run_id, site_id=site_id,
+        runs=_runs(run_id=run_id, scenario_version_id=scenario_version_id, now=now),
+        bindings=(binding,), audits=(audit,), now=now,
+    )
+
+    assert next(item for item in result.items if item.item_type == "audit_record").evidence_refs == (evidence_ref,)
+    assert next(item for item in result.items if item.item_type == "baseline_promotion").evidence_refs == (evidence_ref,)
 
 
 def _runs(*, run_id, scenario_version_id, now, candidate=None):

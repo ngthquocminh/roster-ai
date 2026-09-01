@@ -49,7 +49,8 @@ def _tx(*, agent_run_id=None, consume=True, promote=True, fail_at=None):
 def _promote(values):
     runs, approvals, audit, conversations, command, writer = values
     return promote_baseline(
-        None, binding=approvals.binding, actor_id=command.actor_id, request_id=uuid4(),
+        None, binding=approvals.binding, candidate=runs.candidate,
+        actor_id=command.actor_id, request_id=uuid4(),
         approvals=approvals, baseline_writer=writer, audit_writer=audit,
         conversations=conversations, occurred_at=NOW,
     )
@@ -62,6 +63,7 @@ def test_first_promotion_consumes_moves_pointer_and_records_one_audit_and_event(
     assert result.binding.state == "consumed" and result.baseline.resource_version == 1
     assert writer.calls[0]["expected_resource_version"] is None
     assert audit.items[0].outcome == "approval_consumed"
+    assert audit.items[0].evidence_refs == values[0].candidate.evidence_refs
     assert audit.items[0].effect_key == approvals.binding.request_effect_key
     assert [kind for kind, _ in conversations.items] == ["event"]
 

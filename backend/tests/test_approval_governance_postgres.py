@@ -56,6 +56,7 @@ from adapters.postgres.schema import (
     site_baseline,
 )
 from application.contracts.schedule_version import ScheduleVersionV1
+from application.contracts.evidence_ref import EvidenceRefV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
 from application.contracts.scenario_projection import AssignmentV1
 from application.use_cases.request_approval import (
@@ -87,7 +88,7 @@ def site_ids(governed_postgres_engine):
     return ids
 
 
-def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed", resource_version=2, assignment_count=1, suffix=None, scenario_payload=None):
+def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed", resource_version=2, assignment_count=1, suffix=None, scenario_payload=None, evidence_refs=()):
     """Build one scenario -> conversation -> proposal -> run_snapshot ->
     schedule_run(+candidate schedule_version, +assignments) chain via direct
     inserts, mirroring `finalize_run`'s own insert order without invoking the
@@ -155,7 +156,8 @@ def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed",
                 schedule_version_id=ids["candidate"], schedule_run_id=ids["schedule_run"],
                 scenario_id=ids["scenario"], scenario_version_id=ids["scenario_version"],
                 proposal_id=ids["proposal"], proposal_version_id=ids["proposal_version"],
-                feasible_solver_status="OPTIMAL", assignments=assignments, created_at=NOW,
+                feasible_solver_status="OPTIMAL", assignments=assignments,
+                evidence_refs=evidence_refs, created_at=NOW,
             )
             payload = TypeAdapter(ScheduleVersionV1).dump_python(candidate, mode="json")
             c.execute(insert(schedule_version).values(
@@ -907,8 +909,14 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
     governed_postgres_engine, site_ids, agent_backed
 ) -> None:
     engine = governed_postgres_engine
+    scenario_version_id = uuid4()
+    evidence_ref = EvidenceRefV1(
+        scenario_version_id, "sha256", "rfc8785-v1", "e" * 64,
+        "run-v1", "baseline-v1", "demand", "demand-1", "amount", 0, 60,
+    )
     ids = _seed_candidate_run(
-        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2,
+        evidence_refs=(evidence_ref,),
     )
     with engine.connect() as c:
         versions_before = [dict(row._mapping) for row in c.execute(
@@ -949,6 +957,12 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
         )
         assert result.outcome == "consumed"
     with site_context(engine, site_ids["site"]) as c:
+        candidate = PostgresScheduleRunRepository().get_candidate(
+            c, schedule_run_id=ids["schedule_run"], site_id=site_ids["site"]
+        )
+        audit_rows = PostgresAuditReader().list_for_schedule_run(
+            c, schedule_run_id=ids["schedule_run"], site_id=site_ids["site"]
+        )
         provenance = query_decision_provenance(
             c, schedule_run_id=ids["schedule_run"], site_id=site_ids["site"],
             schedule_runs=PostgresScheduleRunRepository(),
@@ -956,6 +970,19 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
             conversations=PostgresConversationRepository(), clock=lambda: NOW,
         )
     assert provenance is not None
+    assert candidate is not None
+    assert candidate.evidence_refs == (evidence_ref,)
+    consequential = [row for row in audit_rows if row.outcome in {"approval_requested", "approval_consumed"}]
+    assert len(consequential) == 2
+    assert all(row.evidence_refs == candidate.evidence_refs for row in consequential)
+    round_tripped = consequential[0].evidence_refs[0]
+    assert round_tripped.scenario_version_id == evidence_ref.scenario_version_id
+    assert round_tripped.producing_run_version == "run-v1"
+    assert (
+        round_tripped.checksum_algorithm,
+        round_tripped.checksum_schema_version,
+        round_tripped.checksum_digest,
+    ) == ("sha256", "rfc8785-v1", "e" * 64)
     promotion = next(item for item in provenance.items if item.item_type == "baseline_promotion")
     assert promotion.after_version == str(ids["candidate"])
     assert promotion.before_version == (str(live.schedule_version_id) if live else None)

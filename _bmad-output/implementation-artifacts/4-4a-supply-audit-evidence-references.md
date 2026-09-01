@@ -1,10 +1,10 @@
 ---
-baseline_commit: 8ebc34f49c0e23aba167c3aebc2e8a32cdfe4ace
+baseline_commit: 90ccf73
 ---
 
 # Story 4.4a: Supply Audit Evidence References
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -291,106 +291,106 @@ All three keep their own owners and triggers.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-derive the baselines before touching anything (retro §3)**
-  - [ ] Record backend total collected/selected/passed/failed/skipped/deselected, `-m postgres`
+- [x] **Task 1 — Re-derive the baselines before touching anything (retro §3)**
+  - [x] Record backend total collected/selected/passed/failed/skipped/deselected, `-m postgres`
         collected **and actually ran**, Vitest files and tests, and the Playwright count, at
         `8ebc34f`, **before any edit**.
-  - [ ] Story 4.4's post-review Completion Notes record backend 1,453 collected / 1,446 selected,
+  - [x] Story 4.4's post-review Completion Notes record backend 1,453 collected / 1,446 selected,
         1,444 passed, 2 skipped, 0 failed, 7 deselected; `-m postgres` 131 ran / 131 passed;
         Vitest 581 in 84 files; Playwright 66; `npx tsc -b` clean. **These are inherited, not
         verified** — 2.7, 2.8, 3.12 and 4.4 each found an inherited baseline stale. Record the
         total alongside the split.
-  - [ ] Bring `docker-compose.yml`'s `postgres` service up first and assert on the **count** of
+  - [x] Bring `docker-compose.yml`'s `postgres` service up first and assert on the **count** of
         postgres-marked tests that ran, never on the suite being green (Trap 6).
 
-- [ ] **Task 2 — Surface the candidate on the revalidation result (AC: 1, 2; Decision 2)**
-  - [ ] Add `candidate: Any` to `RevalidationV1` (`decide_approval.py:43-47`).
-  - [ ] Move the `get_candidate` call above the expiry check and return the candidate from all
+- [x] **Task 2 — Surface the candidate on the revalidation result (AC: 1, 2; Decision 2)**
+  - [x] Add `candidate: Any` to `RevalidationV1` (`decide_approval.py:43-47`).
+  - [x] Move the `get_candidate` call above the expiry check and return the candidate from all
         three `RevalidationV1` constructions (`:74`, `:93`, `:94`), per Decision 2.
-  - [ ] **Demonstrated-red:** with the read left below the expiry check, assert that an expired
+  - [x] **Demonstrated-red:** with the read left below the expiry check, assert that an expired
         decision's audit row carries the candidate's references **while that candidate resolves in
         the same transaction** — observe the test fail, then move the read and observe it pass.
         Record it. This is the assertion Decision 2 exists for; a test that exercises only the
         approve path cannot fail here.
 
-- [ ] **Task 3 — The four write sites (AC: 1, 2, 3; Decisions 1, 3, 5, 7)**
-  - [ ] `request_approval.py:153` — use the `candidate` already bound at `:104`.
-  - [ ] `decide_approval.py:140` — use `check.candidate`, with the
+- [x] **Task 3 — The four write sites (AC: 1, 2, 3; Decisions 1, 3, 5, 7)**
+  - [x] `request_approval.py:153` — use the `candidate` already bound at `:104`.
+  - [x] `decide_approval.py:140` — use `check.candidate`, with the
         `candidate.evidence_refs if candidate is not None else ()` shape per Decision 3.
-  - [ ] `promote_baseline.py:104, :161` — add the keyword-only `candidate` parameter and use it;
+  - [x] `promote_baseline.py:104, :161` — add the keyword-only `candidate` parameter and use it;
         pass it from `decide_approval.py:113`, per Decision 5. **No `schedule_runs` port on TX2.**
-  - [ ] `approvals.py:382` — resolve through the already-injected `schedule_runs`, keyed on
+  - [x] `approvals.py:382` — resolve through the already-injected `schedule_runs`, keyed on
         `denied.schedule_run_id`, and add the comment Decision 3 requires stating that the
         references identify what the refused attempt **targeted**, not what it consulted.
-  - [ ] Change nothing at `grounding/gate.py:175` or `queries/decision_provenance.py:48`
+  - [x] Change nothing at `grounding/gate.py:175` or `queries/decision_provenance.py:48`
         (Decision 7).
 
-- [ ] **Task 4 — Remove the scope control and close the ledger (AC: 4; Decision 8)**
-  - [ ] Remove `"audit_evidence_refs:empty_at_every_write_site"` from `SCOPE_CONTROLS`
+- [x] **Task 4 — Remove the scope control and close the ledger (AC: 4; Decision 8)**
+  - [x] Remove `"audit_evidence_refs:empty_at_every_write_site"` from `SCOPE_CONTROLS`
         (`contracts/decision_provenance.py:18`).
-  - [ ] Update the set assertion at `tests/test_decision_provenance.py:96-102` to four members.
-  - [ ] Strike through the `deferred-work.md:590` bullet and mark it **CLOSED**, citing this
+  - [x] Update the set assertion at `tests/test_decision_provenance.py:96-102` to four members.
+  - [x] Strike through the `deferred-work.md:590` bullet and mark it **CLOSED**, citing this
         story. Leave its historical wording and its **DECIDED 2026-09-01** paragraph intact.
 
-- [ ] **Task 5 — Default-suite tests for all four sites (AC: 1, 2; Decisions 4, 5)**
-  - [ ] Fake-port tests in `tests/test_request_approval.py`, `tests/test_decide_approval.py` and
+- [x] **Task 5 — Default-suite tests for all four sites (AC: 1, 2; Decisions 4, 5)**
+  - [x] Fake-port tests in `tests/test_request_approval.py`, `tests/test_decide_approval.py` and
         `tests/test_promote_baseline.py`: for each site assert
         `audit_row.evidence_refs == candidate.evidence_refs` against a candidate fixture built
         with at least one `EvidenceRefV1`, per Decision 4. Update `test_promote_baseline.py:51`'s
         `_promote` helper for the new parameter.
-  - [ ] Router test in `tests/test_approvals_api.py` for the denial row: a pre-write
+  - [x] Router test in `tests/test_approvals_api.py` for the denial row: a pre-write
         `approval_not_pending` or `stale_resource_version` refusal against a binding whose
         candidate resolves writes a denial row carrying that candidate's references.
-  - [ ] The honest-absence direction, on its own fixture: a site whose `get_candidate` returns
+  - [x] The honest-absence direction, on its own fixture: a site whose `get_candidate` returns
         `None` writes `()`. Assert the empty set **and** that the candidate genuinely does not
         resolve, so the test cannot pass for the wrong reason.
-  - [ ] **Demonstrated-red for every new assertion:** revert each write site to `()` in turn and
+  - [x] **Demonstrated-red for every new assertion:** revert each write site to `()` in turn and
         observe the matching test fail. Record each (Trap 5).
-  - [ ] Do **not** add a non-empty assertion over an inherited fixture (Decision 4).
+  - [x] Do **not** add a non-empty assertion over an inherited fixture (Decision 4).
 
-- [ ] **Task 6 — Real-PostgreSQL round-trip proof (AC: 1; Decision 6)**
-  - [ ] In `tests/test_approval_governance_postgres.py` (`@pytest.mark.postgres`), drive a full
+- [x] **Task 6 — Real-PostgreSQL round-trip proof (AC: 1; Decision 6)**
+  - [x] In `tests/test_approval_governance_postgres.py` (`@pytest.mark.postgres`), drive a full
         request → run → approve → promote cycle whose candidate carries at least one populated
         `EvidenceRefV1`, then read the rows back through `PostgresAuditReader` and assert the
         rehydrated tuples equal the candidate's, field for field including `scenario_version_id`,
         `producing_run_version`, and the checksum triple.
-  - [ ] This is the first non-empty traversal of `audit.py:42` → JSONB → `audit.py:26`
+  - [x] This is the first non-empty traversal of `audit.py:42` → JSONB → `audit.py:26`
         (Decision 6). Assert on the reconstructed `EvidenceRefV1` objects, not on raw JSON.
-  - [ ] No backfill of existing rows — audit is append-only (NFR33) and AC1 forbids it.
+  - [x] No backfill of existing rows — audit is append-only (NFR33) and AC1 forbids it.
 
-- [ ] **Task 7 — Provenance and rendering coverage (AC: 3)**
-  - [ ] Backend: assert that `query_decision_provenance` emits `audit_record` and
+- [x] **Task 7 — Provenance and rendering coverage (AC: 3)**
+  - [x] Backend: assert that `query_decision_provenance` emits `audit_record` and
         `baseline_promotion` items carrying the populated references
         (`queries/decision_provenance.py:251`, `:266`) — the two lines the correction identified
         as the dead half. **No change to the query module is expected**; if one seems necessary,
         stop, because it means a write site is wrong (Trap 9).
-  - [ ] Frontend: extend `ProvenanceTimeline.test.tsx` to assert an `audit_record` item with
+  - [x] Frontend: extend `ProvenanceTimeline.test.tsx` to assert an `audit_record` item with
         references renders its evidence links. **No component change is expected** —
         `ProvenanceTimeline.tsx:109` already renders `item.evidence_refs` for every item type.
-  - [ ] Give the `audit_record` item in `frontend/e2e/support/apiStubs.ts:216-233` one populated
+  - [x] Give the `audit_record` item in `frontend/e2e/support/apiStubs.ts:216-233` one populated
         reference so the existing accessibility sweep covers the newly-rendered links; re-run
         Playwright and confirm no page-level horizontal scroll and no new axe finding
         (NFR20, `EXPERIENCE.md:196`).
 
-- [ ] **Task 8 — Documentation (AC: 3)**
-  - [ ] `docs/API.md`: extend the existing denial paragraph (`:575-578`) with the one sentence
+- [x] **Task 8 — Documentation (AC: 3)**
+  - [x] `docs/API.md`: extend the existing denial paragraph (`:575-578`) with the one sentence
         Decision 3 requires. No new route, no new problem code, no new table row.
-  - [ ] `docs/GATE-A-RUNBOOK.md` and `docs/DOMAIN-MODEL.md`: no change expected — verify, do not
+  - [x] `docs/GATE-A-RUNBOOK.md` and `docs/DOMAIN-MODEL.md`: no change expected — verify, do not
         assume.
-  - [ ] **No evidence file.** This story has no measured threshold, so
+  - [x] **No evidence file.** This story has no measured threshold, so
         `docs/EVIDENCE-CONVENTION.md` has nothing to bind. Say so in Completion Notes.
 
-- [ ] **Task 9 — Full verification**
-  - [ ] Backend suite, `-m postgres` suite, `npx tsc -b`, `npm run lint`, `npm test`, Playwright,
+- [x] **Task 9 — Full verification**
+  - [x] Backend suite, `-m postgres` suite, `npx tsc -b`, `npm run lint`, `npm test`, Playwright,
         Alembic check, and the architecture/changed-surface tests.
-  - [ ] **Alembic must report no upgrade operations** — AC2's "no migration" is proven by that
+  - [x] **Alembic must report no upgrade operations** — AC2's "no migration" is proven by that
         check, not by inspection. Confirm `backend/alembic/versions/` gains zero files.
-  - [ ] `npx tsc -b` is what actually type-checks the tree; `npm run typecheck` is inert because
+  - [x] `npx tsc -b` is what actually type-checks the tree; `npm run typecheck` is inert because
         the root `tsconfig.json` declares `"files": []` (Trap 7).
-  - [ ] **`npm run codegen` is not expected to change anything** — this story publishes no new or
+  - [x] **`npm run codegen` is not expected to change anything** — this story publishes no new or
         widened API field. If `openapi.json` or `schema.d.ts` changes, a contract widened by
         accident; stop and find it.
-  - [ ] Report totals against Task 1's re-derived baselines, not against 4.4's recorded numbers.
+  - [x] Report totals against Task 1's re-derived baselines, not against 4.4's recorded numbers.
 
 ---
 
@@ -535,11 +535,51 @@ is explicitly **not** the `ApprovalBindingV1` field AC2 forbids.
 
 ### Agent Model Used
 
+GPT-5 Codex
+
+### Implementation Plan
+
+- Preserve the single EAD-10 revalidation fork while carrying its already-read candidate through `RevalidationV1`.
+- Copy the sealed candidate evidence tuple opaquely at the four consequential audit write sites; add no snapshot, port, contract field, migration, checksum work, or evidence inspection.
+- Prove identity and honest absence in fake-port tests, then prove the bare-tuple writer → JSONB → typed reader round trip against live PostgreSQL.
+- Exercise the unchanged provenance and rendering consumers, close the declared scope/ledger gap, and run every no-change and regression gate.
+
 ### Debug Log References
+
+- Task 1 baseline at `90ccf73` (code-equivalent to `8ebc34f`; intervening delta is planning artifacts): backend 1,457 collected / 1,450 selected / 1,448 passed / 2 skipped / 0 failed / 7 deselected; PostgreSQL 131 selected and actually ran / 131 passed; Vitest 581 passed in 84 files; Playwright 66 passed. PostgreSQL was started before collection. The inherited Story 4.4 backend baseline was stale by four collected tests.
+- Demonstrated red, Task 2: expired attempt resolved a populated candidate but audited `()` while `get_candidate` remained below the expiry return; moving the read above the fork made all 25 decision tests pass.
+- Demonstrated red, Tasks 5–7: reverting each request, terminal-decision, promotion, and denial carrier to `()` failed its identity assertion; forcing the PostgreSQL writer to store `()` failed the live JSONB round-trip assertion; forcing both unchanged provenance pass-throughs to `()` failed the audit-record/baseline-promotion assertion. Each mutation was restored and its focused test returned green.
+- Final verification: backend 1,461 collected / 1,454 selected / 1,452 passed / 2 skipped / 0 failed / 7 deselected; PostgreSQL 131 selected and actually ran / 131 passed; Vitest 581 passed in 84 files; Playwright 66 passed; `npx tsc -b`, `npm run lint`, and `git diff --check` clean. Alembic reported `No new upgrade operations detected`; migration delta was zero. `npm run codegen` produced content-identical `openapi.json` and `schema.d.ts`.
 
 ### Completion Notes List
 
+- All four consequential audit write paths now carry the exact immutable `ScheduleVersionV1.evidence_refs` tuple; an unresolved denial candidate writes honest `()`.
+- `RevalidationV1` carries the candidate on valid, stale, and expired outcomes, and TX2 receives that candidate as a keyword-only parameter without acquiring a repository.
+- The live PostgreSQL cycle proves populated `EvidenceRefV1` objects survive the existing bare `TypeAdapter(tuple)` writer, JSONB, and typed reader with UUID, producing run version, and checksum triple intact.
+- Audit-sourced provenance and the existing timeline renderer now have backend, Vitest, and Playwright coverage; neither production consumer required a change.
+- Removed the obsolete audit-evidence scope control, closed the deferred-work entry, and documented that denial references describe the targeted candidate rather than consulted evidence.
+- No evidence file was created because this story has no measured threshold. No dependency, migration, table, column, port, API field, generated contract change, or `ApprovalBindingV1` field was introduced.
+- Honest gaps retained: copied references are not independently re-checksummed at write time; candidates may legitimately carry an empty tuple; targeted vs consulted is not encoded as a discriminant; rolled-back TX2 failures remain unaudited; grounding-calculator evidence may still have `producing_run_version=None`.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/4-4a-supply-audit-evidence-references.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/api/routers/approvals.py`
+- `backend/application/contracts/decision_provenance.py`
+- `backend/application/use_cases/decide_approval.py`
+- `backend/application/use_cases/promote_baseline.py`
+- `backend/application/use_cases/request_approval.py`
+- `backend/tests/test_approval_governance_postgres.py`
+- `backend/tests/test_approval_request.py`
+- `backend/tests/test_approvals_api.py`
+- `backend/tests/test_decide_approval.py`
+- `backend/tests/test_decision_provenance.py`
+- `backend/tests/test_promote_baseline.py`
+- `docs/API.md`
+- `frontend/e2e/support/apiStubs.ts`
+- `frontend/src/features/provenance/ProvenanceTimeline.test.tsx`
 
 ---
 
@@ -548,3 +588,4 @@ is explicitly **not** the `ApprovalBindingV1` field AC2 forbids.
 | Date | Change |
 |---|---|
 | 2026-09-01 | Story created from `epics.md:1258-1284`, `sprint-change-proposal-2026-09-01.md`, the Epic 4 spine (EAD-7, EAD-9, EAD-10), Story 4.4's Dev Notes, Review Findings and Open Question 1, and a live audit of the codebase at `8ebc34f`. |
+| 2026-09-01 | Implemented candidate evidence-reference carriage at all four audit write sites, live JSONB/provenance/rendering proof, scope and ledger closure, documentation, and full verification; status moved to review. |

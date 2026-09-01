@@ -26,6 +26,7 @@ it("renders an ordered, literal, inspectable timeline without leaking planted pa
       { ...common, item_type: "tool_proposal", tool_call_id: "tool-call-1", tool_name: "solve_schedule", pending_payload: marker },
       { ...common, item_type: "approval_decision", approval_id: "approval-1", outcome: "approval_rejected", state: "rejected" },
       { ...common, item_type: "evidence_claim", claim: "Persisted coverage", value: 42, unit: "minutes", evidence_refs: [{ scenario_version_id: versionId, checksum_algorithm: "sha256", checksum_schema_version: "rfc8785-v1", checksum_digest: "a".repeat(64), producing_run_version: null, baseline_schedule_version: null, group: "demand", record_id: "demand-1", field: "amount", start_minute: 0, end_minute: 60, schema_version: "v1" }] },
+      { ...common, item_type: "audit_record", audit_id: "audit-1", action: "approval_decision", outcome: "approval_consumed", success: true, safe_summary: "Promoted", parameter_hash: "a".repeat(64), consequence_hash: "b".repeat(64), policy_version: "policy-v1", app_version: "test", worker_facts: {}, evidence_refs: [{ scenario_version_id: versionId, checksum_algorithm: "sha256", checksum_schema_version: "rfc8785-v1", checksum_digest: "c".repeat(64), producing_run_version: "run-v1", baseline_schedule_version: null, group: "demand", record_id: "audit-demand-1", field: null, start_minute: null, end_minute: null, schema_version: "v1" }] },
       { ...common, item_type: "baseline_promotion", before_version: "baseline-before", after_version: "baseline-after" },
     ],
   } as unknown as RunProvenance;
@@ -37,11 +38,12 @@ it("renders an ordered, literal, inspectable timeline without leaking planted pa
   expect(screen.getByText("Approval decision: approval_rejected")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Copy tool call identifier tool-call-1" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Evidence: demand demand-1, amount, 0–60 minutes/ })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Evidence: demand audit-demand-1/ })).toBeInTheDocument();
   expect(screen.getByText("Before")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Copy promoted baseline version baseline-after" })).toBeInTheDocument();
   expect(screen.queryByText(marker)).not.toBeInTheDocument();
 
-  const details = screen.getByRole("button", { name: "Details" });
+  const [details] = screen.getAllByRole("button", { name: "Details" });
   expect(details).toHaveAttribute("aria-expanded", "false");
   await userEvent.click(details);
   expect(details).toHaveAttribute("aria-expanded", "true");

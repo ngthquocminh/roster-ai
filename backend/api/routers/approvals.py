@@ -366,6 +366,9 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
         ):
             denied = approvals.get(connection, approval_id=approval_id, site_id=session.site_id)
             if denied is not None:
+                candidate = schedule_runs.get_candidate(
+                    connection, schedule_run_id=denied.schedule_run_id, site_id=session.site_id
+                )
                 audit_writer.append(connection, AuditEnvelopeV1(
                     audit_id=uuid4(), attempt_id=uuid4(), request_id=decision_request_id,
                     site_id=session.site_id, initiated_by_actor_id=denied.initiated_by_actor_id,
@@ -379,7 +382,11 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
                     parameter_hash=denied.parameter_hash,
                     consequence_hash=denied.consequence_hash,
                     policy_version=denied.policy_version, app_version="0.1.0",
-                    worker_facts=WorkerFactsV1(), evidence_refs=(), occurred_at=now,
+                    # These references identify the candidate the refused attempt
+                    # targeted; the admission check consulted no candidate evidence.
+                    worker_facts=WorkerFactsV1(),
+                    evidence_refs=candidate.evidence_refs if candidate is not None else (),
+                    occurred_at=now,
                 ))
         return problem_response(status=_ERROR_STATUS.get(exc.code, 422), code=exc.code, title="Approval decision could not be completed", detail=_DECISION_DETAIL.get(exc.code, _DECISION_DETAIL_FALLBACK), extra=_context(exc.expected, exc.current))
     output = _out(result.binding, now)

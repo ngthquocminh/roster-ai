@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from application.contracts.evidence_ref import EvidenceRefV1
 from application.contracts.schedule_version import ScheduleVersionV1
 from application.ports.schedule_run import ScheduleRunViewV1
 from application.ports.site_baseline import SiteBaselineV1
@@ -28,7 +29,12 @@ class Runs:
     status alone and never branches on which terminal reason produced it."""
 
     def __init__(self, *, status="solver_completed", no_candidate=False, resource_version=2, run_id=None):
-        self.candidate = None if no_candidate else ScheduleVersionV1(schedule_version_id=uuid4(), schedule_run_id=run_id or uuid4(), scenario_id=uuid4(), scenario_version_id=uuid4(), feasible_solver_status="FEASIBLE", assignments=())
+        scenario_version_id = uuid4()
+        evidence_ref = EvidenceRefV1(
+            scenario_version_id, "sha256", "rfc8785-v1", "a" * 64,
+            "run-v1", None, "demand", "demand-1",
+        )
+        self.candidate = None if no_candidate else ScheduleVersionV1(schedule_version_id=uuid4(), schedule_run_id=run_id or uuid4(), scenario_id=uuid4(), scenario_version_id=scenario_version_id, feasible_solver_status="FEASIBLE", assignments=(), evidence_refs=(evidence_ref,))
         self.run_id = (self.candidate.schedule_run_id if self.candidate else run_id) or uuid4()
         self.run = ScheduleRunViewV1(self.run_id, status, None, resource_version, False)
     def get_run(self, *_a, **_k): return self.run
@@ -83,6 +89,7 @@ def test_tx1_binds_only_the_exact_feasible_candidate_and_writes_success_audit() 
     assert binding == approvals.binding
     assert binding.candidate_schedule_version_id == runs.candidate.schedule_version_id
     assert audit.items[0].outcome == "approval_requested"
+    assert audit.items[0].evidence_refs == runs.candidate.evidence_refs
 
 
 def test_tx1_persists_the_agent_pending_payload_and_pauses_the_run() -> None:

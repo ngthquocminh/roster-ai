@@ -105,6 +105,7 @@ def promote_baseline(
     connection: Any,
     *,
     binding: ApprovalBindingV1,
+    candidate: Any,
     actor_id: UUID,
     request_id: UUID,
     approvals: Any,
@@ -158,7 +159,7 @@ def promote_baseline(
         after_version=str(binding.candidate_schedule_version_id),
         safe_summary=binding.consequence_summary, parameter_hash=binding.parameter_hash,
         consequence_hash=binding.consequence_hash, policy_version=binding.policy_version,
-        app_version=app_version, worker_facts=WorkerFactsV1(), evidence_refs=(),
+        app_version=app_version, worker_facts=WorkerFactsV1(), evidence_refs=candidate.evidence_refs,
         occurred_at=occurred_at,
     ))
     resume = None
