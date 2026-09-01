@@ -423,18 +423,18 @@ for it, and it would be new test infrastructure inside a proof story.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-derive every baseline before writing anything** (Decision 1)
-  - [ ] From `backend/`: `uv run --frozen pytest -q`, `uv run --frozen pytest -m postgres -q`,
+- [x] **Task 1 — Re-derive every baseline before writing anything** (Decision 1)
+  - [x] From `backend/`: `uv run --frozen pytest -q`, `uv run --frozen pytest -m postgres -q`,
         `uv run --frozen pytest tests/test_evidence_convention.py -q`.
-  - [ ] From `frontend/`: `npm test`, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and
+  - [x] From `frontend/`: `npm test`, `npx tsc --noEmit`, `npm run lint`, `npm run build`, and
         `npx playwright test` (full run, both projects).
-  - [ ] Record all counts in Debug Log References, and record the **totals** alongside any pass/skip
+  - [x] Record all counts in Debug Log References, and record the **totals** alongside any pass/skip
         split — Story 3.12's review established that the split is environment-conditional while the
         total is the stable invariant.
   - Acceptance boundary: no code is written until the numbers are in the Debug Log. Any later
     failure is attributed against these numbers, never against Story 4.4's or 4.5's.
 
-- [ ] **Task 2 — Read the files this story asserts against and extends** (Decision 1)
+- [x] **Task 2 — Read the files this story asserts against and extends** (Decision 1)
   - [ ] `frontend/src/components/primitives/fixtures.tsx` and `fixtures.test.tsx` — the exact
         per-primitive state lists Trap 1 names.
   - [ ] `frontend/src/test/accessibility.test.tsx`, `accessibility-contract.test.tsx`,
@@ -453,7 +453,7 @@ for it, and it would be new test infrastructure inside a proof story.
         `backend/tests/test_repair_journey_evidence.py`.
   - Acceptance boundary: the File List records which of these were read, not merely opened.
 
-- [ ] **Task 3 — Build `frontend/src/test/stateMatrix.tsx`** (AC1; Decisions 2, 12b)
+- [x] **Task 3 — Build `frontend/src/test/stateMatrix.tsx`** (AC1; Decisions 2, 12b)
   - [ ] Export `STATE_MATRIX: readonly StateFixture[]` with `{ family, state, render }`, `family`
         drawn from AC1's ten nouns, and `PRIMITIVE_FIXTURES` composed in unchanged.
   - [ ] Cover, at minimum: **message** (planner message, agent response with a grounded claim,
@@ -471,7 +471,7 @@ for it, and it would be new test infrastructure inside a proof story.
         in the consuming test.
   - Acceptance boundary: `fixtures.tsx` and `fixtures.test.tsx` have a **zero-line diff**.
 
-- [ ] **Task 4 — Write `frontend/src/test/stateMatrix.test.tsx`** (AC1; Decisions 3, 4, 5, 9)
+- [x] **Task 4 — Write `frontend/src/test/stateMatrix.test.tsx`** (AC1; Decisions 3, 4, 5, 9)
   - [ ] One case **per state**, titled `` `${family}/${state}` `` (Decision 9), each asserting:
         axe-clean at the shared WCAG tag set; the prohibited-treatment helper; non-empty text.
   - [ ] Pairwise-within-family assertions: distinct normalized text, and distinct normalized
@@ -484,13 +484,13 @@ for it, and it would be new test infrastructure inside a proof story.
     corrupt the fixture, observe the failure, restore, and record the RED→GREEN line. A guard that
     cannot be made to fail by a relevant mutation does not count.
 
-- [ ] **Task 5 — Reconcile the two ad-hoc prohibition regexes** (Decision 4)
+- [x] **Task 5 — Reconcile the two ad-hoc prohibition regexes** (Decision 4)
   - [ ] If the `message` family's matrix entries cover `ActivityTimeline.test.tsx:281` and `:430`,
         delete those two lines and say so. Otherwise leave them and record why in Completion Notes.
   - Acceptance boundary: the repository ends with **one** statement of the UX-DR32 prohibition rule,
     not two uncoordinated copies.
 
-- [ ] **Task 6 — Write `frontend/e2e/journey-accessibility.spec.ts`** (AC2; Decisions 6, 7, 12b)
+- [x] **Task 6 — Write `frontend/e2e/journey-accessibility.spec.ts`** (AC2; Decisions 6, 7, 12b)
   - [ ] Drive the real desktop journey through `installApiStubs` — Chat (timeline plus draft), Runs
         (table plus progress), Results (comparison, all four approval-panel states, provenance).
   - [ ] Apply all four dimensions from Decision 6, reusing `layout-accessibility.spec.ts`'s exact
@@ -502,7 +502,7 @@ for it, and it would be new test infrastructure inside a proof story.
   - Acceptance boundary: the spec must pass under **both** `chromium` and `msedge`; a chromium-only
     pass does not satisfy `required_projects`.
 
-- [ ] **Task 7 — Execute Decision 10's contrast measurement, in its stated order** (AC2; Decision 10)
+- [x] **Task 7 — Execute Decision 10's contrast measurement, in its stated order** (AC2; Decision 10)
   - [ ] Widen `accessibility.spec.ts`'s four `[data-approval-panel]`-scoped scans to full page; run
         both the default and the `reducedMotion: "reduce"` arms; record the node, computed colours
         and ratio for anything red.
@@ -512,7 +512,7 @@ for it, and it would be new test infrastructure inside a proof story.
   - Acceptance boundary: whichever branch is taken, Completion Notes state the measured values.
     "It passed now" without numbers is not a measurement.
 
-- [ ] **Task 8 — Write `backend/scripts/generate_state_semantics_evidence.py`** (AC3; Decisions 8, 9)
+- [x] **Task 8 — Write `backend/scripts/generate_state_semantics_evidence.py`** (AC3; Decisions 8, 9)
   - [ ] Mirror `generate_repair_journey_evidence.py` structurally, but parse through
         `scripts.junit_ingest.parse_junit` for both sources — no third XML parser.
   - [ ] Require, per source: `tests > 0`, `executed > 0`, `skipped == 0`, `failures == 0`,
@@ -529,7 +529,7 @@ for it, and it would be new test infrastructure inside a proof story.
         absent from its report.
   - Acceptance boundary: the failure path is reachable and tested, not dead code.
 
-- [ ] **Task 9 — Write `backend/tests/test_state_semantics_evidence.py`** (Decision 8)
+- [x] **Task 9 — Write `backend/tests/test_state_semantics_evidence.py`** (Decision 8)
   - [ ] Mirror `test_repair_journey_evidence.py`: all-pass writes `passed: true`; a failing source
         writes `passed: false` and still writes the file; an all-skipped report is **refused**; a
         report missing a required project is refused; a missing declared binding raises `ValueError`
@@ -537,7 +537,7 @@ for it, and it would be new test infrastructure inside a proof story.
   - [ ] All writes to `tmp_path` with `allow_dirty=True`.
   - Acceptance boundary: `assert not output.exists()` on every refusal case.
 
-- [ ] **Task 10 — Register the Gate A invariant and all four checks** (AC2, AC3; Decisions 11, 12)
+- [x] **Task 10 — Register the Gate A invariant and all four checks** (AC2, AC3; Decisions 11, 12)
   - [ ] Add the `Invariant` to `NFR29_GATES`, not to `AR28_INVARIANTS`.
   - [ ] Add the four checks of Decision 11. Never one check declaring both `evidence_path` and
         `test_files`.
@@ -756,9 +756,44 @@ separately generated evidence commit.
 
 ### Debug Log References
 
+- Task 1 baseline (2026-09-02, branch head `8b2b5b1`, PostgreSQL healthy): backend default
+  1,499 total = 1,490 passed + 2 skipped + 7 deselected; PostgreSQL marker 1,499 total =
+  156 passed + 1,343 deselected; evidence convention 80/80 passed. Frontend Vitest 84 files,
+  581/581 tests passed; TypeScript clean; oxlint exited 0 with three pre-existing
+  `react/only-export-components` warnings; production build passed. `npm run test:e2e` rebuilt
+  `frontend/dist/` and Playwright passed 66/66 across chromium and msedge (9 spec files).
+- Tasks 3–4 RED→GREEN: absent `stateMatrix` failed module resolution; the first implementation
+  then failed the reduced-motion treatment and provenance role/name distinctness guards (3
+  failures), and the corrected composition passed 62/62. The test suite now passes 62 per-state
+  and aggregate cases, and the full frontend baseline is 85 files / 643 tests.
+- Task 6: after a fresh production build, `journey-accessibility.spec.ts` passed 2/2 (chromium and
+  msedge). Browser disclosure: Chat is the disconnected/degraded variant; the healthy SSE stream
+  remains component-only.
+- Task 7 measurement: widened full-page scans observed the outline Refresh control at `#858585`
+  on `#ffffff`, ratio 3.69:1 (required 4.5:1), in msedge under default and reduced-motion runs.
+  Replacing shared disabled opacity with muted/foreground (`#252525` on `#f7f7f7`) made all 16
+  approval scans pass across both projects and both motion preferences.
+- Task 10 RED→GREEN: with `workflow_state_semantics` deliberately registered before its checks,
+  both `test_every_invariant_has_at_least_one_contributing_check` and
+  `test_registry_covers_more_than_the_four_evidence_files` failed; after four checks, both passed.
+
 ### Completion Notes List
 
 ### File List
+
+- Read for Task 2: `frontend/src/components/primitives/fixtures.tsx`,
+  `frontend/src/components/primitives/fixtures.test.tsx`, `frontend/src/test/accessibility.test.tsx`,
+  `frontend/src/test/accessibility-contract.test.tsx`, `frontend/src/test/evidence-accessibility.test.tsx`,
+  `frontend/e2e/accessibility.spec.ts`, `frontend/e2e/layout-accessibility.spec.ts`,
+  `frontend/e2e/reduced-motion.spec.ts`, `frontend/e2e/repair-journey-accessibility.spec.ts`,
+  `frontend/e2e/support/accessibility.ts`, `frontend/e2e/support/apiStubs.ts`,
+  `frontend/e2e/support/repairJourneyStubState.ts`, `frontend/src/features/chat/ActivityTimeline.tsx`,
+  `frontend/src/features/chat/DraftCard.tsx`, `frontend/src/features/approvals/ApprovalDecisionPanel.tsx`,
+  `frontend/src/features/approvals/ApprovalRequestCard.tsx`, `frontend/src/features/provenance/ProvenanceTimeline.tsx`,
+  `frontend/src/components/runs/RunsTable.tsx`, `frontend/src/components/runs/ProgressCard.tsx`,
+  `frontend/src/components/runs/RunStatusBadge.tsx`, `backend/scripts/generate_repair_journey_evidence.py`,
+  `backend/scripts/junit_ingest.py`, `backend/scripts/gate_a_checks.py`,
+  `backend/tests/test_gate_a_readiness.py`, `backend/tests/test_repair_journey_evidence.py`.
 
 ---
 

@@ -98,6 +98,11 @@ NFR29_GATES: tuple[Invariant, ...] = (
         "Approval atomicity, idempotency, and authoritative audit integrity",
         "NFR29",
     ),
+    Invariant(
+        "workflow_state_semantics",
+        "Workflow state semantics and completed-journey accessibility",
+        "NFR29",
+    ),
 )
 
 #: Neither AR28's nor NFR29's, but AC2's: "any missing or unbound contributing
@@ -405,6 +410,7 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         test_files=(
             "frontend/src/test/accessibility.test.tsx",
             "frontend/src/test/accessibility-contract.test.tsx",
+            "frontend/src/test/evidence-accessibility.test.tsx",
             "frontend/src/features/scenario-data/usePhoneViewport.test.tsx",
         ),
     ),
@@ -544,6 +550,39 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         description="Live machinery guard: skipped PostgreSQL proof nodes cannot be reported as passing.",
         runner="pytest",
         test_files=("backend/tests/test_approval_audit_report.py",),
+    ),
+    # ---------------------------------------------------------------- 4.6
+    GateACheck(
+        check="state_semantics_matrix",
+        story="4.6",
+        invariant="workflow_state_semantics",
+        description="Enumerable component-layer state semantics and WCAG proof.",
+        runner="vitest",
+        test_files=("frontend/src/test/stateMatrix.test.tsx",),
+    ),
+    GateACheck(
+        check="journey_accessibility_browser_layer",
+        story="4.6",
+        invariant="workflow_state_semantics",
+        description="Desktop Chat, Runs, and Results proof across zoom, spacing, motion, and axe.",
+        runner="playwright",
+        test_files=("frontend/e2e/journey-accessibility.spec.ts",),
+        required_projects=("chromium", "msedge"),
+    ),
+    GateACheck(
+        check="state_semantics_evidence",
+        story="4.6",
+        invariant="workflow_state_semantics",
+        description="Clean-tree state matrix and browser measurement bound through NFR27.",
+        evidence_path="evidence/story-4.6/state-semantics-and-accessibility.json",
+    ),
+    GateACheck(
+        check="state_semantics_report_machinery",
+        story="4.6",
+        invariant="workflow_state_semantics",
+        description="Live fail-closed generator guards for skipped, absent, and unbound reports.",
+        runner="pytest",
+        test_files=("backend/tests/test_state_semantics_evidence.py",),
     ),
 )
 

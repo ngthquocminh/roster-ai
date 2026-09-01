@@ -139,6 +139,10 @@ describe("ShiftMind design tokens", () => {
   });
 
   it("keeps every shipped ShiftMind foreground pair above WCAG AA", () => {
+    // Story 4.6 measured the former transitioning disabled outline foreground
+    // as #858585 on #ffffff (3.69:1). The shared disabled token pair computes
+    // to #252525 on #f7f7f7 in the light theme.
+    expect(contrastRatio("#252525", "#f7f7f7")).toBeGreaterThanOrEqual(4.5);
     expect(
       contrastRatio(
         readHexToken("evidence-foreground"),
