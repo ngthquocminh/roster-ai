@@ -571,6 +571,8 @@ Pre-write `approval_not_pending` and `stale_resource_version` refusals against a
 binding resolved in the current site append an authoritative `approval_denied`
 row (`success=false`) keyed independently by `(site_id, attempt_id)`. Missing or
 cross-site bindings and the feature-policy pre-check write no denial row.
+The row's evidence references identify the candidate the refused attempt
+targeted, not evidence the admission check consulted.
 
 Creating a request writes governance and audit records but never promotes the
 candidate or changes the baseline pointer.

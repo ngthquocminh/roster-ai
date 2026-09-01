@@ -1,0 +1,616 @@
+---
+baseline_commit: 90ccf73
+---
+
+# Story 4.4a: Supply Audit Evidence References
+
+Status: done
+
+<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+
+## Story
+
+As the product team,
+we want every consequential audit row to carry the checksum-bound evidence locators of the
+candidate its attempt targeted,
+So that NFR32's evidence clause rests on a record that can actually fail, and Story 4.5 has a
+real oracle rather than a structurally empty field.
+
+**This story is a WRITE-PATH CARRIER, inserted by course correction, and it is deliberately
+small.** It exists because Story 4.5's AC3 could not be proven as written: `audit_event.evidence_refs`
+is the literal `()` at all four production write sites, so *"no audit or provenance link points
+to unverified evidence"* is unfalsifiable on its audit half. 4.5 is a proof story; a story that
+authors both the mechanism and its own oracle cannot fail. The mechanism therefore lands here.
+Full analysis, including both vacuities and the rejected designs:
+`_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-01.md`.
+
+**It lands no migration, no new table, no new column, no new port, no new field on
+`ApprovalBindingV1`, no new setting, and no new dependency.** Four production statements change,
+one dataclass in `application/use_cases/` gains a field, one function signature gains a
+parameter, one `SCOPE_CONTROLS` member is removed, and one ledger entry closes.
+
+**Depends on, and consumes:** Story 3.2's `ScheduleVersionV1.evidence_refs`, stamped with
+`producing_run_version` at `finalize_schedule_run.py:81-83` and sealed into
+`schedule_version.payload` under `canonical_hash`; Story 4.1's `AuditEnvelopeV1`,
+`PostgresAuditWriter`, and the `approval_request.candidate_schedule_version_id` FK pin; Story
+4.2's `revalidate_binding` and its admission-check denial arm; Story 4.3's TX2; Story 4.4's
+`PostgresAuditReader`, `SCOPE_CONTROLS`, and the `ProvenanceTimeline` rendering it already ships.
+
+**Unblocks:** Story 4.5 — its rewritten AC3 (`epics.md:1276-1279`) asserts against audit rows
+this story populates and **cannot be created until this story is `done`**.
+
+**Scope summary:** Four audit write statements begin passing the candidate's `evidence_refs`
+instead of `()`. `RevalidationV1` gains a `candidate` field and `revalidate_binding` moves one
+side-effect-free read two lines up, so the expired arm reports honest absence rather than an
+unlooked-at one. `promote_baseline` gains a `candidate` parameter supplied by its only caller.
+`SCOPE_CONTROLS` loses its fifth member and `deferred-work.md`'s entry closes in the same commit.
+Tests prove the new invariant in both directions. **No frontend component changes** —
+`ProvenanceTimeline` already renders `item.evidence_refs` for every item type
+(`ProvenanceTimeline.tsx:109`), so audit-sourced items begin rendering evidence links with no
+code change; only coverage is added.
+
+---
+
+## Facts this story depends on — each one written down and citable
+
+Retro action **A3** (`epic-1-2-retro-2026-08-16.md` §6.1) requires this pass before decisions.
+Every rule below is recorded somewhere citable; none of it may be re-derived from adapter code.
+
+| Fact | Where it is written |
+|---|---|
+| **Audit must capture immutable evidence references** — unqualified, per row, alongside actor/site, the identifier set, outcome, summaries/hashes, before/after and software versions | NFR32 (`epics.md:137`) |
+| **Authoritative evidence is produced for successful, DENIED, stale, failed, and cancelled consequential actions** — the denied row is named by the requirement, not chosen by preference | FR21 (`epics.md:65`) |
+| **Provenance links the request, the evidence consulted, and the decision path without hidden chain-of-thought** | FR20 (`epics.md:63`) |
+| **Every Epic 4 contract or guard names its production supplier from the spine's table, or the story extends the table; a guard proven only against a stub is not production behaviour** | EAD-9 (Epic 4 `ARCHITECTURE-SPINE.md:101`) |
+| **A passing guard that cannot be made to fail by a relevant mutation does not count** | Epic 4 spine *Verification Obligations* preamble (`:212`); epic-3 retro §1, §3 |
+| **There is exactly one decision endpoint and one shared revalidation fork.** Any business mismatch terminalizes; only a transactional or infrastructure fault rolls the bundle back and leaves the binding `pending`. `revalidate_binding` must not grow a second decision path | EAD-10 (Epic 4 `ARCHITECTURE-SPINE.md:110`); `decide_approval.py:1-5, :69-72` |
+| **Every read path is pure** — a read never writes | EAD-7 |
+| **Domain and application code must not import SQLAlchemy, FastAPI, or a concrete provider; adapters call ports** | AD-1 (parent `ARCHITECTURE-SPINE.md:48`) |
+| **Application code owns identity, site scope, versions, approvals, state transitions, persistence, and audit; no model output or client value grants authority** | AD-2 (parent `ARCHITECTURE-SPINE.md:54`) |
+| **PostgreSQL owns append-only business audit; the normal application path has no UPDATE or DELETE on `audit_event`** | AD-12; EAD-1; NFR33 (`epics.md:139`) |
+| **`EvidenceRefV1` is a version-bound projection locator** — `scenario_version_id`, the checksum triple, `producing_run_version`, `baseline_schedule_version`, `group`, `record_id`, and an optional field/minute range. It has no URI, no key, and no bucket; there is no evidence port and no object-storage adapter in this codebase | `application/contracts/evidence_ref.py:30-43`; Story 4.5 *Evidence scope note* (`epics.md:1292`) |
+| **AR12's and AR23's create-only S3 evidence permissions are HOSTED requirements owned by Story 6.2**, not by any Epic 4 story | `epics.md:158`, `:169`, `:1463`; Story 4.5 *Evidence scope note* |
+| **The candidate's evidence references are sealed and FK-pinned.** `schedule_version.payload` is immutable JSONB carrying `canonical_hash` with `checksum_algorithm='sha256'` and `checksum_schema_version='rfc8785-v1'`; `approval_request.candidate_schedule_version_id` pins the exact row | `adapters/postgres/schedule_run.py:1082`; `ApprovalBindingV1.candidate_schedule_version_id` (`approval_binding.py:36`) |
+| **`ScheduleVersionV1.evidence_refs` is the only supply carrying a non-null `producing_run_version`**, stamped once at finalize | `finalize_schedule_run.py:81-83`; Story 4.4 *Honest gaps* |
+| **The declared gap this story closes** — `audit_event.evidence_refs` empty at every write site, `SCOPE_CONTROLS[4]`, revisit trigger *"decide before Story 4.5 is created"* | `application/contracts/decision_provenance.py:18`; `deferred-work.md:590-608` (**DECIDED 2026-09-01**) |
+| Never hand-type an evidence file: commit code → clean tree → measure → generate through a script → commit evidence separately | `docs/EVIDENCE-CONVENTION.md:9-20, 191-199` |
+| **Manual assistive-technology verification is out of scope**; automated coverage is the only accepted proof | `EXPERIENCE.md:196` (Accessibility Floor) |
+
+**`docs/DOMAIN-MODEL.md` governs demand families, units, and assignments, and it constrains
+exactly one thing here: this story must not read inside an evidence reference.** An
+`EvidenceRefV1` may carry `group="demand"` and locate a demand row, but this story **copies
+tuples opaquely** — it reads no `family`, no `unit`, no `amount`, computes no metric, derives no
+demand figure, and performs no conversion. §1's rule that `unit` is a property of the source
+table and not a choice a metric may make is therefore satisfied vacuously, and must stay that
+way: **do not add a calculator, a filter, a family predicate, or a unit check to any write site
+in this story.** Cite the document; do not re-derive the family/unit rule from adapter code.
+
+---
+
+## Acceptance Criteria
+
+Verbatim from `epics.md:1258-1284`.
+
+1. **Given** a consequential attempt that resolves a candidate schedule version — request,
+   promotion, terminal decision, or pre-write denial, **When** its audit event is written,
+   **Then** the row carries that candidate's evidence references unchanged from the sealed
+   `schedule_version` row, with no re-derivation, no re-checksumming, and no backfill of any
+   prior row, **And** an attempt whose candidate does not resolve writes an empty set, proven by
+   a demonstrated-red test rather than assumed. (FR21, NFR32)
+
+2. **Given** the existing contracts and schema, **When** this story lands, **Then** no migration,
+   no new column, no new port, and no new field on `ApprovalBindingV1` is introduced — the
+   candidate is supplied from the `get_candidate` call that `request_approval` and
+   `revalidate_binding` already make, on the repository `decide_approval_route` already injects,
+   **And** `promote_baseline` receives the candidate as a parameter from its only caller, never
+   by acquiring a repository of its own. (AD-1, AD-2)
+
+3. **Given** a denial row written at the admission check, before revalidation runs, **When** its
+   evidence references are read, **Then** they identify the candidate the refused attempt
+   targeted, not evidence the attempt consulted, and both the story and the code state that
+   distinction, **And** audit-sourced provenance items render these references with the semantics
+   Story 4.4 already ships, without a new contract field. (FR20, NFR32)
+
+4. **Given** the scope control declared by Story 4.4, **When** this story lands, **Then**
+   `"audit_evidence_refs:empty_at_every_write_site"` is removed from `SCOPE_CONTROLS` in
+   `application/contracts/decision_provenance.py`, because it is no longer true, **And** the
+   corresponding deferred-work ledger entry is closed in the same commit, citing this story.
+   (FR21, NFR32)
+
+---
+
+## Eight decisions were made at story creation — do not re-litigate them
+
+> **Authoring rule in force since commit `2cf598f`:** every Decision below states, in one
+> sentence, what its mechanism does **not** cover. Tasks cite these Decisions; they do not
+> re-argue them.
+
+### Decision 1 — Supply from the candidate at each write site; the `ApprovalBindingV1` snapshot is rejected
+
+The correction's own trigger proposed snapshotting `evidence_refs` onto `ApprovalBindingV1` at
+request time, mirroring `parameter_hash` / `consequence_hash`. **Rejected as heavier than the
+code requires**, and AC2 forbids it by name. Three of the four sites already hold the candidate:
+
+| Write site | Line at `8ebc34f` | Where its candidate comes from |
+|---|---|---|
+| `application/use_cases/request_approval.py` | `:153` | `candidate` already bound at `:104` and read at `:117-133` |
+| `application/use_cases/promote_baseline.py` | `:161` | a new parameter from its only caller (Decision 5) |
+| `application/use_cases/decide_approval.py` | `:140` | `check.candidate`, surfaced by Decision 2 |
+| `api/routers/approvals.py` | `:382` | `schedule_runs`, already injected at `:326` |
+
+The pinning argument for a snapshot is weaker than it appears. `parameter_hash` and
+`consequence_hash` are snapshotted **because they are derived over mutable inputs** that
+`revalidate_binding:91` re-derives and compares. `evidence_refs` are not derived: they sit inside
+an immutable, `canonical_hash`-sealed `schedule_version` row that
+`approval_request.candidate_schedule_version_id` already FK-pins, so re-reading yields a
+byte-identical tuple by construction. A snapshot would add a second copy that cannot diverge,
+plus a migration, a contract field, an adapter round-trip, and a near-tautological drift test.
+
+**Does not cover:** it does not make the stored audit row independently verifiable at read time.
+Nothing re-checksums the copied tuple; its integrity rests on the immutability of the
+`schedule_version` row and the FK pin, and **resolving each locator against its pinned
+`scenario_version_id` is Story 4.5's AC3**, not this story's.
+
+### Decision 2 — `revalidate_binding` loads the candidate BEFORE the expiry fork and surfaces it on `RevalidationV1`
+
+The correction states that `revalidate_binding` "loads the full candidate on **every** decision
+path, approve and reject alike." **That is true of approve, reject and stale, and false of
+expired.** `decide_approval.py:73-74` returns `RevalidationV1("expired", ...)` and `get_candidate`
+is not called until `:75`. Leaving it there would make an expired row's `()` mean *"the function
+returned before looking"* — precisely the *assumed* absence Story 4.5's rewritten AC3 refuses
+(`epics.md:1279`: *"asserted as absence rather than assumed"*).
+
+Move the `get_candidate` call above the expiry check and add `candidate: Any` to
+`RevalidationV1`, returned from **all three** constructions (`:74`, `:93`, `:94`).
+`decide_approval` then reads `check.candidate` for its TX3 audit row at `:140` and passes it to
+`promote_baseline` at `:113`. **One read, one source of truth, no second decision path** —
+EAD-10's prohibition is on a second revalidation path, not on the shape of its result.
+
+EAD-10's fork is preserved exactly: expiry is still evaluated first and still returns first; only
+a side-effect-free read moves, which EAD-7 permits on any path. The cost is one extra
+`get_candidate` on the expired path.
+
+**Does not cover:** it does not change any outcome, any `expected`/`current` context, or the
+order of the fork's arms. It does have one consequence worth stating rather than discovering: a
+transactional read fault inside `get_candidate` can now surface on the **expired** path, where
+before that path issued no read. Under EAD-10 and `revalidate_binding`'s own docstring
+(*"Transactional/infrastructure read faults propagate as the second arm"*) that fault correctly
+rolls the bundle back and leaves the binding `pending` for an honest retry — it is the specified
+behaviour of the second arm, not a new failure mode.
+
+### Decision 3 — The denial row carries the candidate the refused attempt TARGETED, never evidence it consulted
+
+FR21 (`epics.md:65`) names *"denied"* among the consequential actions requiring authoritative
+evidence, and NFR32 (`:137`) requires immutable evidence references unqualified, per row. The
+denial row is populated. **This is settled by spec, not by preference.**
+
+But the denial fires at the admission check in `approvals.py:367-383`, **before**
+`revalidate_binding` runs, and `AuditEnvelopeV1` documents no "evidence consulted" semantics —
+`audit_envelope.py:26-52` merely enumerates the field. Without the distinction stated, a
+populated denial row reads as a false consultation claim. **State it in two places and only those
+two:** a comment at the denial write site, and one sentence in `docs/API.md`'s existing denial
+paragraph (`:575-578`). The references identify *what the refused attempt targeted*.
+
+The denial site resolves the candidate through the **already-injected** `ScheduleRunRepository`
+(`approvals.py:326`) keyed on `denied.schedule_run_id`, which is non-nullable on
+`ApprovalBindingV1` (`approval_binding.py:35`). `get_candidate` returns `ScheduleVersionV1 | None`,
+so the expression is `candidate.evidence_refs if candidate is not None else ()` — a stale binding
+whose candidate is gone writes honest absence.
+
+**Does not cover:** it does not add a "consulted vs targeted" discriminant to `AuditEnvelopeV1`
+or to any provenance item. The distinction is documentation and a comment; nothing in the data
+distinguishes a targeted reference from a consulted one, and no consumer may infer one.
+
+### Decision 4 — The load-bearing invariant is IDENTITY with the candidate's tuple, not non-emptiness
+
+A resolved candidate can legitimately carry **zero** evidence references. `_input_evidence`
+(`create_run_snapshot.py:34-55`) derives the snapshot's refs from `proposal.resolved_entities`
+plus `proposal.preserved_locks`; a proposal with neither produces `()`,
+`finalize_schedule_run.py:81-83` stamps an empty tuple, and the candidate is still valid and
+promotable. AC1's two named cases are therefore not exhaustive, and:
+
+* The assertion that carries the guarantee is
+  **`audit_row.evidence_refs == candidate.evidence_refs`** — identity with the sealed row, which
+  fails the moment a write site reverts to `()`.
+* A **non-empty** assertion is valid only against a fixture whose proposal carries resolved
+  entities, and every test making one must construct that fixture explicitly rather than inherit
+  it. A non-empty assertion over an inherited fixture asserts a property of the fixture, not of
+  the code — the "guard that cannot fail" defect class in its mirror image.
+
+**Does not cover:** it does not guarantee that any production audit row is non-empty. A run whose
+proposal touched no resolved entity and preserved no lock produces an empty candidate tuple and
+therefore an empty audit tuple, which is honest and correct. Story 4.5's AC3 must not assert
+non-empty unconditionally either; its wording (*"each audit row for an attempt that **resolved a
+candidate** carries that candidate's checksum-bound references"*) already accommodates this, and
+this story must not tighten it.
+
+### Decision 5 — `promote_baseline` takes the candidate as a parameter and never acquires a repository
+
+`promote_baseline` has exactly two callers in the repository: `decide_approval.py:113` and
+`tests/test_promote_baseline.py:51`. The production caller has just revalidated and therefore
+holds `check.candidate` (Decision 2). Add `candidate: Any` as a keyword-only parameter and use it
+at `:161`. **Do not give TX2 a `schedule_runs` port** — AC2 forbids it, and a second read inside
+the bundle could observe a different row than the one revalidation validated.
+
+**Does not cover:** it does not make `promote_baseline` verify the candidate it is handed.
+Nothing inside TX2 re-reads or re-checks it; the caller is responsible for passing the candidate
+revalidation just resolved, and the `AssertionError` precondition at `:118-119` remains the only
+check.
+
+### Decision 6 — The JSONB round-trip goes live here for the first time; prove it against real PostgreSQL
+
+`PostgresAuditWriter.append` serializes with a **bare** `TypeAdapter(tuple).dump_python(..., mode="json")`
+(`adapters/postgres/audit.py:42`) — items typed `Any`, serialization inferred — and
+`PostgresAuditReader._envelope` rehydrates with the typed
+`TypeAdapter(tuple[EvidenceRefV1, ...]).validate_python` (`:26`). **That path has never carried a
+non-empty tuple**, in production or in any test, because every write site passed `()`.
+
+Verified at story creation against the installed pydantic: a fully-populated `EvidenceRefV1`
+round-trips losslessly through the bare-tuple dump and the typed validate — all twelve fields
+survive, `scenario_version_id` goes `UUID → str → UUID`, and the reconstructed tuple compares
+equal. That is an in-process check; **prove it through real JSONB** in the
+`@pytest.mark.postgres` file (Task 6), because the in-process check never touches the column.
+
+**Does not cover:** it does not tighten the writer's `TypeAdapter(tuple)` to the typed form.
+Considered and rejected: the round-trip is verified lossless, `worker_facts` on the same
+statement uses the same inferred shape, and changing a serializer on an append-only table's write
+path risks changing stored bytes for a type annotation and no behavioural gain.
+
+### Decision 7 — There are exactly four audit write sites, and `grounding/gate.py:175` is not a fifth
+
+A repository-wide grep for `evidence_refs=()` in `backend/` returns six hits. Two are **not**
+audit write sites and must not be touched:
+
+* `application/grounding/gate.py:175` constructs a `GroundedClaimV1` — the supported-zero claim
+  path, a different contract with its own evidence semantics (Story 2.7).
+* `application/queries/decision_provenance.py:48` is the `_common` helper's **default parameter**
+  in the read-side projection Story 4.4 ships. It is not a write.
+
+The four to change are exactly the rows in Decision 1's table.
+
+**Does not cover:** it does not audit the rest of the codebase for other empty-evidence
+constructions. Two names were checked and excluded; nothing else was surveyed.
+
+### Decision 8 — AC4 closes the ledger and removes the scope control, and one existing test is the guard
+
+`SCOPE_CONTROLS` (`application/contracts/decision_provenance.py:13-19`) loses its fifth member.
+`backend/tests/test_decision_provenance.py:96-102` asserts `set(SCOPE_CONTROLS)` equals an exact
+five-member set, so **it fails the moment the member is removed** — it is a real guard, not
+scenery, and updating it to the four-member set is part of the same change.
+
+`deferred-work.md`'s entry (`:590-608`) already carries its **DECIDED 2026-09-01** paragraph
+naming this story as the closer. Strike the original bullet through and mark it **CLOSED**,
+citing this story, per the correction's success criterion 3. Do **not** rewrite the historical
+wording — the corrections it already carries are the record.
+
+**Does not cover:** it does not close Story 4.4's other three ledger entries (the absent tool
+transcript, the unimplemented `comparison` discriminant, the silent 10,000-item provenance cap).
+All three keep their own owners and triggers.
+
+---
+
+## Tasks / Subtasks
+
+- [x] **Task 1 — Re-derive the baselines before touching anything (retro §3)**
+  - [x] Record backend total collected/selected/passed/failed/skipped/deselected, `-m postgres`
+        collected **and actually ran**, Vitest files and tests, and the Playwright count, at
+        `8ebc34f`, **before any edit**.
+  - [x] Story 4.4's post-review Completion Notes record backend 1,453 collected / 1,446 selected,
+        1,444 passed, 2 skipped, 0 failed, 7 deselected; `-m postgres` 131 ran / 131 passed;
+        Vitest 581 in 84 files; Playwright 66; `npx tsc -b` clean. **These are inherited, not
+        verified** — 2.7, 2.8, 3.12 and 4.4 each found an inherited baseline stale. Record the
+        total alongside the split.
+  - [x] Bring `docker-compose.yml`'s `postgres` service up first and assert on the **count** of
+        postgres-marked tests that ran, never on the suite being green (Trap 6).
+
+- [x] **Task 2 — Surface the candidate on the revalidation result (AC: 1, 2; Decision 2)**
+  - [x] Add `candidate: Any` to `RevalidationV1` (`decide_approval.py:43-47`).
+  - [x] Move the `get_candidate` call above the expiry check and return the candidate from all
+        three `RevalidationV1` constructions (`:74`, `:93`, `:94`), per Decision 2.
+  - [x] **Demonstrated-red:** with the read left below the expiry check, assert that an expired
+        decision's audit row carries the candidate's references **while that candidate resolves in
+        the same transaction** — observe the test fail, then move the read and observe it pass.
+        Record it. This is the assertion Decision 2 exists for; a test that exercises only the
+        approve path cannot fail here.
+
+- [x] **Task 3 — The four write sites (AC: 1, 2, 3; Decisions 1, 3, 5, 7)**
+  - [x] `request_approval.py:153` — use the `candidate` already bound at `:104`.
+  - [x] `decide_approval.py:140` — use `check.candidate`, with the
+        `candidate.evidence_refs if candidate is not None else ()` shape per Decision 3.
+  - [x] `promote_baseline.py:104, :161` — add the keyword-only `candidate` parameter and use it;
+        pass it from `decide_approval.py:113`, per Decision 5. **No `schedule_runs` port on TX2.**
+  - [x] `approvals.py:382` — resolve through the already-injected `schedule_runs`, keyed on
+        `denied.schedule_run_id`, and add the comment Decision 3 requires stating that the
+        references identify what the refused attempt **targeted**, not what it consulted.
+  - [x] Change nothing at `grounding/gate.py:175` or `queries/decision_provenance.py:48`
+        (Decision 7).
+
+- [x] **Task 4 — Remove the scope control and close the ledger (AC: 4; Decision 8)**
+  - [x] Remove `"audit_evidence_refs:empty_at_every_write_site"` from `SCOPE_CONTROLS`
+        (`contracts/decision_provenance.py:18`).
+  - [x] Update the set assertion at `tests/test_decision_provenance.py:96-102` to four members.
+  - [x] Strike through the `deferred-work.md:590` bullet and mark it **CLOSED**, citing this
+        story. Leave its historical wording and its **DECIDED 2026-09-01** paragraph intact.
+
+- [x] **Task 5 — Default-suite tests for all four sites (AC: 1, 2; Decisions 4, 5)**
+  - [x] Fake-port tests in `tests/test_request_approval.py`, `tests/test_decide_approval.py` and
+        `tests/test_promote_baseline.py`: for each site assert
+        `audit_row.evidence_refs == candidate.evidence_refs` against a candidate fixture built
+        with at least one `EvidenceRefV1`, per Decision 4. Update `test_promote_baseline.py:51`'s
+        `_promote` helper for the new parameter.
+  - [x] Router test in `tests/test_approvals_api.py` for the denial row: a pre-write
+        `approval_not_pending` or `stale_resource_version` refusal against a binding whose
+        candidate resolves writes a denial row carrying that candidate's references.
+  - [x] The honest-absence direction, on its own fixture: a site whose `get_candidate` returns
+        `None` writes `()`. Assert the empty set **and** that the candidate genuinely does not
+        resolve, so the test cannot pass for the wrong reason.
+  - [x] **Demonstrated-red for every new assertion:** revert each write site to `()` in turn and
+        observe the matching test fail. Record each (Trap 5).
+  - [x] Do **not** add a non-empty assertion over an inherited fixture (Decision 4).
+
+- [x] **Task 6 — Real-PostgreSQL round-trip proof (AC: 1; Decision 6)**
+  - [x] In `tests/test_approval_governance_postgres.py` (`@pytest.mark.postgres`), drive a full
+        request → run → approve → promote cycle whose candidate carries at least one populated
+        `EvidenceRefV1`, then read the rows back through `PostgresAuditReader` and assert the
+        rehydrated tuples equal the candidate's, field for field including `scenario_version_id`,
+        `producing_run_version`, and the checksum triple.
+  - [x] This is the first non-empty traversal of `audit.py:42` → JSONB → `audit.py:26`
+        (Decision 6). Assert on the reconstructed `EvidenceRefV1` objects, not on raw JSON.
+  - [x] No backfill of existing rows — audit is append-only (NFR33) and AC1 forbids it.
+
+- [x] **Task 7 — Provenance and rendering coverage (AC: 3)**
+  - [x] Backend: assert that `query_decision_provenance` emits `audit_record` and
+        `baseline_promotion` items carrying the populated references
+        (`queries/decision_provenance.py:251`, `:266`) — the two lines the correction identified
+        as the dead half. **No change to the query module is expected**; if one seems necessary,
+        stop, because it means a write site is wrong (Trap 9).
+  - [x] Frontend: extend `ProvenanceTimeline.test.tsx` to assert an `audit_record` item with
+        references renders its evidence links. **No component change is expected** —
+        `ProvenanceTimeline.tsx:109` already renders `item.evidence_refs` for every item type.
+  - [x] Give the `audit_record` item in `frontend/e2e/support/apiStubs.ts:216-233` one populated
+        reference so the existing accessibility sweep covers the newly-rendered links; re-run
+        Playwright and confirm no page-level horizontal scroll and no new axe finding
+        (NFR20, `EXPERIENCE.md:196`).
+
+- [x] **Task 8 — Documentation (AC: 3)**
+  - [x] `docs/API.md`: extend the existing denial paragraph (`:575-578`) with the one sentence
+        Decision 3 requires. No new route, no new problem code, no new table row.
+  - [x] `docs/GATE-A-RUNBOOK.md` and `docs/DOMAIN-MODEL.md`: no change expected — verify, do not
+        assume.
+  - [x] **No evidence file.** This story has no measured threshold, so
+        `docs/EVIDENCE-CONVENTION.md` has nothing to bind. Say so in Completion Notes.
+
+- [x] **Task 9 — Full verification**
+  - [x] Backend suite, `-m postgres` suite, `npx tsc -b`, `npm run lint`, `npm test`, Playwright,
+        Alembic check, and the architecture/changed-surface tests.
+  - [x] **Alembic must report no upgrade operations** — AC2's "no migration" is proven by that
+        check, not by inspection. Confirm `backend/alembic/versions/` gains zero files.
+  - [x] `npx tsc -b` is what actually type-checks the tree; `npm run typecheck` is inert because
+        the root `tsconfig.json` declares `"files": []` (Trap 7).
+  - [x] **`npm run codegen` is not expected to change anything** — this story publishes no new or
+        widened API field. If `openapi.json` or `schema.d.ts` changes, a contract widened by
+        accident; stop and find it.
+  - [x] Report totals against Task 1's re-derived baselines, not against 4.4's recorded numbers.
+
+
+### Review Findings
+
+Adversarial code review, 2026-09-01, three parallel layers (Blind Hunter, Edge Case
+Hunter, Acceptance Auditor) against `defee46` vs `baseline_commit` `90ccf73`. All four
+ACs verified met on their main clause; every new identity guard was independently
+mutation-tested and genuinely fails. Findings below are the residue.
+
+- [x] [Review][Patch] **RESOLVED 2026-09-01 → option (c).** Trap 4 is unmitigated — the new denial-site `get_candidate` can raise past the denial write** — `api/routers/approvals.py:369-371` issues the read unguarded inside the `except DecideApprovalError` handler. `get_site_context` yields inside `with site_context(engine, …)` (`api/deps.py:296`), so an escape unwinds the transaction: the FR21 `approval_denied` row is lost and the planner gets a 500 instead of the defined 409. **Correction to two of the three review layers: this arm was *not* previously I/O-free** — it already calls `approvals.get` at `:368`, so the DB-fault half of this risk is pre-existing. What is genuinely new is the *validation*-failure half: `get_candidate` runs `TypeAdapter(ScheduleVersionV1).validate_python(row.payload)` (`adapters/postgres/schedule_run.py:106`), so stored-payload drift becomes a way to lose a denial row. Trap 4 names this and forbids it; Decision 2's "Does not cover" paragraph accepts the mirror-image fault on the *expired* path as correct second-arm behaviour. The two cannot both be right, and the code distinguishes neither. Options: (a) wrap the denial-site read in `try/except Exception → ()` so the 409 and the row always commit, honouring Trap 4 and accepting that a read fault becomes silent honest-absence; (b) leave as-is, accepting Decision 2's reading uniformly and amending Trap 4 in the record; (c) narrow the guard to `ValidationError` only, keeping genuine DB faults escaping. No test injects a raising `get_candidate` at this site under any option. **Resolution: (c)** — catch only `ValidationError` at the denial-site read and write `()`; let genuine DB faults escape unchanged. Rationale: payload drift is permanent (retry cannot heal it, so the denial row must still be written), while a DB fault is transient and the un-idempotent denial arm re-writes a correct row on retry — so each failure mode gets the response that actually helps. Add a test injecting each of the two.
+- [x] [Review][Patch] **RESOLVED 2026-09-01 → option (a).** The timeline now renders the identical evidence-ref list on up to four items with colliding accessible names, and both new fixtures hide it** — after this story a promoted run emits the same tuple on `solver_run` (`queries/decision_provenance.py:127`), on *each* `audit_record` (`:251`), and on `baseline_promotion` (`:266`); `ProvenanceTimeline.tsx:109` renders `item.evidence_refs` for all of them and `EvidenceLink` derives its accessible name purely from ref content. A proposal resolving 40 entities therefore paints ~160 identically-named buttons inside one `<ol aria-label="Decision provenance">`. The duplication itself is *declared* — the story and `sprint-status.yaml`'s 4.4a note both anticipate audit-sourced items rendering links. What is not declared is the name collision, and both new fixtures dodge it by inventing `record_id: "audit-demand-1"` (`ProvenanceTimeline.test.tsx:29`, `e2e/support/apiStubs.ts:230`) — a value production cannot produce, since production copies the candidate's own refs verbatim. So the Playwright axe sweep Task 7 leans on never sees the real shape. Options: (a) accept and hand it to Story 4.6's state matrix, ledgering the fixture unrepresentativeness; (b) make the fixtures production-shaped (same `record_id` across items) and let the a11y sweep judge the real page now; (c) distinguish the accessible name per item type in `EvidenceLink`/`ProvenanceTimeline` — but Trap 9 forbids touching the projection, so this is a frontend-only change. **Resolution: (a)** — make both fixtures production-shaped and ledger the volume question for Story 4.6. **Severity corrected during triage:** this is *not* an axe violation (duplicate accessible names break no rule, and `id={originElementId(origin)}` is unique per item), and per-item structure does give screen readers context — so the a11y half of the Blind Hunter's `High` does not hold. What holds is that the fixtures prove a page production cannot produce.
+- [x] [Review][Patch] The `else ()` branch of the terminal audit write is exercised but never asserted — AC1's honest-absence clause has no demonstrated-red at this site [backend/tests/test_decide_approval.py:129-131]
+- [x] [Review][Patch] Two tautological assertions restate their own fixtures and cannot fail under any production mutation [backend/tests/test_approvals_api.py:379, backend/tests/test_decide_approval.py:123]
+- [x] [Review][Patch] Decision 3's targeted-vs-consulted comment sits above `worker_facts=`, not above the `evidence_refs=` line it describes [backend/api/routers/approvals.py:385-388]
+- [x] [Review][Patch] `promote_baseline` dereferences the new `candidate` parameter with no precondition while its sibling write site guards; add the `AssertionError` beside the existing `binding.state` one [backend/application/use_cases/promote_baseline.py:118-119, :162]
+- [x] [Review][Patch] The only live-PostgreSQL populated evidence row points at a fresh `uuid4()` rather than the seeded `ids["scenario_version"]`, so Story 4.5's AC3 would resolve it `not_found` by construction [backend/tests/test_approval_governance_postgres.py:912-916]
+- [x] [Review][Patch] The added denial sentence is a 126-char unwrapped line in a file that wraps at ~78 [docs/API.md:574]
+- [x] [Review][Patch] `getByRole("Details")` weakened to `getAllByRole(...)[0]`, silently retargeting to whichever fixture item happens to be first; the new `audit_record` item's own Details control is untested [frontend/src/features/provenance/ProvenanceTimeline.test.tsx:46]
+- [x] [Review][Defer] `SCOPE_CONTROLS` lost a negative control with no positive one replacing it [backend/application/contracts/decision_provenance.py:13-18] — deferred, AC4 asked only for the removal
+- [x] [Review][Defer] Denial rows are not idempotency-guarded, so a retry loop on one terminal binding appends a new row per attempt — now carrying a full ref tuple each [backend/api/routers/approvals.py:365-392] — deferred, pre-existing since Story 4.1
+- [x] [Review][Defer] The promotion-site guard inherits its evidence fixture from `test_decide_approval.Runs`; emptying that fixture makes this guard vacuous with nothing failing to signal it [backend/tests/test_promote_baseline.py:66] — deferred, compliant with Decision 4's letter (identity, not non-emptiness)
+
+**Dismissed as noise (5):** `RevalidationV1.candidate: Any` under-typing (Decision 2 specifies `Any`, and every port in that module is `Any`); "consulted vs targeted" being indistinguishable in the data (Decision 3's own declared *Does not cover*, already an Honest Gap); a `stale` row attaching a different candidate's refs (unreachable — `uq_schedule_version_run` plus `.one_or_none()` make a run's candidate singular and immutable); audit-row size growth (the story's intended effect); and the recorded baseline skip count not reproducing (1,453 passed / 1 skipped measured vs 1,452 / 2 recorded, same 1,461 collected — an environment-dependent skip, not a regression).
+
+
+---
+
+## Dev Notes
+
+### Files being modified — read these before editing
+
+| File | Current state | What this story changes | What must not break |
+|---|---|---|---|
+| `backend/application/use_cases/decide_approval.py` | `RevalidationV1` has 3 fields `:43-47`; `revalidate_binding` returns at `:74` **before** the `get_candidate` at `:75`; three `RevalidationV1` constructions `:74`, `:93`, `:94`; TX3 audit `:140`; calls `promote_baseline` `:113` | `candidate` field on `RevalidationV1`; the read moves above the expiry check; `:140` and `:113` consume it | the EAD-10 fork's arm **order and outcomes** — expiry still evaluated and returned first; the `valid` conjunction at `:91`; the `stale` context dict at `:94`; the three-way error hierarchy (`ApprovalNotPendingError` / `PostWriteApprovalNotPendingError` / `ConcurrentDecisionError`) the router discriminates by **type**, never by code (`approvals.py:347-365`) |
+| `backend/application/use_cases/promote_baseline.py` | signature `:104-116`; TX2 audit `:161`; no `schedule_runs` port | one keyword-only `candidate` parameter; `:161` uses it | the module docstring's raise-vs-return contract `:1-45` — every post-write failure must still **escape** so the bundle rolls back; the `AssertionError` precondition `:118-119`; the `PromotionResultV1` shape |
+| `backend/application/use_cases/request_approval.py` | `candidate` bound `:104`, guarded `:105-106`, read `:117-133`; TX1 audit `:153` | `:153` uses `candidate.evidence_refs` | the `effect_key` being `command.request_effect_key` and **not** `str(approval_id)` — 4.1's audit defect, reasoned at `:145-149`; the `CandidateNotPromotableError` guard order |
+| `backend/api/routers/approvals.py` | `decide_approval_route` `:326` already injects `schedule_runs`; denial arm `:347-383` discriminates by exception **type**; `evidence_refs=()` `:382` | `:382` resolves through `schedule_runs`; one comment added | the type-based discrimination and the `PostWriteApprovalNotPendingError` re-raise at `:348-349`; the denial arm running **before** any `_store_idempotent_result`; `_ERROR_STATUS` / `_DECISION_DETAIL`; the provenance route's registration above `/{approval_id}` |
+| `backend/application/contracts/decision_provenance.py` | `SCOPE_CONTROLS` has five members `:13-19` | fifth member removed | the other four members and the nine item dataclasses; `ProvenanceCommonV1`'s **field order**, asserted at `tests/test_decision_provenance.py:88-95` |
+| `backend/adapters/postgres/audit.py` | writer dumps with bare `TypeAdapter(tuple)` `:42`; reader rehydrates with `TypeAdapter(tuple[EvidenceRefV1, ...])` `:26` | **nothing** — it goes live unchanged (Decision 6) | both coercions exactly as written; the reader's explicit `site_id` predicate `:52`; the absence of any update or delete method |
+| `backend/tests/test_decision_provenance.py` | five-member `SCOPE_CONTROLS` set assertion `:96-102` | four-member set | the `ProvenanceCommonV1` field-order assertion `:88-95` and the discriminator assertion `:104` |
+| `backend/tests/test_promote_baseline.py` | `_promote` helper calls `promote_baseline` `:49-56` | one argument | `_tx`'s fault-injection arms (`fail_at="audit"` / `"event"`), which prove TX2's rollback contract |
+| `docs/API.md` | denial paragraph `:575-578`; provenance route `:527-533` | one sentence in the denial paragraph | every existing row and code — 4.3's review found a documented code on a route that could not emit it |
+| `frontend/e2e/support/apiStubs.ts` | provenance stub `:216-233`, every item `evidence_refs: []` | one populated reference on the `audit_record` item | the other two items and the deliberately long identifier at `:230`, which is what the no-horizontal-scroll assertion exercises |
+
+### Traps
+
+1. **`revalidate_binding` does NOT load the candidate on the expired path.** It returns at
+   `:73-74`, two lines before the `get_candidate` at `:75`. The correction's summary says "every
+   decision path"; the code says otherwise. Decision 2 — and Task 2's demonstrated-red is the
+   only test that catches it.
+2. **A resolved candidate can carry zero evidence references.** `_input_evidence`
+   (`create_run_snapshot.py:34-55`) derives them from `proposal.resolved_entities` plus
+   `preserved_locks`; neither is guaranteed. Decision 4 — assert **identity**, and build any
+   non-empty fixture explicitly.
+3. **TX2 must not acquire a `schedule_runs` port.** AC2 forbids it by name, and a second read
+   inside the bundle could observe a different row than the one revalidation validated.
+   Decision 5.
+4. **The denial row is a pre-write refusal.** It commits precisely because nothing was written
+   (`decide_approval.py:100-104`; `approvals.py:347-383`). Do not move it, do not make it
+   conditional on revalidation, and do not let the new `get_candidate` call raise past it — a
+   read fault there converts a clean 409 into a rolled-back request.
+5. **A guard that cannot fail is this epic's most-repeated defect.** 4.1's review found two,
+   4.2's a third, 4.3's several, 4.4's a fourth — an import guard blind to `from X import Y`.
+   Every assertion added in Tasks 2, 5, 6 and 7 carries an explicit demonstrated-red; a passing
+   test with no recorded red does not count (EAD-9; spine *Verification Obligations* `:212`).
+6. **A down PostgreSQL makes Task 6's proof pass by skipping.** `conftest.py:66` calls
+   `pytest.skip` when the admin connection fails — deliberately, so the suite does not hang. With
+   Docker down, `pytest` reports green while the round-trip never executed. Assert on the
+   **count** of postgres-marked tests that ran.
+7. **`npm run typecheck` is inert.** The root `tsconfig.json` declares `"files": []`;
+   `npx tsc -b` is what actually type-checks (Story 4.3 Trap 13, 4.4 Trap 12).
+8. **The consequence summary is hashed and is a contract.** Nothing in this story touches it — but
+   the write sites being edited sit beside it. Any edit to `consequence_summary` text changes
+   `consequence_hash` and marks every live pending binding `stale` at revalidation. 4.1 Trap 7,
+   4.2 Trap 6, 4.3 Trap 14, 4.4 Trap 13 all said this.
+9. **Provenance must need no change.** `queries/decision_provenance.py:251` and `:266` already
+   pass `evidence_refs=audit.evidence_refs` straight through. If the projection appears to need
+   editing to show the new references, a write site is wrong — fix the write site.
+
+### Honest gaps this story ships with — state them in Completion Notes
+
+- **The copied references are not independently verified at write time.** Nothing re-checksums
+  them; integrity rests on the `schedule_version` row's immutability and the FK pin. Resolving
+  each locator against its pinned `scenario_version_id` is **Story 4.5's AC3**. Decision 1.
+- **A production audit row can still be legitimately empty** — a proposal that resolved no entity
+  and preserved no lock produces an empty candidate tuple. Decision 4.
+- **Nothing distinguishes a targeted reference from a consulted one in the data.** The distinction
+  is a comment and one documentation sentence; no contract field encodes it. Decision 3.
+- **A write fault inside TX2 still writes no audit row** (Story 4.3's gap, Owner: 4.5), so a
+  rolled-back promotion attempt remains invisible to provenance and carries no references.
+  Inherited, not introduced.
+- **`producing_run_version` is `None` on grounding-calculator evidence** (`calculators.py:142`)
+  and set only on candidate evidence (`finalize_schedule_run.py:82`). Audit rows take the
+  candidate supply, so they carry it; claim-side evidence still does not. Pre-existing.
+
+### Testing requirements
+
+- Backend tests in `backend/tests/`, `test_*.py`, never co-located. PostgreSQL-dependent tests
+  carry `@pytest.mark.postgres` (`pyproject.toml:52`).
+- Keep the epic's three-file split: fake-port **use-case** tests beside each use case's existing
+  file; **router/HTTP-contract** tests in `test_approvals_api.py`; **real-PostgreSQL** tests in
+  `test_approval_governance_postgres.py`.
+- Assertions that live **only** in the `@pytest.mark.postgres` file are deselected from the
+  default suite — Story 4.3's review caught exactly that. Every behavioural claim in AC1 needs a
+  default-suite assertion; the PostgreSQL file proves the **JSONB round-trip** (Task 6), which
+  genuinely needs a real column.
+- Frontend tests co-located, Vitest + Testing Library; assert accessible names and roles, not
+  class names.
+- Accessibility is proven by automated coverage alone (`EXPERIENCE.md:196`).
+- Every new guard needs a recorded demonstrated-red.
+
+### Project structure notes
+
+**No new files in `backend/` or `frontend/src/`.** Every change is an edit to a file that already
+exists, listed in the table above. `backend/alembic/versions/` gains **zero** files — Task 9's
+Alembic check is what proves it.
+
+The one structural addition is a field on `RevalidationV1`, which lives in
+`application/use_cases/decide_approval.py`. It is a use-case-local dataclass: never persisted,
+never serialized, and absent from `api/schemas.py`. Adding to it is not a contract change, and it
+is explicitly **not** the `ApprovalBindingV1` field AC2 forbids.
+
+### Open questions — neither blocks this story
+
+1. **Should the audit row's references be re-resolved at read time?** Story 4.5's AC3 resolves
+   each locator through the evidence-locator contract and reports `resolved` / `not_found` /
+   `version_mismatch`. Whether that resolution belongs in the provenance projection or only in
+   4.5's proof harness is 4.5's to decide. Do not pre-empt it here — adding resolution to the
+   projection would put a fallible call inside the read Story 4.4's AC3 requires to survive
+   outages.
+2. **Carried forward from 4.1–4.4, still unanswered:** should a decision pin the *scenario*
+   version as well as the binding's resource version? Populating audit evidence makes the
+   scenario version visible on a second surface but does not settle it. No story is blocked on it.
+
+### References
+
+- Correction: `_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-01.md` — both
+  vacuities, the rejected `ApprovalBindingV1` snapshot, its Decisions 1–3, the two precisions,
+  and the five success criteria
+- Epic and requirements: `_bmad-output/planning-artifacts/epics.md` — Story 4.4a `:1258-1284`,
+  Story 4.5 *Evidence scope note* `:1292` and AC3 `:1276-1279`, FR20 `:63`, FR21 `:65`,
+  NFR20 `:113`, NFR32 `:137`, NFR33 `:139`, AR12 `:158`, AR23 `:169`, Story 6.2 `:1463`
+- Epic 4 spine:
+  `_bmad-output/planning-artifacts/architecture/architecture-epic-4-2026-08-27/ARCHITECTURE-SPINE.md`
+  — EAD-1, EAD-7 (**reads never write**), EAD-9 (**named supplier or declared gap**, `:101`),
+  EAD-10 (**one revalidation fork**, `:110`), EAD-11, *Verification Obligations* `:212`
+- Parent spine: `.../architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md` — AD-1 `:48`,
+  AD-2 `:54`, AD-3, AD-12, AD-13
+- Previous story: `_bmad-output/implementation-artifacts/4-4-inspect-complete-decision-provenance.md`
+  — its Decision 6 (identifier slots), Decision 8 (declared absence), its **Review Findings**
+  (especially the guard that could not fail), Traps 8, 14, 15, and *Open questions for Winston*
+  Q1, which this story answers
+- Ledger: `_bmad-output/implementation-artifacts/deferred-work.md:590-608` — the entry this story
+  closes, with its **DECIDED 2026-09-01** paragraph
+- Domain: `docs/DOMAIN-MODEL.md` §1 (family/unit), §2 (what an assignment carries), §5
+  (checklist) — this story reads no field inside an evidence reference; see the note under
+  *Facts* above
+- Conventions: `docs/API.md:575-578`, `docs/EVIDENCE-CONVENTION.md`, `docs/TESTING.md`,
+  `docs/GATE-A-RUNBOOK.md`
+- Process: `_bmad-output/implementation-artifacts/epic-3-retro-2026-08-27.md` §1, §3;
+  `epic-1-2-retro-2026-08-16.md` §3.2 (A1), §6.1 (A3)
+
+---
+
+## Dev Agent Record
+
+### Agent Model Used
+
+GPT-5 Codex
+
+### Implementation Plan
+
+- Preserve the single EAD-10 revalidation fork while carrying its already-read candidate through `RevalidationV1`.
+- Copy the sealed candidate evidence tuple opaquely at the four consequential audit write sites; add no snapshot, port, contract field, migration, checksum work, or evidence inspection.
+- Prove identity and honest absence in fake-port tests, then prove the bare-tuple writer → JSONB → typed reader round trip against live PostgreSQL.
+- Exercise the unchanged provenance and rendering consumers, close the declared scope/ledger gap, and run every no-change and regression gate.
+
+### Debug Log References
+
+- Task 1 baseline at `90ccf73` (code-equivalent to `8ebc34f`; intervening delta is planning artifacts): backend 1,457 collected / 1,450 selected / 1,448 passed / 2 skipped / 0 failed / 7 deselected; PostgreSQL 131 selected and actually ran / 131 passed; Vitest 581 passed in 84 files; Playwright 66 passed. PostgreSQL was started before collection. The inherited Story 4.4 backend baseline was stale by four collected tests.
+- Demonstrated red, Task 2: expired attempt resolved a populated candidate but audited `()` while `get_candidate` remained below the expiry return; moving the read above the fork made all 25 decision tests pass.
+- Demonstrated red, Tasks 5–7: reverting each request, terminal-decision, promotion, and denial carrier to `()` failed its identity assertion; forcing the PostgreSQL writer to store `()` failed the live JSONB round-trip assertion; forcing both unchanged provenance pass-throughs to `()` failed the audit-record/baseline-promotion assertion. Each mutation was restored and its focused test returned green.
+- Final verification: backend 1,461 collected / 1,454 selected / 1,452 passed / 2 skipped / 0 failed / 7 deselected; PostgreSQL 131 selected and actually ran / 131 passed; Vitest 581 passed in 84 files; Playwright 66 passed; `npx tsc -b`, `npm run lint`, and `git diff --check` clean. Alembic reported `No new upgrade operations detected`; migration delta was zero. `npm run codegen` produced content-identical `openapi.json` and `schema.d.ts`.
+
+### Completion Notes List
+
+- All four consequential audit write paths now carry the exact immutable `ScheduleVersionV1.evidence_refs` tuple; an unresolved denial candidate writes honest `()`.
+- `RevalidationV1` carries the candidate on valid, stale, and expired outcomes, and TX2 receives that candidate as a keyword-only parameter without acquiring a repository.
+- The live PostgreSQL cycle proves populated `EvidenceRefV1` objects survive the existing bare `TypeAdapter(tuple)` writer, JSONB, and typed reader with UUID, producing run version, and checksum triple intact.
+- Audit-sourced provenance and the existing timeline renderer now have backend, Vitest, and Playwright coverage; neither production consumer required a change.
+- Removed the obsolete audit-evidence scope control, closed the deferred-work entry, and documented that denial references describe the targeted candidate rather than consulted evidence.
+- No evidence file was created because this story has no measured threshold. No dependency, migration, table, column, port, API field, generated contract change, or `ApprovalBindingV1` field was introduced.
+- Honest gaps retained: copied references are not independently re-checksummed at write time; candidates may legitimately carry an empty tuple; targeted vs consulted is not encoded as a discriminant; rolled-back TX2 failures remain unaudited; grounding-calculator evidence may still have `producing_run_version=None`.
+
+### File List
+
+- `_bmad-output/implementation-artifacts/4-4a-supply-audit-evidence-references.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/api/routers/approvals.py`
+- `backend/application/contracts/decision_provenance.py`
+- `backend/application/use_cases/decide_approval.py`
+- `backend/application/use_cases/promote_baseline.py`
+- `backend/application/use_cases/request_approval.py`
+- `backend/tests/test_approval_governance_postgres.py`
+- `backend/tests/test_approval_request.py`
+- `backend/tests/test_approvals_api.py`
+- `backend/tests/test_decide_approval.py`
+- `backend/tests/test_decision_provenance.py`
+- `backend/tests/test_promote_baseline.py`
+- `docs/API.md`
+- `frontend/e2e/support/apiStubs.ts`
+- `frontend/src/features/provenance/ProvenanceTimeline.test.tsx`
+
+---
+
+## Change Log
+
+| Date | Change |
+|---|---|
+| 2026-09-01 | Story created from `epics.md:1258-1284`, `sprint-change-proposal-2026-09-01.md`, the Epic 4 spine (EAD-7, EAD-9, EAD-10), Story 4.4's Dev Notes, Review Findings and Open Question 1, and a live audit of the codebase at `8ebc34f`. |
+| 2026-09-01 | Implemented candidate evidence-reference carriage at all four audit write sites, live JSONB/provenance/rendering proof, scope and ledger closure, documentation, and full verification; status moved to review. |
+| 2026-09-01 | Adversarial code review (Blind Hunter, Edge Case Hunter, Acceptance Auditor). Two decisions resolved — D1 → option (c), a narrow `ValidationError` guard at the denial-site read; D2 → option (a), production-shaped provenance fixtures. All nine patches applied, three findings deferred to the ledger, five dismissed. Status moved to done. |

@@ -150,7 +150,7 @@ def request_approval(
         action="promote_baseline", outcome="approval_requested", success=True, effect_key=command.request_effect_key,
         before_version=current_baseline, after_version=None, safe_summary=summary, parameter_hash=parameter_hash,
         consequence_hash=consequence_hash, policy_version=binding.policy_version, app_version=app_version,
-        worker_facts=WorkerFactsV1(), evidence_refs=(), occurred_at=now,
+        worker_facts=WorkerFactsV1(), evidence_refs=candidate.evidence_refs, occurred_at=now,
     ))
     if command.agent_run_id is not None:
         activity = conversations.pause_agent_run_for_approval(connection, claimed_agent_run_id=command.agent_run_id, binding=binding, request_id=command.request_id)

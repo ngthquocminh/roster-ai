@@ -45,6 +45,7 @@ class RevalidationV1:
     outcome: Literal["expired", "stale"] | None
     expected: dict
     current: dict
+    candidate: Any
 
 @dataclass(frozen=True)
 class DecisionResultV1:
@@ -70,9 +71,9 @@ def revalidate_binding(connection: Any, *, binding: ApprovalBindingV1, schedule_
 
     Transactional/infrastructure read faults propagate as the second arm.
     """
-    if binding.expires_at is not None and now >= binding.expires_at:
-        return RevalidationV1("expired", {"expires_at": binding.expires_at.isoformat()}, {"now": now.isoformat()})
     candidate = schedule_runs.get_candidate(connection, schedule_run_id=binding.schedule_run_id, site_id=binding.site_id)
+    if binding.expires_at is not None and now >= binding.expires_at:
+        return RevalidationV1("expired", {"expires_at": binding.expires_at.isoformat()}, {"now": now.isoformat()}, candidate)
     run = schedule_runs.get_run(connection, run_id=binding.schedule_run_id, site_id=binding.site_id)
     baseline = baselines.get(connection, binding.site_id)
     _, _, consequence_hash = contract_digest({"consequence_summary": binding.consequence_summary})
@@ -90,8 +91,8 @@ def revalidate_binding(connection: Any, *, binding: ApprovalBindingV1, schedule_
     # own resource version is unrelated and must never be used as a proxy.
     valid = active_initiator and valid_candidate and run is not None and current_baseline == binding.baseline_schedule_version and (baseline.resource_version if baseline else None) == binding.baseline_resource_version and parameter_hash == binding.parameter_hash and consequence_hash == binding.consequence_hash and current_policy == binding.policy_version
     if valid:
-        return RevalidationV1(None, {}, {})
-    return RevalidationV1("stale", {"candidate_schedule_version_id": str(binding.candidate_schedule_version_id), "baseline_schedule_version": binding.baseline_schedule_version, "parameter_hash": binding.parameter_hash, "consequence_hash": binding.consequence_hash, "policy_version": binding.policy_version, "initiating_actor_membership": "active"}, {"candidate_schedule_version_id": str(candidate.schedule_version_id) if candidate else None, "baseline_schedule_version": current_baseline, "parameter_hash": parameter_hash, "consequence_hash": consequence_hash, "policy_version": current_policy, "initiating_actor_membership": "active" if active_initiator else "revoked_or_absent"})
+        return RevalidationV1(None, {}, {}, candidate)
+    return RevalidationV1("stale", {"candidate_schedule_version_id": str(binding.candidate_schedule_version_id), "baseline_schedule_version": binding.baseline_schedule_version, "parameter_hash": binding.parameter_hash, "consequence_hash": binding.consequence_hash, "policy_version": binding.policy_version, "initiating_actor_membership": "active"}, {"candidate_schedule_version_id": str(candidate.schedule_version_id) if candidate else None, "baseline_schedule_version": current_baseline, "parameter_hash": parameter_hash, "consequence_hash": consequence_hash, "policy_version": current_policy, "initiating_actor_membership": "active" if active_initiator else "revoked_or_absent"}, candidate)
 
 def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approvals: Any, schedule_runs: Any, baselines: Any, baseline_writer: Any, memberships: Any, audit_writer: Any, conversations: Any, scheduling_baseline_enabled: bool, clock: Any, app_version: str = "0.1.0") -> DecisionResultV1:
     if not scheduling_baseline_enabled: raise ApprovalNotGrantedError("baseline approval is not granted by policy")
@@ -111,7 +112,7 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
             from application.use_cases.promote_baseline import promote_baseline
             try:
                 promoted = promote_baseline(
-                    connection, binding=binding, actor_id=command.actor_id,
+                    connection, binding=binding, candidate=check.candidate, actor_id=command.actor_id,
                     request_id=command.request_id, approvals=approvals,
                     baseline_writer=baseline_writer, audit_writer=audit_writer,
                     conversations=conversations, occurred_at=now,
@@ -137,7 +138,8 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
     reason = f"approval_{outcome}"
     if terminal.agent_run_id is not None:
         conversations.cancel_agent_run_for_approval(connection, agent_run_id=terminal.agent_run_id, binding=terminal, reason=reason)
-    audit_writer.append(connection, AuditEnvelopeV1(audit_id=uuid4(), attempt_id=uuid4(), request_id=command.request_id, site_id=command.site_id, initiated_by_actor_id=terminal.initiated_by_actor_id, decided_by_actor_id=command.actor_id, conversation_id=terminal.conversation_id, agent_run_id=terminal.agent_run_id, approval_id=terminal.approval_id, schedule_run_id=terminal.schedule_run_id, action=terminal.action, outcome=f"approval_{outcome}", success=True, effect_key=terminal.request_effect_key, before_version=terminal.baseline_schedule_version, after_version=None, safe_summary=terminal.consequence_summary, parameter_hash=terminal.parameter_hash, consequence_hash=terminal.consequence_hash, policy_version=terminal.policy_version, app_version=app_version, worker_facts=WorkerFactsV1(), evidence_refs=(), occurred_at=now))
+    candidate = check.candidate
+    audit_writer.append(connection, AuditEnvelopeV1(audit_id=uuid4(), attempt_id=uuid4(), request_id=command.request_id, site_id=command.site_id, initiated_by_actor_id=terminal.initiated_by_actor_id, decided_by_actor_id=command.actor_id, conversation_id=terminal.conversation_id, agent_run_id=terminal.agent_run_id, approval_id=terminal.approval_id, schedule_run_id=terminal.schedule_run_id, action=terminal.action, outcome=f"approval_{outcome}", success=True, effect_key=terminal.request_effect_key, before_version=terminal.baseline_schedule_version, after_version=None, safe_summary=terminal.consequence_summary, parameter_hash=terminal.parameter_hash, consequence_hash=terminal.consequence_hash, policy_version=terminal.policy_version, app_version=app_version, worker_facts=WorkerFactsV1(), evidence_refs=candidate.evidence_refs if candidate is not None else (), occurred_at=now))
     # `agent_run_status` is stated, not inferred: the cancellation above already
     # replaced `approval_required`, and Story 4.3 consumes this value.
     activity = conversations.append_approval_request_activity(connection, binding=terminal, actor_id=command.actor_id, request_id=command.request_id, agent_run_id=terminal.agent_run_id, occurred_at=now, agent_run_status="agent_cancelled" if terminal.agent_run_id is not None else None)

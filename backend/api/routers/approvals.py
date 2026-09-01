@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, Header, Query
 from sqlalchemy import Connection, select
 from sqlalchemy.exc import IntegrityError
+from pydantic import ValidationError
 
 from api.deps import AgentRuntimeFactory, CapabilityComposer, PostCommitActions, SiteContextOpener, get_agent_runtime_factory, get_approval_repository, get_audit_reader, get_audit_writer, get_capability_registry, get_clock, get_conversation_repository, get_membership_reader, get_post_commit_actions, get_projection_reader, get_proposal_repository, get_schedule_run_repository, get_session, get_settings, get_site_baseline_reader, get_site_baseline_writer, get_site_context, get_site_context_opener
 from api.problems import problem_response
@@ -366,6 +367,19 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
         ):
             denied = approvals.get(connection, approval_id=approval_id, site_id=session.site_id)
             if denied is not None:
+                try:
+                    candidate = schedule_runs.get_candidate(
+                        connection, schedule_run_id=denied.schedule_run_id, site_id=session.site_id
+                    )
+                except ValidationError:
+                    # A stored `schedule_version.payload` that no longer validates is a
+                    # PERMANENT condition: a retry cannot heal it, and letting it escape
+                    # this handler would roll back and lose the FR21 denial row for good.
+                    # Record honest absence so the row and its 409 both still commit.
+                    # A transactional fault is deliberately NOT caught -- it is transient,
+                    # and this arm stores no idempotent result, so the client's retry
+                    # re-enters here and writes a row carrying the real references.
+                    candidate = None
                 audit_writer.append(connection, AuditEnvelopeV1(
                     audit_id=uuid4(), attempt_id=uuid4(), request_id=decision_request_id,
                     site_id=session.site_id, initiated_by_actor_id=denied.initiated_by_actor_id,
@@ -379,7 +393,11 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
                     parameter_hash=denied.parameter_hash,
                     consequence_hash=denied.consequence_hash,
                     policy_version=denied.policy_version, app_version="0.1.0",
-                    worker_facts=WorkerFactsV1(), evidence_refs=(), occurred_at=now,
+                    worker_facts=WorkerFactsV1(),
+                    # These references identify the candidate the refused attempt
+                    # targeted; the admission check consulted no candidate evidence.
+                    evidence_refs=candidate.evidence_refs if candidate is not None else (),
+                    occurred_at=now,
                 ))
         return problem_response(status=_ERROR_STATUS.get(exc.code, 422), code=exc.code, title="Approval decision could not be completed", detail=_DECISION_DETAIL.get(exc.code, _DECISION_DETAIL_FALLBACK), extra=_context(exc.expected, exc.current))
     output = _out(result.binding, now)
