@@ -98,6 +98,7 @@ def test_provenance_contract_is_closed_and_carries_every_identifier_slot() -> No
         "tool_proposals:approval_triggering_call_only",
         "comparison:linked_by_reference_never_recomputed",
         "payload:identity_only_never_turn",
+        "audit_evidence_refs:mirrors_targeted_candidate",
     }
     assert DecisionProvenanceItemOut.__metadata__[0].discriminator == "item_type"
 

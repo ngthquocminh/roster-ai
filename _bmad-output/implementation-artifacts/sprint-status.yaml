@@ -1996,7 +1996,93 @@ development_status:
   # renders none today. Story 4.6's state matrix must expect it. AuditOutcomeV1's three-way drift
   # is already closed (audit_envelope.py:12-15 now carries all six members) -- no action.
   4-4a-supply-audit-evidence-references: done
-  4-5-prove-approval-and-audit-invariants: backlog
+  # NOTE (2026-09-01): Story 4.5 created. It is EPIC 4'S PROOF STORY and lands exactly ONE
+  # production line -- a positive SCOPE_CONTROLS member (Decision 12, closing deferred-work.md:623).
+  # Everything else is a test, a generator, a Gate A registry entry, or a generated artifact. NO
+  # migration, table, column, route, port, contract field, setting or dependency, and a ZERO-LINE
+  # frontend diff.
+  #
+  # THIRTEEN DECISIONS ARE RECORDED IN THE STORY. Five a fresh reading would get wrong:
+  # (1) THE PROOF MATRIX IS THE SPINE'S SEVEN VERIFICATION OBLIGATIONS, not a re-derivation from
+  #     the ACs. The spine assigns them to "Story 4.5/4.6" jointly without dividing them; the story
+  #     takes 1,2,3,5,6,7 in full plus obligation 4's BACKEND half (an overdue pending binding read
+  #     through any pure path writes nothing -- EAD-7). 4.6 takes obligation 4's rendering half.
+  #     AC1's fixture list names no reconnect fixture, which is why the split falls there.
+  # (2) THE TWO EXISTING LOST-CAS TESTS LOOK LIKE AC2 AND ARE NOT. They inject a repository method
+  #     returning None -- a BUSINESS outcome, which is EAD-10's OTHER fork arm. AC2 needs a genuine
+  #     INFRASTRUCTURE fault. Mechanism: the same delegating-wrapper pattern (__getattr__ forwarding
+  #     to the real adapter) but the one overridden method RAISES a driver error, injected through
+  #     app.dependency_overrides on get_approval_repository / get_site_baseline_writer /
+  #     get_audit_writer / get_conversation_repository. It must ESCAPE the route uncaught, or
+  #     get_site_context commits the partial bundle -- Story 4.3's contract, in promote_baseline.py's
+  #     module docstring. Four fault points, then retry-once-after-clear.
+  # (3) AC3 RESOLVES IN THE TEST, THROUGH THE SIX resolve_* METHODS -- NEVER through grounding/
+  #     gate.py. _locator_failure is claim-scoped AND RELABELS the vocabulary: a raw not_found
+  #     becomes "calculation_failed", so a test reusing it can never observe the three-member
+  #     ResolutionOutcomeV1 vocabulary AC3 names. 4.4a left this fork open deliberately -- adding
+  #     resolution to the provenance READ would put a fallible call inside the read Story 4.4's AC3
+  #     requires to survive an outage.
+  # (4) resolve_assignment AND resolve_lock SEARCH `lambda: ()`. Every ref in the locks or
+  #     baseline-assignments group is UNCONDITIONALLY not_found once the version matches, and
+  #     candidate evidence_refs DO carry a "locks" ref per preserved lock
+  #     (create_run_snapshot.py:_input_evidence). AC3 says "resolved ... OR reports not_found or
+  #     version_mismatch explicitly", so this SATISFIES AC3 -- but only if the assertion is
+  #     PER GROUP. A blanket "every ref resolved" either fails honestly or passes because no fixture
+  #     produced a locks ref.
+  # (5) "A LOCATOR WHOSE PINNED SCENARIO VERSION NO LONGER RESOLVES" IS BUILT BY SEEDING A
+  #     SUPERSEDING scenario_version ROW, never an orphan uuid4(). _projection_row selects the
+  #     CURRENT version (ordinal desc, limit 1), so a newer row is what makes a pinned one mismatch.
+  #     4.4a's own review caught the orphan-UUID shape; its fix is why _seed_candidate_run binds its
+  #     refs to ids["scenario_version"] and names THIS STORY in the inline comment.
+  #
+  # AC4 CARRIES THE SAME DEFECT CLASS THE 2026-09-01 CORRECTION REMOVED FROM AC3, and it was never
+  # re-examined -- that proposal recorded "AC1, AC2, AC4 untouched" (:71). Its two premises differ:
+  # "telemetry export disabled" has a REAL local subject and is already half-proven
+  # (test_authoritative_audit_survives_a_failing_span_exporter, the Story 4.3 review patch, covers
+  # APPROVE AND DENIAL ONLY -- 4.5 extends it to rejected/expired/stale, which is what AC4 names).
+  # "CloudWatch degraded independently" has NO local subject: zero backend source files mention it,
+  # and it is assigned to Epic 6 in three independent places -- agent_availability.py's
+  # SCOPE_CONTROLS, deferred-work.md:506, and Story 3.9's Decision E, which resolved a
+  # STRUCTURALLY IDENTICAL clause. Follow 3.9 verbatim: mark NOT COVERED with the owner, DO NOT
+  # BUILD A CLOUDWATCH DOUBLE, and carry the wording defect to the EPIC 4 RETROSPECTIVE. Striking
+  # it from epics.md would be a course correction, not a story.
+  #
+  # "BLOCKS RELEASE" IS A REGISTRY ENTRY, NOT A SENTENCE. One new Invariant in NFR29_GATES (not
+  # AR28_INVARIANTS) plus TWO GateAChecks -- evidence and machinery -- because
+  # GateACheck.__post_init__ RAISES when one check declares both evidence_path and test_files.
+  # THE REGISTERED-EVIDENCE-PATH SET IN test_gate_a_readiness.py IS AN EXACT EQUALITY of five
+  # paths; adding the artifact to gate_a_checks.py without adding it there reddens a test that
+  # reads as unrelated. Two existing guards do the work and must be seen failing first:
+  # test_every_invariant_has_at_least_one_contributing_check and
+  # test_registry_covers_more_than_the_four_evidence_files.
+  #
+  # GENERATOR SHAPE IS 3.11's, NOT 3.12's -- a matrix of independently orchestrated pytest nodes,
+  # so backend/evals/approval_audit_report.py with PROOF_NODES, FAILURE_MODE_GATES, a
+  # never-raises-mid-loop measure loop, and _junit_outcome. THE SKIP RULE IS THE WHOLE POINT: every
+  # node here is PostgreSQL-backed and governed_postgres_engine calls pytest.skip when the service
+  # is down, so a generator trusting returncode == 0 stamps the entire matrix passed with the
+  # database off.
+  #
+  # AC1'S "runs on the Story 2.2 harness" DOES NOT MEAN GOLDEN CASES. Settled by Story 3.10 and
+  # followed by 3.11/3.12, all three of which contributed zero: for a proof with no model-facing
+  # surface it means the harness's shared machinery (deterministic doubles, resolve_bindings(), the
+  # dual-track run). GOLDEN TOTAL IS UNCHANGED. Do not pad.
+  #
+  # LEDGER: closes :623 (Decision 12) and :627 (Decision 13, build own evidence fixtures rather
+  # than inheriting test_decide_approval.Runs). RE-POINTS :564 rather than implementing it -- that
+  # entry names 4.5 as owner, but READ AC2: it requires rollback, binding stays pending, and
+  # retry-once. It does NOT ask for a durable audit row describing the faulted attempt, and writing
+  # one needs a second connection and a failure-recording policy no epic decision supplies. The
+  # frozen AC governs over the ledger's owner string. LEAVES OPEN AND UNTOUCHED: :506, :572, :574,
+  # :625 -- the last two are SPECIFIED behaviour to be proven stable, never fixed here.
+  #
+  # NO NEW GOLDEN CASE. NO FRONTEND OR PLAYWRIGHT CHANGE.
+  #
+  # BASELINES INHERITED FROM 4.4, NOT VERIFIED: backend 1426 passed / 3 failed / 7 skipped;
+  # PostgreSQL 127 passed / 1 failed; frontend 575 passed; Playwright 62 passed. Re-derive at
+  # Task 1 before attributing any failure to this story. The three backend failures were recorded
+  # as external and pre-existing.
+  4-5-prove-approval-and-audit-invariants: done
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
   epic-4-retrospective: optional
 

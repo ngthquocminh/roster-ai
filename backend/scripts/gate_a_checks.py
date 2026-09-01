@@ -93,6 +93,11 @@ NFR29_GATES: tuple[Invariant, ...] = (
         "Repair browser journey (draft, run, reconnect, terminal outcome, comparison, evidence targeting)",
         "NFR29",
     ),
+    Invariant(
+        "approval_and_audit_invariants",
+        "Approval atomicity, idempotency, and authoritative audit integrity",
+        "NFR29",
+    ),
 )
 
 #: Neither AR28's nor NFR29's, but AC2's: "any missing or unbound contributing
@@ -523,6 +528,22 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         ),
         runner="pytest",
         test_files=("backend/tests/test_repair_journey_evidence.py",),
+    ),
+    # ---------------------------------------------------------------- 4.5
+    GateACheck(
+        check="approval_and_audit_invariants_proof",
+        story="4.5",
+        invariant="approval_and_audit_invariants",
+        description="Exact PostgreSQL approval/audit proof matrix bound to a generated release verdict.",
+        evidence_path="evidence/story-4.5/approval-audit-invariants.json",
+    ),
+    GateACheck(
+        check="approval_audit_report_machinery",
+        story="4.5",
+        invariant="approval_and_audit_invariants",
+        description="Live machinery guard: skipped PostgreSQL proof nodes cannot be reported as passing.",
+        runner="pytest",
+        test_files=("backend/tests/test_approval_audit_report.py",),
     ),
 )
 

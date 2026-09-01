@@ -1254,13 +1254,46 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
         url, headers=_governance_headers(settings, key="otel-success"),
         json={"decision": "approve", "expected_resource_version": 1},
     )
+    additional: list[tuple[object, str]] = []
+    for expected_outcome in ("rejected", "expired", "stale"):
+        extra = _seed_candidate_run(
+            engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2
+        )
+        with site_context(engine, site_ids["site"]) as c:
+            live = PostgresSiteBaselineReader().get(c, site_ids["site"])
+            extra_binding = request_approval(
+                c,
+                command=RequestApprovalCommandV1(
+                    site_id=site_ids["site"], actor_id=site_ids["actor"],
+                    schedule_run_id=extra["schedule_run"], expected_resource_version=2,
+                    expected_baseline_schedule_version=str(live.schedule_version_id),
+                    request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+                    conversation_id=extra["conversation"],
+                ),
+                **_use_case_dependencies(),
+            ).binding
+        if expected_outcome == "expired":
+            with engine.begin() as c:
+                c.execute(update(approval_request).where(approval_request.c.id == extra_binding.approval_id).values(expires_at=NOW))
+        elif expected_outcome == "stale":
+            with engine.begin() as c:
+                c.execute(update(schedule_run).where(schedule_run.c.id == extra["schedule_run"]).values(resource_version=3))
+        with tracer.start_as_current_span(f"before-{expected_outcome}"):
+            pass
+        extra_response = client.post(
+            f"/api/v1/approvals/{extra_binding.approval_id}/decision",
+            headers=_governance_headers(settings, key=f"otel-{expected_outcome}"),
+            json={"decision": "reject" if expected_outcome == "rejected" else "approve", "expected_resource_version": 1},
+        )
+        additional.append((extra_binding.approval_id, expected_outcome))
+        assert extra_response.status_code == (200 if expected_outcome == "rejected" else 409)
     with tracer.start_as_current_span("after-success"):
         pass
 
     assert denial.status_code == 409 and denial.json()["code"] == "stale_resource_version"
     assert success.status_code == 200 and success.json()["state"] == "consumed"
     # The exporter really ran and really failed; without this the case is vacuous.
-    assert exporter.calls >= 3
+    assert exporter.calls >= 6
     with governed_postgres_engine.connect() as c:
         rows = c.execute(
             select(audit_event.c.outcome, audit_event.c.success).where(
@@ -1274,6 +1307,12 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
     assert ("approval_denied", False) in outcomes
     assert ("approval_consumed", True) in outcomes
     assert baseline_row.schedule_version_id == ids["candidate"]
+    with engine.connect() as c:
+        for approval_id, expected_outcome in additional:
+            assert c.execute(select(audit_event.c.outcome).where(
+                audit_event.c.approval_id == approval_id,
+                audit_event.c.outcome == f"approval_{expected_outcome}",
+            )).scalar_one() == f"approval_{expected_outcome}"
     provider.shutdown()
 
 

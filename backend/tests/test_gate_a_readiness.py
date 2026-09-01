@@ -101,6 +101,7 @@ def test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant():
         # the proof was unbound, not because it held.
         "recovery_and_idempotency",
         "repair_browser_journey",
+        "approval_and_audit_invariants",
     )
     assert all(inv.authority == "NFR29" for inv in NFR29_GATES)
     ar28_keys = {inv.key for inv in AR28_INVARIANTS}
@@ -274,6 +275,9 @@ def test_registered_evidence_files_are_the_five_known_ones():
         # Story 3.12 pairs this clean-tree browser measurement with the live
         # Playwright journey check registered on the same invariant.
         "evidence/story-3.12/repair-browser-journey.json",
+        # Story 4.5 deliberately adds a sixth stored measurement and pairs it
+        # with a live machinery check so the invariant never rests on a flag.
+        "evidence/story-4.5/approval-audit-invariants.json",
     }
 
 
