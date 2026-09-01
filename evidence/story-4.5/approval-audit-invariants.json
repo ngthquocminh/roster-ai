@@ -4,9 +4,16 @@
     "audit integrity": {
       "gates": [
         "evidence_resolution",
+        "evidence_rejected",
+        "evidence_expired",
+        "evidence_stale",
+        "evidence_denied",
+        "evidence_absent",
         "version_mismatch",
         "telemetry_independence",
-        "audit_integrity"
+        "telemetry_disabled",
+        "audit_integrity",
+        "repeated_denials"
       ],
       "passed": true
     },
@@ -39,13 +46,19 @@
         "fault_consume",
         "fault_baseline",
         "fault_audit",
-        "fault_event"
+        "fault_event_resume",
+        "fault_event_activity"
       ],
       "passed": true
     },
     "stale/expired/rejected": {
       "gates": [
         "mismatch",
+        "altered_parameter",
+        "changed_baseline",
+        "replaced_candidate",
+        "changed_policy",
+        "repeated_decision",
         "expiry",
         "rejection"
       ],
@@ -53,12 +66,44 @@
     }
   },
   "gates": {
+    "altered_parameter": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_altered_parameter_terminalizes_stale",
+      "passed": true
+    },
     "audit_integrity": {
       "node": "tests/test_approval_audit_invariants_postgres.py::test_audit_uniqueness_covers_the_closed_outcome_vocabulary",
       "passed": true
     },
+    "changed_baseline": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_changed_baseline_terminalizes_stale",
+      "passed": true
+    },
+    "changed_policy": {
+      "node": "tests/test_decide_approval.py::test_every_non_baseline_business_mismatch_terminalizes_stale[policy_version]",
+      "passed": true
+    },
+    "evidence_absent": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_denial_whose_candidate_is_absent_carries_an_empty_set",
+      "passed": true
+    },
+    "evidence_denied": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_every_audit_outcome_carries_resolvable_evidence_refs[denied]",
+      "passed": true
+    },
+    "evidence_expired": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_every_audit_outcome_carries_resolvable_evidence_refs[expired]",
+      "passed": true
+    },
+    "evidence_rejected": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_every_audit_outcome_carries_resolvable_evidence_refs[rejected]",
+      "passed": true
+    },
     "evidence_resolution": {
       "node": "tests/test_approval_audit_invariants_postgres.py::test_audit_evidence_refs_resolve_by_group",
+      "passed": true
+    },
+    "evidence_stale": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_every_audit_outcome_carries_resolvable_evidence_refs[stale]",
       "passed": true
     },
     "expiry": {
@@ -77,8 +122,12 @@
       "node": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[consume]",
       "passed": true
     },
-    "fault_event": {
-      "node": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[event]",
+    "fault_event_activity": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[event_activity]",
+      "passed": true
+    },
+    "fault_event_resume": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_faulted_tx2_rolls_back_and_retries_once[event_resume]",
       "passed": true
     },
     "initial_promotion": {
@@ -97,12 +146,28 @@
       "node": "tests/test_approval_audit_invariants_postgres.py::test_rejection_terminalizes_rejected",
       "passed": true
     },
+    "repeated_decision": {
+      "node": "tests/test_approval_governance_postgres.py::test_approve_route_replays_once_rejects_conflicts_and_audits_denials",
+      "passed": true
+    },
+    "repeated_denials": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_repeated_denials_keep_distinct_attempts_full_refs_and_identity_roles",
+      "passed": true
+    },
+    "replaced_candidate": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_replaced_candidate_terminalizes_stale",
+      "passed": true
+    },
     "replacement": {
       "node": "tests/test_approval_audit_invariants_postgres.py::test_replacement_is_exactly_once",
       "passed": true
     },
     "replay": {
       "node": "tests/test_approval_audit_invariants_postgres.py::test_command_replay_is_idempotent",
+      "passed": true
+    },
+    "telemetry_disabled": {
+      "node": "tests/test_approval_audit_invariants_postgres.py::test_approval_audit_path_has_no_telemetry_import_dependency",
       "passed": true
     },
     "telemetry_independence": {
@@ -114,7 +179,7 @@
       "passed": true
     }
   },
-  "generated_at": "2026-09-01T10:36:13.095715+00:00",
+  "generated_at": "2026-09-01T15:42:18.006329+00:00",
   "honest_gaps": [
     "NOT COVERED: diagnosis:cloudwatch_owned_by_epic_6",
     "TX2 infrastructure faults leave no durable server-side attempt row",
@@ -127,17 +192,20 @@
   "version_bindings": {
     "application": "ShiftMind Epic 4 consequential approval workflow",
     "code": {
-      "git_commit": "d3f73915f05d009f1e35a538b27147959869ff81",
+      "git_commit": "f9ea3e2cbf690149ba0da40a42d8cdddeee2fc1f",
       "working_tree_dirty": false
     },
     "dataset": {
-      "file_count": 2,
+      "file_count": 3,
       "files": {
         "backend/tests/test_approval_audit_invariants_postgres.py": {
-          "sha256": "3324ad408bb58ca4064ec4bcdfe0500c5d5a122db68590fc05cc0c8c8af253d8"
+          "sha256": "3112bba25755399f71364463cc9a5e88fd1ec130792868076e52b83aeeee6af9"
         },
         "backend/tests/test_approval_governance_postgres.py": {
           "sha256": "184e64e313223d771711563f9ea4864608b3a3be62f8d47a210ff82a6d6d9b53"
+        },
+        "backend/tests/test_decide_approval.py": {
+          "sha256": "dab4dbd9b4893bda5777c49fb00195a95ebe3fbcb8233be297074df0da565146"
         }
       },
       "kind": "version-controlled evaluation fixture artifacts"
