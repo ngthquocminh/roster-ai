@@ -1939,6 +1939,63 @@ development_status:
   # Task 1 before attributing any failure to this story. The three backend failures are external
   # and pre-existing (two retired-slug OpenRouter cases, one conftest-import fixture).
   4-4-inspect-complete-decision-provenance: done
+  # NOTE (2026-09-01): Story 4.4a INSERTED by course correction
+  # (sprint-change-proposal-2026-09-01.md). It is a write-path carrier that must complete BEFORE
+  # 4.5, and it carries a SUFFIX rather than a number because renumbering 4.5/4.6 would falsify
+  # "4.5-4.6" in nine places across seven shipped story files, including Story 2.2's Unblocks
+  # contract and four verbatim quotes of the NFR28 Gate-B floor rationale.
+  #
+  # TRIGGER: Story 4.5's AC3 (epics.md:1276-1279) could not be proven as written. Two independent
+  # vacuities, both verified at a8412b2:
+  # (1) Its object-storage premise had NO SUBJECT. No evidence port, evidence adapter, or object
+  #     store exists -- grep for s3|object_storage|ObjectStore|EvidenceWriter|EvidenceStore over
+  #     application/ and adapters/ returns ZERO hits. Here evidence is a version-bound projection
+  #     locator (EvidenceRefV1), never a stored object. AR12/AR23's create-only S3 evidence is a
+  #     HOSTED requirement already owned by Story 6.2 (epics.md:1463).
+  #     This is a SECOND-ORDER FAILURE: sprint-change-proposal-2026-08-09-epics-2-5.md:149 already
+  #     corrected this AC once, removing the hosted dependency but KEEPING the object-storage
+  #     premise without checking that a subject existed. The premise is now removed, not softened
+  #     a third time.
+  # (2) Its third clause was unfalsifiable on the AUDIT half only. audit_event.evidence_refs is a
+  #     literal () at all four write sites (request_approval.py:153, decide_approval.py:140,
+  #     promote_baseline.py:161, approvals.py:382), and AuditEnvelopeV1.evidence_refs has NO
+  #     DEFAULT, so every site passes it explicitly. NOTE THE HALF: the PROVENANCE half was already
+  #     live -- decision_provenance.py:127 sets evidence_refs=candidate_refs, non-empty and
+  #     checksum-bound. Only :251 and :266, the audit-sourced items, replay the empty tuple.
+  #
+  # MECHANISM DECIDED AGAINST THE ORIGINAL PROPOSAL. The proposal was to snapshot evidence_refs
+  # onto ApprovalBindingV1 at request time, matching parameter_hash/consequence_hash. REJECTED as
+  # heavier than the code requires: THREE OF FOUR SITES ALREADY HOLD THE CANDIDATE.
+  # request_approval.py:104 binds it; revalidate_binding (decide_approval.py:75) loads it on EVERY
+  # decision path, approve and reject alike, then discards it; promote_baseline is called only from
+  # decide_approval.py:113 so it takes a parameter, not a port; and decide_approval_route ALREADY
+  # injects ScheduleRunRepository (approvals.py:327), so even the denial site needs no new
+  # dependency. The pinning argument is weaker than it looks: parameter_hash/consequence_hash are
+  # snapshotted because they are DERIVED OVER MUTABLE INPUTS that revalidate_binding:91 re-derives
+  # and compares; evidence_refs are not derived -- they live inside an immutable
+  # canonical_hash-sealed schedule_version row that candidate_schedule_version_id already FK-pins.
+  # A snapshot would add a second copy that cannot diverge, plus a migration and a
+  # near-tautological drift test. NO MIGRATION, NO CONTRACT FIELD, NO NEW PORT -- AC2 forbids all
+  # three by name.
+  #
+  # THE DENIAL ROW IS POPULATED TOO, settled by spec rather than preference: FR21 (epics.md:65)
+  # names "successful, DENIED, stale, failed, and cancelled" consequential actions, and NFR32
+  # (:137) requires audit to capture immutable evidence references unqualified. Two precisions the
+  # story must keep: get_candidate returns ScheduleVersionV1 | None, so the residual () is HONEST
+  # ABSENCE and the AC must not assert non-empty unconditionally; and the denial fires at the
+  # admission check BEFORE revalidation runs, so the refs identify what the attempt TARGETED, not
+  # what it consulted.
+  #
+  # CLOSES the Story 4.4 declared gap: SCOPE_CONTROLS[4]
+  # "audit_evidence_refs:empty_at_every_write_site" (decision_provenance.py:18) is removed, and
+  # deferred-work.md:590 -- whose own trigger reads "decide before Story 4.5 is created" -- closes
+  # in the same commit.
+  #
+  # EXPECT a visible consequence: decision_provenance.py:251/:266 begin returning non-empty
+  # references, so the Provenance section renders evidence links on audit-sourced items where it
+  # renders none today. Story 4.6's state matrix must expect it. AuditOutcomeV1's three-way drift
+  # is already closed (audit_envelope.py:12-15 now carries all six members) -- no action.
+  4-4a-supply-audit-evidence-references: backlog
   4-5-prove-approval-and-audit-invariants: backlog
   4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
   epic-4-retrospective: optional

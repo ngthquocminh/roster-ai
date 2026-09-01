@@ -1255,11 +1255,41 @@ So that I can reconstruct what happened without access to hidden model reasoning
 **Then** site scope is revalidated and protected existence/value is not disclosed
 **And** the normal application path cannot update or delete audit events. (FR21, NFR33)
 
+### Story 4.4a: Supply Audit Evidence References [Technical Enabler]
+
+As the product team,
+we want every consequential audit row to carry the checksum-bound evidence locators of the candidate its attempt targeted,
+So that NFR32's evidence clause rests on a record that can actually fail, and Story 4.5 has a real oracle rather than a structurally empty field.
+
+**Acceptance Criteria:**
+
+**Given** a consequential attempt that resolves a candidate schedule version — request, promotion, terminal decision, or pre-write denial
+**When** its audit event is written
+**Then** the row carries that candidate's evidence references unchanged from the sealed `schedule_version` row, with no re-derivation, no re-checksumming, and no backfill of any prior row
+**And** an attempt whose candidate does not resolve writes an empty set, proven by a demonstrated-red test rather than assumed. (FR21, NFR32)
+
+**Given** the existing contracts and schema
+**When** this story lands
+**Then** no migration, no new column, no new port, and no new field on `ApprovalBindingV1` is introduced — the candidate is supplied from the `get_candidate` call that `request_approval` and `revalidate_binding` already make, on the repository `decide_approval_route` already injects
+**And** `promote_baseline` receives the candidate as a parameter from its only caller, never by acquiring a repository of its own. (AD-1, AD-2)
+
+**Given** a denial row written at the admission check, before revalidation runs
+**When** its evidence references are read
+**Then** they identify the candidate the refused attempt targeted, not evidence the attempt consulted, and both the story and the code state that distinction
+**And** audit-sourced provenance items render these references with the semantics Story 4.4 already ships, without a new contract field. (FR20, NFR32)
+
+**Given** the scope control declared by Story 4.4
+**When** this story lands
+**Then** `"audit_evidence_refs:empty_at_every_write_site"` is removed from `SCOPE_CONTROLS` in `application/contracts/decision_provenance.py`, because it is no longer true
+**And** the corresponding deferred-work ledger entry is closed in the same commit, citing this story. (FR21, NFR32)
+
 ### Story 4.5: Prove Approval and Audit Invariants
 
 As the product team,
 we want consequential edge cases proven deterministically before release,
 So that stale state, retries, or observability failure can never produce an unrecorded baseline change.
+
+**Evidence scope note.** In this codebase evidence is a version-bound projection locator (`EvidenceRefV1` — `scenario_version_id` plus the checksum triple plus a record locator), not a stored object; no evidence port and no object-storage adapter exists. AR12's and AR23's create-only S3 evidence permissions are hosted-deployment requirements discharged by **Story 6.2** (`epics.md:1463`), not by this proof story. The earlier restatement at `sprint-change-proposal-2026-08-09-epics-2-5.md:149` removed the *hosted* dependency but kept an object-storage premise that has no subject here; this AC removes the premise rather than softening it a third time.
 
 **Acceptance Criteria:**
 
@@ -1273,10 +1303,10 @@ So that stale state, retries, or observability failure can never produce an unre
 **Then** the entire transaction rolls back and the binding remains pending
 **And** retry can complete exactly once after the fault clears. (NFR9)
 
-**Given** object-storage evidence failure before snapshot metadata commits, or database failure after an object write
-**When** promotion evidence is prepared
-**Then** storage failure causes no mutation, while database failure leaves only a non-authoritative unreferenced object retained until teardown
-**And** no audit or provenance link points to unverified evidence, proven against the local create-only evidence adapter without requiring hosted infrastructure. (AR12, AR23)
+**Given** promoted, rejected, expired, stale, and denied decisions, plus an evidence locator whose pinned scenario version no longer resolves
+**When** each audit event and provenance item for those decisions is resolved through the evidence locator contract
+**Then** every `EvidenceRefV1` resolves `resolved` against its pinned `scenario_version_id`, or reports `not_found` or `version_mismatch` explicitly, and no record presents an unresolvable locator as valid
+**And** each audit row for an attempt that resolved a candidate carries that candidate's checksum-bound references, while a row whose candidate is absent carries an empty set asserted as absence rather than assumed. (AR12, AR23)
 
 **Given** telemetry export disabled and CloudWatch degraded independently
 **When** approval, rejection, or stale attempts execute

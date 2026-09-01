@@ -594,6 +594,26 @@ rather than folded in.
   decide before Story 4.5 is created**, because 4.5 AC3 must not prove evidence integrity
   vacuously against a structurally empty audit field.
 
+  **DECIDED 2026-09-01 (`sprint-change-proposal-2026-09-01.md`). Owner/revisit trigger: Story 4.4a,
+  which closes this entry and removes `SCOPE_CONTROLS[4]` in the same commit (its AC4).** The
+  trigger fired as written: 4.5's AC3 was found unprovable and has been rewritten, and the write
+  path is carried by a separate story so 4.5 does not author both mechanism and oracle. Two
+  corrections to this entry's own wording, made rather than left to mislead a future reader:
+  (1) "Provenance faithfully replays the empty tuple" is true only of the AUDIT-sourced items
+  (`decision_provenance.py:251`, `:266`). Line `:127` already sets `evidence_refs=candidate_refs`,
+  non-empty and checksum-bound, so the candidate-sourced half of provenance was never empty.
+  (2) "Populating it is a write-path decision" understated how little it costs. Three of the four
+  write sites already hold the candidate: `request_approval.py:104` binds it, `revalidate_binding`
+  (`decide_approval.py:75`) loads it on every decision path and then discards it, and
+  `promote_baseline` receives it as a parameter from its only caller at `decide_approval.py:113`;
+  `decide_approval_route` already injects `ScheduleRunRepository` (`approvals.py:327`) for the
+  denial site. The `ApprovalBindingV1` snapshot considered at correction time was rejected: unlike
+  `parameter_hash`/`consequence_hash`, which are derived over mutable inputs that
+  `revalidate_binding:91` re-derives and compares, `evidence_refs` sit inside an immutable
+  `canonical_hash`-sealed `schedule_version` row that `candidate_schedule_version_id` already
+  FK-pins, so a snapshot would copy what cannot diverge. **No migration, no contract field, no new
+  port.**
+
 ## Deferred from: code review of story-4.4 (2026-09-01)
 
 - **The provenance projection's 10,000-item event cap is silent.** Both `schedule_runs.events_after` and `conversations.timeline` are called with `limit=10_000` (`backend/application/queries/decision_provenance.py:81, :117`), so a run whose combined run and conversation streams exceed that bound is truncated with no signal in the response. — **Deferred reason: this is the specified design, half-built rather than wrong.** Story 4.4 Decision 5's *does not cover* clause anticipates the case and prescribes the remedy — "a cap with a stated `has_more`, not a cursor contract" — so the cap itself is correct and only the declared `has_more` is missing. No current run approaches the bound, and adding the field widens `DecisionProvenanceOut`, which is a published contract. **Owner/revisit trigger: the first run measured above ~1,000 timeline items**, or any story that adds paging to a provenance or activity read.
