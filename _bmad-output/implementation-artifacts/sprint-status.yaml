@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-01
+last_updated: 2026-09-02
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2083,7 +2083,99 @@ development_status:
   # Task 1 before attributing any failure to this story. The three backend failures were recorded
   # as external and pre-existing.
   4-5-prove-approval-and-audit-invariants: done
-  4-6-prove-workflow-state-semantics-and-automated-accessibility: backlog
+  # NOTE (2026-09-02): Story 4-6 created and moved to ready-for-dev. It is EPIC 4'S LAST STORY and a
+  # PROOF story: it consolidates the former 4.6, 4.8 and 4.9, and former Story 4.7 was CUT outright
+  # (sprint-change-proposal-2026-08-09-epics-2-5.md:151, root cause 1 -- "visual-regression fixtures"
+  # was a process artifact no NFR, UX-DR or AD mandated). NO SCREENSHOT BASELINE, NO CHROMATIC/PERCY,
+  # NO MANUAL ASSISTIVE-TECHNOLOGY PASS is required or accepted as proof. Do not reintroduce a
+  # method-defined artifact under a new name.
+  #
+  # THE TERM THAT HAD NO PINNED REFERENT, PINNED AT CREATION: epics.md:1322's "the Story 1.6 fixture
+  # catalogue" is PRIMITIVE_FIXTURES in frontend/src/components/primitives/fixtures.tsx -- a flat,
+  # deterministic, provider-free array of 27 states across 8 primitives. It is NOT the "/" Fixture
+  # Catalogue route (Story 1.3's scenario list). Story 1.6's own Dev Notes name this consumer:
+  # "iterate PRIMITIVE_FIXTURES and change nothing here". This is exactly the undefined-term class
+  # that produced one of Story 4.2's four decision-grade findings, resolved before dev starts.
+  #
+  # MEASURED AT CREATION (3dd2a92, clean tree): Playwright 66 tests / 9 files across chromium+msedge.
+  # The component axe sweep (src/test/accessibility.test.tsx) covers Fixture catalogue, every
+  # PRIMITIVE_FIXTURES entry, Scenario Workspace and Scenario Data -- and covers NO Chat, Draft, Runs,
+  # Results, Approvals or Provenance state. AC2's zoom / text-spacing / reduced-motion dimensions are
+  # proven on demandUrl and "/" ONLY; generate_repair_journey_evidence.py says so in writing ("NFR20
+  # is deliberately absent ... those stay proven on Epic 1's Scenario Data surfaces only"). The
+  # UX-DR32 prohibition exists today as TWO ad-hoc innerHTML regexes inside ActivityTimeline.test.tsx.
+  # gate_a_checks.py has 27 checks and NFR29_GATES has four invariants; the registered-evidence-path
+  # set in test_gate_a_readiness.py is an EXACT SET OF SIX.
+  #
+  # TWELVE DECISIONS, the four most consequential:
+  # (1) THE STATE MATRIX IS A NEW MODULE THAT COMPOSES PRIMITIVE_FIXTURES AND NEVER EDITS IT.
+  #     fixtures.test.tsx asserts an EXACT per-primitive state list, so adding one entry reddens a
+  #     test that reads as unrelated. New: frontend/src/test/stateMatrix.tsx + stateMatrix.test.tsx
+  #     (that directory, because test_runner_matches_the_file_location requires every vitest-
+  #     registered Gate A file to start with frontend/src/). NO gallery route: AC1 names no surface.
+  # (2) A BLANKET "%" BAN IS WRONG. UX-DR11 makes coverage/overtime/cost percentages legitimate
+  #     product content in comparison summaries; UX-DR10 prohibits INVENTED percentages and ETAs on
+  #     RUN PROGRESS. The prohibition helper therefore scans CLASS TOKENS (a substring scan of
+  #     innerHTML matches the word "gradient" in copy) plus a family-scoped text rule. "Color-only
+  #     status" is proven by pairwise-distinct text AND pairwise-distinct (role, accessible name)
+  #     trees within a family -- a state surviving only in colour has both identical to its sibling.
+  # (3) deferred-work.md:558's CONTRAST FINDING IS CORRECTED AND GATED BEHIND A MEASUREMENT. That
+  #     entry's own revisit trigger names this story ("the first story that touches ... the Gate A
+  #     contrast floor; it should widen these three scans back to full-page"). But axe-core 4.13.0's
+  #     colorContrastMatches RETURNS FALSE FOR A DISABLED OR INERT NODE (measured in
+  #     node_modules/axe-core/axe.js), so the 3.69:1 violation cannot have come from the button while
+  #     it was disabled. The plausible mechanism is buttonVariants' base transition-all fading
+  #     disabled:opacity-50 AFTER disabled is removed -- which makes it timing-dependent, so a
+  #     widened scan would be intermittently red rather than reliably red. Widen, measure, record;
+  #     close on green, fix the shared Button's disabled FOREGROUND on red (the 3.12 destructive-
+  #     variant precedent). index.css:151-160 neutralizes transition-duration under reduced motion,
+  #     so a green reduced-motion arm beside a red default arm CONFIRMS the mechanism.
+  # (4) THE GENERATOR IS 3.12'S THIN-SCRIPT SHAPE, NOT 4.5'S PYTEST-NODE AGGREGATOR -- but it ingests
+  #     TWO report sources, because AC3's verdict is a conjunction of one Vitest run and one
+  #     Playwright run. It parses through scripts.junit_ingest.parse_junit (which already handles
+  #     pytest/vitest/playwright and reads the project from hostname); do NOT write a third
+  #     ElementTree parser. "Names every tested state" is DERIVED from the Vitest report's case names
+  #     (one case per state, titled family/state), never hand-listed -- a hand list is a second copy
+  #     of STATE_MATRIX with nothing checking it against the first.
+  #
+  # GATE A: one new NFR29 invariant (workflow_state_semantics -- NOT AR28_INVARIANTS) plus FOUR
+  # GateAChecks: vitest matrix, playwright journey (required_projects chromium+msedge), evidence, and
+  # a pytest machinery gate. Never one check declaring both evidence_path and test_files --
+  # __post_init__ raises. The exact evidence-path set grows from six to seven, which the docstring
+  # says must be a decision.
+  #
+  # LEDGER: CLOSES :294 (evidence-accessibility.test.tsx is outside accessibility_component_layer's
+  # declared files -- its trigger is literally "the next story that already has a legitimate reason
+  # to touch gate_a_checks.py") and :476 (stale -- repair-journey-accessibility.spec.ts has covered
+  # the Runs workspace since 3.12; verify before closing). RE-POINTS :177, the ARIA-snapshot
+  # regression lock assigned to "Story 4.9": that owner string predates the consolidation, no AC here
+  # asks for a regression LOCK, and toMatchAriaSnapshot introduces committed .aria.yml baselines --
+  # the method-defined artifact class root cause 1 already cut. RE-POINTS :518 with the Chat
+  # disclosure widened. LEAVES OPEN AND UNTOUCHED: :512, :524.
+  #
+  # HONEST GAPS RAISED RATHER THAN PAPERED OVER: the prohibition scan cannot see an inline-style or
+  # background-image glow; Chat's HEALTHY connected stream is proven at the component layer only
+  # (installApiStubs registers no /events handler, so every browser spec measures the DEGRADED
+  # disconnected variant -- which is itself a required matrix state, not purely a defect) and is
+  # marked NOT COVERED: chat_sse_healthy_stream:needs_local_sse_server; completeness is a claim about
+  # AC1's ten families, not the product's full state space; phone/tablet coverage for Epic 2-4
+  # surfaces is out of scope because AC2 says "the complete DESKTOP journey".
+  #
+  # TRAP WORTH READING TWICE: apiStubs.ts's timeline fixture pairs metric required_headcount_minutes
+  # with family "outbound" -- a pairing docs/DOMAIN-MODEL.md sections 1 and 3 make impossible in
+  # production (headcount is emitted only for indirect). It is a rendering stub and the frontend
+  # enforces no dimension, so DO NOT FIX IT (that moves an asserted value in existing specs) and DO
+  # NOT COPY IT into a new claim fixture.
+  #
+  # NO NEW GOLDEN CASE, NO MIGRATION, NO NEW ROUTE, NO NEW BACKEND BEHAVIOUR. The only backend files
+  # are the registry, the generator, and the generator's test.
+  #
+  # BASELINES INHERITED FROM 4.5 AND NOT VERIFIED: backend 1490 passed / 2 skipped / 7 deselected;
+  # -m postgres 156 passed; evidence convention 80 passed. 4.5 ran no frontend suite (zero-line
+  # frontend diff), so the last frontend number is 4.4's 575 passed. Playwright 66 WAS measured here
+  # and supersedes 4.4's 62. Re-derive everything at Task 1, and record TOTALS alongside any
+  # pass/skip split -- 3.12's review established the split is environment-conditional.
+  4-6-prove-workflow-state-semantics-and-automated-accessibility: done
   epic-4-retrospective: optional
 
   # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)

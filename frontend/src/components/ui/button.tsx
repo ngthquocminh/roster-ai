@@ -10,8 +10,23 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // Story 4.6 Decision 10 measured `#858585` on `#ffffff` (3.69:1) on the
+        // OUTLINE Refresh control, in the window where the button is enabled but
+        // `transition-all` is still interpolating back from `disabled:opacity-50`.
+        // The replacement token pair is scoped to this variant, not to the shared
+        // base: Decision 10 states the fix "does not restyle any other Button
+        // variant". `disabled:opacity-100` is what closes the measured path —
+        // dimming `#0A0A0A` to 50% over white composites to `#848484` (3.74:1).
+        // The muted/foreground pair keeps the disabled state legible once the
+        // dimming is gone, and paints its own background, so the ratio no longer
+        // depends on the surface behind the button.
+        //
+        // `disabled:border-dashed` is not decoration: that colour pair is
+        // byte-identical to this variant's own hover treatment, so without a
+        // non-colour cue a disabled control reads as a highlighted one. Guarded
+        // in `button.test.tsx` — the shape half must not be shared with hover.
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground disabled:border-dashed disabled:bg-muted disabled:text-foreground disabled:opacity-100 dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:

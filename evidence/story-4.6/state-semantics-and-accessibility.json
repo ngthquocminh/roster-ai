@@ -1,0 +1,161 @@
+{
+  "story": "4.6",
+  "measurement_date": "2026-09-02",
+  "requirements": [
+    "NFR18",
+    "NFR20",
+    "NFR29",
+    "UX-DR10",
+    "UX-DR13",
+    "UX-DR31",
+    "UX-DR32",
+    "UX-DR34",
+    "UX-DR35"
+  ],
+  "results": {
+    "states": [
+      "alert/default",
+      "alert/default with action",
+      "alert/destructive",
+      "alert/destructive with action",
+      "alert/disconnected",
+      "alert/reconnected",
+      "alert/reconnecting",
+      "approval/consumed",
+      "approval/expired",
+      "approval/pending",
+      "approval/pending-overdue",
+      "approval/rejected",
+      "approval/request pending",
+      "comparison/not computed",
+      "comparison/populated",
+      "comparison/stale binding",
+      "draft/fresh",
+      "draft/rejected",
+      "draft/stale",
+      "empty-state/filtered empty",
+      "empty-state/intrinsically empty",
+      "empty-state/with action",
+      "empty-state/without action",
+      "message/clarification",
+      "message/grounded agent response",
+      "message/planner message",
+      "message/terminal approval not grantable",
+      "message/terminal budget exhausted",
+      "message/terminal capability error",
+      "message/terminal deadline exceeded",
+      "message/terminal invalid output",
+      "message/terminal provider error",
+      "message/terminal refused",
+      "provenance/collapsed item",
+      "provenance/copied",
+      "provenance/expanded item with evidence",
+      "provenance/expanded item without evidence",
+      "provenance/field or range",
+      "provenance/idle",
+      "provenance/record",
+      "provenance/record card",
+      "provenance/row",
+      "run/cancelled",
+      "run/completed",
+      "run/expired",
+      "run/failed",
+      "run/infeasible",
+      "run/progress cancellation requested",
+      "run/progress queued",
+      "run/progress running",
+      "run/queued",
+      "run/rejected",
+      "run/running",
+      "run/stale",
+      "run/timed out",
+      "skeleton/table region",
+      "skeleton/text line",
+      "terminal-outcome/cancelled",
+      "terminal-outcome/failed",
+      "terminal-outcome/infeasible",
+      "terminal-outcome/timed out"
+    ],
+    "state_matrix": "passed",
+    "accessibility": "passed",
+    "accessibility_scope": "frontend/e2e/journey-accessibility.spec.ts",
+    "state_matrix_excluded_rules": [
+      "color-contrast",
+      "target-size"
+    ]
+  },
+  "passed": true,
+  "measurement": {
+    "vitest": {
+      "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
+      "sha256": "1b1bb38c6751ecd451eaa886c07db8ec4311a4df730bbe1838f97098f0f41a90",
+      "run_started": "2026-09-02T14:46:34.116Z"
+    },
+    "playwright": {
+      "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
+      "sha256": "ca64b649b29d09ba9c08334399004b36e0baf798981ab38d3eeb2255165a920a",
+      "run_started": "2026-09-02T14:46:37.249Z"
+    }
+  },
+  "contract_digests": {
+    "algorithm": "sha256",
+    "sample_tiny_input": "77da9cadedd6535b255306cb0acad2ed5eed2ec80045b392ec58a2dfcab0890e",
+    "sample_tiny_input_more_tm": "2d9212ffb453b01a2e9c7266a5c1d5194085a40ece03fdb132db86b1eb8a340c"
+  },
+  "tested_artifact_digests": {
+    "frontend/src/test/stateMatrix.tsx": "1a6d956bf5bc0c7ffe426cbb2ffeb75913e3ef7f48a0ec115381db8270603b4f",
+    "frontend/src/test/stateMatrix.test.tsx": "eca2fc24df4c3101e50fb1701a7a31863df5b029ddbf9c147b2ae4ad101bfad7",
+    "frontend/src/components/primitives/fixtures.tsx": "0934c90de87ab50559ea9ba27fa77e7f50735e4518d3b1c3ff2b2b10f4871b55",
+    "frontend/e2e/journey-accessibility.spec.ts": "8478880b63e26edabcaaf95211fccace1543fc5bac658ea5f57b04b3cd1a863d",
+    "frontend/e2e/accessibility.spec.ts": "a573214a897eef985ce150e73db285b142ce9dbe4052baa57d45b110094675a5",
+    "frontend/e2e/support/apiStubs.ts": "b26e4d8412b67c23aafb64edf3885b4ab4d2b299d94cadc87a67046310002fe3",
+    "frontend/e2e/support/repairJourneyStubState.ts": "f7504f9fa41251ab950af79e65ce53d990ecafcdcdcb5f5ee130a067e1c760b1"
+  },
+  "version_bindings": {
+    "dataset": {
+      "kind": "version-controlled evaluation fixture artifacts",
+      "file_count": 7,
+      "files": {
+        "frontend/e2e/accessibility.spec.ts": {
+          "sha256": "a573214a897eef985ce150e73db285b142ce9dbe4052baa57d45b110094675a5"
+        },
+        "frontend/e2e/journey-accessibility.spec.ts": {
+          "sha256": "8478880b63e26edabcaaf95211fccace1543fc5bac658ea5f57b04b3cd1a863d"
+        },
+        "frontend/e2e/support/apiStubs.ts": {
+          "sha256": "b26e4d8412b67c23aafb64edf3885b4ab4d2b299d94cadc87a67046310002fe3"
+        },
+        "frontend/e2e/support/repairJourneyStubState.ts": {
+          "sha256": "f7504f9fa41251ab950af79e65ce53d990ecafcdcdcb5f5ee130a067e1c760b1"
+        },
+        "frontend/src/components/primitives/fixtures.tsx": {
+          "sha256": "b5ac006e39ad7e48014a7d722826e2c76a33bfaffa3220f63f1d31b4461e628c"
+        },
+        "frontend/src/test/stateMatrix.test.tsx": {
+          "sha256": "eca2fc24df4c3101e50fb1701a7a31863df5b029ddbf9c147b2ae4ad101bfad7"
+        },
+        "frontend/src/test/stateMatrix.tsx": {
+          "sha256": "1a6d956bf5bc0c7ffe426cbb2ffeb75913e3ef7f48a0ec115381db8270603b4f"
+        }
+      }
+    },
+    "evaluator": "Vitest and Playwright JUnit; skips and missing projects are refusals",
+    "model": "not applicable \u2014 deterministic UI fixtures",
+    "prompt": "not applicable \u2014 no model invocation",
+    "tool": "Vitest 4.1.10, jest-axe, Playwright and @axe-core/playwright",
+    "policy": "NFR18/NFR20/NFR29 and UX-DR10/13/31/32/34/35",
+    "application": "local frontend production build served by Vite preview",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable \u2014 no solver run",
+    "code": {
+      "git_commit": "057cf6940f855b87ce77b93e70f32cd3c3cde292",
+      "working_tree_dirty": false
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    },
+    "schema_version": "e5f6a7b8c9d0"
+  }
+}

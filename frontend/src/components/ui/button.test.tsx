@@ -45,3 +45,61 @@ describe("Button destructive variant", () => {
     expect(screen.getByRole("button", { name: "Dismiss" })).not.toHaveClass("bg-destructive");
   });
 });
+
+// Story 4.6 code review. Decision 10 replaced `disabled:opacity-50` on the outline
+// variant because dimming near-black text over white composites to #848484 (3.74:1,
+// axe measured #858585 / 3.69:1) during the window where the control is enabled but
+// `transition-all` is still interpolating back. The replacement pair paints its own
+// background, so the ratio no longer depends on the surface behind the button --
+// but `bg-muted` + `text-foreground` is byte-identical to this variant's OWN hover
+// treatment, which made a disabled control read as a highlighted one.
+describe("Button outline disabled treatment", () => {
+  const classesOf = (name: string) =>
+    new Set(Array.from(screen.getByRole("button", { name }).classList));
+
+  it("distinguishes disabled from hover by something other than colour", () => {
+    render(<Button disabled type="button" variant="outline">Refreshing…</Button>);
+    const classes = classesOf("Refreshing…");
+
+    // The colour half is deliberately shared with hover; the shape half is what
+    // separates them, and it is not a colour, so it survives any re-theming.
+    expect(classes).toContain("disabled:bg-muted");
+    expect(classes).toContain("disabled:text-foreground");
+    expect(classes).toContain("disabled:border-dashed");
+
+    const disabledOnly = Array.from(classes)
+      .filter((token) => token.startsWith("disabled:"))
+      .map((token) => token.slice("disabled:".length));
+    const hoverOnly = Array.from(classes)
+      .filter((token) => token.startsWith("hover:"))
+      .map((token) => token.slice("hover:".length));
+    const sharedWithHover = disabledOnly.filter((token) => hoverOnly.includes(token));
+
+    expect(
+      disabledOnly.filter((token) => !sharedWithHover.includes(token)),
+      "outline disabled must carry a cue its hover state does not",
+    ).not.toEqual([]);
+  });
+
+  it("keeps the dimming that produced the measured failure off this variant", () => {
+    render(<Button disabled type="button" variant="outline">Refreshing…</Button>);
+    expect(classesOf("Refreshing…")).not.toContain("disabled:opacity-50");
+  });
+
+  it("leaves every other variant on the shared dimming", () => {
+    render(
+      <>
+        <Button disabled type="button" variant="secondary">Run optimization</Button>
+        <Button disabled type="button" variant="default">Approve</Button>
+      </>,
+    );
+
+    // `--secondary` and `--muted` are the same value in both themes, so putting
+    // the outline pair on the shared base made a disabled `secondary` control
+    // near-indistinguishable from an enabled one.
+    for (const name of ["Run optimization", "Approve"]) {
+      expect(classesOf(name)).toContain("disabled:opacity-50");
+      expect(classesOf(name)).not.toContain("disabled:bg-muted");
+    }
+  });
+});

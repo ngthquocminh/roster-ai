@@ -55,15 +55,17 @@ for (const viewport of [
 // panel's three states in the same configuration the rest of Gate A is held to,
 // including the terminal state, which has no interactive control at all and so
 // is the one most likely to regress into colour-only meaning.
-for (const [name, state, expectedText] of [
-  ["pending", "pending", "Approve as baseline"],
-  ["presented-expired", "pending-overdue", "Dismiss expired request"],
-  ["terminal", "rejected", "Terminal approval state: rejected"],
-  ["post-promotion-terminal", "consumed", "promoted bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb replacing baseline-v12"],
-] as const) {
-  test(`keeps the ${name} approval review surface axe-clean`, async ({ page }) => {
+for (const reducedMotion of [false, true] as const) {
+ for (const [name, state, expectedText] of [
+   ["pending", "pending", "Approve as baseline"],
+   ["presented-expired", "pending-overdue", "Dismiss expired request"],
+   ["terminal", "rejected", "Terminal approval state: rejected"],
+   ["post-promotion-terminal", "consumed", "promoted bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb replacing baseline-v12"],
+ ] as const) {
+  test(`keeps the ${name} approval review surface axe-clean${reducedMotion ? " under reduced motion" : ""}`, async ({ page }) => {
     test.setTimeout(120_000);
     const journey = await installApiStubs(page);
+    await page.emulateMedia({ reducedMotion: reducedMotion ? "reduce" : "no-preference" });
     journey.completeRun();
     const approvalId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
     const overdue = state === "pending-overdue";
@@ -91,13 +93,10 @@ for (const [name, state, expectedText] of [
     await page.goto(`/scenarios/${SCENARIO_ID}/runs/${SCHEDULE_RUN_ID}`);
     await expect(page.getByText(expectedText)).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh" })).toBeEnabled();
-    // Scoped to the review surface, the way the column-chooser scan above is
-    // scoped to its menu. The enclosing Results page carries a pre-existing
-    // outline-button contrast violation on its own Refresh control
-    // (`deferred-work.md`), which is not this story's and would otherwise mask
-    // every result here.
-    await expectAxeClean(page, "[data-approval-panel]");
+    // Story 4.6 Decision 10 deliberately widens the former panel-only scan.
+    await expectAxeClean(page);
   });
+ }
 }
 
 for (const zoom of [100, 200] as const) {
