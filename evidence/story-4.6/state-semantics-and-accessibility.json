@@ -88,13 +88,13 @@
   "measurement": {
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "sha256": "616f878476dd07dd5bd80d17b8ebfa357f55a1b75de7288bbe3a422f4c0d47ca",
-      "run_started": "2026-09-02T14:08:07.189Z"
+      "sha256": "1b1bb38c6751ecd451eaa886c07db8ec4311a4df730bbe1838f97098f0f41a90",
+      "run_started": "2026-09-02T14:46:34.116Z"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
-      "sha256": "b01809a7c65a7e549fa626d461ad3a09b1df4ad7f079ff0d246681bf5d6e15c1",
-      "run_started": "2026-09-02T14:08:10.295Z"
+      "sha256": "ca64b649b29d09ba9c08334399004b36e0baf798981ab38d3eeb2255165a920a",
+      "run_started": "2026-09-02T14:46:37.249Z"
     }
   },
   "contract_digests": {
@@ -106,7 +106,7 @@
     "frontend/src/test/stateMatrix.tsx": "1a6d956bf5bc0c7ffe426cbb2ffeb75913e3ef7f48a0ec115381db8270603b4f",
     "frontend/src/test/stateMatrix.test.tsx": "eca2fc24df4c3101e50fb1701a7a31863df5b029ddbf9c147b2ae4ad101bfad7",
     "frontend/src/components/primitives/fixtures.tsx": "0934c90de87ab50559ea9ba27fa77e7f50735e4518d3b1c3ff2b2b10f4871b55",
-    "frontend/e2e/journey-accessibility.spec.ts": "4c8ac893457fa56f87d604aef557bb136726d680616347f246384ca568f03461",
+    "frontend/e2e/journey-accessibility.spec.ts": "8478880b63e26edabcaaf95211fccace1543fc5bac658ea5f57b04b3cd1a863d",
     "frontend/e2e/accessibility.spec.ts": "a573214a897eef985ce150e73db285b142ce9dbe4052baa57d45b110094675a5",
     "frontend/e2e/support/apiStubs.ts": "b26e4d8412b67c23aafb64edf3885b4ab4d2b299d94cadc87a67046310002fe3",
     "frontend/e2e/support/repairJourneyStubState.ts": "f7504f9fa41251ab950af79e65ce53d990ecafcdcdcb5f5ee130a067e1c760b1"
@@ -120,7 +120,7 @@
           "sha256": "a573214a897eef985ce150e73db285b142ce9dbe4052baa57d45b110094675a5"
         },
         "frontend/e2e/journey-accessibility.spec.ts": {
-          "sha256": "4c8ac893457fa56f87d604aef557bb136726d680616347f246384ca568f03461"
+          "sha256": "8478880b63e26edabcaaf95211fccace1543fc5bac658ea5f57b04b3cd1a863d"
         },
         "frontend/e2e/support/apiStubs.ts": {
           "sha256": "b26e4d8412b67c23aafb64edf3885b4ab4d2b299d94cadc87a67046310002fe3"
@@ -148,7 +148,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable \u2014 no solver run",
     "code": {
-      "git_commit": "e2b31d0f1ba54de26053705f0ad94fc912beccea",
+      "git_commit": "057cf6940f855b87ce77b93e70f32cd3c3cde292",
       "working_tree_dirty": false
     },
     "image": {
