@@ -211,9 +211,16 @@ AC1 names nine prohibitions. Today three are covered by an ad-hoc regex in one c
 Replace that scatter with `expectNoProhibitedTreatment(container, { family })` in the matrix
 module's own test support, applied to **every** entry:
 
-* **Class-token scan** (not a substring scan of `innerHTML`): reject `bg-gradient-*`,
-  `bg-[linear-gradient…]`, `animate-pulse`, `animate-ping`, `animate-bounce`, `animate-spin`
-  outside a `motion-reduce:animate-none` pairing, and any class token containing `glow`. A
+* **Class-token scan** (not a substring scan of `innerHTML`): reject `bg-linear-*`, `bg-radial*`,
+  `bg-conic*`, `bg-[linear-gradient…]`, `bg-[radial-gradient…]`, `bg-[conic-gradient…]`,
+  `animate-pulse`, `animate-ping`, `animate-bounce`, `animate-spin`
+  outside a `motion-reduce:animate-none` pairing, and any class token containing `glow`. The
+  `motion-reduce` pairing is checked **per node**, not against a flattened token list for the whole
+  container — otherwise one guarded node exempts an unguarded sibling.
+  **CORRECTED at code review 2026-09-02:** this list originally read `bg-gradient-*`, which is
+  Tailwind **v3** naming. This repo pins `tailwindcss@4.3.2`, where the canonical gradient
+  utilities are `bg-linear-to-*`, `bg-radial` and `bg-conic`; keep `bg-gradient-` in the scan as a
+  legacy alias, but it alone let `bg-linear-to-r` through (verified by mutation). A
   class-token scan is used because a substring scan of `innerHTML` matches the word "gradient"
   appearing in copy and cannot distinguish a class from prose.
 * **Text rule, family-scoped.** An "invented percentage or ETA" is prohibited on `run` states
@@ -387,7 +394,17 @@ Add `"evidence/story-4.6/state-semantics-and-accessibility.json"` to the **exact
 `backend/services/**`, `backend/migrations/**`, `backend/evals/**` (including
 `backend/evals/golden/**`), `data/contract/**`, `frontend/openapi.json`,
 `frontend/src/api/schema.d.ts`, and every existing `evidence/story-*/` directory other than the new
-`story-4.6/`.
+`story-4.6/` — **except `evidence/story-1.11/gate-a-readiness-report.json`.**
+
+**CORRECTED at code review 2026-09-02.** The fence as originally written contradicted Task 11:
+registering a new Gate A check *requires* regenerating the readiness report, and that report lives
+under `evidence/story-1.11/`. Every story that added a check has rewritten it (`de2dc81`, `729b23f`,
+`d231d50`), so the fence could never have held. The implementation resolved this silently in
+Task 11's favour; Decision 1 required escalating it instead, which is why it is being recorded here
+rather than left as an undocumented deviation. Separately worth carrying into the retrospective:
+`approval_and_audit_invariants` — Story 4.5's invariant — was **absent** from the committed report
+at `8b2b5b1`, so the release-blocking artifact described a stale registry for a whole story before
+this one silently caught it up, and no test compares the committed report against `GATE_A_CHECKS`.
 
 **Does NOT cover:** it does not retro-register Story 3.10's `repair-correctness.json`, still bound
 to no `GateACheck` and still emitting `result` rather than `passed` (recorded at the top of
@@ -586,6 +603,75 @@ for it, and it would be new test infrastructure inside a proof story.
   - [x] Confirm the CI floors in `.github/workflows/ci.yml` still hold. They are floors and
         ceilings, so added tests never redden them — do **not** edit the numbers.
   - Acceptance boundary: every failure attributed against Task 1's re-derived baseline.
+
+### Review Findings
+
+Code review 2026-09-02 (range `8b2b5b1..a5f6e8a`). Three parallel layers (adversarial, edge-case,
+acceptance) plus reviewer-run mutation experiments. Baseline re-measured green before mutating:
+Playwright 76/76 across both projects, backend 134/134, Vitest 642/643 — the single failure is a
+60 s timeout in the pre-existing `ScenarioDataParity` heavy test under concurrent load, not a story
+regression. Every mutation was reverted and the tree left clean.
+
+Confirmed sound, not re-litigated: the two-source generator reuses `scripts.junit_ingest.parse_junit`
+and enforces both Playwright projects; commit order follows the evidence convention; Task 8's
+`apiStubs.ts` / `repairJourneyStubState.ts` binding is present; `:294` and `:476` are genuinely
+closed; the UX-DR11 comparison carve-out is implemented as Decision 4 specified. Two suspicions
+raised at review intake were checked and **refuted**: Decision 10's measurement did happen (Task 7's
+Debug Log entry, independently reproduced below), and `deferred-work.md:558` *was* annotated — the
+ledger diff carries five edits, not four.
+
+#### Mutation record — Task 4's acceptance boundary, executed
+
+Task 4 requires each new assertion be "demonstrated red once — weaken the guard or corrupt the
+fixture, observe the failure, restore". That was not done before delivery; it is recorded here so
+the claim is an artifact rather than a checkbox. Every mutation was reverted and the tree left
+clean.
+
+| # | Mutation applied to real code | Guard that should redden | Before fix | After fix |
+|---|---|---|---|---|
+| 1 | `bg-gradient-to-r animate-pulse ai-glow` on `DraftCard`'s shipped `<Card aria-label="Draft proposal">` | UX-DR32 class scan | **green** (64/64) | still green in the matrix — the `draft` family renders prose, not `DraftCard`; now caught by the restored `ActivityTimeline` regexes only for that component. Open as review decision 2 |
+| 2 | Two `draft` states differing only by `text-red-600` / `text-green-600`, authored through the matrix's own `literal()` convention | Decision 3 + 5 role/name tree | **green** | still green — the injected `aria-label` remains. Open as review decision 1 |
+| 3 | `draft/stale` prose made byte-identical to `draft/fresh` | text distinctness | **green** | unchanged; same root cause as #2 |
+| 4 | `className="bg-linear-to-r"` (Tailwind v4 gradient) on a fixture | UX-DR32 class scan | **green** | **red** ✔ |
+| 5 | `<button style={{ width: 1, height: 1 }}>` in a fixture | `target-size` | **green** | rule now disabled in jsdom and disclosed in the artifact; proven in the browser layer ✔ |
+| 6 | `body { min-width: 3000px }` in `src/index.css`, rebuilt | AC2 no page-level horizontal scroll | not measurable — the spec scanned an empty shell | **red** (`horizontalScroll: false → true`) ✔ |
+| 7 | `button.tsx` reverted to `disabled:opacity-50`, rebuilt | Decision 10 contrast scans | **red in 2 of 8** msedge scans, `#858585` on `#ffffff` | unchanged — confirms the measurement was real, and that the guard is a transition race rather than a deterministic check |
+
+Measured page content behind mutation 6, immediately after `goto` versus settled:
+`bodyChars 64 / focusable 2` on all three routes, against Chat 665/11, Runs 1226/35,
+Results 1837/30 with `Candidate comparison`, `Candidate schedule`, `Evidence`,
+`Decision provenance`.
+
+- [ ] [Review][Decision] **Pairwise distinctness cannot go red — the harness supplies the discriminator, not the product.** `roleNameTree` reads `aria-label` first, and every fixture wrapper is labelled `"{family}: {state}"`; `literal()` additionally echoes the state name in an `<h3>`. Because a sibling guard already asserts `family/state` identities are unique, both the text set and the tree set are unique by construction, for all 60 entries including the primitives. **Reproduced:** added a `draft/colour-a` / `draft/colour-b` pair differing only by `text-red-600` vs `text-green-600`, and made `draft/stale`'s prose byte-identical to `draft/fresh`'s — the suite reported **64 passed (64)**. Decision 5 names this assertion as the only mechanism that reddens on a colour-only state; Decision 3 built the tree half specifically for it. Choice needed: drop the `aria-label` wrapper and the `<h3>` state echo so the comparison sees rendered meaning, or accept that AC1's distinctness claim rests on identity uniqueness and say so. [frontend/src/test/stateMatrix.tsx:28,37; frontend/src/test/stateMatrix.test.tsx:17-25,78-79]
+- [ ] [Review][Decision] **33 of 60 matrix states render hand-written prose; no feature component is ever mounted.** `stateMatrix.tsx` imports only `PRIMITIVE_FIXTURES` and `Button`. `DraftCard`, `ApprovalDecisionPanel`, `ProvenanceTimeline`, `ActivityTimeline`, `RunsTable`, `ProgressCard` and the comparison surface — the components Task 2 required be read and Task 3 named — are absent. **Reproduced:** put `bg-gradient-to-r animate-pulse ai-glow` (three UX-DR32 prohibitions) on `DraftCard`'s shipped `<Card aria-label="Draft proposal">` root; the matrix stayed green. Consequences: the class-token prohibition scan runs over containers carrying no `class` attribute at all for those 33 entries; `terminal-outcome/non-promotable` renders a sentence *saying* no Approve control exists rather than asserting a control's absence; the UX-DR35 merged-action rule fires on exactly one hand-built fixture. Choice needed: compose the real components (Decision 2's stated intent), or restate AC1's scope as "the ten families are enumerated" — the story's own Honest Gap (c). [frontend/src/test/stateMatrix.tsx:34-85]
+- [x] [Review][Decision] **RESOLVED — narrowed to the `outline` variant.** `disabled:bg-muted disabled:text-foreground disabled:opacity-100` moved off the shared `cva` base and onto the `outline` variant, which is the only variant Decision 10 measured; every other variant keeps `disabled:opacity-50`. All 16 approval scans still pass across both projects and both motion arms, so the contrast fix is intact while the blast radius matches what Decision 10 authorised. `DraftCard`'s disabled "Run optimization" (`variant="secondary"`) gets its dimming back. Remaining, not fixed and deliberately not designed around at review: a disabled `outline` button now renders `bg-muted` + `text-foreground`, which is exactly the `outline` hover treatment, so disabled reads as hovered. Raising rather than solving, because choosing a distinct non-colour disabled affordance is a design decision. Original finding below.
+- [ ] [Review][Decision] **`disabled:opacity-100` makes a disabled `secondary` Button visually near-identical to its enabled state.** The shared base now carries `disabled:bg-muted disabled:text-foreground disabled:opacity-100` for all seven variants. In `index.css`, `--secondary` and `--muted` are both `oklch(0.97 0 0)` in light and both `oklch(0.269 0 0)` in dark; `--secondary-foreground` `oklch(0.205)` and `--foreground` `oklch(0.145)` differ by a barely-perceptible lightness step. `DraftCard`'s "Run optimization" control is `variant="secondary"` with `disabled={runDisabled}`, so its disabled state is now communicated by nothing an eye can resolve — `disabled:pointer-events-none` is invisible. `ghost` and `link` disabled render a filled grey block instead of a transparent or underlined control. Decision 10 authorised replacing the **foreground** effect only and stated it "does not restyle any other Button variant, and it does not touch the `dark:` arm"; `disabled:bg-muted` is a background change on the shared base and both tokens are themed. Decision 1 required the smallest change that clears the failure — `disabled:opacity-100` alone closes the measured enabled-transition path. Choice needed: narrow to the foreground/opacity change, or keep the broader treatment and add a non-colour disabled affordance. [frontend/src/components/ui/button.tsx:8; frontend/src/features/chat/DraftCard.tsx:311,317]
+- [x] [Review][Patch] **`journey-accessibility.spec.ts` scans a 64-character app shell on all six visits — the browser layer of the new invariant measures an unrendered page.** [frontend/e2e/journey-accessibility.spec.ts:41-43] No `toBeVisible()` or readiness anchor sits between `page.goto()` and `expectDesktopLayoutClean(page)`; every sibling spec anchors on a heading first. **Measured:** immediately after `goto`, all three routes report `bodyChars: 64`, `focusable: 2`, headings `["Scenario workspace"]`. After settling: Chat 665 chars / 11 focusables, Runs 1226 / 35, Results 1837 / 30 with `Candidate comparison`, `Candidate schedule`, `Evidence`, `Decision provenance`. Both `.some()` probes in `expectDesktopLayoutClean` are vacuously false on an element-free page and axe finds nothing to fault, so the test reports the journey conformant without ever having seen it.
+- [ ] [Review][Patch] **The journey spec still does not reach the draft or the four approval-panel states Task 6 names.** [frontend/e2e/journey-accessibility.spec.ts] Task 6 requires "Chat (timeline **plus draft**), Runs (table plus progress), Results (comparison, **all four approval-panel states**, provenance)". The spec never sends a message, and `repairJourneyStubState.ts` returns the draft activity only once `messageSent` is true, so `DraftCard` never mounts; and it never routes `**/api/v1/approvals**`, which `accessibility.spec.ts:85-91` must install before any approval state renders. The readiness anchor added at review means the three routes are now genuinely scanned, but the two richest surfaces on them are still absent. Not fixed at review because it needs stub work rather than a reordering, and the four approval states are already scanned full-page (both motion arms, both projects) by `accessibility.spec.ts`. Remaining exposure is the draft card at 200% zoom under text spacing.
+- [x] [Review][Patch] **The WCAG text-spacing dimension is applied to zero scanned pages.** [frontend/e2e/journey-accessibility.spec.ts:33] `page.addStyleTag(...)` runs once while the document is still pre-navigation; each `page.goto()` replaces the document and discards the injected `<style>`. **Measured:** before `goto` — 1 style tag, `letter-spacing: 1.92px`; after — 0 style tags, `letter-spacing: normal`. `emulateMedia` and `setViewportSize` survive navigation, so only this dimension evaporates. The precedent it copies navigates first and injects after (`layout-accessibility.spec.ts:102-108`), and also carries the `p { margin-bottom: 2em }` rule WCAG 1.4.12 requires, which is absent here.
+- [x] [Review][Patch] **Task 5 deleted the repository's only prohibited-treatment scans over a rendered product component.** [frontend/src/features/chat/ActivityTimeline.test.tsx:278,427] The two removed `expect(document.body.innerHTML).not.toMatch(...)` lines asserted against real `ActivityTimeline` output. Task 5 permits deletion only if the `message` family's matrix entries cover them; that family is seven `literal()` prose fixtures that never mount the component. A repo-wide grep now returns `stateMatrix.test.tsx:31-34` as the only decoration guard left in the frontend. Restore both lines.
+- [x] [Review][Patch] **`results.states` names 61 states where 60 exist; an aggregate test title leaks through the derivation filter.** [backend/scripts/generate_state_semantics_evidence.py:57-58] `_states()` keeps any case name containing `"/"`, and `covers all ten AC1 families with pairwise-distinct text and role/name trees` contains a slash in "role/name". It is present verbatim in the shipped artifact, sorted between `comparison/populated` and `draft/fresh`. `STATE_MATRIX` is 60 entries (27 primitive + 33 custom) and the file emits 62 cases (60 per-state + 2 aggregate), matching the Debug Log's own count. AC3 requires the artifact name every tested state; it names one thing that is not a state. Filter on the `family/state` shape rather than on any slash.
+- [x] [Review][Patch] **Decision 9's count reconciliation was not implemented; a filtered Vitest run writes `passed: true` for the whole matrix.** [frontend/src/test/stateMatrix.test.tsx:62-65; backend/scripts/generate_state_semantics_evidence.py:40-61] Decision 9 asked that emitted per-state cases equal `STATE_MATRIX.length`; the delivered guard asserts identity uniqueness and reads no test result, and the generator checks non-empty and no-skips but never compares counts. Filtered or sharded Vitest cases are **absent** from the XML rather than `<skipped/>`, so `vitest run -t "message"` yields a 7-case report that passes every guard — the deselection hole `junit_ingest.py` already solves for pytest via `missing_pytest_cases`. Note the generator *does* catch a genuinely skipped `it()`; the unprotected cases are removal and deselection.
+- [x] [Review][Patch] **The generator drops the JUnit measurement provenance its own named precedent implements, and skips its self-audit.** [backend/scripts/generate_state_semantics_evidence.py:64-79,104-113] Decision 8 requires mirroring `generate_repair_journey_evidence.py`, whose `junit_provenance()` and `_postdates()` record the XML path, its sha256, `run_started`, and a `stale` marker — its docstring states why: `resolve_bindings` proves the *tree* was clean, nothing ties the *measurement* to it. `RunnerReport.timestamp` is parsed and discarded here, and `main()` omits the `audit_evidence_file(...)` call the sibling makes. An XML from another branch or an earlier commit yields an identical-looking green artifact. Sharpened by the Debug Log's note that the measuring Playwright run was manually stopped after an eyeballed case count.
+- [x] [Review][Patch] **The new contrast assertion compares two string literals and cannot regress.** [frontend/src/index.test.ts:142-145] `contrastRatio("#252525", "#f7f7f7")` is arithmetic over constants while every sibling assertion reads through `readHexToken(...)`. The root cause is mechanical: `readHexToken` only matches `#RRGGBB`, and `--foreground` / `--muted` are declared `oklch(...)` (`index.css:72,81`). Task 7 asked for a guard "so it cannot regress unmeasured"; changing either token leaves this green. Extend `readHexToken` to parse `oklch()` and assert the real pair — the `.dark` arm is unasserted either way.
+- [x] [Review][Patch] **The gradient guard matches Tailwind v3 names; this repo is on Tailwind 4.3.2.** [frontend/src/test/stateMatrix.test.tsx:31] It tests `bg-gradient-` and `bg-[linear-gradient`, but v4's canonical utilities are `bg-linear-to-*`, `bg-radial`, `bg-conic`. **Reproduced:** a fixture carrying `className="bg-linear-to-r"` passed. Add the v4 names and the `bg-[radial-gradient(` / `bg-[conic-gradient(` arbitrary forms.
+- [x] [Review][Patch] **`target-size: { enabled: true }` under jsdom can only ever produce `incomplete`, never a violation.** [frontend/src/test/stateMatrix.test.tsx:56-58] jsdom reports every rect as 0x0, so axe cannot decide, and only `results.violations` is asserted. **Reproduced:** a fixture containing a 1x1 pixel `<button>` passed. The deliberate `min-h-11` classes at `stateMatrix.tsx:60-61` show 44 px was meant to be proven; it is not. Either assert on `incomplete` as well, or drop the option and note that target size is proven in the browser layer.
+- [x] [Review][Patch] **AC2's "unreadable long identifier" property is measured over an empty node set.** [frontend/e2e/journey-accessibility.spec.ts:16-17] The selector is `code,[data-identifier]` with a `[data-contained-scroll]` exemption; `data-identifier` and `data-contained-scroll` have **zero** occurrences in `frontend/src`, and `<code>` occurs only in `DraftCard`, which never mounts in this spec because the stub returns the draft activity only after a message is sent. Confirmed by probe: `codeTags: 0` on all three routes even when settled. `unreadableIdentifier` is unconditionally `false`.
+- [x] [Review][Patch] **`fixtures.tsx` supplies 27 of the 60 asserted states but is not among the bound tested artifacts.** [backend/scripts/generate_state_semantics_evidence.py:31-37] `CONTRACT_FILES` binds five paths; `frontend/src/components/primitives/fixtures.tsx` is absent, so editing `PRIMITIVE_FIXTURES` changes what was tested while every recorded digest stays valid. Separately, `tested_artifact_digests` is read by nothing — `audit_evidence_drift` diffs only `contract_digests`, and `_referenced_paths` collects string *values*, not dict keys — and it exactly duplicates `version_bindings.dataset.files`. (Task 8's own requirement is met: `apiStubs.ts` and `repairJourneyStubState.ts` are bound in both blocks.)
+- [x] [Review][Patch] **The `motion-reduce:animate-none` exemption is evaluated container-wide rather than per node.** [frontend/src/test/stateMatrix.test.tsx:28-33] All classes are flattened into one `tokens` array before the membership test, so one properly-guarded node exempts an unguarded `animate-pulse` sibling in the same fixture.
+- [x] [Review][Patch] **Only `journey-accessibility.spec.ts` feeds `results.accessibility`; this story's real contrast work contributes nothing to the artifact.** [backend/scripts/generate_state_semantics_evidence.py:21,74] The 16 widened approval scans in `accessibility.spec.ts` — the change that actually caught, and now guards, the `#858585` defect — can be deleted or broken while the evidence file still records `"accessibility": "passed"`. Either bind that spec too, or state in the artifact that the accessibility verdict covers one spec.
+- [x] [Review][Patch] **`primitiveFamily()` classifies by fall-through on a `string` parameter.** [frontend/src/test/stateMatrix.tsx:16-22] The parameter is `string`, not `PrimitiveFixture["primitive"]`, so no exhaustiveness check is possible and anything unmatched returns `"provenance"`. `StatusBadge`'s approval-derived `rejected` / `expired` / `stale` are recorded as `run/*`; `EvidenceLink`, `EvidenceHighlight` and `IdentifierCopyButton` become `provenance/*`, including `provenance/idle`. Because distinctness is pairwise within a family, mis-filing changes what is compared, and a newly added primitive is silently filed under `provenance` while still satisfying the ten-family assertion.
+- [x] [Review][Patch] **The UX-DR10 percentage/ETA rule guards only the `run` family, which is ten single-word status badges.** [frontend/src/test/stateMatrix.test.tsx:36-38; frontend/src/test/stateMatrix.tsx:17] No `ProgressCard` or `RunsTable` state exists in the matrix, and `terminal-outcome` — where run-progress language would actually land — is unguarded: a `terminal-outcome` fixture reading "Run timed out at ~85% after 04:30" would pass. The UX-DR11 comparison carve-out itself is implemented exactly as Decision 4 specified.
+- [x] [Review][Patch] **The Completion Notes List is empty; four acceptance boundaries route their required record there.** [story file, `### Completion Notes List`] Decision 1 conditions the entire production-change allowance on a Completion Notes record ("a finding to escalate, not a licence"), Task 7's boundary says "whichever branch is taken, Completion Notes state the measured values", and Decision 4 and the Dev Notes route the honest gaps there. All of it was written into `### Debug Log References` instead. Move or mirror it.
+- [x] [Review][Patch] **The absent-spec refusal branch is untested.** [backend/tests/test_state_semantics_evidence.py:37-43] `test_refused_report_writes_nothing` is parametrised over `{"skipped": True}` and `{"omit_edge": True}` only. `_validate`'s "required test absent from report" path — the guard against a spec file silently vanishing from the XML — is never exercised, so it is dead code as far as the machinery check is concerned.
+- [x] [Review][Patch] **`deferred-work.md:177` overwrote its original owner instead of annotating beside it.** [_bmad-output/implementation-artifacts/deferred-work.md:177] The heading changed from "Story 4.9." to "owner open.", unlike `:294`, `:476`, `:518` and `:558`, which all preserve the original wording and append a nested closure or re-point bullet — the convention Task 13's own acceptance boundary names. The new owner, "the Epic 4 retrospective", is also `optional` in `sprint-status.yaml`, so nothing schedules it.
+- [x] [Review][Patch] **`expect()` runs in the `describe` body rather than inside a test case.** [frontend/src/test/stateMatrix.test.tsx:47] `expect(STATE_MATRIX.length).toBeGreaterThan(0)` executes at collection time, producing a collection error rather than a named failing case.
+- [x] [Review][Defer] **Decision 11's zero-line fence contradicts Task 11, and the Gate A readiness report has no drift guard.** [4-6-...md:385-390; evidence/story-1.11/gate-a-readiness-report.json] Decision 11 fences "every existing `evidence/story-*/` directory other than the new `story-4.6/`" at zero lines and calls the fences absolute, while Task 11 requires re-running Gate A, which rewrites `evidence/story-1.11/gate-a-readiness-report.json`. The implementation resolved the contradiction in Task 11's favour without escalating it, as Decision 1 requires. Verified separately: `approval_and_audit_invariants` (Story 4.5's invariant) was **absent** from the committed report before this story, so the release-blocking artifact was stale for a whole story and no test compares it against the live registry. — deferred, spec-level contradiction for the Epic 4 retrospective
+- [x] [Review][Defer] **The reduced-motion arm of the widened approval scans asserts nothing motion-specific.** [frontend/e2e/accessibility.spec.ts:58,68,97] The axe `wcag2a`-`wcag22aa` tagset contains no `prefers-reduced-motion` rule and the DOM is identical in both arms, so doubling four tests to eight (16 browser scans at a 120 s timeout) buys coverage of the same assertions twice. — deferred, pre-existing limitation of the shared axe tagset
+- [x] [Review][Defer] **`expectAxeClean` discards `results.incomplete` and never asserts `results.passes` is non-empty.** [frontend/e2e/support/accessibility.ts:22-24] An axe injection that evaluated nothing would read as clean. — deferred, pre-existing Story 1.10 helper, unchanged here
+- [x] [Review][Defer] **Root-element `style.zoom = "2"` is not WCAG 1.4.10 reflow.** [frontend/e2e/journey-accessibility.spec.ts:42; frontend/e2e/accessibility.spec.ts:109] CSS `zoom` does not shift `matchMedia` breakpoints in Chromium, so responsive variants never reflow; the test measures a magnified desktop layout. — deferred, pre-existing repo-wide zoom idiom, not introduced here
+- [x] [Review][Defer] **The sticky-overlap probe counts a sticky ancestor against its own sticky descendant.** [frontend/e2e/journey-accessibility.spec.ts:9-15] The flat pairwise rect intersection has no ancestor/containment exclusion, so legitimately nested sticky regions would be unavoidably red. — deferred, no current surface trips it
+- [x] [Review][Defer] **`generate()` hardcodes `ignore_paths={OUTPUT_RELATIVE}` while accepting an arbitrary `output_path`.** [backend/scripts/generate_state_semantics_evidence.py:88,93] A caller passing both a custom output path and `allow_dirty=False` hits `DirtyTreeError` on its own prior output. — deferred, only reachable by a caller combination nothing in the repo uses
 
 ---
 
@@ -794,6 +880,65 @@ separately generated evidence commit.
   CloudWatch wording defect and unreachable changed-policy fixture remain Epic 4 retrospective input.
 
 ### Completion Notes List
+
+**Written at code review 2026-09-02.** Decision 1, Task 5 and Task 7 each route a required record
+here and it was left empty, with everything written into Debug Log References instead. Decision 1
+conditions the production-change allowance on this record ("a finding to escalate, not a licence"),
+so the entries below are reconstructed from the Debug Log and from measurements re-run at review.
+
+**The one production change, and its measurement (Decision 1 / Decision 10 / Task 7).**
+`frontend/src/components/ui/button.tsx`. Measured before changing, per Decision 10's order: the
+widened full-page approval scans observed the **outline** Refresh control at `#858585` on
+`#ffffff`, ratio **3.69:1** against a 4.5:1 threshold, in msedge under both the default and the
+`reducedMotion: "reduce"` arms. Independently reproduced at code review by reverting the fix and
+re-running: **2 of 8** msedge scans went red on the same node with the same colours. The 2-of-8
+rate is itself the finding — the failing window is the *enabled* transition, where `transition-all`
+is still interpolating back from `disabled:opacity-50`, so the guard is a race rather than a
+deterministic check. axe-core skips disabled/inert nodes for `color-contrast`, which is why the
+disabled node itself was never the measurable path (Trap 4).
+
+The fix was **narrowed at code review**. As delivered it sat on the shared `cva` base
+(`disabled:bg-muted disabled:text-foreground disabled:opacity-100`), restyling every disabled
+button in the app; Decision 10 states the fix "does not restyle any other Button variant". Because
+`--secondary` and `--muted` are both `oklch(0.97 0 0)` in light and both `oklch(0.269 0 0)` in dark,
+a disabled `secondary` button — `DraftCard`'s "Run optimization", whose label does not change while
+the mutation is in flight — became visually near-indistinguishable from its enabled state. The
+treatment now lives on the `outline` variant only; every other variant keeps `disabled:opacity-50`.
+All 16 approval scans pass across both projects and both motion arms after the narrowing.
+
+**Task 5 — the two `ActivityTimeline` regexes.** They were deleted, but Task 5 permits deletion
+only if the `message` family's matrix entries cover the same ground, and that family is seven
+`literal()` prose fixtures that never mount `ActivityTimeline`. The condition was not met and no
+reason was recorded. **Both lines were restored at code review**, so the repository again states the
+UX-DR32 rule over rendered product output as well as over the matrix.
+
+**Task 7 corrections.** The contrast assertion added to `frontend/src/index.test.ts` compared two
+string literals (`contrastRatio("#252525", "#f7f7f7")`) and could not regress; `readHexToken` reads
+only `#RRGGBB` while `--foreground` and `--muted` are declared in `oklch()`. The helper now converts
+achromatic `oklch(L 0 0)` exactly (at chroma 0 the OKLab transform collapses to `L = cbrt(Y)`), and
+the assertion reads both tokens. The recorded literals were also wrong: `#252525` is the **dark**
+theme's `--muted` (`oklch(0.269)`), not the light theme's `--foreground`. Light `--foreground` is
+`#0A0A0A` and light `--muted` is `#F5F5F5`, which pair at **18.15:1**.
+
+**Honest gaps (mirrored from the Debug Log, with review corrections).**
+(a) Prohibited-treatment coverage scans class tokens and rendered text, not inline `style`,
+background images, or tag-targeted CSS. The token list originally used Tailwind **v3** gradient
+names against a v4 repo and let `bg-linear-to-r` through; corrected, and Decision 4's list updated.
+(b) `NOT COVERED: chat_sse_healthy_stream:needs_local_sse_server` (Decision 12b).
+(c) Matrix completeness is the ten AC1 families, **not** source-enumerated product state: 33 of the
+60 entries render hand-written prose and mount no product component, so AC1's distinctness claim is
+not yet proven against shipped surfaces. Open as review decisions 1 and 2.
+(d) The ARIA snapshot lock is re-pointed, not built (Decision 12).
+(e) Phone/tablet Epic 2–4 coverage is out of scope (Decision 6).
+(f) `deferred-work.md`'s `:512` and `:524` entries remain open and untouched; `tabTo` is not used by
+Task 6's spec, so `:524`'s trigger did not fire.
+
+**Not done as specified, and now corrected (Task 4's acceptance boundary).** Task 4 requires that
+"every new assertion is demonstrated red once — weaken the guard or corrupt the fixture, observe the
+failure, restore… A guard that cannot be made to fail by a relevant mutation does not count." The
+RED→GREEN lines recorded in the Debug Log are reds from *incomplete* code (an unresolved import, a
+first draft), not from mutating finished code, and five delivered guards could not be made to fail.
+Mutation results are recorded under Review Findings above.
 
 ### File List
 
