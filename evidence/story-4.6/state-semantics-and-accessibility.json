@@ -1,0 +1,136 @@
+{
+  "story": "4.6",
+  "measurement_date": "2026-09-02",
+  "requirements": [
+    "NFR18",
+    "NFR20",
+    "NFR29",
+    "UX-DR10",
+    "UX-DR13",
+    "UX-DR31",
+    "UX-DR32",
+    "UX-DR34",
+    "UX-DR35"
+  ],
+  "results": {
+    "states": [
+      "alert/default",
+      "alert/default with action",
+      "alert/destructive",
+      "alert/destructive with action",
+      "alert/disconnected",
+      "alert/reconnected",
+      "alert/reconnecting",
+      "approval/consumed",
+      "approval/expired",
+      "approval/pending",
+      "approval/pending-overdue",
+      "approval/rejected",
+      "approval/stale",
+      "comparison/not computed",
+      "comparison/populated",
+      "covers all ten AC1 families with pairwise-distinct text and role/name trees",
+      "draft/fresh",
+      "draft/queued-for-optimization",
+      "draft/rejected",
+      "draft/stale",
+      "empty-state/filtered empty",
+      "empty-state/intrinsically empty",
+      "empty-state/with action",
+      "empty-state/without action",
+      "message/approval expired",
+      "message/approval rejected",
+      "message/approval stale",
+      "message/clarification",
+      "message/grounded agent response",
+      "message/planner message",
+      "message/refusal",
+      "provenance/collapsed item",
+      "provenance/copied",
+      "provenance/expanded item with evidence",
+      "provenance/expanded item without evidence",
+      "provenance/field or range",
+      "provenance/idle",
+      "provenance/record",
+      "provenance/record card",
+      "provenance/row",
+      "run/cancelled",
+      "run/completed",
+      "run/expired",
+      "run/failed",
+      "run/infeasible",
+      "run/queued",
+      "run/rejected",
+      "run/running",
+      "run/stale",
+      "run/timed out",
+      "skeleton/table region",
+      "skeleton/text line",
+      "terminal-outcome/approval expired",
+      "terminal-outcome/approval rejected",
+      "terminal-outcome/approval stale",
+      "terminal-outcome/cancelled",
+      "terminal-outcome/completed",
+      "terminal-outcome/failed",
+      "terminal-outcome/infeasible",
+      "terminal-outcome/non-promotable",
+      "terminal-outcome/timed out"
+    ],
+    "state_matrix": "passed",
+    "accessibility": "passed"
+  },
+  "passed": true,
+  "contract_digests": {
+    "algorithm": "sha256",
+    "sample_tiny_input": "77da9cadedd6535b255306cb0acad2ed5eed2ec80045b392ec58a2dfcab0890e",
+    "sample_tiny_input_more_tm": "2d9212ffb453b01a2e9c7266a5c1d5194085a40ece03fdb132db86b1eb8a340c"
+  },
+  "tested_artifact_digests": {
+    "frontend/src/test/stateMatrix.tsx": "4c12b9c9cc648d8c61bd54dbcadb2b44277236f53be80538de6f3d832924ae96",
+    "frontend/src/test/stateMatrix.test.tsx": "e5fdb193619dff47f0c7066919e97b06a01c493e7c0fd3b26197b0698ddde5a4",
+    "frontend/e2e/journey-accessibility.spec.ts": "20155729c90b8f4a2f951d089721e0b45e0d0f63e4330044c33c9f0661afee23",
+    "frontend/e2e/support/apiStubs.ts": "b26e4d8412b67c23aafb64edf3885b4ab4d2b299d94cadc87a67046310002fe3",
+    "frontend/e2e/support/repairJourneyStubState.ts": "f7504f9fa41251ab950af79e65ce53d990ecafcdcdcb5f5ee130a067e1c760b1"
+  },
+  "version_bindings": {
+    "dataset": {
+      "kind": "version-controlled evaluation fixture artifacts",
+      "file_count": 5,
+      "files": {
+        "frontend/e2e/journey-accessibility.spec.ts": {
+          "sha256": "20155729c90b8f4a2f951d089721e0b45e0d0f63e4330044c33c9f0661afee23"
+        },
+        "frontend/e2e/support/apiStubs.ts": {
+          "sha256": "b26e4d8412b67c23aafb64edf3885b4ab4d2b299d94cadc87a67046310002fe3"
+        },
+        "frontend/e2e/support/repairJourneyStubState.ts": {
+          "sha256": "f7504f9fa41251ab950af79e65ce53d990ecafcdcdcb5f5ee130a067e1c760b1"
+        },
+        "frontend/src/test/stateMatrix.test.tsx": {
+          "sha256": "e5fdb193619dff47f0c7066919e97b06a01c493e7c0fd3b26197b0698ddde5a4"
+        },
+        "frontend/src/test/stateMatrix.tsx": {
+          "sha256": "4c12b9c9cc648d8c61bd54dbcadb2b44277236f53be80538de6f3d832924ae96"
+        }
+      }
+    },
+    "evaluator": "Vitest and Playwright JUnit; skips and missing projects are refusals",
+    "model": "not applicable \u2014 deterministic UI fixtures",
+    "prompt": "not applicable \u2014 no model invocation",
+    "tool": "Vitest 4.1.10, jest-axe, Playwright and @axe-core/playwright",
+    "policy": "NFR18/NFR20/NFR29 and UX-DR10/13/31/32/34/35",
+    "application": "local frontend production build served by Vite preview",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "not applicable \u2014 no solver run",
+    "code": {
+      "git_commit": "792c031ec8f976947af60bb6a1b048f1168f5e99",
+      "working_tree_dirty": false
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    },
+    "schema_version": "e5f6a7b8c9d0"
+  }
+}
