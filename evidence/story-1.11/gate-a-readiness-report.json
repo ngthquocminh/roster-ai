@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-08-26",
+  "measurement_date": "2026-09-02",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -731,8 +731,8 @@
         "cases": {
           "backend/tests/test_gate_a_mutation_audit.py": {
             "status": "passed",
-            "total": 33,
-            "passed": 33,
+            "total": 39,
+            "passed": 39,
             "skipped": 0,
             "failed": 0
           },
@@ -795,6 +795,7 @@
         "test_files": [
           "frontend/src/test/accessibility.test.tsx",
           "frontend/src/test/accessibility-contract.test.tsx",
+          "frontend/src/test/evidence-accessibility.test.tsx",
           "frontend/src/features/scenario-data/usePhoneViewport.test.tsx"
         ],
         "cases": {
@@ -807,8 +808,15 @@
           },
           "frontend/src/test/accessibility-contract.test.tsx": {
             "status": "passed",
-            "total": 26,
-            "passed": 26,
+            "total": 28,
+            "passed": 28,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/test/evidence-accessibility.test.tsx": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
             "skipped": 0,
             "failed": 0
           },
@@ -847,8 +855,8 @@
         "cases": {
           "frontend/e2e/accessibility.spec.ts": {
             "status": "passed",
-            "total": 6,
-            "passed": 6,
+            "total": 26,
+            "passed": 26,
             "skipped": 0,
             "failed": 0
           },
@@ -889,8 +897,8 @@
           },
           "frontend/e2e/repair-journey-accessibility.spec.ts": {
             "status": "passed",
-            "total": 2,
-            "passed": 2,
+            "total": 4,
+            "passed": 4,
             "skipped": 0,
             "failed": 0
           },
@@ -943,8 +951,8 @@
           },
           "backend/tests/test_evidence_convention.py": {
             "status": "passed",
-            "total": 74,
-            "passed": 74,
+            "total": 87,
+            "passed": 87,
             "skipped": 0,
             "failed": 0
           },
@@ -1060,6 +1068,134 @@
         }
       },
       "bound": true
+    },
+    {
+      "story": "4.5",
+      "check": "approval_and_audit_invariants_proof",
+      "description": "Exact PostgreSQL approval/audit proof matrix bound to a generated release verdict.",
+      "invariant": "approval_and_audit_invariants",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "evidence",
+      "source": "evidence/story-4.5/approval-audit-invariants.json",
+      "bound": true
+    },
+    {
+      "story": "4.5",
+      "check": "approval_audit_report_machinery",
+      "description": "Live machinery guard: skipped PostgreSQL proof nodes cannot be reported as passing.",
+      "invariant": "approval_and_audit_invariants",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_approval_audit_report.py"
+        ],
+        "cases": {
+          "backend/tests/test_approval_audit_report.py": {
+            "status": "passed",
+            "total": 5,
+            "passed": 5,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "4.6",
+      "check": "state_semantics_matrix",
+      "description": "Enumerable component-layer state semantics and WCAG proof.",
+      "invariant": "workflow_state_semantics",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "test_files": [
+          "frontend/src/test/stateMatrix.test.tsx"
+        ],
+        "cases": {
+          "frontend/src/test/stateMatrix.test.tsx": {
+            "status": "passed",
+            "total": 62,
+            "passed": 62,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "4.6",
+      "check": "journey_accessibility_browser_layer",
+      "description": "Desktop Chat, Runs, and Results proof across zoom, spacing, motion, and axe.",
+      "invariant": "workflow_state_semantics",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "playwright",
+        "test_files": [
+          "frontend/e2e/journey-accessibility.spec.ts"
+        ],
+        "cases": {
+          "frontend/e2e/journey-accessibility.spec.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
+    },
+    {
+      "story": "4.6",
+      "check": "state_semantics_evidence",
+      "description": "Clean-tree state matrix and browser measurement bound through NFR27.",
+      "invariant": "workflow_state_semantics",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "evidence",
+      "source": "evidence/story-4.6/state-semantics-and-accessibility.json",
+      "bound": true
+    },
+    {
+      "story": "4.6",
+      "check": "state_semantics_report_machinery",
+      "description": "Live fail-closed generator guards for skipped, absent, and unbound reports.",
+      "invariant": "workflow_state_semantics",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_state_semantics_evidence.py"
+        ],
+        "cases": {
+          "backend/tests/test_state_semantics_evidence.py": {
+            "status": "passed",
+            "total": 5,
+            "passed": 5,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
     }
   ],
   "ar28_invariants": {
@@ -1151,6 +1287,26 @@
         "repair_browser_journey_machinery"
       ],
       "blocking": []
+    },
+    "approval_and_audit_invariants": {
+      "title": "Approval atomicity, idempotency, and authoritative audit integrity",
+      "result": "passed",
+      "contributing_checks": [
+        "approval_and_audit_invariants_proof",
+        "approval_audit_report_machinery"
+      ],
+      "blocking": []
+    },
+    "workflow_state_semantics": {
+      "title": "Workflow state semantics and completed-journey accessibility",
+      "result": "passed",
+      "contributing_checks": [
+        "state_semantics_matrix",
+        "journey_accessibility_browser_layer",
+        "state_semantics_evidence",
+        "state_semantics_report_machinery"
+      ],
+      "blocking": []
     }
   },
   "ac2_gates": {
@@ -1166,21 +1322,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 1292,
-      "run_started": "2026-08-26T13:24:33.057000+07:00",
-      "sha256": "e002786cbd939fc19ee3b4c5ceaff3bb3238fbec9dab811e77302c0da0dddcca"
+      "cases": 1504,
+      "run_started": "2026-09-02T08:44:03.693568+07:00",
+      "sha256": "ab1dbfacd92f2983df8ebf16d438e7b50ba872232d28b1777d28559ae1d8c860"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "cases": 529,
-      "run_started": "2026-08-26T06:18:40.700Z",
-      "sha256": "0b5350d1321e135283407c253c4c22d63670a0f7c061656562d76217e3a120bb"
+      "cases": 643,
+      "run_started": "2026-09-02T00:45:57.891Z",
+      "sha256": "da5461bf7b4cc2d464ce236971ce6f5360fcc7217dc93861664d5073375ae2e7"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
-      "cases": 52,
-      "run_started": "2026-08-26T06:18:52.431Z",
-      "sha256": "6b35e7d89b3c77fa3e2e204b1c45cff1c86920bea0ed9d629697ef9f63fec1f6"
+      "cases": 76,
+      "run_started": "2026-09-02T00:46:07.591Z",
+      "sha256": "85270f68b5ebc9ce89cbada03d86b5ef8c835006de305bd7ff90426c7ff22f7e"
     }
   },
   "version_bindings": {
@@ -1194,7 +1350,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "2a6b02522d7e620e85a280c721df9d8a3fa7b3c9",
+      "git_commit": "792c031ec8f976947af60bb6a1b048f1168f5e99",
       "working_tree_dirty": false
     },
     "image": {
@@ -1202,7 +1358,7 @@
       "web": "local source tree",
       "database": "postgres:18"
     },
-    "schema_version": "c4d5e6f7a8b9"
+    "schema_version": "e5f6a7b8c9d0"
   },
   "blocking": [],
   "gate_a_passed": true,
