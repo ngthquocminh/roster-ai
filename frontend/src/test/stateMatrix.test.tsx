@@ -52,14 +52,41 @@ function expectNoProhibitedTreatment(container: HTMLElement, family: StateFamily
   // UX-DR10 bans invented progress language. `run` alone was too narrow: that family
   // is ten single-word status badges, while `terminal-outcome` is where a phrase like
   // "timed out at ~85% after 04:30" would actually land.
+  // The vocabulary is ProgressCard.test.tsx's own FORBIDDEN list (%/eta/remaining/
+  // likely/probably) plus `approximately` and `~`. An earlier form also banned any
+  // `mm:ss`-shaped string, which matched the legitimate wall-clock timestamp
+  // ProgressCard renders — and that its own contract test REQUIRES ("Accepted
+  // 2026-08-22 10:00"). Banning a real timestamp is not what UX-DR10 prohibits.
   if (family === "run" || family === "terminal-outcome") {
-    expect(normalizedText(container)).not.toMatch(/%|\bETA\b|approximately|~|\b\d{1,2}:\d{2}\b/i);
+    expect(normalizedText(container)).not.toMatch(/%|\bETA\b|approximately|~|\bremaining\b|\blikely\b|\bprobably\b/i);
   }
   // UX-DR11 deliberately permits real coverage/overtime/cost percentages in comparisons.
+  // UX-DR35 prohibits MERGED ACTION TREATMENT: two actions with different
+  // consequences rendered identically, so a planner cannot tell them apart
+  // (Story 3.6's Send vs Run optimization; Decision 4 generalises it to Approve
+  // as baseline vs Reject). The earlier form — "if there is more than one action,
+  // their class sets must not all be identical" — punishes the opposite and
+  // entirely legitimate case, which real components hit immediately: a card
+  // carrying four `Copy <identifier>` buttons is ONE action applied to four
+  // targets, distinguished by accessible name, and should look the same.
+  //
+  // The rule instead groups actions by class signature and requires each group to
+  // be a single action verb. Approve and Reject sharing a signature fails; four
+  // Copy buttons sharing one does not.
   const actions = Array.from(container.querySelectorAll<HTMLElement>("button,a"));
-  if (actions.length > 1) {
-    expect(new Set(actions.map((node) => Array.from(node.classList).sort().join(" "))).size).toBeGreaterThan(1);
+  const verbOf = (node: HTMLElement) =>
+    (node.getAttribute("aria-label") ?? normalizedText(node)).trim().split(/\s+/)[0].toLowerCase();
+  const bySignature = new Map<string, Set<string>>();
+  for (const node of actions) {
+    const signature = Array.from(node.classList).sort().join(" ");
+    const verbs = bySignature.get(signature) ?? new Set<string>();
+    verbs.add(verbOf(node));
+    bySignature.set(signature, verbs);
   }
+  const merged = Array.from(bySignature.values())
+    .filter((verbs) => verbs.size > 1)
+    .map((verbs) => Array.from(verbs).sort().join(" vs "));
+  expect(merged, "distinct actions share one visual treatment").toEqual([]);
 }
 
 describe("workflow state semantics matrix", () => {
