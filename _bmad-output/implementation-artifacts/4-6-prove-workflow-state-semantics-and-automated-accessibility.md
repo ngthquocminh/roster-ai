@@ -435,28 +435,28 @@ for it, and it would be new test infrastructure inside a proof story.
     failure is attributed against these numbers, never against Story 4.4's or 4.5's.
 
 - [x] **Task 2 — Read the files this story asserts against and extends** (Decision 1)
-  - [ ] `frontend/src/components/primitives/fixtures.tsx` and `fixtures.test.tsx` — the exact
+  - [x] `frontend/src/components/primitives/fixtures.tsx` and `fixtures.test.tsx` — the exact
         per-primitive state lists Trap 1 names.
-  - [ ] `frontend/src/test/accessibility.test.tsx`, `accessibility-contract.test.tsx`,
+  - [x] `frontend/src/test/accessibility.test.tsx`, `accessibility-contract.test.tsx`,
         `evidence-accessibility.test.tsx` — the component-layer harness and its `expectAxeClean`
         configuration.
-  - [ ] `frontend/e2e/accessibility.spec.ts`, `layout-accessibility.spec.ts`,
+  - [x] `frontend/e2e/accessibility.spec.ts`, `layout-accessibility.spec.ts`,
         `reduced-motion.spec.ts`, `repair-journey-accessibility.spec.ts`,
         `e2e/support/accessibility.ts`, `e2e/support/apiStubs.ts`,
         `e2e/support/repairJourneyStubState.ts`.
-  - [ ] `frontend/src/features/chat/ActivityTimeline.tsx`, `chat/DraftCard.tsx`,
+  - [x] `frontend/src/features/chat/ActivityTimeline.tsx`, `chat/DraftCard.tsx`,
         `approvals/ApprovalDecisionPanel.tsx`, `approvals/ApprovalRequestCard.tsx`,
         `provenance/ProvenanceTimeline.tsx`, and `src/components/runs/{RunsTable,ProgressCard,RunStatusBadge}.tsx`
         — the components whose literal states the matrix enumerates.
-  - [ ] `backend/scripts/generate_repair_journey_evidence.py`, `backend/scripts/junit_ingest.py`,
+  - [x] `backend/scripts/generate_repair_journey_evidence.py`, `backend/scripts/junit_ingest.py`,
         `backend/scripts/gate_a_checks.py`, `backend/tests/test_gate_a_readiness.py`,
         `backend/tests/test_repair_journey_evidence.py`.
   - Acceptance boundary: the File List records which of these were read, not merely opened.
 
 - [x] **Task 3 — Build `frontend/src/test/stateMatrix.tsx`** (AC1; Decisions 2, 12b)
-  - [ ] Export `STATE_MATRIX: readonly StateFixture[]` with `{ family, state, render }`, `family`
+  - [x] Export `STATE_MATRIX: readonly StateFixture[]` with `{ family, state, render }`, `family`
         drawn from AC1's ten nouns, and `PRIMITIVE_FIXTURES` composed in unchanged.
-  - [ ] Cover, at minimum: **message** (planner message, agent response with a grounded claim,
+  - [x] Cover, at minimum: **message** (planner message, agent response with a grounded claim,
         clarification, refusal, each terminal reason); **draft** (fresh, stale, rejected,
         queued-for-optimization); **run** (queued, running, completed, infeasible, timed out,
         cancelled, failed); **comparison** (populated, and "Not computed" for an absent metric);
@@ -466,85 +466,85 @@ for it, and it would be new test infrastructure inside a proof story.
         all three `ReconnectBanner` states); **skeleton**; **empty-state** (intrinsically empty
         versus filtered-empty, UX-DR15); **provenance** (collapsed and expanded item, with and
         without evidence refs).
-  - [ ] Every entry renders provider-free and deterministically — the `fixtures.tsx` contract. Where
+  - [x] Every entry renders provider-free and deterministically — the `fixtures.tsx` contract. Where
         a component needs a router or a query client, wrap it inside the entry's own `render`, never
         in the consuming test.
   - Acceptance boundary: `fixtures.tsx` and `fixtures.test.tsx` have a **zero-line diff**.
 
 - [x] **Task 4 — Write `frontend/src/test/stateMatrix.test.tsx`** (AC1; Decisions 3, 4, 5, 9)
-  - [ ] One case **per state**, titled `` `${family}/${state}` `` (Decision 9), each asserting:
+  - [x] One case **per state**, titled `` `${family}/${state}` `` (Decision 9), each asserting:
         axe-clean at the shared WCAG tag set; the prohibited-treatment helper; non-empty text.
-  - [ ] Pairwise-within-family assertions: distinct normalized text, and distinct normalized
+  - [x] Pairwise-within-family assertions: distinct normalized text, and distinct normalized
         `(role, accessible name)` trees (Decision 3).
-  - [ ] The count guard: emitted per-state cases equal `STATE_MATRIX.length`.
-  - [ ] The `run`-family text rule and the `comparison` carve-out exactly as Decision 4 states, with
+  - [x] The count guard: emitted per-state cases equal `STATE_MATRIX.length`.
+  - [x] The `run`-family text rule and the `comparison` carve-out exactly as Decision 4 states, with
         the UX-DR11 reason in a comment so a later reader does not "tighten" it.
-  - [ ] The UX-DR35 merged-action assertion for every family rendering more than one action.
+  - [x] The UX-DR35 merged-action assertion for every family rendering more than one action.
   - Acceptance boundary: every new assertion is **demonstrated red once** — weaken the guard or
     corrupt the fixture, observe the failure, restore, and record the RED→GREEN line. A guard that
     cannot be made to fail by a relevant mutation does not count.
 
 - [x] **Task 5 — Reconcile the two ad-hoc prohibition regexes** (Decision 4)
-  - [ ] If the `message` family's matrix entries cover `ActivityTimeline.test.tsx:281` and `:430`,
+  - [x] If the `message` family's matrix entries cover `ActivityTimeline.test.tsx:281` and `:430`,
         delete those two lines and say so. Otherwise leave them and record why in Completion Notes.
   - Acceptance boundary: the repository ends with **one** statement of the UX-DR32 prohibition rule,
     not two uncoordinated copies.
 
 - [x] **Task 6 — Write `frontend/e2e/journey-accessibility.spec.ts`** (AC2; Decisions 6, 7, 12b)
-  - [ ] Drive the real desktop journey through `installApiStubs` — Chat (timeline plus draft), Runs
+  - [x] Drive the real desktop journey through `installApiStubs` — Chat (timeline plus draft), Runs
         (table plus progress), Results (comparison, all four approval-panel states, provenance).
-  - [ ] Apply all four dimensions from Decision 6, reusing `layout-accessibility.spec.ts`'s exact
+  - [x] Apply all four dimensions from Decision 6, reusing `layout-accessibility.spec.ts`'s exact
         text-spacing rule and `accessibility.spec.ts`'s `style.zoom = "2"` technique.
-  - [ ] Assert the three literal AC2 properties: no page-level horizontal scroll; no overlapping
+  - [x] Assert the three literal AC2 properties: no page-level horizontal scroll; no overlapping
         sticky text; no unreadable long identifier.
-  - [ ] Record which `STATE_MATRIX` states are **not** reachable through the stubs (Decision 7), and
+  - [x] Record which `STATE_MATRIX` states are **not** reachable through the stubs (Decision 7), and
         which browser states are measured in the degraded Chat variant (Decision 12b).
   - Acceptance boundary: the spec must pass under **both** `chromium` and `msedge`; a chromium-only
     pass does not satisfy `required_projects`.
 
 - [x] **Task 7 — Execute Decision 10's contrast measurement, in its stated order** (AC2; Decision 10)
-  - [ ] Widen `accessibility.spec.ts`'s four `[data-approval-panel]`-scoped scans to full page; run
+  - [x] Widen `accessibility.spec.ts`'s four `[data-approval-panel]`-scoped scans to full page; run
         both the default and the `reducedMotion: "reduce"` arms; record the node, computed colours
         and ratio for anything red.
-  - [ ] Green → close `deferred-work.md:558` citing the measurement **and** the axe-source finding.
+  - [x] Green → close `deferred-work.md:558` citing the measurement **and** the axe-source finding.
         Red → apply the smallest shared-Button fix and add the contrast pair to
         `frontend/src/index.test.ts`'s `contrastRatio` assertions.
   - Acceptance boundary: whichever branch is taken, Completion Notes state the measured values.
     "It passed now" without numbers is not a measurement.
 
 - [x] **Task 8 — Write `backend/scripts/generate_state_semantics_evidence.py`** (AC3; Decisions 8, 9)
-  - [ ] Mirror `generate_repair_journey_evidence.py` structurally, but parse through
+  - [x] Mirror `generate_repair_journey_evidence.py` structurally, but parse through
         `scripts.junit_ingest.parse_junit` for both sources — no third XML parser.
-  - [ ] Require, per source: `tests > 0`, `executed > 0`, `skipped == 0`, `failures == 0`,
+  - [x] Require, per source: `tests > 0`, `executed > 0`, `skipped == 0`, `failures == 0`,
         `errors == 0`; and `chromium` plus `msedge` for the Playwright source.
-  - [ ] Derive `results.states` from the Vitest report's case names (Decision 9). Never a literal
+  - [x] Derive `results.states` from the Vitest report's case names (Decision 9). Never a literal
         list.
-  - [ ] Emit a top-level `passed` boolean; bind through `resolve_bindings()` supplying only the
+  - [x] Emit a top-level `passed` boolean; bind through `resolve_bindings()` supplying only the
         seven prose keys (`evaluator`, `model`, `prompt`, `tool`, `policy`, `application`, `solver`)
         and never `code`, `dataset`, `scenario`, `image` or `schema_version`.
-  - [ ] Bind `contract_digests` over the modules that decide every asserted value — including
+  - [x] Bind `contract_digests` over the modules that decide every asserted value — including
         `e2e/support/apiStubs.ts` and `e2e/support/repairJourneyStubState.ts`. Story 3.12's review
         found exactly this omission.
-  - [ ] `ValueError` and **no file** when a declared binding is missing or a required spec or test is
+  - [x] `ValueError` and **no file** when a declared binding is missing or a required spec or test is
         absent from its report.
   - Acceptance boundary: the failure path is reachable and tested, not dead code.
 
 - [x] **Task 9 — Write `backend/tests/test_state_semantics_evidence.py`** (Decision 8)
-  - [ ] Mirror `test_repair_journey_evidence.py`: all-pass writes `passed: true`; a failing source
+  - [x] Mirror `test_repair_journey_evidence.py`: all-pass writes `passed: true`; a failing source
         writes `passed: false` and still writes the file; an all-skipped report is **refused**; a
         report missing a required project is refused; a missing declared binding raises `ValueError`
         naming the key and writes nothing.
-  - [ ] All writes to `tmp_path` with `allow_dirty=True`.
+  - [x] All writes to `tmp_path` with `allow_dirty=True`.
   - Acceptance boundary: `assert not output.exists()` on every refusal case.
 
 - [x] **Task 10 — Register the Gate A invariant and all four checks** (AC2, AC3; Decisions 11, 12)
-  - [ ] Add the `Invariant` to `NFR29_GATES`, not to `AR28_INVARIANTS`.
-  - [ ] Add the four checks of Decision 11. Never one check declaring both `evidence_path` and
+  - [x] Add the `Invariant` to `NFR29_GATES`, not to `AR28_INVARIANTS`.
+  - [x] Add the four checks of Decision 11. Never one check declaring both `evidence_path` and
         `test_files`.
-  - [ ] Add `frontend/src/test/evidence-accessibility.test.tsx` to `accessibility_component_layer`'s
+  - [x] Add `frontend/src/test/evidence-accessibility.test.tsx` to `accessibility_component_layer`'s
         `test_files`, and close `deferred-work.md:294`.
-  - [ ] Add the new evidence path to the **exact set** in `test_gate_a_readiness.py`, with a comment.
-  - [ ] Confirm `test_every_invariant_has_at_least_one_contributing_check` and
+  - [x] Add the new evidence path to the **exact set** in `test_gate_a_readiness.py`, with a comment.
+  - [x] Confirm `test_every_invariant_has_at_least_one_contributing_check` and
         `test_registry_covers_more_than_the_four_evidence_files` were **seen to fail first** with an
         incomplete registration, then pass.
   - Acceptance boundary: the registry additions are demonstrated-red through both existing guards.
@@ -556,34 +556,34 @@ for it, and it would be new test infrastructure inside a proof story.
   - Acceptance boundary: a green gate that does not list the new invariant means it was registered
     but not contributed to — the unbound-proof failure this repository has already hit twice.
 
-- [ ] **Task 12 — Generate the evidence in the convention's order** (AC3; `docs/EVIDENCE-CONVENTION.md`)
-  - [ ] `git commit` the code. Confirm `git status --porcelain` is empty.
-  - [ ] Run the two measurement suites with their JUnit reporters, using the exact runbook commands
+- [x] **Task 12 — Generate the evidence in the convention's order** (AC3; `docs/EVIDENCE-CONVENTION.md`)
+  - [x] `git commit` the code. Confirm `git status --porcelain` is empty.
+  - [x] Run the two measurement suites with their JUnit reporters, using the exact runbook commands
         (Windows: the committed streaming reporter and `PLAYWRIGHT_JUNIT_OUTPUT_FILE`).
-  - [ ] Generate through the new script; run
+  - [x] Generate through the new script; run
         `uv run --frozen pytest tests/test_evidence_convention.py -q`.
-  - [ ] `git commit` the evidence **on its own**, and make sure the commit it binds to touches at
+  - [x] `git commit` the evidence **on its own**, and make sure the commit it binds to touches at
         least one code file.
   - Acceptance boundary: no hand-typed field anywhere in the artifact, and no docs-only commit
     between the code commit and the evidence commit.
 
-- [ ] **Task 13 — Reconcile the planning record** (Decision 12)
-  - [ ] Close `:294` and `:476` citing this story (and Story 3.12 for `:476`), verifying `:476`'s
+- [x] **Task 13 — Reconcile the planning record** (Decision 12)
+  - [x] Close `:294` and `:476` citing this story (and Story 3.12 for `:476`), verifying `:476`'s
         premise against `repair-journey-accessibility.spec.ts` before closing it.
-  - [ ] Re-point `:177` (ARIA snapshot) with Decision 12's reasoning and the owner left open.
-  - [ ] Re-point `:518` with Decision 12b's widened Chat disclosure.
-  - [ ] Confirm `:512` and `:524` — and `:558` if Task 7 came back red without a fix landing — are
+  - [x] Re-point `:177` (ARIA snapshot) with Decision 12's reasoning and the owner left open.
+  - [x] Re-point `:518` with Decision 12b's widened Chat disclosure.
+  - [x] Confirm `:512` and `:524` — and `:558` if Task 7 came back red without a fix landing — are
         left open and untouched, and say so.
-  - [ ] Record for the Epic 4 retrospective: the two items Story 4.5 carried in (the AC4 CloudWatch
+  - [x] Record for the Epic 4 retrospective: the two items Story 4.5 carried in (the AC4 CloudWatch
         wording defect, and its Decision 3's unreachable `changed policy` fixture), plus anything
         this story raises.
   - Acceptance boundary: no ledger entry is deleted; closure is recorded beside the original
     wording, per the file's own convention.
 
-- [ ] **Task 14 — Run every suite and record the deltas**
-  - [ ] Backend default, `-m postgres`, evidence convention; frontend `npm test`, typecheck, lint,
+- [x] **Task 14 — Run every suite and record the deltas**
+  - [x] Backend default, `-m postgres`, evidence convention; frontend `npm test`, typecheck, lint,
         build; full `npx playwright test` across both projects.
-  - [ ] Confirm the CI floors in `.github/workflows/ci.yml` still hold. They are floors and
+  - [x] Confirm the CI floors in `.github/workflows/ci.yml` still hold. They are floors and
         ceilings, so added tests never redden them — do **not** edit the numbers.
   - Acceptance boundary: every failure attributed against Task 1's re-derived baseline.
 
