@@ -254,6 +254,14 @@ const customStates: readonly StateFixture[] = [
     render: () => <ComparisonSummary approvalsUnavailable={false} comparison={comparison() as never} onRequestApproval={() => {}} pendingApproval={false} requestError={false} requestPending={false} />,
   },
   {
+    // Task 3's "'Not computed' for an absent metric". `delta()` returns that
+    // literal when either side is null, which is what the solver produces when it
+    // hits its time limit before proving cost-optimality — a real absent metric,
+    // not a zero. Rendered through the component so the copy is the component's.
+    family: "comparison", state: "not computed",
+    render: () => <ComparisonSummary approvalsUnavailable={false} comparison={comparison({ baseline_metrics: { ...metrics, total_cost: null, overtime_minutes: null } }) as never} onRequestApproval={() => {}} pendingApproval={false} requestError={false} requestPending={false} />,
+  },
+  {
     family: "comparison", state: "stale binding",
     render: () => <ComparisonSummary approvalsUnavailable={false} comparison={comparison({ stale: true, current_baseline_schedule_version: "baseline-v2" }) as never} onRequestApproval={() => {}} pendingApproval={false} requestError={false} requestPending={false} />,
   },
