@@ -1847,7 +1847,7 @@ development_status:
   # and TX1 on both initiator paths. It also closes the Story 2.9 `suspended` stopgap
   # (deferred-work.md:300) by restoring the approval_required mapping and persisting the
   # pending-call payload; its tripwire test is replaced by its own remediation, not weakened.
-  epic-4: in-progress
+  epic-4: done
   4-1-request-approval-for-one-exact-feasible-candidate: done
   # NOTE (2026-08-29): Story 4.2 created at 0350f06. It owns the epic's ONE decision endpoint and
   # implements TX3 in full (reject / expire / stale -> terminal binding, agent_cancelled with the
@@ -2176,7 +2176,7 @@ development_status:
   # and supersedes 4.4's 62. Re-derive everything at Task 1, and record TOTALS alongside any
   # pass/skip split -- 3.12's review established the split is environment-conditional.
   4-6-prove-workflow-state-semantics-and-automated-accessibility: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)
   epic-5: backlog
@@ -2219,7 +2219,16 @@ action_items:
   - epic: "4"
     action: "Story creation must not let a Task restate a Decision or an AC -- it cites one ('per Decision 6') and never re-argues it -- and a Decision that states a mechanism must state in one sentence what that mechanism does NOT cover. Three of Story 4.2's four decision-grade findings were a restatement that had drifted from its source INSIDE THE SAME FILE."
     owner: "Story creation"
-    status: in-progress
+    status: done
+    # CLOSED 2026-09-02 at the Epic 4 retrospective. The stated "done when" -- "no
+    # restatement-drift finding in any of 4.3-4.6" -- IS MET: Story 4.2 produced three
+    # restatement-drift findings of its four decision-grade findings; Stories 4.3, 4.4, 4.4a, 4.5
+    # and 4.6 produced ZERO. Story 4.3's change log confirms it was created from 4.2's inheritance
+    # section and review retrospective, so the mechanism was consumed at the first opportunity.
+    # The declared blind spot (cross-document undefined-term propagation) recurred ONCE, at Story
+    # 4.3 -- "EAD-5 and Decision 8 do not settle whether a resumed turn may suspend again" -- and
+    # is now carried separately by epic-4 action A2 below, owned at the spine/ADR tier.
+    # Original note follows.
     # 2026-08-30 -- MECHANISM SHIPPED, item stays open, mirroring the epic 1-2
     # facts-pass entry below. Three authoring rules now load on every
     # bmad-create-story activation (_bmad/custom/bmad-create-story.toml, commit
@@ -2285,24 +2294,129 @@ action_items:
   - epic: "3"
     action: "Update Epic 4 Stories 4.1–4.3 to define initial-baseline establishment, baseline replacement, audit identities, approval replay, rejection, expiry, and literal state transitions."
     owner: "John + Winston"
-    status: open
+    status: done
+    # VERIFIED 2026-09-02 (epic-4 retro section 2) - ADR-4-consequential-workflow.md D1-D9 plus
+    # the Epic 4 ARCHITECTURE-SPINE, both cited by identifier in every Epic 4 story Facts table.
   - epic: "3"
     action: "Create a citable consequential-workflow design note covering approval binding, identity roles, state transitions, idempotency, and atomic promotion."
     owner: "Winston"
-    status: open
+    status: done
+    # VERIFIED 2026-09-02 - planning-artifacts/architecture/architecture-epic-4-2026-08-27/
+    # ADR-4-consequential-workflow.md, including an explicit "Open questions (not silently
+    # answered)" section.
   - epic: "3"
     action: "Create the Epic 4 proof matrix for initial promotion, replacement, stale/expired/rejected approvals, reconnect, replay, rollback, and audit integrity."
     owner: "Murat"
-    status: open
+    status: done
+    # VERIFIED 2026-09-02 - Epic 4 ARCHITECTURE-SPINE "Verification Obligations" (seven
+    # obligations); Story 4.5 Decision 2 binds the matrix to them; code review expanded it to
+    # 28 named gates.
   - epic: "3"
     action: "Require every Epic 4 contract or guard to name its production supplier or an explicit seeded proof and production gap before implementation."
     owner: "Amelia"
-    status: open
+    status: done
+    # VERIFIED 2026-09-02 - ADR-4 D8 / spine EAD-9; Story 4.1 Task 12 shipped the supplier
+    # entries. The rule CHANGED AN OUTCOME rather than merely being ticked: it caught Story 4.1's
+    # completion note claiming schedule_assignment rows as a supplier when the real read is
+    # schedule_version.payload (corrected at review 2026-08-29).
   - epic: "3"
     action: "Require and record a relevant demonstrated-red case for every new Epic 4 guard or invariant."
     owner: "Amelia + Murat"
     status: open
+    # NOT ADDRESSED - assessed 2026-09-02 (epic-4 retro section 4). Status deliberately unchanged.
+    # Story 4.6's own record: "Not done as specified... The RED-GREEN lines recorded in the Debug
+    # Log are reds from incomplete code (an unresolved import, a first draft), not from mutating
+    # finished code, and five delivered guards could not be made to fail." The reviewer executed
+    # the mutations, not the dev. All five of 4.6's decision-grade findings are this one shape.
+    # DIAGNOSIS: not a discipline failure - 4.6's Task 4 states the rule verbatim and correctly.
+    # The rule's wording admits a red from INCOMPLETE code, which is the natural red of test-first
+    # development and proves only that the test file loads. Superseded in practice by the epic-4
+    # action A1 below, which names that specific hole and requires a mutation-table artifact.
   - epic: "3"
     action: "Reconcile sprint status and deferred-work wording with current code without erasing historical context."
     owner: "Amelia"
+    status: in-progress
+    # PARTIAL - assessed 2026-09-02. Story 4.1 Task 12 did reconcile the ledger, but Story 4.2's
+    # review then found deferred-work.md:526 marked CLOSED on a proof production cannot reproduce,
+    # and Story 4.6 records :512 and :524 still open and untouched. The epic-4 status flip is done
+    # (this commit). Remaining ledger work is carried by epic-4 action A4 below.
+
+  # Committed during the Epic 4 retrospective (2026-09-02).
+  # Full record: _bmad-output/implementation-artifacts/epic-4-retro-2026-09-02.md
+  - epic: "4"
+    action: "A1 -- Tighten the demonstrated-red rule to name its own failure mode: the red must come from mutating code that is ALREADY GREEN; a missing-import or first-draft red does not count. The Dev Agent Record must carry a mutation table (mutation | guard | before | after) before a story reaches review. Ship as a bmad-dev-story fact, same pattern as 2cf598f."
+    owner: "Dev / review"
     status: open
+    # WHY THIS ONE IS MECHANIZABLE where the 2cf598f authoring rules were not: it leaves an
+    # artifact. Story 4.6's reviewer produced exactly the required table. Supersedes the epic 1-2
+    # red-then-green item's wording, which has been in-progress across three epics.
+    # Done when: every Epic 5 story record carries a mutation table, and no "guard cannot go red"
+    # decision-grade finding is raised in Epic 5.
+  - epic: "4"
+    action: "A2 -- Own the cross-document undefined-term problem at the spine/ADR tier. No bmad-create-story fact can reach epics.md, the architecture spine or ADR-4, where the undefined word originates. TWO live instances: (i) Story 4.3's unsettled resumed-turn suspension question; (ii) agent_cancelled -- three inbound AD-7 edges, no definition, and the single edge with a producer means the opposite of the other two. Fix AD-7's edge label in the same change: it still reads 'rejected or expired' though EAD-5 carries three reasons including approval_stale."
+    owner: "Minh + Winston"
+    status: open
+    # The restatement half of this pair is now done -- see the epic "4" entry above.
+    # (ii) was routed here from the 4.2 code-review deferral, whose owner/revisit trigger names
+    # this retrospective. Not blocking: Epic 5 gives no producer to the two undefined edges.
+    # Done when: the open half names its owner and its check point in the planning tier;
+    # agent_cancelled has a stated meaning or is split; AD-7's label matches EAD-5.
+  - epic: "4"
+    action: "A3 -- Write the three Epic 4 gaps into Story 5.4's limitations scope BEFORE 5.4 is created: (i) empty baseline-assignment supply, (ii) 33/60 matrix states mount no product component, (iii) no separation of duties on the decision endpoint. Decide per gap -- fix, or disclose."
+    owner: "John"
+    status: open
+    # BLOCKS Story 5.4 creation. Story 5.4's own AC requires that every behavioural claim be
+    # reproducible by the Story 5.3 command and that limitations be explicit.
+    # (i) is verified live: PostgresScenarioProjectionReader.get_baseline_assignments
+    # (backend/adapters/postgres/scenario_projection.py:637-650) still applies its query to a
+    # literal (). Story 4.3 resolved the resulting site-wide 409 by degrading the response, not by
+    # wiring a supply -- so comparison AGAINST A PROMOTED BASELINE does not work. Open since
+    # 2026-08-16 (epic 1-2 action items) and now load-bearing for the epic's headline capability.
+    # Done when: each gap appears in Story 5.4's AC or in the epic's Deferred table with a reason.
+  - epic: "4"
+    action: "A4 -- Finish the ledger reconciliation Story 4.1 began: re-open or correct deferred-work.md:526 (marked CLOSED on a proof production cannot reproduce, per Story 4.2's review), and resolve :512 and :524."
+    owner: "Amelia"
+    status: open
+    # The epic-4 status flip half of this item is DONE (2026-09-02, this commit): all seven
+    # stories were done, so the manual in-progress -> done transition applied.
+    # Done when: sprint-status.yaml and deferred-work.md agree with the code.
+  - epic: "4"
+    action: "A5 -- Close the Gate A readiness-report drift hole before Story 5.4 is created. (a) Reword Story 4.6 Decision 11's evidence fence to exempt gate-a-readiness-report.json, which every story adding a Gate A check must regenerate -- the fence as written forbids what the process requires. (b) Add a test asserting the committed readiness report matches the live GATE_A_CHECKS registry."
+    owner: "Murat + Amelia"
+    status: open
+    # BLOCKS Story 5.4 creation. Routed here from the 4.6 code-review deferral, whose owner/revisit
+    # trigger names this retrospective. This is the one blocker the retrospective found that no
+    # story had raised as blocking.
+    # WHY IT MATTERS: approval_and_audit_invariants -- Story 4.5's own invariant -- was ABSENT from
+    # the committed evidence/story-1.11/gate-a-readiness-report.json at 8b2b5b1, so the
+    # release-blocking artifact described a stale registry for a whole story before a later commit
+    # silently caught it up. Nothing in backend/tests/test_gate_a_readiness.py compares the
+    # committed report against the live registry. Story 5.4 must link Gate A evidence and claim
+    # reproducibility for every behavioural assertion; an artifact that drifts unnoticed cannot
+    # carry that claim.
+    # Done when: a registry-drift test exists and fails when a check is added without regenerating
+    # the report, and the fence wording no longer contradicts the Gate A process.
+  - epic: "4"
+    action: "A6 -- Clear the carried decisions that block nothing but will rot if unowned: (i) strike the subjectless CloudWatch clause from Story 4.5's AC4 in epics.md, matching the 2026-09-01 AC3 correction; (ii) decide whether the ARIA-snapshot regression lock is ever built, or record that it is deliberately not; (iii) confirm the accessibility-invariant merge and the PolicyInputsV1 second-field questions stay on their own stated triggers."
+    owner: "Minh + Winston"
+    status: open
+    # All three routed here from ledger entries and story open questions whose trigger names this
+    # retrospective. NOT blocking, verified at the retro: Epic 5's own ACs are subject-neutral
+    # (5.1 "structured JSON logs and metrics", 5.2 "any configured trace export"), and
+    # backend/pyproject.toml:27-45 already names the Logfire SDK as "a stack row owned by Story
+    # 5.1". Epic 5 does NOT inherit the 4.5 AC3/AC4 subject vacuity. CloudWatch stays legitimate
+    # in Epic 6. Neither (iii) trigger fires in Epic 5.
+    # Done when: (i) and (ii) are decided and recorded; (iii) is confirmed as trigger-owned.
+  - epic: "4"
+    action: "A7 -- The retrospective must read the ledger's Owner/revisit trigger lines. Add a step to bmad-retrospective: before synthesising action items, scan deferred-work.md and every story's open-questions section for entries whose trigger names this retrospective, and disposition each one in the record."
+    owner: "Minh"
+    status: open
+    # PROCESS DEFECT FOUND IN THIS RETROSPECTIVE ITSELF. Its first pass read every story's Review
+    # Findings and Dev Agent Record but not the ledger's trigger lines, and dropped SIX items
+    # explicitly scheduled to it (agent_cancelled; the CloudWatch clause; the Gate A fence and
+    # drift guard; 4.6's two open questions; the changed-policy fixture). They were recovered only
+    # because the Project Lead asked whether anything gated Epic 5. The trigger line is the
+    # mechanism by which deferred work is scheduled TO a retrospective; a retrospective that skips
+    # it silently drops the one artifact designed to reach it.
+    # Done when: the Epic 5 retrospective carries a "routed to this retrospective" table produced
+    # by the workflow, not by a follow-up question.
