@@ -27,6 +27,7 @@
       "approval/pending-overdue",
       "approval/rejected",
       "approval/request pending",
+      "comparison/not computed",
       "comparison/populated",
       "comparison/stale binding",
       "draft/fresh",
@@ -87,13 +88,13 @@
   "measurement": {
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "sha256": "d4028c9499c7f1e5d563d8259581fa2b8545ce9b01c78e5911f2fd61438be9f8",
-      "run_started": "2026-09-02T13:42:02.429Z"
+      "sha256": "616f878476dd07dd5bd80d17b8ebfa357f55a1b75de7288bbe3a422f4c0d47ca",
+      "run_started": "2026-09-02T14:08:07.189Z"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
-      "sha256": "b605a374cfe2119b84b533e3ef66f29852f69cb1acfa6f8438566e41cdd05973",
-      "run_started": "2026-09-02T13:42:05.637Z"
+      "sha256": "b01809a7c65a7e549fa626d461ad3a09b1df4ad7f079ff0d246681bf5d6e15c1",
+      "run_started": "2026-09-02T14:08:10.295Z"
     }
   },
   "contract_digests": {
@@ -102,7 +103,7 @@
     "sample_tiny_input_more_tm": "2d9212ffb453b01a2e9c7266a5c1d5194085a40ece03fdb132db86b1eb8a340c"
   },
   "tested_artifact_digests": {
-    "frontend/src/test/stateMatrix.tsx": "6885ed39a95687125c35264a2ab4161a44f4e478a152c9916fbd28b3d6f19093",
+    "frontend/src/test/stateMatrix.tsx": "1a6d956bf5bc0c7ffe426cbb2ffeb75913e3ef7f48a0ec115381db8270603b4f",
     "frontend/src/test/stateMatrix.test.tsx": "eca2fc24df4c3101e50fb1701a7a31863df5b029ddbf9c147b2ae4ad101bfad7",
     "frontend/src/components/primitives/fixtures.tsx": "0934c90de87ab50559ea9ba27fa77e7f50735e4518d3b1c3ff2b2b10f4871b55",
     "frontend/e2e/journey-accessibility.spec.ts": "4c8ac893457fa56f87d604aef557bb136726d680616347f246384ca568f03461",
@@ -134,7 +135,7 @@
           "sha256": "eca2fc24df4c3101e50fb1701a7a31863df5b029ddbf9c147b2ae4ad101bfad7"
         },
         "frontend/src/test/stateMatrix.tsx": {
-          "sha256": "6885ed39a95687125c35264a2ab4161a44f4e478a152c9916fbd28b3d6f19093"
+          "sha256": "1a6d956bf5bc0c7ffe426cbb2ffeb75913e3ef7f48a0ec115381db8270603b4f"
         }
       }
     },
@@ -147,7 +148,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable \u2014 no solver run",
     "code": {
-      "git_commit": "9389890d119a90cdee51db169bf371b040704fcf",
+      "git_commit": "e2b31d0f1ba54de26053705f0ad94fc912beccea",
       "working_tree_dirty": false
     },
     "image": {
