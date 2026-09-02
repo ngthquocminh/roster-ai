@@ -12,7 +12,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from scripts.evidence_binding import REPO_ROOT, file_digest, resolve_bindings  # noqa: E402
+from scripts.evidence_binding import REPO_ROOT, contract_digests, file_digest, resolve_bindings  # noqa: E402
 from scripts.junit_ingest import RunnerReport, parse_junit  # noqa: E402
 
 OUTPUT_RELATIVE = "evidence/story-4.6/state-semantics-and-accessibility.json"
@@ -73,7 +73,8 @@ def build_document(vitest: RunnerReport, playwright: RunnerReport, *, bindings: 
         "requirements": ["NFR18", "NFR20", "NFR29", "UX-DR10", "UX-DR13", "UX-DR31", "UX-DR32", "UX-DR34", "UX-DR35"],
         "results": {"states": states, "state_matrix": "passed" if all(c.status == "passed" for c in vitest.cases if c.file == VITEST_FILE) else "failed", "accessibility": "passed" if all(c.status == "passed" for c in playwright.cases if c.file == PLAYWRIGHT_FILE) else "failed"},
         "passed": passed,
-        "contract_digests": {path: file_digest(repo_root / path) for path in CONTRACT_FILES},
+        "contract_digests": contract_digests(repo_root / "data" / "contract"),
+        "tested_artifact_digests": {path: file_digest(repo_root / path) for path in CONTRACT_FILES},
         "version_bindings": dict(bindings),
     }
 

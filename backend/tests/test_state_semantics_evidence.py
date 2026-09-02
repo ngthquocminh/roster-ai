@@ -27,6 +27,8 @@ def _generate(tmp_path: Path, **kwargs):
 def test_all_pass_writes_passed_true(tmp_path: Path) -> None:
     document = _generate(tmp_path)
     assert document["passed"] is True
+    assert "frontend/e2e/support/apiStubs.ts" in document["tested_artifact_digests"]
+    assert "frontend/e2e/support/repairJourneyStubState.ts" in document["tested_artifact_digests"]
 
 
 def test_failing_source_writes_passed_false(tmp_path: Path) -> None:
