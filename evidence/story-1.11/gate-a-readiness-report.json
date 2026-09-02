@@ -1188,8 +1188,8 @@
         "cases": {
           "backend/tests/test_state_semantics_evidence.py": {
             "status": "passed",
-            "total": 5,
-            "passed": 5,
+            "total": 12,
+            "passed": 12,
             "skipped": 0,
             "failed": 0
           }
@@ -1322,21 +1322,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 1504,
-      "run_started": "2026-09-02T08:44:03.693568+07:00",
-      "sha256": "ab1dbfacd92f2983df8ebf16d438e7b50ba872232d28b1777d28559ae1d8c860"
+      "cases": 1511,
+      "run_started": "2026-09-02T20:10:16.336593+07:00",
+      "sha256": "2c583375e3a42cca4fc11d158e2a30a52ef94fb4a57820dfc65ab2224e01fef6"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 643,
-      "run_started": "2026-09-02T00:45:57.891Z",
-      "sha256": "da5461bf7b4cc2d464ce236971ce6f5360fcc7217dc93861664d5073375ae2e7"
+      "run_started": "2026-09-02T13:11:57.919Z",
+      "sha256": "6f46e84568481a8d3d9df88b9d276851d1b5bc7d43e9dc4b5e6241c1d937ebd8"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 76,
-      "run_started": "2026-09-02T00:46:07.591Z",
-      "sha256": "85270f68b5ebc9ce89cbada03d86b5ef8c835006de305bd7ff90426c7ff22f7e"
+      "run_started": "2026-09-02T13:12:15.428Z",
+      "sha256": "6c542a9d1d98bbbfa1091752ea51b374673e7d17294e849c1c89977737238263"
     }
   },
   "version_bindings": {
@@ -1350,7 +1350,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "792c031ec8f976947af60bb6a1b048f1168f5e99",
+      "git_commit": "f29574a7735a6e27c20e5db7f176471bb9ae480b",
       "working_tree_dirty": false
     },
     "image": {
