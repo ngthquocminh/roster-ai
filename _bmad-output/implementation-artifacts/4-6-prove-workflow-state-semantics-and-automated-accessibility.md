@@ -4,7 +4,7 @@ baseline_commit: 3dd2a92
 
 # Story 4.6: Prove Workflow State Semantics and Automated Accessibility
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -549,8 +549,8 @@ for it, and it would be new test infrastructure inside a proof story.
         incomplete registration, then pass.
   - Acceptance boundary: the registry additions are demonstrated-red through both existing guards.
 
-- [ ] **Task 11 — Re-run Gate A** (AR28)
-  - [ ] Produce the three JUnit reports per `docs/GATE-A-RUNBOOK.md` §3 and run
+- [x] **Task 11 — Re-run Gate A** (AR28)
+  - [x] Produce the three JUnit reports per `docs/GATE-A-RUNBOOK.md` §3 and run
         `gate_a_readiness.py`. Expect `gate_a_passed: true`, `blocking: []`, and the new
         `workflow_state_semantics` invariant present and passing.
   - Acceptance boundary: a green gate that does not list the new invariant means it was registered
@@ -746,7 +746,7 @@ registry. No module is renamed; AR26's structural convergence is unaffected.
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+OpenAI GPT-5 Codex
 
 ### Implementation Plan
 
@@ -776,6 +776,22 @@ separately generated evidence commit.
 - Task 10 RED→GREEN: with `workflow_state_semantics` deliberately registered before its checks,
   both `test_every_invariant_has_at_least_one_contributing_check` and
   `test_registry_covers_more_than_the_four_evidence_files` failed; after four checks, both passed.
+- Tasks 11–14: Story evidence `10f1be2` binds code commit `792c031`; the code commit touches
+  generator/test code and no docs-only commit intervenes. Gate A report `3ae65a8` records
+  `gate_a_passed: true`, `blocking: []`, and `workflow_state_semantics: passed`. Final suites:
+  backend 1,511 total = 1,503 passed + 1 skipped + 7 deselected (the pass/skip split is
+  environment-conditional), PostgreSQL 156 passed + 1,355 deselected, evidence convention 87
+  passed; frontend 85 files / 643 tests, TypeScript clean, oxlint green with three pre-existing
+  Fast Refresh warnings, production build green, Playwright 76/76 across 10 files and both projects.
+- The streaming reporter wrote all 76 cases with zero failures/skips but exhibited its documented
+  no-`onEnd` hang; the run was stopped only after its case count matched `playwright test --list`.
+  The CI count floors/skip ceilings remain satisfied and were not edited.
+- Honest gaps: (a) prohibited-treatment coverage scans class tokens/rendered text, not inline style,
+  background images, or tag-targeted CSS; (b) `NOT COVERED: chat_sse_healthy_stream:needs_local_sse_server`;
+  (c) matrix completeness is the ten AC1 families, not source-enumerated product state; (d) the
+  ARIA snapshot lock is re-pointed, not built; (e) phone/tablet Epic 2–4 coverage is out of scope;
+  (f) deferred-work entries formerly at `:512` and `:524` remain open and untouched. Story 4.5's
+  CloudWatch wording defect and unreachable changed-policy fixture remain Epic 4 retrospective input.
 
 ### Completion Notes List
 
@@ -794,6 +810,16 @@ separately generated evidence commit.
   `frontend/src/components/runs/RunStatusBadge.tsx`, `backend/scripts/generate_repair_journey_evidence.py`,
   `backend/scripts/junit_ingest.py`, `backend/scripts/gate_a_checks.py`,
   `backend/tests/test_gate_a_readiness.py`, `backend/tests/test_repair_journey_evidence.py`.
+- Modified: `_bmad-output/implementation-artifacts/4-6-prove-workflow-state-semantics-and-automated-accessibility.md`,
+  `_bmad-output/implementation-artifacts/deferred-work.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`,
+  `backend/scripts/gate_a_checks.py`, `backend/tests/test_gate_a_readiness.py`,
+  `frontend/e2e/accessibility.spec.ts`, `frontend/src/components/ui/button.tsx`,
+  `frontend/src/features/chat/ActivityTimeline.test.tsx`, `frontend/src/index.test.ts`,
+  `evidence/story-1.11/gate-a-readiness-report.json`.
+- Added: `backend/scripts/generate_state_semantics_evidence.py`,
+  `backend/tests/test_state_semantics_evidence.py`, `frontend/e2e/journey-accessibility.spec.ts`,
+  `frontend/src/test/stateMatrix.tsx`, `frontend/src/test/stateMatrix.test.tsx`,
+  `evidence/story-4.6/state-semantics-and-accessibility.json`.
 
 ---
 
@@ -802,3 +828,4 @@ separately generated evidence commit.
 | Date | Change |
 |---|---|
 | 2026-09-02 | Story created. Twelve decisions recorded; "the Story 1.6 fixture catalogue" pinned to `PRIMITIVE_FIXTURES`; AC2's four dimensions measured as covering Scenario Data only today; `deferred-work.md:558` corrected against axe-core's own source and gated behind a measurement. |
+| 2026-09-02 | Implemented the enumerable state matrix, completed-journey accessibility proof, measured shared Button contrast fix, fail-closed two-source evidence generator, four-check NFR29 registration, generated evidence, green Gate A report, and ledger reconciliation. Status moved to review. |
