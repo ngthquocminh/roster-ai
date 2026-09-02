@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { PRIMITIVE_FIXTURES } from "@/components/primitives/fixtures";
+import { PRIMITIVE_FIXTURES, type PrimitiveFixture } from "@/components/primitives/fixtures";
 import { Button } from "@/components/ui/button";
 
 export type StateFamily =
@@ -13,12 +13,29 @@ export type StateFixture = Readonly<{
   render: () => ReactNode;
 }>;
 
-const primitiveFamily = (primitive: string): StateFamily => {
-  if (primitive === "StatusBadge") return "run";
-  if (primitive === "InlineAlert" || primitive === "ReconnectBanner") return "alert";
-  if (primitive === "Skeleton") return "skeleton";
-  if (primitive === "EmptyState") return "empty-state";
-  return "provenance";
+/**
+ * Exhaustive over `PrimitiveFixture["primitive"]` on purpose: the parameter is the
+ * union, not `string`, so adding a primitive to `PRIMITIVE_FIXTURES` without filing
+ * it here is a TypeScript error rather than a silent fall-through into `provenance`.
+ * Family assignment decides what each state is compared against — distinctness is
+ * pairwise WITHIN a family — so a mis-filed primitive quietly changes the proof.
+ */
+const primitiveFamily = (primitive: PrimitiveFixture["primitive"]): StateFamily => {
+  switch (primitive) {
+    case "StatusBadge":
+      return "run";
+    case "InlineAlert":
+    case "ReconnectBanner":
+      return "alert";
+    case "Skeleton":
+      return "skeleton";
+    case "EmptyState":
+      return "empty-state";
+    case "EvidenceLink":
+    case "EvidenceHighlight":
+    case "IdentifierCopyButton":
+      return "provenance";
+  }
 };
 
 const primitiveStates: readonly StateFixture[] = PRIMITIVE_FIXTURES.map((fixture) => ({

@@ -30,6 +30,32 @@ function readHexToken(name: string) {
   return match[1];
 }
 
+/**
+ * Relative luminance of an achromatic `oklch(L 0 0)` token.
+ *
+ * `readHexToken` cannot read these — `--foreground` and `--muted` are declared in
+ * `oklch()`, not `#RRGGBB`, which is why Story 4.6 originally hardcoded a literal
+ * pair that could not regress. At chroma 0 the OKLab transform collapses to
+ * `L = cbrt(Y)`, so `Y = L ** 3` exactly and no matrix conversion is needed.
+ * A chroma-bearing token is refused rather than approximated.
+ */
+function readOklchLuminance(name: string) {
+  const match = extractBlock(":root").match(
+    new RegExp(`--${name}:\\s*oklch\\(\\s*([0-9.]+)\\s+([0-9.]+)\\s+([0-9.]+)\\s*\\);`),
+  );
+  if (!match) {
+    throw new Error(`Missing oklch token --${name}`);
+  }
+  if (Number.parseFloat(match[2]) !== 0) {
+    throw new Error(`--${name} carries chroma; this helper converts achromatic oklch only`);
+  }
+  return Number.parseFloat(match[1]) ** 3;
+}
+
+function contrastOfLuminances(first: number, second: number) {
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
 function relativeLuminance(hex: string) {
   const channels = [1, 3, 5].map((offset) =>
     Number.parseInt(hex.slice(offset, offset + 2), 16) / 255,
@@ -139,10 +165,16 @@ describe("ShiftMind design tokens", () => {
   });
 
   it("keeps every shipped ShiftMind foreground pair above WCAG AA", () => {
-    // Story 4.6 measured the former transitioning disabled outline foreground
-    // as #858585 on #ffffff (3.69:1). The shared disabled token pair computes
-    // to #252525 on #f7f7f7 in the light theme.
-    expect(contrastRatio("#252525", "#f7f7f7")).toBeGreaterThanOrEqual(4.5);
+    // Story 4.6 measured the former transitioning disabled outline foreground as
+    // #858585 on #ffffff (3.69:1). Its replacement is the `outline` variant's
+    // `disabled:text-foreground` on `disabled:bg-muted` — read from the tokens
+    // themselves, so re-theming either one reddens this assertion. (The original
+    // form hardcoded "#252525 on #f7f7f7"; #252525 is the DARK theme's --muted,
+    // oklch(0.269). Light --foreground is #0A0A0A and light --muted is #F5F5F5,
+    // which pair at 18.15:1.)
+    expect(
+      contrastOfLuminances(readOklchLuminance("foreground"), readOklchLuminance("muted")),
+    ).toBeGreaterThanOrEqual(4.5);
     expect(
       contrastRatio(
         readHexToken("evidence-foreground"),

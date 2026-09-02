@@ -278,6 +278,7 @@ describe("ActivityTimeline", () => {
       "failed",
     );
     expect(screen.queryByText(/approximately|confidence|%/i)).not.toBeInTheDocument();
+    expect(document.body.innerHTML).not.toMatch(/gradient|animate-pulse|ai-glow/i);
   });
 
   it("deduplicates an agent response delivered by SSE and timeline refetch", () => {
@@ -426,6 +427,7 @@ describe("ActivityTimeline", () => {
     // "Refusal" fallback is what renders.
     expect(screen.getByText(/Refusal: That capability is not available/)).toBeInTheDocument();
     expect(screen.getByText("Review Scenario Data.")).toBeInTheDocument();
+    expect(document.body.innerHTML).not.toMatch(/gradient|animate-pulse|glow/i);
   });
 
   it("renders every terminal reason with pairwise-distinct literal output", () => {
