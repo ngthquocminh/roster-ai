@@ -730,11 +730,22 @@ plus `ApprovalRequestCard`; `terminal-outcome` — `TerminalOutcomeCard`; `empty
   is closer to Task 3's "each terminal reason" than the prose was. The approval terminal states are
   covered by the real `approval` family.
 
-**The one entry genuinely not carried over:** `draft/queued-for-optimization`. It is
-`useStartScheduleRun` in its success state — mutation state held inside the component, reachable
-only by driving the interaction or by `vi.mock`, and the matrix stays a plain module so the
-consuming test needs neither. Disclosed rather than faked; the queued run itself is covered by
-`run/queued` and `run/progress queued`.
+**`draft/queued-for-optimization` is proven at the browser layer, not the component layer.**
+`acknowledged` is `useStartScheduleRun`'s `data` together with its `variables`, both held inside the
+mutation observer; `DraftCard` exposes no injection point and the hook sets no `mutationKey`, so the
+state cannot be reached by seeding a cache. The only jsdom routes are `vi.mock` or a global `fetch`
+stub, and each breaks a property the matrix depends on — that it is a plain, provider-free,
+deterministic module the consuming test imports without mocking. Driving a real interaction is what
+the browser layer is for, so that is where it is proven.
+
+`repair-journey-accessibility.spec.ts:44-49` already drives the click and asserts the state's
+literal semantics — `role="status"`, accessible name "Optimization queued", containing the run id —
+and that spec is registered under Gate A's `accessibility_browser_layer`. Its axe scan, however,
+runs *before* the Enter press, so no scan had ever seen the queued status rendered.
+`journey-accessibility.spec.ts` now closes that: it drives the same interaction and scans the
+acknowledgement in the same mount at 200 % zoom under WCAG text spacing. Demonstrated red by
+putting a nameless button inside the queued block alone — that test fails on axe `button-name`
+while the other journey tests stay green.
 
 **The domain rule (Trap 10).** The grounded-claim fixture pairs `required_headcount_minutes` with
 `family: "indirect"` — the one minutes-answerable pairing `docs/DOMAIN-MODEL.md` §1/§3 permits.

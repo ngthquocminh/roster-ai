@@ -144,6 +144,41 @@ test("keeps all four approval-panel states conformant at 200 percent zoom under 
   }
 });
 
+// `draft/queued-for-optimization` is the one state Task 3 names that the component
+// matrix cannot reach: `acknowledged` is `useStartScheduleRun`'s `data` plus its
+// `variables`, both held inside the mutation observer, and DraftCard exposes no
+// injection point and sets no `mutationKey`. Reaching it in jsdom would need either
+// `vi.mock` or a global fetch stub, and both break the matrix module's guarantee of
+// being plain, provider-free and deterministic. The browser layer is where driving a
+// real interaction is natural, so it is proven here instead.
+//
+// `repair-journey-accessibility.spec.ts` already asserts the state's literal
+// semantics (role, accessible name, run id), but its axe scan runs BEFORE the Enter
+// press, so no scan has ever seen the queued status rendered. This closes that.
+test("keeps the queued-optimization draft conformant at 200 percent zoom under text spacing", async ({ page }) => {
+  test.setTimeout(180_000);
+  const journey = await installApiStubs(page);
+  journey.completeRun();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  await page.goto(JOURNEY[0].url);
+  await page.getByRole("textbox", { name: "Message" }).fill("Create a reversible repair draft.");
+  await page.getByRole("button", { name: "Send" }).click();
+  const draft = page.getByRole("region", { name: "Draft proposal" });
+  await expect(draft).toBeVisible();
+
+  await draft.getByRole("button", { name: "Run optimization" }).click();
+  const queued = draft.getByRole("status", { name: "Optimization queued" });
+  await expect(queued).toContainText(SCHEDULE_RUN_ID);
+
+  // Scanned in the same mount: the acknowledgement is mutation state, so it does
+  // not survive a navigation.
+  await applyDimensions(page, "2");
+  await expect(queued).toBeVisible();
+  await expectDesktopLayoutClean(page);
+});
+
 // Browser disclosure: the deterministic stubs measure Chat's disconnected fallback.
 // NOT COVERED: chat_sse_healthy_stream:needs_local_sse_server.
 // Component-only matrix states include clarification/refusal, stale/rejected drafts,
