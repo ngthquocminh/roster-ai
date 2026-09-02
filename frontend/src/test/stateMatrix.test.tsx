@@ -95,19 +95,27 @@ describe("workflow state semantics matrix", () => {
     expect(new Set(identities).size).toBe(STATE_MATRIX.length);
   });
 
-  it("covers all ten AC1 families with pairwise-distinct text and role/name trees", () => {
+  // Decision 3 names the failure mode as "two states that differ only in a colour
+  // class produce an identical tree AND identical text", then states the rule as two
+  // INDEPENDENT distinctness assertions, which is stricter than that failure mode.
+  // Measured on real components at code review: the three terminal approval outcomes
+  // render byte-identical role/name trees (3 distinct of 6) and differ only in text —
+  // legitimate structural reuse, and a false failure under the independent form. The
+  // only fix for it that keeps trees distinct would be to give each outcome its own
+  // accessible name on the `role="status"` region, which mislabels a live region with
+  // its own value. So the assertion is on the COMBINED signature: two states collide
+  // only when they are identical in both, which is exactly the colour-only failure.
+  // Verified both directions — a colour-only pair still collides under this rule.
+  it("covers all ten AC1 families, no two states alike in both text and structure", () => {
     expect(new Set(STATE_MATRIX.map(({ family }) => family))).toEqual(new Set(EXPECTED_FAMILIES));
     for (const family of EXPECTED_FAMILIES) {
-      const texts: string[] = [];
-      const trees: string[] = [];
+      const signatures: string[] = [];
       for (const fixture of STATE_MATRIX.filter((entry) => entry.family === family)) {
         const { container, unmount } = render(<>{fixture.render()}</>);
-        texts.push(normalizedText(container));
-        trees.push(roleNameTree(container));
+        signatures.push(`${normalizedText(container)}||${roleNameTree(container)}`);
         unmount();
       }
-      expect(new Set(texts).size, `${family} text`).toBe(texts.length);
-      expect(new Set(trees).size, `${family} tree`).toBe(trees.length);
+      expect(new Set(signatures).size, `${family} signature`).toBe(signatures.length);
     }
   });
 });

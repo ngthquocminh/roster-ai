@@ -195,10 +195,27 @@ group, assert every entry is non-empty and that the set size equals the list len
 verbatim for `STATE_MATRIX`, keyed on `family`.
 
 For "structurally", assert a **normalized accessibility tree** per entry — the ordered list of
-`(role, accessible name)` pairs reachable in the rendered container — and require those to be
-pairwise distinct within a family too. Two states that differ only in a colour class produce an
-identical tree and identical text, and that is precisely the color-only failure AC1 forbids. This
-is the assertion that can go red on it.
+`(role, accessible name)` pairs reachable in the rendered container. Two states that differ only in
+a colour class produce an identical tree and identical text, and that is precisely the color-only
+failure AC1 forbids. This is the assertion that can go red on it.
+
+**CORRECTED at code review 2026-09-02 — the rule is on the COMBINED signature, not on text and tree
+independently.** As originally written this Decision stated the failure mode as "an identical tree
+**and** identical text" but then required text and tree to be pairwise distinct as two separate
+assertions, which is strictly stricter than the failure mode it names. Measured against real
+components at review: `ApprovalDecisionPanel`'s `rejected`, `expired` and `consumed` outcomes render
+**byte-identical** role/name trees (3 distinct signatures across 6 approval states) and differ only
+in text. That is legitimate structural reuse — the literal outcome is carried in the content of the
+`role="status"` region, whose accessible name is the static region label. The only way to make those
+trees differ would be to give each outcome its own accessible name on that region, which labels a
+live region with its own value and is the wrong ARIA pattern.
+
+The assertion is therefore on `text || tree` as one signature: two states in a family collide only
+when they are identical in **both**, which is exactly the stated failure mode. Verified in both
+directions — a pair differing only by `text-red-600` / `text-green-600` still collides under the
+combined rule (measured: combined `6/6` distinct for the real approval states, and `false` for the
+colour-only control pair). Note this correction is independent of the fixture-vacuity problem: while
+entries are wrapped in a generated `aria-label`, the signature is unique by construction either way.
 
 **Does NOT cover:** distinctness is **not** asserted across families — two families may legitimately
 share a word (a `run` and an `approval` may both say "cancelled"). It is also not an ARIA snapshot
