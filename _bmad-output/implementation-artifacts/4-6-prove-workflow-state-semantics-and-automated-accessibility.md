@@ -4,7 +4,7 @@ baseline_commit: 3dd2a92
 
 # Story 4.6: Prove Workflow State Semantics and Automated Accessibility
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

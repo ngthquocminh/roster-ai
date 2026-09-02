@@ -2175,7 +2175,7 @@ development_status:
   # frontend diff), so the last frontend number is 4.4's 575 passed. Playwright 66 WAS measured here
   # and supersedes 4.4's 62. Re-derive everything at Task 1, and record TOTALS alongside any
   # pass/skip split -- 3.12's review established the split is environment-conditional.
-  4-6-prove-workflow-state-semantics-and-automated-accessibility: review
+  4-6-prove-workflow-state-semantics-and-automated-accessibility: done
   epic-4-retrospective: optional
 
   # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)
