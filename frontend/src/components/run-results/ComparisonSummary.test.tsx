@@ -140,6 +140,21 @@ describe("ComparisonSummary", () => {
     expect(screen.getByText(/Coverage served delta/).nextElementSibling).toHaveTextContent("0.00");
   });
 
+  it("renders an explicit absent-baseline state without claiming assignment changes", async () => {
+    const absent = comparison();
+    absent.baseline_metrics = null;
+    absent.assignment_diff = null;
+    absent.baseline_hard_constraint_results = [];
+
+    const { container } = render(<ComparisonSummary comparison={absent} {...baseProps()} />);
+
+    expect(screen.getAllByText("Not computed")).toHaveLength(5);
+    expect(screen.getByText(/No baseline exists, so assignment changes are not computed/)).toBeInTheDocument();
+    expect(screen.getByText("No baseline exists.")).toBeInTheDocument();
+    expect(screen.queryByText("Workers added")).not.toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it("keeps historical numbers visible under the stale warning", () => {
     render(<ComparisonSummary comparison={comparison(true)} {...baseProps()} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/baseline-v1.*baseline-v2/i);

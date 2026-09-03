@@ -1506,9 +1506,9 @@ export interface components {
             current_baseline_schedule_version: string | null;
             /** Stale */
             stale: boolean;
-            assignment_diff: components["schemas"]["AssignmentDiffOut"];
+            assignment_diff: components["schemas"]["AssignmentDiffOut"] | null;
             candidate_metrics: components["schemas"]["MetricSetOut"];
-            baseline_metrics: components["schemas"]["MetricSetOut"];
+            baseline_metrics: components["schemas"]["MetricSetOut"] | null;
             /** Candidate Constraint Results */
             candidate_constraint_results: components["schemas"]["ConstraintResultOut"][];
             /** Baseline Hard Constraint Results */

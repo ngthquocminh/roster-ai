@@ -30,9 +30,9 @@ class ComparisonV1:
     expected_baseline_schedule_version: str | None
     current_baseline_schedule_version: str | None
     stale: bool
-    assignment_diff: AssignmentDiffV1
+    assignment_diff: AssignmentDiffV1 | None
     candidate_metrics: MetricSetV1
-    baseline_metrics: MetricSetV1
+    baseline_metrics: MetricSetV1 | None
     candidate_constraint_results: tuple[ConstraintResultV1, ...]
     baseline_hard_constraint_results: tuple[ConstraintResultV1, ...]
     warnings: tuple[str, ...]

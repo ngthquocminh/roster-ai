@@ -17,6 +17,7 @@ from adapters.postgres.scenario_projection import (
 from application.contracts.canonical import contract_digest
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
 from application.contracts.schedule_version import (
+    ConstraintResultV1,
     MetricSetV1,
     ScheduleVersionV1,
 )
@@ -118,7 +119,21 @@ def _candidate(reader: _Reader) -> ScheduleVersionV1:
     )
 
 
-def test_empty_baseline_is_real_net_new_comparison_and_detects_staleness() -> None:
+def _baseline_version(reader: _Reader) -> ScheduleVersionV1:
+    return ScheduleVersionV1(
+        schedule_version_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        schedule_run_id=uuid4(), scenario_id=reader.scenario_id,
+        scenario_version_id=reader.version_id, proposal_id=uuid4(),
+        proposal_version_id=uuid4(), feasible_solver_status="OPTIMAL",
+        assignments=reader.baseline, metrics=MetricSetV1(total_cost=75.0),
+        constraint_results=(ConstraintResultV1(
+            constraint_id="hard:persisted", constraint_type="qualification",
+            constraint_class="hard", satisfied=True,
+        ),),
+    )
+
+
+def test_absent_baseline_returns_an_absent_group_and_detects_staleness() -> None:
     reader = _Reader(current_baseline="baseline-v2")
     result = calculate_comparison(
         reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
@@ -127,8 +142,9 @@ def test_empty_baseline_is_real_net_new_comparison_and_detects_staleness() -> No
     )
 
     assert result.stale is True
-    assert result.assignment_diff.added_worker_ids == ("worker-1",)
-    assert result.baseline_metrics.assignment_count == 0
+    assert result.assignment_diff is None
+    assert result.baseline_metrics is None
+    assert result.baseline_hard_constraint_results == ()
     assert result.candidate_metrics.objective_components
     assert result.unresolved_gap_record_ids == ()
 
@@ -145,11 +161,85 @@ def test_seeded_baseline_exercises_removed_and_added_diffs() -> None:
         reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
         expected_baseline_schedule_version="baseline-v1",
+        baseline_version=_baseline_version(reader),
     )
 
     assert result.assignment_diff.removed_worker_ids == ("worker-2",)
     assert result.assignment_diff.added_task_ids == ("task-1",)
     assert result.baseline_metrics.assignment_count == 1
+    assert result.baseline_metrics.total_cost == 75.0
+    assert tuple(item.constraint_id for item in result.baseline_hard_constraint_results) == ("hard:persisted",)
+    assert result.evidence_refs[-1].producing_run_version == "baseline-v1"
+
+
+def test_readable_baseline_with_legitimately_empty_assignments_produces_a_real_comparison() -> None:
+    """AC3's second clause: a readable version whose assignment set is
+    legitimately empty must produce a real comparison with that emptiness
+    visible, not fail closed like an unreadable or incompatible baseline."""
+    reader = _Reader()  # baseline=() by default -- readable, genuinely empty
+
+    result = calculate_comparison(
+        reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
+        scenario_version_id=reader.version_id, site_id=reader.site_id,
+        expected_baseline_schedule_version="baseline-v1",
+        baseline_version=_baseline_version(reader),
+    )
+
+    assert result.baseline_metrics is not None
+    assert result.baseline_metrics.assignment_count == 0
+    assert result.baseline_metrics.total_cost == 75.0
+    assert result.assignment_diff is not None
+    assert result.assignment_diff.added_worker_ids == ("worker-1",)
+    assert result.assignment_diff.removed_worker_ids == ()
+    assert tuple(item.constraint_id for item in result.baseline_hard_constraint_results) == ("hard:persisted",)
+
+
+def test_baseline_version_without_an_expected_pointer_raises() -> None:
+    """Decision 1's intent: `baseline_version` is only meaningful alongside a
+    matching `expected_baseline_schedule_version` -- both are None or neither
+    is. A caller that passes a baseline_version while signalling "no baseline"
+    must not have it silently populate the comparison anyway."""
+    reader = _Reader()
+
+    with pytest.raises(ValueError, match="baseline_version must not be provided"):
+        calculate_comparison(
+            reader, object(), candidate=_candidate(reader), scenario_id=reader.scenario_id,
+            scenario_version_id=reader.version_id, site_id=reader.site_id,
+            expected_baseline_schedule_version=None,
+            baseline_version=_baseline_version(reader),
+        )
+
+
+def test_baseline_from_another_scenario_version_fails_closed_with_reason() -> None:
+    reader = _Reader()
+    baseline = replace(_baseline_version(reader), scenario_version_id=uuid4())
+
+    with pytest.raises(BaselineSupplyUnavailableError) as raised:
+        calculate_comparison(
+            reader, object(), candidate=_candidate(reader),
+            scenario_id=reader.scenario_id, scenario_version_id=reader.version_id,
+            site_id=reader.site_id,
+            expected_baseline_schedule_version="baseline-v1",
+            baseline_version=baseline,
+        )
+
+    assert raised.value.reason == "scenario_version_mismatch"
+
+
+def test_baseline_without_persisted_metrics_fails_closed_with_reason() -> None:
+    reader = _Reader()
+    baseline = replace(_baseline_version(reader), metrics=None)
+
+    with pytest.raises(BaselineSupplyUnavailableError) as raised:
+        calculate_comparison(
+            reader, object(), candidate=_candidate(reader),
+            scenario_id=reader.scenario_id, scenario_version_id=reader.version_id,
+            site_id=reader.site_id,
+            expected_baseline_schedule_version="baseline-v1",
+            baseline_version=baseline,
+        )
+
+    assert raised.value.reason == "metrics_unavailable"
 
 
 def test_candidate_metric_drift_raises_integrity_error() -> None:
@@ -193,8 +283,7 @@ def test_interval_coverage_tuples_are_real_values_not_a_not_computed_placeholder
 
     assert result.candidate_metrics.interval_coverage_required_minutes
     assert result.candidate_metrics.interval_coverage_served_minutes
-    assert result.baseline_metrics.interval_coverage_required_minutes
-    assert result.baseline_metrics.interval_coverage_served_minutes
+    assert result.baseline_metrics is None
 
 
 def test_assignment_diff_flips_from_red_to_green_on_a_baseline_mutation() -> None:
@@ -212,6 +301,7 @@ def test_assignment_diff_flips_from_red_to_green_on_a_baseline_mutation() -> Non
         reader, object(), candidate=candidate, scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
         expected_baseline_schedule_version="baseline-v1",
+        baseline_version=_baseline_version(reader),
     )
     assert before.assignment_diff.added_worker_ids == ("worker-1",)
 
@@ -220,6 +310,7 @@ def test_assignment_diff_flips_from_red_to_green_on_a_baseline_mutation() -> Non
         reader, object(), candidate=candidate, scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
         expected_baseline_schedule_version="baseline-v1",
+        baseline_version=_baseline_version(reader),
     )
     assert after.assignment_diff.added_worker_ids == ()
 
@@ -235,6 +326,7 @@ def test_second_fetch_reports_stale_but_still_describes_the_original_inputs() ->
         reader, object(), candidate=candidate, scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
         expected_baseline_schedule_version="baseline-v1",
+        baseline_version=_baseline_version(reader),
     )
     assert first.stale is False
 
@@ -243,6 +335,7 @@ def test_second_fetch_reports_stale_but_still_describes_the_original_inputs() ->
         reader, object(), candidate=candidate, scenario_id=reader.scenario_id,
         scenario_version_id=reader.version_id, site_id=reader.site_id,
         expected_baseline_schedule_version="baseline-v1",
+        baseline_version=_baseline_version(reader),
     )
 
     assert second.stale is True

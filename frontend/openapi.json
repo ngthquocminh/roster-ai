@@ -6270,13 +6270,27 @@
             "title": "Stale"
           },
           "assignment_diff": {
-            "$ref": "#/components/schemas/AssignmentDiffOut"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssignmentDiffOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "candidate_metrics": {
             "$ref": "#/components/schemas/MetricSetOut"
           },
           "baseline_metrics": {
-            "$ref": "#/components/schemas/MetricSetOut"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MetricSetOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "candidate_constraint_results": {
             "items": {

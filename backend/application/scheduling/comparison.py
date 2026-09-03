@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import math
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from application.contracts.comparison import AssignmentDiffV1, ComparisonV1
@@ -22,18 +22,20 @@ from application.contracts.scenario_projection import (
 from application.grounding.pagination import drain_projection_group
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.scheduling.candidate_metrics import calculate_candidate_metrics
-from application.scheduling.hard_constraints import validate_hard_constraints
 
 SCOPE_CONTROLS = (
-    "COVERS: candidate and baseline metrics are recomputed from version-pinned projection rows.",
+    "COVERS: candidate and baseline metrics derive from version-pinned schedule versions and projection rows.",
     "NOT COVERED: comparisons over a scenario exceeding 2000 rows in any one group.",
-    "COVERS: a pinned non-null baseline with no authoritative assignment supply fails closed.",
-    "NOT COVERED: wiring non-empty production baselines; authoritative wages and selected shift windows are also unavailable today.",
+    "COVERS: a pinned non-null baseline version that is unreadable, incompatible, or lacks persisted metrics fails closed.",
+    "NOT COVERED: a baseline and candidate priced under different wage epochs are compared without detecting the mix.",
 )
 
 
 class ComparisonIntegrityError(ValueError):
     """Persisted candidate evidence disagrees with deterministic recomputation."""
+
+
+BaselineUnavailableReasonV1 = Literal["unreadable", "scenario_version_mismatch", "metrics_unavailable"]
 
 
 class BaselineSupplyUnavailableError(ValueError):
@@ -51,17 +53,23 @@ class BaselineSupplyUnavailableError(ValueError):
         self,
         baseline_schedule_version: str,
         current_baseline_schedule_version: str | None = None,
+        reason: BaselineUnavailableReasonV1 = "unreadable",
     ):
         self.baseline_schedule_version = baseline_schedule_version
         self.current_baseline_schedule_version = current_baseline_schedule_version
+        self.reason = reason
         super().__init__("authoritative baseline assignment supply is unavailable")
 
 
 def _facts(workers: tuple[WorkerV1, ...], tasks: tuple[TaskV1, ...], demand: tuple[DemandIntervalV1, ...], horizon_minutes: int) -> ValidationFactsV1:
     # The projection deliberately has no wage or solver-selected shift facts.
-    # A zero wage and empty selected-shift tuple are truthful only while the
-    # real baseline assignment supply is empty; the first story that populates
-    # it owns replacing both placeholders (recorded in deferred-work.md).
+    # A zero wage and empty selected-shift tuple would misprice a recomputed
+    # total_cost or hard-constraint result -- but neither side trusts this
+    # function for those two fields. calculate_comparison overrides both
+    # candidate and baseline total_cost with their authoritative persisted
+    # values, and baseline_hard_constraint_results comes straight from the
+    # baseline's persisted constraint_results, never from a recompute against
+    # these facts.
     return ValidationFactsV1(
         horizon_minutes=horizon_minutes,
         workers=tuple(
@@ -170,6 +178,7 @@ def calculate_comparison(
     scenario_version_id: UUID,
     site_id: UUID,
     expected_baseline_schedule_version: str | None,
+    baseline_version: ScheduleVersionV1 | None = None,
 ) -> ComparisonV1:
     overview = reader.get_overview(connection, scenario_id)
     if overview is None:
@@ -190,11 +199,29 @@ def calculate_comparison(
     tasks = cast(tuple[TaskV1, ...], drain_projection_group(reader.get_tasks, connection, scenario_id, **drain_args))
     demand = cast(tuple[DemandIntervalV1, ...], drain_projection_group(reader.get_demand, connection, scenario_id, **drain_args))
     workers = cast(tuple[WorkerV1, ...], drain_projection_group(reader.get_workers, connection, scenario_id, **drain_args))
-    baseline = cast(tuple[AssignmentV1, ...], drain_projection_group(reader.get_baseline_assignments, connection, scenario_id, **drain_args))
-    if expected_baseline_schedule_version is not None and not baseline:
+    if expected_baseline_schedule_version is None and baseline_version is not None:
+        raise ValueError(
+            "baseline_version must not be provided when expected_baseline_schedule_version is None"
+        )
+    if expected_baseline_schedule_version is not None and baseline_version is None:
         raise BaselineSupplyUnavailableError(
             expected_baseline_schedule_version, overview.baseline_schedule_version
         )
+    if baseline_version is not None and baseline_version.scenario_version_id != scenario_version_id:
+        raise BaselineSupplyUnavailableError(
+            expected_baseline_schedule_version if expected_baseline_schedule_version is not None
+            else str(baseline_version.schedule_version_id),
+            overview.baseline_schedule_version,
+            "scenario_version_mismatch",
+        )
+    if baseline_version is not None and baseline_version.metrics is None:
+        raise BaselineSupplyUnavailableError(
+            expected_baseline_schedule_version if expected_baseline_schedule_version is not None
+            else str(baseline_version.schedule_version_id),
+            overview.baseline_schedule_version,
+            "metrics_unavailable",
+        )
+    baseline = baseline_version.assignments if baseline_version is not None else ()
     facts = _facts(workers, tasks, demand, overview.horizon_minutes)
 
     recomputed_candidate, _ = calculate_candidate_metrics(
@@ -207,10 +234,20 @@ def calculate_comparison(
     if _metrics_disagree(recomputed_candidate, candidate.metrics):
         raise ComparisonIntegrityError("persisted candidate metrics disagree with recomputation")
 
-    baseline_metrics, _ = calculate_candidate_metrics(
-        baseline, tasks, demand, facts, constraints=()
-    )
-    baseline_hard = validate_hard_constraints(baseline, facts, preserved_locks=())
+    baseline_metrics = None
+    baseline_hard = ()
+    if baseline_version is not None:
+        baseline_metrics, _ = calculate_candidate_metrics(
+            baseline, tasks, demand, facts, constraints=()
+        )
+        baseline_metrics = replace(
+            baseline_metrics, total_cost=baseline_version.metrics.total_cost
+        )
+        baseline_hard = tuple(
+            result
+            for result in baseline_version.constraint_results
+            if result.constraint_class == "hard"
+        )
 
     candidate_workers, baseline_workers = _ids(candidate.assignments, "worker_id"), _ids(baseline, "worker_id")
     candidate_shifts, baseline_shifts = _ids(candidate.assignments, "shift_id"), _ids(baseline, "shift_id")
@@ -222,7 +259,7 @@ def calculate_comparison(
         removed_shift_ids=tuple(sorted(baseline_shifts - candidate_shifts)),
         added_task_ids=tuple(sorted(candidate_tasks - baseline_tasks)),
         removed_task_ids=tuple(sorted(baseline_tasks - candidate_tasks)),
-    )
+    ) if baseline_version is not None else None
     served = dict(recomputed_candidate.interval_coverage_served_minutes)
     unresolved = tuple(
         record_id
@@ -235,7 +272,7 @@ def calculate_comparison(
             checksum_algorithm=overview.checksum_algorithm,
             checksum_schema_version=overview.checksum_schema_version,
             checksum_digest=overview.checksum_digest,
-            producing_run_version=None,
+            producing_run_version=expected_baseline_schedule_version,
             baseline_schedule_version=expected_baseline_schedule_version,
             group="baseline-assignments",
             record_id=assignment.record_id,

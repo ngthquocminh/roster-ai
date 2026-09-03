@@ -122,6 +122,14 @@ class ScheduleRunRepository(Protocol):
         site_id: UUID,
     ) -> ScheduleVersionV1 | None: ...
 
+    def get_version(
+        self,
+        connection: Any,
+        *,
+        schedule_version_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleVersionV1 | None: ...
+
     def get_run(
         self,
         connection: Any,

@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.concurrency import run_in_threadpool
+from pydantic import ValidationError
 from sqlalchemy import Connection
 
 from api.deps import (
@@ -583,6 +584,22 @@ def get_schedule_run_result(
             detail="The completed run has no immutable input snapshot.",
         )
     try:
+        baseline_version = None
+        if snapshot.baseline_schedule_version is not None:
+            try:
+                baseline_version = repository.get_version(
+                    connection,
+                    schedule_version_id=UUID(snapshot.baseline_schedule_version),
+                    site_id=session.site_id,
+                )
+            except (ValueError, ValidationError) as exc:
+                # A malformed pointer or a payload that no longer matches
+                # ScheduleVersionV1 (schema drift on an old row) is the same
+                # class of "not authoritatively readable" as a missing row --
+                # it must degrade the comparison, not the whole result.
+                raise BaselineSupplyUnavailableError(
+                    snapshot.baseline_schedule_version
+                ) from exc
         comparison = calculate_comparison(
             projection_reader,
             connection,
@@ -591,25 +608,34 @@ def get_schedule_run_result(
             scenario_version_id=candidate.scenario_version_id,
             site_id=session.site_id,
             expected_baseline_schedule_version=snapshot.baseline_schedule_version,
+            baseline_version=baseline_version,
         )
     except BaselineSupplyUnavailableError as exc:
         # EAD-8 refuses the COMPARISON, not the result. Returning a problem here
         # would 409 the whole resource, and every block on the Results page is
         # gated on the result query succeeding -- so the schedule, the evidence,
         # and the pending approval's own controls would all disappear with it.
-        # Worse, the refusal is permanent: the baseline assignment supply is not
-        # wired (Decision 9), so from the first promotion onward every completed
-        # run snapshotted afterwards freezes a non-null baseline and would 409
-        # forever, making the site's first successful promotion its last.
-        # The guard itself is unchanged; only the failure BOUNDARY moved.
+        # A missing or incompatible immutable baseline version still refuses
+        # only this comparison; the candidate result remains independently useful.
         return ScheduleRunResultOut(
             run=run_out,
             candidate=ScheduleVersionOut.model_validate(candidate, from_attributes=True),
             comparison=None,
-            comparison_unavailable_reason=(
-                "Assignments for baseline schedule version "
-                f"{exc.baseline_schedule_version} are not authoritatively readable, "
-                "so this candidate cannot be compared against it."
+            comparison_unavailable_reason={
+                "scenario_version_mismatch": (
+                    f"The promoted baseline {exc.baseline_schedule_version} belongs to a "
+                    "different scenario version, so this candidate cannot be compared "
+                    "against it."
+                ),
+                "metrics_unavailable": (
+                    f"The promoted baseline {exc.baseline_schedule_version} has no "
+                    "authoritative metrics, so this candidate cannot be compared against it."
+                ),
+            }.get(
+                exc.reason,
+                "Baseline schedule version "
+                f"{exc.baseline_schedule_version} is not authoritatively readable, "
+                "so this candidate cannot be compared against it.",
             ),
             current_baseline_schedule_version=exc.current_baseline_schedule_version,
         )

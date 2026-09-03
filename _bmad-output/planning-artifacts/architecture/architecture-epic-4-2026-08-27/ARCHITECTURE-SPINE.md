@@ -115,7 +115,7 @@ Parent: `../architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md` — binding
 | Candidate feasibility | `schedule_version` + `ck_schedule_run_candidate_completed` | — (real today) |
 | Resumable pending payload | `AgentApprovalPendingV1` / `AgentTurnRequestV1.approvals` (owned contracts, already exist) | gap: never yet persisted — Story 4.1 supplies persistence |
 | Baseline pointer | `site_baseline` (created by Story 4.1's migration, written by 4.3) | — (real once 4.1 lands) |
-| Baseline assignment supply | **none** — guarded by EAD-8 | seeded readers only; gap named in Deferred |
+| Baseline assignment supply | exact site-scoped `schedule_version.payload` named by the run snapshot | comparison reads the immutable aggregate; the Scenario Data projection supply remains deferred |
 
 ### EAD-10 — One decision endpoint, one owner per bundle, one revalidation fork [ADOPTED]
 

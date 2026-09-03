@@ -50,3 +50,23 @@ def test_candidate_read_returns_none_when_run_has_no_candidate() -> None:
     assert PostgresScheduleRunRepository().get_candidate(
         _Connection(None), schedule_run_id=uuid4(), site_id=uuid4()
     ) is None
+
+
+def test_version_payload_reads_by_version_id_and_is_site_scoped() -> None:
+    version_id, site_id = uuid4(), uuid4()
+    version = ScheduleVersionV1(
+        schedule_version_id=version_id, schedule_run_id=uuid4(),
+        scenario_id=uuid4(), scenario_version_id=uuid4(),
+        proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL",
+    )
+    connection = _Connection(TypeAdapter(ScheduleVersionV1).dump_python(version, mode="json"))
+
+    restored = PostgresScheduleRunRepository().get_version(
+        connection, schedule_version_id=version_id, site_id=site_id
+    )
+
+    assert restored == version
+    compiled = str(connection.statement)
+    assert "schedule_version.id" in compiled
+    assert "site_id" in compiled

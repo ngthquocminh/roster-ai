@@ -105,6 +105,23 @@ class PostgresScheduleRunRepository:
             return None
         return TypeAdapter(ScheduleVersionV1).validate_python(row.payload)
 
+    def get_version(
+        self,
+        connection: Connection,
+        *,
+        schedule_version_id: UUID,
+        site_id: UUID,
+    ) -> ScheduleVersionV1 | None:
+        row = connection.execute(
+            select(schedule_version.c.payload).where(
+                schedule_version.c.id == schedule_version_id,
+                schedule_version.c.site_id == site_id,
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return TypeAdapter(ScheduleVersionV1).validate_python(row.payload)
+
     def get_run(
         self,
         connection: Connection,

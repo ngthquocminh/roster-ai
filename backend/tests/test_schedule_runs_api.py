@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import TypeAdapter
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
 from api.deps import (
@@ -109,6 +110,9 @@ def test_result_route_preserves_literal_run_without_candidate(client, status) ->
         def get_candidate(self, *_args, **_kwargs):
             raise AssertionError("non-completed runs must not read a candidate")
 
+        def get_version(self, *_args, **_kwargs):
+            raise AssertionError("non-completed runs must not read a baseline version")
+
     app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
     response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
 
@@ -140,6 +144,9 @@ def test_result_route_returns_completed_candidate_and_comparison(client, monkeyp
 
         def load_snapshot(self, *_args, **_kwargs):
             return SimpleNamespace(baseline_schedule_version=None)
+
+        def get_version(self, *_args, **_kwargs):
+            raise AssertionError("a None baseline_schedule_version must not read a baseline version")
 
     app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
     app.dependency_overrides[get_projection_reader] = lambda: object()
@@ -182,6 +189,9 @@ def test_result_route_reports_missing_candidate_as_a_distinct_problem(client) ->
         def get_candidate(self, *_args, **_kwargs):
             return None
 
+        def get_version(self, *_args, **_kwargs):
+            raise AssertionError("a missing candidate must not reach baseline resolution")
+
     app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
 
     response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
@@ -208,6 +218,9 @@ def test_result_route_reports_missing_snapshot_as_a_distinct_problem(client) -> 
 
         def load_snapshot(self, *_args, **_kwargs):
             return None
+
+        def get_version(self, *_args, **_kwargs):
+            raise AssertionError("a missing snapshot must not reach baseline resolution")
 
     app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
 
@@ -238,6 +251,9 @@ def test_result_route_reports_comparison_integrity_failure_as_a_distinct_problem
         def load_snapshot(self, *_args, **_kwargs):
             return SimpleNamespace(baseline_schedule_version=None)
 
+        def get_version(self, *_args, **_kwargs):
+            raise AssertionError("a None baseline_schedule_version must not read a baseline version")
+
     def _raise(*_args, **_kwargs):
         raise ComparisonIntegrityError("persisted candidate metrics disagree with recomputation")
 
@@ -259,11 +275,13 @@ def test_result_route_reports_unreadable_baseline_with_literal_version(client, m
         scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
         feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
     )
+    baseline_id = uuid4()
     class _Repository:
         def get_run(self, *_args, **_kwargs): return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
         def get_candidate(self, *_args, **_kwargs): return candidate
-        def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version="baseline-v1")
-    def _raise(*_args, **_kwargs): raise BaselineSupplyUnavailableError("baseline-v1", "baseline-v2")
+        def get_version(self, *_args, **_kwargs): return None
+        def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version=str(baseline_id))
+    def _raise(*_args, **_kwargs): raise BaselineSupplyUnavailableError(str(baseline_id), "baseline-v2")
     app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
     app.dependency_overrides[get_projection_reader] = lambda: object()
     monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", _raise)
@@ -278,12 +296,148 @@ def test_result_route_reports_unreadable_baseline_with_literal_version(client, m
     assert body["comparison"] is None
     assert body["candidate"] is not None, "the candidate must survive a refused comparison"
     assert body["comparison_unavailable_reason"] == (
-        "Assignments for baseline schedule version baseline-v1 are not "
-        "authoritatively readable, so this candidate cannot be compared against it."
+        f"Baseline schedule version {baseline_id} is not authoritatively readable, "
+        "so this candidate cannot be compared against it."
     )
     # Carried so a NEW approval can still be requested while the comparison --
     # normally the only publisher of this value -- is unavailable.
     assert body["current_baseline_schedule_version"] == "baseline-v2"
+
+
+def test_result_route_degrades_gracefully_on_a_malformed_baseline_pointer(client) -> None:
+    """A malformed `baseline_schedule_version` must not 500 the whole result.
+
+    Before this fix, `UUID(snapshot.baseline_schedule_version)` ran outside the
+    try/except that maps a refused comparison to `comparison_unavailable_reason`,
+    so a bad pointer took the candidate and the run down with it.
+    """
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs): return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+        def get_candidate(self, *_args, **_kwargs): return candidate
+        def get_version(self, *_args, **_kwargs):
+            raise AssertionError("a malformed pointer must fail before get_version is ever called")
+        def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version="not-a-uuid")
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["comparison"] is None
+    assert body["candidate"] is not None, "the candidate must survive a refused comparison"
+    assert body["comparison_unavailable_reason"] == (
+        "Baseline schedule version not-a-uuid is not authoritatively readable, "
+        "so this candidate cannot be compared against it."
+    )
+
+
+def test_result_route_degrades_gracefully_on_a_corrupt_baseline_payload(client) -> None:
+    """A `schedule_version.payload` that fails `ScheduleVersionV1` validation
+
+    (schema drift on an old row) must degrade the comparison, not the result --
+    the same class of "not authoritatively readable" as a missing row.
+    """
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+    baseline_id = uuid4()
+
+    class _Repository:
+        def get_run(self, *_args, **_kwargs): return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+        def get_candidate(self, *_args, **_kwargs): return candidate
+        def get_version(self, *_args, **_kwargs):
+            # Every ScheduleVersionV1 field is optional/defaulted, so `{}`
+            # alone validates trivially -- a real payload-shape drift is a
+            # field present with the WRONG type, e.g. after a future contract
+            # change to `metrics`.
+            TypeAdapter(ScheduleVersionV1).validate_python({"metrics": "not-a-metric-set"})
+        def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version=str(baseline_id))
+
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["comparison"] is None
+    assert body["candidate"] is not None, "the candidate must survive a refused comparison"
+    assert body["comparison_unavailable_reason"] == (
+        f"Baseline schedule version {baseline_id} is not authoritatively readable, "
+        "so this candidate cannot be compared against it."
+    )
+
+
+def test_result_route_reports_scenario_version_mismatch_with_literal_message(client, monkeypatch) -> None:
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+    baseline_id = uuid4()
+    class _Repository:
+        def get_run(self, *_args, **_kwargs): return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+        def get_candidate(self, *_args, **_kwargs): return candidate
+        def get_version(self, *_args, **_kwargs): return None
+        def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version=str(baseline_id))
+    def _raise(*_args, **_kwargs):
+        raise BaselineSupplyUnavailableError(str(baseline_id), "baseline-v2", "scenario_version_mismatch")
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", _raise)
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["comparison"] is None
+    assert body["comparison_unavailable_reason"] == (
+        f"The promoted baseline {baseline_id} belongs to a different scenario version, "
+        "so this candidate cannot be compared against it."
+    )
+
+
+def test_result_route_reports_metrics_unavailable_with_literal_message(client, monkeypatch) -> None:
+    test_client, settings, _ = client
+    run_id, scenario_id, version_id = uuid4(), uuid4(), uuid4()
+    candidate = ScheduleVersionV1(
+        schedule_version_id=uuid4(), schedule_run_id=run_id, scenario_id=scenario_id,
+        scenario_version_id=version_id, proposal_id=uuid4(), proposal_version_id=uuid4(),
+        feasible_solver_status="OPTIMAL", metrics=MetricSetV1(),
+    )
+    baseline_id = uuid4()
+    class _Repository:
+        def get_run(self, *_args, **_kwargs): return ScheduleRunViewV1(run_id, "solver_completed", None, 3, False)
+        def get_candidate(self, *_args, **_kwargs): return candidate
+        def get_version(self, *_args, **_kwargs): return None
+        def load_snapshot(self, *_args, **_kwargs): return SimpleNamespace(baseline_schedule_version=str(baseline_id))
+    def _raise(*_args, **_kwargs):
+        raise BaselineSupplyUnavailableError(str(baseline_id), "baseline-v2", "metrics_unavailable")
+    app.dependency_overrides[get_schedule_run_repository] = lambda: _Repository()
+    app.dependency_overrides[get_projection_reader] = lambda: object()
+    monkeypatch.setattr("api.routers.schedule_runs.calculate_comparison", _raise)
+    response = test_client.get(f"/api/v1/schedule-runs/{run_id}/result", headers=_headers(settings))
+    assert response.status_code == 200
+    body = response.json()
+    assert body["comparison"] is None
+    assert body["comparison_unavailable_reason"] == (
+        f"The promoted baseline {baseline_id} has no authoritative metrics, "
+        "so this candidate cannot be compared against it."
+    )
 
 
 def test_result_route_lets_an_unrelated_bug_surface_as_the_generic_internal_error(
@@ -314,6 +468,9 @@ def test_result_route_lets_an_unrelated_bug_surface_as_the_generic_internal_erro
 
         def load_snapshot(self, *_args, **_kwargs):
             return SimpleNamespace(baseline_schedule_version=None)
+
+        def get_version(self, *_args, **_kwargs):
+            raise AssertionError("a None baseline_schedule_version must not read a baseline version")
 
     def _raise(*_args, **_kwargs):
         raise KeyError("unrelated bug, not an integrity failure")

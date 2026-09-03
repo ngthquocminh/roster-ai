@@ -6,11 +6,12 @@ import { InlineAlert } from "@/components/primitives/InlineAlert";
 type Comparison = NonNullable<ScheduleRunResult["comparison"]>;
 type Pair = [string, number];
 
-function sum(values: Pair[]): number {
-  // An empty tuple is a real zero (no demand rows), not "not computed" --
-  // `calculate_candidate_metrics` always populates this field when a
-  // comparison exists, so there is no absent-data case to distinguish here.
-  return values.reduce((total, [, value]) => total + value, 0);
+function sum(values: Pair[] | undefined): number | null {
+  // `undefined` (no baseline) null-propagates to "Not computed"; an empty
+  // tuple is a real zero (no demand rows) -- `calculate_candidate_metrics`
+  // always populates this field for a version that HAS a comparison, so an
+  // empty tuple is never itself an absent-data signal.
+  return values === undefined ? null : values.reduce((total, [, value]) => total + value, 0);
 }
 
 function delta(candidate: number | null, baseline: number | null): string {
@@ -34,10 +35,10 @@ export function ComparisonSummary({ comparison, onRequestApproval, requestPendin
   const baseline = comparison.baseline_metrics;
   const objectiveNames = Array.from(new Set([
     ...candidate.objective_components.map(([name]) => name),
-    ...baseline.objective_components.map(([name]) => name),
+    ...(baseline?.objective_components.map(([name]) => name) ?? []),
   ])).sort();
   const candidateObjectives = new Map(candidate.objective_components);
-  const baselineObjectives = new Map(baseline.objective_components);
+  const baselineObjectives = new Map(baseline?.objective_components ?? []);
 
   return (
     <section aria-labelledby="comparison-heading" className="space-y-5">
@@ -66,23 +67,23 @@ export function ComparisonSummary({ comparison, onRequestApproval, requestPendin
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border p-4" aria-labelledby="assignment-diff-heading">
           <h4 className="font-semibold" id="assignment-diff-heading">Assignment changes</h4>
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+          {comparison.assignment_diff ? <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <IdList label="Workers added" values={comparison.assignment_diff.added_worker_ids} />
             <IdList label="Workers removed" values={comparison.assignment_diff.removed_worker_ids} />
             <IdList label="Shifts added" values={comparison.assignment_diff.added_shift_ids} />
             <IdList label="Shifts removed" values={comparison.assignment_diff.removed_shift_ids} />
             <IdList label="Tasks added" values={comparison.assignment_diff.added_task_ids} />
             <IdList label="Tasks removed" values={comparison.assignment_diff.removed_task_ids} />
-          </dl>
+          </dl> : <p className="mt-3 text-sm text-muted-foreground">No baseline exists, so assignment changes are not computed.</p>}
         </section>
 
         <section className="rounded-xl border p-4" aria-labelledby="metric-delta-heading">
           <h4 className="font-semibold" id="metric-delta-heading">Metric deltas</h4>
           <dl className="mt-3 grid gap-2 text-sm">
-            <div><dt>Coverage required delta</dt><dd>{delta(sum(candidate.interval_coverage_required_minutes), sum(baseline.interval_coverage_required_minutes))}</dd></div>
-            <div><dt>Coverage served delta</dt><dd>{delta(sum(candidate.interval_coverage_served_minutes), sum(baseline.interval_coverage_served_minutes))}</dd></div>
-            <div><dt>Overtime delta</dt><dd>{delta(candidate.overtime_minutes, baseline.overtime_minutes)}</dd></div>
-            <div><dt>Cost delta</dt><dd>{delta(candidate.total_cost, baseline.total_cost)}</dd></div>
+            <div><dt>Coverage required delta</dt><dd>{delta(sum(candidate.interval_coverage_required_minutes), sum(baseline?.interval_coverage_required_minutes))}</dd></div>
+            <div><dt>Coverage served delta</dt><dd>{delta(sum(candidate.interval_coverage_served_minutes), sum(baseline?.interval_coverage_served_minutes))}</dd></div>
+            <div><dt>Overtime delta</dt><dd>{delta(candidate.overtime_minutes, baseline?.overtime_minutes ?? null)}</dd></div>
+            <div><dt>Cost delta</dt><dd>{delta(candidate.total_cost, baseline?.total_cost ?? null)}</dd></div>
             {objectiveNames.map((name) => <div key={name}><dt>{name} objective delta</dt><dd>{delta(candidateObjectives.get(name) ?? null, baselineObjectives.get(name) ?? null)}</dd></div>)}
           </dl>
         </section>
@@ -90,7 +91,7 @@ export function ComparisonSummary({ comparison, onRequestApproval, requestPendin
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border p-4"><h4 className="font-semibold">Candidate constraints</h4><ul className="mt-2 list-disc pl-5 text-sm">{comparison.candidate_constraint_results.length ? comparison.candidate_constraint_results.map((item) => <li key={item.constraint_id}>{item.constraint_type}: {item.satisfied ? "Satisfied" : "Not satisfied"}</li>) : <li>Not computed</li>}</ul></section>
-        <section className="rounded-xl border p-4"><h4 className="font-semibold">Baseline hard constraints</h4><ul className="mt-2 list-disc pl-5 text-sm">{comparison.baseline_hard_constraint_results.length ? comparison.baseline_hard_constraint_results.map((item) => <li key={item.constraint_id}>{item.constraint_type}: {item.satisfied ? "Satisfied" : "Not satisfied"}</li>) : <li>Not computed</li>}</ul></section>
+        <section className="rounded-xl border p-4"><h4 className="font-semibold">Baseline hard constraints</h4><ul className="mt-2 list-disc pl-5 text-sm">{baseline === null ? <li>No baseline exists.</li> : comparison.baseline_hard_constraint_results.length ? comparison.baseline_hard_constraint_results.map((item) => <li key={item.constraint_id}>{item.constraint_type}: {item.satisfied ? "Satisfied" : "Not satisfied"}</li>) : <li>Not computed</li>}</ul></section>
       </div>
 
       <section className="rounded-xl border p-4"><h4 className="font-semibold">Warnings</h4><ul className="mt-2 list-disc pl-5 text-sm">{comparison.warnings.length ? comparison.warnings.map((warning) => <li key={warning}>{warning}</li>) : <li>None</li>}</ul></section>

@@ -62,3 +62,24 @@ def test_comparison_v1_round_trips_every_required_concept() -> None:
     assert restored.stale is True
     assert restored.candidate_metrics.total_cost == 125.0
     assert restored.unresolved_gap_record_ids == ("demand-1",)
+
+
+def test_comparison_v1_round_trips_absent_baseline_group() -> None:
+    comparison = ComparisonV1(
+        candidate_schedule_version_id=uuid4(), candidate_schedule_run_id=uuid4(),
+        scenario_id=uuid4(), scenario_version_id=uuid4(),
+        expected_baseline_schedule_version=None,
+        current_baseline_schedule_version=None, stale=False,
+        assignment_diff=None, candidate_metrics=MetricSetV1(),
+        baseline_metrics=None, candidate_constraint_results=(),
+        baseline_hard_constraint_results=(), warnings=(),
+        unresolved_gap_record_ids=(), evidence_refs=(),
+    )
+
+    restored = TypeAdapter(ComparisonV1).validate_python(
+        TypeAdapter(ComparisonV1).dump_python(comparison, mode="json")
+    )
+
+    assert restored.baseline_metrics is None
+    assert restored.assignment_diff is None
+    assert restored.baseline_hard_constraint_results == ()
