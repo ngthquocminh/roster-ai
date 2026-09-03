@@ -2180,6 +2180,12 @@ development_status:
 
   # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)
   epic-5: in-progress
+  # 5.0 inserted 2026-09-03 by sprint-change-proposal-2026-09-03.md, from Epic 4
+  # retrospective action A3(i). Corrective prerequisite, NOT part of the portfolio
+  # sequence -- numbered 5-0 so 5.1-5.4 keep their keys. Fires the Epic 4 spine's
+  # Deferred trigger "first story needing authoritative baseline-side metrics after a
+  # real promotion". BLOCKS Story 5.4 creation; independent of 5.1, 5.2 and 5.3.
+  5-0-compare-a-candidate-against-the-real-promoted-baseline: backlog
   5-1-instrument-agent-runs-for-latency-budget-and-cost: ready-for-dev
   5-2-prevent-content-and-secret-leaks: backlog
   5-3-run-shiftmind-reproducibly-from-one-command: backlog
@@ -2378,7 +2384,18 @@ action_items:
   - epic: "4"
     action: "A3 -- Write the three Epic 4 gaps into Story 5.4's limitations scope BEFORE 5.4 is created: (i) empty baseline-assignment supply, (ii) 33/60 matrix states mount no product component, (iii) no separation of duties on the decision endpoint. Decide per gap -- fix, or disclose."
     owner: "John"
-    status: open
+    status: in-progress
+    # (i) ADDRESSED 2026-09-03 -- NOT by disclosure but by a fix. Minh's call: a
+    # limitations paragraph cannot reach a planner reading a fabricated cost delta on
+    # the Results page. Disclosure is the instrument for a MISSING capability; this is
+    # a WRONG one. Routed to new Story 5.0 via sprint-change-proposal-2026-09-03.md.
+    # Analysis found the defect is worse and the fix cheaper than this action assumed:
+    # before any promotion the EAD-8 guard does not fire, so the comparison renders
+    # confident fabrications rather than degrading -- and the promoted version's
+    # assignments already exist in schedule_version.payload in the exact type needed,
+    # so the Stories 3.8/3.10 wage prerequisites are not on this path at all.
+    # (ii) and (iii) still open: matrix-mounts-no-product-component, and no separation
+    # of duties. Both remain disclose-or-fix decisions for Story 5.4.
     # BLOCKS Story 5.4 creation. Story 5.4's own AC requires that every behavioural claim be
     # reproducible by the Story 5.3 command and that limitations be explicit.
     # (i) is verified live: PostgresScenarioProjectionReader.get_baseline_assignments

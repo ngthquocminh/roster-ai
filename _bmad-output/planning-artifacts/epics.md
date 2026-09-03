@@ -1348,6 +1348,44 @@ The complete planner journey runs reproducibly on any developer machine from one
 
 **Coverage note.** NFR10's telemetry-independence outcome is proven by Story 3.9's third acceptance criterion and is not restated here. NFR35's four thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and are measured on the CI reference environment per AD-26, never on a hosted topology — they do not depend on this epic or Epic 6.
 
+### Story 5.0: Compare a Candidate Against the Real Promoted Baseline [Corrective Insert]
+
+**Inserted 2026-09-03** by `sprint-change-proposal-2026-09-03.md`, from Epic 4 retrospective action A3(i). Numbered `5.0` rather than renumbering 5.1–5.4 because it is a corrective prerequisite, not a member of the portfolio sequence. It fires the spine's Deferred trigger *"first story needing authoritative baseline-side metrics after a real promotion"* — Story 5.4's walkthrough is that story.
+
+**The defect.** `calculate_comparison` reads its baseline side from `ScenarioProjectionReader.get_baseline_assignments`, whose PostgreSQL implementation applies its query to a hardcoded empty tuple. With no promoted baseline the EAD-8 guard does not fire, so the comparison is computed against an empty baseline and renders fabricated deltas — cost delta equal to the candidate's entire cost, an all-`Satisfied` baseline constraint list, every worker reported `added`. After the first promotion the guard fires and the comparison disappears permanently. There is no state in which the feature works. EAD-8's premise that the pre-promotion rendering was *honest* is false and is amended by this proposal.
+
+**The fix is a change of source, not a new supply.** `ScheduleVersionV1.assignments` is already `tuple[AssignmentV1, ...]`; `schedule_version.payload` already persists it; `site_baseline.schedule_version_id` already FK-pins the promoted row; `snapshot.baseline_schedule_version` is already `str(schedule_version_id)`. The wage and selected-shift prerequisites named in the Deferred row gate the `schedule_assignment` supply for the **projection** consumer, not this path.
+
+As a planner,
+I want the comparison to measure my candidate against the schedule that is actually running,
+So that I can judge a repair before approving it — and, when no baseline exists yet, be told so rather than shown deltas against nothing.
+
+Unblocks: Story 5.4's walkthrough claim that the approve → promote → compare loop is reproducible.
+
+**Acceptance Criteria:**
+
+**Given** a completed candidate whose run snapshot froze a non-null `baseline_schedule_version`
+**When** `ComparisonV1` is calculated
+**Then** the baseline assignments are read from the `schedule_version` row that identifier names, through a site-scoped repository read
+**And** every baseline-side metric, constraint result, and assignment-diff entry derives from those assignments, and `ComparisonV1.evidence_refs` carries a baseline locator for each. (FR15, AR11, AR20)
+
+**Given** a site with no promoted baseline
+**When** Results renders the comparison
+**Then** `baseline_metrics` is null, every delta reads "Not computed", and the baseline constraint list states that no baseline exists rather than listing satisfied constraints
+**And** no assignment-diff entry claims a worker, shift, or task was added relative to a baseline that does not exist. (UX-DR11, UX-DR21)
+
+**Given** a non-null frozen `baseline_schedule_version`
+**When** the `schedule_version` row it names cannot be read
+**Then** the comparison fails closed exactly as it does today
+**And** a readable version whose assignment set is legitimately empty produces a real comparison instead, with that emptiness visible rather than inferred.
+
+**Given** a real promoted baseline
+**When** a later run completes and its result is read
+**Then** the comparison is present and its deltas are measured against the promoted schedule, proven end to end against PostgreSQL
+**And** each new guard is recorded in a demonstrated-red mutation table.
+
+**Out of scope, deliberately.** The hardcoded `baseline_assignment_count=0` in the overview projection and `get_baseline_assignments` itself: they serve the Scenario Data workspace, a different consumer whose need does genuinely depend on the Stories 3.8/3.10 prerequisites. This story changes what *comparison* reads and leaves the projection group unchanged.
+
 ### Story 5.1: Instrument Agent Runs for Latency, Budget, and Cost
 
 As a portfolio operator,
