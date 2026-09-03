@@ -1457,7 +1457,7 @@ So that I can judge the system's engineering without reading the whole repositor
 
 **Given** the portfolio's current scope and configuration
 **When** limitations are documented
-**Then** single-planner scope, fixture-only source data, conversation/audit/snapshot/log retention settings, absence of hosted deployment at this milestone, and non-customer status are explicit
+**Then** single-planner scope — which **must** state in as many words that the planner who requests an approval can decide it, because no separation-of-duties rule exists and none is planned at this milestone (spine Deferred: *"MVP self-approval stands"*, trigger *"activating a second user or customer security review"*) — fixture-only source data, conversation/audit/snapshot/log retention settings, absence of hosted deployment at this milestone, and non-customer status are explicit
 **And** no enterprise latency, availability, recovery, concurrency, or cost promise is made. (NFR17, NFR34)
 
 ## Epic 6: Reliable Hosted Planner Workspace
