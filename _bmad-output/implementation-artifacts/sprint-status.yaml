@@ -2185,7 +2185,64 @@ development_status:
   # sequence -- numbered 5-0 so 5.1-5.4 keep their keys. Fires the Epic 4 spine's
   # Deferred trigger "first story needing authoritative baseline-side metrics after a
   # real promotion". BLOCKS Story 5.4 creation; independent of 5.1, 5.2 and 5.3.
-  5-0-compare-a-candidate-against-the-real-promoted-baseline: backlog
+  # NOTE (2026-09-03): Story 5.0 created and moved to ready-for-dev. Scope: one new repository port
+  # method, one call-site rewiring in `calculate_comparison`, two nullable contract fields, codegen, and
+  # the frontend rendering of the absent state. NO migration, route, dependency, golden case, evidence
+  # file, or Gate A registry change.
+  #
+  # MEASURED AT CREATION (7eea305, clean tree): backend 1357 passed / 156 skipped / 7 deselected --
+  # BUT an identical run minutes earlier gave 1350 passed / 7 FAILED, all
+  # test_state_semantics_evidence.py::test_refused_report_writes_nothing parametrizations, which pass
+  # 12/12 in isolation. Ordering is deterministic (no pytest-randomly/xdist), so the variable is state
+  # OUTSIDE the session -- that suite asserts a report file is NOT written. Treat green as the baseline
+  # and do not attribute a red there to this story. `-m postgres` was NOT measured (Docker down; the 156
+  # skips are that suite). Frontend Vitest 85 files / 647 tests and Playwright 80 tests / 10 files were
+  # measured directly and SUPERSEDE the stale 575 and 66 carried in the 4.4/4.6 notes.
+  #
+  # THE LOAD-BEARING FINDING, made at creation rather than at review: the change proposal's premise that
+  # "the wage and selected-shift prerequisites are not on this path" is TRUE only for the mechanism this
+  # story picked, and FALSE for the obvious one. `_facts()` (comparison.py:72,78) supplies
+  # wage_per_hour=0.0 and selected_shifts=(). So (a) recomputing baseline cost from the projection yields
+  # 0.00 and the "Cost delta" STILL reads the candidate's entire cost -- the exact number the proposal
+  # opens with, with AC1 satisfied to the letter; and (b) `validate_hard_constraints`' first check is
+  # `a.shift_id not in shifts` over an EMPTY shifts dict, so real baseline assignments make EVERY one
+  # "outside its selected shift" -- turning seven fabricated `Satisfied` rows into a fabricated VIOLATION.
+  # Both are avoided by making the baseline side SYMMETRIC with the candidate side, which the shipped code
+  # already gets right: recompute what the projection can express, PRESERVE the persisted `total_cost`
+  # (comparison.py:206 already does exactly this for the candidate), and take hard results from the
+  # persisted `constraint_results` (comparison.py:257 already does exactly this for the candidate).
+  # That closes BOTH halves of deferred-work.md:498 without supplying wages or shifts to the projection.
+  #
+  # THIRTEEN DECISIONS, the four most consequential beyond the above:
+  # (1) The ROUTE loads the baseline version and passes `ScheduleVersionV1 | None` as a PARAMETER;
+  #     `calculate_comparison` gains no second port. Story 4.4a's own precedent, verbatim.
+  # (2) Readable-vs-empty is answered by the parameter's TYPE, not tuple emptiness -- which is exactly
+  #     what deferred-work.md:574 asks for ("a readable/row-count signal from the reader"), so it closes.
+  # (3) The baseline must share the candidate's scenario_version_id or the comparison fails closed.
+  #     NOT tidiness: `calculate_candidate_metrics:80` does an UNGUARDED `workers[assignment.worker_id]`,
+  #     a KeyError -> unhandled 500 that is unreachable today only because the baseline is always empty.
+  #     A second scenario_version IS creatable via the governed import path (fixture_history.py:155-168).
+  # (4) "No baseline" is a nullable GROUP of TWO fields -- `baseline_metrics` AND `assignment_diff`. The
+  #     proposal anticipated only the first; AC2's second clause forces the second, because an EMPTY diff
+  #     claims "nothing changed", which is a different false statement rather than a fix.
+  #
+  # FRONTEND TRAP: `ComparisonSummary.tsx`'s `sum()` returns a number unconditionally, so two of the four
+  # delta rows can NEVER render "Not computed" no matter what the server sends. `delta()` has always
+  # handled null and has never received one. Sending null is necessary and not sufficient.
+  #
+  # A TEST ASSERTS THE DEFECT IS CORRECT IN ITS OWN NAME:
+  # test_empty_baseline_is_real_net_new_comparison_and_detects_staleness (test_schedule_comparison.py:121).
+  # It must be split, not kept passing.
+  #
+  # LEDGER: closes :498 and :574. RE-POINTS :531 -- its trigger is a real `get_baseline_assignments`
+  # supply, which this story explicitly does NOT build (the frozen AC's out-of-scope clause). For the same
+  # reason `evals/repair_correctness_report.py:173`'s honest-gap string stays literally true and must not
+  # be edited -- it is bound into Story 3.10's committed evidence. Baseline evidence locators are CARRIED
+  # but still resolve `not_found`, because resolution reads the group left unwired; declared, not fixed.
+  #
+  # ALSO OWED: docs/API.md:586-596 becomes FALSE and must be corrected; ARCHITECTURE-SPINE.md:118's
+  # EAD-9 row "Baseline assignment supply | none" must name the real supplier. EAD-8's Rule is unchanged.
+  5-0-compare-a-candidate-against-the-real-promoted-baseline: ready-for-dev
   5-1-instrument-agent-runs-for-latency-budget-and-cost: ready-for-dev
   5-2-prevent-content-and-secret-leaks: backlog
   5-3-run-shiftmind-reproducibly-from-one-command: backlog
