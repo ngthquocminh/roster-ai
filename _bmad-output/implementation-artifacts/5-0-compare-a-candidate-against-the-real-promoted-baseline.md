@@ -103,9 +103,11 @@ Do not re-derive these from code; re-verify them at Task 1 and record any drift.
 
 | Fact | Measurement |
 |---|---|
-| Backend default suite | **1357 passed, 156 skipped, 7 deselected** (300 s). See the flake note below — an identical run on the same commit minutes earlier reported **1350 passed / 7 failed**. |
+| Backend default suite, **PostgreSQL up** | **1511 passed, 2 skipped, 7 deselected** (137 s). This is the figure to expect. |
+| Backend default suite, **PostgreSQL down** | **1357 passed, 156 skipped, 7 deselected** (300 s) — the postgres-marked tests skip silently. |
 | Backend collection | **1513 / 1520 collected**, 7 deselected (`live` marker) |
-| Backend `-m postgres` | **not measured — the Docker PostgreSQL service was down.** The 156 skips above are that suite skipping. Story 4.6 last recorded **156 passed**. Bring the service up and measure at Task 1. |
+| Backend `-m postgres` | **156 passed, 1364 deselected** (45 s, PostgreSQL 18 via `docker compose up -d postgres`). Matches Story 4.6's recorded figure exactly. |
+| **The stable invariant** | **1513 collected either way** (1511+2 with the database up; 1357+156 with it down). Story 3.12's review established that the pass/skip split is environment-conditional and the TOTAL is what to compare. Record both. |
 | Frontend Vitest | **85 files, 647 passed** (`npm test -- --run`, 86 s). The last figure recorded in a story file was 4.4's **575** — it was stale. |
 | Playwright | **80 tests in 10 files** (`npx playwright test --list`, chromium + msedge). Story 4.6 recorded **66** — also stale. |
 | Test ordering | **deterministic.** No `pytest-randomly`, no `pytest-xdist`; `addopts = -m "not live"` only (`backend/pyproject.toml:48-54`) |
@@ -119,15 +121,41 @@ Do not re-derive these from code; re-verify them at Task 1 and record any drift.
 | Existing baseline evidence locators | `comparison.py:232-244` — `producing_run_version=None`, `group="baseline-assignments"`. Zero are emitted today because `baseline` is always `()` |
 | Frontend consumers of `baseline_metrics` | exactly one: `ComparisonSummary.tsx:34,37,40,82-86`. Plus the Playwright fixture `repairJourneyStubState.ts:142`, which supplies a **non-null** object and stays valid |
 
-**A real flake was observed at creation, on this commit, with a clean tree.** Two identical
-`uv run --frozen pytest -q` runs minutes apart gave **1350 passed / 7 failed** and then **1357 passed / 0
-failed**. The failures were all `tests/test_state_semantics_evidence.py::test_refused_report_writes_nothing`
-parametrizations (three captured by name: *a filtered run drops the count declaration*, *declared count
-disagrees with emitted states*, *the matrix declares its size twice*); the file passes **12/12 in isolation**.
-Test ordering is deterministic, so the variable is state outside the test session — that suite asserts a
-report file is *not* written, which a leftover artifact from an earlier run would falsify. **Treat the green
-figure as the baseline, and do not attribute a red in that file to this story's changes.** If
-`deferred-work.md` has no entry for it, one is owed (Task 1); fixing it is not this story's.
+**A flake was observed once at creation, on this commit, with a clean tree — then did not recur.** The
+first of three full runs gave **1350 passed / 7 failed**; the two after it were clean. Every failure was a
+`tests/test_state_semantics_evidence.py::test_refused_report_writes_nothing` parametrization (three captured
+by name: *a filtered run drops the count declaration*, *declared count disagrees with emitted states*, *the
+matrix declares its size twice*), and the file passes **12/12 in isolation**. Test ordering is deterministic,
+so the variable is state outside the test session — that suite asserts a report file is *not* written, which
+a leftover artifact from an earlier run would falsify. **Treat green as the baseline and do not attribute a
+red in that file to this story's changes.** If `deferred-work.md` has no entry, one is owed (Task 1); fixing
+it is not this story's.
+
+### Premises verified at creation — live PostgreSQL 18, not inferred
+
+`sprint-change-proposal-2026-09-03.md:150-151` raised two risks as first-ten-minutes checks. Both were run
+against a real migrated database at story creation, through `api/deps.py`'s `site_context` — the same
+RLS-enforcing runtime path a request uses — seeding the chain with
+`tests/test_approval_governance_postgres.py`'s own `_seed_candidate_run`. All three assertions passed.
+
+| Premise | Result |
+|---|---|
+| **RLS on the new predicate.** `select(schedule_version.c.payload).where(id == ..., site_id == ...)` — the exact shape Decision 1's `get_version` proposes, keyed on `id` rather than `get_candidate`'s `schedule_run_id` | **PASS** — row returned, 3 assignments read back |
+| **RLS is not vacuous.** The same read under a *different* site's context | **PASS** — returns `None`, so the isolation is real and the check above is not passing for the wrong reason |
+| **Payload compatibility.** A `schedule_version.payload` row written by the existing writer, hydrated through `TypeAdapter(ScheduleVersionV1)` | **PASS** — round-tripped unchanged, `feasible_solver_status` and `scenario_version_id` both intact |
+
+**Why this is safe to rely on:** the policy on every governed table is uniform —
+`site_id = NULLIF(current_setting('app.site_id', true), '')::uuid` (`migrations/versions/d4e5f6a7b8c9_add_approval_governance.py:30`
+and its siblings) — so it constrains `site_id` alone and is indifferent to which other column the predicate
+names. The empirical check confirms the reasoning rather than replacing it.
+
+**Decision 7's key is present on the hydrated object.** The probe read `scenario_version_id` straight off the
+restored `ScheduleVersionV1`, so the equality guard needs no extra column and no second query.
+
+**What this does NOT establish:** it used a seeded `schedule_version` written by the test helper in
+`finalize_run`'s insert order, not a row produced by a real solve, and the site had no `site_baseline` row —
+so it proves the *read* is possible, not that the promotion path produces a comparable baseline. That is
+Task 9's job and is not discharged here.
 
 ---
 
@@ -206,6 +234,15 @@ Three sources, each matching what `calculate_comparison` already does for the ca
 This closes **both halves** of `deferred-work.md:498` — not by adding wages and selected shifts to the
 projection, but by reading the authoritative values `finalize_schedule_run` already persisted at the
 baseline's own solve time.
+
+**`metrics` is `MetricSetV1 | None` and `constraint_results` defaults to `()`**
+(`contracts/schedule_version.py:126-127`). `finalize_schedule_run` always populates both, so a
+production-built baseline has them — but the type does not, so reading `baseline_version.metrics.total_cost`
+unguarded is an `AttributeError` → unhandled 500. A baseline whose `metrics` is `None` is an **unusable**
+supply and must fail closed through the Decision 2 path with its own `reason`, never through
+`ComparisonIntegrityError` (which is the candidate's 500 and would take the whole result down — the boundary
+Story 4.3 deliberately moved). The candidate already has exactly this guard at `comparison.py:181-182`;
+the baseline needs its own.
 
 **Does NOT cover:** it does not give the projection the ability to express a wage or a solver-selected shift.
 Any *future* consumer that needs baseline cost or hard constraints from the projection alone still faces
@@ -299,6 +336,12 @@ a real baseline (Decision 6 guarantees at least the seven `_result(...)` rows `v
 always emits), so it is unambiguous — but that is an invariant held by construction, not by the type. One test
 must assert the three fields move together.
 
+**And it is unreachable only in PRODUCTION.** Every seeded `schedule_version` in this repository's own
+PostgreSQL tests has `constraint_results=()` and `metrics=None`, because
+`tests/test_approval_governance_postgres.py`'s `_seed_candidate_run` sets neither (`:167-173`). A test that
+asserts "`()` means no baseline" against a seeded baseline therefore **passes for the wrong reason**. See
+Task 9.
+
 ### Decision 10 — The frontend's `sum()` becomes null-propagating; `delta()` is already correct and is not touched
 
 Measured trap: `ComparisonSummary.tsx:9-14`'s `sum()` returns a `number` unconditionally, so
@@ -365,18 +408,18 @@ not, for the comparison: Decision 4 discharges it a different way. Amend that se
   - [ ] Confirm a clean tree at `7eea305` or later; record the actual commit.
   - [ ] Run `uv run --frozen pytest -q` and record **totals alongside any pass/skip split** — Story 3.12's
         review established the split is environment-conditional and the total is the stable invariant.
-  - [ ] If `tests/test_state_semantics_evidence.py` is red, confirm it passes in isolation and treat it as the
+  - [ ] Expect **1511 passed / 2 skipped / 7 deselected** with the database up. If
+        `tests/test_state_semantics_evidence.py` is red, confirm it passes in isolation and treat it as the
         flake recorded above — not as this story's. Raise it to `deferred-work.md` if no entry exists.
-  - [ ] Bring Docker PostgreSQL up and run `uv run --frozen pytest -m postgres -q`. It was **not measured** at
-        creation. Do not proceed to Task 9 without it.
+  - [ ] Bring Docker PostgreSQL up (`docker compose up -d postgres`) and re-run
+        `uv run --frozen pytest -m postgres -q`, expecting **156 passed / 1364 deselected**. A run that reports
+        success with the service DOWN has proven nothing — those tests skip silently.
   - [ ] Record `npm test -- --run` and `npx playwright test --list` totals.
-- [ ] **Task 2 — Verify the two premises the first ten minutes must settle** (AC: 1, 3) — named as
-      first-ten-minutes checks by `sprint-change-proposal-2026-09-03.md:150-151`
-  - [ ] **RLS:** prove that selecting `schedule_version` by `(id, site_id)` — rather than by `schedule_run_id`
-        as `get_candidate` does — passes site-scoped row security under `get_site_context`. If it does not,
-        stop and report; every later task depends on it.
-  - [ ] **Payload compatibility:** prove a `schedule_version.payload` row written before this change still
-        deserializes through `TypeAdapter(ScheduleVersionV1)`.
+- [ ] **Task 2 — Re-confirm the two premises, already VERIFIED at creation** (AC: 1, 3) — named as
+      first-ten-minutes checks by `sprint-change-proposal-2026-09-03.md:150-151`. Both were run against a live
+      PostgreSQL 18 at story creation and **passed**; see *Premises verified at creation* below. This task is a
+      cheap re-confirmation, not an open question — but do not take it on faith if the schema has moved.
+  - [ ] Re-run the equivalent of the creation probe, or assert the same two facts inside the Task 9 test.
 - [ ] **Task 3 — Add `get_version` to the port and the adapter** (AC: 1)
   - [ ] Add the method to `application/ports/schedule_run.py`'s Protocol, per Decision 1's signature.
   - [ ] Implement it in `adapters/postgres/schedule_run.py` beside `get_candidate` (`:91-106`), selecting on
@@ -396,6 +439,8 @@ not, for the comparison: Decision 4 discharges it a different way. Amend that se
   - [ ] Recompute the baseline metrics and preserve `total_cost`; take the hard results from
         `baseline_version.constraint_results`; **delete the `validate_hard_constraints` call at `:213`** — per
         Decisions 4 and 5.
+  - [ ] Guard `baseline_version.metrics is None` through the Decision 2 fail-closed path, not through
+        `ComparisonIntegrityError` — per Decision 4.
   - [ ] Return the absent group as `None` when `expected_baseline_schedule_version is None`, per Decision 9.
   - [ ] Set `producing_run_version` on the baseline locators, per Decision 11.
   - [ ] Update `SCOPE_CONTROLS` (`:27-32`): the two lines naming the unwired supply and the wage/shift gap are
@@ -423,7 +468,14 @@ not, for the comparison: Decision 4 discharges it a different way. Amend that se
   - [ ] Extend the real-PostgreSQL suite: promote a baseline through the shipped Story 4.3 path, complete a
         later run, read its result, and assert the comparison is present with deltas measured against the
         promoted schedule — **not** against a hand-built `ScheduleVersionV1`.
-  - [ ] Reuse `tests/test_approval_governance_postgres.py`'s promotion scaffold rather than writing a second one.
+  - [ ] Reuse `tests/test_approval_governance_postgres.py`'s promotion scaffold rather than writing a second
+        one — **but not unmodified.** Its `_seed_candidate_run` (`:167-173`) sets neither `metrics` nor
+        `constraint_results`, which are the two fields Decision 4 reads. Used as-is the baseline would carry
+        `metrics=None` and `constraint_results=()`, and the whole proof would be vacuous. Either extend the
+        helper to populate both, or build the baseline through the real `finalize_schedule_run` path.
+  - [ ] Assert the baseline's `total_cost` is **non-zero and equal to its persisted value** — the single
+        assertion that distinguishes Decision 4 from trap 2. A proof that omits it cannot tell the fix from
+        the defect.
 - [ ] **Task 10 — Documentation and ledger** (AC: 1, 3)
   - [ ] Correct `docs/API.md:586-596`, per Decision 13.
   - [ ] Apply Decision 12's ledger dispositions in `deferred-work.md`, including amending `:531`'s second
@@ -487,7 +539,13 @@ not, for the comparison: Decision 4 discharges it a different way. Amend that se
    `runtime_checkable`. Missing `get_version` fails at call time inside a route test, not at import — read the
    failure as a missing double method, not as a route bug.
 
-10. **Do not re-verify the baseline's persisted metrics.** Decision 8. Adding `_metrics_disagree` to the
+10. **The repo's own seeded baselines have `metrics=None` and `constraint_results=()`.**
+    `_seed_candidate_run` sets neither, so the two fields Decision 4 reads are absent in every existing
+    PostgreSQL fixture. Two consequences: reading `.metrics.total_cost` unguarded is an `AttributeError`, and
+    a test asserting Decision 9's `()`-means-no-baseline invariant passes for the wrong reason. Decisions 4
+    and 9, Task 9.
+
+11. **Do not re-verify the baseline's persisted metrics.** Decision 8. Adding `_metrics_disagree` to the
     baseline side creates a guard that raises on legitimate float noise between the solver's ingest facts and
     the projection's re-normalization — the exact ~1e-9 disagreement `comparison.py:106-114` documents.
 
@@ -561,3 +619,5 @@ is an edit to a file that already exists. The zero-line-diff fences that have he
 | Date | Change |
 |---|---|
 | 2026-09-03 | Story created from `sprint-change-proposal-2026-09-03.md` (Epic 4 retrospective A3(i)). Baseline `7eea305`. |
+| 2026-09-03 | PostgreSQL brought up. `-m postgres` measured (**156 passed**) and the default suite re-measured with the database up (**1511 passed / 2 skipped**); total 1513 either way. Task 2's two premises **verified against a live database** rather than left as open risks — see *Premises verified at creation* — and Task 2 reduced to a re-confirmation. |
+| 2026-09-03 | Decision 4 corrected: `ScheduleVersionV1.metrics` is Optional and the repo's own seeded baselines set neither `metrics` nor `constraint_results`, so the unguarded read is an `AttributeError` and Task 9's scaffold would have proven nothing unmodified. Added the fail-closed guard, trap 10, and the Task 9 non-vacuity assertion. |

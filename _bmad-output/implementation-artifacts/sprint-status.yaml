@@ -2242,6 +2242,19 @@ development_status:
   #
   # ALSO OWED: docs/API.md:586-596 becomes FALSE and must be corrected; ARCHITECTURE-SPINE.md:118's
   # EAD-9 row "Baseline assignment supply | none" must name the real supplier. EAD-8's Rule is unchanged.
+  #
+  # PREMISES VERIFIED AT CREATION, not left as risks (PostgreSQL 18 up, live database). The change
+  # proposal raised RLS and payload compatibility as first-ten-minutes checks; both were run through
+  # api/deps.py's site_context -- the same RLS-enforcing runtime path a request uses -- and PASSED:
+  # reading schedule_version by (id, site_id) returns the row; the SAME read under a different site's
+  # context returns None (so the check is not passing vacuously); and the payload round-trips through
+  # TypeAdapter(ScheduleVersionV1) with scenario_version_id intact, which is Decision 7's key. The RLS
+  # policy is uniform `site_id = current_setting('app.site_id')` on every governed table, so it is
+  # indifferent to which other column the predicate names. Task 2 is now a re-confirmation, not an
+  # open question. It does NOT establish that the promotion path produces a comparable baseline --
+  # that is Task 9's and is undischarged.
+  #
+  # `-m postgres` MEASURED: 156 passed / 1364 deselected, matching Story 4.6's figure exactly.
   5-0-compare-a-candidate-against-the-real-promoted-baseline: ready-for-dev
   5-1-instrument-agent-runs-for-latency-budget-and-cost: ready-for-dev
   5-2-prevent-content-and-secret-leaks: backlog
