@@ -8,8 +8,26 @@
 # `volume` rows multiplied into "minutes" — a wrong number wearing a valid
 # evidence locator — and it was caught at review, not at implementation
 # (epic-1-2-retro-2026-08-16.md §3.2).
+#
+# The last two facts are Epic 4 retrospective action A1
+# (epic-4-retro-2026-09-02.md §4, §6). "Red-then-green" has been a standing
+# commitment since the Epic 1-2 retro and has failed in three consecutive
+# epics. The diagnosis is NOT that the rule is ignored: Story 4.6's Task 4
+# states it verbatim and correctly. The rule as previously worded admits a red
+# from INCOMPLETE code — the natural red of test-first development — which
+# proves only that the test file loads. The first fact closes that reading; the
+# second requires the artifact that makes compliance checkable.
+#
+# Unlike the domain-model fact above and the authoring rules in
+# bmad-create-story.toml, this pair CAN be verified, because it leaves
+# something behind. It is still not backed by a test: the assertion available
+# would be a proxy (a table can be present and fabricated). Its back-pressure
+# is the paired reviewer fact in bmad-code-review.toml, which spot-checks one
+# row by re-running the mutation.
 
 persistent_facts = [
   "file:{project-root}/docs/DOMAIN-MODEL.md",
   "docs/DOMAIN-MODEL.md is normative. outbound/inbound demand is measured in volume, indirect in headcount, and the two are never multiplied together or reported under one unit. Assignments carry worker identity but no family, so no metric reading assignments may accept a family argument.",
+  "Demonstrated red means: the guard was GREEN, then made to fail by mutating FINISHED product code — weaken the assertion or corrupt the fixture — observed failing for the expected reason, then restored with the tree left clean. A red from an unresolved import, a first draft, or a module that does not exist yet does NOT count; it proves only that the test file loads. Story 4.6's Task 4 stated this rule verbatim and correctly, then satisfied it with reds from incomplete code: five delivered guards could not be made to fail, the reviewer had to run the mutations, and all five of that story's decision-grade findings were this one shape.",
+  "Before a story moves to review, its Dev Agent Record MUST carry a mutation table — one row per new guard or invariant, with the columns 'mutation applied to real code', 'guard that should redden', 'before', 'after'. Every mutation is reverted and the tree left clean. A guard that cannot be made to fail by a relevant mutation is not delivered, and saying so in the table is cheaper than having it found at review. If a guard genuinely cannot be mutated, write that row saying so and why — an honest gap is a finding you keep, not one you are handed.",
 ]
