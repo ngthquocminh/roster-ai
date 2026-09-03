@@ -1,0 +1,41 @@
+# Team overrides for bmad-retrospective. Committed — applies to every developer.
+# Arrays append to the base list in
+# `.claude/skills/bmad-retrospective/customize.toml`.
+
+[workflow]
+
+# Epic 4 retrospective action A7 (epic-4-retro-2026-09-02.md §2, §6) — a defect
+# found in that retrospective itself, not in the epic it reviewed.
+#
+# Its first pass followed the workflow faithfully: it read every story's Review
+# Findings and Dev Agent Record (step 3) and the previous retrospective (step
+# 4). It did not read `deferred-work.md`'s `Owner/revisit trigger:` lines, and
+# the workflow never asks it to. Six items had scheduled themselves TO that
+# retrospective and were silently dropped:
+#
+#   - `agent_cancelled` has three inbound AD-7 edges and no definition
+#   - Story 4.5 AC4 names a CloudWatch subject the repository does not have
+#   - Decision 11's evidence fence forbids the Gate A regeneration the process
+#     requires, and the readiness report has no drift guard  <- this one was
+#     BLOCKING, and no story had raised it as blocking
+#   - Story 4.6's two open questions, both with the retrospective as deadline
+#   - Decision 3's changed-policy fixture has no real-route path
+#
+# They were recovered only because the Project Lead asked whether anything
+# gated the next epic. The trigger line is the ONE mechanism by which deferred
+# work schedules itself to a retrospective; a retrospective that does not read
+# it drops exactly the input designed to reach it, and drops it silently —
+# there is no error, just an absence.
+#
+# The step below is written as an activation step rather than only a fact
+# because the failure was not one of judgement. The retrospective did not
+# decide these were unimportant; it never saw them.
+
+activation_steps_append = [
+  "Scan for work that scheduled itself to THIS retrospective, before any analysis begins. Search `{project-root}/_bmad-output/implementation-artifacts/deferred-work.md` for `revisit trigger` and `Owner/revisit` lines, and every story file of the epic under review for an `Open questions` section or a stated deadline. Collect every entry whose trigger or deadline names a retrospective — this one, or one already past. Hold the list for the whole run; it is a required input to the action-item synthesis step, not background reading.",
+]
+
+persistent_facts = [
+  "Every item collected by the routed-work scan MUST be dispositioned in the retrospective document, in a table naming the item, its source, and its verdict — blocking / folded into another action / left on its own trigger / closed. An item silently absent from the record has been dropped, not deferred: the ledger will keep saying its trigger is this retrospective, which has now passed. If the scan returns nothing, say so explicitly rather than omitting the table.",
+  "Line-number references into `deferred-work.md` (`:526`, `:512`) rot as the file grows — they are appended to, so every earlier reference shifts. When citing a ledger entry, quote enough of its opening sentence to find it by content, and treat any line number you inherit from an older document as a hint about where it USED to be, not as a location.",
+]
