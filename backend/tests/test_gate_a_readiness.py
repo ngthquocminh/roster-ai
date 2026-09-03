@@ -319,6 +319,64 @@ def test_storys_gate_a_guards_are_registered_by_name():
 
 
 # ---------------------------------------------------------------------------
+# Registry drift — the committed report must describe the live registry
+# ---------------------------------------------------------------------------
+
+
+COMMITTED_READINESS_REPORT = (
+    REPO_ROOT / "evidence" / "story-1.11" / "gate-a-readiness-report.json"
+)
+
+
+def _committed_report() -> dict:
+    return json.loads(COMMITTED_READINESS_REPORT.read_text(encoding="utf-8"))
+
+
+def test_committed_readiness_report_covers_exactly_the_live_registry():
+    """The release-blocking artifact must not describe a registry that no
+    longer exists.
+
+    Epic 4 retrospective action A5. `approval_and_audit_invariants` — Story
+    4.5's whole invariant — was ABSENT from this committed report at `8b2b5b1`,
+    so the artifact that decides release described a stale registry for an
+    entire story before a later commit silently caught it up. Nothing compared
+    the two, so nothing failed.
+
+    Regenerating the report is mandatory for any story that adds a Gate A
+    check (`docs/GATE-A-RUNBOOK.md`); this test is what makes forgetting it
+    loud. It asserts identity, not counts: a check renamed in the registry and
+    not regenerated fails here even though the totals still match.
+    """
+    reported = {entry["check"] for entry in _committed_report()["contributing_checks"]}
+    registered = {check.check for check in GATE_A_CHECKS}
+
+    assert reported == registered, (
+        "gate-a-readiness-report.json is out of date with GATE_A_CHECKS. "
+        f"missing from the report: {sorted(registered - reported)}; "
+        f"stale in the report: {sorted(reported - registered)}. "
+        "Regenerate it per docs/GATE-A-RUNBOOK.md and commit the result."
+    )
+
+
+def test_committed_readiness_report_covers_exactly_the_live_nfr29_gates():
+    """The same drift, one level up: an accessibility invariant can be added to
+    `NFR29_GATES` without the artifact naming it.
+
+    Split from the check-level assertion above because the two fail for
+    different reasons and a story adding an invariant should be told which one
+    it forgot.
+    """
+    reported = set(_committed_report()["nfr29_gates"])
+    registered = {gate.key for gate in NFR29_GATES}
+
+    assert reported == registered, (
+        "gate-a-readiness-report.json's nfr29_gates is out of date. "
+        f"missing from the report: {sorted(registered - reported)}; "
+        f"stale in the report: {sorted(reported - registered)}."
+    )
+
+
+# ---------------------------------------------------------------------------
 # JUnit ingestion — identity normalization across three runners
 # ---------------------------------------------------------------------------
 
