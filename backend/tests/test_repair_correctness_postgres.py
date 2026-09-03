@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import json
 import os
 from datetime import datetime, timezone
@@ -29,6 +31,7 @@ from application.capabilities.scheduling_draft import (
 )
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.proposal import DraftConstraintProposalV1
+from application.contracts.schedule_version import ConstraintResultV1
 from application.scheduling.comparison import calculate_comparison
 from application.use_cases.cancel_schedule_run import cancel_schedule_run
 from application.use_cases.enqueue_compute import enqueue_compute
@@ -266,6 +269,24 @@ def test_real_pipeline_closes_gap_preserves_lock_and_does_not_add_overtime(
         )
         assert snapshot is not None
         assert candidate is not None
+        # `metrics`/`constraint_results` are overridden too, not just
+        # `assignments` -- `replace(candidate, ...)` alone would leave
+        # baseline_metrics.total_cost and baseline_hard_constraint_results as
+        # the CANDIDATE's own persisted values (calculate_comparison takes
+        # both verbatim from `baseline_version`, never recomputing them), so
+        # a comparison built this way would silently assert the candidate
+        # against itself on exactly those two fields.
+        baseline_version = replace(
+            candidate,
+            schedule_version_id=uuid4(),
+            schedule_run_id=uuid4(),
+            assignments=BASELINE_ASSIGNMENTS,
+            metrics=replace(candidate.metrics, total_cost=42.0, assignment_count=len(BASELINE_ASSIGNMENTS)),
+            constraint_results=(ConstraintResultV1(
+                constraint_id="hard:baseline-repair-fixture", constraint_type="qualification",
+                constraint_class="hard", satisfied=True,
+            ),),
+        )
         comparison = calculate_comparison(
             repair_context.reader,
             connection,
@@ -273,7 +294,8 @@ def test_real_pipeline_closes_gap_preserves_lock_and_does_not_add_overtime(
             scenario_id=SCENARIO_ID,
             scenario_version_id=SCENARIO_VERSION_ID,
             site_id=SITE_ID,
-            expected_baseline_schedule_version=None,
+            expected_baseline_schedule_version=str(baseline_version.schedule_version_id),
+            baseline_version=baseline_version,
         )
 
     assert snapshot.preserved_locks == LOCKS
@@ -292,6 +314,13 @@ def test_real_pipeline_closes_gap_preserves_lock_and_does_not_add_overtime(
     )
     assert comparison.baseline_metrics.assignment_count == 1
     assert comparison.candidate_metrics.assignment_count == 2
+    # The baseline's cost and hard-constraint results are genuinely its own,
+    # not silently the candidate's -- see the comment above baseline_version.
+    assert comparison.baseline_metrics.total_cost == 42.0
+    assert comparison.baseline_metrics.total_cost != comparison.candidate_metrics.total_cost
+    assert tuple(item.constraint_id for item in comparison.baseline_hard_constraint_results) == (
+        "hard:baseline-repair-fixture",
+    )
     assert all(item.satisfied for item in comparison.candidate_constraint_results)
     assert any(
         item.constraint_type == "preserved_lock"

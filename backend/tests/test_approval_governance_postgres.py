@@ -11,7 +11,9 @@ problem-code mapping are proven against fakes in `test_approvals_api.py`.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from pathlib import Path
+from uuid import UUID, uuid4
+import json
 
 import pytest
 from sqlalchemy import func, insert, select, text, update
@@ -31,9 +33,14 @@ from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditReader, PostgresAuditWriter
 from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.schedule_run import PostgresScheduleRunRepository
+from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
 from adapters.postgres.membership import PostgresMembershipReader
+from application.contracts.canonical import contract_digest
 from application.queries.decision_provenance import query_decision_provenance
+from application.scheduling.candidate_metrics import calculate_candidate_metrics
+from application.scheduling.comparison import calculate_comparison
+from engine.governed_adapter import GovernedSchedulerAdapter
 from adapters.postgres.schema import (
     agent_run,
     app_user,
@@ -55,7 +62,7 @@ from adapters.postgres.schema import (
     site,
     site_baseline,
 )
-from application.contracts.schedule_version import ScheduleVersionV1
+from application.contracts.schedule_version import ConstraintResultV1, MetricSetV1, ScheduleVersionV1
 from application.contracts.evidence_ref import EvidenceRefV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
 from application.contracts.scenario_projection import AssignmentV1
@@ -88,16 +95,32 @@ def site_ids(governed_postgres_engine):
     return ids
 
 
-def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed", resource_version=2, assignment_count=1, suffix=None, scenario_payload=None, evidence_ref_records=()):
+def _seed_candidate_run(
+    engine, *, site_id, actor_id, status="solver_completed", resource_version=2,
+    assignment_count=1, suffix=None, scenario_payload=None, evidence_ref_records=(),
+    assignments=None, metrics=None, constraint_results=None,
+    baseline_schedule_version=None, reuse=None,
+):
     """Build one scenario -> conversation -> proposal -> run_snapshot ->
     schedule_run(+candidate schedule_version, +assignments) chain via direct
     inserts, mirroring `finalize_run`'s own insert order without invoking the
-    solver. Returns the ids `request_approval` and its adapters need."""
+    solver. Returns the ids `request_approval` and its adapters need.
+
+    `assignments`/`metrics`/`constraint_results`, when given, override the
+    synthetic defaults -- for seeding a candidate from a real solve. `reuse`,
+    when given (an ids dict returned by a prior call), skips creating a new
+    scenario/scenario_version/conversation/proposal/proposal_version and
+    reuses those instead -- for seeding a SECOND, later run against the same
+    immutable scenario version (e.g. to compare against a just-promoted
+    baseline from the first run)."""
     suffix = suffix or uuid4().hex
     ids = {name: uuid4() for name in (
         "scenario", "scenario_version", "conversation", "message", "proposal",
         "proposal_version", "run_snapshot", "schedule_run", "candidate",
     )}
+    if reuse is not None:
+        for key in ("scenario", "scenario_version", "conversation", "proposal", "proposal_version"):
+            ids[key] = reuse[key]
     # Bind every reference to the `scenario_version` row this helper actually
     # inserts, and to that row's stored checksum. A ref minted from a free
     # `uuid4()` round-trips through JSONB perfectly well but resolves
@@ -111,33 +134,34 @@ def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed",
         for group, record_id, field, start_minute, end_minute in evidence_ref_records
     )
     with engine.begin() as c:
-        c.execute(insert(scenario).values(id=ids["scenario"], site_id=site_id, fixture_id=f"fixture-{suffix}", name="Fixture"))
-        c.execute(insert(scenario_version).values(
-            id=ids["scenario_version"], site_id=site_id, scenario_id=ids["scenario"],
-            fixture_id=f"fixture-{suffix}", version="v1", payload=scenario_payload or {}, checksum_digest="a" * 64,
-        ))
-        c.execute(insert(conversation).values(
-            id=ids["conversation"], site_id=site_id, scenario_id=ids["scenario"],
-            scenario_version_id=ids["scenario_version"], created_by_actor_id=actor_id,
-        ))
-        c.execute(insert(message).values(
-            id=ids["message"], site_id=site_id, conversation_id=ids["conversation"],
-            actor_id=actor_id, text="Solve this scenario.",
-        ))
-        c.execute(insert(proposal).values(
-            id=ids["proposal"], site_id=site_id, scenario_id=ids["scenario"],
-            scenario_version_id=ids["scenario_version"], conversation_id=ids["conversation"],
-            created_by_actor_id=actor_id,
-        ))
-        c.execute(insert(proposal_version).values(
-            id=ids["proposal_version"], site_id=site_id, proposal_id=ids["proposal"],
-            version_ordinal=1, payload={}, canonical_hash="b" * 64,
-        ))
+        if reuse is None:
+            c.execute(insert(scenario).values(id=ids["scenario"], site_id=site_id, fixture_id=f"fixture-{suffix}", name="Fixture"))
+            c.execute(insert(scenario_version).values(
+                id=ids["scenario_version"], site_id=site_id, scenario_id=ids["scenario"],
+                fixture_id=f"fixture-{suffix}", version="v1", payload=scenario_payload or {}, checksum_digest="a" * 64,
+            ))
+            c.execute(insert(conversation).values(
+                id=ids["conversation"], site_id=site_id, scenario_id=ids["scenario"],
+                scenario_version_id=ids["scenario_version"], created_by_actor_id=actor_id,
+            ))
+            c.execute(insert(message).values(
+                id=ids["message"], site_id=site_id, conversation_id=ids["conversation"],
+                actor_id=actor_id, text="Solve this scenario.",
+            ))
+            c.execute(insert(proposal).values(
+                id=ids["proposal"], site_id=site_id, scenario_id=ids["scenario"],
+                scenario_version_id=ids["scenario_version"], conversation_id=ids["conversation"],
+                created_by_actor_id=actor_id,
+            ))
+            c.execute(insert(proposal_version).values(
+                id=ids["proposal_version"], site_id=site_id, proposal_id=ids["proposal"],
+                version_ordinal=1, payload={}, canonical_hash="b" * 64,
+            ))
         snapshot = RunSnapshotV1(
             snapshot_id=ids["run_snapshot"], schedule_run_id=ids["schedule_run"],
             scenario_id=ids["scenario"], scenario_version_id=ids["scenario_version"],
             checksum_algorithm="sha256", checksum_schema_version="v1",
-            checksum_digest="a" * 64, baseline_schedule_version=None,
+            checksum_digest="a" * 64, baseline_schedule_version=baseline_schedule_version,
             proposal_id=ids["proposal"], proposal_version_id=ids["proposal_version"],
             proposal_resource_version=1, solver_config=GovernedSolverConfigV1(),
             component_versions=(("test", "1"),), accepted_at=NOW,
@@ -160,15 +184,24 @@ def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed",
         ))
         candidate = None
         if status == "solver_completed":
-            assignments = tuple(
+            resolved_assignments = assignments if assignments is not None else tuple(
                 AssignmentV1(record_id=f"assign-{i}", worker_id=f"worker-{i}", task_id="task-1", shift_id="shift-1", start_minute=0, end_minute=480)
                 for i in range(assignment_count)
+            )
+            resolved_metrics = metrics if metrics is not None else MetricSetV1(total_cost=123.45, assignment_count=assignment_count)
+            resolved_constraint_results = constraint_results if constraint_results is not None else (
+                ConstraintResultV1(
+                    constraint_id="hard:seeded", constraint_type="qualification",
+                    constraint_class="hard", satisfied=True,
+                ),
             )
             candidate = ScheduleVersionV1(
                 schedule_version_id=ids["candidate"], schedule_run_id=ids["schedule_run"],
                 scenario_id=ids["scenario"], scenario_version_id=ids["scenario_version"],
                 proposal_id=ids["proposal"], proposal_version_id=ids["proposal_version"],
-                feasible_solver_status="OPTIMAL", assignments=assignments,
+                feasible_solver_status="OPTIMAL", assignments=resolved_assignments,
+                metrics=resolved_metrics,
+                constraint_results=resolved_constraint_results,
                 evidence_refs=evidence_refs, created_at=NOW,
             )
             payload = TypeAdapter(ScheduleVersionV1).dump_python(candidate, mode="json")
@@ -178,7 +211,7 @@ def _seed_candidate_run(engine, *, site_id, actor_id, status="solver_completed",
                 proposal_id=ids["proposal"], proposal_version_id=ids["proposal_version"],
                 solver_status="OPTIMAL", payload=payload, canonical_hash="d" * 64,
             ))
-            for assignment in assignments:
+            for assignment in resolved_assignments:
                 c.execute(insert(schedule_assignment).values(
                     site_id=site_id, schedule_version_id=ids["candidate"],
                     assignment_record_id=assignment.record_id, worker_id=assignment.worker_id,
@@ -968,6 +1001,12 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
         )
         assert result.outcome == "consumed"
     with site_context(engine, site_ids["site"]) as c:
+        promoted = PostgresSiteBaselineReader().get(c, site_ids["site"])
+        assert promoted is not None
+        promoted_version = PostgresScheduleRunRepository().get_version(
+            c, schedule_version_id=promoted.schedule_version_id,
+            site_id=site_ids["site"],
+        )
         candidate = PostgresScheduleRunRepository().get_candidate(
             c, schedule_run_id=ids["schedule_run"], site_id=site_ids["site"]
         )
@@ -982,6 +1021,10 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
         )
     assert provenance is not None
     assert candidate is not None
+    assert promoted_version is not None
+    assert promoted_version.metrics is not None
+    assert promoted_version.metrics.total_cost == 123.45
+    assert promoted_version.constraint_results[0].constraint_id == "hard:seeded"
     assert candidate.evidence_refs == (evidence_ref,)
     consequential = [row for row in audit_rows if row.outcome in {"approval_requested", "approval_consumed"}]
     assert len(consequential) == 2
@@ -1045,6 +1088,133 @@ def test_tx2_promotes_consumes_audits_and_emits_on_both_initiator_paths(
             select(schedule_version).where(schedule_version.c.site_id == site_ids["site"]).order_by(schedule_version.c.id)
         )]
         assert versions_after == versions_before
+
+
+class _PayloadSource:
+    def __init__(self, payload) -> None:
+        self.payload = payload
+
+    def load(self, _scenario_version_id, _expected_digest):
+        return self.payload
+
+
+def test_comparison_reads_the_real_promoted_baseline_end_to_end(governed_postgres_engine, site_ids) -> None:
+    """AC4/Task 9: promote a baseline through the shipped Story 4.3 path,
+    complete a later run against the SAME scenario version, read its result
+    through the real repository, and assert the comparison is present with
+    deltas measured against the promoted schedule -- read via `get_version`,
+    not a hand-built `ScheduleVersionV1`, and recomputed through the real
+    `PostgresScenarioProjectionReader` against a live scenario_version row.
+
+    The assignment-diff/mutation algorithm itself is already proven by the
+    fast unit tests in `test_schedule_comparison.py`; what only a live
+    database can prove is that promotion -> `get_version` ->
+    `calculate_comparison` actually joins up end to end. Both runs share the
+    same real solve of `sample_tiny_input.json` (proven real, non-empty,
+    solve-time/comparison-time metric agreement by
+    `test_solve_time_and_comparison_time_metrics_agree_on_a_real_fixture`),
+    so both sides' persisted metrics are honest, not hand-typed.
+    """
+    engine = governed_postgres_engine
+    payload = json.loads(
+        (Path(__file__).resolve().parents[2] / "data" / "sample_tiny_input.json")
+        .read_text(encoding="utf-8")
+    )
+    digest = contract_digest(payload)[2]
+    solve_snapshot = RunSnapshotV1(
+        snapshot_id=uuid4(), schedule_run_id=uuid4(), scenario_id=uuid4(),
+        scenario_version_id=uuid4(), checksum_algorithm="sha256",
+        checksum_schema_version="rfc8785-v1", checksum_digest=digest,
+        proposal_id=uuid4(), proposal_version_id=uuid4(), proposal_resource_version=1,
+        solver_config=GovernedSolverConfigV1(
+            engine_name="cpsat", seed=42, num_search_workers=1,
+            max_deterministic_time=1.0, wall_time_limit_seconds=30.0,
+        ),
+        component_versions=(("application", "1"), ("contract", "1"), ("ortools", "9.11.4210")),
+        accepted_at=NOW,
+    )
+    outcome = GovernedSchedulerAdapter(_PayloadSource(payload)).solve(solve_snapshot)
+    assert outcome.assignments, "fixture must produce a real, non-empty solve to be a meaningful proof"
+    solve_metrics, _ = calculate_candidate_metrics(
+        outcome.assignments, outcome.validation_facts.tasks,
+        outcome.validation_facts.demand_intervals, outcome.validation_facts, constraints=(),
+    )
+
+    ids1 = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2,
+        scenario_payload=payload, assignments=outcome.assignments, metrics=solve_metrics,
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        # `site_ids["site"]` is module-scoped and shared with earlier tests in
+        # this file that also promote onto it -- the live baseline here is
+        # whatever THEY last left it at, not necessarily absent.
+        live_before = PostgresSiteBaselineReader().get(c, site_ids["site"])
+    request = RequestApprovalCommandV1(
+        site_id=site_ids["site"], actor_id=site_ids["actor"],
+        schedule_run_id=ids1["schedule_run"], expected_resource_version=2,
+        expected_baseline_schedule_version=str(live_before.schedule_version_id) if live_before else None,
+        request_effect_key=f"command:{uuid4()}", request_id=uuid4(),
+        conversation_id=ids1["conversation"], agent_run_id=None, pending_payload=None,
+    )
+    with site_context(engine, site_ids["site"]) as c:
+        pending_binding = request_approval(c, command=request, **_use_case_dependencies()).binding
+        decision = decide_approval(
+            c,
+            command=DecideApprovalCommandV1(
+                site_id=site_ids["site"], actor_id=site_ids["actor"],
+                approval_id=pending_binding.approval_id, decision="approve",
+                expected_resource_version=pending_binding.resource_version,
+                request_id=uuid4(),
+            ),
+            **_decision_dependencies(),
+        )
+        assert decision.outcome == "consumed"
+
+    with site_context(engine, site_ids["site"]) as c:
+        promoted = PostgresSiteBaselineReader().get(c, site_ids["site"])
+    assert promoted is not None
+    assert promoted.schedule_version_id == ids1["candidate"]
+
+    # The later run -- same immutable scenario version, snapshotted against
+    # the baseline that promotion just established.
+    ids2 = _seed_candidate_run(
+        engine, site_id=site_ids["site"], actor_id=site_ids["actor"], resource_version=2,
+        assignments=outcome.assignments, metrics=solve_metrics,
+        baseline_schedule_version=str(promoted.schedule_version_id), reuse=ids1,
+    )
+
+    with site_context(engine, site_ids["site"]) as c:
+        repository = PostgresScheduleRunRepository()
+        run = repository.get_run(c, run_id=ids2["schedule_run"], site_id=site_ids["site"])
+        candidate = repository.get_candidate(c, schedule_run_id=ids2["schedule_run"], site_id=site_ids["site"])
+        snapshot = repository.load_snapshot(c, run_id=ids2["schedule_run"], site_id=site_ids["site"])
+        assert run is not None and run.status == "solver_completed"
+        assert candidate is not None
+        assert snapshot is not None and snapshot.baseline_schedule_version == str(promoted.schedule_version_id)
+
+        baseline_version = repository.get_version(
+            c, schedule_version_id=UUID(snapshot.baseline_schedule_version), site_id=site_ids["site"],
+        )
+        assert baseline_version is not None
+        assert baseline_version.schedule_version_id == promoted.schedule_version_id
+
+        comparison = calculate_comparison(
+            PostgresScenarioProjectionReader(), c,
+            candidate=candidate, scenario_id=candidate.scenario_id,
+            scenario_version_id=candidate.scenario_version_id, site_id=site_ids["site"],
+            expected_baseline_schedule_version=snapshot.baseline_schedule_version,
+            baseline_version=baseline_version,
+        )
+
+    # Present, and measured against the PROMOTED schedule -- not a hand-built
+    # ScheduleVersionV1 (Task 9's own requirement).
+    assert comparison.baseline_metrics is not None
+    assert comparison.assignment_diff is not None
+    assert comparison.stale is False
+    assert comparison.baseline_metrics.total_cost == solve_metrics.total_cost
+    assert comparison.baseline_metrics.assignment_count == solve_metrics.assignment_count
+    assert comparison.candidate_metrics.assignment_count == solve_metrics.assignment_count
+    assert comparison.baseline_hard_constraint_results != ()
 
 
 def test_approve_route_replays_once_rejects_conflicts_and_audits_denials(

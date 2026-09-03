@@ -546,9 +546,9 @@ class ComparisonOut(BaseModel):
     expected_baseline_schedule_version: str | None
     current_baseline_schedule_version: str | None
     stale: bool
-    assignment_diff: AssignmentDiffOut
+    assignment_diff: AssignmentDiffOut | None
     candidate_metrics: MetricSetOut
-    baseline_metrics: MetricSetOut
+    baseline_metrics: MetricSetOut | None
     candidate_constraint_results: list[ConstraintResultOut]
     baseline_hard_constraint_results: list[ConstraintResultOut]
     warnings: list[str]

@@ -2255,7 +2255,7 @@ development_status:
   # that is Task 9's and is undischarged.
   #
   # `-m postgres` MEASURED: 156 passed / 1364 deselected, matching Story 4.6's figure exactly.
-  5-0-compare-a-candidate-against-the-real-promoted-baseline: ready-for-dev
+  5-0-compare-a-candidate-against-the-real-promoted-baseline: done
   5-1-instrument-agent-runs-for-latency-budget-and-cost: ready-for-dev
   5-2-prevent-content-and-secret-leaks: backlog
   5-3-run-shiftmind-reproducibly-from-one-command: backlog

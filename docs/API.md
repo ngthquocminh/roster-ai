@@ -583,17 +583,24 @@ The provenance GET has one RFC 7807 problem code:
 |---|---|---|
 | `schedule_run_not_found` | 404 | No schedule run with that identifier is visible in the current site |
 
-Approving one **does** move the pointer, and that has a documented effect on run
-results. A completed run's result freezes the baseline pointer that was live when
-it was snapshotted, and the authoritative baseline **assignment** supply is not
-wired yet, so from the first promotion onward the baseline half of the comparison
-cannot be computed. The result endpoint does **not** fail for this: it returns
-`200` with `comparison: null` and a literal `comparison_unavailable_reason`, so
-the run, the candidate schedule, and any pending approval on it stay readable and
-actionable. `current_baseline_schedule_version` is carried on the result itself
-(not only on the comparison) so a new approval can still be requested while the
-comparison is unavailable. An unreadable baseline is never rendered as an empty
-one — the comparison is withheld, not fabricated.
+Approving one **does** move the pointer. A completed run freezes the baseline
+pointer that was live when it was snapshotted, and comparison loads that exact,
+site-scoped `schedule_version` payload. Its assignments drive baseline metrics
+and diffs, its persisted cost and hard-constraint results remain authoritative,
+and an absent pointer produces a present comparison whose baseline metrics and
+assignment diff are null. If a frozen version is unreadable, belongs to another
+scenario version, or lacks persisted metrics, the endpoint returns `200` with
+`comparison: null` and a literal `comparison_unavailable_reason`; the run,
+candidate schedule, and pending approval remain readable. An unreadable baseline
+is never rendered as an empty one. The reason string names which of the three
+happened and always embeds the affected baseline's version id:
+"Baseline schedule version `<id>` is not authoritatively readable, so this
+candidate cannot be compared against it." (unreadable — missing row, malformed
+pointer, or a payload that no longer matches the schedule-version contract),
+"The promoted baseline `<id>` belongs to a different scenario version, so this
+candidate cannot be compared against it." (scenario version mismatch), or "The
+promoted baseline `<id>` has no authoritative metrics, so this candidate
+cannot be compared against it." (metrics unavailable).
 
 A binding whose `expires_at` has passed is PRESENTED as `expired` by every read
 path, while the stored row stays `pending`; the terminal `expired` state is
