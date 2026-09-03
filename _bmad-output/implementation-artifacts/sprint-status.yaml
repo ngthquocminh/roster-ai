@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-02
+last_updated: 2026-09-03
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2179,8 +2179,8 @@ development_status:
   epic-4-retrospective: done
 
   # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)
-  epic-5: backlog
-  5-1-instrument-agent-runs-for-latency-budget-and-cost: backlog
+  epic-5: in-progress
+  5-1-instrument-agent-runs-for-latency-budget-and-cost: ready-for-dev
   5-2-prevent-content-and-secret-leaks: backlog
   5-3-run-shiftmind-reproducibly-from-one-command: backlog
   5-4-publish-the-portfolio-walkthrough: backlog
@@ -2346,7 +2346,21 @@ action_items:
   - epic: "4"
     action: "A1 -- Tighten the demonstrated-red rule to name its own failure mode: the red must come from mutating code that is ALREADY GREEN; a missing-import or first-draft red does not count. The Dev Agent Record must carry a mutation table (mutation | guard | before | after) before a story reaches review. Ship as a bmad-dev-story fact, same pattern as 2cf598f."
     owner: "Dev / review"
-    status: open
+    status: done
+    # SHIPPED 2026-09-03, commit c4f5de1. Three facts: two on bmad-dev-story
+    # (demonstrated red is defined as green -> mutate FINISHED code -> observe the
+    # expected failure -> restore; and the Dev Agent Record must carry a mutation
+    # table before review), one paired fact on bmad-code-review (the table must
+    # cover every new guard, a missing table is itself a finding, and the reviewer
+    # independently re-runs at least ONE row rather than only reading it).
+    # The pairing is deliberate: a one-sided dev rule is what failed at 4.6, and a
+    # review fact that only checks the table exists would trade detection for
+    # paperwork. Verified through resolve_customization.py on both skills.
+    # FIRST APPLICATION: commit 60aaaa7 (A5b) carries a two-row mutation table.
+    # The "done when" condition -- no "guard cannot go red" decision-grade finding
+    # in Epic 5 -- can only be observed at the Epic 5 retrospective. Closed here
+    # because the mechanism is shipped and verified; if Epic 5 raises such a
+    # finding, reopen with the evidence.
     # WHY THIS ONE IS MECHANIZABLE where the 2cf598f authoring rules were not: it leaves an
     # artifact. Story 4.6's reviewer produced exactly the required table. Supersedes the epic 1-2
     # red-then-green item's wording, which has been in-progress across three epics.
@@ -2376,14 +2390,42 @@ action_items:
   - epic: "4"
     action: "A4 -- Finish the ledger reconciliation Story 4.1 began: re-open or correct deferred-work.md:526 (marked CLOSED on a proof production cannot reproduce, per Story 4.2's review), and resolve :512 and :524."
     owner: "Amelia"
-    status: open
-    # The epic-4 status flip half of this item is DONE (2026-09-02, this commit): all seven
-    # stories were done, so the manual in-progress -> done transition applied.
-    # Done when: sprint-status.yaml and deferred-work.md agree with the code.
+    status: done
+    # CLOSED 2026-09-03, and PART OF THIS ACTION WAS WRONG AS WRITTEN. Recorded
+    # rather than quietly dropped:
+    #   - epic-4 status flip: DONE (2026-09-02, commit 8f25ccb).
+    #   - "re-open or correct deferred-work.md:526": ALREADY DONE before this
+    #     action was written. The entry (now line 535, "An approval_required agent
+    #     run has no exit edge...") carries "CLOSED 2026-08-29 (Story 4.2).
+    #     CORRECTED AT CODE REVIEW 2026-08-30 -- as first written this closure
+    #     claimed something production cannot do", and splits the three
+    #     consequences by how each is actually closed. The retro quoted Story
+    #     4.2's finding without checking that the same review then fixed it.
+    #   - ":512 and :524": NOT unreconciled. Both are legitimately open deferrals
+    #     whose own triggers have not fired -- Story 4.6 says so explicitly for
+    #     :524 ("tabTo is not used by Task 6's spec, so :524's trigger did not
+    #     fire"). Nothing to reconcile.
+    #   - The real defect underneath was line-number rot: :512 and :524 now point
+    #     at unrelated content because deferred-work.md is append-only, so every
+    #     earlier reference shifts. Fixed structurally by the bmad-retrospective
+    #     fact in commit 5b2b434 (cite by content, treat inherited line numbers as
+    #     hints).
   - epic: "4"
     action: "A5 -- Close the Gate A readiness-report drift hole before Story 5.4 is created. (a) Reword Story 4.6 Decision 11's evidence fence to exempt gate-a-readiness-report.json, which every story adding a Gate A check must regenerate -- the fence as written forbids what the process requires. (b) Add a test asserting the committed readiness report matches the live GATE_A_CHECKS registry."
     owner: "Murat + Amelia"
-    status: open
+    status: in-progress
+    # (b) SHIPPED 2026-09-03, commit 60aaaa7 -- two drift guards in
+    # backend/tests/test_gate_a_readiness.py asserting the committed report's
+    # contributing_checks and nfr29_gates each name EXACTLY the live registry.
+    # Identity, not counts: a renamed check fails even when totals match. Both
+    # demonstrated red by mutating gate_a_checks.py (rename a check; add an
+    # NFR29 gate); each mutation reddened only its own assertion, which is why
+    # they are split. Full file 44 passed after restore.
+    # (a) DELIBERATELY NOT DONE: rewording Story 4.6's Decision 11 evidence fence.
+    # 4.6 is done and the fence has no forward effect -- no future story reads it.
+    # Rewording a frozen story's decision would be bookkeeping that changes no
+    # behaviour. The forward-acting half is (b), which is shipped. Close this item
+    # when someone confirms (a) is genuinely unnecessary, or does it.
     # BLOCKS Story 5.4 creation. Routed here from the 4.6 code-review deferral, whose owner/revisit
     # trigger names this retrospective. This is the one blocker the retrospective found that no
     # story had raised as blocking.
@@ -2399,7 +2441,20 @@ action_items:
   - epic: "4"
     action: "A6 -- Clear the carried decisions that block nothing but will rot if unowned: (i) strike the subjectless CloudWatch clause from Story 4.5's AC4 in epics.md, matching the 2026-09-01 AC3 correction; (ii) decide whether the ARIA-snapshot regression lock is ever built, or record that it is deliberately not; (iii) confirm the accessibility-invariant merge and the PolicyInputsV1 second-field questions stay on their own stated triggers."
     owner: "Minh + Winston"
-    status: open
+    status: in-progress
+    # (i) DONE 2026-09-03: epics.md Story 4.5 AC4 no longer names CloudWatch. It
+    # now reads "telemetry export disabled by import absence, and independently a
+    # configured exporter that raises" -- the subject Story 4.5 actually proved. A
+    # "Telemetry scope note" above the ACs records the correction and why it was
+    # NOT routed through bmad-correct-course as the AC3 correction was: this
+    # changes no scope and re-runs no proof. Note the AC3 correction of 2026-09-01
+    # examined only AC3, which is how the identical defect survived in the
+    # adjacent AC of the same story.
+    # (iii) CONFIRMED 2026-09-03: the accessibility-invariant merge and the
+    # PolicyInputsV1 second-field questions stay on their own stated triggers;
+    # neither fires in Epic 5. Nothing further owed on them.
+    # (ii) STILL OPEN -- a real decision: is the ARIA-snapshot regression lock ever
+    # built, or recorded as deliberately not built? Blocks nothing.
     # All three routed here from ledger entries and story open questions whose trigger names this
     # retrospective. NOT blocking, verified at the retro: Epic 5's own ACs are subject-neutral
     # (5.1 "structured JSON logs and metrics", 5.2 "any configured trace export"), and
@@ -2410,7 +2465,17 @@ action_items:
   - epic: "4"
     action: "A7 -- The retrospective must read the ledger's Owner/revisit trigger lines. Add a step to bmad-retrospective: before synthesising action items, scan deferred-work.md and every story's open-questions section for entries whose trigger names this retrospective, and disposition each one in the record."
     owner: "Minh"
-    status: open
+    status: done
+    # SHIPPED 2026-09-03, commit 5b2b434 -- _bmad/custom/bmad-retrospective.toml.
+    # An activation_steps_append entry (not only a fact) scans deferred-work.md's
+    # revisit-trigger lines and every story's Open questions section before any
+    # analysis begins, because the failure was not one of judgement: the
+    # retrospective did not weigh these items and set them aside, it never saw
+    # them. A step runs; a fact has to be recalled at the right moment.
+    # Two paired facts: every collected item must be dispositioned in a table
+    # (blocking / folded / left on its trigger / closed), and an explicit "nothing
+    # routed" line when the scan is empty; plus the line-number-rot rule that
+    # closes the real defect under A4.
     # PROCESS DEFECT FOUND IN THIS RETROSPECTIVE ITSELF. Its first pass read every story's Review
     # Findings and Dev Agent Record but not the ledger's trigger lines, and dropped SIX items
     # explicitly scheduled to it (agent_cancelled; the CloudWatch clause; the Gate A fence and

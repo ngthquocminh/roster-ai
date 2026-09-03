@@ -1291,6 +1291,8 @@ So that stale state, retries, or observability failure can never produce an unre
 
 **Evidence scope note.** In this codebase evidence is a version-bound projection locator (`EvidenceRefV1` — `scenario_version_id` plus the checksum triple plus a record locator), not a stored object; no evidence port and no object-storage adapter exists. AR12's and AR23's create-only S3 evidence permissions are hosted-deployment requirements discharged by **Story 6.2** (`epics.md:1463`), not by this proof story. The earlier restatement at `sprint-change-proposal-2026-08-09-epics-2-5.md:149` removed the *hosted* dependency but kept an object-storage premise that has no subject here; this AC removes the premise rather than softening it a third time.
 
+**Telemetry scope note (2026-09-03, Epic 4 retrospective action A6).** AC4 previously read *"telemetry export disabled and **CloudWatch** degraded independently"*. There is no CloudWatch subject in this repository — the same defect as the object-storage premise above, in the adjacent AC of the same story, and it survived because only AC3 was re-examined on 2026-09-01. CloudWatch is a hosted concern owned by **Story 6.1/6.2**. The clause is restated below against the subject Story 4.5 actually proved: the real local telemetry seam, exercised under both disabled-by-import-absence and raising-exporter conditions. This is a wording correction to a satisfied AC, not a scope change — no proof is added, removed, or re-run, which is why it is recorded here rather than routed through `bmad-correct-course` as the AC3 correction was.
+
 **Acceptance Criteria:**
 
 **Given** mismatch, expiry, replay, altered parameter, changed baseline, changed membership/policy, rejection, and repeated-decision fixtures
@@ -1308,7 +1310,7 @@ So that stale state, retries, or observability failure can never produce an unre
 **Then** every `EvidenceRefV1` resolves `resolved` against its pinned `scenario_version_id`, or reports `not_found` or `version_mismatch` explicitly, and no record presents an unresolvable locator as valid
 **And** each audit row for an attempt that resolved a candidate carries that candidate's checksum-bound references, while a row whose candidate is absent carries an empty set asserted as absence rather than assumed. (AR12, AR23)
 
-**Given** telemetry export disabled and CloudWatch degraded independently
+**Given** telemetry export disabled by import absence, and independently a configured exporter that raises
 **When** approval, rejection, or stale attempts execute
 **Then** product behavior and authoritative audit remain correct and inspectable
 **And** audit continuity or idempotency regression blocks release. (FR21, NFR10, NFR29)
