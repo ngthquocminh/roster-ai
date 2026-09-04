@@ -12,6 +12,8 @@ per-capability branch here belongs on the module's declaration instead.
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass, replace
+from datetime import datetime, timezone
+from time import perf_counter
 from typing import Callable
 
 from pydantic import TypeAdapter
@@ -20,6 +22,8 @@ from pydantic_ai import Agent, ApprovalRequired, ModelRetry, RunContext, Tool
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1, validate_module
 from application.contracts.capability_manifest import CapabilityApprovalRequired
+from application.app_version import APP_VERSION
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
 
 
 class UnknownCapabilityError(ValueError):
@@ -81,34 +85,67 @@ def _register_module(
     def execute(ctx: RunContext[AgentDepsV1 | None], **kwargs: object) -> object:
         if ctx.deps is None:
             raise RuntimeError("trusted agent dependencies are unavailable")
-        if request_argument not in kwargs:
-            # `Tool.from_schema`'s default validator does not enforce the
-            # `required` the schema advertises, so a model that flattens the
-            # arguments reaches here. That is a mistake the model can correct.
-            raise ModelRetry(
-                f"missing required argument {request_argument!r} for {name}"
-            )
-        request = request_adapter.validate_python(kwargs[request_argument])
-        # Per-call approval state, so the handler can refuse before acting.
-        call_deps = replace(ctx.deps, tool_call_approved=bool(ctx.tool_call_approved))
+        started = perf_counter()
+        failure_reason: str | None = None
         try:
-            result = module.handler(call_deps, request, module.manifest)
-        except CapabilityApprovalRequired as exc:
-            if not declares_approval:
-                # A module whose manifest declares `approval_policy="none"` must
-                # not be able to suspend a run; otherwise the declaration is
-                # decorative rather than enforced.
-                raise RuntimeError(
-                    f"{name} signalled approval but declares approval_policy='none'"
-                ) from exc
-            raise ApprovalRequired from exc
-        except module.error_type as exc:
-            if exc.code in module.retryable_error_codes:
-                raise ModelRetry(f"{exc.code}: {exc}") from exc
-            raise
-        if ctx.deps.tool_result_sink is not None:
-            ctx.deps.tool_result_sink(result)
-        return _render_result(result, module.model_facing_view)
+            if request_argument not in kwargs:
+                # `Tool.from_schema`'s default validator does not enforce the
+                # `required` the schema advertises, so a model that flattens the
+                # arguments reaches here. That is a mistake the model can correct.
+                failure_reason = "missing_argument"
+                raise ModelRetry(
+                    f"missing required argument {request_argument!r} for {name}"
+                )
+            request = request_adapter.validate_python(kwargs[request_argument])
+            # Per-call approval state, so the handler can refuse before acting.
+            call_deps = replace(
+                ctx.deps, tool_call_approved=bool(ctx.tool_call_approved)
+            )
+            try:
+                result = module.handler(call_deps, request, module.manifest)
+            except CapabilityApprovalRequired as exc:
+                # A designed suspension for human approval, not a tool
+                # failure -- `failure_reason` stays `None` (code review of
+                # story-5.1: this was conflating the happy path for every
+                # approval-gated capability with an actual failure).
+                if not declares_approval:
+                    raise RuntimeError(
+                        f"{name} signalled approval but declares approval_policy='none'"
+                    ) from exc
+                raise ApprovalRequired from exc
+            except module.error_type as exc:
+                failure_reason = exc.code
+                if exc.code in module.retryable_error_codes:
+                    raise ModelRetry(f"{exc.code}: {exc}") from exc
+                raise
+            if ctx.deps.tool_result_sink is not None:
+                ctx.deps.tool_result_sink(result)
+            return _render_result(result, module.model_facing_view)
+        finally:
+            if ctx.deps.telemetry is not None:
+                labels = {"capability_name": name}
+                if failure_reason is not None:
+                    labels["failure_reason"] = failure_reason
+                try:
+                    ctx.deps.telemetry.emit(
+                        TelemetryRecordV1(
+                            event="agent.tool.call.completed",
+                            occurred_at=datetime.now(timezone.utc),
+                            app_version=APP_VERSION,
+                            correlation=CorrelationV1(
+                                request_id=ctx.deps.request_id,
+                                site_id=ctx.deps.site_id,
+                                actor_id=ctx.deps.actor_id,
+                                conversation_id=ctx.deps.conversation_id,
+                                agent_run_id=ctx.deps.agent_run_id,
+                                tool_call_id=getattr(ctx, "tool_call_id", None),
+                            ),
+                            labels=labels,
+                            duration_ms=(perf_counter() - started) * 1_000,
+                        )
+                    )
+                except Exception:  # noqa: BLE001 - product work wins
+                    pass
 
     tool = Tool.from_schema(
         execute,

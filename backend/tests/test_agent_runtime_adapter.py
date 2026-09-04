@@ -11,7 +11,7 @@ message class to check a result, the seam would have failed.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
@@ -356,6 +356,15 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
             "tool_name": "shiftmind_demonstration",
             "content": "alpha",
         }],
+        "usage": {
+            "requests": 2,
+            "tool_calls": 1,
+            "input_tokens": 109,
+            "output_tokens": 19,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+        },
+        "budget_outcome": "within_budget",
     }
     # Omitting the parameter and passing it as None must be the same path.
     explicit = PydanticAIAgentRuntime(
@@ -536,6 +545,8 @@ def test_budget_exhaustion_is_failed_with_budget_exhausted() -> None:
 
     assert outcome.status == "failed"
     assert outcome.failure_reason == "budget_exhausted"
+    assert outcome.budget_outcome == "budget_exhausted"
+    assert outcome.usage is None
 
 
 def test_wall_time_exhaustion_is_timed_out_not_budget_exhausted() -> None:
@@ -558,6 +569,63 @@ def test_wall_time_exhaustion_is_timed_out_not_budget_exhausted() -> None:
     assert outcome.status == "timed_out"
     assert outcome.failure_reason != "budget_exhausted"
     assert outcome.failure_reason is None
+    assert outcome.budget_outcome == "deadline_expired"
+    assert outcome.usage is None
+
+
+def test_success_carries_owned_usage_and_emits_model_latency() -> None:
+    records = []
+
+    class RecordingSink:
+        def emit(self, record) -> None:
+            records.append(record)
+
+    base = _runtime()
+    deps = base._deps
+    object.__setattr__(deps, "telemetry", RecordingSink())
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda _messages, _info: ModelResponse(parts=[TextPart(content="done")])
+        ),
+        deps=deps,
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="hello"))
+
+    assert outcome.status == "completed"
+    assert outcome.budget_outcome == "within_budget"
+    assert outcome.usage is not None
+    assert outcome.usage.requests is not None
+    assert [record.event for record in records] == ["agent.model.calls.completed"]
+    assert records[0].duration_ms is not None and records[0].duration_ms >= 0
+    assert records[0].correlation.agent_run_id == deps.agent_run_id
+
+
+def test_capability_call_emits_tool_latency_and_correlation() -> None:
+    records = []
+
+    class RecordingSink:
+        def emit(self, record) -> None:
+            records.append(record)
+
+    base = _runtime()
+    deps = base._deps
+    object.__setattr__(deps, "telemetry", RecordingSink())
+
+    def execute_once(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(message, ModelResponse) for message in messages):
+            return _call_demo(repeat=1)
+        return ModelResponse(parts=[TextPart(content="done")])
+
+    outcome = _runtime(model=FunctionModel(execute_once), deps=deps).run_turn(
+        AgentTurnRequestV1(prompt="run tool")
+    )
+    assert outcome.status == "completed"
+    tool_records = [r for r in records if r.event == "agent.tool.call.completed"]
+    assert len(tool_records) == 1
+    assert tool_records[0].labels == {"capability_name": DEMO_TOOL}
+    assert tool_records[0].correlation.agent_run_id == deps.agent_run_id
+    assert tool_records[0].correlation.tool_call_id == "demo-1"
+    assert tool_records[0].duration_ms is not None
 
 
 def test_provider_errors_become_the_owned_error_type() -> None:

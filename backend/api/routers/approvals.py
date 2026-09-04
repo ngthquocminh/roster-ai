@@ -3,15 +3,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from time import perf_counter
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Request
 from sqlalchemy import Connection, select
 from sqlalchemy.exc import IntegrityError
 from pydantic import ValidationError
 
-from api.deps import AgentRuntimeFactory, CapabilityComposer, PostCommitActions, SiteContextOpener, get_agent_runtime_factory, get_approval_repository, get_audit_reader, get_audit_writer, get_capability_registry, get_clock, get_conversation_repository, get_membership_reader, get_post_commit_actions, get_projection_reader, get_proposal_repository, get_schedule_run_repository, get_session, get_settings, get_site_baseline_reader, get_site_baseline_writer, get_site_context, get_site_context_opener
+from api.deps import AgentRuntimeFactory, CapabilityComposer, PostCommitActions, SiteContextOpener, get_agent_runtime_factory, get_approval_repository, get_audit_reader, get_audit_writer, get_capability_registry, get_clock, get_conversation_repository, get_membership_reader, get_post_commit_actions, get_projection_reader, get_proposal_repository, get_schedule_run_repository, get_session, get_settings, get_site_baseline_reader, get_site_baseline_writer, get_site_context, get_site_context_opener, get_telemetry_sink
 from api.problems import problem_response
 from api.schemas import (
     ApprovalDecisionIn, ApprovalListOut, ApprovalOut, ApprovalRequestIn,
@@ -28,6 +29,7 @@ from application.ports.conversation import ClaimedAgentRunV1
 from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.session import ResolvedSession
 from application.ports.site_baseline import SiteBaselineReader, SiteBaselineWriter
+from application.ports.telemetry import TelemetrySink
 from application.ports.membership import MembershipReader
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_projection import ScenarioProjectionReader
@@ -36,6 +38,9 @@ from application.use_cases.decide_approval import DecideApprovalCommandV1, Decid
 from application.use_cases.promote_baseline import BaselineConcurrentlyMovedError
 from application.contracts.canonical import contract_digest
 from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
+from application.app_version import APP_VERSION
+from adapters.telemetry.cost import estimate_cost_usd
 from application.contracts.agent_runtime import AgentApprovalDecisionV1, AgentBudgetV1
 from application.contracts.approval_binding import presented_approval_state
 from application.contracts.decision_provenance import (
@@ -191,7 +196,8 @@ def _provenance_item_out(item):
 
 
 def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_capabilities,
-                        projection_reader, conversations, proposals, open_site_context) -> None:
+                        projection_reader, conversations, proposals, open_site_context,
+                        telemetry: TelemetrySink, request_id: UUID) -> None:
     """Drive one already-resumed run after TX2 has committed.
 
     NOTHING HERE MAY RAISE. This runs in the request's post-commit stage, which
@@ -226,7 +232,6 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
         )
         return
     raw_results: list[object] = []
-    request_id = uuid4()
     deps = AgentDepsV1(
         actor_id=binding.initiated_by_actor_id, site_id=binding.site_id,
         membership_id=context.membership_id, request_id=request_id,
@@ -237,12 +242,18 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
             projection_reader, open_site_context, binding.site_id
         ), connection=None, remaining_budget=AgentBudgetV1(),
         tool_result_sink=raw_results.append,
+        # Missing here previously meant the entire resumed half of every
+        # approval-gated run produced no model/tool/run-completion telemetry
+        # (code review of story-5.1) -- contrast the first-turn path in
+        # conversations.py, which always passed this.
+        telemetry=telemetry,
     )
     claimed = ClaimedAgentRunV1(
         resume.agent_run_id, binding.conversation_id, context.scenario_id,
         binding.scenario_version_id, binding.site_id, binding.initiated_by_actor_id,
         context.membership_id, "", (),
     )
+    run_started = perf_counter()
     try:
         granted = compose_capabilities(CapabilityGrantContextV1(
             role=PLANNER_ROLE, site_id=binding.site_id,
@@ -267,11 +278,12 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
         logger.exception("resumed turn failed for agent run %s; finalizing as terminal",
                          resume.agent_run_id)
         outcome = failed_outcome_for_exception(exc)
+    status = terminal_status(outcome)
     try:
         with open_site_context(binding.site_id) as connection:
             finalize_agent_run(
                 conversations, proposals, connection, claimed=claimed,
-                status=terminal_status(outcome), payload=activity_payload(outcome, deps),
+                status=status, payload=activity_payload(outcome, deps),
                 request_id=request_id,
             )
     except Exception:  # noqa: BLE001
@@ -283,6 +295,47 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
             "resumed turn for agent run %s could not be finalized; run left non-terminal",
             resume.agent_run_id,
         )
+    # Unconditional -- unlike the first-turn route, finalization failing above
+    # does not skip this: a resumed run that burned tokens deserves a record
+    # even when it could not be finalized (code review of story-5.1).
+    estimated_cost_usd, cost_basis = estimate_cost_usd(
+        outcome.usage,
+        getattr(settings, "agent_model_input_usd_per_mtok", 0.0),
+        getattr(settings, "agent_model_output_usd_per_mtok", 0.0),
+        getattr(settings, "agent_model_cache_read_usd_per_mtok", 0.0),
+        getattr(settings, "agent_model_cache_write_usd_per_mtok", 0.0),
+    )
+    labels = {
+        "agent_run_status": status,
+        "model": settings.agent_runtime_model,
+        "cost_basis": cost_basis,
+    }
+    if outcome.failure_reason is not None:
+        labels["failure_reason"] = outcome.failure_reason
+    if outcome.budget_outcome is not None:
+        labels["budget_outcome"] = outcome.budget_outcome
+    try:
+        telemetry.emit(
+            TelemetryRecordV1(
+                event="agent.run.completed",
+                occurred_at=datetime.now(timezone.utc),
+                app_version=APP_VERSION,
+                correlation=CorrelationV1(
+                    request_id=deps.request_id,
+                    site_id=deps.site_id,
+                    actor_id=deps.actor_id,
+                    conversation_id=deps.conversation_id,
+                    agent_run_id=deps.agent_run_id,
+                ),
+                labels=labels,
+                duration_ms=(perf_counter() - run_started) * 1_000,
+                estimated_cost_usd=estimated_cost_usd,
+                usage=outcome.usage,
+                budget_outcome=outcome.budget_outcome,
+            )
+        )
+    except Exception:  # noqa: BLE001 - finalized product work wins
+        pass
 
 
 @router.post("", response_model=ApprovalOut, responses=_RESPONSES)
@@ -324,7 +377,7 @@ def create_approval(body: ApprovalRequestIn, idempotency_key: IdempotencyKey, co
 
 
 @router.post("/{approval_id}/decision", response_model=ApprovalOut, responses=_DECISION_RESPONSES)
-def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempotency_key: IdempotencyKey, connection: Connection = Depends(get_site_context), post_commit: PostCommitActions = Depends(get_post_commit_actions), session: ResolvedSession = Depends(get_session), settings: Settings = Depends(get_settings), approvals: ApprovalRepository = Depends(get_approval_repository), audit_writer: AuditWriter = Depends(get_audit_writer), conversations: ConversationRepository = Depends(get_conversation_repository), schedule_runs: ScheduleRunRepository = Depends(get_schedule_run_repository), baselines: SiteBaselineReader = Depends(get_site_baseline_reader), baseline_writer: SiteBaselineWriter = Depends(get_site_baseline_writer), memberships: MembershipReader = Depends(get_membership_reader), runtime_factory: AgentRuntimeFactory = Depends(get_agent_runtime_factory), compose_capabilities: CapabilityComposer = Depends(get_capability_registry), projection_reader: ScenarioProjectionReader = Depends(get_projection_reader), proposals: ProposalRepository = Depends(get_proposal_repository), open_site_context: SiteContextOpener = Depends(get_site_context_opener), now: datetime = Depends(get_clock)):
+def decide_approval_route(request: Request, approval_id: UUID, body: ApprovalDecisionIn, idempotency_key: IdempotencyKey, connection: Connection = Depends(get_site_context), post_commit: PostCommitActions = Depends(get_post_commit_actions), session: ResolvedSession = Depends(get_session), settings: Settings = Depends(get_settings), approvals: ApprovalRepository = Depends(get_approval_repository), audit_writer: AuditWriter = Depends(get_audit_writer), conversations: ConversationRepository = Depends(get_conversation_repository), schedule_runs: ScheduleRunRepository = Depends(get_schedule_run_repository), baselines: SiteBaselineReader = Depends(get_site_baseline_reader), baseline_writer: SiteBaselineWriter = Depends(get_site_baseline_writer), memberships: MembershipReader = Depends(get_membership_reader), runtime_factory: AgentRuntimeFactory = Depends(get_agent_runtime_factory), compose_capabilities: CapabilityComposer = Depends(get_capability_registry), projection_reader: ScenarioProjectionReader = Depends(get_projection_reader), proposals: ProposalRepository = Depends(get_proposal_repository), open_site_context: SiteContextOpener = Depends(get_site_context_opener), telemetry: TelemetrySink = Depends(get_telemetry_sink), now: datetime = Depends(get_clock)):
     if "scheduling_baseline_enabled" not in enabled_feature_policy(settings):
         return problem_response(status=403, code="approval_not_granted", title="Approval is not available", detail="Current policy does not grant baseline approval.")
     operation = f"decide_approval:{approval_id}"
@@ -344,7 +397,7 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
         return _out(replayed, now)
     decision_request_id = uuid4()
     try:
-        result = decide_approval(connection, command=DecideApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, approval_id=approval_id, decision=body.decision, expected_resource_version=body.expected_resource_version, request_id=decision_request_id), approvals=approvals, schedule_runs=schedule_runs, baselines=baselines, baseline_writer=baseline_writer, memberships=memberships, audit_writer=audit_writer, conversations=conversations, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: now)
+        result = decide_approval(connection, command=DecideApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, approval_id=approval_id, decision=body.decision, expected_resource_version=body.expected_resource_version, request_id=decision_request_id), approvals=approvals, schedule_runs=schedule_runs, baselines=baselines, baseline_writer=baseline_writer, memberships=memberships, audit_writer=audit_writer, conversations=conversations, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: now, telemetry=telemetry)
     except DecideApprovalError as exc:
         if isinstance(exc, (PostWriteApprovalNotPendingError, BaselineConcurrentlyMovedError)):
             raise
@@ -392,7 +445,7 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
                     safe_summary=denied.consequence_summary,
                     parameter_hash=denied.parameter_hash,
                     consequence_hash=denied.consequence_hash,
-                    policy_version=denied.policy_version, app_version="0.1.0",
+                    policy_version=denied.policy_version, app_version=APP_VERSION,
                     worker_facts=WorkerFactsV1(),
                     # These references identify the candidate the refused attempt
                     # targeted; the admission check consulted no candidate evidence.
@@ -409,11 +462,18 @@ def decide_approval_route(approval_id: UUID, body: ApprovalDecisionIn, idempoten
         return problem_response(status=409, code=f"approval_{result.outcome}", title="Approval is no longer current", detail="Refresh or rerun before making another decision.", extra=_context(result.expected, result.current))
     schedule_runs._store_idempotent_result(connection, site_id=session.site_id, actor_id=session.app_user_id, operation=operation, idempotency_key=idempotency_key, body_hash=body_hash, response_payload=output.model_dump(mode="json"))
     if result.resume is not None:
+        # Read the id `emit_request_telemetry` (api/main.py) already minted
+        # for this HTTP request, rather than minting a second, unrelated one
+        # -- same NFR22 correlation fix as the first-turn route (code
+        # review of story-5.1). Resolved here, not inside the lambda: by the
+        # time `post_commit` runs, the request may no longer be live.
+        resumed_turn_request_id = getattr(request.state, "telemetry_request_id", None) or uuid4()
         post_commit.add(lambda: _drive_resumed_turn(
             resume=result.resume, binding=result.binding, settings=settings,
             runtime_factory=runtime_factory, compose_capabilities=compose_capabilities,
             projection_reader=projection_reader, conversations=conversations,
             proposals=proposals, open_site_context=open_site_context,
+            telemetry=telemetry, request_id=resumed_turn_request_id,
         ))
     return output
 

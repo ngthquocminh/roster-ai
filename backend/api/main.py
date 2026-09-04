@@ -6,9 +6,12 @@ Run from backend/:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 import hmac
 from pathlib import Path
+from time import perf_counter
 from urllib.parse import urlsplit
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exception_handlers import (
@@ -20,10 +23,14 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.routing import compile_path
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
-from api.deps import get_identity_store, get_settings
+from api.deps import get_identity_store, get_settings, get_telemetry_sink
 from api.problems import problem_response
+from application.app_version import APP_VERSION
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
+from adapters.telemetry.json_logs import configure_json_logging
 from application.ports.conversation import AgentRunNotQueuedError
 from application.use_cases.decide_approval import PostWriteApprovalNotPendingError
 from application.use_cases.promote_baseline import ApprovalPayloadUnreadableError, BaselineConcurrentlyMovedError
@@ -48,12 +55,13 @@ from store import db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_json_logging()
     db.init_db(get_settings().db_path)
     yield
     run_service.shutdown()
 
 
-app = FastAPI(title="ShiftMind API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="ShiftMind API", version=APP_VERSION, lifespan=lifespan)
 
 
 @app.exception_handler(PostWriteApprovalNotPendingError)
@@ -308,6 +316,88 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+
+_SSE_ROUTE_TEMPLATES = {
+    "/api/v1/conversations/{conversation_id}/events",
+    "/api/v1/schedule-runs/{run_id}/events",
+}
+
+
+def _declared_route_template(request: Request) -> str:
+    route = request.scope.get("route")
+    resolved = getattr(route, "path_format", None)
+    if resolved:
+        return resolved
+    # Authentication and maintenance middleware may return before FastAPI's
+    # router annotates the scope. Match only against declared OpenAPI paths so
+    # the raw URL can never become a metric label.
+    for template, operations in request.app.openapi()["paths"].items():
+        if request.method.lower() not in operations:
+            continue
+        path_regex, _path_format, _convertors = compile_path(template)
+        if path_regex.match(request.url.path):
+            return template
+    return "unmatched"
+
+
+def _emit_api_request_telemetry(
+    request: Request, request_id: UUID, started: float, status_class: str
+) -> None:
+    # `duration_ms` is captured FIRST, before `_declared_route_template`'s
+    # possible `app.openapi()` fallback -- that fallback rebuilds the whole
+    # schema and must never be charged to the request's own latency (code
+    # review of story-5.1). Everything below (including route-template
+    # resolution and sink lookup) is inside this function's own guard, so
+    # nothing here can turn a completed response into a 500 -- also code
+    # review of story-5.1.
+    duration_ms = (perf_counter() - started) * 1_000
+    try:
+        route_template = _declared_route_template(request)
+        if route_template in _SSE_ROUTE_TEMPLATES:
+            return
+        sink_override = request.app.dependency_overrides.get(get_telemetry_sink)
+        sink = sink_override() if sink_override else get_telemetry_sink()
+        sink.emit(
+            TelemetryRecordV1(
+                event="api.request.completed",
+                occurred_at=datetime.now(timezone.utc),
+                app_version=APP_VERSION,
+                correlation=CorrelationV1(request_id=request_id),
+                labels={
+                    "route_template": route_template,
+                    "method": request.method,
+                    "status_class": status_class,
+                },
+                duration_ms=duration_ms,
+            )
+        )
+    except Exception:  # noqa: BLE001 - telemetry never affects a response
+        pass
+
+
+# Registered after CORS deliberately: Starlette applies middleware in reverse
+# registration order, making this the outermost timer over total handling.
+@app.middleware("http")
+async def emit_request_telemetry(request: Request, call_next):
+    request_id = uuid4()
+    request.state.telemetry_request_id = request_id
+    started = perf_counter()
+    try:
+        response = await call_next(request)
+    except BaseException:
+        # Starlette's own `@app.exception_handler` machinery re-raises after
+        # building its response (see `versioned_unhandled_problem`'s
+        # docstring), so an unhandled 500 propagates through here too --
+        # without this, exactly the requests an operator most needs latency
+        # and rate data for produced zero telemetry (code review of
+        # story-5.1).
+        _emit_api_request_telemetry(request, request_id, started, "5xx")
+        raise
+    _emit_api_request_telemetry(
+        request, request_id, started, f"{response.status_code // 100}xx"
+    )
+    return response
 
 app.include_router(health.router)
 app.include_router(fixtures.router)

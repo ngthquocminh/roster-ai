@@ -907,12 +907,25 @@ def _resume_fixtures(*, row=None, query_error=None):
     return binding, resume, _SiteContext(connection)
 
 
+def _outcome_stub(**overrides) -> SimpleNamespace:
+    """`_drive_resumed_turn` now reads `.usage`/`.failure_reason`/`.budget_outcome`
+    off the outcome unconditionally (code review of story-5.1's run.completed
+    telemetry fix) -- a bare `SimpleNamespace(status=...)` no longer suffices."""
+    defaults = {"usage": None, "failure_reason": None, "budget_outcome": None}
+    defaults.update(overrides)
+    return SimpleNamespace(**defaults)
+
+
 def _drive(monkeypatch, *, binding, resume, opener, outcome=None, turn_error=None,
            finalize_error=None, settings=None):
     """Call the real `_drive_resumed_turn` with the collaborators faked out."""
     from api.routers import approvals as module
 
     recorded: dict = {}
+
+    class _NullSink:
+        def emit(self, _record) -> None:
+            return None
 
     def _execute_turn(*_args, **kwargs):
         recorded["approvals"] = kwargs.get("approvals")
@@ -932,7 +945,7 @@ def _drive(monkeypatch, *, binding, resume, opener, outcome=None, turn_error=Non
     # would make the assertion below pass no matter what the code does.
     monkeypatch.setattr(module, "activity_payload", lambda *_a, **_k: {})
     monkeypatch.setattr(module, "failed_outcome_for_exception",
-                        lambda _exc: SimpleNamespace(status="failed"))
+                        lambda _exc: _outcome_stub(status="failed"))
 
     module._drive_resumed_turn(
         resume=resume, binding=binding,
@@ -941,6 +954,7 @@ def _drive(monkeypatch, *, binding, resume, opener, outcome=None, turn_error=Non
         compose_capabilities=lambda _ctx: (),
         projection_reader=object(), conversations=object(), proposals=object(),
         open_site_context=opener,
+        telemetry=_NullSink(), request_id=uuid4(),
     )
     return recorded
 
@@ -954,7 +968,7 @@ def _settings_stub():
 def test_the_resumed_turn_forwards_the_server_owned_approval_for_the_exact_call(monkeypatch) -> None:
     binding, resume, opener = _resume_fixtures()
     recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
-                      outcome=SimpleNamespace(status="timed_out"))
+                      outcome=_outcome_stub(status="timed_out"))
 
     decision, = recorded["approvals"]
     assert decision.tool_call_id == "call-1"
@@ -975,7 +989,7 @@ def test_a_resumed_turn_that_defers_again_is_refused_instead_of_parked(monkeypat
     """
     binding, resume, opener = _resume_fixtures()
     recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
-                      outcome=SimpleNamespace(status="suspended"))
+                      outcome=_outcome_stub(status="suspended"))
 
     assert recorded["status"] == "agent_failed"
     assert recorded["status"] != "approval_required"
@@ -999,7 +1013,7 @@ def test_setup_failure_after_commit_is_contained_and_never_escapes(monkeypatch) 
 
     binding, resume, opener = _resume_fixtures(query_error=NoResultFound("membership revoked"))
     recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
-                      outcome=SimpleNamespace(status="timed_out"))
+                      outcome=_outcome_stub(status="timed_out"))
 
     # Nothing was finalized because the claim could not be built -- but nothing
     # raised either. The run is left for Epic 3's recovery sweep.
@@ -1010,5 +1024,5 @@ def test_a_failing_finalize_after_commit_is_contained_and_never_escapes(monkeypa
     binding, resume, opener = _resume_fixtures()
 
     _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
-           outcome=SimpleNamespace(status="timed_out"),
+           outcome=_outcome_stub(status="timed_out"),
            finalize_error=AgentRunNotQueuedError("run left agent_running"))

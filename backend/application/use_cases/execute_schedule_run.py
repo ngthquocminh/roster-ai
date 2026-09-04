@@ -13,6 +13,10 @@ from application.use_cases.finalize_schedule_run import (
     FinalizedScheduleRunV1,
     finalize_schedule_run,
 )
+from datetime import datetime, timezone
+from application.app_version import APP_VERSION
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
+from application.ports.telemetry import TelemetrySink
 
 
 #: Bounded so a heartbeat blocked on an exhausted connection pool cannot stall
@@ -89,6 +93,7 @@ def execute_schedule_run(
     runtime_connection_factory: Callable[[UUID], ContextManager[Any]] | None = None,
     observations: HeartbeatObservationsV1 | None = None,
     request_id: UUID | None = None,
+    telemetry: TelemetrySink | None = None,
 ) -> FinalizedScheduleRunV1:
     assert snapshot.schedule_run_id is not None
     # All three arguments drive one feature. Accepting a partial set would
@@ -167,13 +172,37 @@ def execute_schedule_run(
         heartbeat_stop.set()
         if heartbeat_thread is not None:
             heartbeat_thread.join(timeout=_HEARTBEAT_JOIN_TIMEOUT_S)
-    return finalize_schedule_run(
+    finalized = finalize_schedule_run(
         _FencedFinalizationRepository(repository, fencing_epoch, request_id),
         connection,
         snapshot=snapshot,
         outcome=outcome,
         site_id=site_id,
     )
+    if telemetry is not None:
+        try:
+            telemetry.emit(
+                TelemetryRecordV1(
+                    event="solver.run.completed",
+                    occurred_at=datetime.now(timezone.utc),
+                    app_version=APP_VERSION,
+                    correlation=CorrelationV1(
+                        request_id=request_id,
+                        site_id=site_id,
+                        schedule_run_id=snapshot.schedule_run_id,
+                        schedule_version_id=(
+                            finalized.candidate.schedule_version_id
+                            if finalized.candidate is not None
+                            else None
+                        ),
+                    ),
+                    labels={"solver_status": outcome.solver_status},
+                    duration_ms=outcome.wall_time_seconds * 1_000,
+                )
+            )
+        except Exception:  # noqa: BLE001 - finalized result wins
+            pass
+    return finalized
 
 
 __all__ = ["HeartbeatObservationsV1", "execute_schedule_run"]

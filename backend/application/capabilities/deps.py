@@ -8,6 +8,7 @@ from uuid import UUID
 
 from application.contracts.agent_runtime import AgentBudgetV1
 from application.ports.scenario_projection import ScenarioProjectionReader
+from application.ports.telemetry import TelemetrySink
 
 SCHEMA_VERSION = "1"
 
@@ -45,6 +46,7 @@ class AgentDepsV1:
     # Captures trusted raw handler results for the post-run grounding gate.
     # The model sees only the separately rendered representation.
     tool_result_sink: Callable[[object], None] | None = None
+    telemetry: TelemetrySink | None = None
     schema_version: str = SCHEMA_VERSION
 
 

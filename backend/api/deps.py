@@ -23,6 +23,7 @@ from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditReader, PostgresAuditWriter
 from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
+from adapters.telemetry.json_logs import JsonLogTelemetrySink
 from adapters.postgres.membership import PostgresMembershipReader
 from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
 from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
@@ -36,6 +37,7 @@ from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.approval import ApprovalRepository, AuditReader, AuditWriter
 from application.ports.site_baseline import SiteBaselineReader, SiteBaselineWriter
 from application.ports.membership import MembershipReader
+from application.ports.telemetry import TelemetrySink
 from application.capabilities.registry import (
     CapabilityGrantContextV1,
     compose_granted_capabilities,
@@ -119,6 +121,14 @@ def get_capability_registry() -> CapabilityComposer:
 def get_agent_runtime_factory() -> AgentRuntimeFactory:
     """Depends-overridable constructor for one fully scoped agent runtime."""
     return create_agent_runtime
+
+
+_telemetry_sink: TelemetrySink = JsonLogTelemetrySink()
+
+
+def get_telemetry_sink() -> TelemetrySink:
+    """Process singleton, with FastAPI's normal dependency override seam."""
+    return _telemetry_sink
 
 
 _conversation_repository: ConversationRepository = PostgresConversationRepository()

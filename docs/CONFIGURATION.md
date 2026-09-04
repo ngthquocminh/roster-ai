@@ -28,6 +28,10 @@ local backend.
 | `GEMINI_API_KEY` | Required if `LLM_PROVIDER=gemini` | *(none)* | Google Gemini API key. |
 | `OPENROUTER_API_KEY` | Required if `LLM_PROVIDER=openrouter` | *(none)* | OpenRouter API key. |
 | `OPENROUTER_MODEL` | Optional | `openai/gpt-oss-20b:free` | Model slug passed to OpenRouter (distinct from `LLM_MODEL` because `LLM_MODEL`'s default is a Gemini-only model ID, not a valid OpenRouter slug). |
+| `AGENT_MODEL_INPUT_USD_PER_MTOK` | Optional | `0` | Non-negative input-token price in USD per million tokens. When both price variables are unset/zero, telemetry reports `unpriced`, not free. |
+| `AGENT_MODEL_OUTPUT_USD_PER_MTOK` | Optional | `0` | Non-negative output-token price in USD per million tokens. When both price variables are unset/zero, telemetry reports `unpriced`, not free. |
+| `AGENT_MODEL_CACHE_READ_USD_PER_MTOK` | Optional | `0` | Non-negative price for cache-read tokens in USD per million tokens. A provider's `input_tokens` figure already includes cache tokens, so this rate — not the input rate above — prices them; zero means they contribute nothing to the estimate, not that caching is free. |
+| `AGENT_MODEL_CACHE_WRITE_USD_PER_MTOK` | Optional | `0` | Same as above, for cache-write tokens. |
 | `CORS_ORIGINS` | Optional | `http://localhost:5173,http://localhost:4173` | Comma-separated list of browser origins allowed to call the API. |
 | `APPROVAL_EXPIRY_SECONDS` | Optional | `3600` | Positive lifetime, in seconds, snapshotted into a newly requested approval. |
 | `SCHEDULING_BASELINE_ENABLED` | Optional | `true` | Enables the consequential baseline-approval capability. |
@@ -69,6 +73,9 @@ All defaults are defined inline in `backend/settings.py:default_settings()`:
   `_OPENROUTER_DEFAULT_MODEL`, noted in source as live-verified tool-capable
   as of 2026-07-13, replacing a prior free-tier model that started returning
   upstream 429s)
+- `agent_model_input_usd_per_mtok` → `0.0` and
+  `agent_model_output_usd_per_mtok` → `0.0`; together these mean pricing is
+  unconfigured (`cost_basis="unpriced"`), not that model usage is free
 - `cors_origins` → `("http://localhost:5173", "http://localhost:4173")` (Vite
   dev server and preview server origins)
 

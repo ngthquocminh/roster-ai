@@ -5,16 +5,20 @@ decision/revalidation path.
 """
 from __future__ import annotations
 
+
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+from application.app_version import APP_VERSION
 from application.capabilities.registry import PolicyInputsV1, derive_policy_version
 from application.contracts.approval_binding import ApprovalBindingV1
 from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
 from application.contracts.canonical import contract_digest
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
 from application.ports.conversation import ExecutedAgentRunV1
+from application.ports.telemetry import TelemetrySink
 
 class DecideApprovalError(ValueError):
     code = "invalid_approval_command"
@@ -94,7 +98,7 @@ def revalidate_binding(connection: Any, *, binding: ApprovalBindingV1, schedule_
         return RevalidationV1(None, {}, {}, candidate)
     return RevalidationV1("stale", {"candidate_schedule_version_id": str(binding.candidate_schedule_version_id), "baseline_schedule_version": binding.baseline_schedule_version, "parameter_hash": binding.parameter_hash, "consequence_hash": binding.consequence_hash, "policy_version": binding.policy_version, "initiating_actor_membership": "active"}, {"candidate_schedule_version_id": str(candidate.schedule_version_id) if candidate else None, "baseline_schedule_version": current_baseline, "parameter_hash": parameter_hash, "consequence_hash": consequence_hash, "policy_version": current_policy, "initiating_actor_membership": "active" if active_initiator else "revoked_or_absent"}, candidate)
 
-def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approvals: Any, schedule_runs: Any, baselines: Any, baseline_writer: Any, memberships: Any, audit_writer: Any, conversations: Any, scheduling_baseline_enabled: bool, clock: Any, app_version: str = "0.1.0") -> DecisionResultV1:
+def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approvals: Any, schedule_runs: Any, baselines: Any, baseline_writer: Any, memberships: Any, audit_writer: Any, conversations: Any, scheduling_baseline_enabled: bool, clock: Any, app_version: str = APP_VERSION, telemetry: TelemetrySink | None = None) -> DecisionResultV1:
     if not scheduling_baseline_enabled: raise ApprovalNotGrantedError("baseline approval is not granted by policy")
     binding = approvals.get(connection, approval_id=command.approval_id, site_id=command.site_id)
     if binding is None: raise ApprovalNotFoundError("approval is not visible in this site")
@@ -102,8 +106,10 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
         # ADMISSION CHECK -- pre-write. Nothing has been written, so the router
         # catches this, writes the Decision 7 denial audit row, and RETURNS so
         # both commit. Contrast the two CAS closers below/in TX2.
+        _emit_approval_telemetry(telemetry, command=command, binding=binding, outcome="approval_not_pending", occurred_at=clock(), app_version=app_version)
         raise ApprovalNotPendingError("approval is no longer pending", expected={"state": "pending"}, current={"state": binding.state, "resource_version": binding.resource_version})
     if binding.resource_version != command.expected_resource_version:
+        _emit_approval_telemetry(telemetry, command=command, binding=binding, outcome="stale_resource_version", occurred_at=clock(), app_version=app_version)
         raise StaleResourceVersionError("approval resource version changed", expected={"resource_version": command.expected_resource_version}, current={"resource_version": binding.resource_version, "state": binding.state})
     now = clock()
     check = revalidate_binding(connection, binding=binding, schedule_runs=schedule_runs, baselines=baselines, memberships=memberships, now=now, scheduling_baseline_enabled=scheduling_baseline_enabled)
@@ -122,10 +128,15 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
                 raise PostWriteApprovalNotPendingError(
                     str(exc), expected=exc.expected, current=exc.current
                 ) from exc
-            return DecisionResultV1(
+            result = DecisionResultV1(
                 "consumed", promoted.binding, promoted.activity, {}, {},
                 promoted.baseline, promoted.resume,
             )
+            _emit_approval_telemetry(
+                telemetry, command=command, binding=binding, outcome="consumed",
+                occurred_at=now, app_version=app_version,
+            )
+            return result
         outcome: Literal["rejected", "expired", "stale"] = "rejected"
     else:
         outcome = check.outcome
@@ -143,6 +154,50 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
     # `agent_run_status` is stated, not inferred: the cancellation above already
     # replaced `approval_required`, and Story 4.3 consumes this value.
     activity = conversations.append_approval_request_activity(connection, binding=terminal, actor_id=command.actor_id, request_id=command.request_id, agent_run_id=terminal.agent_run_id, occurred_at=now, agent_run_status="agent_cancelled" if terminal.agent_run_id is not None else None)
-    return DecisionResultV1(outcome, terminal, activity, check.expected, check.current)
+    result = DecisionResultV1(outcome, terminal, activity, check.expected, check.current)
+    _emit_approval_telemetry(
+        telemetry, command=command, binding=binding, outcome=outcome,
+        occurred_at=now, app_version=app_version,
+    )
+    return result
+
+
+def _emit_approval_telemetry(
+    telemetry: TelemetrySink | None,
+    *,
+    command: DecideApprovalCommandV1,
+    binding: ApprovalBindingV1,
+    outcome: str,
+    occurred_at: datetime,
+    app_version: str,
+) -> None:
+    if telemetry is None:
+        return
+    try:
+        telemetry.emit(
+            TelemetryRecordV1(
+                event="approval.decided",
+                occurred_at=occurred_at,
+                app_version=app_version,
+                correlation=CorrelationV1(
+                    request_id=command.request_id,
+                    site_id=command.site_id,
+                    actor_id=command.actor_id,
+                    conversation_id=binding.conversation_id,
+                    agent_run_id=binding.agent_run_id,
+                    approval_id=binding.approval_id,
+                    schedule_run_id=binding.schedule_run_id,
+                    schedule_version_id=binding.candidate_schedule_version_id,
+                ),
+                labels={"approval_outcome": outcome},
+                approval_age_s=(
+                    max(0.0, (occurred_at - binding.created_at).total_seconds())
+                    if binding.created_at is not None
+                    else None
+                ),
+            )
+        )
+    except Exception:  # noqa: BLE001 - approval transaction wins
+        return
 
 __all__ = ["DecideApprovalCommandV1", "DecisionResultV1", "revalidate_binding", "decide_approval"]
