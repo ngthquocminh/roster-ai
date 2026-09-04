@@ -78,15 +78,38 @@ def test_every_credential_environment_value_is_absent_from_settings_repr(monkeyp
         "OIDC_CLIENT_SECRET": "CANARY-OIDC-5-2",
         "CSRF_SECRET": "CANARY-CSRF-5-2",
         "AGENT_RUNTIME_API_KEY": "CANARY-AGENT-5-2",
-        "DATABASE_URL": "postgresql://CANARY-DB-5-2@localhost/db",
-        "PROVISIONING_DATABASE_URL": "postgresql://CANARY-PROVISIONING-5-2@localhost/db",
+        "ROSTERAI_DATABASE_URL": "postgresql://CANARY-DB-5-2@localhost/db",
+        "ROSTERAI_PROVISIONING_DATABASE_URL": "postgresql://CANARY-PROVISIONING-5-2@localhost/db",
     }
     for name, value in values.items():
         monkeypatch.setenv(name, value)
 
     rendered = repr(default_settings())
 
-    assert all(value not in rendered for value in values.values())
+    canaries = (
+        "CANARY-GEMINI-5-2", "CANARY-OPENROUTER-5-2", "CANARY-OIDC-5-2",
+        "CANARY-CSRF-5-2", "CANARY-AGENT-5-2", "CANARY-DB-5-2",
+        "CANARY-PROVISIONING-5-2",
+    )
+    assert all(canary not in rendered for canary in canaries)
+
+
+def test_both_instrumentation_constructors_disable_binary_capture() -> None:
+    import ast
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "agent/runtime.py").read_text(encoding="utf-8")
+    calls = [
+        node for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "InstrumentationSettings"
+    ]
+    assert len(calls) == 2
+    for call in calls:
+        keywords = {keyword.arg: keyword.value for keyword in call.keywords}
+        disabled = keywords.get("include_binary_content")
+        assert isinstance(disabled, ast.Constant) and disabled.value is False
 
 
 def test_third_party_log_replaces_message_with_fixed_event() -> None:
