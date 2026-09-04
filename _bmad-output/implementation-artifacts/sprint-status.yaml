@@ -2257,7 +2257,85 @@ development_status:
   # `-m postgres` MEASURED: 156 passed / 1364 deselected, matching Story 4.6's figure exactly.
   5-0-compare-a-candidate-against-the-real-promoted-baseline: done
   5-1-instrument-agent-runs-for-latency-budget-and-cost: done
-  5-2-prevent-content-and-secret-leaks: backlog
+  # NOTE (2026-09-04): Story 5.2 created and moved to ready-for-dev at c0ef358. Scope: a sanitizing
+  # rewrite of JsonLogFormatter's NON-telemetry branch, an AST guard that log call sites pass literal
+  # templates, hide_parameters=True at four engine sites plus its guard, include_binary_content=False
+  # on the agent's InstrumentationSettings, repr=False on the two credential-bearing Settings fields
+  # that lack it, a sanitized worker error path, runtime+AST bounding of telemetry label keys/values,
+  # a new minimization suite, and ONE generated evidence file registered as a Gate A check. NO
+  # migration, route, API field, runtime dependency, golden case, or frontend diff.
+  #
+  # MEASURED AT CREATION (c0ef358, clean tree, Docker PostgreSQL up): backend 1558 passed / 1 skipped
+  # / 7 deselected (173.6s); `-m postgres` 158 passed / 1408 deselected -- and 158+1408 = 1558+1+7,
+  # so postgres-marked tests DO run in the default suite. test_evidence_convention.py 87 passed;
+  # tests/architecture/ 69 passed across 11 files; test_gate_a_readiness.py 44 passed. Frontend NOT
+  # measured (zero frontend diff); Story 5.0's Vitest 647 / Playwright 80 stand.
+  #
+  # THE LOAD-BEARING FINDING, measured at creation rather than inferred: the leak is NOT in
+  # TelemetryRecordV1, which Story 5.1 made clean by construction. It is in the OTHER branch of the
+  # same formatter. JsonLogFormatter.format's fallback branch (json_logs.py:30-41) writes
+  # record.getMessage() and formatException(record.exc_info) verbatim; configure_json_logging installs
+  # that formatter on the PROCESS ROOT logger (:60-67) whose default level is WARNING, so all three
+  # logger.exception calls on the agent-run path reach it; and NO create_engine call in the repo
+  # passes hide_parameters=True, so a SQLAlchemy StatementError's own str() carries
+  # "[parameters: (...)]" -- the bound values. Proven end to end with a canary bound from a VARIABLE
+  # (not a source literal): default engine leaks "WORKER-SECRET-123456" into the emitted JSON line;
+  # the same engine with hide_parameters=True emits "[SQL parameters hidden due to
+  # hide_parameters=True]" and does not. Second measured gap: InstrumentationSettings
+  # .include_binary_content defaults to True in pydantic-ai 2.27.0 and agent/runtime.py:138-144 sets
+  # only include_content=False -- so AC1's "binary capture disabled by default" is false today.
+  #
+  # ALSO MEASURED: with include_content=False the span attributes are structure-only (23 keys
+  # enumerated in the story; gen_ai.input.messages = [{"role":"user","parts":[{"type":"text"}]}]),
+  # prompt and tool-arg canaries absent -- so C4 is nearly right already and needs a proof, not a
+  # rewrite. Settings has SEVEN credential-bearing fields; five carry repr=False (T-04-01), and
+  # database_url + provisioning_database_url do not, though both embed rosterai:rosterai@ by default.
+  #
+  # TWELVE DECISIONS, the four most consequential:
+  # (1) The channel inventory is CLOSED and four-wide, and PostgreSQL is NOT one of them. NFR30 says
+  #     product data must remain in ShiftMind-controlled persistence in as many words, so scrubbing
+  #     persisted_event / audit_event / approval evidence would break FR20-FR21 provenance to satisfy
+  #     a requirement that never asked. Browser payloads are outside AC1's Given and the RFC 7807
+  #     handlers were verified already non-disclosing.
+  # (2) The fallback branch is REWRITTEN, not deleted: record.args are dropped and exc_info is never
+  #     formatted, but the un-interpolated record.msg TEMPLATE is kept as `event` -- which is only
+  #     safe because a new AST guard rejects any non-literal message argument at every log call site.
+  #     Two independent mechanisms deliberately, so neither alone is load-bearing.
+  # (3) The evidence file claims to block release, so per docs/EVIDENCE-CONVENTION.md it MUST be
+  #     registered -- emitting `passed` without registering is EXACTLY the Story 3.10/3.11 defect
+  #     where the gate went green BECAUSE the proof was unbound. NFR29's enumerated list does not
+  #     name content minimization; AC2's citation of NFR29 is the sole authority for the extension,
+  #     and Decision 9 makes that explicit rather than smuggling it in. Registered-evidence set grows
+  #     7 -> 8, which test_gate_a_readiness.py:265's own docstring demands be a decision.
+  # (4) No exporter, no Logfire SDK, no new dependency. AC1's "ANY CONFIGURED trace export" is
+  #     conditional, and the Epic 4 retro already verified at :2592-2597 that Epic 5's ACs are
+  #     subject-neutral. The Stack table's Logfire SDK 4.38.0 row stays `planned`; ownership passes
+  #     from Story 5.1 to EPIC 6, where AD-12 puts hosted diagnosis.
+  #
+  # TWO SEQUENCING TRAPS, both resolved in the story rather than left to be discovered at review:
+  # (A) test_every_registered_evidence_file_exists_on_disk requires the file to exist when the
+  #     registry names it, while the evidence convention requires the code commit to PRECEDE the
+  #     evidence commit. Resolution: the gate_a_checks.py registry edit goes in the EVIDENCE commit.
+  #     Story 4.6 did the opposite (b7ec2eb put it in the feat commit) and left the backend suite red
+  #     for four commits -- verified in git history at story creation, and explicitly not copied.
+  # (B) The readiness report must be regenerated TWICE. backend/tests/test_gate_a_readiness.py is
+  #     ITSELF a registered contributing check under measurement_integrity (gate_a_checks.py:457-468),
+  #     so pass 1's pytest run still sees the stale committed report, the two report-vs-registry
+  #     identity tests are red, and the report generated from that XML records measurement_integrity
+  #     as FAILED. Pass 2 re-runs pytest against the corrected report on disk. gate_a_readiness.py
+  #     exempts its own output from the dirty-tree check for exactly this reason -- its comment at
+  #     :605-608 literally says "run 2 of 2" -- so both passes are clean-tree legal and --allow-dirty
+  #     is never needed. docs/GATE-A-RUNBOOK.md section 3 documents only ONE pass and is silent on
+  #     this; the knowledge lives solely in that code comment. Story 5.2 owes the runbook fix.
+  # Registering therefore costs a THREE-runner regeneration (pytest + Vitest + Playwright, Docker up)
+  # run TWICE. This is the story's largest single cost; Story 4.6 paid the same one.
+  #
+  # LEDGER: closes :663 (label values unguarded) and :667 (AST walker's literal-only blind spot) --
+  # both name "Story 5.2's export-boundary minimization work" as their trigger verbatim. Leaves :669
+  # (tool_call_id unbounded) OPEN and untouched: its trigger is a real provider or a model-influenced
+  # id, neither of which fires, and truncation applies to LABELS while tool_call_id is a correlation
+  # PROPERTY -- do not conflate them. :508 and :639 (cloudwatch_owned_by_epic_6) stay open.
+  5-2-prevent-content-and-secret-leaks: ready-for-dev
   5-3-run-shiftmind-reproducibly-from-one-command: backlog
   5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
