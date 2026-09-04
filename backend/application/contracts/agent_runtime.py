@@ -31,6 +31,7 @@ from application.contracts.grounding import GroundedAnswerV1
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.agent_status import AgentRunStatusV1
 from application.contracts.proposal import DraftProposalV1, ProposalV1
+from application.contracts.telemetry import AgentUsageV1, BudgetOutcomeV1
 
 SCHEMA_VERSION = "1"
 
@@ -260,3 +261,5 @@ class AgentRunOutcomeV1:
     summary: str | None = None
     approval: AgentApprovalPendingV1 | None = None
     tool_results: tuple[AgentToolResultV1, ...] = ()
+    usage: AgentUsageV1 | None = None
+    budget_outcome: BudgetOutcomeV1 | None = None

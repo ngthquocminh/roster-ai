@@ -50,6 +50,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+from application.app_version import APP_VERSION
+
 from pydantic import TypeAdapter, ValidationError
 
 from application.contracts.agent_runtime import AgentApprovalPendingV1, AgentTurnV1
@@ -113,7 +115,7 @@ def promote_baseline(
     audit_writer: Any,
     conversations: Any,
     occurred_at: datetime,
-    app_version: str = "0.1.0",
+    app_version: str = APP_VERSION,
 ) -> PromotionResultV1:
     """Execute TX2 after the caller's shared revalidation returned valid."""
     if binding.state != "pending":

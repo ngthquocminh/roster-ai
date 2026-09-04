@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
+from application.app_version import APP_VERSION
+
 from application.capabilities.registry import PolicyInputsV1, derive_policy_version
 from application.contracts.approval_binding import ApprovalBindingV1
 from application.contracts.audit_envelope import AuditEnvelopeV1, WorkerFactsV1
@@ -89,7 +91,7 @@ def request_approval(
     approval_expiry_seconds: int,
     scheduling_baseline_enabled: bool,
     clock: Any,
-    app_version: str = "0.1.0",
+    app_version: str = APP_VERSION,
 ) -> RequestApprovalResultV1:
     """Build TX1. The caller owns the transaction; no repository may commit."""
     if not scheduling_baseline_enabled:

@@ -76,8 +76,8 @@ def pending(*, agent_run_id=None, baseline=None):
     audit.items.clear(); conversations.items.clear()
     return runs, approvals, audit, conversations, command
 
-def decide(runs, approvals, audit, conversations, command, *, decision="reject", now=NOW, baseline=None, enabled=True, memberships=None):
-    return decide_approval(None, command=DecideApprovalCommandV1(site_id=command.site_id, actor_id=command.actor_id, approval_id=approvals.binding.approval_id, decision=decision, expected_resource_version=approvals.binding.resource_version, request_id=uuid4()), approvals=approvals, schedule_runs=runs, baselines=Baselines(baseline), baseline_writer=BaselineWriter(), memberships=memberships or Memberships(), audit_writer=audit, conversations=conversations, scheduling_baseline_enabled=enabled, clock=lambda: now)
+def decide(runs, approvals, audit, conversations, command, *, decision="reject", now=NOW, baseline=None, enabled=True, memberships=None, telemetry=None):
+    return decide_approval(None, command=DecideApprovalCommandV1(site_id=command.site_id, actor_id=command.actor_id, approval_id=approvals.binding.approval_id, decision=decision, expected_resource_version=approvals.binding.resource_version, request_id=uuid4()), approvals=approvals, schedule_runs=runs, baselines=Baselines(baseline), baseline_writer=BaselineWriter(), memberships=memberships or Memberships(), audit_writer=audit, conversations=conversations, scheduling_baseline_enabled=enabled, clock=lambda: now, telemetry=telemetry)
 
 
 @pytest.mark.parametrize("decision", ["approve", "reject"])
@@ -103,6 +103,25 @@ def test_reject_terminalizes_once_and_records_audit_and_event() -> None:
     assert result.outcome == "rejected" and approvals.binding.state == "rejected"
     assert [item.outcome for item in audit.items] == ["approval_rejected"]
     assert conversations.items[0][0] == "event"
+
+
+def test_decision_emits_approval_age_and_outcome() -> None:
+    runs, approvals, audit, conversations, command = pending()
+    records = []
+
+    class Sink:
+        def emit(self, record) -> None:
+            records.append(record)
+
+    result = decide(
+        runs, approvals, audit, conversations, command, telemetry=Sink()
+    )
+    assert result.outcome == "rejected"
+    assert len(records) == 1
+    assert records[0].event == "approval.decided"
+    assert records[0].approval_age_s == 0.0
+    assert records[0].labels == {"approval_outcome": "rejected"}
+    assert records[0].correlation.approval_id == approvals.binding.approval_id
 
 def test_expiry_outranks_requested_reject_and_clears_pending_slot() -> None:
     runs, approvals, audit, conversations, command = pending()

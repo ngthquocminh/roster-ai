@@ -217,7 +217,7 @@ class ScheduleRunRepository(Protocol):
         site_id: UUID,
         fencing_epoch: int,
         request_id: UUID | None = None,
-    ) -> None: ...
+    ) -> datetime | None: ...
 
     def create_queued_run(
         self,

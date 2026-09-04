@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, ContextManager
 from uuid import UUID
 
@@ -14,6 +15,9 @@ from application.ports.schedule_run import (
     StaleLeaseError,
 )
 from application.use_cases.execute_schedule_run import execute_schedule_run
+from application.app_version import APP_VERSION
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
+from application.ports.telemetry import TelemetrySink
 
 
 class FatalJobError(ValueError):
@@ -103,6 +107,7 @@ def lease_and_execute_schedule_run(
     *,
     lease_owner: str,
     lease_seconds: int,
+    telemetry: TelemetrySink | None = None,
 ) -> LeaseOutcomeV1 | None:
     lease = repository.lease_next_job(
         lease_connection,
@@ -111,6 +116,27 @@ def lease_and_execute_schedule_run(
     )
     if lease is None:
         return None
+    now = datetime.now(timezone.utc)
+    _emit(
+        telemetry,
+        TelemetryRecordV1(
+            event="job.leased",
+            occurred_at=now,
+            app_version=APP_VERSION,
+            correlation=CorrelationV1(
+                site_id=lease.site_id,
+                actor_id=lease.actor_id,
+                job_id=lease.job_id,
+                schedule_run_id=lease.schedule_run_id,
+            ),
+            labels={"job_type": lease.job_type},
+            queue_age_s=(
+                max(0.0, (now - lease.created_at).total_seconds())
+                if lease.created_at is not None
+                else None
+            ),
+        ),
+    )
     try:
         return _execute_leased_schedule_run(
             runtime_connection_factory,
@@ -118,6 +144,7 @@ def lease_and_execute_schedule_run(
             scheduler,
             lease=lease,
             lease_seconds=lease_seconds,
+            telemetry=telemetry,
         )
     except StaleLeaseError:
         # Our fence is already lost: another worker re-leased this job under a
@@ -208,6 +235,7 @@ def _execute_leased_schedule_run(
     *,
     lease,
     lease_seconds: int,
+    telemetry: TelemetrySink | None,
 ) -> LeaseOutcomeV1:
     assert lease.job_id is not None
     assert lease.attempt_id is not None
@@ -217,6 +245,11 @@ def _execute_leased_schedule_run(
     # Transaction A is deliberately short: committing `solver_running` here
     # makes it visible to the cancellation command and releases the row lock
     # before the solve starts.
+    # Captured, not emitted, inside the `with` below: emitting there would
+    # assert "persisted" before Transaction A actually commits, so a later
+    # failure in the same block could roll back an event telemetry already
+    # claimed happened (code review of story-5.1).
+    pending_first_event_telemetry: TelemetryRecordV1 | None = None
     with runtime_connection_factory(lease.site_id) as runtime_connection:
         snapshot = repository.load_snapshot(
             runtime_connection,
@@ -240,13 +273,31 @@ def _execute_leased_schedule_run(
                 raise FatalJobError("leased job references a missing schedule run")
             if state.status == "solver_queued":
                 try:
-                    repository.mark_running(
+                    first_event_at = repository.mark_running(
                         runtime_connection,
                         run_id=lease.schedule_run_id,
                         site_id=lease.site_id,
                         fencing_epoch=lease.fencing_epoch,
                         request_id=lease.attempt_id,
                     )
+                    if first_event_at is not None and lease.created_at is not None:
+                        pending_first_event_telemetry = TelemetryRecordV1(
+                            event="run.first_event.persisted",
+                            occurred_at=first_event_at,
+                            app_version=APP_VERSION,
+                            correlation=CorrelationV1(
+                                request_id=lease.attempt_id,
+                                site_id=lease.site_id,
+                                actor_id=lease.actor_id,
+                                job_id=lease.job_id,
+                                schedule_run_id=lease.schedule_run_id,
+                            ),
+                            duration_ms=max(
+                                0.0,
+                                (first_event_at - lease.created_at).total_seconds()
+                                * 1_000,
+                            ),
+                        )
                 except RunTransitionConflictError:
                     if attempt == 1:
                         continue
@@ -283,6 +334,10 @@ def _execute_leased_schedule_run(
             )
             return _outcome(lease, state.status)
 
+    # Transaction A has committed by now -- safe to assert "persisted".
+    if pending_first_event_telemetry is not None:
+        _emit(telemetry, pending_first_event_telemetry)
+
     # Transaction B gets a fresh READ COMMITTED snapshot. A cancellation that
     # landed after A committed is therefore observed before scheduler.solve.
     with runtime_connection_factory(lease.site_id) as runtime_connection:
@@ -317,6 +372,7 @@ def _execute_leased_schedule_run(
                 lease_seconds=lease_seconds,
                 runtime_connection_factory=runtime_connection_factory,
                 request_id=lease.attempt_id,
+                telemetry=telemetry,
             )
             status = finalized.status
         else:
@@ -333,6 +389,15 @@ def _execute_leased_schedule_run(
             fencing_epoch=lease.fencing_epoch,
         )
     return _outcome(lease, status)
+
+
+def _emit(telemetry: TelemetrySink | None, record: TelemetryRecordV1) -> None:
+    if telemetry is None:
+        return
+    try:
+        telemetry.emit(record)
+    except Exception:  # noqa: BLE001 - telemetry never changes job semantics
+        return
 
 
 __all__ = [

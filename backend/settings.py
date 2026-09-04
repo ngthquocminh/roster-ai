@@ -85,6 +85,17 @@ class Settings:
     # LLMProvider are two seams, and overloading one seam's configuration onto
     # the other is what makes them impossible to migrate independently later.
     agent_runtime_model: str = "test"
+    # USD per million tokens. Zero means no configured price, not a free model.
+    agent_model_input_usd_per_mtok: float = 0.0
+    agent_model_output_usd_per_mtok: float = 0.0
+    # `input_tokens` is a parent bucket that already includes cache tokens
+    # (pydantic-ai's UsageBase), so `estimate_cost_usd` prices the non-cache
+    # remainder at the input rate and cache tokens at these separate rates,
+    # never both -- otherwise cache tokens are double-billed at full input
+    # price (code review of story-5.1, decision 4). Zero means cache tokens
+    # contribute nothing to the estimate; set explicitly to price them.
+    agent_model_cache_read_usd_per_mtok: float = 0.0
+    agent_model_cache_write_usd_per_mtok: float = 0.0
     # Same repr=False treatment as the other API keys (T-04-01).
     agent_runtime_api_key: str | None = field(repr=False, default=None)
     # AD-7: budgets are application configuration, never model output. These are
@@ -212,6 +223,16 @@ def _positive_float(name: str, raw: str | None, fallback: float) -> float:
     return value
 
 
+def _non_negative_float(name: str, raw: str | None, fallback: float) -> float:
+    try:
+        value = fallback if raw is None else float(raw)
+    except ValueError as exc:
+        raise InvalidFlagError(f"{name} must be a non-negative finite number") from exc
+    if not math.isfinite(value) or value < 0:
+        raise InvalidFlagError(f"{name} must be a non-negative finite number")
+    return value
+
+
 def _nonempty(name: str, raw: str | None, fallback: str) -> str:
     value = fallback if raw is None else raw.strip()
     if not value:
@@ -269,6 +290,26 @@ def default_settings() -> Settings:
     csrf_secret = os.environ.get("CSRF_SECRET", "shiftmind-local-csrf-secret")
     agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "test")
     agent_runtime_api_key = os.environ.get("AGENT_RUNTIME_API_KEY")
+    agent_model_input_usd_per_mtok = _non_negative_float(
+        "AGENT_MODEL_INPUT_USD_PER_MTOK",
+        os.environ.get("AGENT_MODEL_INPUT_USD_PER_MTOK"),
+        0.0,
+    )
+    agent_model_output_usd_per_mtok = _non_negative_float(
+        "AGENT_MODEL_OUTPUT_USD_PER_MTOK",
+        os.environ.get("AGENT_MODEL_OUTPUT_USD_PER_MTOK"),
+        0.0,
+    )
+    agent_model_cache_read_usd_per_mtok = _non_negative_float(
+        "AGENT_MODEL_CACHE_READ_USD_PER_MTOK",
+        os.environ.get("AGENT_MODEL_CACHE_READ_USD_PER_MTOK"),
+        0.0,
+    )
+    agent_model_cache_write_usd_per_mtok = _non_negative_float(
+        "AGENT_MODEL_CACHE_WRITE_USD_PER_MTOK",
+        os.environ.get("AGENT_MODEL_CACHE_WRITE_USD_PER_MTOK"),
+        0.0,
+    )
     agent_runtime_request_limit = _positive_int(
         "AGENT_RUNTIME_REQUEST_LIMIT", os.environ.get("AGENT_RUNTIME_REQUEST_LIMIT"), 8
     )
@@ -400,6 +441,10 @@ def default_settings() -> Settings:
         csrf_secret=csrf_secret,
         agent_runtime_model=agent_runtime_model,
         agent_runtime_api_key=agent_runtime_api_key,
+        agent_model_input_usd_per_mtok=agent_model_input_usd_per_mtok,
+        agent_model_output_usd_per_mtok=agent_model_output_usd_per_mtok,
+        agent_model_cache_read_usd_per_mtok=agent_model_cache_read_usd_per_mtok,
+        agent_model_cache_write_usd_per_mtok=agent_model_cache_write_usd_per_mtok,
         agent_runtime_request_limit=agent_runtime_request_limit,
         agent_runtime_tool_calls_limit=agent_runtime_tool_calls_limit,
         agent_runtime_deadline_seconds=agent_runtime_deadline_seconds,

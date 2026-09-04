@@ -77,6 +77,7 @@ class _Repository:
 
     def mark_running(self, connection, **values):
         self.calls.append(("running", connection, values))
+        return datetime(2026, 8, 20, 0, 0, 2, tzinfo=timezone.utc)
 
     def finalize_run(self, connection, **values):
         self.calls.append(("finalize", connection, values))
@@ -128,6 +129,39 @@ def test_no_job_does_not_open_a_runtime_transaction() -> None:
 
     assert result is None
     assert runtime.site_ids == []
+
+
+def test_worker_emits_lease_first_event_and_solver_records() -> None:
+    lease = _lease()
+    repository = _Repository(lease)
+    runtime = _RuntimeFactory()
+    records = []
+
+    class Sink:
+        def emit(self, record) -> None:
+            records.append(record)
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        _Scheduler(),
+        lease_owner="worker-1",
+        lease_seconds=30,
+        telemetry=Sink(),
+    )
+
+    assert result is not None
+    assert [record.event for record in records] == [
+        "job.leased",
+        "run.first_event.persisted",
+        "solver.run.completed",
+    ]
+    assert records[0].queue_age_s is not None and records[0].queue_age_s >= 0
+    assert records[1].duration_ms == 2_000.0
+    assert records[1].queue_age_s is None
+    assert records[2].labels["solver_status"] == "UNKNOWN"
+    assert records[2].correlation.schedule_run_id == lease.schedule_run_id
 
 
 def test_fatal_exception_after_lease_fails_the_job_and_queued_run_atomically() -> None:

@@ -371,7 +371,7 @@ class PostgresScheduleRunRepository:
         resource_version: int,
         request_id: UUID,
         occurred_at: datetime | None = None,
-    ) -> None:
+    ) -> datetime:
         # One clock per stream. Callers used to supply three different ones --
         # `snapshot.accepted_at` (upstream Python), the adapter's own `now()`,
         # and `row.finished_at` (database, itself `candidate.created_at` for a
@@ -414,6 +414,7 @@ class PostgresScheduleRunRepository:
                 ),
             )
         )
+        return when
 
     @staticmethod
     def _actor_for_run(
@@ -704,7 +705,7 @@ class PostgresScheduleRunRepository:
         site_id: UUID,
         fencing_epoch: int,
         request_id: UUID | None = None,
-    ) -> None:
+    ) -> datetime:
         # Transaction A now COMMITS this edge, so the fence must be claimed
         # under a real row lock exactly as `finalize_run` does. The unlocked
         # `_has_current_epoch` EXISTS can pass against an epoch a concurrent
@@ -739,7 +740,7 @@ class PostgresScheduleRunRepository:
                 expected_status="solver_queued",
                 target_status="solver_running",
             )
-        self._write_progress_event(
+        return self._write_progress_event(
             connection,
             run_id=run_id,
             site_id=site_id,

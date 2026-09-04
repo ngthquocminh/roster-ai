@@ -26,6 +26,7 @@ from api.deps import (
     get_site_context,
     get_site_context_opener,
     get_projection_reader,
+    get_telemetry_sink,
 )
 from api.main import app
 from application.contracts.activity import (
@@ -428,6 +429,31 @@ def test_execute_turn_is_conversation_scoped_and_persists_terminal_response(
     assert response.json()["agent_run_id"] == str(run_id)
     assert response.json()["activity"]["activity_type"] == "agent_response"
     assert repository.claimed_statuses == ["agent_completed"]
+
+
+def test_execute_turn_emits_claim_to_finalize_telemetry(conversation_client) -> None:
+    client, repository, settings = conversation_client
+    records = []
+
+    class Sink:
+        def emit(self, record) -> None:
+            records.append(record)
+
+    app.dependency_overrides[get_telemetry_sink] = Sink
+    run_id = uuid4()
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{run_id}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    completed = [record for record in records if record.event == "agent.run.completed"]
+    assert len(completed) == 1
+    assert completed[0].correlation.agent_run_id == run_id
+    assert completed[0].labels["agent_run_status"] == "agent_completed"
+    assert completed[0].labels["model"] == "test"
+    assert completed[0].estimated_cost_usd is None
+    assert completed[0].labels["cost_basis"] == "usage_unavailable"
 
 
 @pytest.mark.parametrize(

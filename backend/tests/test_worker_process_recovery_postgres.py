@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -34,6 +35,14 @@ WAIT_RESOLUTION_SECONDS = 0.005
 
 def _drain(process: subprocess.Popen) -> str:
     """Collect a dead child's output without risking a full-pipe deadlock."""
+    output_files = getattr(process, "_shiftmind_output_files", None)
+    if output_files is not None:
+        chunks = []
+        for label, stream in zip(("stdout", "stderr"), output_files):
+            stream.flush()
+            stream.seek(0)
+            chunks.append(f"{label}:\n{stream.read()}")
+        return "\n".join(chunks)
     try:
         stdout, stderr = process.communicate(timeout=10)
     except subprocess.TimeoutExpired:
@@ -80,7 +89,9 @@ def _spawn_worker(
         SHIFTMIND_WORKER_TEST_SLEEP_SECONDS=sleep_seconds,
     )
     worker_path = Path(__file__).resolve().parents[1] / "worker" / "main.py"
-    return subprocess.Popen(
+    stdout_file = tempfile.TemporaryFile(mode="w+t", encoding="utf-8")
+    stderr_file = tempfile.TemporaryFile(mode="w+t", encoding="utf-8")
+    process = subprocess.Popen(
         [
             sys.executable,
             str(worker_path),
@@ -93,10 +104,12 @@ def _spawn_worker(
         ],
         cwd=worker_path.parents[1],
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=stdout_file,
+        stderr=stderr_file,
         text=True,
     )
+    process._shiftmind_output_files = (stdout_file, stderr_file)
+    return process
 
 
 def _terminate(process: subprocess.Popen) -> None:
@@ -111,6 +124,9 @@ def _terminate(process: subprocess.Popen) -> None:
     finally:
         for stream in (process.stdout, process.stderr):
             if stream is not None and not stream.closed:
+                stream.close()
+        for stream in getattr(process, "_shiftmind_output_files", ()):
+            if not stream.closed:
                 stream.close()
 
 

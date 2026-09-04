@@ -10,6 +10,7 @@ from sqlalchemy import Connection, Engine, text
 
 from application.ports.scheduler import SchedulerPort
 from application.ports.schedule_run import ScheduleRunRepository
+from application.ports.telemetry import TelemetrySink
 from application.use_cases.lease_and_execute_schedule_run import (
     LeaseOutcomeV1,
     lease_and_execute_schedule_run,
@@ -83,6 +84,7 @@ def run_once(
     *,
     lease_owner: str,
     lease_seconds: int,
+    telemetry: TelemetrySink | None = None,
 ) -> LeaseOutcomeV1 | None:
     """Lease and advance at most one job; process supervision stays external.
 
@@ -99,6 +101,7 @@ def run_once(
             scheduler,
             lease_owner=lease_owner,
             lease_seconds=lease_seconds,
+            telemetry=telemetry,
         )
 
 

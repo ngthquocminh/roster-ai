@@ -100,6 +100,29 @@ def test_empty_agent_runtime_ceiling_is_rejected(monkeypatch, name) -> None:
         default_settings()
 
 
+def test_agent_model_cost_rates_are_non_negative_and_not_ceiling_fields(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_MODEL_INPUT_USD_PER_MTOK", "1.25")
+    monkeypatch.setenv("AGENT_MODEL_OUTPUT_USD_PER_MTOK", "0")
+
+    settings = default_settings()
+
+    assert settings.agent_model_input_usd_per_mtok == 1.25
+    assert settings.agent_model_output_usd_per_mtok == 0.0
+    assert "agent_model_input_usd_per_mtok" not in AC2_CEILING_FIELDS
+    assert "agent_model_output_usd_per_mtok" not in AC2_CEILING_FIELDS
+
+
+@pytest.mark.parametrize(
+    "name",
+    ("AGENT_MODEL_INPUT_USD_PER_MTOK", "AGENT_MODEL_OUTPUT_USD_PER_MTOK"),
+)
+@pytest.mark.parametrize("raw", ("-0.01", "not-a-number", "nan", "inf", ""))
+def test_invalid_agent_model_cost_rate_fails_at_startup(monkeypatch, name, raw) -> None:
+    monkeypatch.setenv(name, raw)
+    with pytest.raises(InvalidFlagError, match=name):
+        default_settings()
+
+
 def test_negative_scheduling_row_limit_is_rejected(monkeypatch) -> None:
     monkeypatch.setenv("SCHEDULING_COMPUTE_ROW_LIMIT", "-1")
     with pytest.raises(InvalidFlagError, match="SCHEDULING_COMPUTE_ROW_LIMIT"):

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from time import perf_counter
 
 from pydantic_ai import (
     Agent,
@@ -40,6 +42,13 @@ from application.contracts.agent_runtime import (
     AgentToolCallProposalV1,
     AgentToolResultV1,
     AgentTurnRequestV1,
+)
+from application.app_version import APP_VERSION
+from application.contracts.telemetry import (
+    AgentUsageV1,
+    BudgetOutcomeV1,
+    CorrelationV1,
+    TelemetryRecordV1,
 )
 from application.ports.agent_runtime import (
     AgentInvalidOutputError,
@@ -241,6 +250,9 @@ class PydanticAIAgentRuntime:
             timer.daemon = True
             timer.start()
 
+        model_started = perf_counter()
+        usage: AgentUsageV1 | None = None
+        budget_outcome: BudgetOutcomeV1 = "unknown"
         try:
             result = self._agent.run_sync(
                 request.prompt,
@@ -251,17 +263,34 @@ class PydanticAIAgentRuntime:
                 cancellation_token=token,
                 deps=self._deps,
             )
+            framework_usage = result.usage
+            usage = AgentUsageV1(
+                requests=framework_usage.requests,
+                tool_calls=framework_usage.tool_calls,
+                input_tokens=framework_usage.input_tokens,
+                output_tokens=framework_usage.output_tokens,
+                cache_read_tokens=framework_usage.cache_read_tokens,
+                cache_write_tokens=framework_usage.cache_write_tokens,
+            )
+            budget_outcome = "within_budget"
         except RunCancelled as exc:
             # Wall-clock expiry -> `timed_out` (AD-7), distinguished BY TYPE and
             # never by string-matching a message.
-            return AgentRunOutcomeV1(status="timed_out", summary=str(exc)[:200])
+            budget_outcome = "deadline_expired"
+            return AgentRunOutcomeV1(
+                status="timed_out",
+                summary=str(exc)[:200],
+                budget_outcome=budget_outcome,
+            )
         except UsageLimitExceeded as exc:
             # Any other budget ceiling -> `failed` + stable `budget_exhausted`.
+            budget_outcome = "budget_exhausted"
             return AgentRunOutcomeV1(
                 status="failed",
                 failure_reason="budget_exhausted",
                 failure_source="agent",
                 summary=str(exc)[:200],
+                budget_outcome=budget_outcome,
             )
         except UnexpectedModelBehavior as exc:
             raise AgentInvalidOutputError(
@@ -299,6 +328,7 @@ class PydanticAIAgentRuntime:
                 # rendered to the planner as an agent budget exhaustion.
                 failure_source="capability",
                 summary=str(exc)[:200],
+                budget_outcome="unknown",
             )
         except Exception as exc:  # noqa: BLE001
             # Nothing raw crosses this port. PydanticAI converts only
@@ -309,6 +339,11 @@ class PydanticAIAgentRuntime:
         finally:
             if timer is not None:
                 timer.cancel()
+            self._emit_model_telemetry(
+                duration_ms=(perf_counter() - model_started) * 1_000,
+                usage=usage,
+                budget_outcome=budget_outcome,
+            )
 
         turn = to_owned_turn(result.all_messages())
         summary = summarize(turn)
@@ -329,6 +364,8 @@ class PydanticAIAgentRuntime:
                     ),
                     turn=turn,
                 ),
+                usage=usage,
+                budget_outcome=budget_outcome,
             )
 
         if self._answer_type is not None and not isinstance(
@@ -357,7 +394,45 @@ class PydanticAIAgentRuntime:
             turn=turn,
             summary=summary,
             tool_results=_tool_results(turn, excluded_names=self._output_tool_names),
+            usage=usage,
+            budget_outcome=budget_outcome,
         )
+
+    def _emit_model_telemetry(
+        self,
+        *,
+        duration_ms: float,
+        usage: AgentUsageV1 | None,
+        budget_outcome: BudgetOutcomeV1,
+    ) -> None:
+        sink = getattr(self._deps, "telemetry", None)
+        if sink is None:
+            return
+        deps = self._deps
+        try:
+            sink.emit(
+                TelemetryRecordV1(
+                    event="agent.model.calls.completed",
+                    occurred_at=datetime.now(timezone.utc),
+                    app_version=APP_VERSION,
+                    correlation=CorrelationV1(
+                        request_id=getattr(deps, "request_id", None),
+                        site_id=getattr(deps, "site_id", None),
+                        actor_id=getattr(deps, "actor_id", None),
+                        conversation_id=getattr(deps, "conversation_id", None),
+                        agent_run_id=getattr(deps, "agent_run_id", None),
+                    ),
+                    labels={
+                        "model": self._config.model,
+                        "budget_outcome": budget_outcome,
+                    },
+                    duration_ms=duration_ms,
+                    usage=usage,
+                    budget_outcome=budget_outcome,
+                )
+            )
+        except Exception:  # noqa: BLE001 - telemetry cannot affect the run
+            return
 
 
 def _merge_budget(default: AgentBudgetV1, request: AgentBudgetV1) -> AgentBudgetV1:

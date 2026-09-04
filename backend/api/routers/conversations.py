@@ -6,7 +6,7 @@ import json
 
 import asyncio
 from decimal import Decimal
-from time import monotonic
+from time import monotonic, perf_counter
 from typing import Any, AsyncIterator, Callable, Protocol
 from uuid import UUID
 
@@ -34,6 +34,7 @@ from api.deps import (
     get_session,
     get_site_context,
     get_site_context_opener,
+    get_telemetry_sink,
 )
 from api.problems import problem_response
 from api.schemas import (
@@ -91,6 +92,10 @@ from adapters.postgres.short_transaction_projection import ShortTransactionScena
 from datetime import datetime, timezone
 from uuid import uuid4
 from settings import Settings
+from adapters.telemetry.cost import estimate_cost_usd
+from application.app_version import APP_VERSION
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
+from application.ports.telemetry import TelemetrySink
 
 logger = logging.getLogger(__name__)
 
@@ -181,12 +186,57 @@ def send_message(conversation_id: UUID, body: MessageCreateIn, connection: Conne
     return AcceptedTurnOut(activity=_activity(value.event), resource_version=value.resource_version, agent_run_status=value.agent_run_status, sequence=str(value.event.sequence), agent_run_id=value.event.agent_run_id)
 
 
+def _emit_agent_run_completed(
+    *, telemetry: TelemetrySink, settings: Settings, deps: AgentDepsV1,
+    outcome, agent_run_status: str, run_started: float,
+) -> None:
+    estimated_cost_usd, cost_basis = estimate_cost_usd(
+        outcome.usage,
+        getattr(settings, "agent_model_input_usd_per_mtok", 0.0),
+        getattr(settings, "agent_model_output_usd_per_mtok", 0.0),
+        getattr(settings, "agent_model_cache_read_usd_per_mtok", 0.0),
+        getattr(settings, "agent_model_cache_write_usd_per_mtok", 0.0),
+    )
+    labels = {
+        "agent_run_status": agent_run_status,
+        "model": settings.agent_runtime_model,
+        "cost_basis": cost_basis,
+    }
+    if outcome.failure_reason is not None:
+        labels["failure_reason"] = outcome.failure_reason
+    if outcome.budget_outcome is not None:
+        labels["budget_outcome"] = outcome.budget_outcome
+    try:
+        telemetry.emit(
+            TelemetryRecordV1(
+                event="agent.run.completed",
+                occurred_at=datetime.now(timezone.utc),
+                app_version=APP_VERSION,
+                correlation=CorrelationV1(
+                    request_id=deps.request_id,
+                    site_id=deps.site_id,
+                    actor_id=deps.actor_id,
+                    conversation_id=deps.conversation_id,
+                    agent_run_id=deps.agent_run_id,
+                ),
+                labels=labels,
+                duration_ms=(perf_counter() - run_started) * 1_000,
+                estimated_cost_usd=estimated_cost_usd,
+                usage=outcome.usage,
+                budget_outcome=outcome.budget_outcome,
+            )
+        )
+    except Exception:  # noqa: BLE001 - finalized product work wins
+        pass
+
+
 @router.post(
     "/{conversation_id}/agent-runs/{agent_run_id}/execute",
     response_model=ExecutedTurnOut,
     responses={409: {"model": ProblemDetailsV1}, **_PROBLEM_RESPONSES},
 )
 async def execute_agent_turn(
+    request: Request,
     conversation_id: UUID,
     agent_run_id: UUID,
     session: ResolvedSession = Depends(get_session),
@@ -200,9 +250,12 @@ async def execute_agent_turn(
     compose_capabilities: CapabilityComposer = Depends(get_capability_registry),
     projection_reader: ScenarioProjectionReader = Depends(get_projection_reader),
     runtime_factory: AgentRuntimeFactory = Depends(get_agent_runtime_factory),
+    telemetry: TelemetrySink = Depends(get_telemetry_sink),
     settings: Settings = Depends(get_settings),
 ) -> ExecutedTurnOut | Response:
     """Claim, execute, and finalize without holding a transaction over the model."""
+
+    run_started = perf_counter()
 
     def _claim():
         with open_site_context(session.site_id) as connection:
@@ -225,11 +278,17 @@ async def execute_agent_turn(
         raise HTTPException(status_code=404)
 
     raw_results: list[object] = []
+    # Read the id `emit_request_telemetry` (api/main.py) already minted for
+    # this HTTP request, rather than minting a second, unrelated one -- NFR22
+    # requires one run searchable by one stable identifier across
+    # `api.request.completed` and the agent-side records below (code review
+    # of story-5.1).
+    telemetry_request_id = getattr(request.state, "telemetry_request_id", None) or uuid4()
     deps = AgentDepsV1(
         actor_id=claimed.actor_id,
         site_id=claimed.site_id,
         membership_id=claimed.membership_id,
-        request_id=uuid4(),
+        request_id=telemetry_request_id,
         agent_run_id=claimed.agent_run_id,
         conversation_id=claimed.conversation_id,
         scenario_id=claimed.scenario_id,
@@ -242,6 +301,7 @@ async def execute_agent_turn(
         connection=None,
         remaining_budget=AgentBudgetV1(),
         tool_result_sink=raw_results.append,
+        telemetry=telemetry,
     )
     # EVERYTHING below runs after `_claim` committed `agent_running` in its own
     # short transaction, and `claim_queued_run` only ever claims `agent_queued`
@@ -381,6 +441,13 @@ async def execute_agent_turn(
         # Something else moved the run out of `agent_running` between the claim
         # and here. It is already terminal or owned elsewhere; report the same
         # stable refusal as an unclaimable run rather than a 500.
+        # Emitted here too (code review of story-5.1): a run whose model call
+        # already consumed tokens before this race must not disappear from
+        # telemetry just because finalization lost the race.
+        _emit_agent_run_completed(
+            telemetry=telemetry, settings=settings, deps=deps, outcome=outcome,
+            agent_run_status="agent_run_not_queued", run_started=run_started,
+        )
         return problem_response(
             status=409,
             code="agent_run_not_queued",
@@ -395,12 +462,21 @@ async def execute_agent_turn(
         # the caller cannot act on it, and the non-disclosing refusal is the same
         # answer they would get for any run they cannot currently reach.
         logger.exception("finalizing run %s failed; it remains claimed", agent_run_id)
+        # Emitted here too (code review of story-5.1) -- see the arm above.
+        _emit_agent_run_completed(
+            telemetry=telemetry, settings=settings, deps=deps, outcome=outcome,
+            agent_run_status="finalize_failed", run_started=run_started,
+        )
         return problem_response(
             status=409,
             code="agent_run_not_queued",
             title="Agent run not queued",
             detail="The agent run cannot be executed from its current state.",
         )
+    _emit_agent_run_completed(
+        telemetry=telemetry, settings=settings, deps=deps, outcome=outcome,
+        agent_run_status=completed.agent_run_status, run_started=run_started,
+    )
     return ExecutedTurnOut(
         activity=_activity(completed.event),
         resource_version=completed.resource_version,

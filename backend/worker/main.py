@@ -20,6 +20,8 @@ from uuid import uuid4
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from adapters.telemetry import JsonLogTelemetrySink, configure_json_logging
+from application.ports.telemetry import TelemetrySink
 from worker.lease_worker import default_lease_seconds, run_once
 
 
@@ -41,6 +43,7 @@ class WorkerRuntimeV1:
     repository: Any
     scheduler: Any
     settings: Any
+    telemetry: TelemetrySink | None = None
 
 
 def install_shutdown_handlers(stop_event: Event) -> None:
@@ -79,6 +82,7 @@ def run_worker_loop(
     stop_event: Event | None = None,
     sleep: Callable[[float], object] | None = None,
     on_error: Callable[[BaseException, float], object] | None = None,
+    telemetry: TelemetrySink | None = None,
 ) -> None:
     """Poll until stopped, allowing an in-flight ``run_once`` to finish.
 
@@ -105,6 +109,7 @@ def run_worker_loop(
                 scheduler,
                 lease_owner=lease_owner,
                 lease_seconds=default_lease_seconds(settings),
+                telemetry=telemetry,
             )
         except Exception as error:  # noqa: BLE001 — a poll loop owns every failure
             backoff_seconds = min(
@@ -135,6 +140,7 @@ def _default_lease_owner() -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_json_logging()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--runtime-factory",
@@ -179,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
             lease_owner=args.lease_owner,
             poll_interval_seconds=args.poll_interval_seconds,
             stop_event=stop_event,
+            telemetry=runtime.telemetry or JsonLogTelemetrySink(),
         )
     finally:
         dispose = getattr(runtime.engine, "dispose", None)
