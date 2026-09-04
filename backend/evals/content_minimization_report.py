@@ -20,11 +20,20 @@ ARTIFACT_CONTRACT_MODULES = {
 }
 ARTIFACT_DECLARED_VERSIONS = {"telemetry_record": "1", "json_log_boundary": "1"}
 
-_TEST = "tests/test_content_minimization.py"
+_TEST = "tests/test_content_minimization.py::"
 PROOF_NODES = {
-    f"{channel}_{fixture}": _TEST
-    for channel in ("c1_telemetry", "c2_logs", "c3_worker_stderr", "c4_spans")
-    for fixture in ("secrets", "prompt_injection", "adversarial")
+    "c1_telemetry_secrets": _TEST + "test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
+    "c1_telemetry_prompt_injection": _TEST + "test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
+    "c1_telemetry_adversarial": _TEST + "test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
+    "c2_logs_secrets": _TEST + "test_application_log_drops_statement_parameters_and_exception_text",
+    "c2_logs_prompt_injection": _TEST + "test_application_log_drops_statement_parameters_and_exception_text",
+    "c2_logs_adversarial": _TEST + "test_third_party_log_replaces_message_with_fixed_event",
+    "c3_worker_stderr_secrets": _TEST + "test_worker_error_path_does_not_write_exception_content_to_stderr",
+    "c3_worker_stderr_prompt_injection": _TEST + "test_worker_error_path_does_not_write_exception_content_to_stderr",
+    "c3_worker_stderr_adversarial": _TEST + "test_worker_error_path_does_not_write_exception_content_to_stderr",
+    "c4_spans_secrets": _TEST + "test_observed_spans_are_allow_listed_and_drop_prompt_and_tool_content",
+    "c4_spans_prompt_injection": _TEST + "test_observed_spans_are_allow_listed_and_drop_prompt_and_tool_content",
+    "c4_spans_adversarial": _TEST + "test_both_instrumentation_constructors_disable_binary_capture",
 }
 PINNED_INJECTION_CASE_IDS = (
     "scheduling-baseline-injection-chat-text",
