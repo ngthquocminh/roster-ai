@@ -28,6 +28,7 @@ from scripts.evidence_binding import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+_READINESS_OUTPUT = "evidence/story-1.11/gate-a-readiness-report.json"
 
 # Minimum declared block a caller must supply. The module derives the rest.
 _DECLARED = {
@@ -57,7 +58,7 @@ def _tree_is_clean() -> bool:
     # drift would skip this realism guard and poison pass 2's XML.
     return working_tree_status(
         REPO_ROOT,
-        ignore_paths=frozenset({"evidence/story-1.11/gate-a-readiness-report.json"}),
+        ignore_paths=frozenset({_READINESS_OUTPUT}),
     )[0] is False
 
 
@@ -469,7 +470,11 @@ def test_module_hardcodes_neither_the_alembic_head_nor_a_commit():
     not _tree_is_clean(), reason="binding realism check needs a clean tree"
 )
 def test_bindings_on_a_clean_tree_name_a_reproducible_commit():
-    bindings = resolve_bindings(_DECLARED, repo_root=REPO_ROOT)
+    bindings = resolve_bindings(
+        _DECLARED,
+        repo_root=REPO_ROOT,
+        ignore_paths=frozenset({_READINESS_OUTPUT}),
+    )
     assert bindings["code"]["working_tree_dirty"] is False
     subprocess.run(
         ["git", "cat-file", "-e", f"{bindings['code']['git_commit']}^{{commit}}"],
