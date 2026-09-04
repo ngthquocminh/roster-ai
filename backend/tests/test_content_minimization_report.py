@@ -21,3 +21,11 @@ def test_report_requires_every_channel_fixture_proof_node(tmp_path: Path) -> Non
         assert "exactly" in str(exc)
     else:
         raise AssertionError("missing proof node was accepted")
+
+
+def test_proof_matrix_is_attributable_to_channel_and_fixture_class() -> None:
+    assert len(PROOF_NODES) == 12
+    for channel in ("c1_telemetry", "c2_logs", "c3_worker_stderr", "c4_spans"):
+        for fixture in ("secrets", "prompt_injection", "adversarial"):
+            node = PROOF_NODES[f"{channel}_{fixture}"]
+            assert node.startswith("tests/test_content_minimization.py::")
