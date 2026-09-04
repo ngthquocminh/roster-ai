@@ -35,7 +35,7 @@
     ],
     "secrets": "seven synthetic configuration canaries"
   },
-  "generated_at": "2026-09-04T17:24:32.756412+00:00",
+  "generated_at": "2026-09-04T18:10:33.634950+00:00",
   "passed": true,
   "proof_nodes": {
     "c1_telemetry_adversarial": {
@@ -93,7 +93,7 @@
   "version_bindings": {
     "application": "ShiftMind Story 5.2 telemetry boundaries",
     "code": {
-      "git_commit": "e625c2ada80b6378328cad478317d5b0676ff627",
+      "git_commit": "80d5ee8ebddb5c000b164f775c4422da76a6c699",
       "working_tree_dirty": false
     },
     "dataset": {
