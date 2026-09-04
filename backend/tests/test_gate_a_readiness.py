@@ -103,6 +103,7 @@ def test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant():
         "repair_browser_journey",
         "approval_and_audit_invariants",
         "workflow_state_semantics",
+        "content_minimization",
     )
     assert all(inv.authority == "NFR29" for inv in NFR29_GATES)
     ar28_keys = {inv.key for inv in AR28_INVARIANTS}
@@ -282,6 +283,9 @@ def test_registered_evidence_files_are_the_five_known_ones():
         # Story 4.6 pairs this two-runner measurement with live Vitest,
         # Playwright, and generator-machinery checks on the same invariant.
         "evidence/story-4.6/state-semantics-and-accessibility.json",
+        # Story 5.2 deliberately extends NFR29 with content minimization and
+        # pairs this stored verdict with live generator-machinery coverage.
+        "evidence/story-5.2/content-minimization-report.json",
     }
 
 

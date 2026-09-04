@@ -103,6 +103,11 @@ NFR29_GATES: tuple[Invariant, ...] = (
         "Workflow state semantics and completed-journey accessibility",
         "NFR29",
     ),
+    Invariant(
+        "content_minimization",
+        "Content and secret minimization across logs and configured traces",
+        "NFR29",
+    ),
 )
 
 #: Neither AR28's nor NFR29's, but AC2's: "any missing or unbound contributing
@@ -583,6 +588,22 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         description="Live fail-closed generator guards for skipped, absent, and unbound reports.",
         runner="pytest",
         test_files=("backend/tests/test_state_semantics_evidence.py",),
+    ),
+    # ---------------------------------------------------------------- 5.2
+    GateACheck(
+        check="content_minimization_evidence",
+        story="5.2",
+        invariant="content_minimization",
+        description="Generated four-channel, three-fixture-class content-minimization verdict.",
+        evidence_path="evidence/story-5.2/content-minimization-report.json",
+    ),
+    GateACheck(
+        check="content_minimization_report_machinery",
+        story="5.2",
+        invariant="content_minimization",
+        description="Live fail-closed checks requiring executed, unskipped proof nodes.",
+        runner="pytest",
+        test_files=("backend/tests/test_content_minimization_report.py",),
     ),
 )
 

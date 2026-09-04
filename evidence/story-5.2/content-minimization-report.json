@@ -1,0 +1,152 @@
+{
+  "artifact_versions": {
+    "algorithm": "sha256",
+    "json_log_boundary": {
+      "module": "backend/adapters/telemetry/json_logs.py",
+      "sha256": "615da04ed36f00b77cc275d8633e5e02711fc7537806119c3eedf63afbf22f91",
+      "version": "1"
+    },
+    "telemetry_record": {
+      "module": "backend/application/contracts/telemetry.py",
+      "sha256": "b2826b9d5448c1226ca9bad3b5600c48e7218dc006dda53f9d478c7de350a15e",
+      "version": "1"
+    }
+  },
+  "channels": [
+    "C1 telemetry JSON",
+    "C2 fallback JSON logs",
+    "C3 worker stderr",
+    "C4 OpenTelemetry spans"
+  ],
+  "fixtures": {
+    "adversarial": [
+      "control characters",
+      "newline",
+      "oversized label",
+      "% directive",
+      "identifier label key",
+      "computed label key"
+    ],
+    "prompt_injection": [
+      "scheduling-baseline-injection-chat-text",
+      "scheduling-inspect-injection-chat-text",
+      "scheduling-inspect-injection-fixture-field",
+      "scheduling-inspect-injection-tool-output"
+    ],
+    "secrets": "seven synthetic configuration canaries"
+  },
+  "generated_at": "2026-09-04T17:24:32.756412+00:00",
+  "passed": true,
+  "proof_nodes": {
+    "c1_telemetry_adversarial": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c1_telemetry_prompt_injection": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c1_telemetry_secrets": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c2_logs_adversarial": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c2_logs_prompt_injection": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c2_logs_secrets": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c3_worker_stderr_adversarial": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c3_worker_stderr_prompt_injection": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c3_worker_stderr_secrets": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c4_spans_adversarial": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c4_spans_prompt_injection": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    },
+    "c4_spans_secrets": {
+      "node": "tests/test_content_minimization.py",
+      "passed": true
+    }
+  },
+  "release_blocking": false,
+  "result": "passed",
+  "story": "5.2",
+  "version_bindings": {
+    "application": "ShiftMind Story 5.2 telemetry boundaries",
+    "code": {
+      "git_commit": "e625c2ada80b6378328cad478317d5b0676ff627",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "capability_distribution": {
+        "scheduling_baseline": 1,
+        "scheduling_inspect": 3
+      },
+      "case_count": 4,
+      "case_versions": {
+        "scheduling-baseline-injection-chat-text": "1",
+        "scheduling-inspect-injection-chat-text": "1",
+        "scheduling-inspect-injection-fixture-field": "1",
+        "scheduling-inspect-injection-tool-output": "1"
+      },
+      "files": {
+        "backend/evals/golden/scheduling_baseline/injection-chat-text.json": {
+          "case_id": "scheduling-baseline-injection-chat-text",
+          "case_version": "1",
+          "sha256": "da4bcff93c2a27e5dcd130a71bb680d51506f82b48e729d14ebefdd6d4f103e3"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-chat-text.json": {
+          "case_id": "scheduling-inspect-injection-chat-text",
+          "case_version": "1",
+          "sha256": "08f67b1df7110c070a5cdd2ae614491da4030fa2785a00a9aceccfa1d2724e77"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-fixture-field.json": {
+          "case_id": "scheduling-inspect-injection-fixture-field",
+          "case_version": "1",
+          "sha256": "61a52796c1b51c144c876bc39e8b9a6c5a7d56bd23906874e05463c9f45ce8d1"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-tool-output.json": {
+          "case_id": "scheduling-inspect-injection-tool-output",
+          "case_version": "1",
+          "sha256": "27c57683cf152fee4c6fe57431898d45e1f74d6c53d6e031c28790f50ae76110"
+        }
+      },
+      "kind": "version-controlled golden evaluation dataset",
+      "risk_class_distribution": {
+        "prohibited": 4
+      }
+    },
+    "evaluator": "pytest Story 5.2 content-minimization suite",
+    "image": {
+      "api": "local source tree",
+      "database": "postgres:18",
+      "web": "local source tree"
+    },
+    "model": "deterministic FunctionModel; no external provider",
+    "policy": "Story 5.2 AC1/AC2; NFR3/NFR4/NFR5/NFR27/NFR29/NFR30",
+    "prompt": "synthetic canaries and four pinned prompt-injection cases",
+    "scenario": "not applicable \u2014 no scenario fixture touched",
+    "schema_version": "e5f6a7b8c9d0",
+    "solver": "not applicable \u2014 no scheduling solve",
+    "tool": "demonstration tool double and JSON logging boundary"
+  }
+}
