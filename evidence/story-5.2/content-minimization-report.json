@@ -35,55 +35,55 @@
     ],
     "secrets": "seven synthetic configuration canaries"
   },
-  "generated_at": "2026-09-04T18:10:33.634950+00:00",
+  "generated_at": "2026-09-04T18:18:38.783252+00:00",
   "passed": true,
   "proof_nodes": {
     "c1_telemetry_adversarial": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
       "passed": true
     },
     "c1_telemetry_prompt_injection": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
       "passed": true
     },
     "c1_telemetry_secrets": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
       "passed": true
     },
     "c2_logs_adversarial": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_third_party_log_replaces_message_with_fixed_event",
       "passed": true
     },
     "c2_logs_prompt_injection": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_application_log_drops_statement_parameters_and_exception_text",
       "passed": true
     },
     "c2_logs_secrets": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_application_log_drops_statement_parameters_and_exception_text",
       "passed": true
     },
     "c3_worker_stderr_adversarial": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_worker_error_path_does_not_write_exception_content_to_stderr",
       "passed": true
     },
     "c3_worker_stderr_prompt_injection": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_worker_error_path_does_not_write_exception_content_to_stderr",
       "passed": true
     },
     "c3_worker_stderr_secrets": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_worker_error_path_does_not_write_exception_content_to_stderr",
       "passed": true
     },
     "c4_spans_adversarial": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_both_instrumentation_constructors_disable_binary_capture",
       "passed": true
     },
     "c4_spans_prompt_injection": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_observed_spans_are_allow_listed_and_drop_prompt_and_tool_content",
       "passed": true
     },
     "c4_spans_secrets": {
-      "node": "tests/test_content_minimization.py",
+      "node": "tests/test_content_minimization.py::test_observed_spans_are_allow_listed_and_drop_prompt_and_tool_content",
       "passed": true
     }
   },
@@ -93,7 +93,7 @@
   "version_bindings": {
     "application": "ShiftMind Story 5.2 telemetry boundaries",
     "code": {
-      "git_commit": "80d5ee8ebddb5c000b164f775c4422da76a6c699",
+      "git_commit": "a8e044988108678722e0ab0de38bfa8cd8d17702",
       "working_tree_dirty": false
     },
     "dataset": {
