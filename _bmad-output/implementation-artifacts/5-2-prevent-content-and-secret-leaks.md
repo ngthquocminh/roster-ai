@@ -4,7 +4,7 @@ baseline_commit: c0ef358
 
 # Story 5.2: Prevent Content and Secret Leaks
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -449,130 +449,130 @@ nothing else and re-points nothing.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-verify the creation measurements before changing anything (AC: 1, 2)**
-  - [ ] Confirm `git rev-parse HEAD` is `c0ef358` or record the drift.
-  - [ ] Re-run the four suites in *Measured at creation* and record any difference in the Dev Agent
+- [x] **Task 1 — Re-verify the creation measurements before changing anything (AC: 1, 2)**
+  - [x] Confirm `git rev-parse HEAD` is `c0ef358` or record the drift.
+  - [x] Re-run the four suites in *Measured at creation* and record any difference in the Dev Agent
         Record. Docker PostgreSQL must be up, or the default-suite figure is not comparable.
-  - [ ] Re-confirm the five logging call sites, the four `create_engine` sites, and that
+  - [x] Re-confirm the five logging call sites, the four `create_engine` sites, and that
         `agent/runtime.py` still sets only `include_content=False`. If any moved, use the new
         location and note it — do not assume the line numbers.
 
-- [ ] **Task 2 — Reproduce the leak before fixing it (AC: 1)**
-  - [ ] Add `backend/tests/test_content_minimization.py`. First case: a canary bound from a
+- [x] **Task 2 — Reproduce the leak before fixing it (AC: 1)**
+  - [x] Add `backend/tests/test_content_minimization.py`. First case: a canary bound from a
         variable flows through a real `StatementError` into a `logger.exception` on a logger whose
         handler is `JsonLogFormatter`; assert the canary is **absent** from the emitted line. Confirm
         by hand that it fails on the pre-Task-3 formatter, and record that observation in the Debug
         Log.
-  - [ ] Second case: the same for `worker/main.py::_report_error`, captured on a redirected stderr.
-  - [ ] This is a leak reproduction, **not** the demonstrated red. Per retro A1 a red from
+  - [x] Second case: the same for `worker/main.py::_report_error`, captured on a redirected stderr.
+  - [x] This is a leak reproduction, **not** the demonstrated red. Per retro A1 a red from
         incomplete code does not count; the demonstrated reds all come from Task 14's mutations of
         already-green code.
 
-- [ ] **Task 3 — Sanitize the non-telemetry branch of `JsonLogFormatter` (AC: 1) — per Decision 2 and Decision 4**
-  - [ ] Replace the fallback branch's payload with the closed field set in Decision 2's table.
+- [x] **Task 3 — Sanitize the non-telemetry branch of `JsonLogFormatter` (AC: 1) — per Decision 2 and Decision 4**
+  - [x] Replace the fallback branch's payload with the closed field set in Decision 2's table.
         `record.args` are dropped; `record.exc_info` is walked for `type(exc).__qualname__` across
         the `__cause__`/`__context__` chain and never formatted.
-  - [ ] Apply Decision 4's application-owned logger-prefix rule to the `event` field.
-  - [ ] Do not touch the telemetry branch. Do not change `configure_json_logging`'s level scoping —
+  - [x] Apply Decision 4's application-owned logger-prefix rule to the `event` field.
+  - [x] Do not touch the telemetry branch. Do not change `configure_json_logging`'s level scoping —
         Story 5.1's review deliberately narrowed it to `shiftmind.telemetry`.
 
-- [ ] **Task 4 — Guard that log call sites pass literal templates (AC: 1) — per Decision 3**
-  - [ ] Extend `backend/tests/architecture/test_telemetry_boundaries.py` with an AST walker over the
+- [x] **Task 4 — Guard that log call sites pass literal templates (AC: 1) — per Decision 3**
+  - [x] Extend `backend/tests/architecture/test_telemetry_boundaries.py` with an AST walker over the
         non-test backend roots rejecting a non-`ast.Constant` message argument to a logger call.
-  - [ ] **Resolve the receiver — do not match on method name alone.** Collect the names bound by
+  - [x] **Resolve the receiver — do not match on method name alone.** Collect the names bound by
         `<name> = logging.getLogger(...)` per module and flag only those receivers. Three existing
         `argparse.ArgumentParser.error` call sites collide by name (`worker/main.py:161,175`,
         `scripts/generate_repair_journey_evidence.py:316`) and one of them passes an f-string; a
         name-only walker is red on arrival, and Task 6 makes the collision live inside a single file.
         Record in the guard's docstring why those three are out of scope (per Decision 3).
-  - [ ] Add the paired `test_each_guard_detects_synthetic_violating_source`-style case, following the
+  - [x] Add the paired `test_each_guard_detects_synthetic_violating_source`-style case, following the
         file's existing convention at `:308`.
 
-- [ ] **Task 5 — `hide_parameters=True` at the four non-test engine sites, plus its guard (AC: 1) — per Decision 5**
-  - [ ] `adapters/postgres/fixture_history.py:54`, `adapters/postgres/identity.py:35`,
+- [x] **Task 5 — `hide_parameters=True` at the four non-test engine sites, plus its guard (AC: 1) — per Decision 5**
+  - [x] `adapters/postgres/fixture_history.py:54`, `adapters/postgres/identity.py:35`,
         `api/deps.py:238`, `scripts/seed_planner.py:134`.
-  - [ ] AST guard asserting every **SQLAlchemy** engine construction under the non-test roots passes
+  - [x] AST guard asserting every **SQLAlchemy** engine construction under the non-test roots passes
         it. **Resolve the import binding, not the call name** — per Decision 5's table, `create_engine`
         names two different functions here, so a name-only walker misses the aliased
         `create_postgres_engine` at `api/deps.py:238` and flags three CP-SAT solver-factory calls.
         Build a per-module binding→origin map from `Import`/`ImportFrom` (honouring `asname`).
-  - [ ] Add the negative case too: a synthetic module importing `engine.base.create_engine` must
+  - [x] Add the negative case too: a synthetic module importing `engine.base.create_engine` must
         **not** be flagged, and one importing `sqlalchemy.create_engine as anything` must be. Without
         both directions the guard proves only one of the two failure modes.
-  - [ ] Scope the walker so the three test-fixture engines are excluded by path, and state that
+  - [x] Scope the walker so the three test-fixture engines are excluded by path, and state that
         exclusion in the test's docstring per Decision 5.
 
-- [ ] **Task 6 — Sanitize the worker's error path (AC: 1) — per Decision 1 (channel C3) and Decision 2**
-  - [ ] Replace `_report_error`'s `print` + `traceback.print_exception` with a module-logger call
+- [x] **Task 6 — Sanitize the worker's error path (AC: 1) — per Decision 1 (channel C3) and Decision 2**
+  - [x] Replace `_report_error`'s `print` + `traceback.print_exception` with a module-logger call
         carrying a **literal** template. `logger.exception` is fine and is the natural choice: after
         Task 3 the formatter is what drops the args and the traceback, so the worker needs no
         scrubbing of its own — it needs to stop bypassing the formatter via `print`/stderr.
-  - [ ] Correct the docstring's false premise ("This repo configures no logger") — `main()` calls
+  - [x] Correct the docstring's false premise ("This repo configures no logger") — `main()` calls
         `configure_json_logging()` at `:143`.
-  - [ ] Keep the backoff behaviour byte-for-byte: `MAX_ERROR_BACKOFF_SECONDS`, the reset on success,
+  - [x] Keep the backoff behaviour byte-for-byte: `MAX_ERROR_BACKOFF_SECONDS`, the reset on success,
         and `run_worker_loop`'s `on_error` injection point are Story 3.x recovery guarantees and are
         not this story's to change.
 
-- [ ] **Task 7 — `include_binary_content=False` (AC: 1) — per Decision 6**
-  - [ ] Add the keyword to **both** arms of the `InstrumentationSettings` construction at
+- [x] **Task 7 — `include_binary_content=False` (AC: 1) — per Decision 6**
+  - [x] Add the keyword to **both** arms of the `InstrumentationSettings` construction at
         `agent/runtime.py:138-144` — the `tracer_provider is not None` arm and the bare one.
-  - [ ] Extend the comment above it to name the flag and its default, so the next reader does not
+  - [x] Extend the comment above it to name the flag and its default, so the next reader does not
         have to open the vendor source to learn that `True` was the default.
 
-- [ ] **Task 8 — `repr=False` on the two credential-bearing settings fields, guarded by derivation (AC: 1) — per Decision 10, fixture class 1**
-  - [ ] `database_url` and `provisioning_database_url` gain `field(repr=False)`, tagged like the
+- [x] **Task 8 — `repr=False` on the two credential-bearing settings fields, guarded by derivation (AC: 1) — per Decision 10, fixture class 1**
+  - [x] `database_url` and `provisioning_database_url` gain `field(repr=False)`, tagged like the
         existing five (T-04-01).
-  - [ ] Replace the enumeration pattern: add one test that sets a distinct canary into **every**
+  - [x] Replace the enumeration pattern: add one test that sets a distinct canary into **every**
         credential-bearing environment variable in Decision 10's class-1 list and asserts none appears
         in `repr(default_settings())`. The env-var list is the closed input, so a new credential
         setting added without `repr=False` turns it red. Leave the two existing single-field tests in
         place — they are cheap and they name their own regression.
 
-- [ ] **Task 9 — Bound telemetry label keys and values (AC: 1) — per Decision 8**
-  - [ ] Runtime: `JsonLogTelemetrySink.emit` drops keys outside `TELEMETRY_LABEL_KEYS` and truncates
+- [x] **Task 9 — Bound telemetry label keys and values (AC: 1) — per Decision 8**
+  - [x] Runtime: `JsonLogTelemetrySink.emit` drops keys outside `TELEMETRY_LABEL_KEYS` and truncates
         values over `_MAX_LABEL_VALUE_CHARS`. Never raise — AD-12.
-  - [ ] AST: extend the existing walker in `test_telemetry_boundaries.py` from enumerating literal
+  - [x] AST: extend the existing walker in `test_telemetry_boundaries.py` from enumerating literal
         keys to **rejecting** computed keys and values, and `labels.update(...)`.
 
-- [ ] **Task 10 — The minimization suite (AC: 2) — per Decisions 7 and 10**
-  - [ ] Three fixture classes exactly as Decision 10 defines them, in
+- [x] **Task 10 — The minimization suite (AC: 2) — per Decisions 7 and 10**
+  - [x] Three fixture classes exactly as Decision 10 defines them, in
         `backend/tests/test_content_minimization.py`.
-  - [ ] Channel coverage: C2 (log stream, both application and third-party records), C3 (worker
+  - [x] Channel coverage: C2 (log stream, both application and third-party records), C3 (worker
         stderr), C4 (observed spans through an `InMemorySpanExporter`), and a C1 regression case
         asserting Story 5.1's four existing canaries still do not appear.
-  - [ ] Declare the span-attribute allow-list as a module constant seeded from the 23 keys measured
+  - [x] Declare the span-attribute allow-list as a module constant seeded from the 23 keys measured
         at creation, and assert emitted keys are a subset of it.
-  - [ ] Import `opentelemetry.sdk` **hard, never `importorskip`** — it is a declared dev dependency
+  - [x] Import `opentelemetry.sdk` **hard, never `importorskip`** — it is a declared dev dependency
         and a skipped privacy proof is a false green (`tests/test_agent_runtime_adapter.py:682` sets
         the precedent and says why).
-  - [ ] Reuse the four pinned injection case ids; do not author a new golden case.
+  - [x] Reuse the four pinned injection case ids; do not author a new golden case.
 
-- [ ] **Task 11 — Generate the evidence file (AC: 2) — per Decision 9 and `docs/EVIDENCE-CONVENTION.md`**
-  - [ ] Write `backend/evals/content_minimization_report.py`, following
+- [x] **Task 11 — Generate the evidence file (AC: 2) — per Decision 9 and `docs/EVIDENCE-CONVENTION.md`**
+  - [x] Write `backend/evals/content_minimization_report.py`, following
         `recovery_idempotency_report.py`'s shape: named `PROOF_NODES` (one per channel × fixture
         class, so a regression is attributable to a channel rather than to "the suite"), JUnit
         ingestion via `_junit_outcome` requiring `tests > 0, skipped == 0, failures == 0, errors == 0`,
         `ARTIFACT_CONTRACT_MODULES`/`ARTIFACT_DECLARED_VERSIONS` for AC2's "artifact versions", and
         `resolve_bindings()` for all eleven NFR27 bindings plus `schema_version`.
-  - [ ] Emit a top-level **`passed`** boolean. Also record `channels` (Decision 1's four) and
+  - [x] Emit a top-level **`passed`** boolean. Also record `channels` (Decision 1's four) and
         `fixtures` (Decision 10's three classes with their case ids) — AC2 names both explicitly.
-  - [ ] Exempt the generator's **own output** from the dirty-tree check, using the
+  - [x] Exempt the generator's **own output** from the dirty-tree check, using the
         `own_output` / `ValueError` pattern at `recovery_idempotency_report.py:390-396` verbatim —
         writing the report is what dirties the tree, and without the exemption the generator dies on
         `DirtyTreeError` before doing any work. An uncommitted *source* change still refuses, which is
         the point.
-  - [ ] **Order is the requirement, not a nicety:** commit the code first; confirm
+  - [x] **Order is the requirement, not a nicety:** commit the code first; confirm
         `git status --porcelain` is empty; run the measurement; generate; run
         `pytest tests/test_evidence_convention.py`; commit the evidence on its own. Never hand-type
         the file. Do not use `--allow-dirty`.
-  - [ ] The full three-commit sequence for Tasks 11-12 is in *Dev Notes → The commit plan*. Follow it
+  - [x] The full three-commit sequence for Tasks 11-12 is in *Dev Notes → The commit plan*. Follow it
         literally; the ordering is load-bearing, not stylistic.
 
-- [ ] **Task 12 — Register the Gate A check and regenerate the readiness report (AC: 2) — per Decision 9**
-  - [ ] Add `Invariant("content_minimization", …, "NFR29")` to `NFR29_GATES` and the paired
+- [x] **Task 12 — Register the Gate A check and regenerate the readiness report (AC: 2) — per Decision 9**
+  - [x] Add `Invariant("content_minimization", …, "NFR29")` to `NFR29_GATES` and the paired
         `GateACheck` entries in `backend/scripts/gate_a_checks.py`: one binding the evidence path, one
         live pytest check on the generator's machinery.
-  - [ ] **Three committed assertions must be updated in the same commit as the registry edit, or
+  - [x] **Three committed assertions must be updated in the same commit as the registry edit, or
         they go red for the wrong reason:**
         (a) `test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant` (`:94-108`) pins
         `NFR29_GATES` as an **exact ordered tuple** of five keys — append `"content_minimization"`.
@@ -582,19 +582,19 @@ nothing else and re-points nothing.
         (c) `test_registry_covers_more_than_the_four_evidence_files` (`:171`) fails any invariant
         resting on evidence files alone — this is the mechanical enforcement of Decision 9's paired
         live check, so `content_minimization` must carry the generator-machinery check or it is red.
-  - [ ] **Exactly two tests are then unavoidably red at that commit** — the two report-drift
+  - [x] **Exactly two tests are then unavoidably red at that commit** — the two report-drift
         assertions at `:335` and `:362`. They cannot be fixed by editing a test; only the pass-2
         report fixes them. That one-commit red window is structural (`resolve_bindings()` refuses a
         dirty tree, so the registry must be committed before the report can bind to it) and is the
         minimum achievable. Story 4.6's ordering produced a **four**-commit window instead.
-  - [ ] **Sequencing trap A — the registry must not name a file that does not exist yet.**
+  - [x] **Sequencing trap A — the registry must not name a file that does not exist yet.**
         `test_every_registered_evidence_file_exists_on_disk` requires the file present when the
         registry names it, while the evidence convention requires the code commit to precede the
         evidence commit. Resolve it by putting the *registry edit* in the **evidence commit**,
         alongside the report — the registry is a statement about the evidence, so it belongs with it.
         Story 4.6 did the opposite (`b7ec2eb` put the registry edit in its `feat` commit) and left
         the backend suite red for four commits; **do not copy that.**
-  - [ ] **Sequencing trap B — the readiness report must be regenerated TWICE, and the runbook does
+  - [x] **Sequencing trap B — the readiness report must be regenerated TWICE, and the runbook does
         not say so.** `backend/tests/test_gate_a_readiness.py` is itself a registered contributing
         check under `measurement_integrity` (`gate_a_checks.py:457-468`). So on pass 1 the pytest run
         still sees the *stale committed* report, `test_committed_readiness_report_covers_exactly_the_live_registry`
@@ -604,24 +604,24 @@ nothing else and re-points nothing.
         `.tmp` sibling) from the dirty-tree check for exactly this reason — its comment at `:605-608`
         says "run 2 of 2" — so **both passes run on an otherwise clean tree and `--allow-dirty` is
         never needed.** Commit only the pass-2 report.
-  - [ ] Run both passes through the three-runner procedure in `docs/GATE-A-RUNBOOK.md` §3, with
+  - [x] Run both passes through the three-runner procedure in `docs/GATE-A-RUNBOOK.md` §3, with
         Docker up. Record the two-pass sequence and both verdicts in the Dev Agent Record.
-  - [ ] **Fix the runbook.** §3 documents a single pass and is silent on trap B; the knowledge lives
+  - [x] **Fix the runbook.** §3 documents a single pass and is silent on trap B; the knowledge lives
         only in a code comment. Add the second pass and its reason to `docs/GATE-A-RUNBOOK.md` §3 —
         this story is the first to hit it since the exemption was written, and leaving it in a
         comment is how the next story rediscovers it at review.
-  - [ ] Update `docs/CONFIGURATION.md` if any setting is added (none is expected — this story adds no
+  - [x] Update `docs/CONFIGURATION.md` if any setting is added (none is expected — this story adds no
         env var), and add a line to `docs/CI-SECRETS-CHECKLIST.md`'s review checklist noting that the
         minimization suite's canaries are synthetic and must never be replaced with real keys.
 
-- [ ] **Task 13 — Ledger and status (AC: 2) — per Decision 12**
-  - [ ] Close `deferred-work.md:663` and `:667`, each naming the mechanism that discharged it.
-  - [ ] Leave `:669`, `:508` and `:639` untouched; do not re-point them.
-  - [ ] Add the three new entries Decision 12 names, each with an owner and a revisit trigger.
-  - [ ] Update this story's row in `sprint-status.yaml` and nothing else.
+- [x] **Task 13 — Ledger and status (AC: 2) — per Decision 12**
+  - [x] Close `deferred-work.md:663` and `:667`, each naming the mechanism that discharged it.
+  - [x] Leave `:669`, `:508` and `:639` untouched; do not re-point them.
+  - [x] Add the three new entries Decision 12 names, each with an owner and a revisit trigger.
+  - [x] Update this story's row in `sprint-status.yaml` and nothing else.
 
-- [ ] **Task 14 — Demonstrated-red mutation table (AC: 1, 2)**
-  - [ ] Before review, fill the table in the Dev Agent Record. Every red must come from **mutating
+- [x] **Task 14 — Demonstrated-red mutation table (AC: 1, 2)**
+  - [x] Before review, fill the table in the Dev Agent Record. Every red must come from **mutating
         already-green code**, not from incomplete code. Minimum rows: the formatter's `record.args`
         drop, the exception-text drop, the literal-template AST guard, the `hide_parameters` guard,
         `include_binary_content`, the settings-repr canary sweep, the label-key drop, the span
@@ -793,19 +793,71 @@ the declared home for report generators (`approval_audit_report.py`,
 
 ### Agent Model Used
 
+GPT-5 Codex
+
 ### Implementation Plan
 
+Red-green-refactor in story order: reproduce C2/C3 leaks; close and guard log, engine,
+worker, settings, label, and span boundaries; generate NFR27 evidence; register the
+NFR29 gate; run the required two-pass three-runner Gate A sequence.
+
 ### Debug Log References
+
+- Pre-change HEAD drifted from baseline `c0ef358` to `dc22bd45`; creation inventories remained structurally unchanged.
+- Baseline: default `1557 passed, 2 skipped, 7 deselected`; PostgreSQL `158 passed`; evidence `87`; architecture `69`; Gate A `44`.
+- Leak reproduction: `2 failed` before the formatter and worker fixes, with both synthetic canaries present.
+- Span inventory drift: current pydantic-ai also emits allow-listed key `pydantic_ai.tool.deferral.name`.
+- Gate A pass 1: AR28 and NFR29 passed; measurement integrity failed only on the two expected stale-report identity tests.
+- The documented pass-2 own-output exemption initially skipped/failed the clean-binding realism test; fixed both collection and binding-call scopes without `--allow-dirty`.
+- Final clean-tree suite: `1576 passed, 1 skipped, 7 deselected`; Vitest passed; Playwright passed; `gate_a_passed: true`.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
 | Mutation | Guard | Before | After |
 |---|---|---|---|
-| | | | |
+| Interpolate `record.args` with `record.getMessage()` | application log canary | green | failed; SQL parameter canary emitted |
+| Add `str(record.exc_info[1])` to fallback JSON | application/third-party exception canaries | green | failed; exception canaries emitted |
+| Return no violations from literal-template walker | synthetic nonliteral logger case | green | failed on f-string logger call |
+| Remove `hide_parameters=True` from fixture-history engine | SQLAlchemy engine AST guard | green | failed naming `fixture_history.py` |
+| Remove `include_binary_content=False` from tracer-provider arm | two-constructor binary-capture guard | green | failed on missing keyword |
+| Remove `repr=False` from `database_url` | seven-credential repr sweep | green | failed on `CANARY-DB-5-2` |
+| Accept every telemetry label key at runtime | unknown-label runtime guard | green | failed; `worker_id` escaped |
+| Remove `pydantic_ai.tool.deferral.name` from span allow-list | observed-span key allow-list | green | failed naming the new key |
+| Ignore JUnit `skipped` count | generator fail-closed machinery test | green | failed; skipped node accepted |
 
 ### Completion Notes List
 
+- Sanitized application and third-party JSON logs to a closed metadata field set; worker failures now use that boundary.
+- Hid SQLAlchemy parameters at all four production construction sites and redacted every credential-bearing settings field.
+- Disabled binary trace capture, bounded observed span keys, and bounded telemetry label keys/values.
+- Added a 12-node, four-channel × three-fixture-class minimization report and registered its stored and live proofs under NFR29.
+- Closed the two Story 5.1 ledger triggers, added three residual-risk entries, and documented the corrected two-pass Gate A procedure.
+- Logfire remains planned for Epic 6; no exporter, dependency, migration, API contract, or frontend source change was introduced.
+
 ### File List
+
+- `_bmad-output/implementation-artifacts/5-2-prevent-content-and-secret-leaks.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `backend/adapters/postgres/fixture_history.py`
+- `backend/adapters/postgres/identity.py`
+- `backend/adapters/telemetry/json_logs.py`
+- `backend/agent/runtime.py`
+- `backend/api/deps.py`
+- `backend/evals/content_minimization_report.py`
+- `backend/scripts/gate_a_checks.py`
+- `backend/scripts/seed_planner.py`
+- `backend/settings.py`
+- `backend/tests/architecture/test_telemetry_boundaries.py`
+- `backend/tests/test_content_minimization.py`
+- `backend/tests/test_content_minimization_report.py`
+- `backend/tests/test_evidence_binding.py`
+- `backend/tests/test_gate_a_readiness.py`
+- `backend/worker/main.py`
+- `docs/CI-SECRETS-CHECKLIST.md`
+- `docs/GATE-A-RUNBOOK.md`
+- `evidence/story-1.11/gate-a-readiness-report.json`
+- `evidence/story-5.2/content-minimization-report.json`
 
 ---
 
@@ -815,3 +867,4 @@ the declared home for report generators (`approval_audit_report.py`,
 |---|---|
 | 2026-09-04 | Story created at `c0ef358`. Twelve decisions recorded; the log-stream leak and its `hide_parameters` remedy measured empirically at creation rather than inferred. |
 | 2026-09-05 | Decision 9 confirmed (register, not emit-and-orphan). Four defects found in the story itself and fixed before dev: the Gate A sequencing resolution covered only trap A and missed the two-pass regeneration forced by `test_gate_a_readiness.py` being its own contributing check; `NFR29_GATES`' exact-ordered-tuple assertion and the paired-live-check enforcement at `test_gate_a_readiness.py:171` were unlisted; and Decision 3's guard, specified by method name, would have been red on arrival against three `argparse.ArgumentParser.error` collisions; and Decision 5's guard, specified by call name, would have gone green while missing `api/deps.py:238` — the API's own engine — because `create_engine` names both SQLAlchemy's factory and the CP-SAT one. Added *Dev Notes → The commit plan*. |
+| 2026-09-05 | Implemented content and secret minimization across all four channels, generated and registered evidence, closed ledger triggers, demonstrated nine real-code mutations, and passed the final three-runner Gate A report. |

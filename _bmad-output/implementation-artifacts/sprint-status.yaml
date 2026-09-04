@@ -2335,7 +2335,7 @@ development_status:
   # (tool_call_id unbounded) OPEN and untouched: its trigger is a real provider or a model-influenced
   # id, neither of which fires, and truncation applies to LABELS while tool_call_id is a correlation
   # PROPERTY -- do not conflate them. :508 and :639 (cloudwatch_owned_by_epic_6) stay open.
-  5-2-prevent-content-and-secret-leaks: in-progress
+  5-2-prevent-content-and-secret-leaks: review
   5-3-run-shiftmind-reproducibly-from-one-command: backlog
   5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
