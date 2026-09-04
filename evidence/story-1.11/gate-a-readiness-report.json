@@ -1226,8 +1226,8 @@
         "cases": {
           "backend/tests/test_content_minimization_report.py": {
             "status": "passed",
-            "total": 2,
-            "passed": 2,
+            "total": 3,
+            "passed": 3,
             "skipped": 0,
             "failed": 0
           }
@@ -1369,21 +1369,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 1575,
-      "run_started": "2026-09-05T01:00:22.210586+07:00",
-      "sha256": "a1626f63131e301f94777e46a2330c24e690da15ff34b8a4bb2cda2dccf11c60"
+      "cases": 1577,
+      "run_started": "2026-09-05T01:19:11.271507+07:00",
+      "sha256": "7d9a8802d261bce092792daad9ec45c61452d57a029df41562ce8de556dd20a9"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 648,
-      "run_started": "2026-09-04T18:04:07.672Z",
-      "sha256": "48423905c6099e0890f05a9ac55df35b9c2bd956bf79a73f67a58ddedfe4bd78"
+      "run_started": "2026-09-04T18:22:32.239Z",
+      "sha256": "f40f239e01366954ad3ea6a52602265eefaf6e63d685c7096d45d87304cd4f7f"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 80,
-      "run_started": "2026-09-04T18:04:16.152Z",
-      "sha256": "cfed27ba5c97e0ece04337360f7d4d365cc1d31d8e45ba72a098276d1def21da"
+      "run_started": "2026-09-04T18:22:40.584Z",
+      "sha256": "ea33f9560a5e46e9dcd000e9b8e6fc30b9bc7d4263e323f715efa8eb53f1b52d"
     }
   },
   "version_bindings": {
@@ -1397,7 +1397,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "41b98bcd9e87b3aa2d9a9965e6e5f2584d150433",
+      "git_commit": "4be2534b54b92c5202623892ae2fe46640f6e73d",
       "working_tree_dirty": false
     },
     "image": {
@@ -1405,8 +1405,7 @@
       "web": "local source tree",
       "database": "postgres:18"
     },
-    "schema_version": "e5f6a7b8c9d0",
-    "binding_scope": "output path(s) exempted from the dirty-tree check: evidence/story-1.11/gate-a-readiness-report.json. No source change was uncommitted; the recorded commit reproduces this measurement."
+    "schema_version": "e5f6a7b8c9d0"
   },
   "blocking": [],
   "gate_a_passed": true,
