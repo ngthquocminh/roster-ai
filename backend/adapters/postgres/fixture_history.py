@@ -51,7 +51,7 @@ class PostgresFixtureHistoryAdapter:
         *,
         engine: Engine | None = None,
     ) -> None:
-        self._engine = engine or create_engine(database_url)
+        self._engine = engine or create_engine(database_url, hide_parameters=True)
 
     def ensure_seed_site(
         self,

@@ -132,7 +132,8 @@ def seed_planner_from_env(
 
     resolved_settings = settings or default_settings()
     resolved_engine = engine or create_engine(
-        resolved_settings.provisioning_database_url
+        resolved_settings.provisioning_database_url,
+        hide_parameters=True,
     )
     owns_engine = engine is None
     try:

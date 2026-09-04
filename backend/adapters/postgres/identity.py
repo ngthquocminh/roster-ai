@@ -32,7 +32,7 @@ class PostgresIdentitySessionStore:
         *,
         engine: Engine | None = None,
     ) -> None:
-        self._engine = engine or create_engine(database_url)
+        self._engine = engine or create_engine(database_url, hide_parameters=True)
 
     def create_login_handshake(self, handshake: LoginHandshake) -> None:
         with self._engine.begin() as connection:

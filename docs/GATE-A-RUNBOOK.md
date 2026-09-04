@@ -257,7 +257,11 @@ uv run --frozen python scripts/gate_a_readiness.py \
   --vitest-xml     ../_bmad-output/test-artifacts/gate-a/vitest.xml \
   --playwright-xml ../_bmad-output/test-artifacts/gate-a/playwright.xml
 
-# 3. Commit the report on its own.
+# 3. When the registry changed, repeat steps 1 and 2 before committing.
+# The first report brings the on-disk registry identities current, but pytest's
+# XML still contains the two report-drift failures from the stale input. The
+# second three-runner pass reads the corrected report and produces an honest
+# green measurement. Commit only that second report, on its own.
 ```
 
 **Docker PostgreSQL 18 must be up.** `postgres`-marked tests skip *cleanly*

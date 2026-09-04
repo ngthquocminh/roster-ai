@@ -20,6 +20,11 @@ from application.use_cases.decide_approval import DecideApprovalCommandV1, decid
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PRODUCER_ROOTS = ("api", "agent", "application", "worker")
+NON_TEST_BACKEND_ROOTS = (
+    "adapters", "agent", "api", "application", "engine", "scripts",
+    "services", "store", "worker",
+)
+LOGGER_METHODS = {"debug", "info", "warning", "error", "exception", "critical", "log"}
 RUN_SCOPED_EVENTS = {
     "agent.run.completed",
     "agent.model.calls.completed",
@@ -89,6 +94,83 @@ def producer_label_keys(source: str) -> set[str]:
         for mapping in mappings:
             keys.update(value for key in mapping.keys if key is not None if (value := _literal_string(key)))
     return keys
+
+
+def unsafe_label_operations(source: str) -> list[str]:
+    """Reject computed label keys and bulk updates; values remain closed-vocabulary expressions."""
+    offenders: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store):
+            if isinstance(node.value, ast.Name) and node.value.id == "labels":
+                if _literal_string(node.slice) is None:
+                    offenders.append(ast.unparse(node))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "labels" and node.func.attr == "update":
+                offenders.append(ast.unparse(node))
+        elif isinstance(node, ast.keyword) and node.arg == "labels" and isinstance(node.value, ast.Dict):
+            offenders.extend(
+                ast.unparse(key) for key in node.value.keys
+                if key is None or _literal_string(key) is None
+            )
+    return offenders
+
+
+def nonliteral_logger_messages(source: str) -> list[str]:
+    """Find owned logger calls with nonliteral templates, excluding argparse.error collisions."""
+    tree = ast.parse(source)
+    logger_names = {
+        target.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Attribute)
+        and isinstance(node.value.func.value, ast.Name)
+        and node.value.func.value.id == "logging"
+        and node.value.func.attr == "getLogger"
+    }
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        receiver = node.func.value
+        owned = isinstance(receiver, ast.Name) and receiver.id in logger_names
+        owned = owned or (
+            isinstance(receiver, ast.Call)
+            and isinstance(receiver.func, ast.Attribute)
+            and isinstance(receiver.func.value, ast.Name)
+            and receiver.func.value.id == "logging"
+            and receiver.func.attr == "getLogger"
+        )
+        message_index = 1 if node.func.attr == "log" else 0
+        if owned and node.func.attr in LOGGER_METHODS:
+            if len(node.args) <= message_index or _literal_string(node.args[message_index]) is None:
+                offenders.append(ast.unparse(node))
+    return offenders
+
+
+def sqlalchemy_engines_without_hidden_parameters(source: str) -> list[str]:
+    """Resolve imports so solver create_engine calls and test fixtures stay outside the guard."""
+    tree = ast.parse(source)
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = alias.name
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if bindings.get(node.func.id) != "sqlalchemy.create_engine":
+            continue
+        hidden = next((kw.value for kw in node.keywords if kw.arg == "hide_parameters"), None)
+        if not (isinstance(hidden, ast.Constant) and hidden.value is True):
+            offenders.append(ast.unparse(node))
+    return offenders
 
 
 def raw_route_label_expressions(source: str) -> set[str]:
@@ -192,6 +274,31 @@ def test_all_literal_producer_labels_are_allow_listed_and_not_identifiers() -> N
     literal_keys = {key for source in producer_sources for key in producer_label_keys(source)}
     assert literal_keys <= TELEMETRY_LABEL_KEYS
     assert not {key for key in literal_keys if key.endswith("_id")}
+    assert not {
+        str(path.relative_to(BACKEND_ROOT)): unsafe_label_operations(source)
+        for path in _python_files(*PRODUCER_ROOTS)
+        if (violations := unsafe_label_operations(source := path.read_text(encoding="utf-8")))
+    }
+
+
+def test_application_logger_messages_are_literal_templates() -> None:
+    """Only logging.Logger receivers count; argparse parser.error is not a log channel."""
+    violations = {
+        str(path.relative_to(BACKEND_ROOT)): found
+        for path in _python_files(*NON_TEST_BACKEND_ROOTS)
+        if (found := nonliteral_logger_messages(path.read_text(encoding="utf-8")))
+    }
+    assert not violations
+
+
+def test_sqlalchemy_engines_hide_bound_parameters() -> None:
+    """Protect deployment engines; test fixture engines deliberately remain diagnostic."""
+    violations = {
+        str(path.relative_to(BACKEND_ROOT)): found
+        for path in _python_files(*NON_TEST_BACKEND_ROOTS)
+        if (found := sqlalchemy_engines_without_hidden_parameters(path.read_text(encoding="utf-8")))
+    }
+    assert not violations
 
 
 def test_parameterized_request_uses_the_route_template_not_the_uuid() -> None:
@@ -326,6 +433,17 @@ def test_each_guard_detects_synthetic_violating_source() -> None:
     assert forbidden_framework_imports_in_telemetry_adapter(
         "import fastapi\nfrom sqlalchemy import text\nimport pydantic_ai"
     ) == {"fastapi", "sqlalchemy", "pydantic_ai"}
+    assert nonliteral_logger_messages(
+        'import logging\nlogger = logging.getLogger(__name__)\nlogger.error(f"secret {value}")'
+    )
+    assert not nonliteral_logger_messages('parser.error(f"operator {value}")')
+    assert sqlalchemy_engines_without_hidden_parameters(
+        "from sqlalchemy import create_engine as anything\nanything(url)"
+    )
+    assert not sqlalchemy_engines_without_hidden_parameters(
+        "from engine.base import create_engine\ncreate_engine('cpsat')"
+    )
+    assert unsafe_label_operations("labels[computed] = value\nlabels.update(extra)")
 
     from dataclasses import dataclass
 
