@@ -261,7 +261,9 @@ uv run --frozen python scripts/gate_a_readiness.py \
 # The first report brings the on-disk registry identities current, but pytest's
 # XML still contains the two report-drift failures from the stale input. The
 # second three-runner pass reads the corrected report and produces an honest
-# green measurement. Commit only that second report, on its own.
+# green measurement. The evidence-binding clean-tree realism test applies the
+# same narrow own-output exemption; all other dirty paths still block it.
+# Commit only that second report, on its own.
 ```
 
 **Docker PostgreSQL 18 must be up.** `postgres`-marked tests skip *cleanly*

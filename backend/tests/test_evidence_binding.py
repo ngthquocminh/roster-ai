@@ -52,7 +52,13 @@ def _git(*args: str) -> str:
 
 
 def _tree_is_clean() -> bool:
-    return working_tree_status(REPO_ROOT)[0] is False
+    # Gate A regeneration is deliberately two-pass. Between passes its own
+    # report is the sole dirty path; treating that generated output as source
+    # drift would skip this realism guard and poison pass 2's XML.
+    return working_tree_status(
+        REPO_ROOT,
+        ignore_paths=frozenset({"evidence/story-1.11/gate-a-readiness-report.json"}),
+    )[0] is False
 
 
 # --------------------------------------------------------------------------
