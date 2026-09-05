@@ -473,6 +473,18 @@ def test_image_binding_reads_a_complete_content_addressed_manifest(tmp_path):
     assert resolve_image_binding(tmp_path) == expected
 
 
+def test_digest_recorder_rejects_a_truncated_image_id(monkeypatch):
+    from scripts import record_image_digests
+
+    monkeypatch.setattr(
+        record_image_digests.subprocess,
+        "run",
+        lambda *args, **kwargs: type("Result", (), {"stdout": "sha256:abc\n"})(),
+    )
+    with pytest.raises(RuntimeError, match="non-content-addressed"):
+        record_image_digests._digest("shiftmind-backend:local")
+
+
 def test_evidence_audit_remains_monotone_for_local_source_tree_images():
     from scripts.evidence_binding import audit_evidence_file
 

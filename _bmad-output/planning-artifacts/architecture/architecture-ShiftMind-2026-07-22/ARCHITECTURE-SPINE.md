@@ -276,7 +276,7 @@ Versions are the 2026-07-22 seed; existing rows are repository locks, while plan
 | Psycopg | 3.3.4 | planned seed |
 | Alembic | 1.18.5 | planned seed |
 | Logfire SDK | 4.38.0 | planned optional telemetry seed |
-| Node.js | 24.18.0 LTS | verified planned build target; commit toolchain pin and pass `npm ci`, test, typecheck, build |
+| Node.js | 24.18.0 LTS | planned, unverified upgrade target; repository and CI remain pinned to measured-green Node 22 until a dedicated upgrade pass |
 | React | 19.2.7 | repository lock |
 | React Router | 8.2.0 | repository lock |
 | TanStack Query | 5.101.2 | repository lock |

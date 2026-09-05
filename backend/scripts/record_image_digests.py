@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -16,7 +17,7 @@ def _digest(image: str) -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
-    if not value.startswith("sha256:"):
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None:
         raise RuntimeError(f"Docker returned a non-content-addressed ID for {image}")
     return value
 

@@ -571,12 +571,12 @@ PR gate covers it.
   - [x] Correct `README.md:175`'s "No auth exists anywhere in the stack".
   - [x] Add the seed and bootstrap variables to `backend/.env.example`. Leave `docs/API.md` alone.
 
-- [ ] **Task 11 — Ledger reconciliation (per Decisions 3, 8, 12, 13 and 14)**
-  - [ ] Close `deferred-work.md:465`, `:467` and `:681`.
-  - [ ] Leave `:50`, `:494`, `:521`, `:663`, `:679`, `:684`, `:687`, `:19-28` and `:689` open and untouched, and say why in the entry text.
-  - [ ] Verify `deferred-work.md:193` against commit `8139866` (Epic 1-2 retro prep task P2 claims to have closed it) and **correct the stale entry rather than re-doing the work** — but only after confirming Gate A is re-runnable from a genuinely clean clone, a condition P2 was not tested against.
-  - [ ] Add new entries for: `docs/API.md`'s staleness; the write-only image digest (Decision 8); Story 5.4's `TestModel`-vs-real-output constraint and its recommended split of behavioral from illustrative claims (Decision 12); and the opt-in proof's rot risk (Decision 14).
-  - [ ] Add an entry for the Stack table's Node.js **24.18.0** row (per Decision 11): it is marked "verified" but has never been run in this repository, and the toolchain is pinned at 22. **Revisit trigger:** the first story needing a Node 24 feature, or a deliberate toolchain-upgrade pass carrying its own before/after measurement of the 648 Vitest and 80 Playwright tests. Correct the row's status at the spine rather than leaving the claim standing.
+- [x] **Task 11 — Ledger reconciliation (per Decisions 3, 8, 12, 13 and 14)**
+  - [x] Close `deferred-work.md:465`, `:467` and `:681`.
+  - [x] Leave `:50`, `:494`, `:521`, `:663`, `:679`, `:684`, `:687`, `:19-28` and `:689` open and untouched, and say why in the entry text.
+  - [x] Verify `deferred-work.md:193` against commit `8139866` (Epic 1-2 retro prep task P2 claims to have closed it) and **correct the stale entry rather than re-doing the work** — but only after confirming Gate A is re-runnable from a genuinely clean clone, a condition P2 was not tested against.
+  - [x] Add new entries for: `docs/API.md`'s staleness; the write-only image digest (Decision 8); Story 5.4's `TestModel`-vs-real-output constraint and its recommended split of behavioral from illustrative claims (Decision 12); and the opt-in proof's rot risk (Decision 14).
+  - [x] Add an entry for the Stack table's Node.js **24.18.0** row (per Decision 11): it is marked "verified" but has never been run in this repository, and the toolchain is pinned at 22. **Revisit trigger:** the first story needing a Node 24 feature, or a deliberate toolchain-upgrade pass carrying its own before/after measurement of the 648 Vitest and 80 Playwright tests. Correct the row's status at the spine rather than leaving the claim standing.
 
 - [ ] **Task 12 — Measure, commit, and regenerate only if Task 1 said so (AC: #1, #2)**
   - [ ] Full clean-tree run of every suite; record totals alongside any pass/skip split.
@@ -765,6 +765,8 @@ types (AD-1/AR1).
 - 2026-09-05 Decision 12 implementation note: `TestModel` remained the ordinary runtime default and no scripted runtime seam was added. Because generated schema-shaped arguments cannot name governed fixture records reliably, the proof separates model-run termination from deterministic behavioral claims and drives draft creation through the real capability/repository boundary.
 - 2026-09-05 pre-commit composition regression: focused auth/architecture suite `65 passed`; focused worker/composition suite `100 passed`; default backend suite `1599 passed, 2 skipped, 7 deselected` in 213.76s. An earlier `uv run --project backend pytest` invocation ignored backend pytest configuration, accidentally ran live-provider cases, and was discarded; the canonical `--directory backend` invocation is green.
 - 2026-09-05 Task 8: recorded local backend and web image IDs as content-addressed SHA-256 digests in the gitignored build manifest. Evidence binding tests passed `35` with one clean-tree-only skip; the committed local-source-tree report still passes audit, locking monotonicity independently of whether a future build manifest exists.
+- 2026-09-05 Task 11: verified commit `8139866` in a genuinely fresh clone by running `gate_a_readiness.py` twice consecutively. Both runs wrote the report; the second accepted the first run's sole dirty output instead of raising `DirtyTreeError`. Borrowed pre-commit XML correctly kept the verdict false on provenance/case coverage, which does not weaken the rerunnability proof. The temporary clone was removed after verification.
+- 2026-09-05 Task 12 first regeneration attempt refused commit `262c14b` because the prescribed final ledger commit touched no code. To preserve the four-commit plan while satisfying the evidence convention, commit 4 was amended with strict 64-hex SHA-256 validation in the digest recorder and its regression test; all three evidence runners were therefore re-measured after the amended commit before regeneration.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
@@ -779,6 +781,7 @@ types (AD-1/AR1).
 - Task 9 complete: the isolated opt-in proof brings up the built stack and verifies sign-in through terminal worker execution; normal CI selection remains unchanged at seven live deselections.
 - Task 10 complete: reviewer and developer setup/configuration documentation now describes the runnable PostgreSQL composition and its explicit live-provider override.
 - Task 8 complete: generated image IDs now flow into the three-key NFR27 image binding when present, while absent/invalid manifests retain the honest historical fallback and do not alter audit validity.
+- Task 11 complete: the three composition debts are closed, the stale rerunnability debt is corrected from a fresh-clone reproduction, five newly bounded gaps have owners/triggers, and the unmeasured Node 24 spine claim is no longer labelled verified.
 
 ### File List
 
