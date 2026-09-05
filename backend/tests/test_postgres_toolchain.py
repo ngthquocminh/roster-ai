@@ -52,12 +52,12 @@ def test_provisioning_database_url_can_be_overridden(monkeypatch) -> None:
     assert default_settings().provisioning_database_url == url
 
 
-def test_compose_defines_only_the_postgres_18_service() -> None:
+def test_compose_preserves_postgres_18_contract_inside_the_local_stack() -> None:
     compose = (REPO_ROOT / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert "postgres:" in compose
     assert "postgres:18" in compose
-    assert "5432:5432" in compose
+    assert '"${POSTGRES_PORT:-5432}:5432"' in compose
     assert "postgres_data:/var/lib/postgresql" in compose
     assert "postgres_data:/var/lib/postgresql/data" not in compose
     services_block = compose.split("services:\n", 1)[1].split("\nvolumes:", 1)[0]
@@ -66,7 +66,7 @@ def test_compose_defines_only_the_postgres_18_service() -> None:
         for line in services_block.splitlines()
         if line.startswith("  ") and not line.startswith("    ") and line.endswith(":")
     ]
-    assert service_lines == ["postgres:"]
+    assert service_lines == ["postgres:", "bootstrap:", "api:", "worker:", "web:"]
 
 
 def test_alembic_is_wired_to_application_settings_and_metadata() -> None:

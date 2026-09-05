@@ -9,6 +9,7 @@ import pytest
 
 from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
+from application.ports.scheduler import FatalSchedulerError
 from application.ports.schedule_run import ScheduleRunStateV1
 from application.use_cases.lease_and_execute_schedule_run import (
     FatalJobError,
@@ -193,6 +194,35 @@ def test_fatal_exception_after_lease_fails_the_job_and_queued_run_atomically() -
     assert finalize[2]["status"] == "solver_failed"
     assert finalize[2]["reason"] == "job_execution_failed"
     assert failed[2]["fencing_epoch"] == lease.fencing_epoch
+
+
+def test_fatal_scheduler_input_error_is_terminal_instead_of_released_forever() -> None:
+    lease = _lease()
+    repository = _Repository(
+        lease,
+        ScheduleRunStateV1("solver_queued", 1),
+        ScheduleRunStateV1("solver_running", 2),
+        ScheduleRunStateV1("solver_running", 2),
+    )
+    runtime = _RuntimeFactory()
+
+    class _UnreadableInputScheduler:
+        def solve(self, _snapshot):
+            raise FatalSchedulerError("row-level security hid the solver input")
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        _UnreadableInputScheduler(),
+        lease_owner="worker-1",
+        lease_seconds=30,
+    )
+
+    assert result.status == "solver_failed"
+    assert any(call[0] == "fail" for call in repository.calls)
+    finalize = next(call for call in repository.calls if call[0] == "finalize")
+    assert finalize[2]["reason"] == "job_execution_failed"
 
 
 def test_transient_exception_after_lease_leaves_the_job_leased_for_recovery() -> None:

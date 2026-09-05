@@ -1,0 +1,10 @@
+.git
+.build
+.venv
+**/.venv
+**/__pycache__
+**/.pytest_cache
+frontend/node_modules
+frontend/dist
+_bmad-output
+evidence

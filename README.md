@@ -172,7 +172,8 @@ default dev setup works without extra configuration.
 - Insight generation is a separate, on-demand step after a run completes, and is
   cached (`runs.insight_json`); an LLM failure never invalidates a completed
   schedule.
-- No auth exists anywhere in the stack; every scenario is globally visible to
-  any caller. Out of scope until a public/shared deploy makes it necessary.
+- OIDC sign-in, server-side sessions, CSRF enforcement, site membership, and
+  PostgreSQL row-level security protect the versioned planner surface. Local
+  compose exposes the keyless fake IdP only when `OIDC_PROVIDER=fake`.
 - Deployment target is AWS (frontend → S3/CloudFront; backend container →
   ECR + App Runner/ECS/EC2 — container compute, not Lambda). <!-- VERIFY: no deploy config currently exists in-repo; confirm target before acting on it -->

@@ -8,9 +8,10 @@ from sqlalchemy import Connection, select
 
 from adapters.postgres.schema import scenario_version
 from application.contracts.canonical import contract_digest
+from application.ports.scheduler import FatalSchedulerError
 
 
-class SolverInputError(ValueError):
+class SolverInputError(FatalSchedulerError):
     code = "solver_input_error"
 
 

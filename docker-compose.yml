@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: rosterai
       POSTGRES_PASSWORD: rosterai
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rosterai -d rosterai"]
       interval: 2s
@@ -14,6 +14,59 @@ services:
       retries: 15
     volumes:
       - postgres_data:/var/lib/postgresql
+
+  bootstrap:
+    build:
+      context: .
+    image: shiftmind-backend:local
+    command: ["python", "-m", "scripts.bootstrap_local"]
+    environment: &backend-environment
+      ROSTERAI_DATABASE_URL: postgresql+psycopg://shiftmind_login:shiftmind_login@postgres:5432/rosterai
+      ROSTERAI_PROVISIONING_DATABASE_URL: postgresql+psycopg://rosterai:rosterai@postgres:5432/rosterai
+      APP_BASE_URL: ${APP_ORIGIN:-http://localhost:8080}
+      OIDC_PROVIDER: fake
+      OIDC_ISSUER: ${APP_ORIGIN:-http://localhost:8080}/oidc
+      OIDC_REDIRECT_URI: ${APP_ORIGIN:-http://localhost:8080}/api/v1/auth/callback
+      CORS_ORIGINS: ${APP_ORIGIN:-http://localhost:8080}
+      SHIFTMIND_SEED_PLANNER_SUBJECT: local-planner
+      SHIFTMIND_SEED_PLANNER_EMAIL: planner@shiftmind.local
+      SHIFTMIND_WORKER_RUNTIME_FACTORY: worker.composition:create_runtime
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: shiftmind-backend:local
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment: *backend-environment
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    image: shiftmind-backend:local
+    command: ["python", "-m", "worker.main"]
+    environment: *backend-environment
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: frontend
+      args:
+        VITE_API_BASE_URL: ${APP_ORIGIN:-http://localhost:8080}
+    image: shiftmind-web:local
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   postgres_data:

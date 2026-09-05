@@ -1,11 +1,15 @@
 """Framework- and solver-free governed scheduling ports."""
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from uuid import UUID
 
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import SolverOutcomeV1
+
+
+class FatalSchedulerError(ValueError):
+    """A deterministic scheduler-boundary failure that replay cannot repair."""
 
 
 class SolverInputSource(Protocol):
@@ -16,4 +20,11 @@ class SchedulerPort(Protocol):
     def solve(self, snapshot: RunSnapshotV1) -> SolverOutcomeV1: ...
 
 
-__all__ = ["SchedulerPort", "SolverInputSource"]
+SchedulerFactory = Callable[[Any], SchedulerPort]
+
+__all__ = [
+    "FatalSchedulerError",
+    "SchedulerFactory",
+    "SchedulerPort",
+    "SolverInputSource",
+]

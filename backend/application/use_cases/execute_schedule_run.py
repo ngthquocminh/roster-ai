@@ -7,7 +7,7 @@ from uuid import UUID
 
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import SolverOutcomeV1
-from application.ports.scheduler import SchedulerPort
+from application.ports.scheduler import FatalSchedulerError, SchedulerFactory, SchedulerPort
 from application.ports.schedule_run import ScheduleRunRepository
 from application.use_cases.finalize_schedule_run import (
     FinalizedScheduleRunV1,
@@ -82,7 +82,7 @@ class HeartbeatObservationsV1:
 
 def execute_schedule_run(
     repository: ScheduleRunRepository,
-    scheduler: SchedulerPort,
+    scheduler: SchedulerPort | SchedulerFactory,
     connection: Any,
     *,
     snapshot: RunSnapshotV1,
@@ -162,7 +162,13 @@ def execute_schedule_run(
         )
         heartbeat_thread.start()
     try:
-        outcome = scheduler.solve(snapshot)
+        active_scheduler = scheduler(connection) if callable(scheduler) else scheduler
+        outcome = active_scheduler.solve(snapshot)
+    except FatalSchedulerError:
+        # Missing or digest-invalid immutable input is deterministic. Let the
+        # lease boundary mark the job failed instead of allowing its lease to
+        # lapse and replay the same unreadable snapshot forever.
+        raise
     except Exception as exc:
         outcome = SolverOutcomeV1(
             solver_status="UNKNOWN",

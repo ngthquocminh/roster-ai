@@ -527,31 +527,31 @@ PR gate covers it.
   - [x] Leave `.github/workflows/ci.yml`'s `NODE_VERSION` at `22` — the pin and CI must state the same fact, and CI is already the version that measures green. Do not touch any `--min-passed`/`--max-skipped` floor.
   - [x] Re-run frontend lint, typecheck, build and Vitest to confirm the pin changes nothing. A pin that matches what was already running must be a zero-diff result; anything else means the pin is wrong.
 
-- [ ] **Task 3 — Write the production worker runtime factory (AC: #1, per Decision 3)**
-  - [ ] Add `backend/worker/composition.py` exporting `create_runtime() -> WorkerRuntimeV1`: engine from `settings.database_url` **with `hide_parameters=True`**, `PostgresScheduleRunRepository`, the scheduler seam from Task 4, `default_settings()`, and a `JsonLogTelemetrySink`.
-  - [ ] Extend Story 5.2's SQLAlchemy-engine AST guard so its roots cover the new module, with a synthetic violating-source case proving the guard reddens when `hide_parameters=True` is removed.
-  - [ ] Prove the factory loads through the real entry point: `worker.main` resolving `worker.composition:create_runtime` must construct without error.
-  - [ ] Correct `worker/main.py`'s `parser.error` message, whose "until deployment composition is owned by Epic 5/6" becomes false with this task.
+- [x] **Task 3 — Write the production worker runtime factory (AC: #1, per Decision 3)**
+  - [x] Add `backend/worker/composition.py` exporting `create_runtime() -> WorkerRuntimeV1`: engine from `settings.database_url` **with `hide_parameters=True`**, `PostgresScheduleRunRepository`, the scheduler seam from Task 4, `default_settings()`, and a `JsonLogTelemetrySink`.
+  - [x] Extend Story 5.2's SQLAlchemy-engine AST guard so its roots cover the new module, with a synthetic violating-source case proving the guard reddens when `hide_parameters=True` is removed.
+  - [x] Prove the factory loads through the real entry point: `worker.main` resolving `worker.composition:create_runtime` must construct without error.
+  - [x] Correct `worker/main.py`'s `parser.error` message, whose "until deployment composition is owned by Epic 5/6" becomes false with this task.
 
-- [ ] **Task 4 — Thread site scope to the solver input source (AC: #1, per Decision 4)**
-  - [ ] Widen the seam so the scheduler receives the site-scoped connection `lease_and_execute_schedule_run` already opens. Update `application/ports/scheduler.py`, `engine/governed_adapter.py`, `application/use_cases/lease_and_execute_schedule_run.py`, `worker/lease_worker.py`, and every test constructing a scheduler. Keep SQLAlchemy types out of `domain/` and `application/` signatures per AD-1/AR1.
-  - [ ] Add a **PostgreSQL-marked** test that a solve reading `scenario_version` succeeds under `runtime_context` and reads zero rows without it — the RLS behaviour is the whole point and a mocked connection cannot prove it.
-  - [ ] Add a guard that no production module constructs a solver input source on `provisioning_database_url` (Decision 4's forbidden shortcut).
+- [x] **Task 4 — Thread site scope to the solver input source (AC: #1, per Decision 4)**
+  - [x] Widen the seam so the scheduler receives the site-scoped connection `lease_and_execute_schedule_run` already opens. Update `application/ports/scheduler.py`, `engine/governed_adapter.py`, `application/use_cases/lease_and_execute_schedule_run.py`, `worker/lease_worker.py`, and every test constructing a scheduler. Keep SQLAlchemy types out of `domain/` and `application/` signatures per AD-1/AR1.
+  - [x] Add a **PostgreSQL-marked** test that a solve reading `scenario_version` succeeds under `runtime_context` and reads zero rows without it — the RLS behaviour is the whole point and a mocked connection cannot prove it.
+  - [x] Add a guard that no production module constructs a solver input source on `provisioning_database_url` (Decision 4's forbidden shortcut).
 
-- [ ] **Task 5 — Write the cutover-free bootstrap (AC: #1, per Decision 5)**
-  - [ ] Add `backend/scripts/bootstrap_local.py`: apply migrations to head, `ensure_seed_site`, import every spec from the **imported** `default_fixtures()`, provision the seeded planner. Idempotent on re-run.
-  - [ ] Assert it writes no maintenance flag and touches no SQLite file, and add a guard that it does not restate the fixture list.
-  - [ ] Leave `scripts/gate_a_cutover.py` unchanged.
+- [x] **Task 5 — Write the cutover-free bootstrap (AC: #1, per Decision 5)**
+  - [x] Add `backend/scripts/bootstrap_local.py`: apply migrations to head, `ensure_seed_site`, import every spec from the **imported** `default_fixtures()`, provision the seeded planner. Idempotent on re-run.
+  - [x] Assert it writes no maintenance flag and touches no SQLite file, and add a guard that it does not restate the fixture list.
+  - [x] Leave `scripts/gate_a_cutover.py` unchanged.
 
-- [ ] **Task 6 — Serve the fake IdP and fix the origin (AC: #1, per Decisions 6 and 7)**
-  - [ ] Add a router serving `/oidc/authorize`, `/oidc/token` and `/oidc/jwks` from the `lru_cache`d `FakeOidcProvider`, mounted **only** when `settings.oidc_provider == "fake"`.
-  - [ ] Add an architecture guard, with a synthetic violating-source case, that the router cannot mount under any other provider value.
-  - [ ] Prove the whole flow against a real HTTP server (not `TestClient` in-process): `/api/v1/auth/login` → `/oidc/authorize` → `/api/v1/auth/callback` → a `__Host-` cookie a subsequent request presents successfully.
+- [x] **Task 6 — Serve the fake IdP and fix the origin (AC: #1, per Decisions 6 and 7)**
+  - [x] Add a router serving `/oidc/authorize`, `/oidc/token` and `/oidc/jwks` from the `lru_cache`d `FakeOidcProvider`, mounted **only** when `settings.oidc_provider == "fake"`.
+  - [x] Add an architecture guard, with a synthetic violating-source case, that the router cannot mount under any other provider value.
+  - [x] Prove the whole flow against a real HTTP server (not `TestClient` in-process): `/api/v1/auth/login` → `/oidc/authorize` → `/api/v1/auth/callback` → a `__Host-` cookie a subsequent request presents successfully.
 
-- [ ] **Task 7 — Build the images and compose the stack (AC: #1, #2, per Decisions 1, 2 and 7)**
-  - [ ] Add a backend `Dockerfile` on Python 3.12 installing with `uv sync --frozen --all-groups`, and a web `Dockerfile` on the pinned Node building with `npm ci && npm run build` and serving the bundle with an `/api` reverse proxy to the api service. `VITE_API_BASE_URL` is a **build arg**, not a runtime variable.
-  - [ ] Add `.dockerignore` files. Extend `docker-compose.yml` with `api`, `worker` and `web` services: one built backend image used by both `api` and `worker` (differing only in `command:`), health-gated ordering behind `postgres`, a one-shot bootstrap step, and the environment overrides Decision 7 requires (`APP_BASE_URL`, `OIDC_ISSUER`, `OIDC_REDIRECT_URI`, `CORS_ORIGINS`, `SHIFTMIND_WORKER_RUNTIME_FACTORY`, the seed planner identity).
-  - [ ] Add a guard asserting the images install from the frozen lockfile paths — `uv sync --frozen` and `npm ci`, never `uv sync` alone or `npm install`.
+- [x] **Task 7 — Build the images and compose the stack (AC: #1, #2, per Decisions 1, 2 and 7)**
+  - [x] Add a backend `Dockerfile` on Python 3.12 installing with `uv sync --frozen --all-groups`, and a web `Dockerfile` on the pinned Node building with `npm ci && npm run build` and serving the bundle with an `/api` reverse proxy to the api service. `VITE_API_BASE_URL` is a **build arg**, not a runtime variable.
+  - [x] Add `.dockerignore` files. Extend `docker-compose.yml` with `api`, `worker` and `web` services: one built backend image used by both `api` and `worker` (differing only in `command:`), health-gated ordering behind `postgres`, a one-shot bootstrap step, and the environment overrides Decision 7 requires (`APP_BASE_URL`, `OIDC_ISSUER`, `OIDC_REDIRECT_URI`, `CORS_ORIGINS`, `SHIFTMIND_WORKER_RUNTIME_FACTORY`, the seed planner identity).
+  - [x] Add a guard asserting the images install from the frozen lockfile paths — `uv sync --frozen` and `npm ci`, never `uv sync` alone or `npm install`.
 
 - [ ] **Task 8 — Wire the image digest into `resolve_bindings()` (AC: #2, per Decision 8)**
   - [ ] Have the build write `.build/image-digests.json` (gitignored) with each produced image's content-addressed digest.
@@ -559,17 +559,17 @@ PR gate covers it.
   - [ ] **Add no digest requirement to `audit_evidence_file()`**, per Decision 8. Add a test asserting the audit still passes for an evidence file whose `image` binding records `"local source tree"`.
   - [ ] Correct the three stale pointers in `evidence_binding.py` and the one in `docs/EVIDENCE-CONVENTION.md`.
 
-- [ ] **Task 9 — Write the composed-stack proof (AC: #1, per Decision 14)**
-  - [ ] Add a `@pytest.mark.compose` test (registered in `pyproject.toml`'s markers and deselected by default) that brings the stack up, signs in through the real OIDC flow, walks the journey, and **asserts the worker drove an enqueued run to a terminal state**.
-  - [ ] Add a separate, non-required CI job that runs it on `main` and on `workflow_dispatch`.
-  - [ ] Confirm `-m "not live"` still deselects exactly the live-marked set — `ci.yml:118-138` asserts that equality and a second marker must not perturb it.
+- [x] **Task 9 — Write the composed-stack proof (AC: #1, per Decision 14)**
+  - [x] Add a `@pytest.mark.compose` test (registered in `pyproject.toml`'s markers and deselected by default) that brings the stack up, signs in through the real OIDC flow, walks the journey, and **asserts the worker drove an enqueued run to a terminal state**.
+  - [x] Add a separate, non-required CI job that runs it on `main` and on `workflow_dispatch`.
+  - [x] Confirm `-m "not live"` still deselects exactly the live-marked set — `ci.yml:118-138` asserts that equality and a second marker must not perturb it.
 
-- [ ] **Task 10 — Correct the four documents (AC: #1, per Decision 13)**
-  - [ ] Rewrite `docs/GETTING-STARTED.md` around the one command; remove every SQLite claim.
-  - [ ] Extend `docs/CONFIGURATION.md` to the real settings surface, including `AGENT_RUNTIME_MODEL`, `AGENT_RUNTIME_API_KEY`, `SHIFTMIND_SEED_PLANNER_SUBJECT` and `SHIFTMIND_SEED_PLANNER_EMAIL`, which are documented nowhere today.
-  - [ ] Add compose, Alembic, bootstrap and the worker to `docs/DEVELOPMENT.md`, and add the `postgres` marker to its table.
-  - [ ] Correct `README.md:175`'s "No auth exists anywhere in the stack".
-  - [ ] Add the seed and bootstrap variables to `backend/.env.example`. Leave `docs/API.md` alone.
+- [x] **Task 10 — Correct the four documents (AC: #1, per Decision 13)**
+  - [x] Rewrite `docs/GETTING-STARTED.md` around the one command; remove every SQLite claim.
+  - [x] Extend `docs/CONFIGURATION.md` to the real settings surface, including `AGENT_RUNTIME_MODEL`, `AGENT_RUNTIME_API_KEY`, `SHIFTMIND_SEED_PLANNER_SUBJECT` and `SHIFTMIND_SEED_PLANNER_EMAIL`, which are documented nowhere today.
+  - [x] Add compose, Alembic, bootstrap and the worker to `docs/DEVELOPMENT.md`, and add the `postgres` marker to its table.
+  - [x] Correct `README.md:175`'s "No auth exists anywhere in the stack".
+  - [x] Add the seed and bootstrap variables to `backend/.env.example`. Leave `docs/API.md` alone.
 
 - [ ] **Task 11 — Ledger reconciliation (per Decisions 3, 8, 12, 13 and 14)**
   - [ ] Close `deferred-work.md:465`, `:467` and `:681`.
@@ -747,6 +747,8 @@ types (AD-1/AR1).
 
 ### Agent Model Used
 
+- GPT-5 Codex
+
 ### Implementation Plan
 
 - Execute Tasks 1-12 in story order with red-green-refactor guards, preserve the four-commit implementation plan, and regenerate Gate A readiness once at Task 12 because its committed test evidence records per-file counts.
@@ -758,6 +760,10 @@ types (AD-1/AR1).
 - 2026-09-05 Decision 9 answer: the committed readiness report records per-test-file `total`, `passed`, `skipped`, and `failed` counts under each test-backed check, plus aggregate runner case counts. Therefore one clean-tree regeneration is owed at Task 12 if this story changes any recorded test-file count; it is not a pass/fail-only report.
 - 2026-09-05 Missing-piece verification: zero Dockerfiles/toolchain pins remain; `worker.main` retains the mandatory runtime-factory parser error; `run_cutover` still invokes `_snapshot_sqlite` unconditionally; `api.main` mounts no `/oidc/*` router.
 - 2026-09-05 Task 2: pinned Python `3.12` and Node `22`; CI Node and all threshold flags remained untouched. Lint, typecheck, and build passed. Two full Vitest attempts encountered resource-sensitive 60-second timeouts in different cases of the existing `ScenarioDataParity` file; that file passed `14/14` in isolation and the final full run passed `648/648` across `85` files in 72.99s.
+- 2026-09-05 Tasks 3-7: composed the restricted worker runtime, threaded its site-scoped connection into solver-input construction, classified unreadable/digest-invalid input as terminal, added cutover-free idempotent bootstrap, exposed the cached fake IdP over HTTP, and built the health-gated backend/web stack from frozen locks.
+- 2026-09-05 Task 9: the opt-in Compose proof passed in 60.32s against an isolated fresh PostgreSQL volume. It completed real HTTP sign-in and session reuse, read both fixtures, executed the keyless `TestModel` turn to a terminal state, created a deterministic governed draft through the application boundary, enqueued through the public API, and observed the real worker reach a terminal solver state.
+- 2026-09-05 Decision 12 implementation note: `TestModel` remained the ordinary runtime default and no scripted runtime seam was added. Because generated schema-shaped arguments cannot name governed fixture records reliably, the proof separates model-run termination from deterministic behavioral claims and drives draft creation through the real capability/repository boundary.
+- 2026-09-05 pre-commit composition regression: focused auth/architecture suite `65 passed`; focused worker/composition suite `100 passed`; default backend suite `1599 passed, 2 skipped, 7 deselected` in 213.76s. An earlier `uv run --project backend pytest` invocation ignored backend pytest configuration, accidentally ran live-provider cases, and was discarded; the canonical `--directory backend` invocation is green.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
@@ -768,6 +774,9 @@ types (AD-1/AR1).
 
 - Task 1 complete: all creation measurements reproduced serially without drift, the four composition gaps remain present, Node 22 was measured directly, and readiness-count regeneration responsibility was settled.
 - Task 2 complete: committed toolchain selectors match the already-green CI/runtime versions without dependency or test-count movement.
+- Tasks 3-7 complete: production worker, RLS-correct solver composition, bootstrap, local OIDC HTTP surface, and the shared-image Compose stack are implemented and guarded.
+- Task 9 complete: the isolated opt-in proof brings up the built stack and verifies sign-in through terminal worker execution; normal CI selection remains unchanged at seven live deselections.
+- Task 10 complete: reviewer and developer setup/configuration documentation now describes the runnable PostgreSQL composition and its explicit live-provider override.
 
 ### File List
 

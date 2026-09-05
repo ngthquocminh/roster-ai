@@ -16,6 +16,16 @@ without touching service or route code.
 
 ## Local setup
 
+Run the reviewed full stack from the repository root with `docker compose up -d --build`. Compose waits for PostgreSQL, applies Alembic migrations, imports `default_fixtures()`, provisions the planner, then starts the API, production worker, and web proxy at `http://localhost:8080`.
+
+Alembic must run from the repository root because `alembic.ini` lives there:
+
+```bash
+uv run --project backend alembic upgrade head
+uv run --project backend python -m scripts.bootstrap_local
+uv run --project backend python -m worker.main --runtime-factory worker.composition:create_runtime
+```
+
 ### Backend (`backend/`)
 
 Dependencies are managed with [uv](https://docs.astral.sh/uv/) (`backend/pyproject.toml`,
@@ -93,6 +103,8 @@ pytest marker:
 testpaths = ["tests"]
 markers = [
     "live: exercises a real network-backed LLM provider; excluded by default (run with `pytest -m live`)",
+    "postgres: exercises the local PostgreSQL integration service",
+    "compose: exercises the built local stack from its explicitly named proof file",
 ]
 addopts = "-m \"not live\""
 ```

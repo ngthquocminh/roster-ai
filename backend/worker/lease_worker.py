@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import Connection, Engine, text
 
-from application.ports.scheduler import SchedulerPort
+from application.ports.scheduler import SchedulerFactory, SchedulerPort
 from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.telemetry import TelemetrySink
 from application.use_cases.lease_and_execute_schedule_run import (
@@ -80,7 +80,7 @@ def default_lease_seconds(settings: Any) -> int:
 def run_once(
     engine: Engine,
     repository: ScheduleRunRepository,
-    scheduler: SchedulerPort,
+    scheduler: SchedulerPort | SchedulerFactory,
     *,
     lease_owner: str,
     lease_seconds: int,

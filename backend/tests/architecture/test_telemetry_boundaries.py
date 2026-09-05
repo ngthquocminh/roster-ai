@@ -438,6 +438,17 @@ def test_sqlalchemy_engines_hide_bound_parameters() -> None:
     assert not violations
 
 
+def test_worker_composition_is_covered_by_engine_parameter_guard() -> None:
+    composition = BACKEND_ROOT / "worker/composition.py"
+    assert composition in _python_files(*NON_TEST_BACKEND_ROOTS)
+    assert sqlalchemy_engines_without_hidden_parameters(
+        "from sqlalchemy import create_engine\ncreate_engine(url)"
+    ) == ["create_engine(url)"]
+    source = composition.read_text(encoding="utf-8")
+    assert "provisioning_database_url" not in source
+    assert "PostgresSolverInputSource(connection)" in source
+
+
 def test_parameterized_request_uses_the_route_template_not_the_uuid() -> None:
     records: list[TelemetryRecordV1] = []
 
