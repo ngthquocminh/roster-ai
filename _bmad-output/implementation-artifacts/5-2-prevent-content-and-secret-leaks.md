@@ -4,7 +4,7 @@ baseline_commit: c0ef358
 
 # Story 5.2: Prevent Content and Secret Leaks
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -937,3 +937,4 @@ class-3 `%`-directive fixture, which had never been written, exists.
 | 2026-09-04 | Story created at `c0ef358`. Twelve decisions recorded; the log-stream leak and its `hide_parameters` remedy measured empirically at creation rather than inferred. |
 | 2026-09-05 | Decision 9 confirmed (register, not emit-and-orphan). Four defects found in the story itself and fixed before dev: the Gate A sequencing resolution covered only trap A and missed the two-pass regeneration forced by `test_gate_a_readiness.py` being its own contributing check; `NFR29_GATES`' exact-ordered-tuple assertion and the paired-live-check enforcement at `test_gate_a_readiness.py:171` were unlisted; and Decision 3's guard, specified by method name, would have been red on arrival against three `argparse.ArgumentParser.error` collisions; and Decision 5's guard, specified by call name, would have gone green while missing `api/deps.py:238` — the API's own engine — because `create_engine` names both SQLAlchemy's factory and the CP-SAT one. Added *Dev Notes → The commit plan*. |
 | 2026-09-05 | Implemented content and secret minimization across all four channels, generated and registered evidence, closed ledger triggers, demonstrated nine real-code mutations, and passed the final three-runner Gate A report. |
+| 2026-09-05 | Code review (three parallel layers plus reviewer-run mutations). Four of the five handoff findings cleared with evidence; the alias path, the `_tree_is_clean` exemption and the span allow-list all hold, and the skip drift was identified as `test_evidence_binding.py:469`'s dirty-tree `skipif` rather than pollution. Nineteen patches applied, three decisions resolved, three items ledgered. Three delivered guards could not go red — mutation-table row 1 was false, the C3 proof passed only under pytest's logging plugin, and the attributability guard passed with all twelve cells on one test. Two real leak paths closed: four logger spellings the AST guard did not resolve, and span EVENTS carrying `exception.message`. Two defects found beyond the diff: a fifth privileged engine site (`migrations/env.py`) outside the guard's roots, and alembic's `fileConfig` disabling every existing logger. Decision 8's "reject a computed value" struck as unimplementable; `deferred-work.md:663` re-pointed at the first metrics exporter. 23 of 23 mutations redden; `gate_a_passed: true`. |
