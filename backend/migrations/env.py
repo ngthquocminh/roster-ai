@@ -25,7 +25,14 @@ config.set_main_option(
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # `disable_existing_loggers=False` is required, not cosmetic. The default
+    # is True, which sets `.disabled = True` on EVERY logger that already
+    # exists at this point -- so any process that imports application modules
+    # and then runs a migration silently kills its own sanitized logging,
+    # including `worker.main`'s error path and every `api.*` logger. Found at
+    # the code review of story-5.2 via C3 proof nodes that went dark whenever
+    # a migration ran earlier in the same process.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = metadata
 
@@ -82,6 +89,11 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        # This engine runs on the PRIVILEGED provisioning DSN, so a failing
+        # migration statement would otherwise render its bound parameters in
+        # full. The fifth engine site; the other four are in adapters and api
+        # (code review of story-5.2).
+        hide_parameters=True,
     )
 
     with connectable.connect() as connection:

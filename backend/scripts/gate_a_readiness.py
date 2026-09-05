@@ -118,9 +118,12 @@ def _evidence_result(
     (the ledger's original "evidence has no expiry" heading states the problem
     wrongly).
 
-    Seventeen of the twenty registry checks take fresh JUnit XML instead and do
-    not come through here. It was sixteen of twenty until 2026-08-18, when Story
-    1.9's `viewer_parity_evidence` was replaced by the live `api_parity` check.
+    Twenty-five of the thirty-three registry checks take fresh JUnit XML instead
+    and do not come through here; eight are evidence-backed. Do not hand-edit
+    these numbers -- `test_registered_evidence_files_are_deliberate` recomputes
+    them from `GATE_A_CHECKS`, so they cannot drift again (the counts read
+    "seventeen of twenty" against a registry of thirty-three until the code
+    review of story-5.2).
     """
     path = repo_root / str(check.evidence_path)
     if not path.is_file():

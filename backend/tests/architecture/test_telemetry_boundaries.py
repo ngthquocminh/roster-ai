@@ -20,9 +20,15 @@ from application.use_cases.decide_approval import DecideApprovalCommandV1, decid
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 PRODUCER_ROOTS = ("api", "agent", "application", "worker")
+#: Every first-party package under `backend/`, not a hand-picked nine. Tasks 4
+#: and 5 both say "across the non-test backend roots"; the original tuple
+#: walked 9 of 16 and so could never see `migrations/env.py`, which built the
+#: Alembic engine on the privileged provisioning DSN (code review of
+#: story-5.2). `backend/*.py` is added separately by `_python_files`.
 NON_TEST_BACKEND_ROOTS = (
-    "adapters", "agent", "api", "application", "engine", "scripts",
-    "services", "store", "worker",
+    "adapters", "agent", "api", "application", "config", "domain", "engine",
+    "evals", "fixtures", "ingest", "llm", "migrations", "scripts", "services",
+    "store", "worker",
 )
 LOGGER_METHODS = {"debug", "info", "warning", "error", "exception", "critical", "log"}
 RUN_SCOPED_EVENTS = {
@@ -42,12 +48,19 @@ FORBIDDEN_TEXT_FIELDS = {
 
 
 def _python_files(*roots: str) -> list[Path]:
-    return [
+    files = [
         path
         for root in roots
         for path in (BACKEND_ROOT / root).rglob("*.py")
         if "__pycache__" not in path.parts
     ]
+    if set(roots) == set(NON_TEST_BACKEND_ROOTS):
+        # `settings.py`, `run.py` and `conftest.py` live at the backend root and
+        # belong to no package, so a roots-only walk never reached them.
+        files.extend(
+            path for path in BACKEND_ROOT.glob("*.py") if path.name != "conftest.py"
+        )
+    return files
 
 
 def _literal_string(node: ast.AST) -> str | None:
@@ -115,43 +128,125 @@ def unsafe_label_operations(source: str) -> list[str]:
     return offenders
 
 
+def _is_get_logger_call(node: ast.AST, bindings: dict[str, str]) -> bool:
+    """True when ``node`` is a call that resolves to ``logging.getLogger``.
+
+    Resolved through the module's import bindings rather than matched on the
+    literal spelling `logging.getLogger`, so `from logging import getLogger`,
+    `import logging as lg`, and any `as` alias all resolve. Matching on the
+    spelling alone left four legal idioms green -- and the formatter writes an
+    owned logger's message verbatim, so each one was a live leak path (code
+    review of story-5.2).
+    """
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return bindings.get(func.id) == "logging.getLogger"
+    if isinstance(func, ast.Attribute):
+        target = func.value
+        if isinstance(target, ast.Name) and bindings.get(target.id) == "logging":
+            return func.attr == "getLogger"
+        # `logging.getLogger(__name__).getChild("x")` is still a Logger.
+        if func.attr == "getChild":
+            return _is_get_logger_call(target, bindings)
+    return False
+
+
 def nonliteral_logger_messages(source: str) -> list[str]:
-    """Find owned logger calls with nonliteral templates, excluding argparse.error collisions."""
+    """Find owned logger calls with nonliteral templates, excluding argparse.error collisions.
+
+    `argparse.ArgumentParser.error` shares the method name `error` with
+    `logging.Logger` and is deliberately NOT a violation: its argument is an
+    operator-supplied CLI value reported at import time on the way to
+    `SystemExit`, carrying no planner, workforce, schedule or approval content,
+    and it never reaches the JSON log boundary. Resolving the receiver rather
+    than matching the method name is what keeps those three call sites
+    (`worker/main.py`, `scripts/generate_repair_journey_evidence.py`) out of
+    the guard -- do not "fix" them to satisfy a logging rule (Decision 3).
+    """
     tree = ast.parse(source)
-    logger_names = {
-        target.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign)
-        for target in node.targets
-        if isinstance(target, ast.Name)
-        and isinstance(node.value, ast.Call)
-        and isinstance(node.value.func, ast.Attribute)
-        and isinstance(node.value.func.value, ast.Name)
-        and node.value.func.value.id == "logging"
-        and node.value.func.attr == "getLogger"
-    }
+    bindings: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = alias.name
+
+    # Names and attributes (`self._logger`) bound to a Logger, plus aliases of
+    # those, resolved to a fixed point so `alias = logger` is covered too.
+    logger_targets: set[str] = set()
+    for _ in range(4):
+        grew = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            value = node.value
+            owned = _is_get_logger_call(value, bindings) or (
+                isinstance(value, ast.Name) and value.id in logger_targets
+            ) or (
+                isinstance(value, ast.Attribute) and ast.unparse(value) in logger_targets
+            )
+            if not owned:
+                continue
+            for target in node.targets:
+                for element in (
+                    target.elts if isinstance(target, (ast.Tuple, ast.List)) else [target]
+                ):
+                    if isinstance(element, (ast.Name, ast.Attribute)):
+                        key = ast.unparse(element)
+                        if key not in logger_targets:
+                            logger_targets.add(key)
+                            grew = True
+        if not grew:
+            break
+
     offenders: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
             continue
+        if node.func.attr not in LOGGER_METHODS:
+            continue
         receiver = node.func.value
-        owned = isinstance(receiver, ast.Name) and receiver.id in logger_names
-        owned = owned or (
-            isinstance(receiver, ast.Call)
-            and isinstance(receiver.func, ast.Attribute)
-            and isinstance(receiver.func.value, ast.Name)
-            and receiver.func.value.id == "logging"
-            and receiver.func.attr == "getLogger"
+        owned = (
+            (isinstance(receiver, (ast.Name, ast.Attribute))
+             and ast.unparse(receiver) in logger_targets)
+            or _is_get_logger_call(receiver, bindings)
         )
         message_index = 1 if node.func.attr == "log" else 0
-        if owned and node.func.attr in LOGGER_METHODS:
+        if owned:
             if len(node.args) <= message_index or _literal_string(node.args[message_index]) is None:
                 offenders.append(ast.unparse(node))
     return offenders
 
 
+#: Every SQLAlchemy entry point that builds an Engine. `create_engine` alone is
+#: not the whole surface: `engine_from_config` builds the Alembic engine on the
+#: privileged provisioning DSN, and an async engine leaks the same bound
+#: parameters (code review of story-5.2).
+_ENGINE_FACTORIES = frozenset({
+    "sqlalchemy.create_engine",
+    "sqlalchemy.engine.create_engine",
+    "sqlalchemy.engine_from_config",
+    "sqlalchemy.engine.engine_from_config",
+    "sqlalchemy.ext.asyncio.create_async_engine",
+})
+_ENGINE_FACTORY_ATTRS = frozenset({"create_engine", "engine_from_config", "create_async_engine"})
+_SQLALCHEMY_MODULES = frozenset({"sqlalchemy", "sqlalchemy.engine", "sqlalchemy.ext.asyncio"})
+
+
 def sqlalchemy_engines_without_hidden_parameters(source: str) -> list[str]:
-    """Resolve imports so solver create_engine calls and test fixtures stay outside the guard."""
+    """Resolve imports so solver create_engine calls and test fixtures stay outside the guard.
+
+    Resolution is required, not stylistic: `create_engine` names BOTH
+    SQLAlchemy's factory and the CP-SAT solver factory at `engine/base.py`, so
+    a name-only walker would flag three solver calls while missing
+    `api/deps.py`, whose site is spelled `create_postgres_engine` through an
+    `as` alias. Both the bare-name form and the attribute form
+    (`sqlalchemy.create_engine(...)`) are resolved.
+    """
     tree = ast.parse(source)
     bindings: dict[str, str] = {}
     for node in ast.walk(tree):
@@ -163,9 +258,19 @@ def sqlalchemy_engines_without_hidden_parameters(source: str) -> list[str]:
                 bindings[alias.asname or alias.name] = alias.name
     offenders: list[str] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+        if not isinstance(node, ast.Call):
             continue
-        if bindings.get(node.func.id) != "sqlalchemy.create_engine":
+        func = node.func
+        if isinstance(func, ast.Name):
+            if bindings.get(func.id) not in _ENGINE_FACTORIES:
+                continue
+        elif isinstance(func, ast.Attribute):
+            target = func.value
+            if not isinstance(target, ast.Name) or func.attr not in _ENGINE_FACTORY_ATTRS:
+                continue
+            if bindings.get(target.id) not in _SQLALCHEMY_MODULES:
+                continue
+        else:
             continue
         hidden = next((kw.value for kw in node.keywords if kw.arg == "hide_parameters"), None)
         if not (isinstance(hidden, ast.Constant) and hidden.value is True):
@@ -289,6 +394,38 @@ def test_application_logger_messages_are_literal_templates() -> None:
         if (found := nonliteral_logger_messages(path.read_text(encoding="utf-8")))
     }
     assert not violations
+
+
+def test_logging_config_never_disables_existing_loggers() -> None:
+    """`fileConfig`/`dictConfig` must not switch off the sanitized boundary.
+
+    Both default to `disable_existing_loggers=True`, which sets
+    `.disabled = True` on every logger that already exists. A process that
+    imports application modules and then runs a migration therefore loses
+    `worker.main`'s error path and every `api.*` logger, silently. Caught at
+    the code review of story-5.2 when the C3 proof nodes went dark in the full
+    suite but passed alone.
+    """
+    offenders: dict[str, list[str]] = {}
+    for path in _python_files(*NON_TEST_BACKEND_ROOTS):
+        source = path.read_text(encoding="utf-8")
+        if "fileConfig" not in source and "dictConfig" not in source:
+            continue
+        found = []
+        for node in ast.walk(ast.parse(source)):
+            if not isinstance(node, ast.Call):
+                continue
+            name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+            if name not in {"fileConfig", "dictConfig"}:
+                continue
+            keyword = next(
+                (kw.value for kw in node.keywords if kw.arg == "disable_existing_loggers"), None
+            )
+            if not (isinstance(keyword, ast.Constant) and keyword.value is False):
+                found.append(ast.unparse(node))
+        if found:
+            offenders[str(path.relative_to(BACKEND_ROOT))] = found
+    assert not offenders
 
 
 def test_sqlalchemy_engines_hide_bound_parameters() -> None:
@@ -437,11 +574,35 @@ def test_each_guard_detects_synthetic_violating_source() -> None:
         'import logging\nlogger = logging.getLogger(__name__)\nlogger.error(f"secret {value}")'
     )
     assert not nonliteral_logger_messages('parser.error(f"operator {value}")')
+    # Every logger spelling below reached the formatter verbatim while the
+    # name-matching walker stayed green (code review of story-5.2).
+    for evasion in (
+        'from logging import getLogger\nlogger = getLogger(__name__)\nlogger.error(f"s {v}")',
+        'import logging as lg\nlogger = lg.getLogger(__name__)\nlogger.error(f"s {v}")',
+        'import logging\nclass A:\n    def f(self):\n        self._log = logging.getLogger(__name__)\n        self._log.error(f"s {v}")',
+        'import logging\nbase = logging.getLogger(__name__)\nalias = base\nalias.error(f"s {v}")',
+        'import logging\nlogger = logging.getLogger(__name__).getChild("x")\nlogger.error(f"s {v}")',
+    ):
+        assert nonliteral_logger_messages(evasion), evasion
+    assert not nonliteral_logger_messages(
+        'import logging\nlogger = logging.getLogger(__name__)\nlogger.error("secret %s", value)'
+    )
     assert sqlalchemy_engines_without_hidden_parameters(
         "from sqlalchemy import create_engine as anything\nanything(url)"
     )
+    for evasion in (
+        "import sqlalchemy\nsqlalchemy.create_engine(url)",
+        "import sqlalchemy as sa\nsa.create_engine(url)",
+        "from sqlalchemy.engine import create_engine\ncreate_engine(url)",
+        "from sqlalchemy import engine_from_config\nengine_from_config(cfg)",
+        "from sqlalchemy.ext.asyncio import create_async_engine\ncreate_async_engine(url)",
+    ):
+        assert sqlalchemy_engines_without_hidden_parameters(evasion), evasion
     assert not sqlalchemy_engines_without_hidden_parameters(
         "from engine.base import create_engine\ncreate_engine('cpsat')"
+    )
+    assert not sqlalchemy_engines_without_hidden_parameters(
+        "import sqlalchemy as sa\nsa.create_engine(url, hide_parameters=True)"
     )
     assert unsafe_label_operations("labels[computed] = value\nlabels.update(extra)")
 

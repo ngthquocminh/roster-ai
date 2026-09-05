@@ -149,7 +149,7 @@ Do not re-derive these from code; re-verify them at Task 1 and record any drift.
 | Worker error path | `worker/main.py::_report_error` (`:59`) prints `f"…{type(error).__name__}: {error}"` to stderr **and** `traceback.print_exception(...)`. Its docstring's premise at `:62` ("This repo configures no logger") is false as of Story 5.1, which added `configure_json_logging()` at `main():143` |
 | RFC 7807 surface | already non-disclosing. `versioned_unhandled_problem` returns fixed copy and says so in its own docstring; validation, 401/403/404 and the fallback all use fixed strings (`api/main.py:112-181`). **No change owed here** |
 | `AgentRunOutcomeV1.summary` | set to `str(exc)[:200]` at five sites in `agent/runtime.py:282,292,330,355,395`, and **read by nothing** outside tests (`grep '\.summary'` over non-test backend roots returns zero hits). Not a live channel today |
-| Registered Gate A evidence paths | **seven**, pinned by identity in `test_registered_evidence_files_are_the_five_known_ones` (`tests/test_gate_a_readiness.py:265-286`). Its docstring: *"Adding a fourth is a decision, not a detail."* |
+| Registered Gate A evidence paths | **seven**, pinned by identity in `test_registered_evidence_files_are_deliberate` (`tests/test_gate_a_readiness.py:265-286`). Its docstring: *"Adding a fourth is a decision, not a detail."* |
 | Ledger entries whose revisit trigger names this story | **two**, both verbatim "Story 5.2's export-boundary minimization work": `deferred-work.md:663` (label *values* have no cardinality guard) and `:667` (the AST walker only catches literal label keys) |
 
 **Frontend was deliberately not measured.** This story has a zero-line frontend diff (Decision 11);
@@ -350,14 +350,26 @@ owner. Both close here:
   (`_MAX_LABEL_VALUE_CHARS`). A dropped key is not an error — AD-12 forbids telemetry raising — it
   simply does not leave.
 * **AST (`:667`):** the existing walker is extended from *enumerating literal keys* to **rejecting
-  non-literal ones**: a `labels` dict with a computed key or value, a `labels[...] = …` subscript
+  non-literal ones**: a `labels` dict with a computed key, a `labels[...] = …` subscript
   whose key is not an `ast.Constant`, or a `labels.update(...)` call, all fail.
 
-**What this does not cover.** Truncation bounds a value's *length*, not its *contents*: a
-20-character secret in `failure_reason` still leaves. That is bounded instead by the closed
-vocabularies those keys already draw from (`agent/runtime.py:316-320` refuses any failure code no
-granted manifest declares) and by the AST rejection of computed values — neither of which is a
-content check. Named so a later story adding a label from a free field knows the residual shape.
+  > **CORRECTED at code review (2026-09-05): "or value" is struck as unimplementable.** A walker that
+  > rejects a computed label *value* flags 8 legitimate producer sites and 0 key violations —
+  > `api/main.py` (`route_template`, `request.method`, `status_class`), `agent/runtime.py`
+  > (`self._config.model`, `budget_outcome`), `decide_approval.py` (`outcome`),
+  > `execute_schedule_run.py` (`outcome.solver_status`), `lease_and_execute_schedule_run.py`
+  > (`lease.job_type`). A label value **must** vary at runtime or the label records nothing, so
+  > requiring it to be a literal contradicts what a label is for. The key half is the whole
+  > implementable surface. Do not re-open this as unfinished work.
+
+**What this does not cover.** Truncation bounds a value's *length*, not its *contents* and not its
+*cardinality*: a 20-character secret in `failure_reason` still leaves, and a 36-character UUID
+survives the 128-character bound intact. That is bounded instead by the closed vocabularies those
+keys already draw from (`agent/runtime.py:316-320` refuses any failure code no granted manifest
+declares) — i.e. by the type system, not by anything this story builds. Named so a later story
+adding a label from a free field knows the residual shape. **Because of this, `deferred-work.md:663`
+is re-pointed rather than closed at code review: its subject was cardinality, and cardinality is
+the metrics-exporter question, owned by Epic 6.**
 
 ### Decision 9 — The evidence file is release-blocking, therefore registered — and NFR29's list is extended on purpose
 
@@ -576,7 +588,7 @@ nothing else and re-points nothing.
         they go red for the wrong reason:**
         (a) `test_accessibility_is_tracked_as_nfr29_not_as_an_ar28_invariant` (`:94-108`) pins
         `NFR29_GATES` as an **exact ordered tuple** of five keys — append `"content_minimization"`.
-        (b) `test_registered_evidence_files_are_the_five_known_ones` (`:265`) pins seven evidence
+        (b) `test_registered_evidence_files_are_deliberate` (`:265`) pins seven evidence
         paths — make it eight, with a comment recording that it is a decision (its docstring demands
         one).
         (c) `test_registry_covers_more_than_the_four_evidence_files` (`:171`) fails any invariant
@@ -626,6 +638,41 @@ nothing else and re-points nothing.
         drop, the exception-text drop, the literal-template AST guard, the `hide_parameters` guard,
         `include_binary_content`, the settings-repr canary sweep, the label-key drop, the span
         allow-list, and the generator's `skipped == 0` requirement.
+
+### Review Findings
+
+_Code review 2026-09-05 (`dc22bd4..21cdaf8`). Three parallel layers plus reviewer-run
+mutations. Every finding below was reproduced by executing code, not inferred from the diff.
+Cleared at review, recorded so they are not re-raised: the `hide_parameters` alias path
+(mutating `api/deps.py:238` reddens the guard naming that site), the `_tree_is_clean`
+exemption (a dirty real source file still raises `DirtyTreeError` naming it), the skip-count
+drift (`test_evidence_binding.py:469`'s dirty-tree `skipif`, not test pollution), and the span
+allow-list (all 24 keys are observed by the driven run — nothing padded)._
+
+- [x] [Review][Patch] **RESOLVED 2026-09-05 (option 2): drive the real fixtures through the channels** — implement Decision 10 classes 2 and 3 as specified: load the injection text from the four pinned golden files and drive it through C1-C4 (do not re-author), and add the three missing class-3 values (control character, newline, `%`-format directive in a log argument). Sequencing is load-bearing: the C4 span-events patch must land FIRST, or the injection assertion inspects `span.attributes` only and passes vacuously while `exception.message` carries the text. The `%`-directive fixture also reddens mutation-table row 1, closing that finding too. Original finding: **Evidence file records prompt-injection and adversarial fixtures that no proof node exercises** — `fixtures.prompt_injection` names the four pinned `scheduling-*-injection-*` golden cases, but they appear only as `dataset_files` hashed for binding in `content_minimization_report.py:44-49`; no proof node reads them. `fixtures.adversarial` lists "control characters", "newline" and "% directive", none of which any node exercises. Decision 10.2 requires the injection corpus be "reused, not re-authored", and AC2 requires the report record the *tested* fixtures. Two ways out, and the choice is yours: drive the four golden cases through the C1–C4 channels (real work), or narrow the report's declared fixtures to what is actually tested (honest, smaller claim).
+- [x] [Review][Patch] **RESOLVED 2026-09-05 (option 2): re-point the entry, and delete the unimplementable half of Decision 8** — close only what shipped (key allow-list + `_MAX_LABEL_VALUE_CHARS` length bound); open a fresh ledger entry for label-value *cardinality* triggered on the first metrics exporter (Epic 6), not on this story. Also record in Decision 8 that "reject a computed label **value**" cannot be built as written: measured, it flags 8 legitimate producer sites (`api/main.py` route_template/method/status_class, `agent/runtime.py` model/budget_outcome, `decide_approval.py` outcome, `execute_schedule_run.py` solver_status, `lease_and_execute_schedule_run.py` job_type) and 0 key violations — a label value must vary at runtime or the label is useless. Strike it so no future story tries to build it. Original finding: **`deferred-work.md:663` was closed on length, not on cardinality** — the entry was NFR22 cardinality ("a future producer could put an unbounded value into an allowed key such as `failure_reason` or `model`"). It is closed by `value[:128]`, which bounds length; a 36-char UUID survives intact. Latent today — both named keys are currently bounded by `Literal` unions, not by the truncation. The tension is in the spec, not the dev's work: Decision 8's own "what this does not cover" sentence says truncation bounds length not contents, while Decision 12 says CLOSE. Choose: reword the closure as partial, re-point the entry, or implement the value guard Decision 8 specified ("a computed key **or value** … all fail" — the AST half rejects keys only, as its own docstring at `test_telemetry_boundaries.py:99` concedes).
+- [x] [Review][Note] **ACCEPTED AS DESIGNED 2026-09-05 (option 1): template-only log messages are a deliberate trade-off, no code change** — the formatter emits `record.msg`, never `getMessage()`, so `%s` arguments are dropped. Verified at review that this loses nothing diagnostically material: `api/routers/approvals.py:278` emits a `TelemetryRecordV1` on the same path carrying `correlation.agent_run_id`/`conversation_id`/`request_id` plus `failure_reason` and `agent_run_status` labels, and the log line still carries the full `exception_type` cause chain, `call_site`, `logger` and `occurred_at`. Correlation lives on the telemetry channel by design; logs signal, telemetry diagnoses. The only real loss is the backoff number in the worker's outer-loop handler. Adding allow-listed structured fields to the log payload was considered and rejected: it duplicates what telemetry already carries and adds a second allow-list surface to maintain, i.e. a second place to leak. Original finding: **Sanitized logs are now diagnostically empty** — the formatter emits `record.msg`, never `getMessage()`, so `%s` arguments are dropped with no structured field replacing them: `worker/main.py:62` logs "retrying in %s seconds" with no backoff, `api/routers/approvals.py:278` logs "for agent run %s" with no run id. This is the correct *security* behaviour, and naively "fixing" it is exactly the leak in the finding below. The design call — add safe structured fields to the payload, or accept template-only logs — is yours.
+- [x] [Review][Patch] **Mutation-table row 1 is false; Decision 2's `record.args` vector has no test at all** — I applied the row's exact mutation (`"event": record.getMessage() if owned else "third_party"`) and the minimization suite plus both new architecture guards stayed green (21 passed); the Acceptance Auditor saw the full suite stay green too. The mutation reintroduces a real leak: `logger.error('db failed for %s', secret)` then emits `"event":"db failed for WORKFORCE-ROW-SECRET-42"`. The only helper, `_formatted_exception_line`, passes `"safe-id"` as its sole arg, so no test can ever carry a canary through `record.args`. [backend/adapters/telemetry/json_logs.py:47]
+- [x] [Review][Patch] **C3's worker-stderr proof is a false green** — passes only because pytest installs root handlers. Run with `-p no:logging` it FAILS: the canary is present in redirected stderr, because with no root handler `logging.lastResort` writes the full traceback and message there. The test never asserts the sanitized boundary was used, and three of the twelve evidence cells rest on it. [backend/tests/test_content_minimization.py:61-71]
+- [x] [Review][Patch] **C4 spans leak exception content through span EVENTS, which the suite never inspects** — on the provider-error path OpenTelemetry records an `exception` event carrying `exception.message` and `exception.stacktrace` verbatim. Reproduced: a canary raised from the model appears in the span events of both `chat` and `invoke_agent` spans, while `keys <= SPAN_ATTRIBUTE_ALLOW_LIST` passes and the canary is absent from `attributes`. The test builds its blob from `span.attributes` only. Latent while no exporter is wired, live the moment Epic 6 lands Logfire — which this story names as planned. [backend/tests/test_content_minimization.py:172-180]
+- [x] [Review][Patch] **The literal-template guard's blind spots are live leak paths** — the formatter emits an owned logger's message verbatim, so this guard is the only thing standing between an f-string and a leak. It resolves only module-level `name = logging.getLogger(...)`. Measured green (i.e. bypassed) for: `from logging import getLogger`, `self.logger`, `import logging as lg`, and alias reassignment. Proven end-to-end — a canary via `from logging import getLogger` on logger `api.routers.probe` emitted `"event":"failed for WORKFORCE-ROW-CANARY-XYZ"`. The fix pattern already exists in the same file: the engine guard's import-binding resolution. [backend/tests/architecture/test_telemetry_boundaries.py:121-133]
+- [x] [Review][Patch] **A fifth, privileged engine site was never fixed and is invisible to the guard** — `engine_from_config(...)` on `default_settings().provisioning_database_url` (the superuser DSN) with no `hide_parameters`. `migrations/` is not in `NON_TEST_BACKEND_ROOTS`, so the guard can never see it. The story fixed four sites; there are five. [backend/migrations/env.py:81]
+- [x] [Review][Patch] **The engine guard misses spellings it claims to cover** — measured green for `import sqlalchemy; sqlalchemy.create_engine(url)`, `import sqlalchemy as sa; sa.create_engine(url)`, and — a name-form call the guard's own shape claims to handle — `from sqlalchemy.engine import create_engine`, whose binding resolves to `sqlalchemy.engine.create_engine` and misses the `sqlalchemy.create_engine` equality check. `engine_from_config` and `create_async_engine` are not in the matched set at all. Not ledgered. [backend/tests/architecture/test_telemetry_boundaries.py:164-172]
+- [x] [Review][Patch] **The guard that locks the "attributable proof matrix" cannot go red** — it asserts only that 12 keys exist and each value starts with the file prefix. I collapsed all twelve cells onto a single node and it stayed green. The matrix is in fact 6 distinct tests behind 12 names (all three `c1_telemetry_*` and all three `c3_worker_stderr_*` share one node each), so a regression is not attributable to a channel — the thing Task 11 exists to guarantee. Missing from the mutation table, which the team review rule requires for every new guard. [backend/tests/test_content_minimization_report.py:26-31]
+- [x] [Review][Patch] **Fixture class 1 is bound to no proof node** — `test_every_credential_environment_value_is_absent_from_settings_repr` is the only test implementing Decision 10's seven-canary sweep, and it is absent from `PROOF_NODES`. `passed: true` does not depend on it, while the report asserts `"secrets": "seven synthetic configuration canaries"`. [backend/evals/content_minimization_report.py:24-37]
+- [x] [Review][Patch] **Stored evidence predates a change to its own proof machinery** — the report records `git_commit: a8e0449` (written at `79bb374`), but `4be2534` subsequently changed `test_content_minimization_report.py`, the registered `content_minimization_report_machinery` check for the same invariant. The final refresh at `3750134` touched only the readiness report. `docs/EVIDENCE-CONVENTION.md` exists to prevent exactly this; regenerate. [evidence/story-5.2/content-minimization-report.json]
+- [x] [Review][Patch] **A non-str label silently destroys the whole telemetry record; a list defeats the bound** — `value[:128]` sits inside the `try` whose `except Exception: return None` drops the record, so `labels={"failure_reason": 5}` emits zero records where `json.dumps` previously coped. A list value slices by element count, emitting a 5000-char label. Type says `Mapping[str, str]`, so both are latent. Coerce with `str(value)[:N]`. Also unbounded here: the `exception_type` chain has a cycle guard but no depth cap. [backend/adapters/telemetry/json_logs.py:69-72]
+- [x] [Review][Patch] **`extra={"shiftmind_telemetry": ...}` bypasses the allow-list and truncation entirely** — the formatter dumps the payload verbatim; only the sink applies the key filter and the 128-char bound. Any other caller setting that attribute ships an arbitrary dict. Only the sink sets it today. [backend/adapters/telemetry/json_logs.py:35]
+- [x] [Review][Patch] **Run the worker as a process and its own error channel goes blank** — `logger = logging.getLogger(__name__)` becomes `__main__` under both `python worker/main.py` and `python -m worker.main`, and `__main__` is not in `_APPLICATION_LOGGER_PREFIXES`, so the sanitized event renders as `"third_party"` and the failure message is discarded. Verified; the file carries `if __name__ == "__main__"`. The test imports the module, so it never sees this. Name the logger literally. The same prefix list omits `evals`, `ingest`, `llm`, `domain` and `config`. [backend/worker/main.py:34]
+- [x] [Review][Patch] **Both new guards walk 9 of 16 first-party package directories** — `NON_TEST_BACKEND_ROOTS` omits `config`, `domain`, `evals`, `fixtures`, `ingest`, `llm`, `migrations` and the three backend-root modules; Tasks 4 and 5 both say "across the non-test backend roots". 41 first-party files are unscanned, including `evals/`, which this story added to. One live violation today (the migrations engine above). [backend/tests/architecture/test_telemetry_boundaries.py:23-26]
+- [x] [Review][Patch] **On failure the generator writes the canaries into the committed evidence** — `failures[name]` embeds the child pytest run's full stdout/stderr, so a red proof node would persist into `content-minimization-report.json` exactly the secrets and injection payloads the report exists to prove absent. Also `measure()` has no `except subprocess.TimeoutExpired`, so a node exceeding `timeout=180` crashes the generator and leaves the previous `passed: true` file in place. [backend/evals/content_minimization_report.py:96-127]
+- [x] [Review][Patch] **Mutation table is missing rows for delivered guards** — no row for `unsafe_label_operations`, the `_MAX_LABEL_VALUE_CHARS` truncation (the key-drop row covers key filtering only), Decision 4's `_APPLICATION_LOGGER_PREFIXES` third-party rule, `write_report`'s proof-node-completeness `ValueError`, the attributability guard, or the `_tree_is_clean` exemption. Row 1 is false (above); the engine row mutates a literally-named site and so does not prove the alias resolution that the spec was nearly shipped without — I re-ran it at `api/deps.py:238` and it does hold. [story Dev Agent Record]
+- [x] [Review][Patch] **Stale counts in Gate A machinery names and comments** — `test_registered_evidence_files_are_deliberate` now guards eight paths under a docstring narrating "three to five"; `gate_a_readiness.py:121` still says "Seventeen of the twenty registry checks" against a registry of 33. A reviewer using either to judge whether growth was deliberate reads a false number. [backend/tests/test_gate_a_readiness.py:255]
+- [x] [Review][Patch] **Decision 3's required docstring rationale is not recorded** — the decision asks the guard to say *why* argparse is exempt (an operator-supplied CLI value at import time, carrying no planner, workforce or schedule content) "so the next reader does not 'fix' argparse to satisfy a logging rule". The docstring says only "argparse parser.error is not a log channel". [backend/tests/architecture/test_telemetry_boundaries.py:283]
+- [x] [Review][Defer] **Uvicorn's error channel bypasses the sanitizer** [backend/api/main.py:58] — deferred, pre-existing. `LOGGING_CONFIG` gives `uvicorn` `propagate: false` and its own plain-text handler, which `uvicorn.error` inherits, so an unhandled ASGI exception prints message and traceback to stderr without touching `JsonLogFormatter`. Production process composition is explicitly Epic 6's. The new ledger entry names "direct stream writes", which is the wrong mechanism for this one.
+- [x] [Review][Defer] **`artifact_versions` digests are never re-verified** [backend/scripts/evidence_binding.py:815] — deferred, pre-existing. `audit_evidence_drift` reads only `contract_digests`; Story 3.11 and Story 5.2 are the two reports using `artifact_versions`, so editing `json_logs.py` leaves the recorded sha256 stale with no drift reported. Inherited convention gap, not introduced here.
+- [x] [Review][Defer] **Story 5.1's telemetry guards have their own blind spots** [backend/tests/architecture/test_telemetry_boundaries.py:22] — deferred, pre-existing. `PRODUCER_ROOTS` omits `adapters`, `services`, `store`, `engine` and `scripts`; a non-literal `event=` makes `telemetry_calls` skip the call entirely so run-attribution never sees it; `labels=dict(...)` and `labels=build_labels(...)` are `ast.Call` not `ast.Dict` and pass unflagged; `emit` reached through a bound alias is not counted. All predate this diff.
+
 
 ---
 
@@ -813,17 +860,37 @@ NFR29 gate; run the required two-pass three-runner Gate A sequence.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
-| Mutation | Guard | Before | After |
+Re-measured in full at code review (2026-09-05). **23 of 23 mutations redden.** Each row was applied
+to real, already-green code, the named guard was run, and the mutation reverted — not asserted from
+reading. The pre-review table's first row was **false**: `record.getMessage()` left the whole suite
+green, because no test carried a canary on `record.args`. It reddens now only because Decision 10's
+class-3 `%`-directive fixture, which had never been written, exists.
+
+| Mutation applied to real code | Guard that should redden | Before | After |
 |---|---|---|---|
-| Interpolate `record.args` with `record.getMessage()` | application log canary | green | failed; SQL parameter canary emitted |
-| Add `str(record.exc_info[1])` to fallback JSON | application/third-party exception canaries | green | failed; exception canaries emitted |
-| Return no violations from literal-template walker | synthetic nonliteral logger case | green | failed on f-string logger call |
-| Remove `hide_parameters=True` from fixture-history engine | SQLAlchemy engine AST guard | green | failed naming `fixture_history.py` |
-| Remove `include_binary_content=False` from tracer-provider arm | two-constructor binary-capture guard | green | failed on missing keyword |
-| Remove `repr=False` from `database_url` | seven-credential repr sweep | green | failed on `CANARY-DB-5-2` |
-| Accept every telemetry label key at runtime | unknown-label runtime guard | green | failed; `worker_id` escaped |
-| Remove `pydantic_ai.tool.deferral.name` from span allow-list | observed-span key allow-list | green | failed naming the new key |
-| Ignore JUnit `skipped` count | generator fail-closed machinery test | green | failed; skipped node accepted |
+| Interpolate `record.args` via `record.getMessage()` | C2 injection + adversarial cells | green | RED — 2 cells; `%`-directive canary emitted |
+| Emit `str(exc)` into the fallback JSON payload | C2/C3 exception canaries | green | RED |
+| Treat third-party loggers as owned | C2 adversarial cell | green | RED |
+| Accept every telemetry label key at runtime | C1 runtime key allow-list | green | RED |
+| Remove the label value truncation | C1 adversarial cell | green | RED |
+| Revert label coercion to `value[:n]` | C1 label type-safety node | green | RED — record silently dropped |
+| Reject computed label keys no longer | `unsafe_label_operations` synthetic case | green | RED |
+| Remove `hide_parameters=True` from `api/deps.py` | SQLAlchemy engine AST guard | green | RED — **alias path**, not a literal name |
+| Remove `hide_parameters=True` from `migrations/env.py` | SQLAlchemy engine AST guard | green | RED — `engine_from_config`, 5th site |
+| Return no violations from the literal-template walker | synthetic nonliteral logger case | green | RED |
+| Match logger receivers by name only | five logger-spelling evasions | green | RED |
+| Restrict the engine guard to bare-name calls | five engine-spelling evasions | green | RED |
+| Remove `include_binary_content=False` | two-constructor binary-capture guard | green | RED |
+| Remove `repr=False` from `database_url` | seven-credential repr sweep | green | RED |
+| Remove `pydantic_ai.tool.deferral.name` from the allow-list | observed-span key allow-list | green | RED |
+| Drop span EVENTS from the C4 blob | C4 provider-error cell | green | RED |
+| Collapse all 12 matrix cells onto one node | proof-matrix distinctness | green | RED |
+| Point a matrix cell at a nonexistent test | proof-matrix existence check | green | RED |
+| Ignore the JUnit `skipped` count | generator fail-closed machinery | green | RED |
+| Accept an incomplete proof-node set | `write_report` completeness | green | RED |
+| Write child pytest output into report failures | failure-detail containment | green | RED |
+| Restore alembic `fileConfig`'s `disable_existing_loggers` default | logging-config AST guard | green | RED |
+| Drop `__main__` from the owned-logger prefixes | worker-as-process ownership node | green | RED |
 
 ### Completion Notes List
 
@@ -845,7 +912,9 @@ NFR29 gate; run the required two-pass three-runner Gate A sequence.
 - `backend/agent/runtime.py`
 - `backend/api/deps.py`
 - `backend/evals/content_minimization_report.py`
+- `backend/migrations/env.py`  *(added at code review)*
 - `backend/scripts/gate_a_checks.py`
+- `backend/scripts/gate_a_readiness.py`  *(added at code review)*
 - `backend/scripts/seed_planner.py`
 - `backend/settings.py`
 - `backend/tests/architecture/test_telemetry_boundaries.py`

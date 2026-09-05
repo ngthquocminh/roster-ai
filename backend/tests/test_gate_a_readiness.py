@@ -252,10 +252,15 @@ def test_api_parity_binds_a_test_that_still_exists():
     ), "api_parity's proving test is gone; the check now proves nothing"
 
 
-def test_registered_evidence_files_are_the_five_known_ones():
+def test_registered_evidence_files_are_deliberate():
     """A stored `passed` flag answering a present-tense question is a category
     error the registry tolerates only where a shared CI runner cannot reproduce
     the measurement. Keep that set small and named, so growth is deliberate.
+
+    The set has grown to eight; the name no longer counts them, because a name
+    carrying a number goes stale silently (it read "the five known ones" while
+    guarding eight, until the code review of story-5.2). What matters is that
+    the set is enumerated here, so adding one is a deliberate edit.
 
     It shrank from four to three on 2026-08-18: Story 1.9's
     `viewer_parity_evidence` was replaced by `api_parity`, a live pytest check
@@ -287,6 +292,17 @@ def test_registered_evidence_files_are_the_five_known_ones():
         # pairs this stored verdict with live generator-machinery coverage.
         "evidence/story-5.2/content-minimization-report.json",
     }
+    # Recomputed, never narrated. `gate_a_readiness.py`'s docstring quotes
+    # these two numbers to explain which checks bypass the evidence path; they
+    # read "seventeen of twenty" against a registry of thirty-three until the
+    # code review of story-5.2. Assert them so prose and registry cannot part.
+    evidence_backed = [check for check in GATE_A_CHECKS if check.evidence_path]
+    runner_backed = [check for check in GATE_A_CHECKS if check.runner]
+    assert len(evidence_backed) == len(declared)
+    assert len(GATE_A_CHECKS) == len(evidence_backed) + len(runner_backed)
+    assert (
+        f"{len(runner_backed)}" == "25" and f"{len(GATE_A_CHECKS)}" == "33"
+    ), "update gate_a_readiness.py's docstring: the registry counts changed"
 
 
 def test_runner_matches_the_file_location():

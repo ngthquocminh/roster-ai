@@ -21,20 +21,36 @@ ARTIFACT_CONTRACT_MODULES = {
 ARTIFACT_DECLARED_VERSIONS = {"telemetry_record": "1", "json_log_boundary": "1"}
 
 _TEST = "tests/test_content_minimization.py::"
-PROOF_NODES = {
-    "c1_telemetry_secrets": _TEST + "test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
-    "c1_telemetry_prompt_injection": _TEST + "test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
-    "c1_telemetry_adversarial": _TEST + "test_telemetry_sink_drops_unknown_labels_and_truncates_allowed_values",
-    "c2_logs_secrets": _TEST + "test_application_log_drops_statement_parameters_and_exception_text",
-    "c2_logs_prompt_injection": _TEST + "test_application_log_drops_statement_parameters_and_exception_text",
-    "c2_logs_adversarial": _TEST + "test_third_party_log_replaces_message_with_fixed_event",
-    "c3_worker_stderr_secrets": _TEST + "test_worker_error_path_does_not_write_exception_content_to_stderr",
-    "c3_worker_stderr_prompt_injection": _TEST + "test_worker_error_path_does_not_write_exception_content_to_stderr",
-    "c3_worker_stderr_adversarial": _TEST + "test_worker_error_path_does_not_write_exception_content_to_stderr",
-    "c4_spans_secrets": _TEST + "test_observed_spans_are_allow_listed_and_drop_prompt_and_tool_content",
-    "c4_spans_prompt_injection": _TEST + "test_observed_spans_are_allow_listed_and_drop_prompt_and_tool_content",
-    "c4_spans_adversarial": _TEST + "test_both_instrumentation_constructors_disable_binary_capture",
+#: One DISTINCT test per channel x fixture class, so a red cell is attributable
+#: to a channel and a fixture class rather than to "the suite". The previous
+#: shape named twelve cells over six tests, which the machinery test could not
+#: detect because it only checked that the names existed (code review of
+#: story-5.2); `test_proof_matrix_is_attributable_to_channel_and_fixture_class`
+#: now enforces distinctness and existence.
+MATRIX_NODES = {
+    "c1_telemetry_secrets": _TEST + "test_c1_telemetry_drops_secret_bearing_labels",
+    "c1_telemetry_prompt_injection": _TEST + "test_c1_telemetry_drops_prompt_injection_text_in_unknown_labels",
+    "c1_telemetry_adversarial": _TEST + "test_c1_telemetry_bounds_adversarial_label_keys_and_values",
+    "c2_logs_secrets": _TEST + "test_c2_logs_drop_statement_parameters_and_secret_exception_text",
+    "c2_logs_prompt_injection": _TEST + "test_c2_logs_drop_prompt_injection_text_from_message_and_arguments",
+    "c2_logs_adversarial": _TEST + "test_c2_logs_neutralize_adversarial_arguments_and_third_party_records",
+    "c3_worker_stderr_secrets": _TEST + "test_c3_worker_stderr_withholds_secret_exception_text",
+    "c3_worker_stderr_prompt_injection": _TEST + "test_c3_worker_stderr_withholds_prompt_injection_text",
+    "c3_worker_stderr_adversarial": _TEST + "test_c3_worker_stderr_withholds_adversarial_exception_text",
+    "c4_spans_secrets": _TEST + "test_c4_spans_withhold_secret_prompt_and_tool_content",
+    "c4_spans_prompt_injection": _TEST + "test_c4_spans_withhold_pinned_prompt_injection_text",
+    "c4_spans_adversarial": _TEST + "test_c4_spans_withhold_exception_content_on_the_provider_error_path",
 }
+#: Configuration surfaces that are not per-channel but are release-blocking.
+#: `settings_repr_credentials` is Decision 10's class-1 sweep, which the first
+#: matrix left bound to no node at all, so `passed: true` did not depend on it.
+SURFACE_NODES = {
+    "settings_repr_credentials": _TEST + "test_every_credential_environment_value_is_absent_from_settings_repr",
+    "instrumentation_binary_capture": _TEST + "test_both_instrumentation_constructors_disable_binary_capture",
+    "telemetry_label_type_safety": _TEST + "test_c1_telemetry_survives_a_non_string_label_value",
+    "worker_process_logger_ownership": _TEST + "test_worker_run_as_a_process_still_renders_an_owned_event",
+}
+PROOF_NODES = MATRIX_NODES | SURFACE_NODES
 PINNED_INJECTION_CASE_IDS = (
     "scheduling-baseline-injection-chat-text",
     "scheduling-inspect-injection-chat-text",
@@ -93,14 +109,26 @@ def measure(repo_root: Path = REPO_ROOT) -> tuple[dict[str, bool], dict[str, str
     for name, node in PROOF_NODES.items():
         with tempfile.TemporaryDirectory() as directory:
             junit = Path(directory) / "result.xml"
-            completed = subprocess.run(
-                [sys.executable, "-m", "pytest", node, "-q", "-p", "no:cacheprovider", f"--junitxml={junit}"],
-                cwd=repo_root / "backend", capture_output=True, text=True, timeout=180, check=False,
-            )
+            try:
+                completed = subprocess.run(
+                    [sys.executable, "-m", "pytest", node, "-q", "-p", "no:cacheprovider", f"--junitxml={junit}"],
+                    cwd=repo_root / "backend", capture_output=True, text=True, timeout=180, check=False,
+                )
+            except subprocess.TimeoutExpired:
+                # Fail closed. Letting this escape crashed the generator, which
+                # left the previous `passed: true` report in place and kept
+                # Gate A green on a node that never completed.
+                verdicts[name] = False
+                failures[name] = "pytest node exceeded the 180s timeout"
+                continue
             passed, detail = _junit_outcome(junit)
         verdicts[name] = passed and completed.returncode == 0
         if not verdicts[name]:
-            failures[name] = f"{detail}\n{completed.stdout}\n{completed.stderr}".strip()
+            # `detail` only -- never the child's captured stdout/stderr. A red
+            # node's output carries the canaries and the pinned injection text
+            # this report exists to prove absent, and the report is committed
+            # (code review of story-5.2).
+            failures[name] = detail or f"pytest exited {completed.returncode}"
     return verdicts, failures
 
 
@@ -123,7 +151,20 @@ def write_report(output_path: Path, *, verdicts: Mapping[str, bool], failures: M
         "story": "5.2", "generated_at": datetime.now(timezone.utc).isoformat(),
         "passed": passed, "result": "passed" if passed else "failed", "release_blocking": not passed,
         "channels": ["C1 telemetry JSON", "C2 fallback JSON logs", "C3 worker stderr", "C4 OpenTelemetry spans"],
-        "fixtures": {"secrets": "seven synthetic configuration canaries", "prompt_injection": list(PINNED_INJECTION_CASE_IDS), "adversarial": ["control characters", "newline", "oversized label", "% directive", "identifier label key", "computed label key"]},
+        # Every fixture named here is DRIVEN by a proof node above. The pinned
+        # injection cases are read off disk by the suite's `_injection_prompts`
+        # and pushed through all four channels; they were previously only
+        # hashed as `dataset_files`, i.e. cited rather than reused (code review
+        # of story-5.2).
+        "fixtures": {
+            "secrets": "seven synthetic configuration canaries",
+            "prompt_injection": list(PINNED_INJECTION_CASE_IDS),
+            "adversarial": [
+                "control character", "newline", "oversized label",
+                "% directive in a log argument", "identifier label key",
+                "computed label key", "non-string label value",
+            ],
+        },
         "artifact_versions": artifact_versions(repo_root),
         "proof_nodes": {name: {"node": PROOF_NODES[name], "passed": bool(value)} for name, value in verdicts.items()},
         "version_bindings": dict(bindings),
