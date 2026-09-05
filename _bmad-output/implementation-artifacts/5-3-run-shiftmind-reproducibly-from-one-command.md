@@ -4,7 +4,7 @@ baseline_commit: 62cf85f
 
 # Story 5.3: Run ShiftMind Reproducibly from One Command [Technical Enabler]
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -516,16 +516,16 @@ PR gate covers it.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-verify the creation measurements and settle Decision 9's open question (AC: #1, #2)**
-  - [ ] Re-run every row of *Measured at creation* on a clean tree at the story's baseline commit with Docker up. Record drift in the Dev Agent Record; do not silently adopt different numbers.
-  - [ ] Confirm the four missing pieces are still missing: no `Dockerfile`; `worker/main.py`'s `parser.error` still fires; `gate_a_cutover.run_cutover` still calls `_snapshot_sqlite` unconditionally; no `/oidc/*` route is mounted.
-  - [ ] **Read `evidence/story-1.11/gate-a-readiness-report.json` and `gate_a_readiness.py` and answer in the Dev Agent Record: does the committed report record per-check test COUNTS, or only pass/fail?** If counts, a single-pass regeneration is owed at Task 12; if not, none is. Decision 9 deliberately leaves this to measurement.
-  - [ ] Record the Node major the frontend suites actually ran under, so Task 2's pin is written from a measurement rather than from the Stack table.
+- [x] **Task 1 — Re-verify the creation measurements and settle Decision 9's open question (AC: #1, #2)**
+  - [x] Re-run every row of *Measured at creation* on a clean tree at the story's baseline commit with Docker up. Record drift in the Dev Agent Record; do not silently adopt different numbers.
+  - [x] Confirm the four missing pieces are still missing: no `Dockerfile`; `worker/main.py`'s `parser.error` still fires; `gate_a_cutover.run_cutover` still calls `_snapshot_sqlite` unconditionally; no `/oidc/*` route is mounted.
+  - [x] **Read `evidence/story-1.11/gate-a-readiness-report.json` and `gate_a_readiness.py` and answer in the Dev Agent Record: does the committed report record per-check test COUNTS, or only pass/fail?** If counts, a single-pass regeneration is owed at Task 12; if not, none is. Decision 9 deliberately leaves this to measurement.
+  - [x] Record the Node major the frontend suites actually ran under, so Task 2's pin is written from a measurement rather than from the Stack table.
 
-- [ ] **Task 2 — Commit the toolchain pins (AC: #2, per Decisions 10 and 11)**
-  - [ ] Add `.python-version` (`3.12`) and a Node pin (`.nvmrc` plus `engines` in `frontend/package.json`) at **Node 22**, per Decision 11.
-  - [ ] Leave `.github/workflows/ci.yml`'s `NODE_VERSION` at `22` — the pin and CI must state the same fact, and CI is already the version that measures green. Do not touch any `--min-passed`/`--max-skipped` floor.
-  - [ ] Re-run frontend lint, typecheck, build and Vitest to confirm the pin changes nothing. A pin that matches what was already running must be a zero-diff result; anything else means the pin is wrong.
+- [x] **Task 2 — Commit the toolchain pins (AC: #2, per Decisions 10 and 11)**
+  - [x] Add `.python-version` (`3.12`) and a Node pin (`.nvmrc` plus `engines` in `frontend/package.json`) at **Node 22**, per Decision 11.
+  - [x] Leave `.github/workflows/ci.yml`'s `NODE_VERSION` at `22` — the pin and CI must state the same fact, and CI is already the version that measures green. Do not touch any `--min-passed`/`--max-skipped` floor.
+  - [x] Re-run frontend lint, typecheck, build and Vitest to confirm the pin changes nothing. A pin that matches what was already running must be a zero-diff result; anything else means the pin is wrong.
 
 - [ ] **Task 3 — Write the production worker runtime factory (AC: #1, per Decision 3)**
   - [ ] Add `backend/worker/composition.py` exporting `create_runtime() -> WorkerRuntimeV1`: engine from `settings.database_url` **with `hide_parameters=True`**, `PostgresScheduleRunRepository`, the scheduler seam from Task 4, `default_settings()`, and a `JsonLogTelemetrySink`.
@@ -749,7 +749,15 @@ types (AD-1/AR1).
 
 ### Implementation Plan
 
+- Execute Tasks 1-12 in story order with red-green-refactor guards, preserve the four-commit implementation plan, and regenerate Gate A readiness once at Task 12 because its committed test evidence records per-file counts.
+
 ### Debug Log References
+
+- 2026-09-05 Task 1: branch `story/5-3-run-shiftmind-reproducibly-from-one-command` at `df94852`; product baseline remains `62cf85f`. Docker PostgreSQL 18 healthy. An initial parallel backend/frontend run caused two existing load-sensitive backend guards to fail; each passed immediately in isolation, and the required serial clean-tree rerun reproduced the committed baseline exactly.
+- 2026-09-05 Task 1 measurements: backend `1587 passed, 1 skipped, 7 deselected`; PostgreSQL marker `158 passed, 1437 deselected`; evidence convention `93 passed`; architecture `72 passed`; Gate A readiness `44 passed`; Vitest `648 passed` across `85` files; Playwright `80 passed`. Frontend ran on Node `v22.22.0`.
+- 2026-09-05 Decision 9 answer: the committed readiness report records per-test-file `total`, `passed`, `skipped`, and `failed` counts under each test-backed check, plus aggregate runner case counts. Therefore one clean-tree regeneration is owed at Task 12 if this story changes any recorded test-file count; it is not a pass/fail-only report.
+- 2026-09-05 Missing-piece verification: zero Dockerfiles/toolchain pins remain; `worker.main` retains the mandatory runtime-factory parser error; `run_cutover` still invokes `_snapshot_sqlite` unconditionally; `api.main` mounts no `/oidc/*` router.
+- 2026-09-05 Task 2: pinned Python `3.12` and Node `22`; CI Node and all threshold flags remained untouched. Lint, typecheck, and build passed. Two full Vitest attempts encountered resource-sensitive 60-second timeouts in different cases of the existing `ScenarioDataParity` file; that file passed `14/14` in isolation and the final full run passed `648/648` across `85` files in 72.99s.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
@@ -758,7 +766,16 @@ types (AD-1/AR1).
 
 ### Completion Notes List
 
+- Task 1 complete: all creation measurements reproduced serially without drift, the four composition gaps remain present, Node 22 was measured directly, and readiness-count regeneration responsibility was settled.
+- Task 2 complete: committed toolchain selectors match the already-green CI/runtime versions without dependency or test-count movement.
+
 ### File List
+
+- `.nvmrc` (new)
+- `.python-version` (new)
+- `frontend/package.json` (modified)
+- `_bmad-output/implementation-artifacts/5-3-run-shiftmind-reproducibly-from-one-command.md` (modified)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified)
 
 ---
 
