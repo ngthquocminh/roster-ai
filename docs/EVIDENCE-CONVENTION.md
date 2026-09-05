@@ -87,9 +87,9 @@ bindings = resolve_bindings({
     so report generation never needs PostgreSQL running
   * `dataset` / `scenario` by importing `default_fixtures()` from
     `backend/scripts/gate_a_cutover.py` — never a second copy of the list
-  * `image` as `"local source tree"` / `postgres:18`. There is no registry and
-    no image pipeline; a fabricated digest would be a false binding. Immutable
-    digests arrive with Epic 5 (Stories 5.5–5.7).
+  * `image` from `.build/image-digests.json` when a local image build has been
+    recorded, otherwise `"local source tree"` / `postgres:18`; a fabricated digest would be a false binding. Immutable
+    digests arrive with Epic 5 Story 5.3.
 * **Emits all eleven NFR27 bindings plus `schema_version`.** A binding that
   does not apply keeps its key and states the reason — it is never omitted.
 * **Rejects a caller that supplies a derived binding.** Passing your own `code`

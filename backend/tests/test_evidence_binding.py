@@ -448,14 +448,36 @@ def test_contract_digests_reproduce_the_already_recorded_values():
     assert digests == recorded
 
 
-def test_image_binding_is_honest_about_the_absent_registry():
-    """No ECR, no Dockerfile pipeline — a fabricated digest would be a lie."""
-    bindings = resolve_bindings(_DECLARED, repo_root=REPO_ROOT, allow_dirty=True)
-    assert bindings["image"] == {
+def test_image_binding_falls_back_honestly_when_build_manifest_is_absent(tmp_path):
+    """No build manifest means source-tree placeholders, never fake digests."""
+    from scripts.evidence_binding import resolve_image_binding
+
+    assert resolve_image_binding(tmp_path) == {
         "api": "local source tree",
         "web": "local source tree",
         "database": "postgres:18",
     }
+
+
+def test_image_binding_reads_a_complete_content_addressed_manifest(tmp_path):
+    from scripts.evidence_binding import resolve_image_binding
+
+    build = tmp_path / ".build"
+    build.mkdir()
+    expected = {
+        "api": "sha256:" + "a" * 64,
+        "web": "sha256:" + "b" * 64,
+        "database": "postgres:18",
+    }
+    (build / "image-digests.json").write_text(json.dumps(expected), encoding="utf-8")
+    assert resolve_image_binding(tmp_path) == expected
+
+
+def test_evidence_audit_remains_monotone_for_local_source_tree_images():
+    from scripts.evidence_binding import audit_evidence_file
+
+    evidence = REPO_ROOT / "evidence/story-1.11/gate-a-readiness-report.json"
+    assert not [item for item in audit_evidence_file(evidence) if "image" in item]
 
 
 def test_module_hardcodes_neither_the_alembic_head_nor_a_commit():

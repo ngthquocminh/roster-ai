@@ -1,7 +1,7 @@
 """Shared NFR27 version-binding resolution for evidence reports.
 
-Deliberately generic, not Gate-A-specific. `epics.md:1612-1623` already names
-`evidence/story-5.10/rollback-drill-report.json` and
+Deliberately generic, not Gate-A-specific. `epics.md:1578-1597` names
+Story 5.3's image binding and
 `evidence/epic-5/release-gate-report.json` as future consumers, so anything
 that knows about Gate A belongs in the caller, not here.
 
@@ -73,15 +73,32 @@ _OUTPUT_EXEMPT_NOTE = (
     "measurement."
 )
 
-# There is no container registry, no image build pipeline and no `.github/` in
-# this repository. AD-17/AD-24's immutable-digest requirement is Epic 5 work
-# (Stories 5.5-5.7). Fabricating a digest here would be a false binding, so the
-# honest value is the one Stories 1.4/1.5/1.9/1.10 already recorded.
+# A build manifest is optional because evidence audits routinely run without
+# Docker. Generation records real local image digests when the build has
+# produced them; absence retains the historical honest placeholder.
 _LOCAL_IMAGE_BINDING: dict[str, str] = {
     "api": "local source tree",
     "web": "local source tree",
     "database": "postgres:18",
 }
+
+
+def resolve_image_binding(repo_root: Path) -> dict[str, str]:
+    manifest = repo_root / ".build" / "image-digests.json"
+    if not manifest.is_file():
+        return dict(_LOCAL_IMAGE_BINDING)
+    try:
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return dict(_LOCAL_IMAGE_BINDING)
+    expected = {"api", "web", "database"}
+    if not isinstance(document, dict) or set(document) != expected:
+        return dict(_LOCAL_IMAGE_BINDING)
+    if not all(isinstance(document[key], str) and document[key].strip() for key in expected):
+        return dict(_LOCAL_IMAGE_BINDING)
+    if not all(document[key].startswith("sha256:") for key in ("api", "web")):
+        return dict(_LOCAL_IMAGE_BINDING)
+    return {key: document[key] for key in ("api", "web", "database")}
 
 
 class DirtyTreeError(RuntimeError):
@@ -539,7 +556,7 @@ def resolve_bindings(
         ),
         "solver": declared["solver"],
         "code": code,
-        "image": dict(_LOCAL_IMAGE_BINDING),
+        "image": resolve_image_binding(repo_root),
         "schema_version": resolve_alembic_head(versions_dir),
     }
 

@@ -553,11 +553,11 @@ PR gate covers it.
   - [x] Add `.dockerignore` files. Extend `docker-compose.yml` with `api`, `worker` and `web` services: one built backend image used by both `api` and `worker` (differing only in `command:`), health-gated ordering behind `postgres`, a one-shot bootstrap step, and the environment overrides Decision 7 requires (`APP_BASE_URL`, `OIDC_ISSUER`, `OIDC_REDIRECT_URI`, `CORS_ORIGINS`, `SHIFTMIND_WORKER_RUNTIME_FACTORY`, the seed planner identity).
   - [x] Add a guard asserting the images install from the frozen lockfile paths — `uv sync --frozen` and `npm ci`, never `uv sync` alone or `npm install`.
 
-- [ ] **Task 8 — Wire the image digest into `resolve_bindings()` (AC: #2, per Decision 8)**
-  - [ ] Have the build write `.build/image-digests.json` (gitignored) with each produced image's content-addressed digest.
-  - [ ] Make `resolve_bindings()` read it for the `image` binding, falling back to today's `_LOCAL_IMAGE_BINDING` values with the reason stated when absent. Keep the three keys `api`/`web`/`database` and never fabricate.
-  - [ ] **Add no digest requirement to `audit_evidence_file()`**, per Decision 8. Add a test asserting the audit still passes for an evidence file whose `image` binding records `"local source tree"`.
-  - [ ] Correct the three stale pointers in `evidence_binding.py` and the one in `docs/EVIDENCE-CONVENTION.md`.
+- [x] **Task 8 — Wire the image digest into `resolve_bindings()` (AC: #2, per Decision 8)**
+  - [x] Have the build write `.build/image-digests.json` (gitignored) with each produced image's content-addressed digest.
+  - [x] Make `resolve_bindings()` read it for the `image` binding, falling back to today's `_LOCAL_IMAGE_BINDING` values with the reason stated when absent. Keep the three keys `api`/`web`/`database` and never fabricate.
+  - [x] **Add no digest requirement to `audit_evidence_file()`**, per Decision 8. Add a test asserting the audit still passes for an evidence file whose `image` binding records `"local source tree"`.
+  - [x] Correct the three stale pointers in `evidence_binding.py` and the one in `docs/EVIDENCE-CONVENTION.md`.
 
 - [x] **Task 9 — Write the composed-stack proof (AC: #1, per Decision 14)**
   - [x] Add a `@pytest.mark.compose` test (registered in `pyproject.toml`'s markers and deselected by default) that brings the stack up, signs in through the real OIDC flow, walks the journey, and **asserts the worker drove an enqueued run to a terminal state**.
@@ -764,6 +764,7 @@ types (AD-1/AR1).
 - 2026-09-05 Task 9: the opt-in Compose proof passed in 60.32s against an isolated fresh PostgreSQL volume. It completed real HTTP sign-in and session reuse, read both fixtures, executed the keyless `TestModel` turn to a terminal state, created a deterministic governed draft through the application boundary, enqueued through the public API, and observed the real worker reach a terminal solver state.
 - 2026-09-05 Decision 12 implementation note: `TestModel` remained the ordinary runtime default and no scripted runtime seam was added. Because generated schema-shaped arguments cannot name governed fixture records reliably, the proof separates model-run termination from deterministic behavioral claims and drives draft creation through the real capability/repository boundary.
 - 2026-09-05 pre-commit composition regression: focused auth/architecture suite `65 passed`; focused worker/composition suite `100 passed`; default backend suite `1599 passed, 2 skipped, 7 deselected` in 213.76s. An earlier `uv run --project backend pytest` invocation ignored backend pytest configuration, accidentally ran live-provider cases, and was discarded; the canonical `--directory backend` invocation is green.
+- 2026-09-05 Task 8: recorded local backend and web image IDs as content-addressed SHA-256 digests in the gitignored build manifest. Evidence binding tests passed `35` with one clean-tree-only skip; the committed local-source-tree report still passes audit, locking monotonicity independently of whether a future build manifest exists.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
@@ -777,6 +778,7 @@ types (AD-1/AR1).
 - Tasks 3-7 complete: production worker, RLS-correct solver composition, bootstrap, local OIDC HTTP surface, and the shared-image Compose stack are implemented and guarded.
 - Task 9 complete: the isolated opt-in proof brings up the built stack and verifies sign-in through terminal worker execution; normal CI selection remains unchanged at seven live deselections.
 - Task 10 complete: reviewer and developer setup/configuration documentation now describes the runnable PostgreSQL composition and its explicit live-provider override.
+- Task 8 complete: generated image IDs now flow into the three-key NFR27 image binding when present, while absent/invalid manifests retain the honest historical fallback and do not alter audit validity.
 
 ### File List
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -126,6 +127,11 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
     origin = env["APP_ORIGIN"]
     try:
         _compose(env, "up", "-d", "--build")
+        subprocess.run(
+            [sys.executable, "-m", "scripts.record_image_digests"],
+            cwd=REPO_ROOT / "backend",
+            check=True,
+        )
         deadline = time.monotonic() + 120
         while True:
             try:
