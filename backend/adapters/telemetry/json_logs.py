@@ -8,10 +8,24 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from application.contracts.telemetry import TelemetryRecordV1
+from application.contracts.telemetry import TELEMETRY_LABEL_KEYS, TelemetryRecordV1
 
 TELEMETRY_LOGGER_NAME = "shiftmind.telemetry"
 _PAYLOAD_ATTRIBUTE = "shiftmind_telemetry"
+_MAX_LABEL_VALUE_CHARS = 128
+#: A cycle guard alone does not bound a retry loop that chains a fresh
+#: exception per attempt; cap the recorded chain too.
+_MAX_EXCEPTION_CHAIN = 16
+#: Owned loggers render their message template; everything else collapses to
+#: "third_party". `__main__` is listed because `worker/main.py` is executable:
+#: run as `python worker/main.py` or `python -m worker.main` its module logger
+#: is named `__main__`, and without this the worker's own failure event was
+#: discarded as third-party (code review of story-5.2).
+_APPLICATION_LOGGER_PREFIXES = (
+    "api", "worker", "application", "adapters", "agent", "engine",
+    "services", "store", "scripts", "shiftmind", "evals", "ingest",
+    "llm", "domain", "config", "__main__",
+)
 
 
 def _json_default(value: object) -> object:
@@ -28,17 +42,50 @@ class JsonLogFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         payload = getattr(record, _PAYLOAD_ATTRIBUTE, None)
+        if isinstance(payload, dict):
+            # Re-apply the label bound here as well as in the sink. The sink is
+            # the only writer today, but `extra=` is a public logging API: any
+            # caller setting this attribute would otherwise have its dict
+            # serialized verbatim, bypassing the allow-list and the length
+            # bound entirely (code review of story-5.2).
+            labels = payload.get("labels")
+            if isinstance(labels, dict):
+                payload = payload | {
+                    "labels": {
+                        key: str(value)[:_MAX_LABEL_VALUE_CHARS]
+                        for key, value in labels.items()
+                        if key in TELEMETRY_LABEL_KEYS
+                    }
+                }
+        elif payload is not None:
+            payload = None
         if payload is None:
+            owned = any(
+                record.name == prefix or record.name.startswith(f"{prefix}.")
+                for prefix in _APPLICATION_LOGGER_PREFIXES
+            )
             payload = {
                 "occurred_at": datetime.fromtimestamp(
                     record.created, tz=timezone.utc
                 ).isoformat().replace("+00:00", "Z"),
                 "level": record.levelname,
                 "logger": record.name,
-                "message": record.getMessage(),
+                "event": record.msg if owned and isinstance(record.msg, str) else "third_party",
+                "call_site": f"{record.module}:{record.lineno}",
             }
             if record.exc_info:
-                payload["exception"] = self.formatException(record.exc_info)
+                exception = record.exc_info[1]
+                exception_types: list[str] = []
+                seen: set[int] = set()
+                while (
+                    exception is not None
+                    and id(exception) not in seen
+                    and len(exception_types) < _MAX_EXCEPTION_CHAIN
+                ):
+                    seen.add(id(exception))
+                    exception_types.append(type(exception).__qualname__)
+                    exception = exception.__cause__ or exception.__context__
+                payload["exception_type"] = exception_types
         return json.dumps(payload, default=_json_default, separators=(",", ":"))
 
 
@@ -49,6 +96,17 @@ class JsonLogTelemetrySink:
     def emit(self, record: TelemetryRecordV1) -> None:
         try:
             payload = asdict(record)
+            # `str(value)` before slicing, not `value[:n]`. The contract types
+            # labels as `Mapping[str, str]`, but a dataclass does not enforce
+            # it: an int raised TypeError *inside* this try, so a single
+            # wrong-typed label silently dropped the whole record, and a list
+            # sliced by element count and escaped the bound entirely (code
+            # review of story-5.2).
+            payload["labels"] = {
+                key: str(value)[:_MAX_LABEL_VALUE_CHARS]
+                for key, value in (record.labels or {}).items()
+                if key in TELEMETRY_LABEL_KEYS
+            }
             # Validate serialization inside this catch as well as in the
             # formatter so malformed records cannot escape through logging.
             json.dumps(payload, default=_json_default)

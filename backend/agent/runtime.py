@@ -130,17 +130,22 @@ class PydanticAIAgentRuntime:
         # AD-12/AD-15: external telemetry excludes prompt, tool, workforce, and
         # schedule content BY DEFAULT. This is constructed content-disabled and
         # there is no parameter to turn it on — enabling content export is a
-        # deliberate future decision, not an adapter option.
+        # deliberate future decision, not an adapter option. Binary capture is
+        # also explicitly disabled because the framework default is True.
         #
         # Deliberately NOT the Logfire SDK: Story 5.1 owns telemetry export.
         # `opentelemetry-api` arriving transitively under pydantic-ai-slim is all
         # this story needs.
         instrumentation_settings = (
             InstrumentationSettings(
-                include_content=False, tracer_provider=tracer_provider
+                include_content=False,
+                include_binary_content=False,
+                tracer_provider=tracer_provider,
             )
             if tracer_provider is not None
-            else InstrumentationSettings(include_content=False)
+            else InstrumentationSettings(
+                include_content=False, include_binary_content=False
+            )
         )
 
         output_type = (

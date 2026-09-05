@@ -51,8 +51,8 @@ AC2_CEILING_FIELDS = (
 class Settings:
     db_path: str            # SQLite file
     data_dir: str           # directory holding input fixtures (*.json)
-    database_url: str       # restricted API runtime connection (shiftmind_login)
-    provisioning_database_url: str  # privileged: Alembic migrations, seed_planner.py
+    database_url: str = field(repr=False)  # restricted API runtime credential (T-04-01)
+    provisioning_database_url: str = field(repr=False)  # privileged credential (T-04-01)
     maintenance_flag_path: str  # persistent Gate A legacy-write lock
     llm_provider: str       # "stub" (default) | "gemini" | "openrouter"
     llm_model: str          # model id passed to the selected provider

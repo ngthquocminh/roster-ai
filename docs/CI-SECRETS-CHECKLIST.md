@@ -50,4 +50,6 @@ Before merging a change to `.github/workflows/ci.yml`:
       as `"$VAR"` (these are user-controllable and are a script-injection vector)
 - [ ] Uploaded artifacts contain only test logs and Playwright traces, no
       environment dumps
+- [ ] Story 5.2 minimization canaries remain synthetic placeholders and have
+      not been replaced with real provider, database, OIDC, or runtime secrets
 - [ ] Artifact `retention-days` is set (30) rather than left to the default

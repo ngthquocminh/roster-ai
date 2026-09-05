@@ -235,7 +235,7 @@ async def get_session(
 
 @lru_cache(maxsize=8)
 def _site_context_engine(database_url: str) -> Engine:
-    return create_postgres_engine(database_url)
+    return create_postgres_engine(database_url, hide_parameters=True)
 
 
 @contextmanager

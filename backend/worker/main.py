@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import logging
 import math
 import os
 import signal
 import socket
 import sys
-import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
@@ -31,6 +31,7 @@ DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 #: not spin against a down dependency either.
 MAX_ERROR_BACKOFF_SECONDS = 60.0
 RUNTIME_FACTORY_ENV = "SHIFTMIND_WORKER_RUNTIME_FACTORY"
+logger = logging.getLogger(__name__)
 
 
 class RuntimeFactory(Protocol):
@@ -57,18 +58,12 @@ def install_shutdown_handlers(stop_event: Event) -> None:
 
 
 def _report_error(error: BaseException, backoff_seconds: float) -> None:
-    """Surface a transient failure without a logging framework.
-
-    This repo configures no logger (CLI paths use `print`), and swallowing the
-    traceback would make a looping worker undiagnosable.
-    """
-    print(
-        f"worker: run_once failed, retrying in {backoff_seconds:.1f}s: "
-        f"{type(error).__name__}: {error}",
-        file=sys.stderr,
-        flush=True,
+    """Surface a transient failure through the sanitized JSON log boundary."""
+    logger.error(
+        "worker run_once failed; retrying in %s seconds",
+        backoff_seconds,
+        exc_info=(type(error), error, error.__traceback__),
     )
-    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
 def run_worker_loop(

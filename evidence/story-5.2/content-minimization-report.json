@@ -1,0 +1,169 @@
+{
+  "artifact_versions": {
+    "algorithm": "sha256",
+    "json_log_boundary": {
+      "module": "backend/adapters/telemetry/json_logs.py",
+      "sha256": "632accdb38ec5ee6f49eab58f84168be5d53ae535495872fd539779d4a41c0b6",
+      "version": "1"
+    },
+    "telemetry_record": {
+      "module": "backend/application/contracts/telemetry.py",
+      "sha256": "b2826b9d5448c1226ca9bad3b5600c48e7218dc006dda53f9d478c7de350a15e",
+      "version": "1"
+    }
+  },
+  "channels": [
+    "C1 telemetry JSON",
+    "C2 fallback JSON logs",
+    "C3 worker stderr",
+    "C4 OpenTelemetry spans"
+  ],
+  "fixtures": {
+    "adversarial": [
+      "control character",
+      "newline",
+      "oversized label",
+      "% directive in a log argument",
+      "identifier label key",
+      "computed label key",
+      "non-string label value"
+    ],
+    "prompt_injection": [
+      "scheduling-baseline-injection-chat-text",
+      "scheduling-inspect-injection-chat-text",
+      "scheduling-inspect-injection-fixture-field",
+      "scheduling-inspect-injection-tool-output"
+    ],
+    "secrets": "seven synthetic configuration canaries"
+  },
+  "generated_at": "2026-09-05T08:02:36.692845+00:00",
+  "passed": true,
+  "proof_nodes": {
+    "c1_telemetry_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c1_telemetry_bounds_adversarial_label_keys_and_values",
+      "passed": true
+    },
+    "c1_telemetry_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c1_telemetry_drops_prompt_injection_text_in_unknown_labels",
+      "passed": true
+    },
+    "c1_telemetry_secrets": {
+      "node": "tests/test_content_minimization.py::test_c1_telemetry_drops_secret_bearing_labels",
+      "passed": true
+    },
+    "c2_logs_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c2_logs_neutralize_adversarial_arguments_and_third_party_records",
+      "passed": true
+    },
+    "c2_logs_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c2_logs_drop_prompt_injection_text_from_message_and_arguments",
+      "passed": true
+    },
+    "c2_logs_secrets": {
+      "node": "tests/test_content_minimization.py::test_c2_logs_drop_statement_parameters_and_secret_exception_text",
+      "passed": true
+    },
+    "c3_worker_stderr_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c3_worker_stderr_withholds_adversarial_exception_text",
+      "passed": true
+    },
+    "c3_worker_stderr_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c3_worker_stderr_withholds_prompt_injection_text",
+      "passed": true
+    },
+    "c3_worker_stderr_secrets": {
+      "node": "tests/test_content_minimization.py::test_c3_worker_stderr_withholds_secret_exception_text",
+      "passed": true
+    },
+    "c4_spans_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c4_spans_withhold_exception_content_on_the_provider_error_path",
+      "passed": true
+    },
+    "c4_spans_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c4_spans_withhold_pinned_prompt_injection_text",
+      "passed": true
+    },
+    "c4_spans_secrets": {
+      "node": "tests/test_content_minimization.py::test_c4_spans_withhold_secret_prompt_and_tool_content",
+      "passed": true
+    },
+    "instrumentation_binary_capture": {
+      "node": "tests/test_content_minimization.py::test_both_instrumentation_constructors_disable_binary_capture",
+      "passed": true
+    },
+    "settings_repr_credentials": {
+      "node": "tests/test_content_minimization.py::test_every_credential_environment_value_is_absent_from_settings_repr",
+      "passed": true
+    },
+    "telemetry_label_type_safety": {
+      "node": "tests/test_content_minimization.py::test_c1_telemetry_survives_a_non_string_label_value",
+      "passed": true
+    },
+    "worker_process_logger_ownership": {
+      "node": "tests/test_content_minimization.py::test_worker_run_as_a_process_still_renders_an_owned_event",
+      "passed": true
+    }
+  },
+  "release_blocking": false,
+  "result": "passed",
+  "story": "5.2",
+  "version_bindings": {
+    "application": "ShiftMind Story 5.2 telemetry boundaries",
+    "code": {
+      "git_commit": "562f57d99ec3b975a2d46120cdd45efe55ef3892",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "capability_distribution": {
+        "scheduling_baseline": 1,
+        "scheduling_inspect": 3
+      },
+      "case_count": 4,
+      "case_versions": {
+        "scheduling-baseline-injection-chat-text": "1",
+        "scheduling-inspect-injection-chat-text": "1",
+        "scheduling-inspect-injection-fixture-field": "1",
+        "scheduling-inspect-injection-tool-output": "1"
+      },
+      "files": {
+        "backend/evals/golden/scheduling_baseline/injection-chat-text.json": {
+          "case_id": "scheduling-baseline-injection-chat-text",
+          "case_version": "1",
+          "sha256": "da4bcff93c2a27e5dcd130a71bb680d51506f82b48e729d14ebefdd6d4f103e3"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-chat-text.json": {
+          "case_id": "scheduling-inspect-injection-chat-text",
+          "case_version": "1",
+          "sha256": "08f67b1df7110c070a5cdd2ae614491da4030fa2785a00a9aceccfa1d2724e77"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-fixture-field.json": {
+          "case_id": "scheduling-inspect-injection-fixture-field",
+          "case_version": "1",
+          "sha256": "61a52796c1b51c144c876bc39e8b9a6c5a7d56bd23906874e05463c9f45ce8d1"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-tool-output.json": {
+          "case_id": "scheduling-inspect-injection-tool-output",
+          "case_version": "1",
+          "sha256": "27c57683cf152fee4c6fe57431898d45e1f74d6c53d6e031c28790f50ae76110"
+        }
+      },
+      "kind": "version-controlled golden evaluation dataset",
+      "risk_class_distribution": {
+        "prohibited": 4
+      }
+    },
+    "evaluator": "pytest Story 5.2 content-minimization suite",
+    "image": {
+      "api": "local source tree",
+      "database": "postgres:18",
+      "web": "local source tree"
+    },
+    "model": "deterministic FunctionModel; no external provider",
+    "policy": "Story 5.2 AC1/AC2; NFR3/NFR4/NFR5/NFR27/NFR29/NFR30",
+    "prompt": "synthetic canaries and four pinned prompt-injection cases",
+    "scenario": "not applicable \u2014 no scenario fixture touched",
+    "schema_version": "e5f6a7b8c9d0",
+    "solver": "not applicable \u2014 no scheduling solve",
+    "tool": "demonstration tool double and JSON logging boundary"
+  }
+}

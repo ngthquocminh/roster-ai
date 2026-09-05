@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-09-02",
+  "measurement_date": "2026-09-05",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -951,15 +951,15 @@
           },
           "backend/tests/test_evidence_convention.py": {
             "status": "passed",
-            "total": 87,
-            "passed": 87,
+            "total": 93,
+            "passed": 93,
             "skipped": 0,
             "failed": 0
           },
           "backend/tests/test_gate_a_readiness.py": {
             "status": "passed",
-            "total": 42,
-            "passed": 42,
+            "total": 44,
+            "passed": 44,
             "skipped": 0,
             "failed": 0
           }
@@ -1196,6 +1196,44 @@
         }
       },
       "bound": true
+    },
+    {
+      "story": "5.2",
+      "check": "content_minimization_evidence",
+      "description": "Generated four-channel, three-fixture-class content-minimization verdict.",
+      "invariant": "content_minimization",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "evidence",
+      "source": "evidence/story-5.2/content-minimization-report.json",
+      "bound": true
+    },
+    {
+      "story": "5.2",
+      "check": "content_minimization_report_machinery",
+      "description": "Live fail-closed checks requiring executed, unskipped proof nodes.",
+      "invariant": "content_minimization",
+      "authority": "NFR29",
+      "ar28_invariant": null,
+      "result": "passed",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "test_files": [
+          "backend/tests/test_content_minimization_report.py"
+        ],
+        "cases": {
+          "backend/tests/test_content_minimization_report.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "bound": true
     }
   ],
   "ar28_invariants": {
@@ -1307,6 +1345,15 @@
         "state_semantics_report_machinery"
       ],
       "blocking": []
+    },
+    "content_minimization": {
+      "title": "Content and secret minimization across logs and configured traces",
+      "result": "passed",
+      "contributing_checks": [
+        "content_minimization_evidence",
+        "content_minimization_report_machinery"
+      ],
+      "blocking": []
     }
   },
   "ac2_gates": {
@@ -1322,21 +1369,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 1511,
-      "run_started": "2026-09-02T21:50:00.992149+07:00",
-      "sha256": "67b65c2d6069ebece6807365a10786c800fc7e093eca779b9ac649d58b1d22ef"
+      "cases": 1588,
+      "run_started": "2026-09-05T15:14:13.479699+07:00",
+      "sha256": "59cb3bfa12688b29f01c0ffe48d81de6cc2eaed8fa06d85d007675ffbe9ffd32"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
-      "cases": 647,
-      "run_started": "2026-09-02T14:46:34.116Z",
-      "sha256": "1b1bb38c6751ecd451eaa886c07db8ec4311a4df730bbe1838f97098f0f41a90"
+      "cases": 648,
+      "run_started": "2026-09-05T08:08:53.255Z",
+      "sha256": "f9203aee2c731d74d589bcc33e0845a94cf0edef4f0bab3816ac6939f2f52cdf"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 80,
-      "run_started": "2026-09-02T14:46:37.249Z",
-      "sha256": "ca64b649b29d09ba9c08334399004b36e0baf798981ab38d3eeb2255165a920a"
+      "run_started": "2026-09-05T08:09:05.252Z",
+      "sha256": "f1a9a752df9524574ea4f7b10f8425e3badc24acfb9e8b473eb15afe2289e8fe"
     }
   },
   "version_bindings": {
@@ -1350,7 +1397,7 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "057cf6940f855b87ce77b93e70f32cd3c3cde292",
+      "git_commit": "562f57d99ec3b975a2d46120cdd45efe55ef3892",
       "working_tree_dirty": false
     },
     "image": {
@@ -1358,7 +1405,8 @@
       "web": "local source tree",
       "database": "postgres:18"
     },
-    "schema_version": "e5f6a7b8c9d0"
+    "schema_version": "e5f6a7b8c9d0",
+    "binding_scope": "output path(s) exempted from the dirty-tree check: evidence/story-1.11/gate-a-readiness-report.json. No source change was uncommitted; the recorded commit reproduces this measurement."
   },
   "blocking": [],
   "gate_a_passed": true,
