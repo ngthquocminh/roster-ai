@@ -724,6 +724,31 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 
 - **CP-SAT round 2 never returns a solution, so no run ever produces a candidate, so the
   approval / baseline / provenance path is unreachable from a real solve.**
+  **CORRECTED 2026-09-06 while drafting `sprint-change-proposal-2026-09-06.md`:** the paragraph
+  below named `engine/cpsat/objective.py:64`. That module carries the same defect but is NOT on
+  the blocked path. The worker composes `GovernedSchedulerAdapter` (`worker/composition.py:21`),
+  so the run that fails to reach `solver_completed` goes through `governed_adapter.py:195`
+  `_solve_lexicographic_governed`, which snapshots at `:245` and re-`Solve()`s with no hint at
+  `:250-251`. `objective.py` is reached only by `api/deps.py:68 create_engine("cpsat")` — the
+  legacy routes, the `run.py` CLI and `scripts/calibrate_penalties.py`.
+
+  The two also differ in budget, which invalidates the transfer of the measurements below.
+  `objective.py:47` sets `max_time_in_seconds` ONCE, so OR-Tools grants each round a full budget —
+  this is what the 120s → 133.8s measurement observed, and it means the "one decreasing wall-time
+  budget" claim in `governed_adapter.py`'s `SCOPE_CONTROLS` was disputed against the wrong module.
+  `_solve_lexicographic_governed`'s `apply_remaining_budget()` (`:209-227`) recomputes
+  `wall_time_limit_seconds - elapsed` before each round, so round 2 receives only what round 1
+  left of a shared 30s (`settings.py:135`) under a shared 30s deterministic ceiling
+  (`settings.py:134`). **The table below was measured through `objective.py` at 30s PER `Solve()`
+  and does not transfer. Story 5.3a must re-measure on the governed path**, and must not assume a
+  hint alone suffices there.
+
+  Related: the "12+ test files" blast radius stated below is wider than measured. Only
+  `test_governed_solver_adapter.py:235` and `test_penalty_calibration.py` run a real solve;
+  `test_lease_next_job.py:164` reads a stub, and every other `round2`/`UNKNOWN` match feeds a
+  synthetic `SolverOutcomeV1`. The full suite still runs — the expectation changes from "expect
+  breakage" to "investigate any breakage".
+
   `engine/cpsat/objective.py:64` re-`Solve()`s the same model with a new objective and **no
   hint**, discarding the round-1 solution it snapshotted four lines earlier at `:58`
   (`snap = list(solver.ResponseProto().solution)`) — even though that solution is trivially
