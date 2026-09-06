@@ -7,7 +7,7 @@ from uuid import UUID
 
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import SolverOutcomeV1
-from application.ports.scheduler import FatalSchedulerError, SchedulerFactory, SchedulerPort
+from application.ports.scheduler import SchedulerFactory, SchedulerPort
 from application.ports.schedule_run import ScheduleRunRepository
 from application.use_cases.finalize_schedule_run import (
     FinalizedScheduleRunV1,
@@ -162,13 +162,15 @@ def execute_schedule_run(
         )
         heartbeat_thread.start()
     try:
-        active_scheduler = scheduler(connection) if callable(scheduler) else scheduler
+        # A `SchedulerPort` is identified by its `solve` method, never by
+        # callability: a port that also defines `__call__`, or a class passed
+        # where an instance was meant, would otherwise be invoked as a factory
+        # and fail much later as an AttributeError that the handler below
+        # turns into a plausible-looking UNKNOWN outcome.
+        active_scheduler = (
+            scheduler if hasattr(scheduler, "solve") else scheduler(connection)
+        )
         outcome = active_scheduler.solve(snapshot)
-    except FatalSchedulerError:
-        # Missing or digest-invalid immutable input is deterministic. Let the
-        # lease boundary mark the job failed instead of allowing its lease to
-        # lapse and replay the same unreadable snapshot forever.
-        raise
     except Exception as exc:
         outcome = SolverOutcomeV1(
             solver_status="UNKNOWN",

@@ -15,58 +15,82 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
 
-  bootstrap:
+  # The backend image is built here, on the long-lived service, so
+  # `docker compose build api` and `--pull always` mean what they say. Compose
+  # runs its build phase before creating any container, so `bootstrap` and
+  # `worker` can reference the tag without repeating the stanza.
+  api:
     build:
       context: .
-    image: shiftmind-backend:local
-    command: ["python", "-m", "scripts.bootstrap_local"]
+    image: ${BACKEND_IMAGE:-shiftmind-backend:local}
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # AD-23: the request-serving process gets the RESTRICTED role only. The
+    # privileged DSN is deliberately NOT in this anchor -- `rosterai` is the
+    # container's POSTGRES_USER and therefore a superuser, and superusers
+    # bypass FORCE ROW LEVEL SECURITY. Only `bootstrap` adds it, below.
     environment: &backend-environment
       ROSTERAI_DATABASE_URL: postgresql+psycopg://shiftmind_login:shiftmind_login@postgres:5432/rosterai
-      ROSTERAI_PROVISIONING_DATABASE_URL: postgresql+psycopg://rosterai:rosterai@postgres:5432/rosterai
       APP_BASE_URL: ${APP_ORIGIN:-http://localhost:8080}
       OIDC_PROVIDER: fake
       OIDC_ISSUER: ${APP_ORIGIN:-http://localhost:8080}/oidc
       OIDC_REDIRECT_URI: ${APP_ORIGIN:-http://localhost:8080}/api/v1/auth/callback
       CORS_ORIGINS: ${APP_ORIGIN:-http://localhost:8080}
-      SHIFTMIND_SEED_PLANNER_SUBJECT: local-planner
-      SHIFTMIND_SEED_PLANNER_EMAIL: planner@shiftmind.local
+      SHIFTMIND_SEED_PLANNER_SUBJECT: ${SHIFTMIND_SEED_PLANNER_SUBJECT:-local-planner}
+      SHIFTMIND_SEED_PLANNER_EMAIL: ${SHIFTMIND_SEED_PLANNER_EMAIL:-planner@shiftmind.local}
       SHIFTMIND_WORKER_RUNTIME_FACTORY: worker.composition:create_runtime
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  api:
-    image: shiftmind-backend:local
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    environment: *backend-environment
+      # AC1's "available through explicit configuration". Unset on the host,
+      # these resolve to empty and `settings.py` keeps the keyless `"test"`
+      # default; without the passthrough, exporting them would do nothing.
+      AGENT_RUNTIME_MODEL: ${AGENT_RUNTIME_MODEL:-test}
+      AGENT_RUNTIME_API_KEY: ${AGENT_RUNTIME_API_KEY:-}
     depends_on:
       bootstrap:
         condition: service_completed_successfully
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 2s
       timeout: 5s
       retries: 30
 
+  bootstrap:
+    image: ${BACKEND_IMAGE:-shiftmind-backend:local}
+    command: ["python", "-m", "scripts.bootstrap_local"]
+    environment:
+      <<: *backend-environment
+      # The one process that legitimately needs the privileged account:
+      # Alembic and `seed_planner.py` create roles and rows the restricted
+      # login cannot. It is a one-shot container that exits.
+      ROSTERAI_PROVISIONING_DATABASE_URL: postgresql+psycopg://rosterai:rosterai@postgres:5432/rosterai
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   worker:
-    image: shiftmind-backend:local
+    image: ${BACKEND_IMAGE:-shiftmind-backend:local}
     command: ["python", "-m", "worker.main"]
     environment: *backend-environment
     depends_on:
       bootstrap:
         condition: service_completed_successfully
+    restart: unless-stopped
+    # `worker/main.py` finishes an in-flight `run_once` after SIGTERM rather
+    # than abandoning the lease. The default 10s grace would SIGKILL a CP-SAT
+    # solve mid-flight and orphan its lease until it lapsed.
+    stop_grace_period: 60s
 
   web:
     build:
       context: frontend
       args:
         VITE_API_BASE_URL: ${APP_ORIGIN:-http://localhost:8080}
-    image: shiftmind-web:local
+    image: ${WEB_IMAGE:-shiftmind-web:local}
     ports:
       - "${WEB_PORT:-8080}:80"
     depends_on:
       api:
         condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:

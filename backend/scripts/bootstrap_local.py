@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -53,14 +52,11 @@ def bootstrap_local(
                     source_path=str(fixture.path.resolve().relative_to(REPO_ROOT)),
                 )
             )
-        subject = os.environ.get("SHIFTMIND_SEED_PLANNER_SUBJECT", "").strip()
-        email = os.environ.get("SHIFTMIND_SEED_PLANNER_EMAIL", "").strip()
-        if not subject or not email:
-            raise ValueError(
-                "SHIFTMIND_SEED_PLANNER_SUBJECT and SHIFTMIND_SEED_PLANNER_EMAIL are required"
-            )
         planner = provision_seed_planner(
-            subject=subject, email=email, site_id=site_id, engine=privileged_engine
+            subject=resolved.seed_planner_subject,
+            email=resolved.seed_planner_email,
+            site_id=site_id,
+            engine=privileged_engine,
         )
         return BootstrapResult(fixtures=tuple(imported), planner=planner)
     finally:

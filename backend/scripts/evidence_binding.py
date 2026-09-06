@@ -83,22 +83,53 @@ _LOCAL_IMAGE_BINDING: dict[str, str] = {
 }
 
 
+#: A content-addressed image digest, in the exact shape `docker image inspect`
+#: emits. The prefix alone is not enough: `"sha256:pending"` would satisfy it
+#: and land in committed evidence looking like provenance. `record_image_digests`
+#: enforces the same pattern when it writes, but a hand-written manifest never
+#: passes through that code — and hand-writing evidence is the defect this
+#: whole module exists to prevent, so the reading side must check too.
+_IMAGE_DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+
+_IMAGE_KEYS: tuple[str, ...] = ("api", "web", "database")
+
+
 def resolve_image_binding(repo_root: Path) -> dict[str, str]:
+    """The `image` binding: recorded digests when the build wrote them.
+
+    ABSENT is the ordinary case — an evidence audit run without Docker — and
+    falls back to `_LOCAL_IMAGE_BINDING`, whose values state their own reason
+    ("local source tree"). The binding keeps exactly the three keys
+    `api`/`web`/`database` in both cases: fourteen committed evidence files
+    record that shape, so a fourth key (including a "reason" key) would be a
+    contract change, not an improvement.
+
+    PRESENT BUT MALFORMED is different and must not fall back. A corrupt
+    manifest sitting beside a real build would otherwise generate evidence
+    claiming no build happened, which is a false statement rather than an
+    honest absence.
+    """
     manifest = repo_root / ".build" / "image-digests.json"
     if not manifest.is_file():
         return dict(_LOCAL_IMAGE_BINDING)
     try:
         document = json.loads(manifest.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return dict(_LOCAL_IMAGE_BINDING)
-    expected = {"api", "web", "database"}
-    if not isinstance(document, dict) or set(document) != expected:
-        return dict(_LOCAL_IMAGE_BINDING)
-    if not all(isinstance(document[key], str) and document[key].strip() for key in expected):
-        return dict(_LOCAL_IMAGE_BINDING)
-    if not all(document[key].startswith("sha256:") for key in ("api", "web")):
-        return dict(_LOCAL_IMAGE_BINDING)
-    return {key: document[key] for key in ("api", "web", "database")}
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"{manifest} exists but is unreadable: {exc}") from exc
+    if not isinstance(document, dict) or set(document) != set(_IMAGE_KEYS):
+        raise ValueError(
+            f"{manifest} must be an object with exactly the keys "
+            f"{sorted(_IMAGE_KEYS)}; got {sorted(document) if isinstance(document, dict) else type(document).__name__}"
+        )
+    if not all(isinstance(document[key], str) and document[key].strip() for key in _IMAGE_KEYS):
+        raise ValueError(f"{manifest} carries a non-string or empty image value")
+    for key in ("api", "web"):
+        if _IMAGE_DIGEST_RE.fullmatch(document[key]) is None:
+            raise ValueError(
+                f"{manifest} records {key}={document[key]!r}, which is not a "
+                "content-addressed sha256 digest"
+            )
+    return {key: document[key] for key in _IMAGE_KEYS}
 
 
 class DirtyTreeError(RuntimeError):

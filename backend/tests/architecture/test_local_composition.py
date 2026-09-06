@@ -42,7 +42,29 @@ def test_fake_oidc_mount_guard_detects_synthetic_violation() -> None:
 def test_container_builds_use_frozen_dependency_paths() -> None:
     backend = (BACKEND_ROOT.parent / "Dockerfile").read_text(encoding="utf-8")
     web = (BACKEND_ROOT.parent / "frontend/Dockerfile").read_text(encoding="utf-8")
-    assert "uv sync --project backend --frozen --all-groups" in backend
+    assert "uv sync --project backend --frozen --no-dev --no-install-project" in backend
+    # `--all-groups` would install the dev group, whose own comment in
+    # backend/pyproject.toml says `opentelemetry-sdk` "is not shipped at
+    # runtime". An unfrozen install would satisfy AC2's words and defeat it.
+    assert "--all-groups" not in backend
+    assert "uv sync" in backend and "--frozen" in backend
     assert "npm ci" in web
     assert "npm install" not in web
     assert "ARG VITE_API_BASE_URL" in web
+
+
+def test_runtime_image_excludes_untracked_local_developer_state() -> None:
+    """`COPY backend/ backend/` would otherwise bake `.env` and `var/` in.
+
+    `settings.py` calls `load_dotenv(backend/.env, override=False)` at import,
+    so a baked file supplies every key compose does not set — and it would make
+    the recorded image digest depend on untracked local state.
+    """
+    ignored = {
+        line.strip()
+        for line in (BACKEND_ROOT.parent / ".dockerignore")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+    assert {".env", ".env.*", "**/.env", "**/.env.*", "**/var/", "*.db"} <= ignored

@@ -541,7 +541,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
-          version: "0.10.8"
+          # Same interpreter input as the four required jobs. Without it this
+          # job's Python is chosen by `.python-version` instead, so bumping
+          # `env.PYTHON_VERSION` would silently not reach the image proof.
+          python-version: ${{ env.PYTHON_VERSION }}
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - name: Sync proof dependencies

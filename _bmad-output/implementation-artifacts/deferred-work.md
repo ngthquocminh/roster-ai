@@ -190,7 +190,7 @@ Surfaced while amending Story 2.7's Decision 2 (`sprint-change-proposal-2026-08-
   - **PARTIALLY CLOSED 2026-08-18 (`chore/gate-a-p3-live-parity`):** the third (circular) test is gone, replaced by real denied write requests — see the CLOSED note above. The **second** test (the `ast.walk` substring scan over two hardcoded adapters) is untouched and remains open; it is weak independently of Epic 3 and was deliberately left out of scope so that session stayed focused.
 - The `authenticated_readonly_scenario_data` invariant's largest contributors are design-token and table-widget tests (`StatusBadge`, `EmptyState`, `ColumnChooser`, `FilterBar`, `columns.ts`, `filters.ts`), while `backend/tests/test_scenario_projection.py` — which holds the actual 401/403 assertions — is filed under `normalized_scenario_reads` [backend/scripts/gate_a_checks.py:220-280]. `validate_registry()` requires at least one check per invariant but never that a check is topically relevant, so this invariant would still roll up `passed` with every authorization test removed from its bucket. Not a defect in Story 1.11 — the spec's own coverage table (story lines 60-68) dictated the mapping — but the registry is the thing Epic 2+ will trust, and it should prove what it claims.
 - `dataset` and `scenario` are documented as "derived live, none is a literal", but resolve through `default_fixtures()` [backend/scripts/gate_a_cutover.py:76-89], which is a hardcoded tuple of `FixtureSpec`s with literal `"v1"` version strings and no checksum of the underlying `data/sample_tiny_input*.json` bytes. Editing a fixture's contents without bumping the literal leaves the binding byte-identical. Importing rather than re-declaring was the spec's explicit instruction, so this is inherited, not introduced — but the fixture binding is weaker than the contract-digest binding beside it.
-- ~~The readiness gate cannot be run twice in a row: `gate_a_readiness.main()` writes into `evidence/`, which dirties the tree, so the next `resolve_bindings()` raises `DirtyTreeError` before doing any work.~~ **CLOSED 2026-09-05 (verified by Story 5.3 against commit `8139866`).** A genuinely fresh local clone at `966028b` ran `gate_a_readiness.py` twice consecutively with only `evidence/story-1.11/gate-a-readiness-report.json` dirty after the first run; the second run wrote the report again without `DirtyTreeError`. The borrowed XML correctly left the gate false because it predated the clone commit and omitted new cases, but rerunnability—not a fabricated green verdict—was the condition under verification. The narrow own-output exemption therefore works while every other dirty path remains blocking.
+- ~~The readiness gate cannot be run twice in a row: `gate_a_readiness.main()` writes into `evidence/`, which dirties the tree, so the next `resolve_bindings()` raises `DirtyTreeError` before doing any work.~~ **CLOSED 2026-09-05 (verified by Story 5.3 at commit `966028b`).** The property commit `8139866` claimed to fix was re-measured at this story's own tree, not at `8139866` itself. A genuinely fresh local clone at `966028b` ran `gate_a_readiness.py` twice consecutively with only `evidence/story-1.11/gate-a-readiness-report.json` dirty after the first run; the second run wrote the report again without `DirtyTreeError`. The borrowed XML correctly left the gate false because it predated the clone commit and omitted new cases, but rerunnability—not a fabricated green verdict—was the condition under verification. The narrow own-output exemption therefore works while every other dirty path remains blocking.
 - `requires_git` [backend/tests/test_evidence_convention.py:31-42] silently skips `test_every_recorded_commit_is_a_real_ancestor_that_touched_code` and `test_evidence_file_is_fully_bound` when git is unavailable, so a git-less CI image would run the repo-wide sweep green having proved nothing about commits — the same "a skip looks like a pass" failure `junit_ingest.py` was deliberately built to close for the gate itself. No git-less CI exists today (`.github/` is still absent), so nothing is exploitable now.
 
 ## Deferred from: code review of story-2-1-establish-the-owned-agent-runtime-boundary (2026-08-10)
@@ -701,3 +701,81 @@ rather than folded in.
 - **`artifact_versions` digests are recorded but never re-verified, so evidence cannot report contract drift.** `audit_evidence_drift` (`backend/scripts/evidence_binding.py:815`) recomputes and compares only `contract_digests`. Story 3.11's `recovery-idempotency.json` and Story 5.2's `content-minimization-report.json` are the two evidence files that instead record `artifact_versions` with per-module sha256, and nothing recomputes those. Editing `backend/adapters/telemetry/json_logs.py` or `backend/application/contracts/telemetry.py` leaves the recorded digest stale with no drift reported and the stored verdict still `passed: true`. [backend/scripts/evidence_binding.py:815] — **Deferred reason: pre-existing and inherited from Story 3.11, not introduced by 5.2; both stories pair the stored verdict with a live pytest check, so the gate still re-executes the proof.** **Owner/revisit trigger: the first evidence file whose verdict is NOT paired with a live runner check, or a convention pass over `EVIDENCE-CONVENTION.md`** — teach `audit_evidence_drift` the `artifact_versions` shape, or migrate both files to `contract_digests`.
 
 - **Story 5.1's telemetry AST guards have blind spots this story did not close.** `PRODUCER_ROOTS` (`backend/tests/architecture/test_telemetry_boundaries.py:22`) omits `adapters`, `services`, `store`, `engine` and `scripts`, so a `TelemetryRecordV1` constructed there escapes both the label allow-list check and the emit-guard check. Within the covered roots: a non-literal `event=` makes `telemetry_calls` skip the whole call, so `test_every_run_scoped_event_declares_run_attribution` never sees it; `labels=dict(agent_run_id=x)` and `labels=build_labels(x)` are `ast.Call` rather than `ast.Dict` and pass `producer_label_keys`/`unsafe_label_operations` unflagged; and `emit` reached through a bound alias (`f = sink.emit; f(record)`) is not counted by `unguarded_emit_calls`. All measured green. [backend/tests/architecture/test_telemetry_boundaries.py:22] — **Deferred reason: every one of these predates this diff and no live producer trips any of them today — all `labels={...}` sites are literal dicts, all `event=` values are literals, and every producer lives in a covered root.** **Owner/revisit trigger: the first telemetry producer added outside `api`/`agent`/`application`/`worker`, or the first computed `event=`/`labels=` expression** — widen `PRODUCER_ROOTS` to match `NON_TEST_BACKEND_ROOTS` and make a non-literal `event=` or a non-`ast.Dict` `labels=` an offender rather than a skip.
+
+## Deferred from: code review of story-5.3 (2026-09-06)
+
+- **`evidence/story-1.11/gate-a-readiness-report.json`'s `measurement_date` is `2026-09-06` while all three recorded `run_started` values are `2026-09-05`.** Under `docs/EVIDENCE-CONVENTION.md`'s measure-then-generate rule the field should name the measurement date, not the generation date. **Deferred reason: not hand-editable.** Correcting it means a regeneration pass on a clean tree, and hand-editing an evidence file is the exact defect the convention exists to prevent. **Owner/revisit trigger: the next story that regenerates this report for a substantive reason** - correct the field in the same pass rather than spending a three-runner run on the date alone.
+
+- **The `postgres` healthcheck can report ready against initdb's temporary socket server on a first start.** `pg_isready -U rosterai -d rosterai` (`docker-compose.yml:10-15`) omits `-h 127.0.0.1` and declares no `start_period`, so on an empty volume it can succeed before the TCP listener accepts connections, and `bootstrap` starts against a database that is not yet reachable. **Deferred reason: pre-existing and explicitly preserved.** Story 5.3's files-being-modified table requires the healthcheck stay verbatim because `.github/workflows/ci.yml:40-47` depends on it. The race became load-bearing only now that `bootstrap` gates the whole stack behind it. **Owner/revisit trigger: the first observed bootstrap failure on a cold volume, or Epic 6's hosted composition**, whichever comes first.
+
+- **Container base images are tag-pinned, not digest-pinned.** `Dockerfile:1-2` uses `ghcr.io/astral-sh/uv:0.10.8` and `python:3.12-slim`; `frontend/Dockerfile:1,10` uses `node:22-bookworm-slim` and `nginx:1.29-alpine`. AC2's "tested constraints and lockfiles pin each used dependency version" is satisfied for Python and npm packages (`uv sync --frozen`, `npm ci`) but not for the bases, so the recorded image digest is not reproducible from reviewed code alone. The existing write-only-manifest entry covers staleness of `.build/image-digests.json` only and does not name this. **Deferred reason: belongs with the registry pipeline.** Digest-pinning bases without a registry to resolve them against trades one unverifiable value for another. **Owner/revisit trigger: Epic 6's ECR work under AD-17**, where base digests can be pinned and verified together.
+
+- **Story 5.3's commit 4 no longer matches its message, and commit 5 carries more than the regenerated report.** `docs(story-5.3): reconcile the ledger` was amended to add code (strict 64-hex SHA-256 validation in the digest recorder plus its regression test) so that `resolve_bindings()` would accept it under the convention's "the recorded commit touches at least one code file" rule; `evidence(gate-a): refresh after story 5.3` also carries the story file and `sprint-status.yaml`. Both are disclosed in the Dev Agent Record's Debug Log. **Deferred reason: history is already written and the binding is valid.** The substantive half - that the added validation guards the recorder but not `resolve_image_binding`, which is the path reaching committed evidence - is raised as a patch in the story's Review Findings. **Owner/revisit trigger: the next story whose commit plan ends in a docs-only commit** - plan for the code-touching rule up front rather than amending afterwards.
+
+- **`test_container_builds_use_frozen_dependency_paths` has no synthetic violating-source case.** Story 5.3's Testing requirements say "Every new guard needs a synthetic violating-source case", matching `test_each_guard_detects_synthetic_violating_source`'s convention. The guard reads the two real Dockerfiles and asserts substrings, so there is no source-string entry point a synthetic case could use; the same applies to the `provisioning_database_url` assertion in `test_telemetry_boundaries.py`. **Deferred reason: covered by a stronger method.** Both were demonstrated red by real-code mutation in the story's mutation table, which the Epic 4 retrospective prefers over a synthetic case. **Owner/revisit trigger: the first story that refactors either guard into a `(source: str) -> list[str]` shape**, at which point the synthetic case costs one line.
+
+- **Production code imports `httpx` without declaring it.** `backend/adapters/cognito/oidc.py:9` does `import httpx`, but `httpx` appears only in `backend/pyproject.toml`'s `dev` group, annotated "required by fastapi.testclient.TestClient" - i.e. declared for a test reason, not a runtime one. It resolves today only because `openai`, `google-genai` and `pydantic-ai-slim` all pull it transitively (`uv tree --frozen --no-dev` confirms `httpx v0.28.1` is present without the dev group). The import is lazy - `application/ports/identity.py:49` only loads the Cognito adapter when `OIDC_PROVIDER=cognito` - so nothing breaks today. Surfaced at Story 5.3's code review while verifying that dropping `--all-groups` from the runtime image was safe. **Deferred reason: out of scope.** Story 5.3's Decision 10 requires the dependency floors be left alone, and moving `httpx` into `[project].dependencies` re-resolves the lockfile. **Owner/revisit trigger: the first story permitted to change `backend/pyproject.toml`'s dependency list, or Epic 6's Cognito adapter work** - whichever first makes the Cognito path reachable in a deployed environment.
+
+## Deferred from: code review of story-5.3 (2026-09-06) — measured by running the composed stack
+
+These three were found by BUILDING the stack and driving it, not by reading the diff. All three
+have the same owner and the same trigger, and together they are why Story 5.3's compose proof
+does not assert `solver_completed` or exercise Flow 1's approval leg.
+
+- **CP-SAT round 2 never returns a solution, so no run ever produces a candidate, so the
+  approval / baseline / provenance path is unreachable from a real solve.**
+  `engine/cpsat/objective.py:64` re-`Solve()`s the same model with a new objective and **no
+  hint**, discarding the round-1 solution it snapshotted four lines earlier at `:58`
+  (`snap = list(solver.ResponseProto().solution)`) — even though that solution is trivially
+  feasible for round 2, which only adds `round1_unmet <= r1`. CP-SAT therefore searches from
+  zero and times out. `finalize_schedule_run` creates a candidate **only** when the status is
+  `solver_completed`, i.e. `OPTIMAL` or `FEASIBLE` (`finalize_schedule_run.py:41-58`), so a
+  `solver_timed_out` run carries none.
+  **Measured 2026-09-06**, 30s per `Solve()`, 8 workers, seed 42, both shipped fixtures:
+
+  | fixture | round 2 without hint | round 2 with round-1 hint |
+  |---|---|---|
+  | `sample_tiny_input` | `UNKNOWN` (28.6s) | **`FEASIBLE`** (30.2s) |
+  | `sample_tiny_input_more_tm` | `UNKNOWN` (30.4s) | **`FEASIBLE`** (30.4s) |
+
+  More budget does not help and was ruled out by measurement, not by argument: a 120s limit
+  produced 133.8s of total wall time, which proves each round gets its own full budget rather
+  than a shared decreasing one, and round 2 spent all 120s finding nothing. `FEASIBLE` is
+  sufficient — `_terminal` maps both `OPTIMAL` and `FEASIBLE` to `solver_completed`.
+  **Not fixed in Story 5.3** because it changes solver search behaviour: 12+ test files read
+  `round2`/`UNKNOWN`/`total_cost`, and `governed_adapter.py`'s `SCOPE_CONTROLS` records
+  measured reproducibility claims (`round1=247.44352`, `round2=1118241`, "identical … in 3/3
+  runs") that must be re-measured and rewritten under the evidence convention, never hand-edited.
+  Story 5.3's own Decision 11 refused a Node major bump on exactly this reasoning — "a major
+  bump would make a red suite ambiguous" — and this is a larger change to a hotter path.
+  **Owner: Story 5.3a. Trigger: before Story 5.4 writes its walkthrough**, whose AC1 requires it
+  walk the Wednesday-coverage journey "with real output" and that "every claim it makes about
+  behavior is reproducible by the Story 5.3 command" (`epics.md:1455-1456`). Flow 1 ends at
+  "approve as baseline → read the Provenance timeline", so 5.4 has nothing to describe until
+  this is closed. 5.3a also owns restoring the approval leg and the `solver_completed`
+  assertion to `backend/tests/compose_proof.py`.
+
+- **The approval, baseline-promotion and provenance features have never been exercised against a
+  real solve.** Every `solver_completed` in the suite is fabricated — `SimpleNamespace` stubs in
+  `test_approvals_api.py:666,711,762`, a seeded row in `test_approval_governance_postgres.py:99`,
+  a status literal in `test_agent_approval_path.py:156`. That is sound unit isolation, but it
+  means the join between a real candidate and the approval path is unproven end to end, and the
+  entry above is why it could not be proven now. **Owner: Story 5.3a**, as the natural consumer
+  of the first real candidate. **Trigger: the same one.**
+
+- **`TestModel` drives an agent turn to `agent_failed` / `invalid_output`, not to completion.**
+  Measured 2026-09-06 through the composed stack's public HTTP route: `POST
+  /conversations/{id}/agent-runs/{id}/execute` returns `agent_run_status: "agent_failed"` with
+  `reason: "invalid_output"` and detail "The model returned an invalid response."
+  Story 5.3's Decision 12 asserts that `TestModel` "synthesises schema-conformant values" and
+  that "The journey completes"; the first is wrong and the second follows from it. The cause is
+  the one the Dev Agent Record already identified — generated tool arguments cannot name governed
+  fixture records — but its consequence was recorded as "meaningless prose" when it is in fact a
+  failed turn. AC1's "the primary journey is completable end to end against deterministic model
+  doubles" is therefore **not** satisfied at the agent step. The compose proof now asserts the
+  seam is wired and keyless (a terminal agent status that is not `provider_error`) rather than
+  that the turn succeeds. **Owner: Story 5.3a. Trigger: the same one** — with a real candidate
+  available, decide there whether the walkthrough's agent step is bound to a live-provider
+  capture (Decision 12's own recommended split) or whether a runtime-selectable deterministic
+  double is finally warranted.
+

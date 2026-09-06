@@ -4,7 +4,13 @@ FROM python:3.12-slim
 COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock backend/
-RUN uv sync --project backend --frozen --all-groups --no-install-project
+# `--frozen` is what AC2 requires: install exactly what uv.lock pins, never
+# re-resolve. `--no-dev` is what backend/pyproject.toml requires: its dev group
+# carries `opentelemetry-sdk`, annotated "Deliberately in the dev group, never
+# [project].dependencies: it is not shipped at runtime", plus pytest and httpx.
+# Nothing runs tests inside a container — the compose proof drives from the
+# host — so the dev group has no runtime consumer here.
+RUN uv sync --project backend --frozen --no-dev --no-install-project
 COPY alembic.ini ./
 COPY data/ data/
 COPY backend/ backend/

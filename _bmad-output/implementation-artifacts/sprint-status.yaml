@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-05
+last_updated: 2026-09-06
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2433,7 +2433,7 @@ development_status:
   # the stale :193 (already fixed by retro prep task P2 at 8139866, entry text never updated) rather
   # than re-doing the work. Leaves OPEN and untouched: :50, :494, :521, :663, :679, :684, :687,
   # :19-28, :689 -- the last five are explicitly Epic 6's or have unrelated triggers.
-  5-3-run-shiftmind-reproducibly-from-one-command: ready-for-review
+  5-3-run-shiftmind-reproducibly-from-one-command: in-progress
   5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
 

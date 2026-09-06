@@ -4,7 +4,7 @@ baseline_commit: 62cf85f
 
 # Story 5.3: Run ShiftMind Reproducibly from One Command [Technical Enabler]
 
-Status: ready-for-review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -147,7 +147,7 @@ Do not re-derive these from code; re-verify them at Task 1 and record any drift.
 | `SchedulerPort` interface | `solve(self, snapshot: RunSnapshotV1) -> SolverOutcomeV1` (`application/ports/scheduler.py:15-16`). No connection, no site, is passed |
 | `RunSnapshotV1` site scoping | carries `scenario_version_id` (`:63`) and **no `site_id`** |
 | RLS on `scenario_version` | `ENABLE` **and `FORCE ROW LEVEL SECURITY`**, policy `USING (site_id = NULLIF(current_setting('app.site_id', true), '')::uuid)` (`migrations/versions/d128d081ab48_…:241-262`). A connection without `app.site_id` set reads **zero rows** |
-| How that failure classifies | `SolverInputError` (and its `SnapshotInputMissingError` subclass) is **not** in `_FATAL_EXECUTION_ERRORS` (`lease_and_execute_schedule_run.py:43-47`), so the job is left `leased`, the lease lapses, and `lease_next_job` re-selects it. **A mis-wired worker retries forever in silence rather than failing** |
+| How that failure classifies | **CORRECTED AT CODE REVIEW 2026-09-06.** The original claim - that the job is left `leased`, the lease lapses, and a mis-wired worker "retries forever in silence" - was wrong. `_FATAL_EXECUTION_ERRORS` governs only exceptions that ESCAPE `execute_schedule_run`, and `SolverInputError` never did: `except Exception` catches it, carries its `code` onto `SolverOutcomeV1(solver_status="UNKNOWN", reason=...)`, and `finalize_schedule_run._terminal` turns that into `("solver_failed", "snapshot_input_missing")`. A mis-wired worker **fails its runs terminally and names the cause**; it does not spin. |
 | Fixture importer reachable on a clean clone | **none.** `gate_a_cutover.run_cutover` calls `_snapshot_sqlite(...)` at `:145` unconditionally; `_snapshot_sqlite` raises `FileNotFoundError` when the legacy DB is absent (`:115-124`). It also writes the maintenance flag (`_enable_maintenance`, `:140`), after which `refuse_legacy_routes_during_gate_a` 503s the legacy routes permanently (`api/main.py:188-219`) |
 | The only documented seed sequence | `docs/GATE-A-RUNBOOK.md:150-181` — an inline `python -c` snippet calling `PostgresFixtureHistoryAdapter` plus `default_fixtures()` directly, then `seed_planner.py`. It appears in **no** other document |
 | `default_fixtures()` | `scripts/gate_a_cutover.py:76-89` — `sample_tiny_input` v1 and `sample_tiny_input_more_tm` v1. **Also imported by `evidence_binding.py`** for the `dataset` and `scenario` bindings ("never a second copy of the list") |
@@ -589,12 +589,15 @@ PR gate covers it.
 
 ### Traps — the quietest first
 
-1. **A mis-wired worker does not fail; it retries forever in silence.** `SolverInputError` and its
-   `SnapshotInputMissingError` subclass are **not** in `_FATAL_EXECUTION_ERRORS`
-   (`lease_and_execute_schedule_run.py:43-47`), so an RLS-empty read leaves the job `leased`, the lease
-   lapses, and `lease_next_job` re-selects the same run. You will see a spinning worker and a run that
-   never terminates, and nothing will say "row-level security". This is the single most likely way
-   Task 4 ships broken.
+1. **A mis-wired worker fails every run terminally, and the reason code is the only clue.**
+   **CORRECTED AT CODE REVIEW 2026-09-06** - this trap originally said the worker "retries forever in
+   silence", which the code contradicts. `SolverInputError` is caught by `execute_schedule_run`'s
+   `except Exception`, which carries its `code` onto the outcome, so an RLS-empty read finalizes as
+   `("solver_failed", "snapshot_input_missing")`. Nothing spins. What you will see instead is every run
+   reaching `solver_failed`, and the ONLY thing distinguishing an RLS mis-wiring from an ordinary
+   solver failure is that `reason` field - which is why it must not be replaced with a generic
+   `job_execution_failed`, and why the composed-stack proof asserts `solver_completed` rather than
+   merely a terminal state. This is still the single most likely way Task 4 ships broken.
 
 2. **`rosterai` is a superuser, so `FORCE ROW LEVEL SECURITY` does not stop it.** The privileged DSN
    makes the symptom above disappear — and gives the worker cross-site read access. It is the
@@ -844,6 +847,122 @@ types (AD-1/AR1).
 - `_bmad-output/planning-artifacts/architecture/architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md` (modified)
 
 ---
+
+### Review Findings
+
+Code review 2026-09-06 against `62cf85f..59acfb3`. Three adversarial layers (Blind Hunter,
+Edge Case Hunter, Acceptance Auditor) plus reviewer verification on a live tree. The D8
+monotonicity lock was independently re-mutated and confirmed red for its stated reason.
+
+**Verified honoured, not re-raised:** D2 (three image-binding keys), D8 (`audit_evidence_file`
+untouched), D9 (registered set still 8; readiness report fresh at 34/34), D10 (frozen installs),
+D11 (Node 22, CI unmoved), D13 (`docs/API.md` untouched), D14 (absent from `summary.needs`).
+`gate_a_cutover.py` and `gate_a_checks.py` unchanged. File List is exact. Architecture +
+evidence-convention + Gate A readiness reproduce at 213 (76+93+44).
+
+#### Decisions needed - all four resolved with Minh on 2026-09-06
+
+- [x] [Review][Decision] **The fake IdP mounts by default and `/oidc/authorize` never validates `redirect_uri`** - `settings.py:71,277` default `oidc_provider` to `"fake"`, so `api/main.py:416`'s guard is a default, not an opt-in; any deployment omitting `OIDC_PROVIDER` exposes an unauthenticated code-minting IdP for the seeded planner. Separately `fake_oidc.py:29,43-44` takes `redirect_uri` from the query string and 302s to it with a live authorization code, making it an open redirect that leaks the code offsite. D6 declares the fake IdP "not safe to expose on a network", but default-on mounting is a new fact this story created and the missing `redirect_uri` check is declared nowhere. Options: (a) require an affirmative local flag in addition to `OIDC_PROVIDER=fake`; (b) keep default-on but validate `redirect_uri` against `settings.oidc_redirect_uri`; (c) accept both as within D6's declared local-only posture and ledger them. **RESOLVED 2026-09-06: option (b)** - keep the default-on mount as D6's declared local-only posture; validate `redirect_uri` against `settings.oidc_redirect_uri`. See patch D1 below.
+- [x] [Review][Decision] **`SolverInputError` was reclassified as fatal on a false premise, and the change loses the diagnostic reason code** - Trap 1 and the *Measured at creation* row state that a mis-wired worker "retries forever in silence". That is not what the code did: `execute_schedule_run`'s `except Exception` already converted `SolverInputError` into `SolverOutcomeV1(UNKNOWN, reason=exc.code)`, and `finalize_schedule_run._terminal` (`:35-36`) mapped it to `("solver_failed", "snapshot_input_missing")`. `_FATAL_EXECUTION_ERRORS` only governs exceptions that *escape* `execute_schedule_run`, and this one never did. The delivered change (`solver_input.py:14`, `lease_and_execute_schedule_run.py:45`, `execute_schedule_run.py:167-171`) keeps the same status but regresses the reason to generic `job_execution_failed`, making both `code` attributes dead on this path; and it makes an environmental cause (`row is None` from a wrong DSN or a missing site scope) permanently absorbing across every queued run. No decision authorises it and it is not ledgered. Options: (a) revert the reclassification; (b) keep it and thread `exc.code` through `_record_fatal_failure` so the reason survives; (c) keep as-is and ledger it as a deliberate change to Story 3.5/3.7's planner-visible surface. **RESOLVED 2026-09-06: option (a)** - revert the reclassification; the pre-existing path already terminated correctly and named the cause. See patch D2 below.
+- [x] [Review][Decision] **`uv sync --all-groups` ships the dev group into the runtime image, against an explicit in-repo statement** - `pyproject.toml:38-45` says of `opentelemetry-sdk`: "Deliberately in the dev group, never `[project].dependencies`: it is not shipped at runtime". `Dockerfile:7` installs it anyway along with `pytest` and `httpx`, and `test_local_composition.py:44` asserts the literal `--all-groups` string, so the violation is now test-locked. Task 7 prescribes `--all-groups`; `pyproject.toml` forbids the outcome. Options: (a) switch the runtime image to `--frozen --no-dev` and update the guard; (b) keep `--all-groups` per Task 7 and correct the `pyproject.toml` comment; (c) keep and ledger. **RESOLVED 2026-09-06: option (a)** - build the runtime image with `--frozen --no-dev`; verified safe (`alembic` is a project dependency, `httpx` resolves transitively, no production module imports `opentelemetry`). See patch D3 below.
+- [x] [Review][Decision] **Flow 1's last three steps have no composed-stack evidence and the declared gap does not say so** - `EXPERIENCE.md:228-238` ends "request approval -> approve as baseline -> read the Provenance timeline". `compose_proof.py` stops at run termination; approval, baseline promotion and provenance are exercised nowhere in this story against the composed stack. Task 12's annotation attributes the gap to browser availability and `TestModel` prose, which is a different and smaller claim. This bears on whether AC1 is met and on Story 5.4's "reproducible by the Story 5.3 command". Options: (a) extend the proof through approval and provenance; (b) perform the manual browser pass before marking done; (c) restate the declared gap accurately and accept it. **RESOLVED 2026-09-06: option (a), then SUPERSEDED by measurement.** The leg was implemented, and running it proved it unreachable: `finalize_schedule_run` creates a candidate only on `solver_completed`, and CP-SAT's round 2 returns `UNKNOWN` on BOTH shipped fixtures at any practical budget, so no candidate is ever produced and approval 404s. Re-decided with Minh as **Decision 5** below: the leg is removed from Story 5.3 and owned, with the solver fix, by a new Story 5.3a. See patch D4 and the Decision 5 note.
+
+#### Patches
+
+- [x] [Review][Patch] **(D1)** Validate `redirect_uri` in `/oidc/authorize` against `settings.oidc_redirect_uri` and return 400 on mismatch, closing the open redirect that currently delivers a live planner authorization code to any host the caller names. The default-on mount stays, per the resolved decision [backend/api/routers/fake_oidc.py:29,43-44]
+- [x] [Review][Patch] **(D2)** Revert the fatal reclassification of `SolverInputError`: restore `SolverInputError(ValueError)`, drop `FatalSchedulerError` from `_FATAL_EXECUTION_ERRORS`, remove the `except FatalSchedulerError: raise` arm, and delete `FatalSchedulerError` from `ports/scheduler.py` (nothing else references it; `SchedulerFactory` stays). Replace `test_fatal_scheduler_input_error_is_terminal_instead_of_released_forever` with a test asserting the reason survives as `snapshot_input_missing`. Correct Trap 1 and the *Measured at creation* row, which state a false premise [backend/adapters/postgres/solver_input.py:14; backend/application/ports/scheduler.py:11; backend/application/use_cases/execute_schedule_run.py:167-171; backend/application/use_cases/lease_and_execute_schedule_run.py:45]
+- [x] [Review][Patch] **(D3)** Build the runtime image with `uv sync --project backend --frozen --no-dev --no-install-project` and update `test_container_builds_use_frozen_dependency_paths` to assert `--no-dev`. Rebuild the images and re-run the compose proof afterwards; the recorded digest changes (as it does for the `.dockerignore` patch), so one evidence regeneration is owed for both together [Dockerfile:7; backend/tests/architecture/test_local_composition.py:44]
+- [x] [Review][Patch] **(D4, revised)** The approval / baseline / provenance leg was written and then removed after measurement showed it unreachable (no candidate is ever produced — see Decision 5). `compose_proof.py` now records that absence in place, with the reason and the owner, rather than leaving a silent gap; Task 12's annotation is superseded by the Decision 5 note below [backend/tests/compose_proof.py:248-280]
+
+- [x] [Review][Patch] Root `.dockerignore` omits `.env`, `.env.*`, `backend/var/` and `*.db`, so `COPY backend/ backend/` bakes host secrets and local Gate A state into the image - confirmed: `backend/var/rosterai.db` is present, `settings.py:24` runs `load_dotenv(backend/.env, override=False)` at import, and compose sets none of `GEMINI_API_KEY`/`AGENT_RUNTIME_API_KEY`/`CSRF_SECRET`, so a baked file wins uncontested. Also makes the AC2 digest a function of untracked local state, defeating NFR21. `frontend/.dockerignore:5` already excludes `.env*` [.dockerignore:1-10]
+- [x] [Review][Patch] `AGENT_RUNTIME_MODEL` and `AGENT_RUNTIME_API_KEY` reach no container - the `&backend-environment` anchor lists neither and there is no `env_file:` or `${VAR}` passthrough, yet `docs/GETTING-STARTED.md` tells the reviewer to "explicitly set" them before starting. AC1's "a live-provider run is available through explicit configuration" is not achievable by the documented route [docker-compose.yml:22-34]
+- [x] [Review][Patch] nginx breaks the SSE streams the primary journey depends on - defaults are `proxy_http_version 1.0`, `proxy_buffering on`, `proxy_read_timeout 60s`; the app serves `text/event-stream` from `conversations.py:146` and `schedule_runs.py:122` and `ChatView.tsx:108` consumes it via `EventSource`. Needs `proxy_http_version 1.1`, `proxy_buffering off`, a long read timeout, a `resolver` for the `api` upstream, and `client_max_body_size` [frontend/nginx.conf:10-20]
+- [x] [Review][Patch] The compose proof greens on a broken worker and a failed agent run - `TERMINAL` includes `solver_failed` and the agent assertion accepts `agent_failed`, so an RLS-mis-wired worker (Trap 1) passes. Assert `solver_completed` and `agent_completed` [backend/tests/compose_proof.py:30,190-194,231]
+- [x] [Review][Patch] Nothing in the build writes `.build/image-digests.json` - `record_image_digests` is referenced only from `compose_proof.py:131` and its own unit test; no Dockerfile, compose service or document invokes it, so Task 8's first subtask is delivered as a manual undocumented step and anyone following `GETTING-STARTED.md` then generating evidence silently gets `"local source tree"` [backend/scripts/record_image_digests.py:1]
+- [x] [Review][Patch] `resolve_image_binding` accepts any `sha256:`-prefixed string; the strict `sha256:[0-9a-f]{64}` regex lives only in the recorder, which a hand-written manifest bypasses - reintroduces the hand-typed-evidence failure mode one layer up. It also states no reason on any of its four fallback paths, which D8 requires [backend/scripts/evidence_binding.py:86-101]
+- [x] [Review][Patch] Compose hands the PostgreSQL superuser DSN to `api` and `worker` - the `&backend-environment` anchor defined on `bootstrap` is aliased verbatim, carrying `ROSTERAI_PROVISIONING_DATABASE_URL`. Only migrations, bootstrap, cutover and `seed_planner` read it; `settings.py:55` marks it `repr=False` precisely to keep it out of logs [docker-compose.yml:23-25,41,54]
+- [x] [Review][Patch] The Decision 4 forbidden-shortcut guard covers exactly one file - Task 4 asks for a guard that no *production module* builds a solver input source on `provisioning_database_url`; what shipped is `assert "provisioning_database_url" not in source` scoped to `worker/composition.py` alone. Also `assert "PostgresSolverInputSource(connection)" in source` hard-codes the lambda parameter name [backend/tests/architecture/test_telemetry_boundaries.py:441-448]
+- [x] [Review][Patch] `docs/DEVELOPMENT.md`'s commands cannot run from the repository root as the surrounding prose instructs - verified: `uv run --project backend python -m scripts.bootstrap_local` gives `ModuleNotFoundError: No module named 'scripts'`, same for `worker.main`; both work from `backend/`. The `alembic upgrade head` line is also redundant since `bootstrap_local.py:37` already does it [docs/DEVELOPMENT.md:19-27]
+- [x] [Review][Patch] `pytest -m compose` collects nothing - verified "no tests collected (1610 deselected)". `compose_proof.py` does not match `python_files`, so it is uncollected rather than deselected as D14 and Task 9 describe, and the marker is now advertised in the docs with no working invocation [docs/DEVELOPMENT.md:106; backend/pyproject.toml:53]
+- [x] [Review][Patch] The seed-planner identity has two contradictory defaulting policies - `bootstrap_local.py:56-61` hard-fails when unset while `fake_oidc.py:38-39` silently defaults to `local-planner`, and `CONFIGURATION.md` documents the default as *(none)* and marks the variables bootstrap-only though the API reads them at request time. Off-compose this signs in a subject with no membership, so every governed read 403s and reads as broken authorization. Both sites should read the same resolved `Settings` field rather than `os.environ` [backend/api/routers/fake_oidc.py:38-39]
+- [x] [Review][Patch] Bootstrap validates its required inputs only after migrating and importing - `command.upgrade` and the full fixture loop run before the `SHIFTMIND_SEED_PLANNER_*` check, so missing variables leave a half-provisioned database, `service_completed_successfully` fails, and the stack never starts [backend/scripts/bootstrap_local.py:37-61]
+
+- [x] [Review][Patch] The proof's `--build` retags the developer's shared `:local` images with proof-specific build args - `shiftmind-web:local` is project-independent and the proof bakes `VITE_API_BASE_URL=http://localhost:18081` into it; `down --volumes` does not undo a retag, so a later `docker compose up -d` serves a bundle pointing at the wrong port. Also `api`/`worker` carry no `build:` stanza, so the tag exists only as a side effect of `bootstrap`'s build [docker-compose.yml:18-21,39,52,64]
+- [x] [Review][Patch] The evidence-binding tests lost their only end-to-end assertion, and the monotonicity lock now reads the least representative file - both replacements call `resolve_image_binding(tmp_path)` directly, so the wiring at `evidence_binding.py:559` is untested and deleting that line keeps the suite green. The lock's file now records `sha256:` for `api`/`web`, so its name is wrong and it bites only via the `database` key. (It is not vacuous - re-mutating `audit_evidence_file()` reddened it.) [backend/tests/test_evidence_binding.py:451-491]
+- [x] [Review][Patch] `callable(scheduler)` duck-typing mis-dispatches a class or a callable port - a `SchedulerPort` passed as a class is constructed with the `Connection` as its `input_source`, and the later `AttributeError` is swallowed by `except Exception` into a fabricated `SolverOutcomeV1(UNKNOWN)` that finalizes as a legitimate-looking result. Dispatch on `hasattr(scheduler, "solve")` or take an explicit `scheduler_factory=` keyword [backend/application/use_cases/execute_schedule_run.py:165]
+- [x] [Review][Patch] `code_verifier` is overloaded with a `"challenge:"` string sentinel, so a caller passing a verifier with that prefix takes the S256 branch; a separate `code_challenge` field removes the collision. Also function-local `import base64` while `hashlib` is module-level, and `claims` bound and unused at `:129` [backend/adapters/oidc/fake.py:171-180]
+- [x] [Review][Patch] No `restart:` policy and no `stop_grace_period` on `api`/`worker` - D1 names compose's `restart:` policy as the whole of supervision but none is declared, so a worker that exits stays dead and runs queue forever, the exact state `:465`/`:467` were just closed against; the default 10s grace also SIGKILLs a mid-flight CP-SAT solve [docker-compose.yml:38-57]
+- [x] [Review][Patch] Compose-proof teardown masks real failures and `_find()` is dead code - `_compose(check=True)` in the `finally` raises `CalledProcessError` over the real assertion, the `logs` diagnostic on `:139` has the same problem, and `_find` has no caller [backend/tests/compose_proof.py:33-46,139,249]
+- [x] [Review][Patch] `GETTING-STARTED.md`'s "running the start command again is safe" holds only for identical inputs - a fixture payload edited at the same `v1`, or a changed planner identity, makes bootstrap raise and the whole stack refuse to start. Narrow the claim or catch and emit an actionable message [docs/GETTING-STARTED.md:25]
+- [x] [Review][Patch] `_codes` grows without bound on unexchanged `/oidc/authorize` calls now that the route is network-reachable; sweep expired entries before insert [backend/adapters/oidc/fake.py:107-116]
+- [x] [Review][Patch] `/oidc/authorize` does not percent-encode `code`/`state` into the redirect, and `/oidc/token` returns 500 rather than 400 on a non-UTF-8 body [backend/api/routers/fake_oidc.py:43-44,52]
+- [x] [Review][Patch] The `:193` ledger correction cites commit `8139866` but its own body says the fresh clone was taken at `966028b` - the property was re-measured at this story's tree, not at the commit P2 claimed to have fixed [_bmad-output/implementation-artifacts/deferred-work.md:193]
+- [x] [Review][Patch] The `compose-proof` CI job omits the shared `python-version` input and uniquely pins its uv `version`, so its interpreter is chosen by a different mechanism than the four required jobs and a future `env.PYTHON_VERSION` bump would silently not reach it [.github/workflows/ci.yml:535-552]
+
+#### Deferred
+
+- [x] [Review][Defer] `measurement_date` is `2026-09-06` while every recorded `run_started` is `2026-09-05` [evidence/story-1.11/gate-a-readiness-report.json:8] - deferred; correcting it requires a regeneration pass, and hand-editing evidence is forbidden by the convention
+- [x] [Review][Defer] The postgres healthcheck can pass against initdb's temporary socket server on first start (`pg_isready` without `-h 127.0.0.1`, no `start_period`) [docker-compose.yml:10-15] - deferred, pre-existing; the story's preservation column requires the healthcheck stay verbatim
+- [x] [Review][Defer] Base images are tag-pinned, not digest-pinned (`python:3.12-slim`, `nginx:1.29-alpine`, `node:22-bookworm-slim`) and the ledger's write-only entry covers manifest staleness only [Dockerfile:1-2] - deferred; digest-pinning bases belongs with Epic 6's registry work
+- [x] [Review][Defer] Commit 4's message no longer describes its contents and commit 5 carries more than the regenerated report - both declared in the Debug Log; the substantive half is the `resolve_image_binding` validation patch above - deferred, history already written
+- [x] [Review][Defer] `test_container_builds_use_frozen_dependency_paths` has no synthetic violating-source case, against the story's own Testing requirement [backend/tests/architecture/test_local_composition.py:43] - deferred; the mutation table demonstrates it by real-code mutation, which the Epic 4 retro prefers
+
+- [x] [Review][Defer] `backend/adapters/cognito/oidc.py:9` imports `httpx`, but `httpx` is declared only in the `dev` group with the comment "required by fastapi.testclient.TestClient" - production code depends on a package it does not declare, and works today only via a transitive edge from `openai`/`google-genai`. Surfaced while verifying the `--no-dev` decision [backend/pyproject.toml:37] - deferred; D10 requires this story leave the dependency floors alone
+
+- [x] [Review][Defer] `npm run codegen` will emit `/oidc/*` into `frontend/openapi.json` and `src/api/schema.d.ts`, and neither generated artifact was regenerated in this diff [backend/api/routers/fake_oidc.py:15] - deferred. The obvious fix, `include_in_schema=False`, was applied at review and **reverted**: `test_openapi_document_hides_no_write_route` exists to stop a write route vanishing from the OpenAPI document, because every Gate A write-surface guard discovers routes by reading it, and `docs/GATE-A-RUNBOOK.md` deliberately NAMES `POST /oidc/token` so the exception stays visible. What remains is contract drift to manage, not exposure to hide
+
+
+#### Decision 5 — taken 2026-09-06, after building and running the stack
+
+Everything above was decided by reading. This one was decided by **running**, and it reverses part
+of Decision 4.
+
+Two assertions tightened at review both went red, and neither was a defect in the patch:
+
+1. `agent_run_status == "agent_completed"` → actual `agent_failed` / `invalid_output`.
+2. `status == "solver_completed"` → actual `solver_timed_out` / `budget_exhausted`.
+
+The second is the load-bearing one. `finalize_schedule_run` creates a candidate **only** on
+`solver_completed`, so a timed-out run carries none and `POST /approvals` cannot proceed. Measured
+at 30s per `Solve()` on **both** shipped fixtures, CP-SAT's round 2 returns `UNKNOWN` without a
+hint and `FEASIBLE` with one; a 120s budget produced 133.8s of wall time, proving each round already
+gets a full budget, so more time is not the fix. The cause is `objective.py:64` re-solving with no
+hint from the round-1 snapshot taken at `:58`.
+
+**Decision: fix it in a new Story 5.3a, not here.** It changes solver search behaviour — 12+ test
+files read `round2`/`UNKNOWN`/`total_cost`, and `SCOPE_CONTROLS` records measured reproducibility
+claims that must be re-measured under the evidence convention. Story 5.3's own Decision 11 refused a
+Node major bump on the same reasoning. 5.3a owns the solver fix **and** restoring both assertions
+plus the approval leg to this proof. Trigger: **before Story 5.4 writes its walkthrough**, which
+cannot describe Flow 1's ending until a candidate exists.
+
+Story 5.3 therefore closes with the composition proven and this gap measured, owned and dated
+rather than hidden. Three ledger entries carry the detail.
+
+#### Verification after applying the patches
+
+Full backend suite **1614 passed, 2 skipped, 7 deselected** (baseline 1602 / 1 / 7). The extra
+skip is `test_evidence_binding.py:570`, which is clean-tree-only and skips because the working
+tree carries these fixes; on a clean tree it runs, so CI's `--max-skipped 1` ceiling holds.
+Deselections stay at 7, so the live-marker equality assertion is unperturbed. Frontend
+`tsc --noEmit` exits 0; oxlint reports only the pre-existing `only-export-components` warnings.
+The rewritten monotonicity lock was re-mutated and confirmed red — now on
+`evidence/story-1.10/...`, a file that still records the placeholder, so it is strictly stronger
+than the version that only bit through the regenerated file's `database` key.
+
+**Not verified in this session, and owed before the story can be marked done:**
+
+1. **No image was built.** The `--no-dev` install, the `.dockerignore` exclusions, the nginx SSE
+   settings, the split image tags and the extended compose proof are correct as source and are
+   unproven as behaviour. Run `docker compose up -d --build` and
+   `pytest -q tests/compose_proof.py -m compose`.
+2. **One evidence regeneration is owed.** `.dockerignore` and `--no-dev` both change the image
+   content, so `evidence/story-1.11/gate-a-readiness-report.json`'s recorded
+   `api`/`web` digests no longer describe a build of this tree. Commit the code, rebuild, record
+   the digests, then regenerate on a clean tree and commit the evidence separately.
+3. **No manual browser pass.** The proof now covers Flow 1 end to end over HTTP, including
+   approval, baseline promotion and provenance, but nothing has rendered the SPA — and the nginx
+   SSE fix is precisely the kind of defect only a browser surfaces.
 
 ## Change Log
 

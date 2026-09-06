@@ -18,12 +18,38 @@ without touching service or route code.
 
 Run the reviewed full stack from the repository root with `docker compose up -d --build`. Compose waits for PostgreSQL, applies Alembic migrations, imports `default_fixtures()`, provisions the planner, then starts the API, production worker, and web proxy at `http://localhost:8080`.
 
-Alembic must run from the repository root because `alembic.ini` lives there:
+To run the same processes on the host instead, mind the working directory —
+the two halves below need **different** ones.
+
+Alembic runs from the **repository root**, because `alembic.ini` lives there
+and sets `script_location = %(here)s/backend/migrations`. From `backend/` it
+fails with "No 'script_location' key found":
 
 ```bash
+# from the repository root
 uv run --project backend alembic upgrade head
-uv run --project backend python -m scripts.bootstrap_local
-uv run --project backend python -m worker.main --runtime-factory worker.composition:create_runtime
+```
+
+Everything else runs from **`backend/`**. The project is a uv *virtual*
+project, so nothing is installed onto `sys.path` and there is no top-level
+`scripts/` or `worker/` package at the root — `python -m scripts.bootstrap_local`
+from the root fails with `ModuleNotFoundError`. (The container gets this via
+`PYTHONPATH=/app/backend`.) `bootstrap_local` applies migrations itself, so the
+Alembic step above is only needed if you want to migrate without seeding:
+
+```bash
+cd backend
+uv run --frozen python -m scripts.bootstrap_local
+uv run --frozen python -m worker.main --runtime-factory worker.composition:create_runtime
+```
+
+After building images, record their content-addressed digests so
+`resolve_bindings()` can emit them as the NFR27 `image` binding. Without this
+step the binding falls back to the `"local source tree"` placeholder:
+
+```bash
+cd backend
+uv run --frozen python -m scripts.record_image_digests   # writes .build/image-digests.json (gitignored)
 ```
 
 ### Backend (`backend/`)
@@ -108,6 +134,21 @@ markers = [
 ]
 addopts = "-m \"not live\""
 ```
+
+The `compose` marker is the one exception to "run it by marker". Its only file
+is `backend/tests/compose_proof.py`, which deliberately does **not** match
+pytest's default `test_*.py` collection pattern — so it is *uncollected*, not
+merely deselected, and `pytest -m compose` finds nothing. Name the file:
+
+```bash
+cd backend
+uv run --frozen pytest -q tests/compose_proof.py -m compose
+```
+
+It needs a running Docker daemon and builds both images, takes about a minute,
+and brings the whole stack up on an isolated volume and ports (55433/18081).
+CI runs it in the non-required `compose-proof` job on `main` and on
+`workflow_dispatch`.
 
 The default `addopts` excludes `live`-marked tests, so `uv run pytest -q`
 never requires `GEMINI_API_KEY` or `OPENROUTER_API_KEY` and is safe to run in

@@ -1,6 +1,7 @@
 """Deterministic, in-process OIDC provider for local development and tests."""
 from __future__ import annotations
 
+import base64
 import hashlib
 import secrets
 from dataclasses import dataclass
@@ -18,9 +19,15 @@ class _AuthorizationCode:
     subject: str
     email: str
     nonce: str
-    code_verifier: str
     expires_at: datetime
     claim_overrides: Mapping[str, object]
+    #: Exactly one of these is set. `code_verifier` is the in-process path,
+    #: which knows the verifier up front; `code_challenge` is the browser PKCE
+    #: path, which sees only the S256 challenge until redemption. They were
+    #: briefly one field distinguished by a `"challenge:"` string prefix, which
+    #: silently reinterpreted any verifier that happened to start with it.
+    code_verifier: str | None = None
+    code_challenge: str | None = None
 
 
 class FakeOidcProvider:
@@ -104,16 +111,31 @@ class FakeOidcProvider:
         code_challenge: str,
     ) -> str:
         """Mint the browser-facing half of a PKCE authorization flow."""
+        self._evict_expired_codes()
         code = f"fake-{secrets.token_urlsafe(24)}"
         self._codes[code] = _AuthorizationCode(
             subject=subject,
             email=email,
             nonce=nonce,
-            code_verifier=f"challenge:{code_challenge}",
+            code_challenge=code_challenge,
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
             claim_overrides={},
         )
         return code
+
+    def _evict_expired_codes(self) -> None:
+        """Drop lapsed codes before minting another.
+
+        `/oidc/authorize` is reachable over HTTP and needs no credential, so
+        codes that are never redeemed would otherwise accumulate for the life
+        of the process.
+        """
+        now = datetime.now(timezone.utc)
+        self._codes = {
+            code: authorization
+            for code, authorization in self._codes.items()
+            if authorization.expires_at > now
+        }
 
     async def exchange_code(
         self,
@@ -126,7 +148,7 @@ class FakeOidcProvider:
         authorization = self._consume_code(code, code_verifier)
         if not secrets.compare_digest(authorization.nonce, nonce):
             raise ValueError("OIDC nonce does not match")
-        encoded, claims = self._signed_identity(authorization)
+        encoded, _ = self._signed_identity(authorization)
         decoded = jwt.decode(
             encoded,
             self.jwks,
@@ -168,14 +190,14 @@ class FakeOidcProvider:
         now = datetime.now(timezone.utc)
         if authorization is None:
             raise ValueError("OIDC authorization code is invalid or already used")
-        expected_verifier = authorization.code_verifier
-        if expected_verifier.startswith("challenge:"):
-            actual_challenge = hashlib.sha256(code_verifier.encode("ascii")).digest()
-            import base64
-
-            actual_verifier = base64.urlsafe_b64encode(actual_challenge).rstrip(b"=").decode("ascii")
-            expected_verifier = expected_verifier.removeprefix("challenge:")
+        if authorization.code_challenge is not None:
+            digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+            expected_verifier = authorization.code_challenge
+            actual_verifier = (
+                base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+            )
         else:
+            expected_verifier = authorization.code_verifier or ""
             actual_verifier = code_verifier
         if not secrets.compare_digest(expected_verifier, actual_verifier):
             raise ValueError("OIDC code verifier does not match")

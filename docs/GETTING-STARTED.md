@@ -21,9 +21,15 @@ docker compose up -d --build
 
 Open `http://localhost:8080`. Choose sign in; the local fake identity provider signs in the pre-provisioned planner through the normal OIDC callback and session-cookie path. Select either immutable fixture and walk the planner journey. The default agent model is the deterministic, keyless `TestModel`; no provider credential is required.
 
-Check readiness with `docker compose ps` and inspect failures with `docker compose logs bootstrap api worker web`. Running the start command again is safe: migrations, fixture imports, and planner provisioning are idempotent.
+Check readiness with `docker compose ps` and inspect failures with `docker compose logs bootstrap api worker web`. Running the start command again with the **same** inputs is safe: migrations, fixture imports, and planner provisioning are all idempotent on replay.
 
-For a live model, explicitly set `AGENT_RUNTIME_MODEL` and `AGENT_RUNTIME_API_KEY` before starting. Live-provider output is optional and never required release evidence.
+Two changes are not replays, and the `bootstrap` service will stop the stack rather than reinterpret them: editing a fixture payload without bumping its version, and changing `SHIFTMIND_SEED_PLANNER_SUBJECT`/`_EMAIL` after the planner exists. Both are resolved by starting from a clean database — `docker compose down --volumes`, then start again.
+
+For a live model, set `AGENT_RUNTIME_MODEL` and `AGENT_RUNTIME_API_KEY` in the environment you run `docker compose up` from; compose passes both through to the API and worker, and unset they fall back to the keyless deterministic default. Live-provider output is optional and never required release evidence.
+
+```bash
+AGENT_RUNTIME_MODEL=openrouter:openai/gpt-4o-mini AGENT_RUNTIME_API_KEY=… docker compose up -d --build
+```
 
 Host-port overrides are available when the defaults are occupied:
 

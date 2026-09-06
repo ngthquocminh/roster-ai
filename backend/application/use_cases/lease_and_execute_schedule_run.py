@@ -7,7 +7,7 @@ from typing import Any, Callable, ContextManager
 from uuid import UUID
 
 from application.contracts.schedule_version import ScheduleRunStatusV1
-from application.ports.scheduler import FatalSchedulerError, SchedulerFactory, SchedulerPort
+from application.ports.scheduler import SchedulerFactory, SchedulerPort
 from application.ports.schedule_run import (
     IllegalTransitionError,
     RunTransitionConflictError,
@@ -42,7 +42,6 @@ class FatalJobError(ValueError):
 #: successful solve.
 _FATAL_EXECUTION_ERRORS = (
     FatalJobError,
-    FatalSchedulerError,
     RunTransitionConflictError,
     IllegalTransitionError,
 )

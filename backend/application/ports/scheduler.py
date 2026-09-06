@@ -8,10 +8,6 @@ from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import SolverOutcomeV1
 
 
-class FatalSchedulerError(ValueError):
-    """A deterministic scheduler-boundary failure that replay cannot repair."""
-
-
 class SolverInputSource(Protocol):
     def load(self, scenario_version_id: UUID, expected_digest: str) -> Any: ...
 
@@ -23,7 +19,6 @@ class SchedulerPort(Protocol):
 SchedulerFactory = Callable[[Any], SchedulerPort]
 
 __all__ = [
-    "FatalSchedulerError",
     "SchedulerFactory",
     "SchedulerPort",
     "SolverInputSource",

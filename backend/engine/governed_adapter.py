@@ -48,6 +48,17 @@ SCOPE_CONTROLS = (
     "wall-time budget; a 0.25s fixture solve returns UNKNOWN within 0.40s.",
     "NOT COVERED: solution-quality parity at longer ceilings — deterministic "
     "reproducibility is the governed default; performance ceilings remain settings-owned.",
+    "NOT COVERED: any terminal status other than UNKNOWN on the shipped "
+    "fixtures — CORRECTED 2026-09-06 at Story 5.3's code review. The line above "
+    "describing 'one decreasing wall-time budget' shared by both rounds does "
+    "NOT match objective.py, which sets max_time_in_seconds ONCE on a shared "
+    "CpSolver; OR-Tools applies it per Solve() call, so round 2 receives the "
+    "full budget again (measured: 120s limit -> 133.8s total wall). Round 2 "
+    "still returns UNKNOWN because it re-solves from scratch with no hint from "
+    "round 1, and finalize_schedule_run creates a candidate only on "
+    "solver_completed — so NO run reaches a candidate on either shipped "
+    "fixture, and the approval/baseline/provenance path is unreachable from a "
+    "real solve. Owner: Story 5.3a.",
     "COVERED AT: events:postgres_schedule_run_repository_transition_writes.",
     "COVERS: cancellation:cooperative_checkpoints_before_solver — the worker observes persisted cancellation before entering this adapter.",
     "NOT COVERED: cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit — an in-flight CP-SAT call is not interrupted.",

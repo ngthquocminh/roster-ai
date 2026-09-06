@@ -66,7 +66,11 @@ def test_compose_preserves_postgres_18_contract_inside_the_local_stack() -> None
         for line in services_block.splitlines()
         if line.startswith("  ") and not line.startswith("    ") and line.endswith(":")
     ]
-    assert service_lines == ["postgres:", "bootstrap:", "api:", "worker:", "web:"]
+    # Membership, not declaration order: which services the local stack defines
+    # is the contract; the order they appear in the YAML is not, and pinning it
+    # reddens CI for a readability edit. `==` on the set still catches both a
+    # missing service and an unexpected extra one.
+    assert set(service_lines) == {"postgres:", "bootstrap:", "api:", "worker:", "web:"}
 
 
 def test_alembic_is_wired_to_application_settings_and_metadata() -> None:

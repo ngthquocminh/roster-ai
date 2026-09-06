@@ -8,10 +8,20 @@ from sqlalchemy import Connection, select
 
 from adapters.postgres.schema import scenario_version
 from application.contracts.canonical import contract_digest
-from application.ports.scheduler import FatalSchedulerError
 
 
-class SolverInputError(FatalSchedulerError):
+class SolverInputError(ValueError):
+    """Raised when the frozen solver input cannot be read or re-verified.
+
+    Deliberately NOT a fatal-job error. `execute_schedule_run` catches it with
+    every other solver failure and finalizes the run as
+    `("solver_failed", <this class's `code`>)`, so the specific cause —
+    `snapshot_input_missing` or `snapshot_digest_mismatch` — reaches the Runs
+    list and the provenance timeline. Routing it through the lease boundary's
+    fatal path instead would replace that with a generic
+    `job_execution_failed` and make both `code` attributes dead.
+    """
+
     code = "solver_input_error"
 
 

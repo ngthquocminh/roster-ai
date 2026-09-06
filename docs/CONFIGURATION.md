@@ -23,8 +23,8 @@ local backend.
 |---|---|---|---|
 | `ROSTERAI_DATABASE_URL` | Optional | restricted local PostgreSQL DSN | Restricted API/worker DSN. Never use the privileged account here. |
 | `ROSTERAI_PROVISIONING_DATABASE_URL` | Operator/bootstrap only | privileged local PostgreSQL DSN | Alembic, fixture-import, and planner-provisioning DSN. |
-| `SHIFTMIND_SEED_PLANNER_SUBJECT` | Bootstrap | *(none)* | OIDC subject for the local planner; compose supplies `local-planner`. |
-| `SHIFTMIND_SEED_PLANNER_EMAIL` | Bootstrap | *(none)* | Email for the local planner; compose supplies `planner@shiftmind.local`. |
+| `SHIFTMIND_SEED_PLANNER_SUBJECT` | Bootstrap **and API** | `local-planner` | OIDC subject for the local planner. Read by `bootstrap` when provisioning the identity **and** by the local fake IdP at sign-in time. Both must see the same value or the callback mints a session for a subject with no membership and every read 403s. |
+| `SHIFTMIND_SEED_PLANNER_EMAIL` | Bootstrap **and API** | `planner@shiftmind.local` | Email for the local planner. Same two readers as above. |
 | `SHIFTMIND_WORKER_RUNTIME_FACTORY` | Worker | *(none)* | Local compose uses `worker.composition:create_runtime`. |
 | `AGENT_RUNTIME_MODEL` | Optional | `test` | `test` is deterministic/keyless; live runs use an explicit `provider:model`. |
 | `AGENT_RUNTIME_API_KEY` | Live agent only | *(none)* | Credential for an explicitly selected live agent model. |
