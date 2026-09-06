@@ -480,10 +480,10 @@ artifact, and it does not touch the other open ledger rows.
   - [x] Measure through `GovernedSchedulerAdapter` at the new defaults, on **both** shipped fixtures, **≥3 runs each**. Record: terminal status, `round1_value`, `round2_value`, assignment count, distinct-member count, wall time, and **the assignment set** (not just the counts — that is what `SCOPE_CONTROLS`' reproducibility claim is about). Record the host's core count beside the worker count.
   - [x] **If round 2 still does not reach `OPTIMAL`/`FEASIBLE`**, escalate in this order and record why each step was taken or skipped: (1) raise the worker count further; (2) `solver.parameters.fix_variables_to_their_hinted_value` or `repair_hint`, so round 2 starts from a known-feasible point rather than a suggested one; (3) **stop and report**. Do **not** reach for a larger wall budget — 60s and 120s were both measured and neither helped (Decision 4).
 
-- [ ] **Task 4 — Reconcile `SCOPE_CONTROLS` from Task 3's measurements (AC: #1, per Decision 6)**
-  - [ ] `backend/engine/governed_adapter.py:38-68`: restore `solver:wall_total`; rewrite the `NOT COVERED: any terminal status other than UNKNOWN` entry; rewrite `solver:reproducibility` and `solver:multi_worker_trade` from Task 3's runs with **no value carried forward**.
-  - [ ] State in the block that the shipped 30/30 configuration is **wall-bound, not deterministic-bound**, and that single-worker running was measured non-reproducible there (two round-1 values on the same fixture) — so the reproducibility claim belongs to the deterministic-ceiling configuration, not to the worker count.
-  - [ ] Record the `objective.py` / `governed_adapter.py` distinction and which caller reaches which.
+- [x] **Task 4 — Reconcile `SCOPE_CONTROLS` from Task 3's measurements (AC: #1, per Decision 6)**
+  - [x] `backend/engine/governed_adapter.py:38-68`: restore `solver:wall_total`; rewrite the `NOT COVERED: any terminal status other than UNKNOWN` entry; rewrite `solver:reproducibility` and `solver:multi_worker_trade` from Task 3's runs with **no value carried forward**.
+  - [x] State in the block that the shipped 30/30 configuration is **wall-bound, not deterministic-bound**, and that single-worker running was measured non-reproducible there (two round-1 values on the same fixture) — so the reproducibility claim belongs to the deterministic-ceiling configuration, not to the worker count.
+  - [x] Record the `objective.py` / `governed_adapter.py` distinction and which caller reaches which.
 
 - [ ] **Task 5 — A deterministic agent double that completes the turn (AC: #2, per Decisions 7 and 8)**
   - [ ] Add a `pydantic_ai` `FunctionModel` double under `backend/agent/`, shaped on `evals/doubles.py` but **not importing it**. It calls a real fixture-independent capability tool (`scheduling_inspect`, whose request names no record IDs), then answers through `ANSWER_OUTPUT_TOOL` with a `GroundedAnswerV1` whose prose carries **no numeric characters**.
@@ -715,6 +715,10 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
   was FEASIBLE in 30.285/30.275/30.301s with identical round1=15833025,
   round2=1954456, 125 assignments and 22 members; digests were `189ed8eb…`,
   `3497fddb…`, `905c8f62…`. All six reached round 2, so escalation was skipped.
+- Clean-tree full suite after commit 1: **1617 passed, 1 skipped, 7 deselected**
+  in 289.22s. The real-solve guard was isolated in a subprocess after OR-Tools aborted
+  the long-lived pytest process when the test ran late in the suite; the subprocess
+  preserves the real solve and turns native failure into an ordinary test failure.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
@@ -730,6 +734,8 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 - Added a real-solve regression test plus a mismatched-snapshot guard test. Focused
   solver/settings/calibration validation passed 53 tests. The dirty-tree regression
   pass was 1616 passed, 2 skipped, 7 deselected; a clean-tree pass follows commit 1.
+- Replaced the governed solver scope claims with the measured six-run results and
+  documented the governed shared-wall versus legacy per-Solve budget distinction.
 
 ### File List
 

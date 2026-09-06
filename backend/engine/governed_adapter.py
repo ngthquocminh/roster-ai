@@ -37,28 +37,31 @@ from ingest.input_adapter import build_problem
 
 SCOPE_CONTROLS = (
     "COVERS: inputs:solver_reads_raw_fixture — the adapter alone translates the re-verified checksummed fixture into SchedulingProblem.",
-    "COVERS: solver:reproducibility — sample_tiny_input, seed 42: single-worker "
-    "max_deterministic_time=1.0 produced identical 70-assignment/10-member sets "
-    "in 3/3 runs (round1=247.44352 hours, round2=1118241; wall "
-    "6.22/7.24/6.71s; terminal UNKNOWN because round 2 consumed the ceiling).",
-    "COVERS: solver:multi_worker_trade — 8-worker wall-time=3.0s produced "
-    "211.85190-211.85271 unmet hours, round2=1173123-1201002, 76-78 "
-    "assignments, 10 members, and two distinct assignment sets across 3 runs.",
-    "COVERS: solver:wall_total — both lexicographic rounds share one decreasing "
-    "wall-time budget; a 0.25s fixture solve returns UNKNOWN within 0.40s.",
+    "COVERS: solver:reproducibility — the shipped 30s wall/30 deterministic "
+    "configuration is wall-bound, not deterministic-bound. At 1 worker, repeated "
+    "sample_tiny_input runs produced different round-1 values (25843341 and "
+    "25255815 at creation; 25848785 on re-verification), so bit reproducibility "
+    "is not claimable there. At the shipped 8-worker default, all three runs per "
+    "fixture had identical objective values but all six assignment-set digests "
+    "were distinct.",
+    "COVERS: solver:multi_worker_trade — measured on a 16-core host at 8 workers "
+    "and the shipped 30s wall/30 deterministic budgets: sample_tiny_input was "
+    "FEASIBLE in 29.209/30.186/29.761s with round1=21092759, round2=1154971, "
+    "76 assignments and 10 members; sample_tiny_input_more_tm was FEASIBLE in "
+    "30.285/30.275/30.301s with round1=15833025, round2=1954456, "
+    "125 assignments and 22 members.",
+    "COVERS: solver:wall_total — governed_adapter.py, reached by the worker, "
+    "shares one decreasing wall budget across both rounds; at 1 worker a finite "
+    "round-1 solution still consumed the 30s wall and left round 2 unentered. "
+    "objective.py, reached by legacy API/CLI/calibration callers, configures one "
+    "per-Solve limit and therefore has different budget semantics.",
     "NOT COVERED: solution-quality parity at longer ceilings — deterministic "
     "reproducibility is the governed default; performance ceilings remain settings-owned.",
-    "NOT COVERED: any terminal status other than UNKNOWN on the shipped "
-    "fixtures — CORRECTED 2026-09-06 at Story 5.3's code review. The line above "
-    "describing 'one decreasing wall-time budget' shared by both rounds does "
-    "NOT match objective.py, which sets max_time_in_seconds ONCE on a shared "
-    "CpSolver; OR-Tools applies it per Solve() call, so round 2 receives the "
-    "full budget again (measured: 120s limit -> 133.8s total wall). Round 2 "
-    "still returns UNKNOWN because it re-solves from scratch with no hint from "
-    "round 1, and finalize_schedule_run creates a candidate only on "
-    "solver_completed — so NO run reaches a candidate on either shipped "
-    "fixture, and the approval/baseline/provenance path is unreachable from a "
-    "real solve. Owner: Story 5.3a.",
+    "COVERS: solver:completed_candidate — both shipped fixtures reached FEASIBLE "
+    "through GovernedSchedulerAdapter at the 8-worker default after round 2 was "
+    "seeded from round 1. Independent hard-constraint validation passed and "
+    "candidate metrics returned total costs 11549.69 and 19544.45. FEASIBLE is "
+    "sufficient for candidate creation; optimality is not claimed.",
     "COVERED AT: events:postgres_schedule_run_repository_transition_writes.",
     "COVERS: cancellation:cooperative_checkpoints_before_solver — the worker observes persisted cancellation before entering this adapter.",
     "NOT COVERED: cancellation:mid_solve_preemption_owned_by_first_story_raising_wall_time_limit — an in-flight CP-SAT call is not interrupted.",
