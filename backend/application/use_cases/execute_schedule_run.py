@@ -7,7 +7,7 @@ from uuid import UUID
 
 from application.contracts.run_snapshot import RunSnapshotV1
 from application.contracts.schedule_version import SolverOutcomeV1
-from application.ports.scheduler import SchedulerPort
+from application.ports.scheduler import SchedulerFactory, SchedulerPort
 from application.ports.schedule_run import ScheduleRunRepository
 from application.use_cases.finalize_schedule_run import (
     FinalizedScheduleRunV1,
@@ -82,7 +82,7 @@ class HeartbeatObservationsV1:
 
 def execute_schedule_run(
     repository: ScheduleRunRepository,
-    scheduler: SchedulerPort,
+    scheduler: SchedulerPort | SchedulerFactory,
     connection: Any,
     *,
     snapshot: RunSnapshotV1,
@@ -162,7 +162,15 @@ def execute_schedule_run(
         )
         heartbeat_thread.start()
     try:
-        outcome = scheduler.solve(snapshot)
+        # A `SchedulerPort` is identified by its `solve` method, never by
+        # callability: a port that also defines `__call__`, or a class passed
+        # where an instance was meant, would otherwise be invoked as a factory
+        # and fail much later as an AttributeError that the handler below
+        # turns into a plausible-looking UNKNOWN outcome.
+        active_scheduler = (
+            scheduler if hasattr(scheduler, "solve") else scheduler(connection)
+        )
+        outcome = active_scheduler.solve(snapshot)
     except Exception as exc:
         outcome = SolverOutcomeV1(
             solver_status="UNKNOWN",

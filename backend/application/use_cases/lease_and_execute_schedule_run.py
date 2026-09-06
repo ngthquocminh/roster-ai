@@ -7,7 +7,7 @@ from typing import Any, Callable, ContextManager
 from uuid import UUID
 
 from application.contracts.schedule_version import ScheduleRunStatusV1
-from application.ports.scheduler import SchedulerPort
+from application.ports.scheduler import SchedulerFactory, SchedulerPort
 from application.ports.schedule_run import (
     IllegalTransitionError,
     RunTransitionConflictError,
@@ -103,7 +103,7 @@ def lease_and_execute_schedule_run(
     lease_connection: Any,
     runtime_connection_factory: RuntimeConnectionFactory,
     repository: ScheduleRunRepository,
-    scheduler: SchedulerPort,
+    scheduler: SchedulerPort | SchedulerFactory,
     *,
     lease_owner: str,
     lease_seconds: int,
@@ -231,7 +231,7 @@ def _record_fatal_failure(
 def _execute_leased_schedule_run(
     runtime_connection_factory: RuntimeConnectionFactory,
     repository: ScheduleRunRepository,
-    scheduler: SchedulerPort,
+    scheduler: SchedulerPort | SchedulerFactory,
     *,
     lease,
     lease_seconds: int,

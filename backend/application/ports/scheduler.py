@@ -1,7 +1,7 @@
 """Framework- and solver-free governed scheduling ports."""
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from uuid import UUID
 
 from application.contracts.run_snapshot import RunSnapshotV1
@@ -16,4 +16,10 @@ class SchedulerPort(Protocol):
     def solve(self, snapshot: RunSnapshotV1) -> SolverOutcomeV1: ...
 
 
-__all__ = ["SchedulerPort", "SolverInputSource"]
+SchedulerFactory = Callable[[Any], SchedulerPort]
+
+__all__ = [
+    "SchedulerFactory",
+    "SchedulerPort",
+    "SolverInputSource",
+]

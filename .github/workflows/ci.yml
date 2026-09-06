@@ -532,6 +532,28 @@ jobs:
           path: frontend/test-results/
           retention-days: 30
 
+  compose-proof:
+    name: Optional composed-stack proof
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          # Same interpreter input as the four required jobs. Without it this
+          # job's Python is chosen by `.python-version` instead, so bumping
+          # `env.PYTHON_VERSION` would silently not reach the image proof.
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Sync proof dependencies
+        working-directory: backend
+        run: uv sync --frozen --all-groups
+      - name: Run opt-in composition proof
+        working-directory: backend
+        run: uv run --frozen pytest -q tests/compose_proof.py -m compose
+
   # ---------------------------------------------------------------------------
   # Roll-up so branch protection has one status to require.
   # ---------------------------------------------------------------------------

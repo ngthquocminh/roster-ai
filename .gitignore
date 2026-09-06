@@ -96,3 +96,6 @@ _bmad/config.user.toml
 # suites, noisy in diffs, and the report itself carries the summarized result —
 # so it is deliberately NOT committed. It must never be written into evidence/.
 _bmad-output/test-artifacts/
+
+# Local, content-addressed container build metadata.
+/.build/

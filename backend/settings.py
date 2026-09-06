@@ -73,6 +73,13 @@ class Settings:
     oidc_client_id: str = "shiftmind-local"
     oidc_client_secret: str | None = field(repr=False, default=None)
     oidc_redirect_uri: str = "http://shiftmind.test/api/v1/auth/callback"
+    # The identity `scripts/bootstrap_local.py` provisions and the one the
+    # local fake IdP signs in must be the SAME value, or the callback mints a
+    # session for a subject with no membership row and every governed read
+    # 403s — a configuration mismatch that reads as broken authorization.
+    # Both sites resolve them here rather than reading `os.environ` apart.
+    seed_planner_subject: str = "local-planner"
+    seed_planner_email: str = "planner@shiftmind.local"
     app_base_url: str = "http://shiftmind.test"
     session_ttl_s: int = 3600
     # HMAC pepper for deriving the CSRF token from the session token (see
@@ -282,6 +289,13 @@ def default_settings() -> Settings:
         "OIDC_REDIRECT_URI",
         "http://shiftmind.test/api/v1/auth/callback",
     )
+    seed_planner_subject = (
+        os.environ.get("SHIFTMIND_SEED_PLANNER_SUBJECT", "").strip() or "local-planner"
+    )
+    seed_planner_email = (
+        os.environ.get("SHIFTMIND_SEED_PLANNER_EMAIL", "").strip()
+        or "planner@shiftmind.local"
+    )
     app_base_url = os.environ.get("APP_BASE_URL", "http://shiftmind.test")
     try:
         session_ttl_s = int(os.environ.get("SESSION_TTL_S", "3600"))
@@ -436,6 +450,8 @@ def default_settings() -> Settings:
         oidc_client_id=oidc_client_id,
         oidc_client_secret=oidc_client_secret,
         oidc_redirect_uri=oidc_redirect_uri,
+        seed_planner_subject=seed_planner_subject,
+        seed_planner_email=seed_planner_email,
         app_base_url=app_base_url.rstrip("/"),
         session_ttl_s=session_ttl_s,
         csrf_secret=csrf_secret,

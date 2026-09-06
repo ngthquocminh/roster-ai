@@ -50,5 +50,6 @@ testpaths = ["tests"]
 markers = [
     "live: exercises a real network-backed LLM provider; excluded by default (run with `pytest -m live`)",
     "postgres: exercises the local PostgreSQL integration service",
+    "compose: exercises the built local stack; invoked through its explicitly named proof file",
 ]
 addopts = "-m \"not live\""

@@ -21,6 +21,20 @@ local backend.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
+| `ROSTERAI_DATABASE_URL` | Optional | restricted local PostgreSQL DSN | Restricted API/worker DSN. Never use the privileged account here. |
+| `ROSTERAI_PROVISIONING_DATABASE_URL` | Operator/bootstrap only | privileged local PostgreSQL DSN | Alembic, fixture-import, and planner-provisioning DSN. |
+| `SHIFTMIND_SEED_PLANNER_SUBJECT` | Bootstrap **and API** | `local-planner` | OIDC subject for the local planner. Read by `bootstrap` when provisioning the identity **and** by the local fake IdP at sign-in time. Both must see the same value or the callback mints a session for a subject with no membership and every read 403s. |
+| `SHIFTMIND_SEED_PLANNER_EMAIL` | Bootstrap **and API** | `planner@shiftmind.local` | Email for the local planner. Same two readers as above. |
+| `SHIFTMIND_WORKER_RUNTIME_FACTORY` | Worker | *(none)* | Local compose uses `worker.composition:create_runtime`. |
+| `AGENT_RUNTIME_MODEL` | Optional | `test` | `test` is deterministic/keyless; live runs use an explicit `provider:model`. |
+| `AGENT_RUNTIME_API_KEY` | Live agent only | *(none)* | Credential for an explicitly selected live agent model. |
+| `OIDC_PROVIDER` | Optional | `fake` | Browser fake-IdP routes mount only for `fake`. |
+| `OIDC_ISSUER` | Optional | `http://shiftmind.test/oidc` | Compose overrides this to localhost. |
+| `OIDC_CLIENT_ID` | Optional | `shiftmind-local` | OIDC client identifier. |
+| `OIDC_REDIRECT_URI` | Optional | ShiftMind callback | Compose overrides this to localhost. |
+| `APP_BASE_URL` | Optional | `http://shiftmind.test` | Redirect and CSRF origin; compose overrides this to localhost. |
+| `SESSION_TTL_S` | Optional | `3600` | Maximum application-session lifetime. |
+| `CSRF_SECRET` | Optional locally | local-only value | Replace outside local development. |
 | `ROSTERAI_DB` | Optional | `backend/var/rosterai.db` | Path to the SQLite database file. |
 | `ROSTERAI_DATA_DIR` | Optional | `<repo-root>/data` | Directory holding input fixture JSON files. |
 | `LLM_PROVIDER` | Optional | `stub` | Selects the `LLMProvider` backend: `stub` (keyless, no network calls), `gemini`, or `openrouter`. |
@@ -38,7 +52,7 @@ local backend.
 
 ### Required vs optional settings
 
-None of the backend settings cause a startup failure by themselves — every
+Most backend settings do not cause a startup failure by themselves — every
 field in the `Settings` dataclass has a default, and `GEMINI_API_KEY` /
 `OPENROUTER_API_KEY` are passed straight through to the underlying SDK client
 (`google.genai.Client(api_key=...)` / `openai.OpenAI(api_key=...)`) without

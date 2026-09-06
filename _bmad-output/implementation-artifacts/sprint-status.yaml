@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-05
+last_updated: 2026-09-06
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2336,7 +2336,104 @@ development_status:
   # id, neither of which fires, and truncation applies to LABELS while tool_call_id is a correlation
   # PROPERTY -- do not conflate them. :508 and :639 (cloudwatch_owned_by_epic_6) stay open.
   5-2-prevent-content-and-secret-leaks: done
-  5-3-run-shiftmind-reproducibly-from-one-command: backlog
+  # NOTE (2026-09-05): Story 5.3 created and moved to ready-for-dev at 62cf85f. This is a
+  # COMPOSITION story: every mechanism it needs exists and is proven, but NOTHING in this repository
+  # has ever assembled them. No CI job and no document brings API + worker + database + frontend up
+  # together -- the Playwright e2e job starts `vite preview` alone and apiStubs.ts intercepts every
+  # `**/api/v1/**` call, so all 80 browser tests pass against a backend that is not running.
+  #
+  # MEASURED AT CREATION (62cf85f, clean tree, Docker PostgreSQL up): backend 1587 passed / 1 skipped
+  # / 7 deselected (229.6s); `-m postgres` 158 passed / 1437 deselected (183.6s) -- and 158+1437 =
+  # 1587+1+7, so postgres-marked tests DO run in the default suite. test_evidence_convention.py 93
+  # passed; tests/architecture/ 72 passed; test_gate_a_readiness.py 44 passed. Frontend Vitest 648
+  # tests / 85 files; Playwright 80 passed. These SUPERSEDE Story 5.2's 1558/158/87/69/44 and Story
+  # 5.0's Vitest 647.
+  #
+  # FOUR PIECES OF THE COMPOSITION ARE MISSING OUTRIGHT, each measured rather than inferred:
+  # (1) NO production worker runtime factory. `worker/main.py:154-159` hard-errors without
+  #     --runtime-factory, message: "required until deployment composition is owned by Epic 5/6".
+  #     The only factory is `tests/fixtures/worker_process.py:39`, whose scheduler SLEEPS and returns
+  #     a fabricated empty outcome. `GovernedSchedulerAdapter` is constructed in tests ONLY (5 sites,
+  #     all under backend/tests/).
+  # (2) NO clean-clone fixture importer. `gate_a_cutover.run_cutover` calls `_snapshot_sqlite` at
+  #     :145 UNCONDITIONALLY, which raises FileNotFoundError with no legacy SQLite file -- and
+  #     backend/var/ is gitignored and empty on a fresh clone. It also writes the Gate A maintenance
+  #     flag. It is AD-25's one-way migration, not a bootstrap.
+  # (3) NO browser sign-in. `FakeOidcProvider.authorization_url` redirects to
+  #     http://shiftmind.test/oidc/authorize and NO router in `api/main.py:402-414` serves any
+  #     /oidc/* path. Codes are minted only by calling issue_authorization_code() in-process.
+  # (4) NO image build. Zero Dockerfiles in the repository; docker-compose.yml has one service and
+  #     no `build:` stanza.
+  #
+  # TWO SILENT-FAILURE TRAPS, found at creation and written into the story rather than left for
+  # review: (A) `scenario_version` carries FORCE ROW LEVEL SECURITY on app.site_id, but
+  # RunSnapshotV1 has no site_id and SchedulerPort.solve(snapshot) receives no connection -- so a
+  # naive worker factory reads zero rows, and because SolverInputError is NOT in
+  # _FATAL_EXECUTION_ERRORS (lease_and_execute_schedule_run.py:43-47) the job is left `leased` and
+  # RETRIES FOREVER instead of failing. The tempting fix -- connecting on provisioning_database_url
+  # -- works silently because `rosterai` is a superuser and superusers bypass RLS even under FORCE,
+  # and it is exactly what .env.example:37-44 and AD-23 forbid. (B) The session cookie is
+  # `__Host-shiftmind_session` with Secure; the `__Host-` prefix requires a trustworthy origin, and
+  # the shipped defaults name http://shiftmind.test -- so the browser SILENTLY DISCARDS the cookie
+  # and the next request 401s, reading as broken authorization.
+  #
+  # FOURTEEN DECISIONS, the four most consequential:
+  # (1) The image binding is DERIVED at generation from a build-written manifest, but NO digest rule
+  #     is added to `audit_evidence_file()`. All 14 committed evidence files record
+  #     image={"api":"local source tree","web":"local source tree","database":"postgres:18"}; a rule
+  #     requiring a digest would redden every one of them at once -- precisely the defect
+  #     EVIDENCE-CONVENTION.md's monotonicity section records Story 1.11 shipping and reverting.
+  #     Generation and audit answer different questions.
+  # (2) ONE backend image, two processes (api + worker differ only in `command:`), per the spine's
+  #     Design Paradigm. This is also why the binding stays THREE keys: adding a `worker` key would
+  #     change the shape 14 committed artifacts already record.
+  # (3) NO new registered evidence file. AC2 names no evidence path (contrast 5.2's AC2, which named
+  #     one). So this story does NOT pay 5.2's largest cost -- the two-pass three-runner Gate A
+  #     regeneration. A SINGLE-pass refresh may still be owed if `evidence_convention_and_gate_machinery`'s
+  #     test counts move; Task 1 measures that rather than assuming.
+  # (4) The fake IdP is SERVED as real routes gated on OIDC_PROVIDER=fake, not bypassed with a
+  #     session-minting shortcut -- so the flow the reviewer sees is the flow the tests prove.
+  #
+  # AGENT_RUNTIME_MODEL already defaults to "test" (pydantic-ai's TestModel, keyless, no network,
+  # selected by ordinary application config) so AC1's "no provider credential required" is nearly
+  # true already. BUT TestModel returns schema-valid values, NOT answers -- it satisfies AC1's
+  # "completable" and does NOT satisfy Story 5.4's "walks the Wednesday-coverage journey with REAL
+  # OUTPUT". Decision 12 hands 5.4 a RECOMMENDED RESOLUTION rather than an open question: split the
+  # walkthrough's BEHAVIORAL claims (loop runs, run terminates, approval promotes, provenance links --
+  # all keyless and reproducible by the 5.3 command, and what 5.4's AC actually binds, "every claim it
+  # makes ABOUT BEHAVIOR") from ILLUSTRATIVE model prose (a live-provider capture, labelled as such --
+  # exactly the use AC1 sanctions). The rejected option is a runtime-selectable scripted double: it
+  # adds a model seam to application code to make a demo read well, test_application_and_domain_never_
+  # import_evals forbids reaching evals/doubles.py for it, and a rigged transcript rates below an
+  # honestly-labelled live one. 5.4 still owns its scope and may reject the recommendation.
+  #
+  # ALSO OWED: four documents are corrected because AC1's Given says "a documented prerequisite set".
+  # GETTING-STARTED.md still says "No database server to install -- SQLite is used"; CONFIGURATION.md
+  # documents 12 of ~51 settings and mentions neither PostgreSQL, OIDC, sessions, CSRF nor the solver;
+  # DEVELOPMENT.md never mentions Postgres, compose, Alembic, seed_planner or the worker; README.md:175
+  # says "No auth exists anywhere in the stack", false since Story 1.2. AGENT_RUNTIME_MODEL,
+  # AGENT_RUNTIME_API_KEY, SHIFTMIND_SEED_PLANNER_SUBJECT and SHIFTMIND_SEED_PLANNER_EMAIL are
+  # documented in NONE of them. docs/API.md is stale too and is deliberately LEFT ALONE (ledgered).
+  # Three stale in-code pointers are corrected: evidence_binding.py:76-78 claims "no .github/ in this
+  # repository" (false since CI landed) and cites "Stories 5.5-5.7", which no longer exist.
+  #
+  # NO TOOLCHAIN PIN EXISTS ANYWHERE -- no .python-version, .nvmrc, .node-version, .tool-versions,
+  # engines or packageManager. The Stack table's Node row asks for one in as many words ("commit
+  # toolchain pin"). CI pins Node 22; the Stack table's row reads 24.18.0 LTS, "verified".
+  # DECISION 11 PINS AT 22 AND LEDGERS THE 24 ROW, reversing the story's first draft: AR27's
+  # obligation is that a pin EXIST, not that it name a version; the spine's "verified" has never been
+  # verified in THIS repository; Node is a build-stage-only concern once the web image is multi-stage,
+  # so AC2's digest does not depend on it; and a frontend major bump would make any red suite in a
+  # story that also changes a scheduler port, adds a worker composition and rewrites an evidence
+  # binding unattributable. Task 2 is therefore a behaviour-free commit -- if anything moves, the pin
+  # is wrong, not the floor. CI floors are floors and ceilings and must NOT be edited to make a red pass.
+  #
+  # LEDGER: closes :465, :467 (both "the production COMPOSITION does not exist -- Owner: Epic 5/6")
+  # and :681, whose trigger names "Story 5.3's first production worker factory" verbatim. Corrects
+  # the stale :193 (already fixed by retro prep task P2 at 8139866, entry text never updated) rather
+  # than re-doing the work. Leaves OPEN and untouched: :50, :494, :521, :663, :679, :684, :687,
+  # :19-28, :689 -- the last five are explicitly Epic 6's or have unrelated triggers.
+  5-3-run-shiftmind-reproducibly-from-one-command: in-progress
   5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
 

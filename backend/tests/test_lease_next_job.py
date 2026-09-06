@@ -9,6 +9,7 @@ import pytest
 
 from application.contracts.job_lease import JobLeaseV1, LeaseRenewalV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
+from adapters.postgres.solver_input import SnapshotInputMissingError
 from application.ports.schedule_run import ScheduleRunStateV1
 from application.use_cases.lease_and_execute_schedule_run import (
     FatalJobError,
@@ -193,6 +194,45 @@ def test_fatal_exception_after_lease_fails_the_job_and_queued_run_atomically() -
     assert finalize[2]["status"] == "solver_failed"
     assert finalize[2]["reason"] == "job_execution_failed"
     assert failed[2]["fencing_epoch"] == lease.fencing_epoch
+
+
+def test_unreadable_solver_input_finalizes_with_its_own_diagnostic_reason() -> None:
+    """An RLS-hidden or digest-invalid snapshot must NAME itself in the run row.
+
+    `SolverInputError` is deliberately not a fatal-job error. It is caught with
+    every other solver failure inside `execute_schedule_run`, which carries its
+    `code` onto the outcome, and `finalize_schedule_run` turns that into
+    `("solver_failed", "snapshot_input_missing")`. Classifying it fatal instead
+    reaches the same status through `_record_fatal_failure`, which hardcodes
+    `"job_execution_failed"` — losing the one field that tells a planner, and
+    Story 3.5/3.7's provenance timeline, which of the two causes it was.
+    """
+    lease = _lease()
+    repository = _Repository(
+        lease,
+        ScheduleRunStateV1("solver_queued", 1),
+        ScheduleRunStateV1("solver_running", 2),
+        ScheduleRunStateV1("solver_running", 2),
+    )
+    runtime = _RuntimeFactory()
+
+    class _UnreadableInputScheduler:
+        def solve(self, _snapshot):
+            raise SnapshotInputMissingError("row-level security hid the solver input")
+
+    result = lease_and_execute_schedule_run(
+        "lease-connection",
+        runtime,
+        repository,
+        _UnreadableInputScheduler(),
+        lease_owner="worker-1",
+        lease_seconds=30,
+    )
+
+    assert result.status == "solver_failed"
+    finalize = next(call for call in repository.calls if call[0] == "finalize")
+    assert finalize[2]["reason"] == "snapshot_input_missing"
+    assert finalize[2]["reason"] != "job_execution_failed"
 
 
 def test_transient_exception_after_lease_leaves_the_job_leased_for_recovery() -> None:

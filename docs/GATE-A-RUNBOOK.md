@@ -100,6 +100,13 @@ not by an HTTP create route — there is deliberately no `POST /api/v1/proposals
 Authentication and CSRF are the property to re-assert when a future story adds a
 write path — not the absence of writes.
 
+The local composition also mounts `POST /oidc/token` only when
+`OIDC_PROVIDER=fake`. It exposes the fake-provider protocol surface and does not
+write scenario, proposal, schedule-run, or baseline data. As an OAuth protocol
+endpoint it is intentionally outside the application session/CSRF boundary;
+the whole-app write-surface inventory still names it so the exception remains
+visible.
+
 Note there is **no application-level "viewer" role**. Authorization is session +
 site membership + row-level security; `role` in this codebase means a PostgreSQL
 role (see `backend/tests/test_identity_role_boundaries.py`).

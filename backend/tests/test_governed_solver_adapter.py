@@ -14,6 +14,7 @@ from adapters.postgres.solver_input import (
     SnapshotDigestMismatchError,
     SnapshotInputMissingError,
 )
+from adapters.postgres.fixture_history import PostgresFixtureHistoryAdapter
 from application.contracts.canonical import contract_digest
 from application.contracts.proposal import DraftConstraintV1, ResolvedEntityV1
 from application.contracts.run_snapshot import GovernedSolverConfigV1, RunSnapshotV1
@@ -24,6 +25,8 @@ from engine.governed_adapter import (
     _minutes_to_hours,
     _wire_employment_caps,
 )
+from settings import default_settings
+from worker.lease_worker import runtime_context
 
 
 class _Result:
@@ -65,6 +68,36 @@ def test_solver_input_source_recomputes_the_raw_payload_digest() -> None:
         PostgresSolverInputSource(_Connection(row)).load(uuid4(), "f" * 64)
     with pytest.raises(SnapshotInputMissingError):
         PostgresSolverInputSource(_Connection(None)).load(uuid4(), digest)
+
+
+@pytest.mark.postgres
+def test_solver_input_requires_the_runtime_site_scope(governed_postgres_engine) -> None:
+    adapter = PostgresFixtureHistoryAdapter(
+        default_settings().database_url, engine=governed_postgres_engine
+    )
+    suffix = uuid4().hex
+    site_id = adapter.ensure_seed_site(f"Organization {suffix}", f"Site {suffix}")
+    payload = {"Scenario Range": [{"PeriodStartDate": "2026-01-01", "PeriodEndDate": "2026-01-02"}]}
+    imported = adapter.import_fixture(
+        site_id=site_id,
+        fixture_id=f"fixture-{suffix}",
+        version="v1",
+        payload=payload,
+        source_package="tests",
+        source_path="fixture.json",
+    )
+
+    with governed_postgres_engine.begin() as connection:
+        connection.exec_driver_sql("SET LOCAL ROLE shiftmind_runtime")
+        with pytest.raises(SnapshotInputMissingError):
+            PostgresSolverInputSource(connection).load(
+                imported.scenario_version_id, imported.checksum_digest
+            )
+
+    with runtime_context(governed_postgres_engine, site_id) as connection:
+        assert PostgresSolverInputSource(connection).load(
+            imported.scenario_version_id, imported.checksum_digest
+        ) == payload
 
 
 @pytest.mark.parametrize("minute", (0, 1, 60, 1204, 10080))

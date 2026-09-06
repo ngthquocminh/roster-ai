@@ -40,6 +40,7 @@ from api.routers import (
     auth,
     constraints,
     conversations,
+    fake_oidc,
     fixtures,
     health,
     proposals,
@@ -412,3 +413,5 @@ app.include_router(conversations.router, prefix="/api/v1")
 app.include_router(proposals.router, prefix="/api/v1")
 app.include_router(schedule_runs.router, prefix="/api/v1")
 app.include_router(approvals.router, prefix="/api/v1")
+if get_settings().oidc_provider == "fake":
+    app.include_router(fake_oidc.router)

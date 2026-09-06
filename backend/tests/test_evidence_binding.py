@@ -448,14 +448,115 @@ def test_contract_digests_reproduce_the_already_recorded_values():
     assert digests == recorded
 
 
-def test_image_binding_is_honest_about_the_absent_registry():
-    """No ECR, no Dockerfile pipeline — a fabricated digest would be a lie."""
-    bindings = resolve_bindings(_DECLARED, repo_root=REPO_ROOT, allow_dirty=True)
-    assert bindings["image"] == {
+def test_image_binding_falls_back_honestly_when_build_manifest_is_absent(tmp_path):
+    """No build manifest means source-tree placeholders, never fake digests."""
+    from scripts.evidence_binding import resolve_image_binding
+
+    assert resolve_image_binding(tmp_path) == {
         "api": "local source tree",
         "web": "local source tree",
         "database": "postgres:18",
     }
+
+
+def test_image_binding_reads_a_complete_content_addressed_manifest(tmp_path):
+    from scripts.evidence_binding import resolve_image_binding
+
+    build = tmp_path / ".build"
+    build.mkdir()
+    expected = {
+        "api": "sha256:" + "a" * 64,
+        "web": "sha256:" + "b" * 64,
+        "database": "postgres:18",
+    }
+    (build / "image-digests.json").write_text(json.dumps(expected), encoding="utf-8")
+    assert resolve_image_binding(tmp_path) == expected
+
+
+def test_resolve_bindings_threads_the_repo_root_into_the_image_binding():
+    """The wiring, not just the helper.
+
+    Both tests above call `resolve_image_binding` directly, so deleting its
+    call site in `resolve_bindings` would leave them green while the `image`
+    binding silently stopped being derived at all.
+    """
+    bindings = resolve_bindings(_DECLARED, repo_root=REPO_ROOT, allow_dirty=True)
+    from scripts.evidence_binding import resolve_image_binding
+
+    assert bindings["image"] == resolve_image_binding(REPO_ROOT)
+    assert set(bindings["image"]) == {"api", "web", "database"}
+
+
+@pytest.mark.parametrize(
+    "document",
+    (
+        {"api": "sha256:pending", "web": "sha256:" + "b" * 64, "database": "postgres:18"},
+        {"api": "sha256:" + "a" * 63, "web": "sha256:" + "b" * 64, "database": "postgres:18"},
+        {"api": "sha256:" + "A" * 64, "web": "sha256:" + "b" * 64, "database": "postgres:18"},
+        {"api": "sha256:" + "a" * 64, "web": "sha256:" + "b" * 64},
+        {
+            "api": "sha256:" + "a" * 64,
+            "web": "sha256:" + "b" * 64,
+            "database": "postgres:18",
+            "worker": "sha256:" + "c" * 64,
+        },
+    ),
+)
+def test_a_present_but_malformed_manifest_refuses_rather_than_falling_back(
+    tmp_path, document
+):
+    """A corrupt manifest beside a real build must not read as "no build".
+
+    Falling back here would emit `"local source tree"` into committed
+    evidence, which is a false statement rather than an honest absence. The
+    fourth-key case also pins Decision 2's three-key shape.
+    """
+    from scripts.evidence_binding import resolve_image_binding
+
+    build = tmp_path / ".build"
+    build.mkdir()
+    (build / "image-digests.json").write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValueError):
+        resolve_image_binding(tmp_path)
+
+
+def test_digest_recorder_rejects_a_truncated_image_id(monkeypatch):
+    from scripts import record_image_digests
+
+    monkeypatch.setattr(
+        record_image_digests.subprocess,
+        "run",
+        lambda *args, **kwargs: type("Result", (), {"stdout": "sha256:abc\n"})(),
+    )
+    with pytest.raises(RuntimeError, match="non-content-addressed"):
+        record_image_digests._digest("shiftmind-backend:local")
+
+
+def test_evidence_audit_asserts_no_image_shape_across_every_committed_file():
+    """The monotonicity lock: `audit_evidence_file` must have NO image rule.
+
+    Story 5.3 regenerated `story-1.11`'s report with real `sha256:` digests, so
+    reading that one file alone no longer represents the tree — thirteen other
+    committed files still record `"local source tree"`, and they are the ones a
+    digest rule would redden. Sweeping all of them keeps this lock pointed at
+    what Decision 8 actually protects.
+    """
+    from scripts.evidence_binding import audit_evidence_file
+
+    evidence_files = sorted((REPO_ROOT / "evidence").rglob("*.json"))
+    assert len(evidence_files) >= 14, evidence_files
+    placeholders = [
+        path
+        for path in evidence_files
+        if "local source tree"
+        in json.loads(path.read_text(encoding="utf-8"))
+        .get("version_bindings", {})
+        .get("image", {})
+        .values()
+    ]
+    assert placeholders, "no committed file still records the placeholder"
+    for path in evidence_files:
+        assert not [item for item in audit_evidence_file(path) if "image" in item], path
 
 
 def test_module_hardcodes_neither_the_alembic_head_nor_a_commit():

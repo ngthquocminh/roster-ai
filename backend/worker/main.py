@@ -154,8 +154,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not args.runtime_factory:
         parser.error(
-            "--runtime-factory is required until deployment composition is "
-            "owned by Epic 5/6"
+            "--runtime-factory is required (use "
+            "worker.composition:create_runtime for the production composition)"
         )
 
     stop_event = Event()

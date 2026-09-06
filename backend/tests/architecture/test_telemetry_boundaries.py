@@ -438,6 +438,67 @@ def test_sqlalchemy_engines_hide_bound_parameters() -> None:
     assert not violations
 
 
+def test_worker_composition_is_covered_by_engine_parameter_guard() -> None:
+    composition = BACKEND_ROOT / "worker/composition.py"
+    assert composition in _python_files(*NON_TEST_BACKEND_ROOTS)
+    assert sqlalchemy_engines_without_hidden_parameters(
+        "from sqlalchemy import create_engine\ncreate_engine(url)"
+    ) == ["create_engine(url)"]
+    source = composition.read_text(encoding="utf-8")
+    assert "settings.database_url" in source
+    assert "PostgresSolverInputSource(" in source
+
+
+#: The privileged account is the container's `POSTGRES_USER` and therefore a
+#: superuser, and superusers bypass FORCE ROW LEVEL SECURITY. Only these
+#: modules may name it: migrations and the operator scripts that create roles
+#: and rows the restricted login cannot. Anything else reaching it would give
+#: the solver cross-site read access, which is what AD-23 exists to prevent.
+_PRIVILEGED_DSN_ALLOWLIST = frozenset(
+    {
+        "conftest.py",
+        "settings.py",
+        "migrations/env.py",
+        "scripts/bootstrap_local.py",
+        "scripts/gate_a_cutover.py",
+        "scripts/seed_planner.py",
+    }
+)
+
+
+def privileged_dsn_readers(source: str) -> list[str]:
+    """Every expression in `source` that reaches `provisioning_database_url`."""
+    return [
+        ast.unparse(node)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Attribute) and node.attr == "provisioning_database_url"
+    ]
+
+
+def test_no_production_module_builds_a_solver_path_on_the_privileged_dsn() -> None:
+    """Decision 4's forbidden shortcut, scoped to production modules.
+
+    This was previously a substring assertion over `worker/composition.py`
+    alone, so any other production module could have taken the shortcut with
+    the guard staying green.
+    """
+    offenders = {
+        str(path.relative_to(BACKEND_ROOT)).replace("\\", "/"): found
+        for path in _python_files(*NON_TEST_BACKEND_ROOTS)
+        if str(path.relative_to(BACKEND_ROOT)).replace("\\", "/")
+        not in _PRIVILEGED_DSN_ALLOWLIST
+        and (found := privileged_dsn_readers(path.read_text(encoding="utf-8")))
+    }
+    assert not offenders
+
+
+def test_privileged_dsn_guard_detects_a_synthetic_violating_source() -> None:
+    assert privileged_dsn_readers(
+        "from settings import default_settings\n"
+        "engine = create_engine(default_settings().provisioning_database_url)\n"
+    ) == ["default_settings().provisioning_database_url"]
+
+
 def test_parameterized_request_uses_the_route_template_not_the_uuid() -> None:
     records: list[TelemetryRecordV1] = []
 

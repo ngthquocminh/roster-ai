@@ -1,7 +1,7 @@
 """Shared NFR27 version-binding resolution for evidence reports.
 
-Deliberately generic, not Gate-A-specific. `epics.md:1612-1623` already names
-`evidence/story-5.10/rollback-drill-report.json` and
+Deliberately generic, not Gate-A-specific. `epics.md:1578-1597` names
+Story 5.3's image binding and
 `evidence/epic-5/release-gate-report.json` as future consumers, so anything
 that knows about Gate A belongs in the caller, not here.
 
@@ -73,15 +73,63 @@ _OUTPUT_EXEMPT_NOTE = (
     "measurement."
 )
 
-# There is no container registry, no image build pipeline and no `.github/` in
-# this repository. AD-17/AD-24's immutable-digest requirement is Epic 5 work
-# (Stories 5.5-5.7). Fabricating a digest here would be a false binding, so the
-# honest value is the one Stories 1.4/1.5/1.9/1.10 already recorded.
+# A build manifest is optional because evidence audits routinely run without
+# Docker. Generation records real local image digests when the build has
+# produced them; absence retains the historical honest placeholder.
 _LOCAL_IMAGE_BINDING: dict[str, str] = {
     "api": "local source tree",
     "web": "local source tree",
     "database": "postgres:18",
 }
+
+
+#: A content-addressed image digest, in the exact shape `docker image inspect`
+#: emits. The prefix alone is not enough: `"sha256:pending"` would satisfy it
+#: and land in committed evidence looking like provenance. `record_image_digests`
+#: enforces the same pattern when it writes, but a hand-written manifest never
+#: passes through that code — and hand-writing evidence is the defect this
+#: whole module exists to prevent, so the reading side must check too.
+_IMAGE_DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+
+_IMAGE_KEYS: tuple[str, ...] = ("api", "web", "database")
+
+
+def resolve_image_binding(repo_root: Path) -> dict[str, str]:
+    """The `image` binding: recorded digests when the build wrote them.
+
+    ABSENT is the ordinary case — an evidence audit run without Docker — and
+    falls back to `_LOCAL_IMAGE_BINDING`, whose values state their own reason
+    ("local source tree"). The binding keeps exactly the three keys
+    `api`/`web`/`database` in both cases: fourteen committed evidence files
+    record that shape, so a fourth key (including a "reason" key) would be a
+    contract change, not an improvement.
+
+    PRESENT BUT MALFORMED is different and must not fall back. A corrupt
+    manifest sitting beside a real build would otherwise generate evidence
+    claiming no build happened, which is a false statement rather than an
+    honest absence.
+    """
+    manifest = repo_root / ".build" / "image-digests.json"
+    if not manifest.is_file():
+        return dict(_LOCAL_IMAGE_BINDING)
+    try:
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"{manifest} exists but is unreadable: {exc}") from exc
+    if not isinstance(document, dict) or set(document) != set(_IMAGE_KEYS):
+        raise ValueError(
+            f"{manifest} must be an object with exactly the keys "
+            f"{sorted(_IMAGE_KEYS)}; got {sorted(document) if isinstance(document, dict) else type(document).__name__}"
+        )
+    if not all(isinstance(document[key], str) and document[key].strip() for key in _IMAGE_KEYS):
+        raise ValueError(f"{manifest} carries a non-string or empty image value")
+    for key in ("api", "web"):
+        if _IMAGE_DIGEST_RE.fullmatch(document[key]) is None:
+            raise ValueError(
+                f"{manifest} records {key}={document[key]!r}, which is not a "
+                "content-addressed sha256 digest"
+            )
+    return {key: document[key] for key in _IMAGE_KEYS}
 
 
 class DirtyTreeError(RuntimeError):
@@ -539,7 +587,7 @@ def resolve_bindings(
         ),
         "solver": declared["solver"],
         "code": code,
-        "image": dict(_LOCAL_IMAGE_BINDING),
+        "image": resolve_image_binding(repo_root),
         "schema_version": resolve_alembic_head(versions_dir),
     }
 

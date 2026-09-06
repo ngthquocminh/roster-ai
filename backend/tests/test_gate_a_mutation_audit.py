@@ -117,6 +117,10 @@ _PUBLIC_VERSIONED_PATHS = frozenset(
 #: `docs/GATE-A-RUNBOOK.md` section 2, not by this suite.
 _LEGACY_WRITE_ROUTES = (
     ("POST", "/constraints"),
+    # Local-only OAuth protocol endpoint. It consumes an ephemeral code and
+    # never writes governed scenario or baseline state; api.main mounts it
+    # only when OIDC_PROVIDER=fake.
+    ("POST", "/oidc/token"),
     ("POST", "/scenarios"),
     ("POST", "/scenarios/{scenario_id}/runs"),
 )
@@ -249,8 +253,9 @@ def test_gate_a_write_surface_is_exactly_the_approved_paths() -> None:
     a human recording in `docs/GATE-A-RUNBOOK.md` why it does not touch
     governed scenario data or the baseline pointer.
 
-    It deliberately covers the un-versioned legacy routes too. They are NOT
-    session-guarded — nothing here claims they are — but a "write surface"
+    It deliberately covers un-versioned routes too. The legacy routes are NOT
+    session-guarded and the local-only OIDC token route is an OAuth protocol
+    endpoint — nothing here claims otherwise — but a "write surface"
     assertion that quietly skipped them would read as a clean bill of health
     over three open write paths.
     """
