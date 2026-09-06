@@ -2445,7 +2445,78 @@ development_status:
   # Inserted 2026-09-06 by `sprint-change-proposal-2026-09-06.md`. Corrective prerequisite from
   # 5.3's code review, not a portfolio-sequence member -- hence `5-3a`, with 5.4's key unchanged.
   # Owns the three ledger entries at `deferred-work.md:719-780`.
-  5-3a-make-a-real-solve-reach-a-candidate: backlog
+  # NOTE (2026-09-06): Story 5.3a created and moved to ready-for-dev at 167cd29. Scope: a round-2
+  # solution hint on both lexicographic implementations, one solver-configuration default, a
+  # re-measured SCOPE_CONTROLS block, a runtime-selectable deterministic agent double, and the
+  # restored compose-proof assertions plus Flow 1's approval leg. NO migration, route, API field,
+  # golden case, runtime dependency, registered evidence file, or frontend diff.
+  #
+  # MEASURED AT CREATION (167cd29, clean tree, Docker PostgreSQL 18 up, 16-core host): backend
+  # 1615 passed / 1 skipped / 7 deselected (181.8s); `-m postgres` 160 passed / 1463 deselected --
+  # and 160+1463 = 1615+1+7. test_evidence_convention.py 93 passed; tests/architecture/ 79 passed;
+  # test_gate_a_readiness.py 44 passed. Frontend NOT measured (zero frontend diff); Story 5.3's
+  # Vitest 648 / Playwright 80 stand. THE CHANGE PROPOSAL'S OWN BASELINE (1614/2/7) IS A
+  # DIRTY-TREE ARTEFACT and was reproduced as such: one untracked file makes
+  # test_evidence_binding.py:570 skip. 1615/1/7 is the number, and CI's --max-skipped 1 ceiling is
+  # exactly one skip wide.
+  #
+  # THE LOAD-BEARING FINDING, measured at creation rather than left as the proposal's contingency:
+  # the round-2 hint is NOT the blocking fix at the shipped defaults. At
+  # solver_num_search_workers=1 (settings.py:133) round 1 CONSUMES THE ENTIRE shared 30s wall on
+  # BOTH fixtures, so apply_remaining_budget returns "wall" and round 2 is never entered -- the
+  # hint is a change to code that does not run. Measured non-convergent at 1 worker/30s, 1
+  # worker/120s (so the proposal's "raise the wall budget" escalation is measured INSUFFICIENT),
+  # 2 workers/30s and 4 workers/30s. At 8 workers round 1 converges (13.9s / 4.6s), round 2 is
+  # entered, and WITHOUT the hint still returns UNKNOWN; WITH the hint it returns FEASIBLE on both
+  # (r2 = 1154971 / 1954456). So BOTH changes are required and each was measured necessary in
+  # isolation. A 60s wall returned the IDENTICAL round2_value as 30s, so extra budget buys
+  # latency, not quality -- the wall stays at 30 and minimum_lease_seconds (settings.py:399) is
+  # untouched.
+  #
+  # THE LARGEST UNNAMED RISK IN THE PROPOSAL, closed by measurement: solver_completed is necessary
+  # but NOT sufficient -- finalize_schedule_run then runs require_hard_constraints, which has never
+  # seen a real governed solve (every solver_completed in the suite is fabricated). Driven through
+  # the real adapter with the hint applied: PASS on both fixtures (76 assignments / 10 workers /
+  # 40 shifts / cost 11549.69, and 125 / 22 / 76 / 19544.45). A candidate really is produced.
+  #
+  # ALSO MEASURED: the shipped 30/30 configuration is WALL-bound, not deterministic-bound
+  # (det_used ~3.6 of 30 at 1 worker), and two runs of the same fixture gave different round-1
+  # values -- so single-worker running is ALREADY non-reproducible there, and raising the worker
+  # count sacrifices no reproducibility the running system has. SCOPE_CONTROLS' existing
+  # reproducibility claim was measured at max_deterministic_time=1.0, where the deterministic
+  # ceiling binds first; that framing must not be copied onto the new numbers. All hint APIs
+  # (ClearHints / AddHint / GetIntVarFromProtoIndex) verified present on the pinned
+  # ortools==9.11.4210, and the round-1 snapshot length equals the model's variable count on both
+  # fixtures (3493, 5689).
+  #
+  # TEN DECISIONS, the four most consequential:
+  # (1) The fix is TWO changes -- the hint AND a worker-count default -- and the proposal named
+  #     only one. Neither is observable alone, so they ship in one commit.
+  # (2) The worker count moves in settings.py, NOT docker-compose.yml. AC1's Given is "at the
+  #     DEFAULT solver budget"; a compose-only override greens the proof while leaving the
+  #     configuration the AC names still unable to produce a candidate.
+  # (3) The deterministic agent double is a FunctionModel under backend/agent/ and becomes the
+  #     KEYLESS DEFAULT, reversing Story 5.3's Decision 12 on the change proposal's authority
+  #     (§3.5). Placement verified legal: test_application_and_domain_never_import_evals guards
+  #     (domain, application) only, and agent/ is the layer permitted to touch the framework.
+  #     evals/doubles.py is the shape reference and is never imported.
+  # (4) DECISION 8 IS BEYOND THE PROPOSAL'S SCOPE and was added after reading terminal_status
+  #     (execute_turn.py:115-128): agent_completed is returned for a REFUSAL or a CLARIFICATION
+  #     too, so a double that politely declines satisfies AC2's letter. The compose proof must
+  #     assert activity_type == "agent_response" alongside the status.
+  #
+  # MACHINE-DEPENDENCE, named rather than assumed away: 8 workers was measured on a 16-core host.
+  # A 4-core runner or a CPU-limited container may not converge round 1 at any worker count, and
+  # the compose proof -- the only thing covering this default -- is opt-in and non-required. If
+  # the proof cannot reach solver_completed inside a container, STOP AND REPORT rather than
+  # widening scope.
+  #
+  # LEDGER: closes all three entries at :719-806 and corrects the first one's cause statement once
+  # more (the measured cause at the defaults is that round 1 never converges; the missing hint is
+  # the second half). Leaves every other row untouched, including the five other 5.3-review
+  # entries above :719. Story 5.3 flips to `done` in the SAME commit as 5.3a, with the
+  # bounded-exception note above it removed.
+  5-3a-make-a-real-solve-reach-a-candidate: ready-for-dev
   5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
 
