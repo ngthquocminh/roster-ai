@@ -950,19 +950,32 @@ The rewritten monotonicity lock was re-mutated and confirmed red — now on
 `evidence/story-1.10/...`, a file that still records the placeholder, so it is strictly stronger
 than the version that only bit through the regenerated file's `database` key.
 
-**Not verified in this session, and owed before the story can be marked done:**
+**Verified by building and running, 2026-09-06:**
 
-1. **No image was built.** The `--no-dev` install, the `.dockerignore` exclusions, the nginx SSE
-   settings, the split image tags and the extended compose proof are correct as source and are
-   unproven as behaviour. Run `docker compose up -d --build` and
-   `pytest -q tests/compose_proof.py -m compose`.
-2. **One evidence regeneration is owed.** `.dockerignore` and `--no-dev` both change the image
-   content, so `evidence/story-1.11/gate-a-readiness-report.json`'s recorded
-   `api`/`web` digests no longer describe a build of this tree. Commit the code, rebuild, record
-   the digests, then regenerate on a clean tree and commit the evidence separately.
-3. **No manual browser pass.** The proof now covers Flow 1 end to end over HTTP, including
-   approval, baseline promotion and provenance, but nothing has rendered the SPA — and the nginx
-   SSE fix is precisely the kind of defect only a browser surfaces.
+1. **Both images build and the composed stack runs.** `docker compose build` green; the opt-in
+   proof passes in **60.54s** against the built images, driving real OIDC sign-in over HTTP, a
+   `__Host-` session, CSRF, both fixtures, a keyless agent turn, an enqueued run, and a worker
+   that leased and solved it under site-scoped RLS.
+2. **The `.dockerignore` and `--no-dev` fixes hold in the built artifact**, checked inside the
+   image rather than inferred: no `.env`, no `var/`, no `*.db`; `opentelemetry_sdk` and `pytest`
+   absent; `opentelemetry_api` and `httpx` present (both transitive, both required).
+3. **Evidence regenerated on a clean tree at `fd55130`** from three fresh runners — pytest
+   1615 passed / 1 skipped / 7 deselected, vitest 648, playwright 80 — `gate_a_passed: true`.
+   This is the first report whose `image` binding names digests of images built from the commit
+   it records.
+4. **CI's `--max-skipped 1` ceiling holds.** The clean-tree run skips exactly one test
+   (`test_scheduling_inspect.py:323`, pre-existing); the second skip seen mid-review was the
+   clean-tree-only binding check, which runs when the tree is clean.
+
+**Still not done, and why the story is not `done`:**
+
+- **No manual browser pass.** The session has no browser. The nginx SSE fix in particular is the
+  kind of defect only a rendered page surfaces.
+- **AC1 is measurably not met**, for two reasons now owned by Story 5.3a: the agent turn ends
+  `agent_failed`/`invalid_output` under `TestModel`, and no run reaches `solver_completed`, so
+  Flow 1's approval, baseline-promotion and provenance steps are unreachable. Both are ledgered
+  with the measurements a fix needs. This is a declared, dated, owned gap — not an open review
+  finding — but a story whose acceptance criterion is measurably unmet should not be marked done.
 
 ## Change Log
 
