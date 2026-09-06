@@ -4,7 +4,7 @@ baseline_commit: 167cd29
 
 # Story 5.3a: Make a Real Solve Reach a Candidate [Technical Enabler]
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -464,21 +464,21 @@ artifact, and it does not touch the other open ledger rows.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Re-verify the creation measurements and the candidate gate before changing anything (AC: #1)**
-  - [ ] Re-run the suite baselines on a **clean tree** at `167cd29` with Docker PostgreSQL up: backend default, `-m postgres`, `tests/architecture`, `tests/test_evidence_convention.py`, `tests/test_gate_a_readiness.py`. Record drift in the Dev Agent Record; do not silently adopt different numbers. **Keep the tree clean while measuring** — an untracked file spends the one permitted skip (see *Measured at creation*).
-  - [ ] Confirm the blocking mechanism still holds at the shipped defaults: a governed solve at `num_search_workers=1`, wall 30, det 30 leaves round 2 unentered because round 1 consumes the wall. If it converges on this machine, **stop and re-plan** — Decision 1's premise has changed.
-  - [ ] Confirm `ClearHints`, `AddHint` and `GetIntVarFromProtoIndex` exist on the pinned `ortools==9.11.4210`, and that `len(round-1 snapshot) == len(model.Proto().variables)` on both fixtures.
-  - [ ] Re-verify the candidate gate: apply Task 2's hint locally **without committing it**, drive `GovernedSchedulerAdapter` on both fixtures and confirm `require_hard_constraints` **passes** and `calculate_candidate_metrics` returns. Record assignment/worker/shift counts and `total_cost`. Per Decision 5 a violation here is a re-plan signal, not an expected outcome.
+- [x] **Task 1 — Re-verify the creation measurements and the candidate gate before changing anything (AC: #1)**
+  - [x] Re-run the suite baselines on a **clean tree** at `167cd29` with Docker PostgreSQL up: backend default, `-m postgres`, `tests/architecture`, `tests/test_evidence_convention.py`, `tests/test_gate_a_readiness.py`. Record drift in the Dev Agent Record; do not silently adopt different numbers. **Keep the tree clean while measuring** — an untracked file spends the one permitted skip (see *Measured at creation*).
+  - [x] Confirm the blocking mechanism still holds at the shipped defaults: a governed solve at `num_search_workers=1`, wall 30, det 30 leaves round 2 unentered because round 1 consumes the wall. If it converges on this machine, **stop and re-plan** — Decision 1's premise has changed.
+  - [x] Confirm `ClearHints`, `AddHint` and `GetIntVarFromProtoIndex` exist on the pinned `ortools==9.11.4210`, and that `len(round-1 snapshot) == len(model.Proto().variables)` on both fixtures.
+  - [x] Re-verify the candidate gate: apply Task 2's hint locally **without committing it**, drive `GovernedSchedulerAdapter` on both fixtures and confirm `require_hard_constraints` **passes** and `calculate_candidate_metrics` returns. Record assignment/worker/shift counts and `total_cost`. Per Decision 5 a violation here is a re-plan signal, not an expected outcome.
 
-- [ ] **Task 2 — Seed round 2 from the round-1 snapshot, on both implementations (AC: #1, per Decision 2)**
-  - [ ] `backend/engine/governed_adapter.py:249-251` — the blocking fix. Clear existing hints and add the round-1 snapshot as a solution hint before the second `solver.Solve(model)`, guarded on the snapshot/variable-count equality.
-  - [ ] `backend/engine/cpsat/objective.py:63-64` — the same change, for consistency. **Attach no measured claim to this path.**
-  - [ ] Add a focused test proving round 2 is hinted: on `sample_tiny_input` at a worker count where round 1 converges, the hinted solve reaches `OPTIMAL`/`FEASIBLE` where the unhinted one returns `UNKNOWN`. This is the story's central behaviour and it must have a test that fails without the hint.
+- [x] **Task 2 — Seed round 2 from the round-1 snapshot, on both implementations (AC: #1, per Decision 2)**
+  - [x] `backend/engine/governed_adapter.py:249-251` — the blocking fix. Clear existing hints and add the round-1 snapshot as a solution hint before the second `solver.Solve(model)`, guarded on the snapshot/variable-count equality.
+  - [x] `backend/engine/cpsat/objective.py:63-64` — the same change, for consistency. **Attach no measured claim to this path.**
+  - [x] Add a focused test proving round 2 is hinted: on `sample_tiny_input` at a worker count where round 1 converges, the hinted solve reaches `OPTIMAL`/`FEASIBLE` where the unhinted one returns `UNKNOWN`. This is the story's central behaviour and it must have a test that fails without the hint.
 
-- [ ] **Task 3 — Move the solver default so round 2 is reachable, and measure the pair (AC: #1, per Decisions 3 and 4)**
-  - [ ] Raise `solver_num_search_workers` in `backend/settings.py` (both the dataclass default at `:133` and the `_positive_int` fallback at `:384-388`) to the value Task 3's measurement supports. Start at **8**; 2 and 4 were measured non-convergent. Leave `solver_wall_time_limit_seconds`, `solver_max_deterministic_time`, `solver_seed` and `solver_engine_name` untouched (Decision 4).
-  - [ ] Measure through `GovernedSchedulerAdapter` at the new defaults, on **both** shipped fixtures, **≥3 runs each**. Record: terminal status, `round1_value`, `round2_value`, assignment count, distinct-member count, wall time, and **the assignment set** (not just the counts — that is what `SCOPE_CONTROLS`' reproducibility claim is about). Record the host's core count beside the worker count.
-  - [ ] **If round 2 still does not reach `OPTIMAL`/`FEASIBLE`**, escalate in this order and record why each step was taken or skipped: (1) raise the worker count further; (2) `solver.parameters.fix_variables_to_their_hinted_value` or `repair_hint`, so round 2 starts from a known-feasible point rather than a suggested one; (3) **stop and report**. Do **not** reach for a larger wall budget — 60s and 120s were both measured and neither helped (Decision 4).
+- [x] **Task 3 — Move the solver default so round 2 is reachable, and measure the pair (AC: #1, per Decisions 3 and 4)**
+  - [x] Raise `solver_num_search_workers` in `backend/settings.py` (both the dataclass default at `:133` and the `_positive_int` fallback at `:384-388`) to the value Task 3's measurement supports. Start at **8**; 2 and 4 were measured non-convergent. Leave `solver_wall_time_limit_seconds`, `solver_max_deterministic_time`, `solver_seed` and `solver_engine_name` untouched (Decision 4).
+  - [x] Measure through `GovernedSchedulerAdapter` at the new defaults, on **both** shipped fixtures, **≥3 runs each**. Record: terminal status, `round1_value`, `round2_value`, assignment count, distinct-member count, wall time, and **the assignment set** (not just the counts — that is what `SCOPE_CONTROLS`' reproducibility claim is about). Record the host's core count beside the worker count.
+  - [x] **If round 2 still does not reach `OPTIMAL`/`FEASIBLE`**, escalate in this order and record why each step was taken or skipped: (1) raise the worker count further; (2) `solver.parameters.fix_variables_to_their_hinted_value` or `repair_hint`, so round 2 starts from a known-feasible point rather than a suggested one; (3) **stop and report**. Do **not** reach for a larger wall budget — 60s and 120s were both measured and neither helped (Decision 4).
 
 - [ ] **Task 4 — Reconcile `SCOPE_CONTROLS` from Task 3's measurements (AC: #1, per Decision 6)**
   - [ ] `backend/engine/governed_adapter.py:38-68`: restore `solver:wall_total`; rewrite the `NOT COVERED: any terminal status other than UNKNOWN` entry; rewrite `solver:reproducibility` and `solver:multi_worker_trade` from Task 3's runs with **no value carried forward**.
@@ -675,18 +675,71 @@ artifact; this story edits it rather than adding a parallel proof.
 
 ### Agent Model Used
 
+GPT-6 Codex
+
 ### Implementation Plan
 
+Stopped at Task 1's explicit re-plan gate before product-code changes. Reconcile the
+single-worker round-1 convergence observed on this host with Decision 1 before resuming.
+
 ### Debug Log References
+
+- 2026-09-06 baseline at clean product tree (`167cd29`, branch HEAD contains planning
+  artifacts only), Docker PostgreSQL 18 healthy: backend default **1615 passed, 1 skipped,
+  7 deselected** in 259.17s; postgres **160 passed, 1463 deselected** in 91.14s;
+  architecture **79 passed** in 20.84s; evidence convention **93 passed** in 6.71s;
+  Gate A readiness **44 passed** in 21.91s. Counts match creation; runtime drifted from
+  181.76s and 72.61s for the two measured aggregate suites.
+- Task 1 probe confirmed `ClearHints`, `AddHint`, and `GetIntVarFromProtoIndex` exist.
+  Round-1 snapshot sizes matched model variables on both fixtures: 3493/3493 and
+  5689/5689.
+- **RE-PLAN SIGNAL:** at workers=1, wall=30, deterministic=30 on
+  `sample_tiny_input`, round 1 returned a finite value **25848785** before the shared wall
+  was exhausted. Round 2 remained unentered and the governed outcome was `UNKNOWN` after
+  30.057s, carrying round2 snapshot cost 1074335. The story's Task 1 says to stop if round
+  1 converges because Decision 1's premise has changed. No hint or product-code change was
+  applied before the re-plan decision.
+- Continued on Minh's direction with the refined premise that round 1 may converge but
+  consumes the shared wall, leaving round 2 unentered. With the Task 2 hint applied
+  temporarily at workers=8, both real candidates passed `require_hard_constraints` and
+  `calculate_candidate_metrics`: `sample_tiny_input` was FEASIBLE with round1=21092759,
+  round2=1154971, 76 assignments, 10 members, 40 selected shifts, 30.157s, total cost
+  11549.69; `sample_tiny_input_more_tm` was FEASIBLE with round1=15833025,
+  round2=1954456, 125 assignments, 22 members, 76 selected shifts, 30.414s, total cost
+  19544.45. Both returned zero soft results. The temporary hint and probe were removed
+  before Task 2's red phase.
+- Task 3 measurement on a 16-core host at 8 workers, 30/30 budget, three runs per
+  fixture: `sample_tiny_input` was FEASIBLE in 29.209/30.186/29.761s with identical
+  round1=21092759, round2=1154971, 76 assignments and 10 members; assignment-set
+  digests were `ac6c164d…`, `3362de46…`, `fcff5270…`. `sample_tiny_input_more_tm`
+  was FEASIBLE in 30.285/30.275/30.301s with identical round1=15833025,
+  round2=1954456, 125 assignments and 22 members; digests were `189ed8eb…`,
+  `3497fddb…`, `905c8f62…`. All six reached round 2, so escalation was skipped.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
 | Mutation applied to real code | Guard that should redden | Before | After |
 |---|---|---|---|
+| Removed `_seed_round_two_from_snapshot(model, snapshot)` from the governed round-2 path | `test_round_two_is_seeded_from_the_round_one_solution` | PASS (`FEASIBLE`) | FAIL (`UNKNOWN`) |
+| Reversed the snapshot/model variable-count guard so a mismatched snapshot was accepted | `test_mismatched_round_one_snapshot_is_not_hinted` | PASS (returns `False`, no hint) | FAIL (returned `True`) |
 
 ### Completion Notes List
 
+- Seeded both lexicographic round-2 solves from their round-1 snapshots, guarded by
+  exact model-variable count, and moved the application-owned default to 8 workers.
+- Added a real-solve regression test plus a mismatched-snapshot guard test. Focused
+  solver/settings/calibration validation passed 53 tests. The dirty-tree regression
+  pass was 1616 passed, 2 skipped, 7 deselected; a clean-tree pass follows commit 1.
+
 ### File List
+
+- backend/engine/governed_adapter.py
+- backend/engine/cpsat/objective.py
+- backend/settings.py
+- backend/tests/test_round2_solution_hint.py
+- backend/tests/test_settings.py
+- _bmad-output/implementation-artifacts/5-3a-make-a-real-solve-reach-a-candidate.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ---
 

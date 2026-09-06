@@ -192,6 +192,17 @@ class _GovernedLexResult:
         return self.solver.Value(variable)
 
 
+def _seed_round_two_from_snapshot(
+    model: cp_model.CpModel, snapshot: list[int]
+) -> bool:
+    if len(snapshot) != len(model.Proto().variables):
+        return False
+    model.ClearHints()
+    for index, value in enumerate(snapshot):
+        model.AddHint(model.GetIntVarFromProtoIndex(index), value)
+    return True
+
+
 def _solve_lexicographic_governed(
     builder: CpSatBuilder,
     *,
@@ -248,6 +259,7 @@ def _solve_lexicographic_governed(
 
     model.Add(builder.round1_unmet <= int(round(round1_value)))
     model.Minimize(builder.round2_cost)
+    _seed_round_two_from_snapshot(model, snapshot)
     exhausted = apply_remaining_budget(deterministic_used)
     if exhausted is not None:
         return _GovernedLexResult(
@@ -423,6 +435,7 @@ __all__ = [
     "_constraints_to_overrides",
     "_hours_to_minutes",
     "_minutes_to_hours",
+    "_seed_round_two_from_snapshot",
     "_solve_lexicographic_governed",
     "_wire_employment_caps",
 ]

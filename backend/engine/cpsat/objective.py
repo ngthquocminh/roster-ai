@@ -61,6 +61,10 @@ def solve_lexicographic(builder: CpSatBuilder, time_limit_s: float,
     # ---- lock round 1, minimize cost ----
     m.Add(builder.round1_unmet <= int(round(r1)))
     m.Minimize(builder.round2_cost)
+    if len(snap) == len(m.Proto().variables):
+        m.ClearHints()
+        for index, value in enumerate(snap):
+            m.AddHint(m.GetIntVarFromProtoIndex(index), value)
     s2 = solver.Solve(m)
     if s2 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         # Round 2 found no solution in time: fall back to the round-1 solution

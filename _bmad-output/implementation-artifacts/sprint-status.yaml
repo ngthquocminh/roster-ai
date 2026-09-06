@@ -2516,7 +2516,7 @@ development_status:
   # the second half). Leaves every other row untouched, including the five other 5.3-review
   # entries above :719. Story 5.3 flips to `done` in the SAME commit as 5.3a, with the
   # bounded-exception note above it removed.
-  5-3a-make-a-real-solve-reach-a-candidate: ready-for-dev
+  5-3a-make-a-real-solve-reach-a-candidate: in-progress
   5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
 

@@ -127,10 +127,11 @@ class Settings:
     scheduling_draft_max_constraints: int = 10
     # Governed solver ceilings (Story 3.2, AD-7). These are application-owned
     # inputs frozen into RunSnapshotV1; neither a model nor a caller chooses
-    # them. Single-worker + deterministic time is the reproducible default.
+    # them. The worker count leaves enough of the shared wall budget for both
+    # lexicographic rounds on the shipped fixtures.
     solver_engine_name: str = "cpsat"
     solver_seed: int = 42
-    solver_num_search_workers: int = 1
+    solver_num_search_workers: int = 8
     solver_max_deterministic_time: float = 30.0
     solver_wall_time_limit_seconds: float = 30.0
     lease_seconds: int = 120
@@ -384,7 +385,7 @@ def default_settings() -> Settings:
     solver_num_search_workers = _positive_int(
         "SOLVER_NUM_SEARCH_WORKERS",
         os.environ.get("SOLVER_NUM_SEARCH_WORKERS"),
-        1,
+        8,
     )
     solver_max_deterministic_time = _positive_float(
         "SOLVER_MAX_DETERMINISTIC_TIME",
