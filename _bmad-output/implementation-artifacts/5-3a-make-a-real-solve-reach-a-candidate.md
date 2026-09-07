@@ -4,7 +4,7 @@ baseline_commit: 167cd29
 
 # Story 5.3a: Make a Real Solve Reach a Candidate [Technical Enabler]
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -512,11 +512,11 @@ artifact, and it does not touch the other open ledger rows.
   - [x] Re-check the 120s poll deadline (`:248`) and the proof's 60.54s runtime against Task 3's timings. A 30s solve plus lease pickup fits; record the new runtime.
   - [x] Assess whether `docs/TESTING.md` / `docs/DEVELOPMENT.md` need updating — only if the proof's runtime or invocation changed materially.
 
-- [ ] **Task 8 — Close out (AC: #1, #2, per Decisions 9 and 10)**
-  - [ ] Measure whether `evidence/story-1.11/gate-a-readiness-report.json`'s recorded per-file counts moved. If they did, one **single-pass** regeneration is owed: commit the code, measure on a clean tree, generate through the runner, commit the evidence **separately**.
-  - [ ] Close the three `deferred-work.md` entries at `:719-806` using the strikethrough + **CLOSED `<date>` (Story 5.3a)** convention already used at `:90`, `:94`, `:106`, `:188`. Correct the first entry's cause statement once more: the measured cause at the shipped defaults is that **round 1 never converges**, so round 2 is never entered — the missing hint is the second half, not the first.
-  - [ ] In one commit: flip `5-3-run-shiftmind-reproducibly-from-one-command` to `done`, remove the bounded-exception note above it in `sprint-status.yaml`, and flip `5-3a-make-a-real-solve-reach-a-candidate` to `done`.
-  - [ ] Record the mutation table (Epic 4 retro A1) in the Dev Agent Record before review.
+- [x] **Task 8 — Close out (AC: #1, #2, per Decisions 9 and 10)**
+  - [x] Measure whether `evidence/story-1.11/gate-a-readiness-report.json`'s recorded per-file counts moved. If they did, one **single-pass** regeneration is owed: commit the code, measure on a clean tree, generate through the runner, commit the evidence **separately**.
+  - [x] Close the three `deferred-work.md` entries at `:719-806` using the strikethrough + **CLOSED `<date>` (Story 5.3a)** convention already used at `:90`, `:94`, `:106`, `:188`. Correct the first entry's cause statement once more: the measured cause at the shipped defaults is that **round 1 never converges**, so round 2 is never entered — the missing hint is the second half, not the first.
+  - [x] In one commit: flip `5-3-run-shiftmind-reproducibly-from-one-command` to `done`, remove the bounded-exception note above it in `sprint-status.yaml`, and flip `5-3a-make-a-real-solve-reach-a-candidate` to `done`.
+  - [x] Record the mutation table (Epic 4 retro A1) in the Dev Agent Record before review.
 
 ---
 
@@ -752,6 +752,14 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
   baseline-promotion, and provenance leg. The green proof completed in **67.20s**, within
   the existing 120s poll deadline; its invocation did not change, so testing/development
   documentation required no update.
+- Gate A readiness evidence regeneration was not required: neither new test file belongs
+  to a registered check's `test_files`, and no test case was added to the report's existing
+  contributing files. The committed per-file totals therefore did not move.
+- Final clean-tree regression suite: **1618 passed, 1 skipped, 7 deselected** in
+  328.77s. The single skip remains the unconditional scheduling-inspect skip; CI's
+  `--max-skipped 1` ceiling is preserved.
+- Closed the three Story 5.3 compose-measurement ledger entries and synchronized Story 5.3
+  and Story 5.3a to `done` in sprint tracking. Story 5.3a itself is ready for review.
 
 ### File List
 
@@ -771,6 +779,7 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 - backend/tests/compose_proof.py
 - _bmad-output/implementation-artifacts/5-3-run-shiftmind-reproducibly-from-one-command.md
 - _bmad-output/implementation-artifacts/5-3a-make-a-real-solve-reach-a-candidate.md
+- _bmad-output/implementation-artifacts/deferred-work.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ---
@@ -779,4 +788,5 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 
 | Date | Change |
 |---|---|
+| 2026-09-07 | Implemented the paired solver hint and eight-worker default, re-measured governed search, added the deterministic keyless agent model, restored the complete composed Flow 1 proof, and closed the three owned deferrals. |
 | 2026-09-06 | Story created at `167cd29`. Ten decisions recorded. **The change proposal's central premise was corrected by measurement at creation:** the round-2 hint is not the blocking fix at the shipped defaults, because at `num_search_workers=1` round 1 consumes the entire shared wall budget on both fixtures and round 2 is never entered — measured at 30s and again at 120s, and at 2 and 4 workers, all non-convergent. Both halves of the fix are therefore required and each was measured necessary in isolation (8 workers without the hint → `UNKNOWN`; 1 worker with the hint → round 2 unreachable), and the proposal's escalation step of raising the wall budget was measured insufficient rather than left as a contingency. Two further facts were measured rather than deferred to review: `require_hard_constraints` **passes** on the hinted round-2 solution for both fixtures, so `solver_completed` really does yield a candidate — the largest unnamed risk in the proposal; and the shipped 30/30 configuration is wall-bound, not deterministic-bound, so single-worker running is already non-reproducible there and the worker-count change sacrifices no reproducibility the running system has. The proposal's stated suite baseline (1614/2/7) was reproduced as a dirty-tree artefact and corrected to **1615/1/7**. Decision 8 was added beyond the proposal's scope after reading `terminal_status`: `agent_completed` is returned for a refusal or a clarification, so the compose proof must assert the activity kind or a politely declining double would satisfy AC2's letter. |

@@ -722,8 +722,14 @@ These three were found by BUILDING the stack and driving it, not by reading the 
 have the same owner and the same trigger, and together they are why Story 5.3's compose proof
 does not assert `solver_completed` or exercise Flow 1's approval leg.
 
-- **CP-SAT round 2 never returns a solution, so no run ever produces a candidate, so the
-  approval / baseline / provenance path is unreachable from a real solve.**
+- ~~**CP-SAT round 2 never returns a solution, so no run ever produces a candidate, so the
+  approval / baseline / provenance path is unreachable from a real solve.**~~ **CLOSED 2026-09-07
+  (Story 5.3a):** at the shipped one-worker default, round 1 consumed the shared wall budget
+  (and on re-verification could return a finite solution only as the wall expired), so round 2
+  was never entered; the missing hint was the second half of the defect. The default is now
+  eight workers and both lexicographic paths seed round 2 from the round-1 snapshot. Both shipped
+  fixtures reached `FEASIBLE`, passed independent hard-constraint validation, and produced real
+  candidates through the composed worker.
   **CORRECTED 2026-09-06 while drafting `sprint-change-proposal-2026-09-06.md`:** the paragraph
   below named `engine/cpsat/objective.py:64`. That module carries the same defect but is NOT on
   the blocked path. The worker composes `GovernedSchedulerAdapter` (`worker/composition.py:21`),
@@ -780,15 +786,22 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   this is closed. 5.3a also owns restoring the approval leg and the `solver_completed`
   assertion to `backend/tests/compose_proof.py`.
 
-- **The approval, baseline-promotion and provenance features have never been exercised against a
-  real solve.** Every `solver_completed` in the suite is fabricated — `SimpleNamespace` stubs in
+- ~~**The approval, baseline-promotion and provenance features have never been exercised against a
+  real solve.**~~ **CLOSED 2026-09-07 (Story 5.3a):** `compose_proof.py` now requests approval for
+  the candidate produced by the real governed solve, approves and promotes it as baseline, then
+  reads a non-empty provenance timeline linked to that schedule run. Every `solver_completed` in the suite was previously fabricated — `SimpleNamespace` stubs in
   `test_approvals_api.py:666,711,762`, a seeded row in `test_approval_governance_postgres.py:99`,
   a status literal in `test_agent_approval_path.py:156`. That is sound unit isolation, but it
   means the join between a real candidate and the approval path is unproven end to end, and the
   entry above is why it could not be proven now. **Owner: Story 5.3a**, as the natural consumer
   of the first real candidate. **Trigger: the same one.**
 
-- **`TestModel` drives an agent turn to `agent_failed` / `invalid_output`, not to completion.**
+- ~~**`TestModel` drives an agent turn to `agent_failed` / `invalid_output`, not to completion.**~~
+  **CLOSED 2026-09-07 (Story 5.3a):** the keyless default is now a runtime-owned deterministic
+  `FunctionModel` that calls the real `scheduling_inspect` capability and returns numeral-free
+  grounded prose. The composed public HTTP turn reaches `agent_completed` with
+  `activity_type == "agent_response"`; `TestModel` remains explicitly selectable for framework
+  tests.
   Measured 2026-09-06 through the composed stack's public HTTP route: `POST
   /conversations/{id}/agent-runs/{id}/execute` returns `agent_run_status: "agent_failed"` with
   `reason: "invalid_output"` and detail "The model returned an invalid response."
@@ -803,4 +816,3 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   available, decide there whether the walkthrough's agent step is bound to a live-provider
   capture (Decision 12's own recommended split) or whether a runtime-selectable deterministic
   double is finally warranted.
-

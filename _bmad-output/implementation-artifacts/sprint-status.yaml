@@ -2433,15 +2433,7 @@ development_status:
   # the stale :193 (already fixed by retro prep task P2 at 8139866, entry text never updated) rather
   # than re-doing the work. Leaves OPEN and untouched: :50, :494, :521, :663, :679, :684, :687,
   # :19-28, :689 -- the last five are explicitly Epic 6's or have unrelated triggers.
-  # 5.3 stays `in-progress` deliberately, though it is merged on `main` (PR #28) with its code
-  # review closed. Its AC1 clause "the primary journey is completable end to end against
-  # deterministic model doubles" is measurably unsatisfied: no real solve reaches
-  # `solver_completed`, so no candidate exists and Flow 1's approval leg is unreachable. Story
-  # 5.3a restores the assertions to 5.3's OWN `compose_proof.py`; 5.3 flips to `done` in that same
-  # pass. This is a bounded, single-story exception to the "developer actively working" definition
-  # above, chosen over closing `done` on an unmet AC and over amending a frozen AC after
-  # measurement. See `sprint-change-proposal-2026-09-06.md` section 3.6.
-  5-3-run-shiftmind-reproducibly-from-one-command: in-progress
+  5-3-run-shiftmind-reproducibly-from-one-command: done
   # Inserted 2026-09-06 by `sprint-change-proposal-2026-09-06.md`. Corrective prerequisite from
   # 5.3's code review, not a portfolio-sequence member -- hence `5-3a`, with 5.4's key unchanged.
   # Owns the three ledger entries at `deferred-work.md:719-780`.
@@ -2516,7 +2508,7 @@ development_status:
   # the second half). Leaves every other row untouched, including the five other 5.3-review
   # entries above :719. Story 5.3 flips to `done` in the SAME commit as 5.3a, with the
   # bounded-exception note above it removed.
-  5-3a-make-a-real-solve-reach-a-candidate: in-progress
+  5-3a-make-a-real-solve-reach-a-candidate: done
   5-4-publish-the-portfolio-walkthrough: backlog
   epic-5-retrospective: optional
 
