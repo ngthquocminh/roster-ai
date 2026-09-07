@@ -451,7 +451,7 @@ def test_execute_turn_emits_claim_to_finalize_telemetry(conversation_client) -> 
     assert len(completed) == 1
     assert completed[0].correlation.agent_run_id == run_id
     assert completed[0].labels["agent_run_status"] == "agent_completed"
-    assert completed[0].labels["model"] == "test"
+    assert completed[0].labels["model"] == "deterministic"
     assert completed[0].estimated_cost_usd is None
     assert completed[0].labels["cost_basis"] == "usage_unavailable"
 

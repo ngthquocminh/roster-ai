@@ -156,7 +156,7 @@ Do not re-derive these from code; re-verify them at Task 1 and record any drift.
 | Sign-in reachability | `api/main.py:402-414` mounts thirteen routers; **none serves `/oidc/authorize`, `/oidc/token`, or `/oidc/jwks`**. `FakeOidcProvider` exposes `discovery_document`, `jwks`, `authorization_url` and `issue_authorization_code` as in-process Python only (`adapters/oidc/fake.py:40-95`), and `api/deps.py:190-203` `lru_cache`s the provider per process, so a code is redeemable only inside the same OS process that minted it |
 | Session cookie | `__Host-shiftmind_session`, `secure=True`, `httponly=True`, `samesite="lax"` (`api/auth_security.py:9`; `api/routers/auth.py:177-182`). The `__Host-` prefix requires Secure, `Path=/`, no `Domain`, **and a trustworthy origin** — browsers treat `http://localhost` and `http://127.0.0.1` as trustworthy and **`http://shiftmind.test` as not** |
 | Shipped defaults that break that cookie | `app_base_url` = `http://shiftmind.test`, `oidc_issuer` = `http://shiftmind.test/oidc`, `oidc_redirect_uri` = `http://shiftmind.test/api/v1/auth/callback` (`settings.py:71-83`; `backend/.env.example:52-58`). Nothing in the repository resolves that host |
-| Runtime model seam | `agent_runtime_model` / `AGENT_RUNTIME_MODEL`, default **`"test"`** (`settings.py:87,291`). `_configured_model` resolves `"test"` to `infer_model("test")` — pydantic-ai's own `TestModel` — with no key and no network (`agent/runtime.py:525-528`). Live providers require an explicit `provider:model` string plus `AGENT_RUNTIME_API_KEY` (`:533-546`). **This is application configuration, not a test shim**: `create_agent_runtime` is the same factory `api/deps.py:121-123` publishes |
+| Runtime model seam | `agent_runtime_model` / `AGENT_RUNTIME_MODEL`, default **`"deterministic"`** after Story 5.3a. `_configured_model` resolves it to the runtime-owned keyless `FunctionModel`; `"test"` remains selectable for focused framework tests. Live providers require an explicit `provider:model` string plus `AGENT_RUNTIME_API_KEY`. **This is application configuration, not a test shim**: `create_agent_runtime` is the same factory `api/deps.py` publishes |
 | Legacy `LLMProvider` seam | still imported by `api/deps.py:48`, `api/routers/runs.py:12`, `api/routers/constraints.py:16`, `services/insight_service.py:23`, `services/constraint_service.py:25`; **never** by `agent/` or `application/`. Its routes mount at bare paths (`api/main.py:404-406`), and its frontend callers are asserted unreachable from `App.tsx` by `frontend/src/test/legacyReachability.test.ts:76-86`. It also defaults keyless (`LLM_PROVIDER=stub`) |
 | Undocumented settings | `AGENT_RUNTIME_MODEL`, `AGENT_RUNTIME_API_KEY`, `SHIFTMIND_SEED_PLANNER_SUBJECT` and `SHIFTMIND_SEED_PLANNER_EMAIL` appear in **none** of `backend/.env.example`, `docs/CONFIGURATION.md`, `docs/DEVELOPMENT.md`, or `README.md`. `docs/CONFIGURATION.md` documents **12** of roughly **51** real settings and mentions neither PostgreSQL, OIDC, sessions, CSRF, the solver, nor the scheduling flags |
 | `evidence/` inventory | **14** files, **8** of them registered Gate A checks pinned by identity at `tests/test_gate_a_readiness.py:272-294`; `GATE_A_CHECKS` has **33** entries, **25** runner-backed. All 14 carry `version_bindings.image` = `{"api": "local source tree", "web": "local source tree", "database": "postgres:18"}` |
@@ -427,25 +427,21 @@ it does not establish that Node 24 would fail — only that this story is the wr
 It also leaves the pin and CI stating the same fact in two files; they must be changed together or the
 drift this decision just closed reopens.
 
-### Decision 12 — `TestModel` satisfies AC1's "deterministic model doubles"; it does not give Story 5.4 "real output", and that gap is named, not solved here
+### Decision 12 — Corrected by Story 5.3a: a runtime-selectable deterministic double completes AC1's keyless journey
 
-AC1 is already nearly true at the seam: `AGENT_RUNTIME_MODEL` defaults to `"test"`, which resolves to
-pydantic-ai's `TestModel` with no key and no network, through ordinary application configuration
-(`settings.py:87,291`; `agent/runtime.py:525-528`). The compose stack sets nothing, and the journey is
-completable with no credential. A live provider remains reachable by setting
-`AGENT_RUNTIME_MODEL=openrouter:…` plus `AGENT_RUNTIME_API_KEY`, which is exactly AC1's "available
-through explicit configuration but … never required".
+**CORRECTED 2026-09-07 (Story 5.3a).** Measurement through the composed HTTP route showed that
+pydantic-ai's `TestModel` synthesises schema-shaped tool arguments that cannot name usable governed
+fixture records. The turn therefore ended `agent_failed` / `invalid_output`; AC1's journey was not
+completable as this decision originally claimed.
 
-**But `TestModel` synthesises schema-conformant values, not meaningful answers.** The journey
-completes; the agent's reply is not a real analysis of Wednesday outbound coverage. AC1 says
-"completable", and it is. Story 5.4's AC1 says the walkthrough *"walks the Wednesday-coverage journey
-with **real output**"* (`epics.md:1455`) — a different claim, which `TestModel` does not support. The
-case-scripted `FunctionModel` double in `backend/evals/doubles.py` cannot be borrowed:
-`test_application_and_domain_never_import_evals` forbids it, and nothing in `api/` or `agent/` can
-select it by configuration.
+Story 5.3a therefore adds a runtime-owned `FunctionModel` under `backend/agent/`, selectable as
+`AGENT_RUNTIME_MODEL=deterministic` and used by the one-command stack by default. It calls the real
+fixture-independent `scheduling_inspect` capability and returns numeral-free `GroundedAnswerV1`
+prose through `final_result`, so the turn completes keylessly without importing `evals/doubles.py`.
+`AGENT_RUNTIME_MODEL=test` remains explicitly selectable, and a live provider remains available by
+setting a `provider:model` value plus `AGENT_RUNTIME_API_KEY`.
 
-This story therefore delivers AC1 as written, and hands Story 5.4 the gap **with a recommended
-resolution rather than an open question**, because the analysis that found the gap also settles it:
+The original behavioral-versus-illustrative split still governs Story 5.4:
 
 > **Split the walkthrough's claims by kind.** *Behavioral* claims — the loop runs, the run reaches a
 > terminal state, the approval promotes the baseline, the provenance timeline links request, evidence,
@@ -455,16 +451,9 @@ resolution rather than an open question**, because the analysis that found the g
 > as such**, which is precisely the use AC1 sanctions when it says a live-provider run "is available
 > through explicit configuration but is never required to demonstrate the system".
 
-The rejected option is a runtime-selectable scripted double. It would add a model seam to application
-code for no reason but to make a demo read well, `test_application_and_domain_never_import_evals`
-forbids reaching `evals/doubles.py` to do it, and a reviewer who noticed would rate a rigged transcript
-below an honestly-labelled live one. NFR26 is not in tension here: a walkthrough is documentation, and
-the release evidence it links to stays deterministic and keyless.
-
-**What this does not cover:** it does not change any default, add a model seam, or touch
-`evals/doubles.py` — and it does not bind Story 5.4, which owns its own scope and may reject the
-recommendation. What it removes is the possibility of 5.4 discovering the constraint late and having to
-adjudicate it after its walkthrough is written.
+The double proves the behavioral journey, not a genuine model analysis of Wednesday coverage.
+Illustrative prose may still come from a clearly labelled live-provider run and is never sole release
+evidence. No application/domain layer imports the evaluation harness.
 
 ### Decision 13 — Four documents are corrected because AC1 says "a documented prerequisite set"; the rest are left
 
@@ -765,7 +754,7 @@ types (AD-1/AR1).
 - 2026-09-05 Task 2: pinned Python `3.12` and Node `22`; CI Node and all threshold flags remained untouched. Lint, typecheck, and build passed. Two full Vitest attempts encountered resource-sensitive 60-second timeouts in different cases of the existing `ScenarioDataParity` file; that file passed `14/14` in isolation and the final full run passed `648/648` across `85` files in 72.99s.
 - 2026-09-05 Tasks 3-7: composed the restricted worker runtime, threaded its site-scoped connection into solver-input construction, classified unreadable/digest-invalid input as terminal, added cutover-free idempotent bootstrap, exposed the cached fake IdP over HTTP, and built the health-gated backend/web stack from frozen locks.
 - 2026-09-05 Task 9: the opt-in Compose proof passed in 60.32s against an isolated fresh PostgreSQL volume. It completed real HTTP sign-in and session reuse, read both fixtures, executed the keyless `TestModel` turn to a terminal state, created a deterministic governed draft through the application boundary, enqueued through the public API, and observed the real worker reach a terminal solver state.
-- 2026-09-05 Decision 12 implementation note: `TestModel` remained the ordinary runtime default and no scripted runtime seam was added. Because generated schema-shaped arguments cannot name governed fixture records reliably, the proof separates model-run termination from deterministic behavioral claims and drives draft creation through the real capability/repository boundary.
+- 2026-09-05 Decision 12 implementation note, **superseded 2026-09-07 by Story 5.3a**: `TestModel` was initially left as the runtime default, but composed measurement showed its schema-shaped arguments ended the turn as `agent_failed` / `invalid_output`. Story 5.3a supplies the runtime-owned deterministic seam described in the corrected Decision 12.
 - 2026-09-05 pre-commit composition regression: focused auth/architecture suite `65 passed`; focused worker/composition suite `100 passed`; default backend suite `1599 passed, 2 skipped, 7 deselected` in 213.76s. An earlier `uv run --project backend pytest` invocation ignored backend pytest configuration, accidentally ran live-provider cases, and was discarded; the canonical `--directory backend` invocation is green.
 - 2026-09-05 Task 8: recorded local backend and web image IDs as content-addressed SHA-256 digests in the gitignored build manifest. Evidence binding tests passed `35` with one clean-tree-only skip; the committed local-source-tree report still passes audit, locking monotonicity independently of whether a future build manifest exists.
 - 2026-09-05 Task 11: verified commit `8139866` in a genuinely fresh clone by running `gate_a_readiness.py` twice consecutively. Both runs wrote the report; the second accepted the first run's sole dirty output instead of raising `DirtyTreeError`. Borrowed pre-commit XML correctly kept the verdict false on provenance/case coverage, which does not weaken the rerunnability proof. The temporary clone was removed after verification.

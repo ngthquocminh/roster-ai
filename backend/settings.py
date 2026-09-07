@@ -91,7 +91,7 @@ class Settings:
     # llm_provider/llm_model: the agent runtime and the task-specific
     # LLMProvider are two seams, and overloading one seam's configuration onto
     # the other is what makes them impossible to migrate independently later.
-    agent_runtime_model: str = "test"
+    agent_runtime_model: str = "deterministic"
     # USD per million tokens. Zero means no configured price, not a free model.
     agent_model_input_usd_per_mtok: float = 0.0
     agent_model_output_usd_per_mtok: float = 0.0
@@ -303,7 +303,7 @@ def default_settings() -> Settings:
     except ValueError:
         session_ttl_s = 3600
     csrf_secret = os.environ.get("CSRF_SECRET", "shiftmind-local-csrf-secret")
-    agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "test")
+    agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "deterministic")
     agent_runtime_api_key = os.environ.get("AGENT_RUNTIME_API_KEY")
     agent_model_input_usd_per_mtok = _non_negative_float(
         "AGENT_MODEL_INPUT_USD_PER_MTOK",

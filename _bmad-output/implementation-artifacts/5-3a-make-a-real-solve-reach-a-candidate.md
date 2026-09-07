@@ -485,12 +485,12 @@ artifact, and it does not touch the other open ledger rows.
   - [x] State in the block that the shipped 30/30 configuration is **wall-bound, not deterministic-bound**, and that single-worker running was measured non-reproducible there (two round-1 values on the same fixture) — so the reproducibility claim belongs to the deterministic-ceiling configuration, not to the worker count.
   - [x] Record the `objective.py` / `governed_adapter.py` distinction and which caller reaches which.
 
-- [ ] **Task 5 — A deterministic agent double that completes the turn (AC: #2, per Decisions 7 and 8)**
-  - [ ] Add a `pydantic_ai` `FunctionModel` double under `backend/agent/`, shaped on `evals/doubles.py` but **not importing it**. It calls a real fixture-independent capability tool (`scheduling_inspect`, whose request names no record IDs), then answers through `ANSWER_OUTPUT_TOOL` with a `GroundedAnswerV1` whose prose carries **no numeric characters**.
-  - [ ] Extend `_configured_model` (`agent/runtime.py:525-547`) with one new literal value returning it, and make that value the default of `settings.agent_runtime_model` (`settings.py:94`, `:305`). Keep `"test"` selectable.
-  - [ ] Update `docs/CONFIGURATION.md:29` and `docs/GETTING-STARTED.md:28,31`, which document `test` as the keyless default.
-  - [ ] Correct Story 5.3's Decision 12 **in place** in `5-3-run-shiftmind-reproducibly-from-one-command.md`: `TestModel` does not synthesise usable values here, and the runtime-selectable double it rejected is now shipped by this story on the change proposal's authority.
-  - [ ] Test the double directly through `PydanticAIAgentRuntime` — not only through the compose proof, which is opt-in and would leave this untested in CI.
+- [x] **Task 5 — A deterministic agent double that completes the turn (AC: #2, per Decisions 7 and 8)**
+  - [x] Add a `pydantic_ai` `FunctionModel` double under `backend/agent/`, shaped on `evals/doubles.py` but **not importing it**. It calls a real fixture-independent capability tool (`scheduling_inspect`, whose request names no record IDs), then answers through `ANSWER_OUTPUT_TOOL` with a `GroundedAnswerV1` whose prose carries **no numeric characters**.
+  - [x] Extend `_configured_model` (`agent/runtime.py:525-547`) with one new literal value returning it, and make that value the default of `settings.agent_runtime_model` (`settings.py:94`, `:305`). Keep `"test"` selectable.
+  - [x] Update `docs/CONFIGURATION.md:29` and `docs/GETTING-STARTED.md:28,31`, which document `test` as the keyless default.
+  - [x] Correct Story 5.3's Decision 12 **in place** in `5-3-run-shiftmind-reproducibly-from-one-command.md`: `TestModel` does not synthesise usable values here, and the runtime-selectable double it rejected is now shipped by this story on the change proposal's authority.
+  - [x] Test the double directly through `PydanticAIAgentRuntime` — not only through the compose proof, which is opt-in and would leave this untested in CI.
 
 - [ ] **Task 6 — Run the blast radius empirically, and investigate rather than expect (AC: #1)**
   - [ ] Full backend suite. Baseline **1615 passed / 1 skipped / 7 deselected** on a clean tree.
@@ -719,6 +719,11 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
   in 289.22s. The real-solve guard was isolated in a subprocess after OR-Tools aborted
   the long-lived pytest process when the test ran late in the suite; the subprocess
   preserves the real solve and turns native failure into an ordinary test failure.
+- Task 5 found a story-record discrepancy: Compose did not merely pass through an unset
+  model setting; `${AGENT_RUNTIME_MODEL:-test}` actively overrode `settings.py`. The fallback
+  was changed to `deterministic` because leaving it untouched would keep the one-command stack
+  on the measured-failing `TestModel`. The `.env.example` default was corrected for the same
+  reason. Focused runtime, settings, Compose, and architecture coverage passed 46 tests.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
@@ -726,6 +731,8 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 |---|---|---|---|
 | Removed `_seed_round_two_from_snapshot(model, snapshot)` from the governed round-2 path | `test_round_two_is_seeded_from_the_round_one_solution` | PASS (`FEASIBLE`) | FAIL (`UNKNOWN`) |
 | Reversed the snapshot/model variable-count guard so a mismatched snapshot was accepted | `test_mismatched_round_one_snapshot_is_not_hinted` | PASS (returns `False`, no hint) | FAIL (returned `True`) |
+| Changed the deterministic double's prose to include the numeral `1` | `test_configured_deterministic_model_executes_a_real_tool_then_answers` | PASS (`completed`) | FAIL after output retries with `AgentInvalidOutputError` |
+| Reverted Compose's keyless fallback from `deterministic` to `test` | `test_configured_deterministic_model_executes_a_real_tool_then_answers` | PASS (default bound to deterministic model) | FAIL on Compose default assertion |
 
 ### Completion Notes List
 
@@ -736,6 +743,9 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
   pass was 1616 passed, 2 skipped, 7 deselected; a clean-tree pass follows commit 1.
 - Replaced the governed solver scope claims with the measured six-run results and
   documented the governed shared-wall versus legacy per-Solve budget distinction.
+- Added a runtime-owned deterministic `FunctionModel` that calls `scheduling_inspect` and
+  returns numeral-free grounded prose, made it the application and Compose default, kept
+  `test` selectable, and corrected the configuration docs and Story 5.3 Decision 12.
 
 ### File List
 
@@ -744,6 +754,15 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 - backend/settings.py
 - backend/tests/test_round2_solution_hint.py
 - backend/tests/test_settings.py
+- backend/agent/deterministic_model.py
+- backend/agent/runtime.py
+- backend/tests/test_agent_deterministic_model.py
+- backend/tests/test_conversations_api.py
+- backend/.env.example
+- docker-compose.yml
+- docs/CONFIGURATION.md
+- docs/GETTING-STARTED.md
+- _bmad-output/implementation-artifacts/5-3-run-shiftmind-reproducibly-from-one-command.md
 - _bmad-output/implementation-artifacts/5-3a-make-a-real-solve-reach-a-candidate.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
 
