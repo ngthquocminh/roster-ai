@@ -65,12 +65,12 @@ def _create_deterministic_draft(
     scenario_version_id: UUID,
     task_record_id: str,
 ):
-    """Drive the real draft application boundary without scripting model prose.
+    """Drive the real draft application boundary alongside the model turn.
 
-    TestModel is still exercised through the public HTTP agent-run route. It is
-    deliberately not treated as a source of meaningful fixture identifiers:
-    this proof obtains those from the governed projection and supplies them to
-    the same capability and repository used by an agent turn.
+    The deterministic model proves the public HTTP agent loop through a real
+    inspect capability. Draft persistence remains a separate governed boundary,
+    so this proof obtains its fixture identifier from the pinned projection and
+    supplies it to the same capability and repository used by an agent turn.
     """
     engine = create_engine(database_url, hide_parameters=True)
     try:
@@ -194,22 +194,11 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
                 headers=command_headers,
             )
             assert executed.status_code == 200, executed.text
-            # Measured 2026-09-06 in the composed stack: `TestModel` drives this
-            # turn to `agent_failed` / `invalid_output`. Decision 12 states that
-            # TestModel "synthesises schema-conformant values" and that "the
-            # journey completes"; neither holds -- its generated tool arguments
-            # cannot name governed fixture records, so the turn produces no
-            # usable draft. What this assertion proves is that the agent seam is
-            # WIRED and reachable over HTTP inside the container, keylessly.
-            # Tightening it to `agent_completed` is Story 5.3a's, alongside the
-            # solver fix; see `deferred-work.md`.
-            assert executed.json()["agent_run_status"] in {
-                "agent_completed",
-                "agent_failed",
-            }, executed.text
-            assert executed.json()["activity"]["outcome"]["reason"] != "provider_error", (
-                executed.text
-            )
+            executed_value = executed.json()
+            assert executed_value["agent_run_status"] == "agent_completed", executed.text
+            activity = executed_value["activity"]
+            assert activity["activity_type"] == "agent_response", executed.text
+            assert activity.get("outcome", {}).get("reason") != "provider_error", executed.text
 
             tasks = client.get(
                 f"{origin}/api/v1/scenarios/{fixture['scenario_id']}"
@@ -255,41 +244,49 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
                     headers={"Cookie": session_cookie},
                 )
                 assert started.status_code == 200, started.text
-            # Terminal is not enough. The mis-wiring this proof exists to catch
-            # -- a worker that cannot read its own snapshot under row-level
-            # security -- fails every run and still terminates each one, so
-            # `status in TERMINAL` greens on exactly that defect. What separates
-            # the two is the REASON, which `SolverInputError` carries onto the
-            # outcome precisely so it survives to here.
-            #
-            # `solver_timed_out` is a WORKING worker, not a failure: it read its
-            # input and spent its budget. Measured 2026-09-06 on both shipped
-            # fixtures, CP-SAT's round 2 returns UNKNOWN at any practical budget
-            # because it re-solves from scratch with no hint, so no run reaches
-            # `solver_completed` and no candidate is ever produced. Asserting
-            # `solver_completed` here would therefore be asserting a defect is
-            # absent when it is present. Story 5.3a owns that fix and owns
-            # restoring the approval/baseline/provenance leg below.
             run = started.json()
             assert run["status"] != "solver_failed", started.text
             assert run["reason"] not in {
                 "snapshot_input_missing",
                 "snapshot_digest_mismatch",
             }, started.text
-            assert run["status"] in {
-                "solver_completed",
-                "solver_timed_out",
-                "solver_infeasible",
-            }, started.text
+            assert run["status"] == "solver_completed", started.text
 
-            # --- Flow 1's tail (request approval -> approve as baseline -> read
-            # the provenance timeline) is NOT exercised here, and its absence is
-            # a measured blocker rather than an oversight.
-            # `finalize_schedule_run` creates a candidate only when the run
-            # reaches `solver_completed`, and no real solve does today (above).
-            # Every `solver_completed` elsewhere in this suite is fabricated, so
-            # the approval path has never run against a real solve. Restoring
-            # this leg is Story 5.3a's second half; see `deferred-work.md`.
+            approval = client.post(
+                f"{origin}/api/v1/approvals",
+                headers={
+                    **command_headers,
+                    "Idempotency-Key": "compose-proof-approval",
+                },
+                json={
+                    "schedule_run_id": run_id,
+                    "expected_resource_version": run["resource_version"],
+                    "expected_baseline_schedule_version": None,
+                },
+            )
+            assert approval.status_code == 200, approval.text
+            approval_value = approval.json()
+            decision = client.post(
+                f"{origin}/api/v1/approvals/{approval_value['approval_id']}/decision",
+                headers={
+                    **command_headers,
+                    "Idempotency-Key": "compose-proof-decision",
+                },
+                json={
+                    "decision": "approve",
+                    "expected_resource_version": approval_value["resource_version"],
+                },
+            )
+            assert decision.status_code == 200, decision.text
+            assert decision.json()["state"] == "consumed", decision.text
+            provenance = client.get(
+                f"{origin}/api/v1/approvals/provenance",
+                params={"schedule_run_id": run_id},
+                headers={"Cookie": session_cookie},
+            )
+            assert provenance.status_code == 200, provenance.text
+            assert provenance.json()["schedule_run_id"] == run_id, provenance.text
+            assert provenance.json()["items"], provenance.text
         services = _compose(env, "ps", "--status", "running", "--services").stdout
         assert {"api", "worker", "web", "postgres"}.issubset(set(services.splitlines()))
     finally:

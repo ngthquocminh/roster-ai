@@ -492,25 +492,25 @@ artifact, and it does not touch the other open ledger rows.
   - [x] Correct Story 5.3's Decision 12 **in place** in `5-3-run-shiftmind-reproducibly-from-one-command.md`: `TestModel` does not synthesise usable values here, and the runtime-selectable double it rejected is now shipped by this story on the change proposal's authority.
   - [x] Test the double directly through `PydanticAIAgentRuntime` — not only through the compose proof, which is opt-in and would leave this untested in CI.
 
-- [ ] **Task 6 — Run the blast radius empirically, and investigate rather than expect (AC: #1)**
-  - [ ] Full backend suite. Baseline **1615 passed / 1 skipped / 7 deselected** on a clean tree.
-  - [ ] `backend/tests/test_governed_solver_adapter.py:215` (`wall_time_limit_seconds=0.25`, 1 worker) — expected unaffected: round 1 cannot converge at 0.25s, so the early return at `governed_adapter.py:239-243` fires before the hint. **Verify, do not assume.**
-  - [ ] `backend/tests/test_governed_solver_adapter.py:144` — the reproducibility test at `max_deterministic_time=1.0`, 1 worker. Expected unaffected: round 2 is never entered at that ceiling, so the hint is unreachable and the snapshot path it asserts is unchanged. It passes `num_search_workers=1` explicitly, so Task 3's default move does not reach it. **Verify.**
-  - [ ] `backend/tests/test_penalty_calibration.py` — the only real-solve consumer of `objective.py`, at `SolverConfig(time_limit_s=10)` on synthetic problems. Its prose documents non-convergent `UNKNOWN`; the hint may change that. Update the prose if the behaviour changed; do not weaken an assertion to keep it green.
-  - [ ] Every other `round2` / `UNKNOWN` / `total_cost` match feeds a synthetic `SolverOutcomeV1` (`test_finalize_schedule_run.py:150-153`, `test_job_leasing_postgres.py:1091`, `test_run_snapshot_contracts.py:62`, `test_schedule_runs_api.py:100`, `test_lease_next_job.py:164`, `architecture/test_schedule_run_state_machine.py`) and should be indifferent. **The expectation is "investigate any breakage", not "expect breakage".**
-  - [ ] **CI `--min-passed` and `--max-skipped` are floors and ceilings and are not edited.** If the suite cannot meet them, the fix is wrong.
+- [x] **Task 6 — Run the blast radius empirically, and investigate rather than expect (AC: #1)**
+  - [x] Full backend suite. Baseline **1615 passed / 1 skipped / 7 deselected** on a clean tree.
+  - [x] `backend/tests/test_governed_solver_adapter.py:215` (`wall_time_limit_seconds=0.25`, 1 worker) — expected unaffected: round 1 cannot converge at 0.25s, so the early return at `governed_adapter.py:239-243` fires before the hint. **Verify, do not assume.**
+  - [x] `backend/tests/test_governed_solver_adapter.py:144` — the reproducibility test at `max_deterministic_time=1.0`, 1 worker. Expected unaffected: round 2 is never entered at that ceiling, so the hint is unreachable and the snapshot path it asserts is unchanged. It passes `num_search_workers=1` explicitly, so Task 3's default move does not reach it. **Verify.**
+  - [x] `backend/tests/test_penalty_calibration.py` — the only real-solve consumer of `objective.py`, at `SolverConfig(time_limit_s=10)` on synthetic problems. Its prose documents non-convergent `UNKNOWN`; the hint may change that. Update the prose if the behaviour changed; do not weaken an assertion to keep it green.
+  - [x] Every other `round2` / `UNKNOWN` / `total_cost` match feeds a synthetic `SolverOutcomeV1` (`test_finalize_schedule_run.py:150-153`, `test_job_leasing_postgres.py:1091`, `test_run_snapshot_contracts.py:62`, `test_schedule_runs_api.py:100`, `test_lease_next_job.py:164`, `architecture/test_schedule_run_state_machine.py`) and should be indifferent. **The expectation is "investigate any breakage", not "expect breakage".**
+  - [x] **CI `--min-passed` and `--max-skipped` are floors and ceilings and are not edited.** If the suite cannot meet them, the fix is wrong.
 
-- [ ] **Task 7 — Restore the compose proof and Flow 1's tail (AC: #2)**
-  - [ ] `backend/tests/compose_proof.py:279-283` — tighten the run assertion from `{solver_completed, solver_timed_out, solver_infeasible}` to **`solver_completed`**, and remove the inline deferral comment at `:258-272`.
-  - [ ] `:206-209` — tighten the agent assertion to **`agent_completed`**, add `activity["activity_type"] == "agent_response"` (Decision 8), and remove the deferral comment at `:197-205`. Keep the existing `reason != "provider_error"` assertion.
-  - [ ] `:285-292` — re-add the approval leg against the candidate the real solve produced. Decision 5 of Story 5.3 records that this was written and removed; recover it from that work. The routes and their required inputs, verified at creation:
+- [x] **Task 7 — Restore the compose proof and Flow 1's tail (AC: #2)**
+  - [x] `backend/tests/compose_proof.py:279-283` — tighten the run assertion from `{solver_completed, solver_timed_out, solver_infeasible}` to **`solver_completed`**, and remove the inline deferral comment at `:258-272`.
+  - [x] `:206-209` — tighten the agent assertion to **`agent_completed`**, add `activity["activity_type"] == "agent_response"` (Decision 8), and remove the deferral comment at `:197-205`. Keep the existing `reason != "provider_error"` assertion.
+  - [x] `:285-292` — re-add the approval leg against the candidate the real solve produced. Decision 5 of Story 5.3 records that this was written and removed; recover it from that work. The routes and their required inputs, verified at creation:
     - `POST /api/v1/approvals` with an `Idempotency-Key` header and `{schedule_run_id, expected_resource_version, expected_baseline_schedule_version}`. `expected_resource_version` comes from the run GET the poll loop already performs (`ScheduleRunOut.resource_version`, `api/schemas.py:464`); `expected_baseline_schedule_version` is **`null`** on a fresh stack and must be sent explicitly — `ApprovalRequestIn` gives it no default on purpose (`api/schemas.py:220-223`).
     - `POST /api/v1/approvals/{approval_id}/decision` with an `Idempotency-Key` and `{"decision": "approve", "expected_resource_version": …}` from `ApprovalOut.resource_version` (`api/schemas.py:250`).
     - `GET /api/v1/approvals/provenance?schedule_run_id=…` returns `DecisionProvenanceOut` with `items` — assert the timeline is non-empty and links the run.
     - Both write routes require `scheduling_baseline_enabled` in the feature policy (`api/routers/approvals.py:343`, `:381`); it defaults `True` (`settings.py:153`) and compose sets nothing, so no configuration change is needed — but a 403 here means that flag, not the candidate.
-  - [ ] Leave `TERMINAL` (`:36-42`) as the full terminal set — it ends the poll loop; the assertion below it discriminates. Its docstring already says so.
-  - [ ] Re-check the 120s poll deadline (`:248`) and the proof's 60.54s runtime against Task 3's timings. A 30s solve plus lease pickup fits; record the new runtime.
-  - [ ] Assess whether `docs/TESTING.md` / `docs/DEVELOPMENT.md` need updating — only if the proof's runtime or invocation changed materially.
+  - [x] Leave `TERMINAL` (`:36-42`) as the full terminal set — it ends the poll loop; the assertion below it discriminates. Its docstring already says so.
+  - [x] Re-check the 120s poll deadline (`:248`) and the proof's 60.54s runtime against Task 3's timings. A 30s solve plus lease pickup fits; record the new runtime.
+  - [x] Assess whether `docs/TESTING.md` / `docs/DEVELOPMENT.md` need updating — only if the proof's runtime or invocation changed materially.
 
 - [ ] **Task 8 — Close out (AC: #1, #2, per Decisions 9 and 10)**
   - [ ] Measure whether `evidence/story-1.11/gate-a-readiness-report.json`'s recorded per-file counts moved. If they did, one **single-pass** regeneration is owed: commit the code, measure on a clean tree, generate through the runner, commit the evidence **separately**.
@@ -733,6 +733,8 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 | Reversed the snapshot/model variable-count guard so a mismatched snapshot was accepted | `test_mismatched_round_one_snapshot_is_not_hinted` | PASS (returns `False`, no hint) | FAIL (returned `True`) |
 | Changed the deterministic double's prose to include the numeral `1` | `test_configured_deterministic_model_executes_a_real_tool_then_answers` | PASS (`completed`) | FAIL after output retries with `AgentInvalidOutputError` |
 | Reverted Compose's keyless fallback from `deterministic` to `test` | `test_configured_deterministic_model_executes_a_real_tool_then_answers` | PASS (default bound to deterministic model) | FAIL on Compose default assertion |
+| Changed the deterministic double's final output from a grounded answer to a refusal | Compose proof `activity_type == "agent_response"` assertion | PASS (`agent_completed`, `agent_response`) | FAIL: status remained `agent_completed`, activity became `terminal_outcome` with reason `refused` |
+| Reverted both `solver_num_search_workers` defaults from 8 to 1 | Compose proof `run["status"] == "solver_completed"` assertion | PASS (`solver_completed`) | FAIL: `solver_timed_out` / `budget_exhausted` |
 
 ### Completion Notes List
 
@@ -746,6 +748,10 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 - Added a runtime-owned deterministic `FunctionModel` that calls `scheduling_inspect` and
   returns numeral-free grounded prose, made it the application and Compose default, kept
   `test` selectable, and corrected the configuration docs and Story 5.3 Decision 12.
+- Restored the composed proof's strict agent and solver assertions and Flow 1 approval,
+  baseline-promotion, and provenance leg. The green proof completed in **67.20s**, within
+  the existing 120s poll deadline; its invocation did not change, so testing/development
+  documentation required no update.
 
 ### File List
 
@@ -762,6 +768,7 @@ single-worker round-1 convergence observed on this host with Decision 1 before r
 - docker-compose.yml
 - docs/CONFIGURATION.md
 - docs/GETTING-STARTED.md
+- backend/tests/compose_proof.py
 - _bmad-output/implementation-artifacts/5-3-run-shiftmind-reproducibly-from-one-command.md
 - _bmad-output/implementation-artifacts/5-3a-make-a-real-solve-reach-a-candidate.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
