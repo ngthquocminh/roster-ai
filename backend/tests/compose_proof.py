@@ -226,7 +226,7 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
             assert proposal.status_code == 200, proposal.text
             started = client.post(
                 f"{origin}/api/v1/schedule-runs",
-                headers={**command_headers, "Idempotency-Key": f"compose-proof-run-{uuid4()}"},
+                headers={**command_headers, "Idempotency-Key": str(uuid4())},
                 json={
                     "proposal_id": proposal_id,
                     "expected_resource_version": proposal.json()["resource_version"],
@@ -256,7 +256,7 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
                 f"{origin}/api/v1/approvals",
                 headers={
                     **command_headers,
-                    "Idempotency-Key": f"compose-proof-approval-{uuid4()}",
+                    "Idempotency-Key": str(uuid4()),
                 },
                 json={
                     "schedule_run_id": run_id,
@@ -270,7 +270,7 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
                 f"{origin}/api/v1/approvals/{approval_value['approval_id']}/decision",
                 headers={
                     **command_headers,
-                    "Idempotency-Key": f"compose-proof-decision-{uuid4()}",
+                    "Idempotency-Key": str(uuid4()),
                 },
                 json={
                     "decision": "approve",
