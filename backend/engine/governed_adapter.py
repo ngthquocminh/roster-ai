@@ -32,6 +32,7 @@ from application.ports.scheduler import SolverInputSource
 from domain.overrides import OverrideCall, override_id
 from config import constants as C
 from engine.cpsat.builder import CpSatBuilder
+from engine.cpsat.objective import seed_round_two_from_snapshot as _seed_round_two_from_snapshot
 from ingest.input_adapter import build_problem
 
 
@@ -193,17 +194,6 @@ class _GovernedLexResult:
         if self.snapshot is not None:
             return self.snapshot[variable.Index()]
         return self.solver.Value(variable)
-
-
-def _seed_round_two_from_snapshot(
-    model: cp_model.CpModel, snapshot: list[int]
-) -> bool:
-    if len(snapshot) != len(model.Proto().variables):
-        return False
-    model.ClearHints()
-    for index, value in enumerate(snapshot):
-        model.AddHint(model.GetIntVarFromProtoIndex(index), value)
-    return True
 
 
 def _solve_lexicographic_governed(

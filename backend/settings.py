@@ -303,7 +303,7 @@ def default_settings() -> Settings:
     except ValueError:
         session_ttl_s = 3600
     csrf_secret = os.environ.get("CSRF_SECRET", "shiftmind-local-csrf-secret")
-    agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "deterministic")
+    agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "deterministic").strip()
     agent_runtime_api_key = os.environ.get("AGENT_RUNTIME_API_KEY")
     agent_model_input_usd_per_mtok = _non_negative_float(
         "AGENT_MODEL_INPUT_USD_PER_MTOK",

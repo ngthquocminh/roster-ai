@@ -524,11 +524,12 @@ def _tool_results(
 
 def _configured_model(config: AgentRuntimeConfig) -> object:
     """Resolve the owned model setting without consulting another LLM seam."""
-    if config.model == "deterministic":
+    normalized = config.model.strip().lower()
+    if normalized == "deterministic":
         from agent.deterministic_model import build_deterministic_model
 
         return build_deterministic_model()
-    if config.model == "test":
+    if normalized == "test":
         return infer_model("test")
     provider_name, separator, model_name = config.model.partition(":")
     if not separator or not model_name:

@@ -40,6 +40,20 @@ _STATUS = {
 }
 
 
+def seed_round_two_from_snapshot(model: cp_model.CpModel, snapshot: list[int]) -> bool:
+    """Hint round 2 from the round-1 solution snapshot, guarded on variable count.
+
+    Shared by both lexicographic entry points (this module and
+    `engine/governed_adapter.py`) so the fix stays in one place.
+    """
+    if len(snapshot) != len(model.Proto().variables):
+        return False
+    model.ClearHints()
+    for index, value in enumerate(snapshot):
+        model.AddHint(model.GetIntVarFromProtoIndex(index), value)
+    return True
+
+
 def solve_lexicographic(builder: CpSatBuilder, time_limit_s: float,
                         num_workers: int, seed: int = 42) -> LexResult:
     m = builder.m
@@ -61,10 +75,7 @@ def solve_lexicographic(builder: CpSatBuilder, time_limit_s: float,
     # ---- lock round 1, minimize cost ----
     m.Add(builder.round1_unmet <= int(round(r1)))
     m.Minimize(builder.round2_cost)
-    if len(snap) == len(m.Proto().variables):
-        m.ClearHints()
-        for index, value in enumerate(snap):
-            m.AddHint(m.GetIntVarFromProtoIndex(index), value)
+    seed_round_two_from_snapshot(m, snap)
     s2 = solver.Solve(m)
     if s2 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         # Round 2 found no solution in time: fall back to the round-1 solution

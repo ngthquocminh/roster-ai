@@ -4,7 +4,7 @@ baseline_commit: 167cd29
 
 # Story 5.3a: Make a Real Solve Reach a Candidate [Technical Enabler]
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -517,6 +517,18 @@ artifact, and it does not touch the other open ledger rows.
   - [x] Close the three `deferred-work.md` entries at `:719-806` using the strikethrough + **CLOSED `<date>` (Story 5.3a)** convention already used at `:90`, `:94`, `:106`, `:188`. Correct the first entry's cause statement once more: the measured cause at the shipped defaults is that **round 1 never converges**, so round 2 is never entered — the missing hint is the second half, not the first.
   - [x] In one commit: flip `5-3-run-shiftmind-reproducibly-from-one-command` to `done`, remove the bounded-exception note above it in `sprint-status.yaml`, and flip `5-3a-make-a-real-solve-reach-a-candidate` to `done`.
   - [x] Record the mutation table (Epic 4 retro A1) in the Dev Agent Record before review.
+
+### Review Findings
+
+- [x] [Review][Patch] `test_round2_solution_hint.py::test_round_two_is_seeded_from_the_round_one_solution` pins an exact, machine-measured solver value in required (non-opt-in) CI [`backend/tests/test_round2_solution_hint.py:74`]. The test carries no `live`/`compose` marker and `pyproject.toml`'s `addopts = "-m \"not live\""` does not exclude it, so it runs in every default `pytest` invocation. It hard-asserts `outcome.round2_value == 1154971` at the shipped 8-worker/30s-wall config, a value measured 3 times on one 16-core host, while the story's own `SCOPE_CONTROLS` text documents that assignment-set digests already vary run-to-run at this config — objective values are not guaranteed bit-reproducible across different hardware/contention. **Decision (Minh, 2026-09-08): loosen the assertion** — keep `outcome.solver_status in {"OPTIMAL", "FEASIBLE"}` but replace the exact `round2_value == 1154971` check with a feasibility/bound check (e.g. assert it is a positive number no worse than the measured value, or drop the numeric pin entirely and rely on the status + `require_hard_constraints` gate elsewhere) so a different CI runner cannot redden this required test on a value mismatch.
+
+- [x] [Review][Patch] Uncaught `subprocess.TimeoutExpired` in the same test's self-reinvocation, instead of the intended diagnostic assertion [`backend/tests/test_round2_solution_hint.py:43-52`]. `subprocess.run(..., timeout=60, check=False)` has no `except subprocess.TimeoutExpired` handler — on a slower host a timeout raises the raw exception (losing the clean `assert completed.returncode == 0, completed.stdout + completed.stderr` diagnostic path) instead of a readable test failure.
+
+- [x] [Review][Patch] `objective.py`'s round-2 hint guard is an untested, unsynced duplicate of `governed_adapter.py`'s tested `_seed_round_two_from_snapshot` [`backend/engine/cpsat/objective.py:64-67`]. This inline copy is on a live, reachable path (`engine/cpsat/engine.py` → the CLI/legacy `SchedulerEngine`, confirmed via `solve_lexicographic` call sites) with zero direct test coverage of the guard itself (grepped: no test references `solve_lexicographic`/`LexResult` at all; it's only indirectly, tolerantly exercised via `test_penalty_calibration.py` per Decision 2's disclosed waiver). If this copy silently diverges from the tested one, nothing catches it. Extract the guard+hint logic (currently identical in both files) into one shared function both entry points call — the two engines' differing wall/deterministic-budget semantics are orthogonal to this guard and don't block sharing it.
+
+- [x] [Review][Patch] `AGENT_RUNTIME_MODEL` has no validation at settings load and no normalization at runtime construction [`backend/settings.py:306`, `backend/agent/runtime.py:527-537`]. `os.environ.get("AGENT_RUNTIME_MODEL", "deterministic")` performs no enum/format check (unlike other settings fields, which use `_nonempty`/`_positive_int` helpers), and `_configured_model`'s exact string match (`config.model == "deterministic"`) has no `.strip()`/case normalization. A malformed value (typo, stray whitespace, wrong case) is not caught at process startup — `create_agent_runtime` is only wired as a lazy per-request `Depends`, not constructed eagerly at lifespan — so it instead raises a bare, unowned `ValueError` the first time an agent turn is attempted.
+
+- [x] [Review][Patch] `compose_proof.py` reuses static `Idempotency-Key` literals across the approval/decision requests (`"compose-proof-approval"`, `"compose-proof-decision"`) [`backend/tests/compose_proof.py:259,273`]. If a prior run of this proof was interrupted before its `finally: down --volumes` teardown ran, a subsequent run against the same (undestroyed) database would replay the cached prior response for that idempotency key rather than performing a fresh approval — the assertions would still nominally pass without re-exercising the approval leg. Low probability (requires an interrupted prior run) but a one-line fix: use a fresh key (e.g., `str(uuid4())`) per invocation.
 
 ---
 
