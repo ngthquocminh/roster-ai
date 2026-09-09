@@ -16,7 +16,7 @@ This is a property of the design, not an accident:
 
 ## Secrets that must NOT be added
 
-`GEMINI_API_KEY` and `OPENROUTER_API_KEY` must not be configured as repository
+`GEMINI_API_KEY`, `OPENROUTER_API_KEY`, and `ANTHROPIC_API_KEY` must not be configured as repository
 secrets or exposed to any job in this workflow.
 
 **NFR26** keeps live-provider calls out of normal CI. The seven

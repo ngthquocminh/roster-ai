@@ -37,11 +37,13 @@ local backend.
 | `CSRF_SECRET` | Optional locally | local-only value | Replace outside local development. |
 | `ROSTERAI_DB` | Optional | `backend/var/rosterai.db` | Path to the SQLite database file. |
 | `ROSTERAI_DATA_DIR` | Optional | `<repo-root>/data` | Directory holding input fixture JSON files. |
-| `LLM_PROVIDER` | Optional | `stub` | Selects the `LLMProvider` backend: `stub` (keyless, no network calls), `gemini`, or `openrouter`. |
+| `LLM_PROVIDER` | Optional | `stub` | Selects the task-level `LLMProvider` backend: `stub` (keyless, no network calls), `gemini`, `openrouter`, or `anthropic`. This does not configure `AgentRuntime`. |
 | `LLM_MODEL` | Optional | `gemini-2.5-flash` | Model ID passed to the Gemini provider. |
 | `GEMINI_API_KEY` | Required if `LLM_PROVIDER=gemini` | *(none)* | Google Gemini API key. |
 | `OPENROUTER_API_KEY` | Required if `LLM_PROVIDER=openrouter` | *(none)* | OpenRouter API key. |
 | `OPENROUTER_MODEL` | Optional | `openai/gpt-oss-20b:free` | Model slug passed to OpenRouter (distinct from `LLM_MODEL` because `LLM_MODEL`'s default is a Gemini-only model ID, not a valid OpenRouter slug). |
+| `ANTHROPIC_API_KEY` | Required if `LLM_PROVIDER=anthropic` | *(none)* | Anthropic Messages API key. Keep it in deployment secret storage, never source control. |
+| `ANTHROPIC_MODEL` | Optional | `claude-haiku-4-5-20251001` | Anthropic model ID, independent of Gemini's `LLM_MODEL` and OpenRouter's model slug. |
 | `AGENT_MODEL_INPUT_USD_PER_MTOK` | Optional | `0` | Non-negative input-token price in USD per million tokens. When both price variables are unset/zero, telemetry reports `unpriced`, not free. |
 | `AGENT_MODEL_OUTPUT_USD_PER_MTOK` | Optional | `0` | Non-negative output-token price in USD per million tokens. When both price variables are unset/zero, telemetry reports `unpriced`, not free. |
 | `AGENT_MODEL_CACHE_READ_USD_PER_MTOK` | Optional | `0` | Non-negative price for cache-read tokens in USD per million tokens. A provider's `input_tokens` figure already includes cache tokens, so this rate — not the input rate above — prices them; zero means they contribute nothing to the estimate, not that caching is free. |
@@ -54,19 +56,19 @@ local backend.
 
 Most backend settings do not cause a startup failure by themselves — every
 field in the `Settings` dataclass has a default, and `GEMINI_API_KEY` /
-`OPENROUTER_API_KEY` are passed straight through to the underlying SDK client
-(`google.genai.Client(api_key=...)` / `openai.OpenAI(api_key=...)`) without
+`OPENROUTER_API_KEY` / `ANTHROPIC_API_KEY` are passed straight through to the underlying SDK client
+(`google.genai.Client(api_key=...)` / `openai.OpenAI(api_key=...)` / `anthropic.Anthropic(api_key=...)`) without
 eager validation. The practical effect:
 
 - With the default `LLM_PROVIDER=stub`, the app runs fully keyless — no
   environment variables are required at all.
-- Setting `LLM_PROVIDER=gemini` or `LLM_PROVIDER=openrouter` without the
+- Setting `LLM_PROVIDER=gemini`, `LLM_PROVIDER=openrouter`, or `LLM_PROVIDER=anthropic` without the
   matching API key does not fail at process startup; it fails later, at the
   first LLM call, when the vendor SDK rejects the missing/invalid key. That
   error is caught and re-raised as the provider-neutral `LLMProviderError`
   (see `backend/llm/base.py`).
 - `create_provider()` (`backend/llm/base.py`) raises `ValueError` immediately
-  if `settings=None` is passed for `"gemini"` or `"openrouter"` — this only
+  if `settings=None` is passed for `"gemini"`, `"openrouter"`, or `"anthropic"` — this only
   matters if you are calling the provider factory directly rather than via
   the FastAPI dependency (`api/deps.py:get_llm_provider`), which always
   supplies `settings`.
@@ -87,6 +89,7 @@ All defaults are defined inline in `backend/settings.py:default_settings()`:
   `_OPENROUTER_DEFAULT_MODEL`, noted in source as live-verified tool-capable
   as of 2026-07-13, replacing a prior free-tier model that started returning
   upstream 429s)
+- `anthropic_model` → `"claude-haiku-4-5-20251001"`
 - `agent_model_input_usd_per_mtok` → `0.0` and
   `agent_model_output_usd_per_mtok` → `0.0`; together these mean pricing is
   unconfigured (`cost_basis="unpriced"`), not that model usage is free
@@ -173,7 +176,7 @@ unaffected by it.
 - **CI/tests:** `backend/pyproject.toml` defines a `live` pytest marker for
   tests that exercise a real network-backed LLM provider; these are excluded
   by default (`pytest`) and only run explicitly (`pytest -m live`), so CI does
-  not require `GEMINI_API_KEY` or `OPENROUTER_API_KEY` to pass. The frontend
+  not require `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, or `ANTHROPIC_API_KEY` to pass. The frontend
   test suite (`npm test` / `vitest run`) uses the fixed
   `VITE_API_BASE_URL=http://127.0.0.1:8000` override shown above and needs no
   `.env` file.

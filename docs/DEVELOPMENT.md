@@ -123,7 +123,7 @@ uv run pytest -q -m live             # also run the network-backed live provider
 
 Tests live in `backend/tests/` as `test_*.py` files (e.g. `test_api.py`,
 `test_engine_small.py`, `test_llm_provider.py`, `test_gemini_provider.py`,
-`test_openrouter_provider.py`). `backend/pyproject.toml` registers a `live`
+`test_openrouter_provider.py`, `test_anthropic_provider.py`). `backend/pyproject.toml` registers a `live`
 pytest marker:
 
 ```toml
@@ -153,9 +153,9 @@ CI runs it in the non-required `compose-proof` job on `main` and on
 `workflow_dispatch`.
 
 The default `addopts` excludes `live`-marked tests, so `uv run pytest -q`
-never requires `GEMINI_API_KEY` or `OPENROUTER_API_KEY` and is safe to run in
+never requires `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, or `ANTHROPIC_API_KEY` and is safe to run in
 CI or on a fresh machine. The handful of `@pytest.mark.live` tests (in
-`test_gemini_provider.py` and `test_openrouter_provider.py`) are additionally
+`test_gemini_provider.py`, `test_openrouter_provider.py`, and `test_anthropic_provider.py`) are additionally
 gated with `@pytest.mark.skipif(not _HAS_KEY, ...)`, so even an explicit
 `pytest -m live` run skips them cleanly if the relevant API key isn't set in
 the environment. `backend/conftest.py` also pops `LLM_PROVIDER` /

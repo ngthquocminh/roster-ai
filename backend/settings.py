@@ -26,6 +26,7 @@ load_dotenv(_BACKEND_DIR / ".env", override=False)
 
 # Live-verified tool-capable as of 2026-07-13; replaces meta-llama/llama-3.3-70b-instruct:free, which started returning upstream 429 rate-limit errors.
 _OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
+_ANTHROPIC_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 # FR12 / NFR16 closed vocabulary. Keeping the application-owned ceilings named
 # in one place makes omission detectable when the contract changes.
@@ -54,7 +55,7 @@ class Settings:
     database_url: str = field(repr=False)  # restricted API runtime credential (T-04-01)
     provisioning_database_url: str = field(repr=False)  # privileged credential (T-04-01)
     maintenance_flag_path: str  # persistent Gate A legacy-write lock
-    llm_provider: str       # "stub" (default) | "gemini" | "openrouter"
+    llm_provider: str       # "stub" (default) | "gemini" | "openrouter" | "anthropic"
     llm_model: str          # model id passed to the selected provider
     # T-04-01: keep the API key out of the auto-generated __repr__ so it never
     # surfaces in logs, FastAPI dependency errors, or unhandled-exception dumps.
@@ -64,6 +65,10 @@ class Settings:
     # Separate from llm_model because llm_model's default "gemini-2.5-flash" is
     # not a valid OpenRouter slug.
     openrouter_model: str = _OPENROUTER_DEFAULT_MODEL
+    # Separate from llm_model because Anthropic model identifiers are neither
+    # Gemini nor OpenRouter model identifiers.
+    anthropic_api_key: str | None = field(repr=False, default=None)
+    anthropic_model: str = _ANTHROPIC_DEFAULT_MODEL
     # Browser origins allowed to call this API (BE-01, D-04). Not secret, so
     # this field carries no repr override — that treatment is reserved for the
     # two API key fields above.
@@ -276,6 +281,8 @@ def default_settings() -> Settings:
     llm_api_key = os.environ.get("GEMINI_API_KEY")
     openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
     openrouter_model = os.environ.get("OPENROUTER_MODEL", _OPENROUTER_DEFAULT_MODEL)
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+    anthropic_model = os.environ.get("ANTHROPIC_MODEL", _ANTHROPIC_DEFAULT_MODEL)
     # The os.environ.get default only applies when CORS_ORIGINS is absent from
     # env entirely; an explicitly empty CORS_ORIGINS="" yields an empty
     # allow-list (a valid "no browser origin may call this" posture), not a
@@ -445,6 +452,8 @@ def default_settings() -> Settings:
         llm_api_key=llm_api_key,
         openrouter_api_key=openrouter_api_key,
         openrouter_model=openrouter_model,
+        anthropic_api_key=anthropic_api_key,
+        anthropic_model=anthropic_model,
         cors_origins=cors_origins,
         oidc_provider=oidc_provider,
         oidc_issuer=oidc_issuer.rstrip("/"),

@@ -59,6 +59,7 @@ SPAN_ATTRIBUTE_ALLOW_LIST = frozenset({
 CREDENTIAL_CANARIES = {
     "GEMINI_API_KEY": "CANARY-GEMINI-5-2",
     "OPENROUTER_API_KEY": "CANARY-OPENROUTER-5-2",
+    "ANTHROPIC_API_KEY": "CANARY-ANTHROPIC-5-2",
     "OIDC_CLIENT_SECRET": "CANARY-OIDC-5-2",
     "CSRF_SECRET": "CANARY-CSRF-5-2",
     "AGENT_RUNTIME_API_KEY": "CANARY-AGENT-5-2",
@@ -468,7 +469,7 @@ def test_every_credential_environment_value_is_absent_from_settings_repr(monkeyp
     rendered = repr(default_settings())
 
     canaries = (
-        "CANARY-GEMINI-5-2", "CANARY-OPENROUTER-5-2", "CANARY-OIDC-5-2",
+        "CANARY-GEMINI-5-2", "CANARY-OPENROUTER-5-2", "CANARY-ANTHROPIC-5-2", "CANARY-OIDC-5-2",
         "CANARY-CSRF-5-2", "CANARY-AGENT-5-2", "CANARY-DB-5-2",
         "CANARY-PROVISIONING-5-2",
     )

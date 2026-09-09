@@ -3,7 +3,7 @@
 Mirror of engine/base.py: Protocol + factory with lazy imports. The Protocol
 returns provider-neutral list[OverrideCall]; no vendor-specific payload crosses
 this boundary (D-08). Registered providers: "stub" (keyless default), "gemini",
-and "openrouter" (both real, network-backed, requiring settings=...).
+"openrouter", and "anthropic" (real, network-backed, requiring settings=...).
 """
 from __future__ import annotations
 
@@ -50,6 +50,16 @@ def create_provider(name: str, *, settings=None) -> LLMProvider:
         return OpenRouterLLMProvider(
             api_key=settings.openrouter_api_key, model=settings.openrouter_model
         )
+    if name == "anthropic":
+        if settings is None:
+            raise ValueError(
+                "create_provider('anthropic') requires settings=... carrying "
+                "anthropic_api_key and anthropic_model (e.g. default_settings())."
+            )
+        from llm.anthropic import AnthropicLLMProvider
+        return AnthropicLLMProvider(
+            api_key=settings.anthropic_api_key, model=settings.anthropic_model
+        )
     raise ValueError(
-        f"Unknown LLM provider: {name!r}. Available: ['stub', 'gemini', 'openrouter']"
+        f"Unknown LLM provider: {name!r}. Available: ['stub', 'gemini', 'openrouter', 'anthropic']"
     )

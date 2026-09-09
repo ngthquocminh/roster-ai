@@ -14,7 +14,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
-# Surface ONLY GEMINI_API_KEY / OPENROUTER_API_KEY from a local backend/.env so
+# Surface ONLY GEMINI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY from a local backend/.env so
 # the @pytest.mark.live gate can detect a developer's key. Deliberately do NOT
 # load LLM_PROVIDER / LLM_MODEL / OPENROUTER_MODEL from .env — the test suite
 # must observe the keyless `stub` default regardless of a developer's .env
@@ -28,6 +28,9 @@ if _gemini_key and not os.environ.get("GEMINI_API_KEY"):
 _openrouter_key = _dotenv.get("OPENROUTER_API_KEY")
 if _openrouter_key and not os.environ.get("OPENROUTER_API_KEY"):
     os.environ["OPENROUTER_API_KEY"] = _openrouter_key
+_anthropic_key = _dotenv.get("ANTHROPIC_API_KEY")
+if _anthropic_key and not os.environ.get("ANTHROPIC_API_KEY"):
+    os.environ["ANTHROPIC_API_KEY"] = _anthropic_key
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -38,7 +41,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 # stub-only-CI invariant. Trigger that one-time import here, then drop the
 # leaked provider/model selection so every test observes the keyless `stub`
 # default. This scoping is test-process only; the real app is unaffected, and
-# GEMINI_API_KEY (surfaced above) is preserved for the @pytest.mark.live gate.
+# Provider API keys surfaced above are preserved for the @pytest.mark.live gates.
 import settings as _settings  # noqa: E402,F401  (imported for its load_dotenv side effect)
 
 os.environ.pop("LLM_PROVIDER", None)
