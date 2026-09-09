@@ -39,9 +39,9 @@ services:
       SHIFTMIND_SEED_PLANNER_EMAIL: ${SHIFTMIND_SEED_PLANNER_EMAIL:-planner@shiftmind.local}
       SHIFTMIND_WORKER_RUNTIME_FACTORY: worker.composition:create_runtime
       # AC1's "available through explicit configuration". Unset on the host,
-      # these resolve to empty and `settings.py` keeps the keyless `"test"`
+      # these keep the keyless deterministic model as the composed default;
       # default; without the passthrough, exporting them would do nothing.
-      AGENT_RUNTIME_MODEL: ${AGENT_RUNTIME_MODEL:-test}
+      AGENT_RUNTIME_MODEL: ${AGENT_RUNTIME_MODEL:-deterministic}
       AGENT_RUNTIME_API_KEY: ${AGENT_RUNTIME_API_KEY:-}
     depends_on:
       bootstrap:

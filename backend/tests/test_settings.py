@@ -63,7 +63,7 @@ def test_governed_solver_settings_are_positive_and_application_owned(monkeypatch
     settings = default_settings()
     assert settings.solver_engine_name == "cpsat"
     assert settings.solver_seed == 42
-    assert settings.solver_num_search_workers == 1
+    assert settings.solver_num_search_workers == 8
     assert settings.solver_max_deterministic_time == 30.0
     assert settings.solver_wall_time_limit_seconds == 30.0
 

@@ -524,12 +524,17 @@ def _tool_results(
 
 def _configured_model(config: AgentRuntimeConfig) -> object:
     """Resolve the owned model setting without consulting another LLM seam."""
-    if config.model == "test":
+    normalized = config.model.strip().lower()
+    if normalized == "deterministic":
+        from agent.deterministic_model import build_deterministic_model
+
+        return build_deterministic_model()
+    if normalized == "test":
         return infer_model("test")
     provider_name, separator, model_name = config.model.partition(":")
     if not separator or not model_name:
         raise ValueError(
-            "agent runtime model must be 'test' or '<provider>:<model-name>'"
+            "agent runtime model must be 'deterministic', 'test', or '<provider>:<model-name>'"
         )
     if provider_name == "openrouter":
         from pydantic_ai.models.openai import OpenAIChatModel

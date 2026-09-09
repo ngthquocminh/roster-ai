@@ -25,7 +25,7 @@ Check readiness with `docker compose ps` and inspect failures with `docker compo
 
 Two changes are not replays, and the `bootstrap` service will stop the stack rather than reinterpret them: editing a fixture payload without bumping its version, and changing `SHIFTMIND_SEED_PLANNER_SUBJECT`/`_EMAIL` after the planner exists. Both are resolved by starting from a clean database — `docker compose down --volumes`, then start again.
 
-For a live model, set `AGENT_RUNTIME_MODEL` and `AGENT_RUNTIME_API_KEY` in the environment you run `docker compose up` from; compose passes both through to the API and worker, and unset they fall back to the keyless deterministic default. Live-provider output is optional and never required release evidence.
+The composed stack defaults to `AGENT_RUNTIME_MODEL=deterministic`, a keyless model double that inspects the pinned scenario and completes the planner turn. For a live model, set `AGENT_RUNTIME_MODEL` and `AGENT_RUNTIME_API_KEY` in the environment you run `docker compose up` from; compose passes both through to the API and worker. Live-provider output is optional and never required release evidence. PydanticAI's schema-synthesizing `test` model remains available through `AGENT_RUNTIME_MODEL=test` for focused framework tests.
 
 ```bash
 AGENT_RUNTIME_MODEL=openrouter:openai/gpt-4o-mini AGENT_RUNTIME_API_KEY=… docker compose up -d --build

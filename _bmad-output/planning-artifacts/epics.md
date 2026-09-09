@@ -1442,6 +1442,36 @@ Unblocks: Story 5.4's walkthrough, and the release-gate report's image binding.
 **Then** tested constraints and lockfiles pin each used dependency version and the built image exposes a recorded content-addressed digest
 **And** that digest satisfies the image binding every evaluation report requires, so no release evidence depends on hosted infrastructure. (NFR27, AR27)
 
+### Story 5.3a: Make a Real Solve Reach a Candidate [Technical Enabler]
+
+**Inserted 2026-09-06** by `sprint-change-proposal-2026-09-06.md`, from Story 5.3's code review —
+the first review able to build and run the composed stack. Numbered `5.3a` rather than renumbering
+5.4 because it is a corrective prerequisite discovered inside 5.3, not a member of the portfolio
+sequence. It exists because Story 5.3's Decision 5 measured that changing solver search behaviour
+did not belong in a composition story.
+
+As a reviewer of this portfolio,
+I want a real schedule run to produce a candidate I can approve,
+So that the approval, baseline-promotion and provenance features are demonstrable rather than
+merely unit-tested.
+
+Blocks: Story 5.4's walkthrough, whose AC1 requires the Wednesday-coverage journey be walked "with
+real output" and every behavioural claim be "reproducible by the Story 5.3 command".
+Closes: `deferred-work.md`'s three entries under "Deferred from: code review of story-5.3
+(2026-09-06) — measured by running the composed stack".
+
+**Acceptance Criteria:**
+
+**Given** a governed schedule run on either shipped fixture at the default solver budget
+**When** the worker executes it through `GovernedSchedulerAdapter`
+**Then** the run reaches `solver_completed` and `finalize_schedule_run` creates a candidate
+**And** the round-2 search is seeded from the round-1 solution rather than restarted from zero, and the resulting reproducibility characteristics are re-measured and recorded in `engine/governed_adapter.py`'s `SCOPE_CONTROLS` from that measurement, never hand-edited. (NFR21)
+
+**Given** the composed stack started by the Story 5.3 command
+**When** `backend/tests/compose_proof.py` runs
+**Then** it asserts `solver_completed` for the schedule run and `agent_completed` for the agent turn, driven by a deterministic model double that requires no provider credential
+**And** it exercises Flow 1's tail end to end — request approval, approve as baseline, read the provenance timeline — against the candidate that real solve produced. (NFR21, NFR26, AR1)
+
 ### Story 5.4: Publish the Portfolio Walkthrough
 
 As a reviewer of this portfolio,

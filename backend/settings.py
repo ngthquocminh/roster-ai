@@ -91,7 +91,7 @@ class Settings:
     # llm_provider/llm_model: the agent runtime and the task-specific
     # LLMProvider are two seams, and overloading one seam's configuration onto
     # the other is what makes them impossible to migrate independently later.
-    agent_runtime_model: str = "test"
+    agent_runtime_model: str = "deterministic"
     # USD per million tokens. Zero means no configured price, not a free model.
     agent_model_input_usd_per_mtok: float = 0.0
     agent_model_output_usd_per_mtok: float = 0.0
@@ -127,10 +127,11 @@ class Settings:
     scheduling_draft_max_constraints: int = 10
     # Governed solver ceilings (Story 3.2, AD-7). These are application-owned
     # inputs frozen into RunSnapshotV1; neither a model nor a caller chooses
-    # them. Single-worker + deterministic time is the reproducible default.
+    # them. The worker count leaves enough of the shared wall budget for both
+    # lexicographic rounds on the shipped fixtures.
     solver_engine_name: str = "cpsat"
     solver_seed: int = 42
-    solver_num_search_workers: int = 1
+    solver_num_search_workers: int = 8
     solver_max_deterministic_time: float = 30.0
     solver_wall_time_limit_seconds: float = 30.0
     lease_seconds: int = 120
@@ -302,7 +303,7 @@ def default_settings() -> Settings:
     except ValueError:
         session_ttl_s = 3600
     csrf_secret = os.environ.get("CSRF_SECRET", "shiftmind-local-csrf-secret")
-    agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "test")
+    agent_runtime_model = os.environ.get("AGENT_RUNTIME_MODEL", "deterministic").strip()
     agent_runtime_api_key = os.environ.get("AGENT_RUNTIME_API_KEY")
     agent_model_input_usd_per_mtok = _non_negative_float(
         "AGENT_MODEL_INPUT_USD_PER_MTOK",
@@ -384,7 +385,7 @@ def default_settings() -> Settings:
     solver_num_search_workers = _positive_int(
         "SOLVER_NUM_SEARCH_WORKERS",
         os.environ.get("SOLVER_NUM_SEARCH_WORKERS"),
-        1,
+        8,
     )
     solver_max_deterministic_time = _positive_float(
         "SOLVER_MAX_DETERMINISTIC_TIME",
