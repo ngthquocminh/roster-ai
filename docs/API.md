@@ -36,7 +36,7 @@ docker compose exec -T api python -c "from api.main import app; print('\\n'.join
 
 | Area | Routes |
 |---|---:|
-| Versioned planner surface | 40 paths under `/api/v1` |
+| Versioned planner surface | 40 operations under `/api/v1` |
 | Authentication | login, callback, logout, session |
 | Planner workflow | scenario catalogue and projections; conversations; proposals; schedule runs; approvals and provenance |
 | Local-only/support surface | health, fixtures, fake OIDC, and the compatibility routes still mounted for the local composition |

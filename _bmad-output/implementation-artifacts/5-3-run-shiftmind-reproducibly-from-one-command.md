@@ -719,6 +719,11 @@ types (AD-1/AR1).
    story supplies the digest it will bind and does not create it. **Revisit trigger:** Story 5.4 or the
    Epic 5 retrospective, whichever first needs the aggregate report to exist.
 
+   **Answered 2026-09-09 by Story 5.4:** it belongs to the gate and remains owned by Evaluation/QA.
+   Story 5.4 does not create it because the golden dataset has 30 cases against Gate B's 50-case
+   floor; changing that floor requires the gate owner's recorded rationale under `epics.md`, not a
+   walkthrough-story decision. The walkthrough names the specified path and unmet precondition.
+
 ### References
 
 * AC text, NFR21/NFR26/NFR27, AR27, Gate B rows — `_bmad-output/planning-artifacts/epics.md:115,125,127,173,1425-1443,1578-1597`

@@ -31,6 +31,12 @@ The evaluation harness is demonstrated by `evidence/story-2.2/evaluation-harness
 Automated accessibility coverage is recorded in `evidence/story-4.6/state-semantics-and-accessibility.json`. Anchor: `evidence/story-4.6/state-semantics-and-accessibility.json`.
 <!-- behavioral-claims:end -->
 
+## Illustrative live-provider output — not captured
+
+No live provider or model was configured for this run, so no illustrative
+model prose is quoted. The behavioral proof above uses the named deterministic
+runtime and remains the release-relevant result.
+
 ## Evidence and gates
 
 The [evaluation demonstration](../evidence/story-2.2/evaluation-harness-demonstration.json), [Gate A readiness report](../evidence/story-1.11/gate-a-readiness-report.json), and [automated accessibility evidence](../evidence/story-4.6/state-semantics-and-accessibility.json) are bound artifacts. Gate B's checklist is in [`epics.md`](../_bmad-output/planning-artifacts/epics.md). The aggregate release report is specified as `evidence/epic-5/release-gate-report.json`, but it is an Evaluation/QA-owner step after this story: the dataset currently has 30 cases against its 50-case floor, which requires recorded owner rationale rather than a fabricated report.

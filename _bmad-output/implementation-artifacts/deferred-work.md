@@ -816,3 +816,23 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   available, decide there whether the walkthrough's agent step is bound to a live-provider
   capture (Decision 12's own recommended split) or whether a runtime-selectable deterministic
   double is finally warranted.
+
+- **Walkthrough behavioral anchors prove existence, not semantic correspondence.** Story 5.4's
+  anchor guard verifies that each named test or evidence artifact exists, but a prose claim can
+  drift away from an unchanged anchor. **Owner/revisit trigger:** the next walkthrough claim edit;
+  reviewer must compare the claim with its anchor before accepting the change.
+
+- **Story 5.4's captured identifiers and metrics are a dated machine-local snapshot.** The
+  walkthrough records the successful composed run but no guard re-runs it or detects later metric
+  drift. **Owner/revisit trigger:** the next solver, fixture, or walkthrough-output change; rerun
+  the composed proof and replace the snapshot from real output.
+
+- **The non-BMAD `.planning/` tree remains outside the reviewer-facing documentation ownership
+  cleanup.** Story 5.4 stops presenting it as the current portfolio-status source but does not
+  reconcile or retire that live workflow's artifacts. **Owner/revisit trigger:** the first
+  `.planning/` maintenance pass or reviewer confusion over which planning tree is current.
+
+- **Three `.planning/` artifacts still reference the pre-archive `docs/vision.md` path.** They are
+  historical workflow records outside Story 5.4's scope and were not rewritten during the
+  `git mv` to `docs/archive/vision.md`. **Owner/revisit trigger:** the first `.planning/` pass;
+  update the three references together so their internal history remains coherent.

@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2179,7 +2179,9 @@ development_status:
   epic-4-retrospective: done
 
   # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)
-  epic-5: in-progress
+  # Story completion is closed, but Gate B has NOT passed: the Evaluation/QA-owned aggregate
+  # report remains outstanding because the golden dataset has 30 cases against its 50-case floor.
+  epic-5: done
   # 5.0 inserted 2026-09-03 by sprint-change-proposal-2026-09-03.md, from Epic 4
   # retrospective action A3(i). Corrective prerequisite, NOT part of the portfolio
   # sequence -- numbered 5-0 so 5.1-5.4 keep their keys. Fires the Epic 4 spine's
@@ -2509,7 +2511,7 @@ development_status:
   # entries above :719. Story 5.3 flips to `done` in the SAME commit as 5.3a, with the
   # bounded-exception note above it removed.
   5-3a-make-a-real-solve-reach-a-candidate: done
-  5-4-publish-the-portfolio-walkthrough: backlog
+  5-4-publish-the-portfolio-walkthrough: done
   epic-5-retrospective: optional
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
