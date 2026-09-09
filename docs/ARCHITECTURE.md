@@ -6,6 +6,14 @@ libraries, identity providers, telemetry exporters, or concrete model
 providers. Adapters implement the outer boundary; application code owns the
 workflow and its policy.
 
+The rule is enforced mechanically rather than by convention: the suites in
+`backend/tests/architecture/` sweep the domain and application packages for
+forbidden imports, and any exception must be named in `ALLOWED_LEAKS`, which a
+companion test asserts still exists and still leaks — so a suppression cannot
+outlive the violation it covers. Three ports under `backend/application/ports/`
+currently import SQLAlchemy's `Connection` and are recorded there; closing them
+is tracked in the deferred-work ledger.
+
 Authority is deliberately divided three ways:
 
 - The model proposes typed intent only.

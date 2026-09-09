@@ -60,12 +60,14 @@ Dependencies are managed with [uv](https://docs.astral.sh/uv/) (`backend/pyproje
 ```bash
 cd backend
 uv sync                              # create .venv + install from uv.lock
-cp .env.example .env                 # fill in LLM_PROVIDER / API keys if needed (see CONFIGURATION.md)
+cp .env.example .env                 # only needed for a live model (see CONFIGURATION.md)
 uv run uvicorn api.main:app --reload # http://127.0.0.1:8000  (/docs for Swagger)
 ```
 
-With the default `LLM_PROVIDER=stub`, the backend runs fully keyless — no
-`.env` values are required to get the API serving requests.
+With the default `AGENT_RUNTIME_MODEL=deterministic`, the backend runs fully
+keyless — no `.env` values are required to get the API serving requests. Note
+this bare-uvicorn path serves the API alone; the documented reviewer path is the
+composed stack in [`GETTING-STARTED.md`](GETTING-STARTED.md).
 
 ### Frontend (`frontend/`)
 
@@ -197,9 +199,10 @@ this guide intentionally doesn't re-derive that detail.
 ## Extension points: the two Protocol seams
 
 Two `typing.Protocol` interfaces are the designed extension points for
-swapping backends without touching service or route code. Both follow the
-same shape: a Protocol, a lazy-import factory function, and a name-keyed
-registry.
+swapping backends without touching service or route code. Both pair a Protocol
+with a factory function; the solver seam resolves implementations from a
+name-keyed registry, while the agent seam has a single implementation today and
+selects a *model* rather than a runtime.
 
 ### `SchedulerEngine` (`backend/engine/base.py`)
 
@@ -221,14 +224,23 @@ adapter are untouched.
 
 ### `AgentRuntime` (`backend/agent/`)
 
-The agent boundary is `AgentRuntime`: it receives the governed application
-dependencies and produces typed intent, while application code retains control
-of authorization, policy, versions, approvals, state, and audit. Select the
-runtime through `AGENT_RUNTIME_MODEL` (see
-[`CONFIGURATION.md`](CONFIGURATION.md)). The default `deterministic` runtime is
-keyless and drives the composed local journey; live providers require an
-explicit model and credential. Existing compatibility adapters remain behind
-their own seams, but they are not the model-extension point for this system.
+The agent boundary is the `AgentRuntime` Protocol
+(`backend/application/ports/agent_runtime.py`): it receives the governed
+application dependencies and produces typed intent, while application code
+retains control of authorization, policy, versions, approvals, state, and audit.
+`PydanticAIAgentRuntime` (`backend/agent/runtime.py`) is the single
+implementation today, built by `create_agent_runtime`.
+
+Select the *model* it runs through `AGENT_RUNTIME_MODEL` (see
+[`CONFIGURATION.md`](CONFIGURATION.md)) — the variable chooses a model, not a
+runtime implementation. The default `deterministic` model is keyless and drives
+the composed local journey; live providers require an explicit
+`provider:model` and a credential. Extending this seam means adding a second
+`AgentRuntime` implementation and a branch in `create_agent_runtime`.
+
+Existing compatibility adapters remain behind their own seams under AD-1's
+migration allowance, but they are not the model-extension point for this
+system.
 
 ## How the backend and frontend talk locally
 
