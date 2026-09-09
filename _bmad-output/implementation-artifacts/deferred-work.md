@@ -836,3 +836,66 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   historical workflow records outside Story 5.4's scope and were not rewritten during the
   `git mv` to `docs/archive/vision.md`. **Owner/revisit trigger:** the first `.planning/` pass;
   update the three references together so their internal history remains coherent.
+
+## Deferred from: code review of 5-4-publish-the-portfolio-walkthrough (2026-09-09)
+
+- **`docs/README.md` no longer names the second planning tree it exists to disambiguate.** The
+  rewrite keeps the one-owner-per-audience principle but drops every mention of `.planning/` and the
+  tie-break rule for when two trees disagree. `.planning/` is still live on disk. Partially covered by
+  Story 5.4's own third residual entry, which defers the tree itself but not the missing rule.
+  **Owner/revisit trigger:** the first `.planning/` maintenance pass; restore a one-line rule saying
+  which tree wins, or retire `.planning/` outright.
+
+- **`candidate_metrics.py`'s docstring contradicts its own code on which rates drive the
+  volume-to-minutes conversion.** The docstring (`backend/application/scheduling/candidate_metrics.py:1-6`)
+  says conversion goes "through the rates on the workers who were actually assigned"; the code
+  (`:48-55`) deliberately averages every *qualified* worker's rate, and its inline comment says so
+  explicitly ("from every qualified worker, not just whoever this candidate happened to assign"). The
+  docstring is the wrong one. Pre-existing product code, outside Story 5.4's diff.
+  **Owner/revisit trigger:** the next change to candidate metrics, or any story quoting per-function
+  required minutes; correct the docstring to match the code.
+
+- **Guard 3's retired-symbol list bans a route that is still mounted and served.**
+  `backend/tests/test_walkthrough_claims.py:33` forbids the literal `/runs/{run_id}/insights` in
+  reviewer-facing documents, but the live app serves it — enumerated at 13 non-versioned paths / 15
+  operations alongside `/scenarios`, `/runs`, `/constraints`, `/fixtures` and `/oidc/*`. It is
+  therefore a test failure to document a working endpoint honestly, which is the situation Story 5.4's
+  Dev Note trap 4 warned about. The bare `SQLite` substring has the mirror problem: it would redden
+  the very `docs/archive/` cross-reference Decision 6 was written to enable.
+  **Owner/revisit trigger:** the first story that needs to document the legacy surface, or the
+  legacy-route flag cutover in `docs/GATE-A-RUNBOOK.md`.
+
+- **Two application ports leak SQLAlchemy into the application layer, now tracked.**
+  `backend/application/ports/membership.py:7` and `site_baseline.py:9` import
+  `from sqlalchemy import Connection`, which AD-1 forbids by name
+  (`ARCHITECTURE-SPINE.md:52`). They were neither swept nor allow-listed until the
+  Story 5.4 review, so the walkthrough's architecture-boundary claim was
+  unqualified while three ports violated it. Fixed at review by sweeping
+  `application/ports` whole in `backend/tests/architecture/test_conversation_boundaries.py`
+  and adding both to `ALLOWED_LEAKS`; `test_every_allowed_leak_still_exists_and_still_leaks`
+  now holds them. The leak itself is **not** closed — closing it means giving the
+  ports a persistence-free connection abstraction, which is product work.
+  **Owner/revisit trigger:** the next story touching either port, or the Epic 5
+  retrospective; definition of done is deleting both `ALLOWED_LEAKS` entries.
+
+- **The retired-symbol guard cannot distinguish "describes a live legacy mechanism"
+  from "presents it as the current path".** It is a literal token sweep, so
+  `docs/CONFIGURATION.md`, `DEVELOPMENT.md`, `TESTING.md`, `GATE-A-RUNBOOK.md`,
+  `AGENT-RUNTIME-DECISION.md` and `CI-SECRETS-CHECKLIST.md` are excluded by name
+  in `SYMBOL_SWEEP_EXCLUSIONS` with a recorded reason each — every one of them
+  legitimately names the still-live v0.3 seam that `settings.py:253,274` still
+  reads. The reviewer-entry documents remain swept, and the sweep now walks the
+  tree so a document added later is covered by default. The excluded six are
+  reviewed by eye, not by test.
+  **Owner/revisit trigger:** the Gate A legacy-route cutover — once the legacy
+  surface is actually offline, most of these exclusions can be deleted and the
+  tokens become genuinely retired.
+
+- **Quoted walkthrough output is still a dated snapshot with no re-verification.**
+  Story 5.4's own residual stands after review: `docs/WALKTHROUGH.md`'s identifiers,
+  versions and metrics come from one recorded run and no guard re-runs it. The
+  review added assertions to `compose_proof.py` for baseline promotion and the
+  provenance item kinds, so the *claims* are now anchored to something that checks
+  them, but the *numbers* are not.
+  **Owner/revisit trigger:** the next solver, fixture, or metric change; re-run the
+  composed proof and replace the snapshot from real output.
