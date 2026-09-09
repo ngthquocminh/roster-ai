@@ -219,31 +219,16 @@ solver backend means adding a new `engine/<name>/` package implementing the
 Protocol and a new branch in `create_engine()` — domain types and the input
 adapter are untouched.
 
-### `LLMProvider` (`backend/llm/base.py`)
+### `AgentRuntime` (`backend/agent/`)
 
-```python
-class LLMProvider(Protocol):
-    def parse_constraints(self, text: str) -> list[OverrideCall]: ...
-    def generate_insights(self, summary: dict) -> str: ...
-    @property
-    def name(self) -> str: ...
-
-def create_provider(name: str, *, settings=None) -> LLMProvider:
-    ...  # {"stub", "gemini", "openrouter"}
-```
-
-Three implementations are registered today: `stub`
-(`backend/llm/stub.py`, deterministic regex-based, keyless — the CI/test
-default), `gemini` (`backend/llm/gemini.py`, via `google-genai`), and
-`openrouter` (`backend/llm/openrouter.py`, via the `openai` SDK against
-OpenRouter's OpenAI-compatible API). Every provider implementation unpacks
-its own vendor-specific tool-call shape before calling the shared
-`llm/translate.to_override_call` helper, so no vendor payload format ever
-crosses the `LLMProvider` boundary — this is what let two real providers get
-added with no changes to `services/constraint_service.py` or its router.
-Select the active provider via the `LLM_PROVIDER` environment variable (see
-[`docs/CONFIGURATION.md`](CONFIGURATION.md)); adding a fourth provider means
-adding a new `llm/<name>.py` module and a new branch in `create_provider()`.
+The agent boundary is `AgentRuntime`: it receives the governed application
+dependencies and produces typed intent, while application code retains control
+of authorization, policy, versions, approvals, state, and audit. Select the
+runtime through `AGENT_RUNTIME_MODEL` (see
+[`CONFIGURATION.md`](CONFIGURATION.md)). The default `deterministic` runtime is
+keyless and drives the composed local journey; live providers require an
+explicit model and credential. Existing compatibility adapters remain behind
+their own seams, but they are not the model-extension point for this system.
 
 ## How the backend and frontend talk locally
 

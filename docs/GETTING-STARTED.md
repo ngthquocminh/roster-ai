@@ -19,7 +19,7 @@ cd rosterai
 docker compose up -d --build
 ```
 
-Open `http://localhost:8080`. Choose sign in; the local fake identity provider signs in the pre-provisioned planner through the normal OIDC callback and session-cookie path. Select either immutable fixture and walk the planner journey. The default agent model is the deterministic, keyless `TestModel`; no provider credential is required.
+Open `http://localhost:8080`. Choose sign in; the local fake identity provider signs in the pre-provisioned planner through the normal OIDC callback and session-cookie path. Select either immutable fixture and walk the planner journey. The default agent model is the deterministic, keyless `deterministic` model; no provider credential is required.
 
 Check readiness with `docker compose ps` and inspect failures with `docker compose logs bootstrap api worker web`. Running the start command again with the **same** inputs is safe: migrations, fixture imports, and planner provisioning are all idempotent on replay.
 
