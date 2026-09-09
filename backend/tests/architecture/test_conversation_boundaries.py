@@ -33,6 +33,13 @@ SWEPT_PACKAGES = (
     BACKEND_ROOT / "application/clarification",
     BACKEND_ROOT / "application/grounding",
     BACKEND_ROOT / "application/contracts",
+    # Added 2026-09-09 (story 5.4 review). `application/ports` was covered only
+    # by the two files named in GUARDED, so membership.py and site_baseline.py
+    # leaked SQLAlchemy unguarded and unticketed while the walkthrough claimed
+    # the boundary held. Sweeping the package whole applies this module's own
+    # rule: a file list that stops growing with the layer it guards becomes a
+    # claim about coverage it no longer has.
+    BACKEND_ROOT / "application/ports",
 )
 
 # Known, ticketed AD-1 violations outside this guard's coverage. Tracked in
@@ -41,6 +48,8 @@ SWEPT_PACKAGES = (
 # the entry here — so it is a real, greppable value rather than a comment.
 ALLOWED_LEAKS = {
     "application/ports/scenario_catalogue.py": "deferred-work.md story-2-3 creation (2026-08-10)",
+    "application/ports/membership.py": "deferred-work.md story-5-4 review (2026-09-09)",
+    "application/ports/site_baseline.py": "deferred-work.md story-5-4 review (2026-09-09)",
 }
 
 

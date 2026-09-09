@@ -166,7 +166,15 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
             )
             assert catalogue.status_code == 200
             assert len(catalogue.json()) == 2
-            fixture = catalogue.json()[0]
+            # Select by name rather than by index. The catalogue is ordered by
+            # fixture_id, so position 0 is stable but arbitrary; the walkthrough
+            # names this fixture, and picking it by name makes that claim true by
+            # construction instead of resting on an unasserted ordering.
+            fixture = next(
+                entry
+                for entry in catalogue.json()
+                if entry["scenario_name"] == "sample_tiny_input"
+            )
             command_headers = {
                 "Cookie": session_cookie,
                 "Origin": origin,
@@ -286,7 +294,25 @@ def test_one_command_stack_serves_real_oidc_and_worker() -> None:
             )
             assert provenance.status_code == 200, provenance.text
             assert provenance.json()["schedule_run_id"] == run_id, provenance.text
-            assert provenance.json()["items"], provenance.text
+            items = provenance.json()["items"]
+            assert items, provenance.text
+
+            # The walkthrough claims this journey "promotes the candidate baseline"
+            # and returns a timeline connecting request, run, approval and both
+            # versions. Assert both, so that claim is anchored to something that
+            # actually checks it rather than to a run that merely finished.
+            kinds = {item["item_type"] for item in items}
+            assert {
+                "approval_request",
+                "approval_decision",
+                "baseline_promotion",
+            } <= kinds, sorted(kinds)
+            promotions = [i for i in items if i["item_type"] == "baseline_promotion"]
+            assert len(promotions) == 1, provenance.text
+            promotion = promotions[0]
+            assert promotion["schedule_run_id"] == run_id, provenance.text
+            assert promotion["after_version"], provenance.text
+            assert promotion["after_version"] != promotion["before_version"], provenance.text
         services = _compose(env, "ps", "--status", "running", "--services").stdout
         assert {"api", "worker", "web", "postgres"}.issubset(set(services.splitlines()))
     finally:
