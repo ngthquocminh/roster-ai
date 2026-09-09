@@ -4,7 +4,7 @@ baseline_commit: bb5b8ef5f744bc3785b3cc731df3392108d150ec
 
 # Story 5.4: Publish the Portfolio Walkthrough
 
-Status: in-progress
+Status: review
 
 **This is the last story of Epic 5 and the last story of the portfolio milestone.** Everything it
 describes already exists and already works. Nothing in this story adds a product capability, and any
@@ -446,9 +446,9 @@ Ordered so the measurement that AC1 depends on happens before the prose that quo
         tracks — and add a note above it stating that Gate B's aggregate report is still outstanding
         per Decision 4, so the flip is not read as "Gate B passed".
 
-- [ ] **Task 8 — Prove the suite did not move**
-  - [ ] Clean-tree regression run; compare against the baseline in *Measured at creation*.
-  - [ ] Gate A readiness evidence regeneration is required only if a recorded count moves; `test_walkthrough_claims.py` belongs to no registered check's `test_files`, so it should not — verify rather than assume (`docs/EVIDENCE-CONVENTION.md`).
+- [x] **Task 8 — Prove the suite did not move**
+  - [x] Clean-tree regression run; compare against the baseline in *Measured at creation*.
+  - [x] Gate A readiness evidence regeneration is required only if a recorded count moves; `test_walkthrough_claims.py` belongs to no registered check's `test_files`, so it should not — verify rather than assume (`docs/EVIDENCE-CONVENTION.md`).
 
 ---
 
@@ -602,6 +602,7 @@ GPT-5 Codex
 - Compose proof: `1 passed in 61.12s`; run reached `solver_completed` and completed approval, promotion, and provenance.
 - Dirty-tree regression: `1621 passed, 2 skipped, 7 deselected`; the additional skip was the intentionally clean-tree-only evidence-binding realism check.
 - Gate A registry/readiness verification: `48 passed`; the new walkthrough module is not registered, so no evidence regeneration is required.
+- Final clean-tree regression: `1622 passed, 1 skipped, 7 deselected, 2 warnings` in 286.58 seconds; exactly the prior 1618-pass baseline plus four walkthrough guards, with skip and deselection counts unchanged.
 
 ### Demonstrated-red mutation table (retro A1 — required before review)
 
@@ -618,6 +619,7 @@ GPT-5 Codex
 - Added four repository guards and demonstrated each can redden through a relevant real-document mutation.
 - Reconciled Story 5.3's release-report question and added four explicit residual-risk ledger entries.
 - Verified Gate A remains 33 checks / 25 runner-backed checks and its committed readiness report is current; no regeneration was performed.
+- Completed the clean-tree definition-of-done gate with no regressions and moved the story to review.
 
 ### File List
 
@@ -630,6 +632,7 @@ GPT-5 Codex
 - docs/README.md
 - docs/archive/architecture-v0.4.md
 - docs/archive/vision.md
+- docs/vision.md (moved to `docs/archive/vision.md`)
 - backend/tests/test_walkthrough_claims.py
 - _bmad-output/implementation-artifacts/5-3-run-shiftmind-reproducibly-from-one-command.md
 - _bmad-output/implementation-artifacts/5-4-publish-the-portfolio-walkthrough.md
@@ -644,3 +647,4 @@ GPT-5 Codex
 |---|---|
 | 2026-09-09 | Story created at `bb5b8ef`, clean tree. Nine decisions recorded. Three premises were measured rather than assumed: (1) the golden dataset holds **30** cases against Gate B's 50-case floor, which is why Decision 4 refuses to create `evidence/epic-5/release-gate-report.json` in this story — lowering that floor is the gate owner's recorded-rationale decision under `epics.md:1627`, not a walkthrough story's; (2) the system has **no data retention or purge policy** — the only two time bounds are `SESSION_TTL_S` and `APPROVAL_EXPIRY_SECONDS`, neither of which is retention — so Decision 9 requires AC2's retention paragraph to state that absence rather than infer a policy from the TTLs; (3) `docs/GETTING-STARTED.md:22` still names `TestModel` as the default agent model, contradicting `:28` and `docs/CONFIGURATION.md:29` after Story 5.3a moved the default — the reviewer's entry page names the one model 5.3a proved cannot complete the journey. Decision 6 archives `docs/vision.md` rather than deleting it, and records that the move is mechanically load-bearing for Decision 7's guard 3, not merely tidy. |
 | 2026-09-09 | Published the walkthrough, archived superseded current docs with `git mv`, and added demonstrated-red walkthrough guards. |
+| 2026-09-09 | Reconciled the Gate B ownership decision and residual ledger; final clean-tree suite passed 1622/1/7 and story moved to review. |
