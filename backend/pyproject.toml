@@ -10,7 +10,9 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "google-genai>=2.10.0",
-    "anthropic",
+    # PydanticAI 2.27 provides its async client through httpx; Anthropic 1.x
+    # moved to httpx2, so retain the compatible 0.x SDK line.
+    "anthropic>=0.108,<1",
     "openai>=1.40",
     "python-dotenv>=1.2.2",
     "sqlalchemy==2.0.51",
@@ -24,12 +26,12 @@ dependencies = [
     # spike in backend/spikes/agent_runtime/, verdict in
     # docs/AGENT-RUNTIME-DECISION.md.
     #
-    # `-slim` with exactly two extras, never the `pydantic-ai` meta-package:
+    # `-slim` with exactly three extras, never the `pydantic-ai` meta-package:
     # that resolves to [anthropic,cli,evals,google,logfire,mcp,openai,retries,web]
     # and would pull the Logfire SDK, a stack row owned by Story 5.1.
-    # The extras mirror the providers already shipped: google -> llm/gemini.py,
-    # openrouter -> llm/openrouter.py.
-    "pydantic-ai-slim[google,openrouter]==2.27.0",
+    # The extras mirror the providers already shipped: anthropic -> AgentRuntime,
+    # google -> llm/gemini.py, openrouter -> llm/openrouter.py.
+    "pydantic-ai-slim[anthropic,google,openrouter]==2.27.0",
 ]
 
 [dependency-groups]

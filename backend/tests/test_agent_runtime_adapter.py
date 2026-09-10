@@ -146,6 +146,16 @@ def test_openrouter_model_uses_the_explicit_agent_runtime_key() -> None:
     assert runtime._model.__class__.__name__ == "OpenAIChatModel"
 
 
+def test_anthropic_model_uses_the_explicit_agent_runtime_key() -> None:
+    runtime = PydanticAIAgentRuntime(
+        config=AgentRuntimeConfig(
+            model="anthropic:claude-haiku-4-5-20251001", api_key="test-key"
+        )
+    )
+
+    assert runtime._model.__class__.__name__ == "AnthropicModel"
+
+
 def test_configured_retry_ceiling_bounds_tool_and_output_model_retries() -> None:
     settings = type(
         "SettingsStub",

@@ -549,6 +549,13 @@ def _configured_model(config: AgentRuntimeConfig) -> object:
         from pydantic_ai.providers.google import GoogleProvider
 
         return GoogleModel(model_name, provider=GoogleProvider(api_key=config.api_key))
+    if provider_name == "anthropic":
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+
+        return AnthropicModel(
+            model_name, provider=AnthropicProvider(api_key=config.api_key)
+        )
     return infer_model(config.model)
 
 
