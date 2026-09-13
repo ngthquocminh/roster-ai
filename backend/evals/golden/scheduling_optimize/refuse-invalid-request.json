@@ -1,9 +1,9 @@
 {
   "case_id": "optimize-refuse-invalid-request",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "scheduling_optimize",
   "risk_class": "compute",
-  "prompt": "Run optimization for a proposal that carries no durable identifier.",
+  "prompt": "Submit optimization for proposal_id 00000000-0000-0000-0000-000000000000 with expected_resource_version 1, idempotency_key run-invalid, and schema_version 1. This proposal identifier is intentionally invalid; let the governed request refuse it.",
   "scripted_turns": [
     {"tool_name": "scheduling_optimize", "arguments": {"request": {"proposal_id": "00000000-0000-0000-0000-000000000000", "expected_resource_version": 1, "idempotency_key": "run-invalid", "schema_version": "1"}}, "tool_call_id": "optimize-5"},
     {

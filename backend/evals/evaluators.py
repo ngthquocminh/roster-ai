@@ -60,22 +60,30 @@ class ToolRoutingEvaluator:
             if part.kind == "tool_call"
             if part.tool_name not in self.output_tool_names
         )
-        expected = tuple(
-            (call.tool_name, call.arguments) for call in case.expected_tool_calls
+        expected_calls = (
+            case.live_expected_tool_calls
+            if self.run_source == "live" and case.live_expected_tool_calls is not None
+            else case.expected_tool_calls
+        )
+        expected = tuple((call.tool_name, call.arguments) for call in expected_calls)
+        expected_outcome = (
+            case.live_expected_outcome
+            if self.run_source == "live" and case.live_expected_outcome is not None
+            else case.expected_outcome
         )
 
-        if case.expected_outcome in ("refuse", "clarify") and not expected:
+        if expected_outcome in ("refuse", "clarify") and not expected:
             if actual:
                 return self._verdict(
                     passed=False,
                     reason=(
-                        f"expected {case.expected_outcome} with no tool call, "
+                        f"expected {expected_outcome} with no tool call, "
                         f"but routed to {actual[0][0]!r}"
                     ),
                 )
             return self._verdict(
                 passed=True,
-                reason=f"matched {case.expected_outcome}: no tool call was routed",
+                reason=f"matched {expected_outcome}: no tool call was routed",
             )
 
         if len(actual) != len(expected):
@@ -160,8 +168,23 @@ class GroundingEvaluator:
     run_source: RunSource = "double"
 
     def evaluate(self, case: GoldenCase, outcome: AgentRunOutcomeV1) -> EvalVerdict:
+        expected_outcome = (
+            case.live_expected_outcome
+            if self.run_source == "live" and case.live_expected_outcome is not None
+            else case.expected_outcome
+        )
         response = outcome.grounded_response
-        if response is None or case.expected_grounding_outcome is None:
+        expected_oracle = (
+            case.live_expected_grounding_outcome
+            if self.run_source == "live" and case.live_expected_grounding_outcome is not None
+            else case.expected_grounding_outcome
+        )
+        expected_refs = (
+            case.live_expected_evidence_refs
+            if self.run_source == "live" and case.live_expected_evidence_refs is not None
+            else case.expected_evidence_refs
+        )
+        if response is None or expected_oracle is None:
             return EvalVerdict(False, "grounded response or oracle is missing", self.run_source)
         actual_refs = tuple(
             stable_evidence_ref(reference)
@@ -173,7 +196,7 @@ class GroundingEvaluator:
             "version_mismatch": "version_mismatch",
             "missing_evidence": "missing_evidence",
             "argument_mismatch": "missing_evidence",
-        }[case.expected_grounding_outcome]
+        }[expected_oracle]
         actual_failures = tuple(claim.failure for claim in response.claims if claim.failure)
         if expected_failure is None:
             if actual_failures:
@@ -188,7 +211,7 @@ class GroundingEvaluator:
         # result id and a claim that changed the originating metric/arguments.
         # Keep that persisted vocabulary closed, but make the evaluation oracle
         # observe the input relation so its two golden cases are not duplicates.
-        if case.expected_grounding_outcome in {"missing_evidence", "argument_mismatch"}:
+        if expected_oracle in {"missing_evidence", "argument_mismatch"}:
             # `any()` over an empty tuple is False, so a response carrying no
             # claims at all would silently read as "no argument mismatch" and
             # pass a `missing_evidence` case without exercising the relation.
@@ -196,7 +219,7 @@ class GroundingEvaluator:
                 return EvalVerdict(
                     False,
                     "grounding input relation is unverifiable: the response "
-                    f"carried no claims, but {case.expected_grounding_outcome} "
+                f"carried no claims, but {expected_oracle} "
                     "is a claim-level oracle",
                     self.run_source,
                 )
@@ -205,7 +228,7 @@ class GroundingEvaluator:
                 for claim in response.claims
             )
             expected_argument_mismatch = (
-                case.expected_grounding_outcome == "argument_mismatch"
+                expected_oracle == "argument_mismatch"
             )
             if has_argument_mismatch != expected_argument_mismatch:
                 return EvalVerdict(
@@ -221,15 +244,15 @@ class GroundingEvaluator:
         # locator naming some other record or version. Checking refs only when
         # the case already passed left `expected_evidence_refs` unread on three
         # of the four cases.
-        if actual_refs != case.expected_evidence_refs:
+        if actual_refs != expected_refs:
             return EvalVerdict(
                 False,
-                f"evidence differed: expected {case.expected_evidence_refs}, actual {actual_refs}",
+                f"evidence differed: expected {expected_refs}, actual {actual_refs}",
                 self.run_source,
             )
         return EvalVerdict(
             True,
-            f"matched grounding oracle {case.expected_grounding_outcome} and exact evidence IDs",
+            f"matched grounding oracle {expected_oracle} and exact evidence IDs",
             self.run_source,
         )
 
@@ -242,13 +265,18 @@ class PolicyOutcomeEvaluator:
     run_source: RunSource = "double"
 
     def evaluate(self, case: GoldenCase, outcome: AgentRunOutcomeV1) -> EvalVerdict:
+        expected_outcome = (
+            case.live_expected_outcome
+            if self.run_source == "live" and case.live_expected_outcome is not None
+            else case.expected_outcome
+        )
         # A run that produced nothing is not an allowed request. Deriving the
         # outcome from clarification/refusal presence alone made every failed or
         # timed-out run read as `allow`, so `provider-failure.json` -- which
         # expects visible state `failed` -- passed the policy oracle as though
         # the request had been served.
         if outcome.status != "completed":
-            if case.expected_outcome == "allow":
+            if expected_outcome == "allow":
                 return EvalVerdict(
                     True,
                     f"terminated as {outcome.status} before any policy decision",
@@ -256,7 +284,7 @@ class PolicyOutcomeEvaluator:
                 )
             return EvalVerdict(
                 False,
-                f"expected {case.expected_outcome}, but the turn terminated as "
+                f"expected {expected_outcome}, but the turn terminated as "
                 f"{outcome.status} without reaching a policy decision",
                 self.run_source,
             )
@@ -268,10 +296,10 @@ class PolicyOutcomeEvaluator:
             if outcome.refusal is not None
             else "allow"
         )
-        if actual != case.expected_outcome:
+        if actual != expected_outcome:
             return EvalVerdict(
                 False,
-                f"policy outcome differed: expected {case.expected_outcome}, actual {actual}",
+                f"policy outcome differed: expected {expected_outcome}, actual {actual}",
                 self.run_source,
             )
         registered = frozenset(

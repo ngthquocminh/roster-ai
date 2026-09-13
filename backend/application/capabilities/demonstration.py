@@ -134,6 +134,11 @@ def demonstration_module() -> CapabilityModuleV1:
         # change the transcript and therefore the bytes of Story 2.2's seven
         # frozen golden cases and the sha256-pinned demonstration evidence.
         model_facing_view=lambda result: result.text,
+        model_description=(
+            "shiftmind_demonstration repeats an explicit label for the requested repeat count. "
+            "Use it only for the demonstration flow; repeat must be at least one, and repeating "
+            "more than once requires exact human approval."
+        ),
     )
 
 

@@ -15,6 +15,7 @@ multiplied into minutes -- survived precisely because of that.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Literal
 from uuid import UUID
 
 from application.capabilities.deps import AgentDepsV1
@@ -35,8 +36,15 @@ def ground_case_outcome(
     outcome: AgentRunOutcomeV1,
     deps: AgentDepsV1,
     results: tuple[object, ...],
+    *,
+    run_source: Literal["double", "live"] = "double",
 ) -> AgentRunOutcomeV1:
-    """Drive the authored path through the real gate over real tool results."""
+    """Drive the authored path through the real gate over real tool results.
+
+    The deterministic version-mismatch case models an adversarial re-version
+    between compute and display. A live request has no such injected race, so
+    it must validate the actual pinned version instead.
+    """
     if outcome.answer is None or case.expected_grounding_outcome is None:
         return outcome
     trusted = {
@@ -44,7 +52,7 @@ def ground_case_outcome(
         for value in results
         if isinstance(getattr(value, "result_id", None), str)
     }
-    if case.expected_grounding_outcome == "version_mismatch":
+    if run_source == "double" and case.expected_grounding_outcome == "version_mismatch":
         deps = replace(deps, scenario_version_id=ROTATED_VERSION)
     return replace(
         outcome, grounded_response=ground_answer(outcome.answer, deps, trusted)

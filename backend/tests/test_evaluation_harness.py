@@ -39,8 +39,8 @@ from application.capabilities.scheduling_compute import (
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
 from application.capabilities.scheduling_optimize import scheduling_optimize_module
 from application.contracts.grounding import ClaimArgumentsV1, GroundedAnswerV1
-from application.ports.scenario_projection import GroupQueryKeysV1
-from evals.fixture_projection import FIXTURE_IDENTITY
+from application.ports.scenario_projection import GroupQueryKeysV1, GroupQueryV1
+from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 from evals.cases import (
     ExpectedToolCall,
     GoldenCase,
@@ -60,11 +60,13 @@ from evals.evaluators import (
 from evals.report import (
     CaseEvaluation,
     EVAL_TAG_TO_CAPABILITY,
+    _evaluate_case,
     _report_deps,
     _runtime_for_case,
     _run_runtime_case,
     build_evaluation_report,
     generate_demonstration_report,
+    generate_live_diagnostics,
     write_evaluation_report,
 )
 from scripts.evidence_binding import audit_evidence_file, resolve_bindings
@@ -118,6 +120,7 @@ def test_case_loader_round_trips_a_hand_written_json_file(tmp_path) -> None:
     assert case.risk_class == "inspect"
     assert case.scripted_turns[0].arguments["payload"]["repeat"] == 1
     assert case.expected_evidence_refs == ()
+    assert case.live_expected_tool_calls is None
 
 
 def test_case_loader_rejects_out_of_vocabulary_risk_class(tmp_path) -> None:
@@ -304,6 +307,22 @@ def test_tool_routing_evaluator_passes_when_no_tool_is_routed(outcome: str) -> N
     assert verdict.passed is True
     assert outcome in verdict.reason
     assert "no tool call" in verdict.reason
+
+
+def test_live_routing_uses_an_explicit_zero_call_expectation_without_weakening_double() -> None:
+    """A live provider cannot call a tool it was never offered.
+
+    The deterministic double still records the adversarial attempted call; the
+    live assertion instead requires a direct refusal with no capability call.
+    """
+    payload = _refusal_payload()
+    payload["expected_tool_calls"] = [{"tool_name": "grant_admin", "arguments": {}}]
+    payload["live_expected_tool_calls"] = []
+    case = case_from_mapping(payload)
+    outcome = _run_case(case)
+
+    assert ToolRoutingEvaluator(run_source="live").evaluate(case, outcome).passed
+    assert not ToolRoutingEvaluator(run_source="double").evaluate(case, outcome).passed
 
 
 @pytest.mark.parametrize("outcome", ["refuse", "clarify"])
@@ -795,6 +814,64 @@ def test_grounding_evaluator_distinguishes_argument_mismatch_from_missing_result
     assert evaluator.evaluate(cases["missing_evidence"], mismatch).passed is False
 
 
+def test_live_grounding_expectation_can_preserve_a_double_only_failure_oracle() -> None:
+    """A provider must be rewarded for a real supported claim, not a fake error.
+
+    The deterministic error cases intentionally script malformed final claims to
+    exercise the evaluator.  Their live equivalent must still verify the exact
+    supported evidence from the real compute result without changing what the
+    double proves.
+    """
+    cases = {
+        case.expected_grounding_outcome: case
+        for case in load_cases(GOLDEN_DIR)
+        if case.capability == "scheduling_compute"
+    }
+    results: list[object] = []
+    runtime = _runtime_for_case(cases["supported"], installed_modules(), results)
+    supported_outcome = ground_case_outcome(
+        cases["supported"],
+        _run_runtime_case(runtime, cases["supported"]),
+        runtime._deps,
+        tuple(results),
+    )
+    live_error_case = replace(
+        cases["missing_evidence"],
+        live_expected_grounding_outcome="supported",
+        live_expected_evidence_refs=cases["supported"].expected_evidence_refs,
+    )
+
+    assert GroundingEvaluator(run_source="live").evaluate(
+        live_error_case, supported_outcome
+    ).passed is True
+    assert GroundingEvaluator().evaluate(live_error_case, supported_outcome).passed is False
+
+
+def test_live_grounding_does_not_inject_the_double_only_version_rotation() -> None:
+    cases = {
+        case.expected_grounding_outcome: case
+        for case in load_cases(GOLDEN_DIR)
+        if case.capability == "scheduling_compute"
+    }
+    case = cases["version_mismatch"]
+    results: list[object] = []
+    runtime = _runtime_for_case(case, installed_modules(), results)
+    outcome = ground_case_outcome(
+        case,
+        _run_runtime_case(runtime, case),
+        runtime._deps,
+        tuple(results),
+        run_source="live",
+    )
+    live_case = replace(
+        case,
+        live_expected_grounding_outcome="supported",
+        live_expected_evidence_refs=cases["supported"].expected_evidence_refs,
+    )
+
+    assert GroundingEvaluator(run_source="live").evaluate(live_case, outcome).passed is True
+
+
 def test_live_verdict_is_non_authoritative_by_data_shape() -> None:
     verdict = ToolRoutingEvaluator(run_source="live").evaluate(
         case_from_mapping(_case_payload()),
@@ -804,19 +881,86 @@ def test_live_verdict_is_non_authoritative_by_data_shape() -> None:
     assert verdict.authoritative is False
 
 
+def test_live_diagnostics_flushes_one_result_per_case(tmp_path) -> None:
+    """A provider crash after a case must not erase that case's diagnosis."""
+    case = case_from_mapping(_case_payload())
+    output = tmp_path / "live.jsonl"
+
+    generate_live_diagnostics(output, model=build_model_double(case), cases=(case,))
+
+    lines = output.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0]) == {
+        "case_id": "schema-roundtrip",
+        "case_version": "1",
+        "model": "configured-live-model",
+        "passed": True,
+        "reason": "matched 1 expected tool route(s); policy: matched policy outcome allow with no unauthorized result",
+        "run_source": "live",
+        "tool_calls": [{"arguments": {"payload": {"label": "alpha", "repeat": 1}}, "name": "shiftmind_demonstration"}],
+        "tool_results": [{"content": "alpha", "name": "shiftmind_demonstration"}],
+    }
+
+
+def test_live_diagnostics_skips_deterministic_only_case_but_double_keeps_it(tmp_path) -> None:
+    """A deterministic regression remains covered without asking a live model to fake it."""
+    payload = _case_payload()
+    payload["live_eligible"] = False
+    case = case_from_mapping(payload)
+    output = tmp_path / "live.jsonl"
+
+    generate_live_diagnostics(output, model=build_model_double(case), cases=(case,))
+
+    assert output.read_text(encoding="utf-8") == ""
+    assert _run_case(case).status == "completed"
+
+
 @pytest.mark.live
 @pytest.mark.skipif(
     not _HAS_LIVE_AGENT,
     reason="AGENT_RUNTIME_API_KEY/model not set — live evaluation requires both",
 )
 def test_golden_cases_against_live_agent_are_non_authoritative() -> None:
+    """Score every live-eligible golden case against the real configured provider.
+
+    Never gates the release (`verdict.authoritative` is always False for
+    `run_source="live"`, asserted below) — this only reports whether the live
+    model actually routes/grounds/refuses the way the golden dataset expects.
+    Grants the same per-case capability + deps + answer_type as the
+    deterministic double run (`_runtime_for_case`/`_evaluate_case`), swapping
+    only the model, so a live pass means the same thing an authoritative pass
+    means. `ALLOW_MODEL_REQUESTS` is disabled at module scope (see the module
+    docstring); it must be overridden here or every request raises.
+    """
+    from agent.runtime import AgentRuntimeConfig, _configured_model
     from settings import default_settings
 
-    runtime = create_agent_runtime(settings=default_settings())
-    for case in load_cases(GOLDEN_DIR):
-        outcome = runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
-        verdict = ToolRoutingEvaluator(run_source="live").evaluate(case, outcome)
-        assert verdict.authoritative is False
+    settings = default_settings()
+    live_model = _configured_model(
+        AgentRuntimeConfig(
+            model=settings.agent_runtime_model, api_key=settings.agent_runtime_api_key
+        )
+    )
+    cases = tuple(case for case in load_cases(GOLDEN_DIR) if case.live_eligible)
+    failures: list[str] = []
+    with models.override_allow_model_requests(True):
+        for case in cases:
+            results: list[object] = []
+            runtime = _runtime_for_case(
+                case, installed_modules(), results, model=live_model
+            )
+            outcome = _run_runtime_case(runtime, case)
+            verdict, _outcome = _evaluate_case(
+                case, runtime, outcome, results, run_source="live"
+            )
+            assert verdict.authoritative is False
+            if not verdict.passed:
+                failures.append(f"{case.case_id}: {verdict.reason}")
+    if failures:
+        pytest.fail(
+            f"{len(failures)}/{len(cases)} golden cases failed live routing "
+            f"against {settings.agent_runtime_model}:\n" + "\n".join(failures)
+        )
 
 
 def _declared_bindings() -> dict[str, str]:
@@ -1050,3 +1194,35 @@ def test_report_generator_refuses_a_case_naming_an_uninstalled_capability() -> N
 
     with pytest.raises(ValueError, match="no supplied module provides"):
         _runtime_for_case(orphan, installed_modules())
+
+
+def test_eval_fixture_demand_window_filters_match_the_projection_contract() -> None:
+    """The live golden prompt must not be rejected solely by fixture drift.
+
+    The production projection publishes these containment filters.  The compact
+    eval reader needs the same contract so a Wednesday request excludes the
+    deliberately present Thursday row before its result reaches the model.
+    """
+    reader = FixtureProjectionReader()
+
+    assert {"start_minute_gte", "end_minute_lte"}.issubset(
+        reader.get_query_keys("demand").filter_keys
+    )
+    page = reader.get_demand(
+        object(),
+        FIXTURE_IDENTITY,
+        GroupQueryV1(
+            filters=(
+                ("family", "outbound"),
+                ("start_minute_gte", 2880),
+                ("end_minute_lte", 4320),
+            )
+        ),
+    )
+
+    assert {row.record_id for row in page.items} == {
+        "d-outbound-0",
+        "d-outbound-1",
+        "d-outbound-pack",
+        "d-outbound-vol",
+    }

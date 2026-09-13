@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-09
+last_updated: 2026-09-12
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2179,9 +2179,13 @@ development_status:
   epic-4-retrospective: done
 
   # Epic 5: Demonstrable Local Planner Workspace (portfolio milestone, Gate B)
-  # Story completion is closed, but Gate B has NOT passed: the Evaluation/QA-owned aggregate
-  # report remains outstanding because the golden dataset has 30 cases against its 50-case floor.
-  epic-5: done
+  # Story completion was briefly closed 2026-09-03 - 2026-09-10, but Gate B never passed: the
+  # Evaluation/QA-owned aggregate report remains outstanding because the golden dataset has 30
+  # cases against its 50-case floor. RE-OPENED 2026-09-10 at the Epic 5 retrospective: Story 5.5
+  # added to make the live-eval suite (now fixed and functional; measured 3/30 identically against
+  # two models) actually pass before the dataset-floor/release-gate-report decision is made. See
+  # epic-5-retro-2026-09-10.md.
+  epic-5: in-progress
   # 5.0 inserted 2026-09-03 by sprint-change-proposal-2026-09-03.md, from Epic 4
   # retrospective action A3(i). Corrective prerequisite, NOT part of the portfolio
   # sequence -- numbered 5-0 so 5.1-5.4 keep their keys. Fires the Epic 4 spine's
@@ -2512,7 +2516,19 @@ development_status:
   # bounded-exception note above it removed.
   5-3a-make-a-real-solve-reach-a-candidate: done
   5-4-publish-the-portfolio-walkthrough: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
+  # 5.5 created 2026-09-10 from the Epic 5 retrospective's action item 1 (sprint-status action_items,
+  # epic "5"). Corrective, not part of the original portfolio sequence -- makes the live-eval suite
+  # actually pass before Gate B's dataset-floor decision can be made. See
+  # 5-5-make-the-live-agent-route-the-golden-dataset.md and epic-5-retro-2026-09-10.md section 4.
+  5-5-make-the-live-agent-route-the-golden-dataset: in-progress
+  # RETRO 2026-09-10: full record at epic-5-retro-2026-09-10.md. Gate B is NOT passed --
+  # golden dataset at 30/50 cases, and the live-eval suite (now fixed and functional; it had
+  # three independent defects that meant it had never actually run) measured 3/30 passing
+  # identically against both claude-haiku-4-5-20251001 and claude-sonnet-5, ruling out model
+  # capability as the cause. Two new stories owed (action items 1-2 below) before Gate B's
+  # release-gate-report.json / the 50-case dataset-floor decision can be made. Epic 4 action A1
+  # reopened (see that entry).
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog
@@ -2663,7 +2679,7 @@ action_items:
   - epic: "3"
     action: "Reconcile sprint status and deferred-work wording with current code without erasing historical context."
     owner: "Amelia"
-    status: in-progress
+    status: done
     # PARTIAL - assessed 2026-09-02. Story 4.1 Task 12 did reconcile the ledger, but Story 4.2's
     # review then found deferred-work.md:526 marked CLOSED on a proof production cannot reproduce,
     # and Story 4.6 records :512 and :524 still open and untouched. The epic-4 status flip is done
@@ -2684,7 +2700,7 @@ action_items:
   - epic: "4"
     action: "A1 -- Tighten the demonstrated-red rule to name its own failure mode: the red must come from mutating code that is ALREADY GREEN; a missing-import or first-draft red does not count. The Dev Agent Record must carry a mutation table (mutation | guard | before | after) before a story reaches review. Ship as a bmad-dev-story fact, same pattern as 2cf598f."
     owner: "Dev / review"
-    status: done
+    status: in-progress
     # SHIPPED 2026-09-03, commit c4f5de1. Three facts: two on bmad-dev-story
     # (demonstrated red is defined as green -> mutate FINISHED code -> observe the
     # expected failure -> restore; and the Dev Agent Record must carry a mutation
@@ -2695,15 +2711,21 @@ action_items:
     # review fact that only checks the table exists would trade detection for
     # paperwork. Verified through resolve_customization.py on both skills.
     # FIRST APPLICATION: commit 60aaaa7 (A5b) carries a two-row mutation table.
-    # The "done when" condition -- no "guard cannot go red" decision-grade finding
-    # in Epic 5 -- can only be observed at the Epic 5 retrospective. Closed here
-    # because the mechanism is shipped and verified; if Epic 5 raises such a
-    # finding, reopen with the evidence.
+    # REOPENED 2026-09-10 at the Epic 5 retrospective, per this entry's own done-when.
+    # Story 5.2's review raised exactly the shape this action exists to prevent, twice:
+    # a proof-matrix guard that stayed green after collapsing all 12 asserted cells onto
+    # one node (5-2-prevent-content-and-secret-leaks.md:661), and a mutation table
+    # missing rows for several delivered guards (:669). Both were patched at review --
+    # but shipped to review unpatched first, so the dev-side mechanism did not catch
+    # them; only the independent reviewer re-run did. New done-when below.
     # WHY THIS ONE IS MECHANIZABLE where the 2cf598f authoring rules were not: it leaves an
     # artifact. Story 4.6's reviewer produced exactly the required table. Supersedes the epic 1-2
     # red-then-green item's wording, which has been in-progress across three epics.
-    # Done when: every Epic 5 story record carries a mutation table, and no "guard cannot go red"
-    # decision-grade finding is raised in Epic 5.
+    # Done when: a guard's mutation-table completeness/correctness is checked before review
+    # reaches it, not only that a table is present -- e.g. an independent dev-side re-run of at
+    # least one row before marking the task complete. No "guard cannot go red" or "mutation table
+    # missing rows" finding is raised at review for any story after the strengthened mechanism
+    # ships; if one is, reopen again with the evidence.
   - epic: "4"
     action: "A2 -- Own the cross-document undefined-term problem at the spine/ADR tier. No bmad-create-story fact can reach epics.md, the architecture spine or ADR-4, where the undefined word originates. TWO live instances: (i) Story 4.3's unsettled resumed-turn suspension question; (ii) agent_cancelled -- three inbound AD-7 edges, no definition, and the single edge with a producer means the opposite of the other two. Fix AD-7's edge label in the same change: it still reads 'rejected or expired' though EAD-5 carries three reasons including approval_stale."
     owner: "Minh + Winston"
@@ -2871,3 +2893,33 @@ action_items:
     # it silently drops the one artifact designed to reach it.
     # Done when: the Epic 5 retrospective carries a "routed to this retrospective" table produced
     # by the workflow, not by a follow-up question.
+    # VERIFIED 2026-09-10 at the Epic 5 retrospective: ran as specified, recovered two live items
+    # (the AD-1 port leak; the Gate B dataset-floor/release-gate-report question) whose trigger
+    # named this retrospective. See epic-5-retro-2026-09-10.md section 3.
+
+  # Committed during the Epic 5 retrospective (2026-09-10).
+  # Full record: _bmad-output/implementation-artifacts/epic-5-retro-2026-09-10.md
+  - epic: "5"
+    action: "Create a story to make the live-eval suite (test_golden_cases_against_live_agent_are_non_authoritative, now functional -- it had three independent defects fixed at this retrospective: no real assertion, ALLOW_MODEL_REQUESTS blocking every call, and zero capabilities/deps wired) actually pass against the configured provider. Diagnose each of the 27 failing cases (of 30) and fix the root cause -- tool description clarity, prompt specificity, or a case whose expected arguments are genuinely unreachable from its own prompt text and needs rewriting -- not the evaluator's strictness. Both claude-haiku-4-5-20251001 and claude-sonnet-5 measured identically (3/30 pass, same failing set), ruling out model capability as the variable."
+    owner: "Minh"
+    status: done
+    # Story created 2026-09-10: 5-5-make-the-live-agent-route-the-golden-dataset.md
+    # (ready-for-dev). Names two proven root causes so the dev agent does not have to
+    # rediscover them: every tool's model-visible description is a hardcoded generic
+    # placeholder (agent/capability_tools.py:153), and several failing cases' expected
+    # arguments are not literally present in their own prompt text, which the
+    # deterministic double never notices because it replays scripted_turns by index and
+    # never reads the prompt (evals/doubles.py:28-39).
+    # DONE 2026-09-11 — generic model-visible descriptions were replaced with required
+    # per-module descriptions; prompt literals and tool-use instructions were made explicit;
+    # demand-minute fixture projection was aligned with production. Both configured Anthropic
+    # models passed all 29 live-eligible cases. One forced-provider-failure case remains a
+    # deliberately deterministic-only regression (all 30 cases still run deterministically).
+    # The evidence/epic-5/release-gate-report.json / 50-case dataset-floor decision remains an
+    # explicit follow-up, not a claim made by this corrective story.
+  - epic: "5"
+    action: "Create a story giving application/ports/membership.py and site_baseline.py a persistence-free connection abstraction, closing the AD-1 SQLAlchemy leak (deferred-work.md:868-879), and deleting both ALLOWED_LEAKS entries."
+    owner: "Minh"
+    status: open
+    # Done when: both ALLOWED_LEAKS entries for these ports are deleted and
+    # test_every_allowed_leak_still_exists_and_still_leaks no longer names them.

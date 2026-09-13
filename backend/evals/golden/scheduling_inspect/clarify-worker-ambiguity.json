@@ -1,6 +1,6 @@
 {
   "case_id": "scheduling-inspect-clarify-worker-ambiguity",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "scheduling_inspect",
   "risk_class": "inspect",
   "prompt": "Show me the worker; the name is ambiguous.",
@@ -28,6 +28,7 @@
       "arguments": {"request": {"group": "workers", "sort": "contact_id"}}
     }
   ],
+  "live_expected_tool_calls": [],
   "expected_evidence_refs": [],
   "expected_visible_state": "completed",
   "expected_visible_text": "Which worker did you mean?",

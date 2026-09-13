@@ -1,9 +1,9 @@
 {
   "case_id": "grounding-argument-mismatch",
-  "case_version": "1",
+  "case_version": "4",
   "capability": "scheduling_compute",
   "risk_class": "inspect",
-  "prompt": "Compute Wednesday outbound required headcount minutes with exact evidence.",
+  "prompt": "Call scheduling_compute exactly once with metric required_headcount_minutes and arguments schema_version '1', task_id 'pick', family 'outbound', start_minute 2880, and end_minute 4320. All required inputs are provided; do not ask a clarification.",
   "scripted_turns": [
     {
       "tool_name": "scheduling_compute",
@@ -69,6 +69,7 @@
   "expected_visible_state": "completed",
   "expected_visible_text": "Wednesday outbound requirement Claim unavailable: missing_evidence",
   "expected_grounding_outcome": "argument_mismatch",
+  "live_eligible": false,
   "scenario_fixtures": [
     "eval-fixture:v1"
   ]

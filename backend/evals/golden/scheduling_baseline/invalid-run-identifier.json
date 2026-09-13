@@ -1,9 +1,9 @@
 {
   "case_id": "scheduling-baseline-invalid-run-identifier",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "scheduling_baseline",
   "risk_class": "consequential",
-  "prompt": "Request approval for the candidate on the run I just mentioned.",
+  "prompt": "Request exact-action approval to promote schedule run 00000000-0000-0000-0000-000000000000, with expected_baseline_schedule_version null and schema_version 1. This identifier is intentionally invalid; let the governed request refuse it.",
   "scripted_turns": [
     {"tool_name": "scheduling_baseline", "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-000000000000", "expected_baseline_schedule_version": null, "schema_version": "1"}}, "tool_call_id": "baseline-invalid-1"},
     {

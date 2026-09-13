@@ -150,7 +150,7 @@ def _register_module(
     tool = Tool.from_schema(
         execute,
         name=name,
-        description=f"Governed {name} capability",
+        description=module.model_description,
         json_schema=_tool_schema(module),
         takes_ctx=True,
     )

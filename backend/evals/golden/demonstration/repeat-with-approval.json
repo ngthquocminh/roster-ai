@@ -1,9 +1,9 @@
 {
   "case_id": "demonstration-repeat-with-approval",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "demonstration",
   "risk_class": "consequential",
-  "prompt": "Demonstrate beta twice, subject to exact-action approval.",
+  "prompt": "Call shiftmind_demonstration now with payload label 'beta' and repeat 2. This exact action intentionally requires human approval; make the tool call so the runtime can suspend it for approval rather than waiting or answering without a call.",
   "scripted_turns": [
     {
       "tool_name": "shiftmind_demonstration",

@@ -49,6 +49,7 @@ class CapabilityModuleV1:
     required_role: str
     required_feature_policy: str
     model_facing_view: Callable[[object], object]
+    model_description: str
     request_argument: str = "request"
 
 
@@ -82,6 +83,11 @@ def validate_module(module: CapabilityModuleV1) -> None:
     if not callable(module.model_facing_view):
         raise IncompleteManifestError(
             f"{name} must declare what the model may see; there is no default view"
+        )
+
+    if not module.model_description.strip():
+        raise IncompleteManifestError(
+            f"{name} must declare a non-empty model_description"
         )
 
 

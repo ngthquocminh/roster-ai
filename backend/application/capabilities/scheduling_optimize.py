@@ -163,6 +163,12 @@ def scheduling_optimize_module() -> CapabilityModuleV1:
         required_role="planner",
         required_feature_policy=SCHEDULING_OPTIMIZE_POLICY,
         model_facing_view=_model_view,
+        model_description=(
+            "scheduling_optimize submits an explicit optimization run for an existing proposal. "
+            "Call it only when the user gives the proposal_id, its expected_resource_version, and a "
+            "durable idempotency_key. Do not invent these values or use this tool to create, inspect, "
+            "or promote a proposal."
+        ),
     )
 
 

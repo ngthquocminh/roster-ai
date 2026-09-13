@@ -79,6 +79,18 @@ class GoldenCase:
     expected_visible_text: str
     expected_grounding_outcome: GroundingOracle | None = None
     scenario_fixtures: tuple[str, ...] = ()
+    # Deterministic security simulations may include an attempted call to an
+    # unavailable tool. A real provider was never offered that tool, so its
+    # separately authored live expectation can require a direct refusal.
+    # `None` deliberately means the canonical deterministic expectation applies.
+    live_expected_tool_calls: tuple[ExpectedToolCall, ...] | None = None
+    # Some deterministic cases intentionally script a malformed model answer to
+    # prove a grounding oracle. A live provider should instead be held to the
+    # truthful supported result it receives from the capability.
+    live_expected_grounding_outcome: GroundingOracle | None = None
+    live_expected_evidence_refs: tuple[str, ...] | None = None
+    live_expected_outcome: ExpectedOutcome | None = None
+    live_eligible: bool = True
 
 
 def load_case(path: Path) -> GoldenCase:
@@ -111,6 +123,11 @@ CASE_FIELDS: frozenset[str] = frozenset(
         "expected_visible_text",
         "scenario_fixtures",
         "expected_grounding_outcome",
+        "live_expected_tool_calls",
+        "live_expected_grounding_outcome",
+        "live_expected_evidence_refs",
+        "live_expected_outcome",
+        "live_eligible",
     }
 )
 
@@ -162,6 +179,18 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
             _list(raw.get("expected_tool_calls"), "expected_tool_calls")
         )
     )
+    live_expected_calls = (
+        None
+        if "live_expected_tool_calls" not in raw
+        else tuple(
+            _expected_tool_call(
+                item, f"{label}.live_expected_tool_calls[{index}]"
+            )
+            for index, item in enumerate(
+                _list(raw.get("live_expected_tool_calls"), "live_expected_tool_calls")
+            )
+        )
+    )
 
     grounding_oracle = _optional_string(
         raw.get("expected_grounding_outcome"),
@@ -171,6 +200,28 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
         raise ValueError(
             f"{label}.expected_grounding_outcome {grounding_oracle!r} is invalid"
         )
+    live_grounding_oracle = _optional_string(
+        raw.get("live_expected_grounding_outcome"),
+        f"{label}.live_expected_grounding_outcome",
+    )
+    if live_grounding_oracle is not None and live_grounding_oracle not in GROUNDING_ORACLES:
+        raise ValueError(
+            f"{label}.live_expected_grounding_outcome {live_grounding_oracle!r} is invalid"
+        )
+    live_evidence_refs = (
+        None
+        if "live_expected_evidence_refs" not in raw
+        else tuple(
+            _string(value, f"{label}.live_expected_evidence_refs")
+            for value in _list(raw.get("live_expected_evidence_refs"), "live_expected_evidence_refs")
+        )
+    )
+    live_outcome = _optional_string(raw.get("live_expected_outcome"), f"{label}.live_expected_outcome")
+    if live_outcome is not None and live_outcome not in EXPECTED_OUTCOMES:
+        raise ValueError(f"{label}.live_expected_outcome {live_outcome!r} is invalid")
+    live_eligible = raw.get("live_eligible", True)
+    if not isinstance(live_eligible, bool):
+        raise ValueError(f"{label}.live_eligible must be boolean")
 
     return GoldenCase(
         case_id=_string(raw.get("case_id"), f"{label}.case_id"),
@@ -197,6 +248,11 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
             _string(value, f"{label}.scenario_fixtures")
             for value in _list(raw.get("scenario_fixtures"), "scenario_fixtures")
         ),
+        live_expected_tool_calls=live_expected_calls,
+        live_expected_grounding_outcome=cast(GroundingOracle | None, live_grounding_oracle),
+        live_expected_evidence_refs=live_evidence_refs,
+        live_expected_outcome=cast(ExpectedOutcome | None, live_outcome),
+        live_eligible=live_eligible,
     )
 
 

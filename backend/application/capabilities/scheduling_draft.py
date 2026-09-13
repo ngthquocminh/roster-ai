@@ -309,6 +309,12 @@ def scheduling_draft_module() -> CapabilityModuleV1:
         required_role="planner",
         required_feature_policy=SCHEDULING_DRAFT_POLICY,
         model_facing_view=_model_view,
+        model_description=(
+            "scheduling_draft creates a reversible scheduling proposal from explicit constraints. "
+            "Call it only when the user supplies the intended constraint kind, affected record IDs, "
+            "values, and optional expected_scenario_version_id. It does not optimize or promote a "
+            "schedule; it returns a draft citation handle for a later review or run."
+        ),
     )
 
 

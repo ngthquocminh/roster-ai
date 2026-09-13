@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 from uuid import UUID
 
+from pydantic_ai import models
+
+# Evaluation infrastructure is deterministic by default. Live diagnostics and
+# the marked live test opt in with a narrow scoped override around provider use.
+models.ALLOW_MODEL_REQUESTS = False
+
 from agent.runtime import PydanticAIAgentRuntime
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import installed_modules
@@ -95,54 +101,43 @@ def generate_demonstration_report(
     output_path: Path,
     *,
     repo_root: Path = REPO_ROOT,
+    golden_dir: Path | None = None,
     allow_dirty: bool = False,
 ) -> dict[str, object]:
-    """Run the committed golden cases deterministically and persist evidence."""
-    golden_dir = repo_root / "backend" / "evals" / "golden"
-    cases = load_cases(golden_dir)
+    """Run a committed golden subset deterministically and persist evidence.
+
+    The default remains the complete corpus. Historical evidence artifacts can
+    pass their original subset explicitly, so regenerating one cannot silently
+    widen its dataset binding as the corpus grows.
+    """
+    selected_golden_dir = (
+        Path(golden_dir)
+        if golden_dir is not None
+        else repo_root / "backend" / "evals" / "golden"
+    )
+    cases = load_cases(selected_golden_dir)
     evaluations: list[CaseEvaluation] = []
     # The installed set itself, never a second hand-maintained list: a module
     # installed but missing here would silently drop out of the NFR27 binding.
-    granted_modules = installed_modules()
+    # This is only the SEARCH POOL `_runtime_for_case` matches each case's
+    # capability tag against -- not what a case's runtime actually grants (see
+    # `exercised_modules` below, which the "tool" binding is scoped to).
+    installed = installed_modules()
+    # Scoped to what each case's runtime was actually constructed with, never
+    # the full installed set -- otherwise regenerating a `golden_dir` subset
+    # would falsely claim every installed module was exercised, contradicting
+    # this function's own "cannot silently widen its dataset binding" promise.
+    exercised_modules: dict[str, CapabilityModuleV1] = {}
     for case in cases:
         results: list[object] = []
-        runtime = _runtime_for_case(case, granted_modules, results)
+        runtime = _runtime_for_case(case, installed, results)
         outcome = _run_runtime_case(runtime, case)
-        routing = ToolRoutingEvaluator(run_source="double").evaluate(case, outcome)
-        # A draft case cites a trusted result rather than authoring one, so the
-        # dataset has to drive the same citation binding the request path uses.
-        # Without this the case would assert an empty visible text and prove
-        # nothing about DraftProposalV1 or outcome_visible_text's draft branch.
-        if outcome.draft is not None:
-            outcome = resolve_draft_citation(
-                outcome,
-                {
-                    value.result_id: value
-                    for value in results
-                    if isinstance(getattr(value, "result_id", None), str)
-                },
-            )
-        if case.expected_grounding_outcome:
-            outcome = ground_case_outcome(
-                case, outcome, runtime._deps, tuple(results)
-            )
-            grounding = GroundingEvaluator(run_source="double").evaluate(case, outcome)
-            verdict = EvalVerdict(
-                passed=routing.passed and grounding.passed,
-                reason=f"routing: {routing.reason}; grounding: {grounding.reason}",
-                run_source="double",
-            )
-        else:
-            verdict = routing
-        policy = PolicyOutcomeEvaluator(runtime=runtime, run_source="double").evaluate(
-            case, outcome
-        )
-        verdict = EvalVerdict(
-            passed=verdict.passed and policy.passed,
-            reason=f"{verdict.reason}; policy: {policy.reason}",
-            run_source="double",
+        verdict, outcome = _evaluate_case(
+            case, runtime, outcome, results, run_source="double"
         )
         evaluations.append(CaseEvaluation(case=case, verdict=verdict, outcome=outcome))
+        for module in getattr(runtime, "_granted", ()):
+            exercised_modules[module.manifest.capability_name] = module
     return write_evaluation_report(
         output_path,
         evaluations=evaluations,
@@ -150,15 +145,145 @@ def generate_demonstration_report(
             **DEMONSTRATION_BINDINGS,
             "tool": ", ".join(
                 f"{module.manifest.capability_name}@{module.manifest.capability_version}"
-                for module in granted_modules
+                for module in sorted(
+                    exercised_modules.values(), key=lambda m: m.manifest.capability_name
+                )
             ),
         },
-        dataset_files=sorted(golden_dir.rglob("*.json")),
+        dataset_files=sorted(selected_golden_dir.rglob("*.json")),
         repo_root=repo_root,
         # Only ever True from a test writing to a temporary path: committed
         # evidence still requires a clean tree.
         allow_dirty=allow_dirty,
     )
+
+
+def generate_live_diagnostics(
+    output_path: Path,
+    *,
+    model: object,
+    cases: Sequence[GoldenCase],
+    model_name: str = "configured-live-model",
+) -> None:
+    """Append and flush a non-authoritative verdict immediately per live case."""
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("w", encoding="utf-8") as stream:
+        with models.override_allow_model_requests(True):
+            for case in cases:
+                if not case.live_eligible:
+                    continue
+                results: list[object] = []
+                try:
+                    runtime = _runtime_for_case(case, installed_modules(), results, model=model)
+                    outcome = _run_runtime_case(runtime, case)
+                    verdict, _outcome = _evaluate_case(
+                        case, runtime, outcome, results, run_source="live"
+                    )
+                    record = {
+                        "case_id": case.case_id,
+                        "case_version": case.case_version,
+                        "model": model_name,
+                        "passed": verdict.passed,
+                        "reason": verdict.reason,
+                        "run_source": verdict.run_source,
+                        "tool_calls": [
+                            {
+                                "name": part.tool_name,
+                                "arguments": json.loads(part.tool_args_json or "null"),
+                            }
+                            for message in outcome.turn.messages
+                            if message.role == "assistant"
+                            for part in message.parts
+                            if part.kind == "tool_call"
+                        ],
+                        "tool_results": [
+                            {"name": result.tool_name, "content": result.content}
+                            for result in outcome.tool_results
+                        ],
+                    }
+                except Exception as exc:  # diagnostic evidence must survive a bad case
+                    record = {
+                        "case_id": case.case_id,
+                        "case_version": case.case_version,
+                        "model": model_name,
+                        "passed": False,
+                        "reason": f"diagnostic exception: {type(exc).__name__}: {str(exc)[:200]}",
+                        "run_source": "live",
+                        "tool_calls": [],
+                        "tool_results": [],
+                    }
+                try:
+                    stream.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+                except Exception as exc:  # one record must never abort diagnostics for later cases
+                    fallback = {
+                        "case_id": case.case_id,
+                        "case_version": case.case_version,
+                        "model": model_name,
+                        "passed": False,
+                        "reason": (
+                            f"diagnostic record could not be serialized: "
+                            f"{type(exc).__name__}: {str(exc)[:200]}"
+                        ),
+                        "run_source": "live",
+                        "tool_calls": [],
+                        "tool_results": [],
+                    }
+                    stream.write(json.dumps(fallback, sort_keys=True) + "\n")
+                stream.flush()
+
+
+def _evaluate_case(
+    case: GoldenCase,
+    runtime: PydanticAIAgentRuntime,
+    outcome: AgentRunOutcomeV1,
+    results: list[object],
+    *,
+    run_source: str,
+) -> tuple[EvalVerdict, AgentRunOutcomeV1]:
+    """Score one case's outcome, routing + grounding + policy, for any run source.
+
+    Extracted from `generate_demonstration_report`'s loop so a live run scores a
+    case by the exact same rule an authoritative double run does -- only
+    `run_source` (and therefore `EvalVerdict.authoritative`) differs. Returns the
+    resolved outcome alongside the verdict because a draft case's citation
+    binding mutates it before grounding can see the real text.
+    """
+    routing = ToolRoutingEvaluator(run_source=run_source).evaluate(case, outcome)
+    # A draft case cites a trusted result rather than authoring one, so the
+    # dataset has to drive the same citation binding the request path uses.
+    # Without this the case would assert an empty visible text and prove
+    # nothing about DraftProposalV1 or outcome_visible_text's draft branch.
+    if outcome.draft is not None:
+        outcome = resolve_draft_citation(
+            outcome,
+            {
+                value.result_id: value
+                for value in results
+                if isinstance(getattr(value, "result_id", None), str)
+            },
+        )
+    if case.expected_grounding_outcome:
+        outcome = ground_case_outcome(
+            case, outcome, runtime._deps, tuple(results), run_source=run_source
+        )
+        grounding = GroundingEvaluator(run_source=run_source).evaluate(case, outcome)
+        verdict = EvalVerdict(
+            passed=routing.passed and grounding.passed,
+            reason=f"routing: {routing.reason}; grounding: {grounding.reason}",
+            run_source=run_source,
+        )
+    else:
+        verdict = routing
+    policy = PolicyOutcomeEvaluator(runtime=runtime, run_source=run_source).evaluate(
+        case, outcome
+    )
+    verdict = EvalVerdict(
+        passed=verdict.passed and policy.passed,
+        reason=f"{verdict.reason}; policy: {policy.reason}",
+        run_source=run_source,
+    )
+    return verdict, outcome
 
 
 def _report_deps(sink: list | None = None) -> AgentDepsV1:
@@ -186,15 +311,22 @@ def runtime_for_modules(
     case: GoldenCase,
     modules: tuple[CapabilityModuleV1, ...],
     sink: list | None = None,
+    *,
+    model: object | None = None,
 ) -> PydanticAIAgentRuntime:
     """Build a runtime granting EXACTLY `modules` -- no tag filtering.
 
     Kept separate from `_runtime_for_case` so a caller composing its own granted
     set (a removed-world proof, for instance) gets that set rendered verbatim
     rather than re-filtered behind its back.
+
+    `model` defaults to the case's deterministic double; passing one (a real
+    provider model) is how a live run reuses this same capability/deps/
+    answer_type wiring instead of duplicating it.
     """
     return PydanticAIAgentRuntime(
-        model=build_model_double(case), capabilities=modules, deps=_report_deps(sink),
+        model=model if model is not None else build_model_double(case),
+        capabilities=modules, deps=_report_deps(sink),
         answer_type=GroundedAnswerV1 if _needs_named_output_tools(case) else None,
     )
 
@@ -224,6 +356,8 @@ def _runtime_for_case(
     case: GoldenCase,
     modules: tuple[CapabilityModuleV1, ...],
     sink: list | None = None,
+    *,
+    model: object | None = None,
 ) -> PydanticAIAgentRuntime:
     """Grant a case exactly the module its `capability` tag names."""
     wanted = EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
@@ -237,7 +371,7 @@ def _runtime_for_case(
             f"case {case.case_id!r} names capability {case.capability!r}, "
             f"which no supplied module provides"
         )
-    return runtime_for_modules(case, selected, sink)
+    return runtime_for_modules(case, selected, sink, model=model)
 
 
 def _run_runtime_case(
@@ -370,5 +504,6 @@ __all__ = [
     "DEMONSTRATION_BINDINGS",
     "build_evaluation_report",
     "generate_demonstration_report",
+    "generate_live_diagnostics",
     "write_evaluation_report",
 ]
