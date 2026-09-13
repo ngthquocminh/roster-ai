@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-12
+last_updated: 2026-09-13
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2521,7 +2521,7 @@ development_status:
   # epic "5"). Corrective, not part of the original portfolio sequence -- makes the live-eval suite
   # actually pass before Gate B's dataset-floor decision can be made. See
   # 5-5-make-the-live-agent-route-the-golden-dataset.md and epic-5-retro-2026-09-10.md section 4.
-  5-5-make-the-live-agent-route-the-golden-dataset: in-progress
+  5-5-make-the-live-agent-route-the-golden-dataset: done
   # RETRO 2026-09-10: full record at epic-5-retro-2026-09-10.md. Gate B is NOT passed --
   # golden dataset at 30/50 cases, and the live-eval suite (now fixed and functional; it had
   # three independent defects that meant it had never actually run) measured 3/30 passing
