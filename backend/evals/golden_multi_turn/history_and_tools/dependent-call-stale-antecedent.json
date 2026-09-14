@@ -8,7 +8,7 @@
   ],
   "turns": [
     {
-      "prompt": "Inspect the assignments group, with no filters and no sort.",
+      "prompt": "Call scheduling_inspect with the JSON argument {\"group\": \"assignments\"} exactly -- no other keys such as filters, sort, cursor, or limit.",
       "capabilities": [
         "scheduling_inspect"
       ],
@@ -106,7 +106,36 @@
       "expected_visible_state": "failed",
       "expected_visible_text": "",
       "history_mode": "raw_turn",
-      "expected_tool_result_names": []
+      "expected_tool_result_names": [],
+      "live_expected_tool_calls": [
+        {
+          "tool_name": "scheduling_draft",
+          "arguments": {
+            "request": {
+              "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+              "constraints": [
+                {
+                  "kind": "set_max_hours",
+                  "group": "workers",
+                  "record_id": "w1",
+                  "related_group": null,
+                  "related_record_id": null,
+                  "n": null,
+                  "factor": null,
+                  "max_hours": 40,
+                  "start_minute": null,
+                  "end_minute": null,
+                  "schema_version": "1"
+                }
+              ],
+              "schema_version": "1"
+            }
+          }
+        }
+      ],
+      "live_expected_tool_result_names": [
+        "scheduling_draft"
+      ]
     }
   ]
 }

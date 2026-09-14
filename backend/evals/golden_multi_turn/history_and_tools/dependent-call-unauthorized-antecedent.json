@@ -8,7 +8,7 @@
   ],
   "turns": [
     {
-      "prompt": "Inspect the assignments group, with no filters and no sort.",
+      "prompt": "Call scheduling_inspect with the JSON argument {\"group\": \"assignments\"} exactly -- no other keys such as filters, sort, cursor, or limit.",
       "capabilities": [
         "scheduling_inspect"
       ],
@@ -131,7 +131,8 @@
       "expected_visible_state": "completed",
       "expected_visible_text": "The scheduling_draft capability is not available on this turn.",
       "history_mode": "raw_turn",
-      "expected_tool_result_names": []
+      "expected_tool_result_names": [],
+      "live_expected_tool_calls": []
     }
   ]
 }

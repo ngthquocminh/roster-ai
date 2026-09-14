@@ -198,6 +198,14 @@ class GoldenTurn:
     # but a real capability RESULT must never appear once the boundary held.
     # `None` means "not checked" -- every case predating this field.
     expected_tool_result_names: tuple[str, ...] | None = None
+    # Mirrors `live_expected_tool_calls`'s existing split (GoldenCase): a
+    # deterministic-only scripted double can force a scenario a real provider
+    # never reproduces (e.g. `stale-antecedent`'s consistency check has no
+    # live analog -- a real model simply succeeds like the success case, and
+    # SUCCEEDING produces a real result the deterministic `()` expectation
+    # would wrongly reject). `None` means the canonical
+    # `expected_tool_result_names` applies unchanged.
+    live_expected_tool_result_names: tuple[str, ...] | None = None
     live_expected_tool_calls: tuple[ExpectedToolCall, ...] | None = None
     live_expected_outcome: ExpectedOutcome | None = None
 
@@ -236,7 +244,7 @@ GOLDEN_TURN_FIELDS: frozenset[str] = frozenset(
         "prompt", "capabilities", "scripted_turns", "expected_outcome",
         "expected_tool_calls", "expected_visible_state", "expected_visible_text",
         "history_mode", "raw_turn_padding", "filler_activity_count",
-        "expected_tool_result_names",
+        "expected_tool_result_names", "live_expected_tool_result_names",
         "live_expected_tool_calls", "live_expected_outcome",
     }
 )
@@ -362,6 +370,16 @@ def _golden_turn(value: object, label: str) -> GoldenTurn:
             for value in _list(raw.get("expected_tool_result_names"), "expected_tool_result_names")
         )
     )
+    live_expected_tool_result_names = (
+        None
+        if "live_expected_tool_result_names" not in raw
+        else tuple(
+            _string(value, f"{label}.live_expected_tool_result_names")
+            for value in _list(
+                raw.get("live_expected_tool_result_names"), "live_expected_tool_result_names"
+            )
+        )
+    )
     return GoldenTurn(
         prompt=_string(raw.get("prompt"), f"{label}.prompt"),
         capabilities=tuple(
@@ -380,6 +398,7 @@ def _golden_turn(value: object, label: str) -> GoldenTurn:
         raw_turn_padding=raw_turn_padding,
         filler_activity_count=filler_activity_count,
         expected_tool_result_names=expected_tool_result_names,
+        live_expected_tool_result_names=live_expected_tool_result_names,
         live_expected_tool_calls=live_expected_calls,
         live_expected_outcome=cast(ExpectedOutcome | None, live_outcome),
     )
