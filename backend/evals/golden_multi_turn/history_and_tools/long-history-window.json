@@ -1,0 +1,64 @@
+{
+  "case_id": "multi-turn-long-history-window",
+  "case_version": "1",
+  "capability": "scheduling_inspect",
+  "risk_class": "inspect",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ],
+  "turns": [
+    {
+      "prompt": "Inspect the demand group, with no filters and no sort.",
+      "capabilities": [
+        "scheduling_inspect"
+      ],
+      "scripted_turns": [
+        {
+          "tool_name": "scheduling_inspect",
+          "arguments": {
+            "request": {
+              "group": "demand"
+            }
+          },
+          "tool_call_id": "long-history-t0-inspect"
+        },
+        {
+          "response_text": "There are several demand rows for the pick task."
+        }
+      ],
+      "expected_outcome": "allow",
+      "expected_tool_calls": [
+        {
+          "tool_name": "scheduling_inspect",
+          "arguments": {
+            "request": {
+              "group": "demand"
+            }
+          }
+        }
+      ],
+      "expected_visible_state": "completed",
+      "expected_visible_text": "There are several demand rows for the pick task.",
+      "history_mode": "independent",
+      "expected_tool_result_names": [
+        "scheduling_inspect"
+      ]
+    },
+    {
+      "prompt": "Summarize what we just discussed.",
+      "capabilities": [],
+      "scripted_turns": [
+        {
+          "response_text": "We discussed pick task demand."
+        }
+      ],
+      "expected_outcome": "allow",
+      "expected_tool_calls": [],
+      "expected_visible_state": "completed",
+      "expected_visible_text": "We discussed pick task demand.",
+      "history_mode": "rehydrated_activities",
+      "filler_activity_count": 105,
+      "expected_tool_result_names": []
+    }
+  ]
+}

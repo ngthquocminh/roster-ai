@@ -44,11 +44,25 @@ from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 from evals.cases import (
     ExpectedToolCall,
     GoldenCase,
+    GoldenTurn,
+    HistoryLookupV1,
+    MultiTurnGoldenCase,
+    ScriptedModelTurn,
     case_from_mapping,
     load_case,
     load_cases,
+    load_multi_turn_case,
+    load_multi_turn_cases,
+    multi_turn_case_from_mapping,
 )
-from evals.doubles import _to_model_response, build_model_double
+import evals.doubles as doubles_module
+from evals.doubles import (
+    _to_model_response,
+    build_model_double,
+    build_multi_turn_double,
+    history_response_offset_for,
+)
+from application.use_cases import execute_turn as execute_turn_module
 from application.use_cases.execute_turn import resolve_draft_citation
 from evals.grounding import ground_case_outcome
 from evals.evaluators import (
@@ -60,13 +74,24 @@ from evals.evaluators import (
 from evals.report import (
     CaseEvaluation,
     EVAL_TAG_TO_CAPABILITY,
+    LiveReadinessExceptionV1,
+    LiveSuiteBudgetV1,
+    MultiTurnCaseEvaluation,
+    _classify_reason,
     _evaluate_case,
+    _readiness_verdict,
     _report_deps,
     _runtime_for_case,
     _run_runtime_case,
+    _safe_diagnostic_record,
     build_evaluation_report,
+    build_multi_turn_evaluation_report,
+    generate_bounded_live_multi_turn_report,
     generate_demonstration_report,
     generate_live_diagnostics,
+    generate_multi_turn_demonstration_report,
+    run_bounded_live_multi_turn_suite,
+    run_multi_turn_case,
     write_evaluation_report,
 )
 from scripts.evidence_binding import audit_evidence_file, resolve_bindings
@@ -75,6 +100,7 @@ from application.use_cases.execute_turn import outcome_visible_text, terminal_ou
 models.ALLOW_MODEL_REQUESTS = False
 
 GOLDEN_DIR = Path(__file__).resolve().parents[1] / "evals" / "golden"
+MULTI_TURN_GOLDEN_DIR = Path(__file__).resolve().parents[1] / "evals" / "golden_multi_turn"
 _HAS_LIVE_AGENT = bool(os.environ.get("AGENT_RUNTIME_API_KEY")) and os.environ.get(
     "AGENT_RUNTIME_MODEL", "test"
 ) != "test"
@@ -882,7 +908,14 @@ def test_live_verdict_is_non_authoritative_by_data_shape() -> None:
 
 
 def test_live_diagnostics_flushes_one_result_per_case(tmp_path) -> None:
-    """A provider crash after a case must not erase that case's diagnosis."""
+    """A provider crash after a case must not erase that case's diagnosis.
+
+    Story 5.6 Decision 6 replaced the raw `tool_calls[].arguments` /
+    `tool_results[].content` shape this test used to assert byte-for-byte:
+    that shape persisted raw tool arguments and result bodies verbatim,
+    violating AC6/AD-15. Only ordered names/counts and a closed-vocabulary
+    `reason_classification` survive now -- see `TestLiveDiagnosticsRedaction`.
+    """
     case = case_from_mapping(_case_payload())
     output = tmp_path / "live.jsonl"
 
@@ -895,10 +928,12 @@ def test_live_diagnostics_flushes_one_result_per_case(tmp_path) -> None:
         "case_version": "1",
         "model": "configured-live-model",
         "passed": True,
-        "reason": "matched 1 expected tool route(s); policy: matched policy outcome allow with no unauthorized result",
+        "reason_classification": "matched",
         "run_source": "live",
-        "tool_calls": [{"arguments": {"payload": {"label": "alpha", "repeat": 1}}, "name": "shiftmind_demonstration"}],
-        "tool_results": [{"content": "alpha", "name": "shiftmind_demonstration"}],
+        "tool_call_names": ["shiftmind_demonstration"],
+        "tool_call_count": 1,
+        "tool_result_names": ["shiftmind_demonstration"],
+        "tool_result_count": 1,
     }
 
 
@@ -961,6 +996,95 @@ def test_golden_cases_against_live_agent_are_non_authoritative() -> None:
             f"{len(failures)}/{len(cases)} golden cases failed live routing "
             f"against {settings.agent_runtime_model}:\n" + "\n".join(failures)
         )
+
+
+@pytest.mark.live
+@pytest.mark.skipif(
+    not _HAS_LIVE_AGENT,
+    reason="AGENT_RUNTIME_API_KEY/model not set — live evaluation requires both",
+)
+def test_live_multi_turn_suite_is_bounded_and_non_authoritative(tmp_path: Path) -> None:
+    """AC2/AC7/Decision 5: the documented explicit command for the pinned
+    release provider/model. `authoritative` stays False no matter the
+    outcome, and every release-eligible case must pass for readiness to read
+    `eligible` -- a pass here is necessary, never sufficient, for shipping.
+    """
+    from agent.runtime import AgentRuntimeConfig, _configured_model
+    from settings import default_settings
+
+    settings = default_settings()
+    live_model = _configured_model(
+        AgentRuntimeConfig(
+            model=settings.agent_runtime_model, api_key=settings.agent_runtime_api_key
+        )
+    )
+    output = tmp_path / "live-multi-turn-report.json"
+    budget = LiveSuiteBudgetV1(
+        case_limit=10, request_limit=200, tool_call_limit=200,
+        token_limit=2_000_000, elapsed_seconds_limit=300.0, spend_usd_limit=5.0,
+    )
+    report = generate_bounded_live_multi_turn_report(
+        output, model=live_model, model_name=settings.agent_runtime_model, budget=budget,
+        # A `pytest -m live` smoke run is not the deliberate, separate
+        # evidence-generation step `docs/EVIDENCE-CONVENTION.md` requires a
+        # clean, committed tree for -- it verifies the wiring during active
+        # development, matching how `generate_multi_turn_demonstration_report`
+        # is already exercised the same way above.
+        allow_dirty=True,
+    )
+    assert report["authoritative"] is False
+    assert report["opt_in"] is True
+    assert report["budgeted"] is True
+    assert report["readiness"] in ("blocked", "eligible", "excepted")
+    assert "version_bindings" in report
+    if report["readiness"] != "eligible":
+        failures = [
+            f"{item['case_id']}: {item.get('reason_classification', item)}"
+            for item in report["results"]
+            if not item.get("passed", False)
+        ]
+        pytest.fail(
+            f"live multi-turn suite is not release-eligible "
+            f"(stopped_reason={report['stopped_reason']!r}): " + "; ".join(failures)
+        )
+
+
+class TestLiveReadinessException:
+    """Decision 7 / AC7: the ONLY way a blocked verdict may ship anyway."""
+
+    def _exception(self, **overrides: object) -> LiveReadinessExceptionV1:
+        base: dict[str, object] = dict(
+            owner="release-owner", rationale="known provider flake, tracked",
+            scope="scheduling_draft dependent-call cases only",
+            expires_at=datetime(2999, 1, 1, tzinfo=timezone.utc),
+            compensating_limitation="feature ships with the affected path manually verified",
+        )
+        base.update(overrides)
+        return LiveReadinessExceptionV1(**base)  # type: ignore[arg-type]
+
+    def test_a_pass_is_eligible_regardless_of_any_exception(self) -> None:
+        assert _readiness_verdict(True, None, self._exception(), now=datetime.now(timezone.utc)) == "eligible"
+
+    def test_a_failure_with_no_exception_blocks(self) -> None:
+        assert _readiness_verdict(False, None, None, now=datetime.now(timezone.utc)) == "blocked"
+
+    def test_a_failure_with_a_valid_exception_is_excepted(self) -> None:
+        assert (
+            _readiness_verdict(False, None, self._exception(), now=datetime.now(timezone.utc))
+            == "excepted"
+        )
+
+    def test_an_expired_exception_blocks(self) -> None:
+        expired = self._exception(expires_at=datetime(2000, 1, 1, tzinfo=timezone.utc))
+        assert _readiness_verdict(False, None, expired, now=datetime.now(timezone.utc)) == "blocked"
+
+    @pytest.mark.parametrize("field", ["owner", "rationale", "scope", "compensating_limitation"])
+    def test_an_incomplete_exception_blocks(self, field: str) -> None:
+        incomplete = self._exception(**{field: "   "})
+        assert _readiness_verdict(False, None, incomplete, now=datetime.now(timezone.utc)) == "blocked"
+
+    def test_a_stopped_suite_is_never_eligible_even_with_all_passes(self) -> None:
+        assert _readiness_verdict(True, "case_limit_exhausted", None, now=datetime.now(timezone.utc)) == "blocked"
 
 
 def _declared_bindings() -> dict[str, str]:
@@ -1226,3 +1350,641 @@ def test_eval_fixture_demand_window_filters_match_the_projection_contract() -> N
         "d-outbound-pack",
         "d-outbound-vol",
     }
+
+
+# ---------------------------------------------------------------------------
+# Story 5.6: versioned multi-turn history and tool-continuity evaluation.
+# ---------------------------------------------------------------------------
+
+
+def _multi_turn_payload(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "case_id": "schema-multi-turn",
+        "case_version": "1",
+        "capability": "demonstration",
+        "risk_class": "inspect",
+        "scenario_fixtures": [],
+        "turns": [
+            {
+                "prompt": "hi",
+                "capabilities": [],
+                "scripted_turns": [{"response_text": "hello"}],
+                "expected_outcome": "allow",
+                "expected_tool_calls": [],
+                "expected_visible_state": "completed",
+                "expected_visible_text": "hello",
+                "history_mode": "independent",
+            }
+        ],
+    }
+    base.update(overrides)
+    return base
+
+
+class TestMultiTurnCaseSchema:
+    """Story 5.6 Decision 1: a narrowly scoped multi-turn shape that rejects
+    unknown fields and consumes every declared one -- legacy single-turn
+    `GoldenCase` semantics stay untouched (proven by every existing test
+    above continuing to pass unmodified).
+    """
+
+    def test_round_trips_a_minimal_case(self) -> None:
+        case = multi_turn_case_from_mapping(_multi_turn_payload())
+        assert case.case_id == "schema-multi-turn"
+        assert len(case.turns) == 1
+        assert case.turns[0].history_mode == "independent"
+        assert case.turns[0].expected_tool_result_names is None
+
+    def test_rejects_unknown_case_field(self) -> None:
+        payload = _multi_turn_payload()
+        payload["unexpected"] = True
+        with pytest.raises(ValueError, match="unknown field"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_rejects_unknown_turn_field(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["unexpected"] = True  # type: ignore[index]
+        with pytest.raises(ValueError, match="unknown field"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_requires_at_least_one_turn(self) -> None:
+        payload = _multi_turn_payload(turns=[])
+        with pytest.raises(ValueError, match="at least one turn"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_first_turn_must_be_independent(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["history_mode"] = "raw_turn"  # type: ignore[index]
+        with pytest.raises(ValueError, match="independent"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_rejects_an_invalid_history_mode(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["history_mode"] = "time_travel"  # type: ignore[index]
+        with pytest.raises(ValueError, match="history_mode"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_rejects_an_invalid_risk_class(self) -> None:
+        payload = _multi_turn_payload(risk_class="not-a-real-risk-class")
+        with pytest.raises(ValueError, match="risk_class"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_rejects_a_negative_raw_turn_padding(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["raw_turn_padding"] = -1  # type: ignore[index]
+        with pytest.raises(ValueError, match="raw_turn_padding"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_history_lookup_requires_tool_name(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["scripted_turns"] = [
+            {
+                "response_text": "hello",
+                "history_lookup": {
+                    "source_tool_name": "x", "field_path": ["a"], "arg_path": ["b"],
+                },
+            }
+        ]
+        with pytest.raises(ValueError, match="history_lookup"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_load_multi_turn_cases_reads_every_committed_golden_case(self) -> None:
+        cases = load_multi_turn_cases(MULTI_TURN_GOLDEN_DIR)
+        assert len(cases) == 6
+        assert len({case.case_id for case in cases}) == 6
+        for path in sorted(MULTI_TURN_GOLDEN_DIR.rglob("*.json")):
+            load_multi_turn_case(path)  # never raises on a committed file
+
+
+class TestHistoryResponseOffset:
+    def test_offset_counts_only_non_empty_assistant_messages(self) -> None:
+        messages = (
+            AgentMessageV1(role="user", parts=(AgentPartV1(kind="text", text="hi"),)),
+            AgentMessageV1(role="assistant", parts=(AgentPartV1(kind="text", text="hello"),)),
+            AgentMessageV1(
+                role="assistant",
+                parts=(AgentPartV1(kind="tool_call", tool_name="x", tool_call_id="1", tool_args_json="{}"),),
+            ),
+        )
+        assert history_response_offset_for(messages) == 2
+
+    def test_offset_is_zero_for_an_all_user_history(self) -> None:
+        messages = (
+            AgentMessageV1(role="user", parts=(AgentPartV1(kind="text", text="hi"),)),
+        )
+        assert history_response_offset_for(messages) == 0
+
+    def test_a_single_turn_case_double_is_unaffected_by_the_new_parameter(self) -> None:
+        """`build_model_double` (single-turn) must behave byte-for-byte as
+        before -- it always passes `history_response_offset=0` implicitly.
+        """
+        case = case_from_mapping(_case_payload())
+        double = build_model_double(case)
+        assert double is not None  # constructs without needing any history
+
+
+class TestHistoryLookup:
+    """Story 5.6 Decision 3: the double must OBSERVE and VALIDATE the
+    antecedent, never merely replay a hardcoded value.
+    """
+
+    @staticmethod
+    def _turn(**history_lookup_overrides: object) -> ScriptedModelTurn:
+        lookup_kwargs = dict(
+            source_tool_name="scheduling_inspect",
+            field_path=("items", 0, "worker_id"),
+            arg_path=("request", "record_id"),
+        )
+        lookup_kwargs.update(history_lookup_overrides)
+        return ScriptedModelTurn(
+            tool_name="scheduling_draft",
+            arguments={"request": {"record_id": None}},
+            tool_call_id="call-1",
+            history_lookup=HistoryLookupV1(**lookup_kwargs),  # type: ignore[arg-type]
+        )
+
+    @staticmethod
+    def _messages_with_result(content: object):
+        from pydantic_ai.messages import ModelRequest, ToolReturnPart
+
+        return [
+            ModelRequest(
+                parts=[
+                    ToolReturnPart(
+                        tool_name="scheduling_inspect", content=content, tool_call_id="prior-1"
+                    )
+                ]
+            )
+        ]
+
+    def test_extracts_a_value_from_a_stringified_prior_result(self) -> None:
+        turn = self._turn()
+        messages = self._messages_with_result("{'items': ({'worker_id': 'w9'},)}")
+        resolved = doubles_module._resolve_history_lookup(turn, messages)
+        assert resolved.arguments == {"request": {"record_id": "w9"}}
+        # The case's own template is never mutated in place.
+        assert turn.arguments == {"request": {"record_id": None}}
+
+    def test_extracts_a_value_from_a_live_in_run_result(self) -> None:
+        """A same-run in-flight tool result is still a live Python object,
+        not text -- both shapes are handled without a special case.
+        """
+        turn = self._turn()
+        messages = self._messages_with_result({"items": ({"worker_id": "w9"},)})
+        resolved = doubles_module._resolve_history_lookup(turn, messages)
+        assert resolved.arguments == {"request": {"record_id": "w9"}}
+
+    def test_raises_when_the_antecedent_is_absent(self) -> None:
+        turn = self._turn()
+        with pytest.raises(UnexpectedModelBehavior, match="absent"):
+            doubles_module._resolve_history_lookup(turn, [])
+
+    def test_returns_the_turn_unchanged_when_absence_is_tolerated(self) -> None:
+        turn = self._turn(require_present=False)
+        resolved = doubles_module._resolve_history_lookup(turn, [])
+        assert resolved is turn
+
+    def test_raises_when_a_consistency_check_finds_a_stale_antecedent(self) -> None:
+        turn = self._turn(
+            require_field=(("items", 0, "record_id"), "a-999"),
+        )
+        messages = self._messages_with_result(
+            "{'items': ({'worker_id': 'w9', 'record_id': 'a-1'},)}"
+        )
+        with pytest.raises(UnexpectedModelBehavior, match="stale"):
+            doubles_module._resolve_history_lookup(turn, messages)
+
+    def test_raises_when_the_field_path_does_not_resolve(self) -> None:
+        turn = self._turn(field_path=("items", 5, "worker_id"))
+        messages = self._messages_with_result("{'items': ({'worker_id': 'w9'},)}")
+        with pytest.raises(UnexpectedModelBehavior, match="antecedent field"):
+            doubles_module._resolve_history_lookup(turn, messages)
+
+
+class TestMultiTurnGoldenCasesPassDeterministically:
+    """AC1: every versioned multi-turn scenario has a deterministic,
+    authoritative equivalent that passes in normal CI without a provider.
+    """
+
+    @pytest.mark.parametrize(
+        "case",
+        load_multi_turn_cases(MULTI_TURN_GOLDEN_DIR),
+        ids=lambda case: case.case_id,
+    )
+    def test_case_passes_and_is_authoritative(self, case: MultiTurnGoldenCase) -> None:
+        evaluation = run_multi_turn_case(case, installed_modules())
+        assert evaluation.authoritative is True
+        failures = [
+            f"turn {item.turn_index}: {item.verdict.reason}"
+            for item in evaluation.turn_evaluations
+            if not item.verdict.passed
+        ]
+        assert not failures, "; ".join(failures)
+        assert evaluation.passed is True
+
+    def test_a_history_dependent_success_case_actually_grants_two_capabilities(self) -> None:
+        """Guards against a vacuous case: prove BOTH capabilities are really
+        exercised, not just declared, so the dependency is real (Decision 3).
+        """
+        case = next(
+            c for c in load_multi_turn_cases(MULTI_TURN_GOLDEN_DIR)
+            if c.case_id == "multi-turn-dependent-call-success"
+        )
+        exercised = {name for turn in case.turns for name in turn.capabilities}
+        assert exercised == {"scheduling_inspect", "scheduling_draft"}
+
+
+def _load_multi_turn_case_by_id(case_id: str) -> MultiTurnGoldenCase:
+    return next(
+        case for case in load_multi_turn_cases(MULTI_TURN_GOLDEN_DIR)
+        if case.case_id == case_id
+    )
+
+
+class TestMultiTurnMutationGuards:
+    """Story 5.6 Task 4's Dev Agent Record mutation table, executable.
+
+    Each test mutates ALREADY-GREEN product code (never a first-draft or
+    import-error red), demonstrates the named guard turning the affected
+    case red FOR THE STATED REASON, then restores and re-proves green.
+    """
+
+    def test_history_lookup_guard_catches_a_broken_extraction(self, monkeypatch) -> None:
+        case = _load_multi_turn_case_by_id("multi-turn-dependent-call-success")
+        installed = installed_modules()
+        assert run_multi_turn_case(case, installed).passed is True
+
+        def _broken_lookup(turn, messages):  # pretend nothing was ever observed
+            return turn
+
+        monkeypatch.setattr(doubles_module, "_resolve_history_lookup", _broken_lookup)
+        mutated = run_multi_turn_case(case, installed)
+        assert mutated.passed is False
+        assert "tool arguments differed" in mutated.turn_evaluations[1].verdict.reason
+        monkeypatch.undo()
+
+        assert run_multi_turn_case(case, installed).passed is True
+
+    def test_history_bound_guard_catches_a_widened_window(self, monkeypatch) -> None:
+        case = _load_multi_turn_case_by_id("multi-turn-dependent-call-truncated-antecedent")
+        installed = installed_modules()
+        assert run_multi_turn_case(case, installed).passed is True
+
+        monkeypatch.setattr(execute_turn_module, "HISTORY_MESSAGE_BOUND", 1000)
+        mutated = run_multi_turn_case(case, installed)
+        assert mutated.passed is False
+        assert "tool-call count differed" in mutated.turn_evaluations[1].verdict.reason
+        monkeypatch.undo()
+
+        assert run_multi_turn_case(case, installed).passed is True
+
+    def test_capability_grant_boundary_guard_catches_a_widened_grant(self) -> None:
+        case = _load_multi_turn_case_by_id("multi-turn-dependent-call-unauthorized-antecedent")
+        installed = installed_modules()
+        assert run_multi_turn_case(case, installed).passed is True
+
+        widened_turns = list(case.turns)
+        widened_turns[1] = replace(
+            widened_turns[1], capabilities=("scheduling_inspect", "scheduling_draft")
+        )
+        widened_case = replace(case, turns=tuple(widened_turns))
+        mutated = run_multi_turn_case(widened_case, installed)
+        assert mutated.passed is False
+        assert "tool results" in mutated.turn_evaluations[1].verdict.reason
+
+        # `widened_case` is a separate object -- the original was never
+        # mutated, so re-running it proves green with nothing to restore.
+        assert run_multi_turn_case(case, installed).passed is True
+
+    def test_stale_consistency_guard_catches_a_removed_freshness_check(self, monkeypatch) -> None:
+        case = _load_multi_turn_case_by_id("multi-turn-dependent-call-stale-antecedent")
+        installed = installed_modules()
+        assert run_multi_turn_case(case, installed).passed is True
+
+        original_resolve = doubles_module._resolve_history_lookup
+
+        def _ignore_require_field(turn, messages):
+            lookup = turn.history_lookup
+            assert lookup is not None
+            return original_resolve(
+                replace(turn, history_lookup=replace(lookup, require_field=None)), messages
+            )
+
+        monkeypatch.setattr(doubles_module, "_resolve_history_lookup", _ignore_require_field)
+        mutated = run_multi_turn_case(case, installed)
+        assert mutated.passed is False
+        monkeypatch.undo()
+
+        assert run_multi_turn_case(case, installed).passed is True
+
+
+def test_build_multi_turn_evaluation_report_scopes_to_authoritative_results() -> None:
+    case = _load_multi_turn_case_by_id("multi-turn-dependent-call-success")
+    evaluation = run_multi_turn_case(case, installed_modules())
+    report = build_multi_turn_evaluation_report(
+        [evaluation],
+        bindings={"evaluator": "x", "scenario": "not applicable"},
+    )
+    assert report["report_type"] == "evaluation-harness-multi-turn"
+    assert report["release_gate_eligible"] is False
+    assert report["metrics"]["authoritative_case_count"] == 1
+    assert report["metrics"]["passed"] == 1
+    assert len(report["results"][0]["turns"]) == 2
+
+
+def test_generate_multi_turn_demonstration_report_binds_nfr27_dimensions(tmp_path: Path) -> None:
+    output = tmp_path / "multi-turn-report.json"
+    report = generate_multi_turn_demonstration_report(output, allow_dirty=True)
+    assert report["release_gate_eligible"] is False
+    assert report["metrics"]["authoritative_case_count"] == 6
+    assert report["metrics"]["failed"] == 0
+    bindings = report["version_bindings"]
+    for key in (
+        "dataset", "evaluator", "model", "prompt", "tool", "policy",
+        "application", "scenario", "solver", "code", "image",
+    ):
+        assert key in bindings, f"missing NFR27 binding {key!r}"
+    assert "scheduling_inspect" in bindings["tool"]
+    assert "scheduling_draft" in bindings["tool"]
+    assert output.exists()
+
+
+class TestLiveDiagnosticsRedaction:
+    """Story 5.6 Decision 6 / AC6: a diagnostics record may carry ordered
+    NAMES and COUNTS and a closed-vocabulary classification -- never a raw
+    prompt, tool argument, tool-result body, or credential.
+    """
+
+    def test_classify_reason_never_returns_the_raw_string(self) -> None:
+        sensitive_reason = (
+            'tool arguments differed at call 0: expected {"secret": "sk-do-not-leak"}, '
+            'actual {"secret": "sk-other"}'
+        )
+        classification = _classify_reason(sensitive_reason)
+        assert classification == "tool_arguments_mismatch"
+        assert "sk-do-not-leak" not in classification
+        assert "sk-other" not in classification
+
+    def test_unrecognized_reasons_classify_as_other_not_raw(self) -> None:
+        assert _classify_reason("sk-live-abc123 leaked verbatim") == "other"
+
+    def test_safe_diagnostic_record_shape_has_no_argument_or_content_keys(self) -> None:
+        record = _safe_diagnostic_record(
+            case_id="c1", case_version="1", model_name="m",
+            passed=True, reason_classification="matched", run_source="live",
+            tool_call_names=["scheduling_inspect"], tool_result_names=["scheduling_inspect"],
+        )
+        serialized = json.dumps(record)
+        assert "arguments" not in record
+        assert "content" not in record
+        assert "reason" not in record  # only the closed classification survives
+        assert record["tool_call_count"] == 1
+        assert record["tool_result_count"] == 1
+        assert "sk-" not in serialized  # sanity: nothing free-text leaks through
+
+    def test_generate_live_diagnostics_persists_no_sensitive_sentinel(self, tmp_path: Path) -> None:
+        """A sensitive sentinel placed in a scripted tool argument, AND one
+        that flows through into a REAL captured tool-result body (`payload`
+        validates, so `shiftmind_demonstration` actually executes and its
+        result -- not just the call arguments -- carries the sentinel), must
+        never reach the persisted diagnostics file. Only ordered names,
+        counts, and the closed classification may survive.
+        """
+        sentinel = "SENTINEL-5F3D9C-DO-NOT-PERSIST"
+        case = case_from_mapping(
+            {
+                **_case_payload(),
+                "case_id": "diagnostics-redaction",
+                "expected_outcome": "allow",
+                "scripted_turns": [
+                    {
+                        "tool_name": "shiftmind_demonstration",
+                        "arguments": {"payload": {"label": sentinel, "repeat": 1}},
+                        "tool_call_id": "diag-1",
+                    },
+                    {"response_text": f"done: {sentinel}"},
+                ],
+                "expected_tool_calls": [
+                    {
+                        "tool_name": "shiftmind_demonstration",
+                        "arguments": {"payload": {"label": sentinel, "repeat": 1}},
+                    }
+                ],
+                "expected_visible_text": f"done: {sentinel}",
+            }
+        )
+        output = tmp_path / "diagnostics.jsonl"
+        # `models.override_allow_model_requests` is entered INSIDE
+        # `generate_live_diagnostics` itself; the double is deterministic, so
+        # no network call is actually made.
+        generate_live_diagnostics(
+            output, model=build_model_double(case), cases=[case], model_name="test-double",
+        )
+        raw_text = output.read_text(encoding="utf-8")
+        assert sentinel not in raw_text
+        record = json.loads(raw_text.splitlines()[0])
+        # `text=sentinel` is what `demonstrate()` actually returns -- this
+        # confirms the real tool result body carried the sentinel and STILL
+        # only its NAME (not its content) survived redaction.
+        assert record["tool_result_count"] == 1
+        assert set(record) == {
+            "case_id", "case_version", "model", "passed", "reason_classification",
+            "run_source", "tool_call_names", "tool_call_count",
+            "tool_result_names", "tool_result_count",
+        }
+
+    def test_a_serialization_failure_fallback_record_also_carries_no_sentinel(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The per-record write/serialize failure path (a later case's
+        diagnostic must survive an earlier one's write error) is itself a
+        `_safe_diagnostic_record` -- it cannot leak either.
+        """
+        sentinel = "SENTINEL-FALLBACK-DO-NOT-PERSIST"
+        case = case_from_mapping(
+            {
+                **_case_payload(),
+                "case_id": "diagnostics-fallback-redaction",
+                "expected_outcome": "allow",
+                "scripted_turns": [
+                    {
+                        "tool_name": "shiftmind_demonstration",
+                        "arguments": {"payload": {"label": sentinel, "repeat": 1}},
+                        "tool_call_id": "diag-2",
+                    },
+                    {"response_text": f"done: {sentinel}"},
+                ],
+                "expected_tool_calls": [
+                    {
+                        "tool_name": "shiftmind_demonstration",
+                        "arguments": {"payload": {"label": sentinel, "repeat": 1}},
+                    }
+                ],
+                "expected_visible_text": f"done: {sentinel}",
+            }
+        )
+        output = tmp_path / "diagnostics-fallback.jsonl"
+        original_dumps = json.dumps
+
+        def _fail_only_on_this_records_write(*args, **kwargs):
+            # Targets ONLY `generate_live_diagnostics`'s own
+            # `stream.write(json.dumps(record, sort_keys=True, ...))` call for
+            # THIS case's safe record -- never the double's unrelated
+            # `json.dumps(...)` calls building tool-call arguments, which run
+            # first and must succeed for the case to reach a real result.
+            record = args[0] if args else None
+            if (
+                isinstance(record, dict)
+                and record.get("case_id") == "diagnostics-fallback-redaction"
+                # Only the FIRST (real) record write is broken -- the
+                # fallback record's own subsequent write must still succeed,
+                # exactly like a second case's diagnostic surviving a first
+                # case's write failure.
+                and record.get("reason_classification") != "diagnostic_record_unserializable"
+            ):
+                raise TypeError("simulated unserializable record")
+            return original_dumps(*args, **kwargs)
+
+        monkeypatch.setattr(json, "dumps", _fail_only_on_this_records_write)
+        generate_live_diagnostics(
+            output, model=build_model_double(case), cases=[case], model_name="test-double",
+        )
+        raw_text = output.read_text(encoding="utf-8")
+        assert sentinel not in raw_text
+        record = json.loads(raw_text.splitlines()[0])
+        assert record["reason_classification"] == "diagnostic_record_unserializable"
+        assert record["tool_call_names"] == []
+        assert record["tool_result_names"] == []
+
+
+class TestLiveSuiteBudget:
+    """Story 5.6 Decision 5: every ceiling is required and validated
+    positive-finite; there is no way to construct an unbounded live suite.
+    """
+
+    def _valid_kwargs(self, **overrides: object) -> dict[str, object]:
+        base: dict[str, object] = dict(
+            case_limit=1, request_limit=10, tool_call_limit=10,
+            token_limit=10_000, elapsed_seconds_limit=30.0, spend_usd_limit=1.0,
+        )
+        base.update(overrides)
+        return base
+
+    def test_accepts_positive_finite_ceilings(self) -> None:
+        budget = LiveSuiteBudgetV1(**self._valid_kwargs())  # type: ignore[arg-type]
+        assert budget.case_limit == 1
+
+    @pytest.mark.parametrize("field", [
+        "case_limit", "request_limit", "tool_call_limit",
+        "token_limit", "elapsed_seconds_limit", "spend_usd_limit",
+    ])
+    @pytest.mark.parametrize("bad_value", [0, -1, float("inf"), float("nan")])
+    def test_rejects_a_non_positive_or_non_finite_ceiling(self, field, bad_value) -> None:
+        with pytest.raises(ValueError):
+            LiveSuiteBudgetV1(**self._valid_kwargs(**{field: bad_value}))  # type: ignore[arg-type]
+
+    def test_rejects_a_boolean_masquerading_as_a_number(self) -> None:
+        with pytest.raises(ValueError):
+            LiveSuiteBudgetV1(**self._valid_kwargs(case_limit=True))  # type: ignore[arg-type]
+
+
+def _flat_text_model(text: str = "ok"):
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+
+    def respond(messages, info):
+        return ModelResponse(parts=[TextPart(content=text)])
+
+    return FunctionModel(respond)
+
+
+def _trivial_live_cases(count: int) -> list[MultiTurnGoldenCase]:
+    return [
+        multi_turn_case_from_mapping(
+            _multi_turn_payload(case_id=f"live-budget-case-{index}")
+        )
+        for index in range(count)
+    ]
+
+
+class TestBoundedLiveMultiTurnSuite:
+    """Story 5.6 Decision 5 / AC2 / AC7: explicit opt-in, finite budgets,
+    cumulative accounting, fail-closed stop, safe partial results. Exercised
+    with a deterministic stand-in model -- ANY model object drives the same
+    stop mechanics, so this needs no live provider or credential.
+    """
+
+    def test_stops_fail_closed_at_the_case_limit_and_keeps_partial_results(self) -> None:
+        cases = _trivial_live_cases(5)
+        budget = LiveSuiteBudgetV1(
+            case_limit=2, request_limit=1000, tool_call_limit=1000,
+            token_limit=1_000_000, elapsed_seconds_limit=60.0, spend_usd_limit=1000.0,
+        )
+        result = run_bounded_live_multi_turn_suite(
+            cases, model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        assert result["authoritative"] is False
+        assert result["opt_in"] is True
+        assert result["budgeted"] is True
+        assert result["cases_run"] == 2
+        assert result["stopped_reason"] == "case_limit_exhausted"
+        assert len(result["results"]) == 2
+
+    def test_stops_fail_closed_at_the_elapsed_time_limit(self) -> None:
+        cases = _trivial_live_cases(50)
+        budget = LiveSuiteBudgetV1(
+            case_limit=1000, request_limit=100_000, tool_call_limit=100_000,
+            token_limit=10_000_000, elapsed_seconds_limit=0.0000001, spend_usd_limit=1000.0,
+        )
+        result = run_bounded_live_multi_turn_suite(
+            cases, model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        assert result["stopped_reason"] in ("elapsed_seconds_limit_exhausted", "case_limit_exhausted")
+        assert result["cases_run"] < len(cases)
+
+    def test_a_case_raising_is_recorded_and_never_aborts_the_suite(self) -> None:
+        good = _trivial_live_cases(1)
+        bad_turn = GoldenTurn(
+            prompt="boom",
+            capabilities=("does-not-exist",),
+            scripted_turns=(ScriptedModelTurn(response_text="unreachable"),),
+            expected_outcome="allow",
+            expected_tool_calls=(),
+            expected_visible_state="completed",
+            expected_visible_text="unreachable",
+        )
+        bad_case = MultiTurnGoldenCase(
+            case_id="live-budget-bad-case", case_version="1", capability="demonstration",
+            risk_class="inspect", scenario_fixtures=(), turns=(bad_turn,),
+        )
+        budget = LiveSuiteBudgetV1(
+            case_limit=10, request_limit=1000, tool_call_limit=1000,
+            token_limit=1_000_000, elapsed_seconds_limit=60.0, spend_usd_limit=1000.0,
+        )
+        result = run_bounded_live_multi_turn_suite(
+            [bad_case, *good], model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        assert result["cases_run"] == 2
+        assert result["results"][0]["passed"] is False
+        assert result["results"][0]["reason_classification"] == "suite_exception"
+        # The SECOND (good) case must still be scored -- the point of this
+        # test -- regardless of whether the flat stand-in model's fixed text
+        # happens to match its own scripted expectation.
+        assert "reason_classification" not in result["results"][1]
+        assert "exception_type" not in result["results"][1]
+
+    def test_never_reads_a_credential_or_allows_requests_outside_its_own_scope(self) -> None:
+        assert models.ALLOW_MODEL_REQUESTS is False  # module-level default, unchanged
+        cases = _trivial_live_cases(1)
+        budget = LiveSuiteBudgetV1(
+            case_limit=1, request_limit=10, tool_call_limit=10,
+            token_limit=10_000, elapsed_seconds_limit=30.0, spend_usd_limit=1.0,
+        )
+        run_bounded_live_multi_turn_suite(
+            cases, model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        # The scoped `with models.override_allow_model_requests(True)` block
+        # inside the suite has already exited -- the module default is
+        # restored, so an ordinary unmarked test after this one still cannot
+        # reach a provider by accident.
+        assert models.ALLOW_MODEL_REQUESTS is False

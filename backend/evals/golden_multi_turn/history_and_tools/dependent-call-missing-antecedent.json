@@ -1,0 +1,82 @@
+{
+  "case_id": "multi-turn-dependent-call-missing-antecedent",
+  "case_version": "1",
+  "capability": "scheduling_draft",
+  "risk_class": "draft",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ],
+  "turns": [
+    {
+      "prompt": "Hello, what can you help with?",
+      "capabilities": [],
+      "scripted_turns": [
+        {
+          "response_text": "I can inspect scenario facts or draft constraints."
+        }
+      ],
+      "expected_outcome": "allow",
+      "expected_tool_calls": [],
+      "expected_visible_state": "completed",
+      "expected_visible_text": "I can inspect scenario facts or draft constraints.",
+      "expected_tool_result_names": [],
+      "history_mode": "independent"
+    },
+    {
+      "prompt": "Cap that worker's hours at 40 in a new draft.",
+      "capabilities": [
+        "scheduling_draft"
+      ],
+      "scripted_turns": [
+        {
+          "tool_name": "scheduling_draft",
+          "arguments": {
+            "request": {
+              "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+              "constraints": [
+                {
+                  "kind": "set_max_hours",
+                  "group": "workers",
+                  "record_id": null,
+                  "related_group": null,
+                  "related_record_id": null,
+                  "n": null,
+                  "factor": null,
+                  "max_hours": 40,
+                  "start_minute": null,
+                  "end_minute": null,
+                  "schema_version": "1"
+                }
+              ],
+              "schema_version": "1"
+            }
+          },
+          "tool_call_id": "dep-missing-t1-draft",
+          "history_lookup": {
+            "source_tool_name": "scheduling_inspect",
+            "field_path": [
+              "items",
+              0,
+              "worker_id"
+            ],
+            "arg_path": [
+              "request",
+              "constraints",
+              0,
+              "record_id"
+            ]
+          }
+        },
+        {
+          "response_text": "This should never be reached without the antecedent."
+        }
+      ],
+      "expected_outcome": "allow",
+      "expected_tool_calls": [],
+      "expected_visible_state": "failed",
+      "expected_visible_text": "",
+      "expected_tool_result_names": [],
+      "history_mode": "raw_turn"
+    }
+  ]
+}
