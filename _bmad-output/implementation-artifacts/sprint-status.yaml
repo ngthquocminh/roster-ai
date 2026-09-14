@@ -2522,6 +2522,10 @@ development_status:
   # actually pass before Gate B's dataset-floor decision can be made. See
   # 5-5-make-the-live-agent-route-the-golden-dataset.md and epic-5-retro-2026-09-10.md section 4.
   5-5-make-the-live-agent-route-the-golden-dataset: done
+  # Added 2026-09-14 by the approved multi-turn live-provider evaluation corrective change.
+  # It follows Story 5.5 and must complete before the AI feature can claim readiness for its
+  # pinned release provider/model configuration; deterministic evidence remains authoritative.
+  5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity: backlog
   # RETRO 2026-09-10: full record at epic-5-retro-2026-09-10.md. Gate B is NOT passed --
   # golden dataset at 30/50 cases, and the live-eval suite (now fixed and functional; it had
   # three independent defects that meant it had never actually run) measured 3/30 passing

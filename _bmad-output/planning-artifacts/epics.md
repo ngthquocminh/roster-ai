@@ -1490,6 +1490,75 @@ So that I can judge the system's engineering without reading the whole repositor
 **Then** single-planner scope — which **must** state in as many words that the planner who requests an approval can decide it, because no separation-of-duties rule exists and none is planned at this milestone (spine Deferred: *"MVP self-approval stands"*, trigger *"activating a second user or customer security review"*) — fixture-only source data, conversation/audit/snapshot/log retention settings, absence of hosted deployment at this milestone, and non-customer status are explicit
 **And** no enterprise latency, availability, recovery, concurrency, or cost promise is made. (NFR17, NFR34)
 
+### Story 5.6: Evaluate Real-Provider Multi-Turn History and Tool Continuity [Corrective Insert]
+
+**Inserted 2026-09-14** by `sprint-change-proposal-2026-09-14.md`, following the completed
+Story 5.5 live-provider routing correction. Story 5.5 made the existing live golden suite
+functional for its eligible single-turn cases; it did not exercise real-provider behavior across
+application-owned multi-turn history, prior tool results, durable rehydration, or the bounded
+history window.
+
+As a portfolio reviewer,
+I want opt-in, version-bound live-provider evaluations that exercise multi-turn conversation
+continuity,
+So that real-provider behavior is observable across the history and tool-result paths that
+deterministic release evidence already protects.
+
+**Acceptance Criteria:**
+
+**Given** a versioned multi-turn golden scenario
+**When** its deterministic equivalent runs in normal CI
+**Then** it remains the authoritative correctness-and-safety release-gate evidence
+**And** the scenario asserts history-aware routing, use of prior tool results, ordered dependent
+tool calls, durable conversation rehydration, and the 100-activity history-window boundary.
+
+**Given** explicitly enabled live evaluation with a configured provider and application-owned
+finite limits for cases, requests, tool calls, tokens, elapsed time, and spend
+**When** the same scenario runs
+**Then** each turn receives only application-owned history and trusted prior tool results
+**And** the report records ordered calls and per-turn outcomes without persisting sensitive prompt
+or tool-result content.
+
+**Given** a history-aware routing scenario
+**When** a later prompt depends on an earlier tool result or clarified entity
+**Then** the live provider selects only currently granted tools and uses the prior trusted result
+where required
+**And** an absent, stale, unauthorized, or truncated antecedent fails closed rather than being
+silently invented or retargeted.
+
+**Given** a long conversation
+**When** persisted activities exceed the owned history-window bound
+**Then** the live run proves the provider receives only the newest bounded window, the older
+activities remain durable but are not supplied, and the outcome makes no claim that omitted
+history was retained.
+
+**Given** a deterministic or live multi-turn evaluation failure
+**When** investigation identifies a defect in existing history handling, trusted tool-result
+propagation, sequencing, persistence, or truncation behavior
+**Then** the root cause is fixed in the owning implementation and covered by a deterministic
+regression test
+**And** the opt-in live scenario is rerun as version-bound diagnostic evidence.
+
+**Given** a release-candidate model, prompt, tool, policy, application, and image version
+**When** every release-eligible live multi-turn scenario runs under its explicit
+application-owned budget
+**Then** every scenario must pass before the AI feature is released
+**And** a live failure blocks that release until its root cause is fixed and rerun, or an explicitly
+approved exception names its owner, rationale, scope, expiry, and compensating user-facing
+limitation.
+
+**Given** a live report
+**When** its evidence is written
+**Then** it binds dataset, evaluator, provider/model, prompts, tools, policy, application,
+scenario, solver, code, and image versions
+**And** it is marked opt-in and budgeted; a live pass is necessary but never sufficient, and can
+neither satisfy nor weaken the deterministic release gate. (NFR26, NFR27, AR16)
+
+**Out of scope, deliberately.** Changing the 100-message application-owned history bound,
+widening capability authority, treating provider output as authorization, changing durable
+contracts, or making a live result substitute for deterministic safety/correctness evidence. A
+failure needing one of those changes returns to Correct Course for a separate decision.
+
 ## Epic 6: Reliable Hosted Planner Workspace
 
 The planner can sign in to the hosted ShiftMind workspace and trust it: it is reproducibly deployed from reviewed infrastructure code, diagnosable without privacy leaks, and its invariants hold through the real edge, load-balancer, and database topology.
@@ -1615,7 +1684,7 @@ Release evaluation is not an epic or story. Each epic proves its own slice throu
 
 | Gate | Milestone | Threshold | Evidence owner |
 |---|---|---|---|
-| Deterministic-first CI | B | No live-provider result satisfies any gate on its own; live suites are named, gated, budgeted, non-authoritative. | Story 2.2 |
+| Deterministic-first CI and live AI readiness | B | Deterministic evidence is mandatory and authoritative for safety and correctness. For the pinned release provider/model configuration, every release-eligible live scenario must also pass under its explicit application-owned budget. A live pass is necessary but never sufficient: it cannot satisfy, weaken, or replace a deterministic gate. A live failure blocks the AI feature unless an explicit, time-bounded release exception records owner, rationale, scope, expiry, and user-facing limitation. | Stories 2.2, 5.5, 5.6 |
 | Report version binding | B | Every evaluation report binds dataset, evaluator, model, prompt, tool, policy, application, scenario, solver, code, and image versions; the image binding is satisfied by Story 5.3's locally built digest. | Stories 2.2, 5.3 |
 | Golden dataset size | B | At least 50 versioned cases, at least four per allowed capability, and at least ten consequential/prohibited cases; case count may later change only from reviewed failure diversity. | Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute; Gate B measures |
 | Tool routing | B | At least 90% overall and 100% for consequential/prohibited cases. | Gate B |
