@@ -31,6 +31,13 @@ The composed stack defaults to `AGENT_RUNTIME_MODEL=deterministic`, a keyless mo
 AGENT_RUNTIME_MODEL=openrouter:openai/gpt-4o-mini AGENT_RUNTIME_API_KEY=… docker compose up -d --build
 ```
 
+For Anthropic, the usual `ANTHROPIC_API_KEY` is accepted by the composed
+runtime too:
+
+```bash
+AGENT_RUNTIME_MODEL=anthropic:claude-haiku-4-5-20251001 ANTHROPIC_API_KEY=… docker compose up -d --build
+```
+
 Host-port overrides are available when the defaults are occupied:
 
 ```bash
