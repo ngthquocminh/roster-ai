@@ -2525,12 +2525,12 @@ development_status:
   # Added 2026-09-14 by the approved multi-turn live-provider evaluation corrective change.
   # It follows Story 5.5 and must complete before the AI feature can claim readiness for its
   # pinned release provider/model configuration; deterministic evidence remains authoritative.
-  5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity: in-progress
-  # Code review 2026-09-14: all decision-needed and patch findings fixed and verified
-  # (full default suite 1612/1613, the one failure pre-existing/unrelated). Moves to `done`
-  # once the live suite is re-run against the pinned provider and its evidence committed
-  # (Decision 4 — gated on explicit user go-ahead; the code changes materially altered how
-  # a live turn is scored, so the prior "all 6 pass live" claim needs re-confirming).
+  5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity: done
+  # Code review 2026-09-14/15: all decision-needed and patch findings fixed and verified
+  # (full default suite 1612/1613, the one failure pre-existing/unrelated). Decision 4 also
+  # closed: live suite re-run on a clean, committed tree (eea9148); readiness "eligible",
+  # 6/6 cases passing, stable across 3 runs; evidence committed separately (ae08ee3,
+  # evidence/story-5.6/live-multi-turn-evaluation.json) per docs/EVIDENCE-CONVENTION.md.
   # RETRO 2026-09-10: full record at epic-5-retro-2026-09-10.md. Gate B is NOT passed --
   # golden dataset at 30/50 cases, and the live-eval suite (now fixed and functional; it had
   # three independent defects that meant it had never actually run) measured 3/30 passing
