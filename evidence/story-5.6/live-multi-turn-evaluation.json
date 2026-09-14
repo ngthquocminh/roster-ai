@@ -1,0 +1,285 @@
+{
+  "authoritative": false,
+  "budget": {
+    "case_limit": 10,
+    "elapsed_seconds_limit": 300.0,
+    "request_limit": 200,
+    "spend_usd_limit": 5.0,
+    "token_limit": 2000000,
+    "tool_call_limit": 200
+  },
+  "budgeted": true,
+  "cases_considered": 6,
+  "cases_run": 6,
+  "exception": null,
+  "generated_at": "2026-09-14T23:41:35.701382+00:00",
+  "model": "anthropic:claude-haiku-4-5-20251001",
+  "opt_in": true,
+  "readiness": "eligible",
+  "release_gate_eligible": false,
+  "release_gate_status": "live evidence only \u2014 necessary but never sufficient; the deterministic report remains the authoritative release-gate evidence and the Gate B 50-case aggregate floor remains open",
+  "report_type": "evaluation-harness-multi-turn-live",
+  "report_version": "1",
+  "results": [
+    {
+      "authoritative": false,
+      "case_id": "multi-turn-dependent-call-missing-antecedent",
+      "case_version": "1",
+      "partial": false,
+      "passed": true,
+      "turns": [
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [],
+          "tool_result_names": [],
+          "turn_index": 0
+        },
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [],
+          "tool_result_names": [],
+          "turn_index": 1
+        }
+      ]
+    },
+    {
+      "authoritative": false,
+      "case_id": "multi-turn-dependent-call-stale-antecedent",
+      "case_version": "1",
+      "partial": false,
+      "passed": true,
+      "turns": [
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [
+            "scheduling_inspect"
+          ],
+          "tool_result_names": [
+            "scheduling_inspect"
+          ],
+          "turn_index": 0
+        },
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [
+            "scheduling_draft"
+          ],
+          "tool_result_names": [
+            "scheduling_draft"
+          ],
+          "turn_index": 1
+        }
+      ]
+    },
+    {
+      "authoritative": false,
+      "case_id": "multi-turn-dependent-call-success",
+      "case_version": "1",
+      "partial": false,
+      "passed": true,
+      "turns": [
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [
+            "scheduling_inspect"
+          ],
+          "tool_result_names": [
+            "scheduling_inspect"
+          ],
+          "turn_index": 0
+        },
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [
+            "scheduling_draft"
+          ],
+          "tool_result_names": [
+            "scheduling_draft"
+          ],
+          "turn_index": 1
+        }
+      ]
+    },
+    {
+      "authoritative": false,
+      "case_id": "multi-turn-dependent-call-truncated-antecedent",
+      "case_version": "1",
+      "partial": false,
+      "passed": true,
+      "turns": [
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [
+            "scheduling_inspect"
+          ],
+          "tool_result_names": [
+            "scheduling_inspect"
+          ],
+          "turn_index": 0
+        },
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [],
+          "tool_result_names": [],
+          "turn_index": 1
+        }
+      ]
+    },
+    {
+      "authoritative": false,
+      "case_id": "multi-turn-dependent-call-unauthorized-antecedent",
+      "case_version": "1",
+      "partial": false,
+      "passed": true,
+      "turns": [
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [
+            "scheduling_inspect"
+          ],
+          "tool_result_names": [
+            "scheduling_inspect"
+          ],
+          "turn_index": 0
+        },
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [],
+          "tool_result_names": [],
+          "turn_index": 1
+        }
+      ]
+    },
+    {
+      "authoritative": false,
+      "case_id": "multi-turn-long-history-window",
+      "case_version": "1",
+      "partial": false,
+      "passed": true,
+      "turns": [
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [
+            "scheduling_inspect"
+          ],
+          "tool_result_names": [
+            "scheduling_inspect"
+          ],
+          "turn_index": 0
+        },
+        {
+          "passed": true,
+          "reason_classification": "matched",
+          "run_source": "live",
+          "tool_call_names": [],
+          "tool_result_names": [],
+          "turn_index": 1
+        }
+      ]
+    }
+  ],
+  "spend_measured": false,
+  "stopped_reason": null,
+  "usage": {
+    "elapsed_seconds": 34.99853699997766,
+    "requests": 19,
+    "spend_usd": 0.0,
+    "tokens": 25672,
+    "tool_calls": 7
+  },
+  "version_bindings": {
+    "application": "ShiftMind Story 5.6 multi-turn evaluation (execute_turn + rehydrate_history)",
+    "code": {
+      "git_commit": "eea91486f6778e41b3fd54394f55427e7dabdece",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "capability_distribution": {
+        "scheduling_draft": 1,
+        "scheduling_inspect": 1,
+        "scheduling_inspect+scheduling_draft": 4
+      },
+      "case_count": 6,
+      "case_versions": {
+        "multi-turn-dependent-call-missing-antecedent": "1",
+        "multi-turn-dependent-call-stale-antecedent": "1",
+        "multi-turn-dependent-call-success": "1",
+        "multi-turn-dependent-call-truncated-antecedent": "1",
+        "multi-turn-dependent-call-unauthorized-antecedent": "1",
+        "multi-turn-long-history-window": "1"
+      },
+      "files": {
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-missing-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-missing-antecedent",
+          "case_version": "1",
+          "sha256": "1b736861bdede4238aa49c7e333a67da16d72d3e1b2f340f1f9f10b4b6b52343"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-stale-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-stale-antecedent",
+          "case_version": "1",
+          "sha256": "126fe76e1ecca54690656cb92236bbd461fef153a40c4cbc0ba968e6ace23722"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-success.json": {
+          "case_id": "multi-turn-dependent-call-success",
+          "case_version": "1",
+          "sha256": "306ab3efa986e6148920d09890e14f1bb859385e2e0608caa7bf137e0fd52387"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-truncated-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-truncated-antecedent",
+          "case_version": "1",
+          "sha256": "b04bb62b761c83d1078a6b8f965b31b4792a6517ec06267c59885c9c3ae4dfcc"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-unauthorized-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-unauthorized-antecedent",
+          "case_version": "1",
+          "sha256": "c2ddbba0a1c19c7384aa19eeb1e788bc483afa557073e1717c793b4330e2c4a4"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/long-history-window.json": {
+          "case_id": "multi-turn-long-history-window",
+          "case_version": "1",
+          "sha256": "16be0a93c6b4cd2d0f530e72ba828e1205f65e391d173e719fb85b21309d8070"
+        }
+      },
+      "kind": "version-controlled golden evaluation dataset",
+      "risk_class_distribution": {
+        "draft": 5,
+        "inspect": 1
+      }
+    },
+    "evaluator": "ToolRoutingEvaluator + PolicyOutcomeEvaluator v1, applied per turn",
+    "image": {
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
+      "database": "postgres:18",
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959"
+    },
+    "model": "anthropic:claude-haiku-4-5-20251001",
+    "policy": "AD-5 risk tags; only double-sourced verdicts are authoritative",
+    "prompt": "versioned multi-turn prompts in backend/evals/golden_multi_turn/**/*.json",
+    "scenario": "eval-fixture:v1",
+    "schema_version": "e5f6a7b8c9d0",
+    "solver": "not applicable \u2014 no solver run",
+    "tool": "scheduling_draft@1, scheduling_inspect@2"
+  }
+}
