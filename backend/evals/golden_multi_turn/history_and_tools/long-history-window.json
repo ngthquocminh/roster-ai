@@ -58,7 +58,8 @@
       "expected_visible_text": "We discussed pick task demand.",
       "history_mode": "rehydrated_activities",
       "filler_activity_count": 105,
-      "expected_tool_result_names": []
+      "expected_tool_result_names": [],
+      "expected_history_absent": ["filler activity 0"]
     }
   ]
 }

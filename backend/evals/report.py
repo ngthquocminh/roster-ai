@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Iterator, Mapping, Sequence
 from uuid import UUID, uuid4
 
 from pydantic_ai import models
@@ -45,7 +45,12 @@ from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 EVAL_TAG_TO_CAPABILITY = {"demonstration": "shiftmind_demonstration"}
 from evals.cases import GoldenCase, GoldenTurn, MultiTurnGoldenCase
 from evals.cases import load_cases, load_multi_turn_cases
-from evals.doubles import build_model_double, build_multi_turn_double, history_response_offset_for
+from evals.doubles import (
+    AntecedentFaultError,
+    build_model_double,
+    build_multi_turn_double,
+    history_response_offset_for,
+)
 from evals.evaluators import (
     EvalVerdict,
     GroundingEvaluator,
@@ -182,17 +187,29 @@ def generate_demonstration_report(
 # must never reach a diagnostics file. Matched by substring against the known,
 # stable phrasings those evaluators emit; an unrecognized phrasing classifies
 # as "other" rather than falling through unredacted.
-#: Checked BEFORE `"matched"`. A multi-turn `_evaluate_turn` reason is a
-#: COMPOUND string ("routing: matched ...; policy: matched ...; visible:
-#: state expected completed, actual failed; ...") -- the word "matched" can
-#: legitimately appear in an early, passing segment while a LATER segment is
-#: the actual failure. Checking failure needles first, and "matched" only as
-#: the final fallback, is what keeps a genuinely failed verdict from
-#: classifying as "matched" merely because routing happened to succeed.
+#
+# Code review 2026-09-14 (patch): substring matching alone is unsound on a
+# COMPOUND reason string ("routing: matched ...; policy: terminated as
+# completed before any policy decision; visible differed: ...") because a
+# PASSING segment's own wording ("terminated as", "visible differed") can
+# read as a failure needle even though the overall verdict passed -- verified
+# two ways: `PolicyOutcomeEvaluator` emits `EvalVerdict(True, "terminated as
+# ...")` for an expected-`allow` case that terminates early (evaluators.py),
+# and a live turn's `visible_reason` says "differed" whenever the model's
+# free text merely doesn't match the double's scripted wording, which is
+# EVERY live turn regardless of pass/fail (single-turn precedent never
+# gates live on visible text either). `_classify_reason` now takes the
+# verdict's own `passed` and answers "matched" immediately when it is True,
+# never falling into the failure-needle table at all -- so a passing verdict
+# can no longer classify as a failure label by coincidence of wording.
 _REASON_CLASSIFICATIONS: tuple[tuple[str, str], ...] = (
     ("tool-call count differed", "tool_call_count_mismatch"),
     ("tool name differed", "tool_name_mismatch"),
     ("tool arguments differed", "tool_arguments_mismatch"),
+    ("grounded response or oracle is missing", "grounding_response_missing"),
+    ("expected supported, got", "grounding_supported_mismatch"),
+    ("grounding input relation is unverifiable", "grounding_relation_unverifiable"),
+    ("grounding input relation differed", "grounding_relation_mismatch"),
     ("oracle differed", "grounding_oracle_mismatch"),
     ("evidence differed", "grounding_evidence_mismatch"),
     ("policy outcome differed", "policy_outcome_mismatch"),
@@ -200,6 +217,8 @@ _REASON_CLASSIFICATIONS: tuple[tuple[str, str], ...] = (
     ("did not reach completed state", "policy_outcome_mismatch"),
     ("invoked consequential capability", "policy_outcome_mismatch"),
     ("tool results differed", "tool_result_mismatch"),
+    ("history window leaked", "history_window_leak"),
+    ("failure reason differed", "failure_reason_mismatch"),
     ("visible differed", "visible_mismatch"),
     # Deliberately NOT a bare `"expected"` needle: `ToolRoutingEvaluator`'s own
     # PASSING reason ("matched N EXPECTED tool route(s)") contains that word
@@ -208,12 +227,21 @@ _REASON_CLASSIFICATIONS: tuple[tuple[str, str], ...] = (
     # `PolicyOutcomeEvaluator`'s own FAILURE messages.
     ("but routed to", "unexpected_tool_call"),
     ("without reaching a policy decision", "policy_outcome_mismatch"),
-    ("terminated as", "terminated_before_policy_decision"),
-    ("matched", "matched"),
 )
 
 
-def _classify_reason(reason: str) -> str:
+def _classify_reason(reason: str, *, passed: bool) -> str:
+    """A closed, redacted classification of one evaluator reason string.
+
+    `passed` decides FIRST: a passing verdict always classifies as
+    `"matched"`, before any substring is even inspected, so a passing
+    segment's own incidental wording can never masquerade as a failure
+    label. Only a failing verdict falls through to the failure-needle table;
+    an unrecognized failure phrasing classifies as `"other"` rather than
+    leaking unredacted.
+    """
+    if passed:
+        return "matched"
     lowered = reason.lower()
     for needle, label in _REASON_CLASSIFICATIONS:
         if needle in lowered:
@@ -231,6 +259,7 @@ def _safe_diagnostic_record(
     run_source: str,
     tool_call_names: Sequence[str] = (),
     tool_result_names: Sequence[str] = (),
+    exception_type: str | None = None,
 ) -> dict[str, object]:
     """The ONLY shape a diagnostics record may take.
 
@@ -239,7 +268,10 @@ def _safe_diagnostic_record(
     violating AC6/AD-15. This carries only ordered NAMES and COUNTS -- never a
     value a prompt, a tool argument, or a tool result body could have produced
     -- plus a closed-vocabulary outcome classification instead of the raw
-    evaluator reason string.
+    evaluator reason string. `exception_type` is a safe Python type NAME
+    (e.g. `"AgentProviderError"`) -- code review 2026-09-14: without it, a
+    provider 5xx and a genuine harness bug both persisted as the identical
+    `"diagnostic_exception"` classification with nothing to tell them apart.
     """
     return {
         "case_id": case_id,
@@ -252,6 +284,7 @@ def _safe_diagnostic_record(
         "tool_call_count": len(tool_call_names),
         "tool_result_names": list(tool_result_names),
         "tool_result_count": len(tool_result_names),
+        "exception_type": exception_type,
     }
 
 
@@ -288,7 +321,7 @@ def generate_live_diagnostics(
                         case_version=case.case_version,
                         model_name=model_name,
                         passed=verdict.passed,
-                        reason_classification=_classify_reason(verdict.reason),
+                        reason_classification=_classify_reason(verdict.reason, passed=verdict.passed),
                         run_source=verdict.run_source,
                         tool_call_names=[
                             part.tool_name
@@ -309,9 +342,12 @@ def generate_live_diagnostics(
                         passed=False,
                         reason_classification="diagnostic_exception",
                         run_source="live",
+                        exception_type=type(exc).__name__,
                     )
                 try:
                     stream.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+                    stream.flush()
+                    continue
                 except Exception:  # one record must never abort diagnostics for later cases
                     fallback = _safe_diagnostic_record(
                         case_id=case.case_id,
@@ -321,8 +357,17 @@ def generate_live_diagnostics(
                         reason_classification="diagnostic_record_unserializable",
                         run_source="live",
                     )
-                    stream.write(json.dumps(fallback, sort_keys=True) + "\n")
-                stream.flush()
+                    # Code review 2026-09-14: this fallback write/flush used to
+                    # be unguarded -- a genuine I/O failure here (disk full, a
+                    # closed handle) propagated out of the `with` block and
+                    # aborted diagnostics for every LATER case too, not just
+                    # this one. Losing this one case's record is the worst
+                    # outcome now; the loop always continues.
+                    try:
+                        stream.write(json.dumps(fallback, sort_keys=True) + "\n")
+                        stream.flush()
+                    except Exception:
+                        pass
 
 
 def _evaluate_case(
@@ -442,6 +487,23 @@ def _needs_named_output_tools(case: GoldenCase) -> bool:
     if case.expected_outcome in {"clarify", "refuse"}:
         return True
     return any(turn.response_data is not None for turn in case.scripted_turns)
+
+
+def _needs_named_output_tools_for_turn(turn: GoldenTurn) -> bool:
+    """`GoldenTurn` counterpart of `_needs_named_output_tools`.
+
+    Code review 2026-09-14 (patch): the multi-turn runner used to hardcode
+    `answer_type=None` unconditionally, so `expected_outcome: "clarify"`/
+    `"refuse"` and a scripted `response_data` turn were unreachable -- the
+    schema accepted case shapes the runner could only ever turn into a
+    generic `UnexpectedModelBehavior -> failed`, never the real
+    clarification/draft branch. `GoldenTurn` carries no per-turn grounding
+    oracle (that is case-level, single-turn-only), so this mirrors the other
+    two clauses only.
+    """
+    if turn.expected_outcome in {"clarify", "refuse"}:
+        return True
+    return any(scripted.response_data is not None for scripted in turn.scripted_turns)
 
 
 def _runtime_for_case(
@@ -638,7 +700,17 @@ def _history_for_turn(
     if turn.history_mode == "raw_turn":
         if not prior_outcomes:
             raise ValueError("raw_turn history_mode requires a previous turn")
-        previous = prior_outcomes[-1].turn
+        # Code review 2026-09-14: `prior_outcomes[-1].turn` alone silently
+        # dropped every earlier antecedent whenever the IMMEDIATELY prior
+        # turn failed (`failed_outcome_for_exception`'s default `AgentTurnV1`
+        # carries `messages=()`) -- a 3+-turn case with a failing middle turn
+        # would resume from nothing instead of the last real transcript.
+        # Resuming from the last NON-EMPTY transcript matches this turn's own
+        # docstring promise: "must resume from every earlier turn".
+        previous = next(
+            (outcome.turn for outcome in reversed(prior_outcomes) if outcome.turn.messages),
+            prior_outcomes[-1].turn,
+        )
         # Synthetic filler pushes the real antecedent out of
         # `HISTORY_MESSAGE_BOUND` once `execute_turn` slices `[-100:]` -- the
         # truncated-antecedent fault case's only mechanism. It never bypasses
@@ -689,7 +761,10 @@ def _history_for_turn(
 
 
 def _trim_outcome_to_current_turn(
-    outcome: AgentRunOutcomeV1, injected_message_count: int
+    outcome: AgentRunOutcomeV1,
+    injected_message_count: int,
+    *,
+    excluded_names: frozenset[str] = frozenset(),
 ) -> AgentRunOutcomeV1:
     """Scope one `execute_turn` outcome to only the messages THIS turn added.
 
@@ -700,6 +775,13 @@ def _trim_outcome_to_current_turn(
     unmodified. Slicing the injected prefix off before evaluation keeps
     `ToolRoutingEvaluator`/`PolicyOutcomeEvaluator` judging what THIS turn
     did, not the whole accumulated conversation.
+
+    `excluded_names` mirrors `agent/runtime.py`'s own `_tool_results(...,
+    excluded_names=self._output_tool_names)` (code review 2026-09-14): a
+    structured-output ("named output tool") return is not a capability
+    result, and re-deriving `tool_results` here without excluding it would
+    misreport an output-tool return as a capability result the moment a
+    multi-turn case actually uses one (see `_needs_named_output_tools_for_turn`).
     """
     if injected_message_count <= 0:
         return outcome
@@ -714,12 +796,19 @@ def _trim_outcome_to_current_turn(
         for message in trimmed_messages
         if message.role == "tool_result"
         for part in message.parts
+        if part.tool_name not in excluded_names
     )
     return replace(outcome, turn=trimmed_turn, tool_results=trimmed_tool_results)
 
 
 def _evaluate_turn(
-    turn: GoldenTurn, runtime: PydanticAIAgentRuntime, outcome: AgentRunOutcomeV1, *, run_source: str
+    turn: GoldenTurn,
+    runtime: PydanticAIAgentRuntime,
+    outcome: AgentRunOutcomeV1,
+    *,
+    run_source: str,
+    failure_code: str | None = None,
+    history_violations: tuple[str, ...] = (),
 ) -> EvalVerdict:
     """Judge one turn with the UNCHANGED Story 2.2/2.9 evaluators (Decision 1).
 
@@ -728,11 +817,35 @@ def _evaluate_turn(
     `live_expected_*` counterparts -- fields `GoldenTurn` declares under the
     identical names on purpose, so this is duck typing by design, not a type
     violation silently tolerated.
+
+    Code review 2026-09-14 additions (`failure_code`, `history_violations`
+    are new parameters; every other change is inside this function):
+
+    - **Decision 1**: the STATE gate now applies on `run_source == "live"`
+      too, via `turn.live_expected_visible_state` when declared -- a dead or
+      do-nothing provider can no longer "pass" a turn expecting zero tool
+      calls merely because the live path skipped the check entirely. TEXT
+      stays ungated on live (unchanged single-turn precedent: a real model's
+      prose never reproduces a scripted double's exact wording).
+    - **Decision 2**: `failure_code` (from `AntecedentFaultError.code`, see
+      `evals/doubles.py`) is compared against `turn.expected_failure_reason`
+      when declared, deterministic-only -- the double is the only thing
+      that ever raises a named antecedent fault.
+    - **Decision 3**: `history_violations` -- any of `turn.
+      expected_history_absent`'s substrings the CALLER already found in the
+      truncated history this turn actually observed -- fails the turn on
+      EITHER run source, since that computation happens before either a
+      double or a real model is ever called (see `run_multi_turn_case`).
     """
     routing = ToolRoutingEvaluator(run_source=run_source).evaluate(turn, outcome)  # type: ignore[arg-type]
     policy = PolicyOutcomeEvaluator(runtime=runtime, run_source=run_source).evaluate(turn, outcome)  # type: ignore[arg-type]
     actual_text = outcome_visible_text(outcome)
-    state_matches = outcome.status == turn.expected_visible_state
+    expected_state = (
+        turn.live_expected_visible_state
+        if run_source == "live" and turn.live_expected_visible_state is not None
+        else turn.expected_visible_state
+    )
+    state_matches = outcome.status == expected_state
     text_matches = actual_text == turn.expected_visible_text
     # "differed"/"matched" phrasing mirrors the existing single-turn
     # evaluators' own style (`evals/evaluators.py`) deliberately: `_classify_reason`
@@ -743,7 +856,7 @@ def _evaluate_turn(
         "visible matched"
         if state_matches and text_matches
         else (
-            f"visible differed: state expected {turn.expected_visible_state}, "
+            f"visible differed: state expected {expected_state}, "
             f"actual {outcome.status}; text expected {turn.expected_visible_text!r}, "
             f"actual {actual_text!r}"
         )
@@ -771,21 +884,86 @@ def _evaluate_turn(
                 f"actual {actual_result_names}"
             )
         )
+    failure_reason_matched = True
+    failure_reason_reason = "failure reason: not checked"
+    if turn.expected_failure_reason is not None and run_source != "live":
+        failure_reason_matched = failure_code == turn.expected_failure_reason
+        failure_reason_reason = (
+            f"failure reason matched {turn.expected_failure_reason!r}"
+            if failure_reason_matched
+            else (
+                f"failure reason differed: expected {turn.expected_failure_reason!r}, "
+                f"actual {failure_code!r}"
+            )
+        )
+    history_reason = "history window: not checked"
+    history_ok = True
+    if turn.expected_history_absent:
+        if history_violations:
+            history_ok = False
+            history_reason = f"history window leaked: {history_violations}"
+        else:
+            history_reason = f"history window correctly excluded {turn.expected_history_absent}"
     # A live model's prose NEVER reproduces the deterministic double's exact
     # scripted text verbatim -- exactly why the Story 2.2/2.9 single-turn live
     # test (`test_golden_cases_against_live_agent_are_non_authoritative`)
     # scores a live run on routing/grounding/policy alone and never calls
     # `_visible_judgement`. The deterministic (authoritative) run keeps the
-    # full precise contract; live keeps the same narrower proof the existing
-    # precedent already established, or every live case would fail on prose
-    # wording alone regardless of whether the model actually behaved.
-    passed = routing.passed and policy.passed and results_matched
+    # full precise contract, including TEXT; live keeps the same narrower
+    # text exemption the existing precedent already established, but now
+    # requires STATE to match too (Decision 1) -- or every live case would
+    # "pass" on a dead or do-nothing provider regardless of behaviour.
+    passed = (
+        routing.passed and policy.passed and results_matched
+        and state_matches and failure_reason_matched and history_ok
+    )
     if run_source != "live":
-        passed = passed and state_matches and text_matches
+        passed = passed and text_matches
     return EvalVerdict(
         passed=passed,
-        reason=f"routing: {routing.reason}; policy: {policy.reason}; {visible_reason}; {results_reason}",
+        reason=(
+            f"routing: {routing.reason}; policy: {policy.reason}; {visible_reason}; "
+            f"{results_reason}; {failure_reason_reason}; {history_reason}"
+        ),
         run_source=run_source,
+    )
+
+
+def _antecedent_fault_code(exc: BaseException) -> str | None:
+    """Recover an `AntecedentFaultError.code` through the wrapping chain.
+
+    Code review 2026-09-14 (Decision 2): `agent/runtime.py` always re-raises
+    with the cause preserved (`raise AgentInvalidOutputError(...) from exc`),
+    so the ORIGINAL `AntecedentFaultError` our double raised survives as
+    `__cause__` even though `execute_turn`/`run_turn` never touch this
+    module. Bounded walk: `__cause__` chains are never expected to cycle,
+    but nothing enforces that on an arbitrary exception, so this never loops
+    unboundedly on one.
+    """
+    current: BaseException | None = exc
+    for _ in range(8):
+        if isinstance(current, AntecedentFaultError):
+            return current.code
+        if current is None:
+            return None
+        current = current.__cause__
+    return None
+
+
+def _history_text_corpus(messages: Sequence[AgentMessageV1]) -> str:
+    """All text this turn's history actually carries, for the absence check.
+
+    Code review 2026-09-14 (Decision 3): built from the SAME
+    `truncated_history_messages` the caller already computes to size the
+    double's response offset -- never a second, independent truncation --
+    so this reads exactly what a real live model would also receive, not an
+    approximation of it.
+    """
+    return "\n".join(
+        part.text
+        for message in messages
+        for part in message.parts
+        if getattr(part, "text", None)
     )
 
 
@@ -804,9 +982,30 @@ def run_multi_turn_case(
     `model` is `None` for the authoritative deterministic double run and a
     real provider model for the non-authoritative live run; either way each
     turn still passes through this identical wiring.
+
+    A thin wrapper over `_iter_turn_evaluations` (code review 2026-09-14):
+    the loop body is unchanged, only extracted into a generator so
+    `run_bounded_live_multi_turn_suite` can consume it TURN BY TURN and stop
+    mid-case the instant a budget ceiling is reached, instead of only ever
+    checking budgets at a case boundary (Decision 5: "before each next
+    turn"). This is the SAME evaluation authority, not a second harness.
     """
+    return MultiTurnCaseEvaluation(
+        case=case,
+        turn_evaluations=tuple(
+            _iter_turn_evaluations(case, modules, model=model, run_source=run_source)
+        ),
+    )
+
+
+def _iter_turn_evaluations(
+    case: MultiTurnGoldenCase,
+    modules: tuple[CapabilityModuleV1, ...],
+    *,
+    model: object | None = None,
+    run_source: str = "double",
+) -> Iterator[TurnEvaluation]:
     outcomes: list[AgentRunOutcomeV1] = []
-    turn_evaluations: list[TurnEvaluation] = []
     for index, turn in enumerate(case.turns):
         deps = _report_deps()
         history = _history_for_turn(turn, case.turns[:index], outcomes, deps)
@@ -834,6 +1033,16 @@ def run_multi_turn_case(
             else rehydrate_history(history).messages
         )
         injected_message_count = len(truncated_history_messages)
+        # Decision 3 (code review 2026-09-14): computed from the truncated
+        # window BEFORE either a double or a real model is ever called, so
+        # this is identical evidence for BOTH run sources -- a live model
+        # cannot make the long-history-window case pass by producing SOME
+        # answer; the window itself must have actually excluded the named
+        # text.
+        history_corpus = _history_text_corpus(truncated_history_messages)
+        history_violations = tuple(
+            needle for needle in turn.expected_history_absent if needle in history_corpus
+        )
         if model is not None:
             turn_model = model
         else:
@@ -847,14 +1056,26 @@ def run_multi_turn_case(
                 turn, label=f"{case.case_id}[{index}]", history_response_offset=offset
             )
         runtime = PydanticAIAgentRuntime(
-            model=turn_model, capabilities=granted, deps=deps, answer_type=None,
+            model=turn_model, capabilities=granted, deps=deps,
+            # Code review 2026-09-14 (patch): was hardcoded `None`, making
+            # `expected_outcome: "clarify"/"refuse"` and a scripted
+            # `response_data` turn unreachable through this runner.
+            answer_type=(
+                GroundedAnswerV1 if _needs_named_output_tools_for_turn(turn) else None
+            ),
         )
+        failure_code: str | None = None
         try:
             outcome = execute_turn(
                 runtime, deps, prompt=turn.prompt, calculation_results=[], history=history,
             )
         except Exception as exc:  # the production route has the same finalization rule
             outcome = failed_outcome_for_exception(exc)
+            # Decision 2 (code review 2026-09-14): recovers the ORIGINAL
+            # `AntecedentFaultError.code` our double raised, if any, through
+            # `execute_turn`'s cause-preserving wrapping -- deterministic
+            # runs only, since a live model never goes through the double.
+            failure_code = _antecedent_fault_code(exc)
         # The FULL outcome (history-included) is what the NEXT turn's
         # `raw_turn` mode must resume from -- an owned resume transcript that
         # only ever carried the latest turn would drop every earlier turn's
@@ -871,12 +1092,15 @@ def run_multi_turn_case(
         # the `unauthorized` fault case). Scoping to the NEW suffix -- for
         # evaluation only, never for what propagates forward -- is what makes
         # each turn's verdict actually about that turn.
-        scoped_outcome = _trim_outcome_to_current_turn(outcome, injected_message_count)
-        verdict = _evaluate_turn(turn, runtime, scoped_outcome, run_source=run_source)
-        turn_evaluations.append(
-            TurnEvaluation(turn_index=index, turn=turn, verdict=verdict, outcome=scoped_outcome)
+        scoped_outcome = _trim_outcome_to_current_turn(
+            outcome, injected_message_count,
+            excluded_names=getattr(runtime, "_output_tool_names", frozenset()),
         )
-    return MultiTurnCaseEvaluation(case=case, turn_evaluations=tuple(turn_evaluations))
+        verdict = _evaluate_turn(
+            turn, runtime, scoped_outcome, run_source=run_source,
+            failure_code=failure_code, history_violations=history_violations,
+        )
+        yield TurnEvaluation(turn_index=index, turn=turn, verdict=verdict, outcome=scoped_outcome)
 
 
 MULTI_TURN_BINDINGS: dict[str, str] = {
@@ -941,7 +1165,22 @@ def build_multi_turn_evaluation_report(
                     {
                         "turn_index": turn_eval.turn_index,
                         "passed": turn_eval.verdict.passed,
-                        "reason": turn_eval.verdict.reason,
+                        "reason_classification": _classify_reason(
+                            turn_eval.verdict.reason, passed=turn_eval.verdict.passed
+                        ),
+                        # Code review 2026-09-14 (AC6/Decision 6): the raw
+                        # `reason` embeds literal expected/actual tool
+                        # ARGUMENTS (and, on a non-authoritative turn, the
+                        # model's own visible text) -- exactly the raw
+                        # content AC6 forbids. Kept only for AUTHORITATIVE
+                        # (deterministic) turns; `write_multi_turn_evaluation_report`
+                        # refuses a non-authoritative evaluation outright, so
+                        # this can never actually persist a live reason.
+                        **(
+                            {"reason": turn_eval.verdict.reason}
+                            if turn_eval.verdict.authoritative
+                            else {}
+                        ),
                         "run_source": turn_eval.verdict.run_source,
                     }
                     for turn_eval in item.turn_evaluations
@@ -962,6 +1201,21 @@ def write_multi_turn_evaluation_report(
     repo_root: Path = REPO_ROOT,
     allow_dirty: bool = False,
 ) -> dict[str, object]:
+    # Code review 2026-09-14: this is the DETERMINISTIC (authoritative)
+    # report writer -- `build_multi_turn_evaluation_report` retains raw
+    # evaluator `reason` text for authoritative turns only, on the
+    # assumption every evaluation this function is handed IS authoritative.
+    # A caller passing a live (`run_source="live"`) evaluation through here
+    # instead of `generate_bounded_live_multi_turn_report` would silently
+    # violate that assumption at the data level even though each turn's own
+    # `reason` field still individually redacts correctly -- refused outright
+    # rather than relying on that per-turn redaction alone.
+    if any(not evaluation.authoritative for evaluation in evaluations):
+        raise ValueError(
+            "write_multi_turn_evaluation_report received a non-authoritative "
+            "(live) evaluation; use generate_bounded_live_multi_turn_report "
+            "for live results instead"
+        )
     dataset_paths = tuple(Path(path) for path in dataset_files)
     bindings = resolve_bindings(
         declared_bindings,
@@ -1077,6 +1331,26 @@ class LiveReadinessExceptionV1:
     expires_at: datetime
     compensating_limitation: str
 
+    def __post_init__(self) -> None:
+        """Validate structure at construction (code review 2026-09-14).
+
+        `is_valid()` used to be the ONLY check, called after every live case
+        had already run -- a timezone-naive `expires_at` raised `TypeError`
+        comparing against the aware `now` from OUTSIDE the per-case `try` in
+        `run_bounded_live_multi_turn_suite`, and a blank/`None` string field
+        raised `AttributeError` from `.strip()` -- both only after the whole
+        budget had already been spent, losing every case's evidence. Now
+        these fail BEFORE a single provider call.
+        """
+        for name in ("owner", "rationale", "scope", "compensating_limitation"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(self.expires_at, datetime):
+            raise ValueError("expires_at must be a datetime")
+        if self.expires_at.tzinfo is None:
+            raise ValueError("expires_at must be timezone-aware")
+
     def is_valid(self, *, now: datetime) -> bool:
         return bool(
             self.owner.strip()
@@ -1126,11 +1400,19 @@ def run_bounded_live_multi_turn_suite(
 
     Never reads a credential or infers a model itself -- both are the
     caller's job, completed only after ITS OWN explicit opt-in validation, the
-    same separation `generate_live_diagnostics` already keeps. Accounts
-    cumulative actual usage/cost BEFORE each next case and stops fail-closed
-    the moment any ceiling would be reached, persisting every case scored so
-    far as a safe partial result rather than raising past collected evidence
-    (AC2, AC7, Decision 5).
+    same separation `generate_live_diagnostics` already keeps.
+
+    Code review 2026-09-14: accounting and ceiling checks now happen after
+    EVERY TURN (Decision 5's own wording: "before each next turn"), not only
+    at a case boundary -- consuming `_iter_turn_evaluations` directly, rather
+    than the whole-case `run_multi_turn_case`, is what makes stopping MID-CASE
+    possible. The prior per-case version never recorded an overrun that
+    happened during the LAST case considered (nothing ran afterward to
+    observe it); the final ceiling re-check after the loop closes that gap
+    for the run as a whole, too. `spend_measured` makes it visible in the
+    report itself whenever `spend_usd_limit` is declared (required, per
+    `LiveSuiteBudgetV1`) but the caller supplied no pricing to actually
+    measure against it, rather than a silently-unenforceable ceiling.
     """
     started = perf_counter()
     totals = {"requests": 0, "tool_calls": 0, "tokens": 0, "spend_usd": 0.0}
@@ -1138,25 +1420,34 @@ def run_bounded_live_multi_turn_suite(
     stopped_reason: str | None = None
     installed = installed_modules()
     eligible_cases = tuple(case for case in cases if case.live_eligible)
+    spend_measured = input_usd_per_mtok > 0 or output_usd_per_mtok > 0
+
+    def _over_budget() -> str | None:
+        if (perf_counter() - started) >= budget.elapsed_seconds_limit:
+            return "elapsed_seconds_limit_exhausted"
+        if (
+            totals["requests"] >= budget.request_limit
+            or totals["tool_calls"] >= budget.tool_call_limit
+            or totals["tokens"] >= budget.token_limit
+            or totals["spend_usd"] >= budget.spend_usd_limit
+        ):
+            return "aggregate_budget_exhausted"
+        return None
+
     with models.override_allow_model_requests(True):
         for case in eligible_cases:
             if len(results) >= budget.case_limit:
                 stopped_reason = "case_limit_exhausted"
                 break
-            if (perf_counter() - started) >= budget.elapsed_seconds_limit:
-                stopped_reason = "elapsed_seconds_limit_exhausted"
+            stopped_reason = _over_budget()
+            if stopped_reason is not None:
                 break
-            if (
-                totals["requests"] >= budget.request_limit
-                or totals["tool_calls"] >= budget.tool_call_limit
-                or totals["tokens"] >= budget.token_limit
-                or totals["spend_usd"] >= budget.spend_usd_limit
-            ):
-                stopped_reason = "aggregate_budget_exhausted"
-                break
+            turn_records: list[dict[str, object]] = []
+            case_complete = False
             try:
-                evaluation = run_multi_turn_case(case, installed, model=model, run_source="live")
-                for turn_eval in evaluation.turn_evaluations:
+                for turn_eval in _iter_turn_evaluations(
+                    case, installed, model=model, run_source="live"
+                ):
                     usage = turn_eval.outcome.usage
                     if usage is not None:
                         totals["requests"] += usage.requests
@@ -1166,19 +1457,41 @@ def run_bounded_live_multi_turn_suite(
                         usage, input_usd_per_mtok=input_usd_per_mtok,
                         output_usd_per_mtok=output_usd_per_mtok,
                     )
+                    turn_records.append({
+                        "turn_index": turn_eval.turn_index,
+                        "passed": turn_eval.verdict.passed,
+                        "reason_classification": _classify_reason(
+                            turn_eval.verdict.reason, passed=turn_eval.verdict.passed
+                        ),
+                        "run_source": turn_eval.verdict.run_source,
+                        "tool_call_names": [
+                            part.tool_name
+                            for message in turn_eval.outcome.turn.messages
+                            if message.role == "assistant"
+                            for part in message.parts
+                            if part.kind == "tool_call"
+                        ],
+                        "tool_result_names": [
+                            result.tool_name for result in turn_eval.outcome.tool_results
+                        ],
+                    })
+                    over = _over_budget()
+                    if over is not None:
+                        stopped_reason = over
+                        break
+                else:
+                    case_complete = True
                 results.append({
                     "case_id": case.case_id,
                     "case_version": case.case_version,
-                    "passed": evaluation.passed,
-                    "authoritative": evaluation.authoritative,
-                    "turns": [
-                        {
-                            "turn_index": turn_eval.turn_index,
-                            "passed": turn_eval.verdict.passed,
-                            "reason_classification": _classify_reason(turn_eval.verdict.reason),
-                        }
-                        for turn_eval in evaluation.turn_evaluations
-                    ],
+                    # A case cut short mid-turn is never a release-eligible
+                    # PASS -- only a case every one of whose turns actually
+                    # ran and passed counts, so a budget stop can never be
+                    # mistaken for evidence the case behaved correctly.
+                    "passed": case_complete and all(t["passed"] for t in turn_records),
+                    "authoritative": False,
+                    "partial": not case_complete,
+                    "turns": turn_records,
                 })
             except Exception as exc:  # a bad case must not lose the suite's evidence
                 results.append({
@@ -1186,9 +1499,13 @@ def run_bounded_live_multi_turn_suite(
                     "case_version": case.case_version,
                     "passed": False,
                     "authoritative": False,
+                    "partial": True,
                     "reason_classification": "suite_exception",
                     "exception_type": type(exc).__name__,
+                    "turns": turn_records,
                 })
+            if stopped_reason is not None:
+                break
     elapsed_seconds = perf_counter() - started
     all_release_eligible_passed = bool(results) and all(
         item["passed"] for item in results
@@ -1205,11 +1522,22 @@ def run_bounded_live_multi_turn_suite(
         "authoritative": False,
         "opt_in": True,
         "budgeted": True,
+        # Code review 2026-09-14 (AC7/Task 5): a live pass is necessary but
+        # never sufficient -- this report alone can never satisfy the release
+        # gate, only the deterministic report (which carries the matching
+        # `release_gate_eligible`/`release_gate_status` pair) can.
+        "release_gate_eligible": False,
+        "release_gate_status": (
+            "live evidence only — necessary but never sufficient; the "
+            "deterministic report remains the authoritative release-gate "
+            "evidence and the Gate B 50-case aggregate floor remains open"
+        ),
         "cases_considered": len(eligible_cases),
         "cases_run": len(results),
         "stopped_reason": stopped_reason,
         "budget": asdict(budget),
         "usage": {**totals, "elapsed_seconds": elapsed_seconds},
+        "spend_measured": spend_measured,
         "results": results,
         "readiness": readiness,
         "exception": (

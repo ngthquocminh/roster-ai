@@ -99,7 +99,9 @@
       "expected_visible_text": "",
       "history_mode": "raw_turn",
       "raw_turn_padding": 100,
-      "expected_tool_result_names": []
+      "expected_tool_result_names": [],
+      "expected_failure_reason": "antecedent_absent",
+      "live_expected_visible_state": "completed"
     }
   ]
 }

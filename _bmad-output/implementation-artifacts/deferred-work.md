@@ -941,3 +941,27 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the next story touching `scheduling_compute` golden cases or
   `fixture_projection.py`'s `DEMAND` tuple, or the Gate B dataset-floor decision this story's Open
   Question already flags as owed.
+
+## Deferred from: code review of 5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity (2026-09-14)
+
+- **Usage consumed by a turn that raises is never accounted in the live suite.**
+  `backend/evals/report.py` `run_bounded_live_multi_turn_suite` reads `turn_eval.outcome.usage`, but
+  `failed_outcome_for_exception` (and a runtime `failed`/`timed_out` return) carries `usage=None`, so a
+  live turn that makes several provider requests and then fails adds 0 to every aggregate total.
+  **Owner/revisit trigger:** the story that next touches `agent/runtime.py:run_turn` — surface partial
+  usage on the failure path so the eval seam can account it.
+
+- **`raw_turn_padding` between 1 and 99 can leave an orphan `tool_result` at the head of the truncated
+  window.** `_history_for_turn` appends filler after the prior turn's real messages; a `[-100:]` slice
+  can start on a `tool_result` with no preceding `tool_call`. The deterministic double ignores it, but
+  a real provider rejects it and the case records `suite_exception` for a harness artifact. No committed
+  case uses partial padding today.
+  **Owner/revisit trigger:** the first multi-turn case that needs padding < `HISTORY_MESSAGE_BOUND`;
+  pad to a clean message boundary or reject the combination at load.
+
+- **`.env` `AGENT_RUNTIME_MODEL` / `AGENT_RUNTIME_API_KEY` leak into the default suite (pre-existing,
+  now load-bearing).** Already ledgered at Story 5.5; Story 5.6's "0 regressions" figure was reached by
+  deselecting the leaked `test_execute_turn_emits_claim_to_finalize_telemetry` failure, and
+  `_HAS_LIVE_AGENT` is computed from `.env` contents.
+  **Owner/revisit trigger:** same as the 5.5 entry — pin `AGENT_RUNTIME_MODEL=deterministic` in
+  `conftest.py` for the default session.

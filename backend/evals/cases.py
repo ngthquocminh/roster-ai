@@ -55,13 +55,19 @@ class HistoryLookupV1:
     evaluated against the SAME parsed result. It is how a "stale antecedent"
     case proves fail-closed behaviour without inventing model-side judgement --
     the check simply fails when the persisted fact has moved on.
+
+    Absence is ALWAYS fatal (code review 2026-09-14, Decision 2): there used
+    to be a `require_present=False` escape that returned the turn unchanged
+    -- proceeding with whatever hardcoded literal the case script carried --
+    which is exactly what Decision 3 forbids ("a response-index-only double
+    is not evidence"). No committed case ever set it false; removed rather
+    than left as a live footgun.
     """
 
     source_tool_name: str
     field_path: tuple[str | int, ...]
     arg_path: tuple[str | int, ...]
     require_field: tuple[tuple[str | int, ...], object] | None = None
-    require_present: bool = True
 
 
 @dataclass(frozen=True)
@@ -208,6 +214,29 @@ class GoldenTurn:
     live_expected_tool_result_names: tuple[str, ...] | None = None
     live_expected_tool_calls: tuple[ExpectedToolCall, ...] | None = None
     live_expected_outcome: ExpectedOutcome | None = None
+    # Code review 2026-09-14 (Decision 1): the live path used to skip the
+    # state/text gate entirely -- a dead or do-nothing provider could "pass"
+    # a turn expecting zero tool calls. The gate now applies on BOTH paths;
+    # `None` means the canonical `expected_visible_state` applies unchanged,
+    # and a declared value is the one place a live/deterministic divergence
+    # is allowed to live, instead of the silent `run_source != "live"` bypass.
+    live_expected_visible_state: VisibleState | None = None
+    # Code review 2026-09-14 (Decision 2): names WHY a negative-antecedent
+    # turn failed (by the `AntecedentFaultError.code` the eval seam observes
+    # from `evals/doubles.py`), so "failed because the antecedent was
+    # genuinely absent/stale/malformed" is distinguishable from "failed
+    # because the harness crashed for an unrelated reason". Deterministic-
+    # only: the double is the only thing that ever raises one of these
+    # named faults, so this is never checked on `run_source == "live"`.
+    expected_failure_reason: str | None = None
+    # Code review 2026-09-14 (Decision 3): substrings that must NOT appear
+    # in the text content of the history THIS turn actually observes, after
+    # `execute_turn`'s own `HISTORY_MESSAGE_BOUND` truncation -- computed the
+    # same way for a double OR a real live model, since the truncation
+    # happens before either is ever called. This is what lets the
+    # long-history-window case prove AC5 through the harness on both paths
+    # instead of merely not crashing.
+    expected_history_absent: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -246,6 +275,8 @@ GOLDEN_TURN_FIELDS: frozenset[str] = frozenset(
         "history_mode", "raw_turn_padding", "filler_activity_count",
         "expected_tool_result_names", "live_expected_tool_result_names",
         "live_expected_tool_calls", "live_expected_outcome",
+        "live_expected_visible_state", "expected_failure_reason",
+        "expected_history_absent",
     }
 )
 
@@ -261,10 +292,31 @@ def load_multi_turn_case(path: Path) -> MultiTurnGoldenCase:
 
 
 def load_multi_turn_cases(directory: Path) -> tuple[MultiTurnGoldenCase, ...]:
-    """Load every JSON case recursively; no malformed file is silently skipped."""
-    return tuple(
-        load_multi_turn_case(path) for path in sorted(Path(directory).rglob("*.json"))
-    )
+    """Load every JSON case recursively; no malformed file is silently skipped.
+
+    Code review 2026-09-14: an empty or mistyped `directory` used to load
+    silently as zero cases, so a typo'd path produced a clean-looking report
+    with nothing in it rather than an error. A duplicate `case_id` across
+    files used to load as two distinct cases too, double-consuming a live
+    suite's `case_limit` under one identity.
+    """
+    paths = sorted(Path(directory).rglob("*.json"))
+    if not paths:
+        raise ValueError(f"no multi-turn golden case files found under {directory}")
+    cases = tuple(load_multi_turn_case(path) for path in paths)
+    _require_unique_case_ids(cases, directory)
+    return cases
+
+
+def _require_unique_case_ids(cases: tuple, directory: Path) -> None:
+    seen: set[str] = set()
+    for case in cases:
+        if case.case_id in seen:
+            raise ValueError(
+                f"duplicate case_id {case.case_id!r} found under {directory}; "
+                "golden case ids must be unique across the dataset"
+            )
+        seen.add(case.case_id)
 
 
 def multi_turn_case_from_mapping(
@@ -355,6 +407,14 @@ def _golden_turn(value: object, label: str) -> GoldenTurn:
     raw_turn_padding = raw.get("raw_turn_padding", 0)
     if not isinstance(raw_turn_padding, int) or isinstance(raw_turn_padding, bool) or raw_turn_padding < 0:
         raise ValueError(f"{label}.raw_turn_padding must be a non-negative integer")
+    # Code review 2026-09-14 (patch 13): a nonzero padding/filler field under
+    # the WRONG history_mode used to load silently and do nothing, despite
+    # the story's own claim that "every new field is consumed".
+    if raw_turn_padding > 0 and history_mode != "raw_turn":
+        raise ValueError(
+            f"{label}.raw_turn_padding is only meaningful when history_mode is "
+            "'raw_turn'"
+        )
     filler_activity_count = raw.get("filler_activity_count", 0)
     if (
         not isinstance(filler_activity_count, int)
@@ -362,6 +422,25 @@ def _golden_turn(value: object, label: str) -> GoldenTurn:
         or filler_activity_count < 0
     ):
         raise ValueError(f"{label}.filler_activity_count must be a non-negative integer")
+    if filler_activity_count > 0 and history_mode != "rehydrated_activities":
+        raise ValueError(
+            f"{label}.filler_activity_count is only meaningful when history_mode "
+            "is 'rehydrated_activities'"
+        )
+    live_visible_state = _optional_string(
+        raw.get("live_expected_visible_state"), f"{label}.live_expected_visible_state"
+    )
+    if live_visible_state is not None and live_visible_state not in VISIBLE_STATES:
+        raise ValueError(
+            f"{label}.live_expected_visible_state {live_visible_state!r} is invalid"
+        )
+    expected_failure_reason = _optional_string(
+        raw.get("expected_failure_reason"), f"{label}.expected_failure_reason"
+    )
+    expected_history_absent = tuple(
+        _string(value, f"{label}.expected_history_absent")
+        for value in _list(raw.get("expected_history_absent", []), "expected_history_absent")
+    )
     expected_tool_result_names = (
         None
         if "expected_tool_result_names" not in raw
@@ -401,6 +480,9 @@ def _golden_turn(value: object, label: str) -> GoldenTurn:
         live_expected_tool_result_names=live_expected_tool_result_names,
         live_expected_tool_calls=live_expected_calls,
         live_expected_outcome=cast(ExpectedOutcome | None, live_outcome),
+        live_expected_visible_state=cast(VisibleState | None, live_visible_state),
+        expected_failure_reason=expected_failure_reason,
+        expected_history_absent=expected_history_absent,
     )
 
 
@@ -415,8 +497,18 @@ def load_case(path: Path) -> GoldenCase:
 
 
 def load_cases(directory: Path) -> tuple[GoldenCase, ...]:
-    """Load every JSON case recursively; no malformed file is silently skipped."""
-    return tuple(load_case(path) for path in sorted(Path(directory).rglob("*.json")))
+    """Load every JSON case recursively; no malformed file is silently skipped.
+
+    Code review 2026-09-14: see `load_multi_turn_cases`' docstring -- the
+    same empty-directory and duplicate-id gaps applied to the single-turn
+    loader.
+    """
+    paths = sorted(Path(directory).rglob("*.json"))
+    if not paths:
+        raise ValueError(f"no golden case files found under {directory}")
+    cases = tuple(load_case(path) for path in paths)
+    _require_unique_case_ids(cases, directory)
+    return cases
 
 
 CASE_FIELDS: frozenset[str] = frozenset(
@@ -450,7 +542,7 @@ SCRIPTED_TURN_FIELDS: frozenset[str] = frozenset(
 )
 
 HISTORY_LOOKUP_FIELDS: frozenset[str] = frozenset(
-    {"source_tool_name", "field_path", "arg_path", "require_field", "require_present"}
+    {"source_tool_name", "field_path", "arg_path", "require_field"}
 )
 
 
@@ -641,19 +733,34 @@ def _history_lookup(value: object, label: str) -> HistoryLookupV1:
         if len(pair) != 2:
             raise ValueError(f"{label}.require_field must be [path, expected_value]")
         require_field = (
-            tuple(_list(pair[0], f"{label}.require_field[0]")),
+            _path_tuple(pair[0], f"{label}.require_field[0]"),
             pair[1],
         )
-    require_present = raw.get("require_present", True)
-    if not isinstance(require_present, bool):
-        raise ValueError(f"{label}.require_present must be boolean")
     return HistoryLookupV1(
         source_tool_name=_string(raw.get("source_tool_name"), f"{label}.source_tool_name"),
-        field_path=tuple(_list(raw.get("field_path"), f"{label}.field_path")),
-        arg_path=tuple(_list(raw.get("arg_path"), f"{label}.arg_path")),
+        field_path=_path_tuple(raw.get("field_path"), f"{label}.field_path"),
+        arg_path=_path_tuple(raw.get("arg_path"), f"{label}.arg_path"),
         require_field=require_field,
-        require_present=require_present,
     )
+
+
+def _path_tuple(value: object, label: str) -> tuple[str | int, ...]:
+    """A `history_lookup` path segment list, type-checked element-by-element.
+
+    Code review 2026-09-14 (patch 13): `_list` alone let a float, a dict, or
+    any other JSON value ride through as a path segment, surfacing later as
+    an opaque `KeyError`/`TypeError` deep inside `_dig`/`_deep_set` instead
+    of a clear authoring error at load time.
+    """
+    items = _list(value, label)
+    result: list[str | int] = []
+    for index, item in enumerate(items):
+        if isinstance(item, bool) or not isinstance(item, (str, int)):
+            raise ValueError(
+                f"{label}[{index}] must be a string or integer path segment, got {item!r}"
+            )
+        result.append(item)
+    return tuple(result)
 
 
 def _expected_tool_call(value: object, label: str) -> ExpectedToolCall:

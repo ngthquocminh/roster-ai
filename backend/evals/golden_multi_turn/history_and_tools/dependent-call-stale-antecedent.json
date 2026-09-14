@@ -107,6 +107,8 @@
       "expected_visible_text": "",
       "history_mode": "raw_turn",
       "expected_tool_result_names": [],
+      "expected_failure_reason": "antecedent_stale",
+      "live_expected_visible_state": "completed",
       "live_expected_tool_calls": [
         {
           "tool_name": "scheduling_draft",

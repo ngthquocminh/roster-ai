@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
-from pydantic_ai import UnexpectedModelBehavior, models
+from pydantic_ai import ModelHTTPError, UnexpectedModelBehavior, models
 
 from agent.runtime import PydanticAIAgentRuntime, create_agent_runtime
 from application.contracts.agent_runtime import (
@@ -56,6 +56,7 @@ from evals.cases import (
     multi_turn_case_from_mapping,
 )
 import evals.doubles as doubles_module
+import evals.report as report_module
 from evals.doubles import (
     _to_model_response,
     build_model_double,
@@ -79,6 +80,7 @@ from evals.report import (
     MultiTurnCaseEvaluation,
     _classify_reason,
     _evaluate_case,
+    _needs_named_output_tools_for_turn,
     _readiness_verdict,
     _report_deps,
     _runtime_for_case,
@@ -934,6 +936,7 @@ def test_live_diagnostics_flushes_one_result_per_case(tmp_path) -> None:
         "tool_call_count": 1,
         "tool_result_names": ["shiftmind_demonstration"],
         "tool_result_count": 1,
+        "exception_type": None,
     }
 
 
@@ -1079,9 +1082,18 @@ class TestLiveReadinessException:
         assert _readiness_verdict(False, None, expired, now=datetime.now(timezone.utc)) == "blocked"
 
     @pytest.mark.parametrize("field", ["owner", "rationale", "scope", "compensating_limitation"])
-    def test_an_incomplete_exception_blocks(self, field: str) -> None:
-        incomplete = self._exception(**{field: "   "})
-        assert _readiness_verdict(False, None, incomplete, now=datetime.now(timezone.utc)) == "blocked"
+    def test_an_incomplete_exception_is_rejected_at_construction(self, field: str) -> None:
+        """Code review 2026-09-14: an incomplete exception used to construct
+        fine and only read as `is_valid() == False` at USE time, after the
+        whole live budget had already been spent finding that out. It is now
+        rejected at construction, before any provider call.
+        """
+        with pytest.raises(ValueError, match=field):
+            self._exception(**{field: "   "})
+
+    def test_a_naive_expires_at_is_rejected_at_construction(self) -> None:
+        with pytest.raises(ValueError, match="timezone-aware"):
+            self._exception(expires_at=datetime(2999, 1, 1))  # no tzinfo
 
     def test_a_stopped_suite_is_never_eligible_even_with_all_passes(self) -> None:
         assert _readiness_verdict(True, "case_limit_exhausted", None, now=datetime.now(timezone.utc)) == "blocked"
@@ -1455,6 +1467,122 @@ class TestMultiTurnCaseSchema:
         for path in sorted(MULTI_TURN_GOLDEN_DIR.rglob("*.json")):
             load_multi_turn_case(path)  # never raises on a committed file
 
+    # Code review 2026-09-14 (patch 13): a nonzero padding/filler field under
+    # the wrong history_mode used to load silently and do nothing.
+
+    def test_rejects_raw_turn_padding_under_the_wrong_mode(self) -> None:
+        payload = _multi_turn_payload(
+            turns=[
+                {**_multi_turn_payload()["turns"][0], "history_mode": "independent"},  # type: ignore[index]
+                {
+                    "prompt": "hi", "capabilities": [],
+                    "scripted_turns": [{"response_text": "hello"}],
+                    "expected_outcome": "allow", "expected_tool_calls": [],
+                    "expected_visible_state": "completed", "expected_visible_text": "hello",
+                    "history_mode": "rehydrated_activities", "raw_turn_padding": 5,
+                },
+            ]
+        )
+        with pytest.raises(ValueError, match="raw_turn_padding"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_rejects_filler_activity_count_under_the_wrong_mode(self) -> None:
+        payload = _multi_turn_payload(
+            turns=[
+                {**_multi_turn_payload()["turns"][0], "history_mode": "independent"},  # type: ignore[index]
+                {
+                    "prompt": "hi", "capabilities": [],
+                    "scripted_turns": [{"response_text": "hello"}],
+                    "expected_outcome": "allow", "expected_tool_calls": [],
+                    "expected_visible_state": "completed", "expected_visible_text": "hello",
+                    "history_mode": "raw_turn", "filler_activity_count": 5,
+                },
+            ]
+        )
+        with pytest.raises(ValueError, match="filler_activity_count"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_rejects_an_invalid_live_expected_visible_state(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["live_expected_visible_state"] = "time_travelled"  # type: ignore[index]
+        with pytest.raises(ValueError, match="live_expected_visible_state"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_history_lookup_rejects_a_float_path_segment(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["scripted_turns"] = [
+            {
+                "tool_name": "x", "arguments": {}, "tool_call_id": "c1",
+                "history_lookup": {
+                    "source_tool_name": "y", "field_path": [1.5], "arg_path": ["b"],
+                },
+            }
+        ]
+        with pytest.raises(ValueError, match="path segment"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_history_lookup_rejects_a_dict_path_segment(self) -> None:
+        payload = _multi_turn_payload()
+        payload["turns"][0]["scripted_turns"] = [
+            {
+                "tool_name": "x", "arguments": {}, "tool_call_id": "c1",
+                "history_lookup": {
+                    "source_tool_name": "y", "field_path": [{"a": 1}], "arg_path": ["b"],
+                },
+            }
+        ]
+        with pytest.raises(ValueError, match="path segment"):
+            multi_turn_case_from_mapping(payload)
+
+    def test_history_lookup_no_longer_accepts_require_present(self) -> None:
+        """Code review 2026-09-14 (Decision 2): removed entirely -- the
+        escape it provided is exactly what Decision 3 forbids.
+        """
+        payload = _multi_turn_payload()
+        payload["turns"][0]["scripted_turns"] = [
+            {
+                "tool_name": "x", "arguments": {}, "tool_call_id": "c1",
+                "history_lookup": {
+                    "source_tool_name": "y", "field_path": ["a"], "arg_path": ["b"],
+                    "require_present": False,
+                },
+            }
+        ]
+        with pytest.raises(ValueError, match="unknown field"):
+            multi_turn_case_from_mapping(payload)
+
+
+class TestGoldenCaseLoaderIntegrity:
+    """Code review 2026-09-14: an empty/mistyped dataset directory used to
+    load silently as zero cases, and a duplicate `case_id` across files used
+    to load as two distinct cases, double-consuming a live suite's
+    `case_limit` under one identity.
+    """
+
+    def test_load_multi_turn_cases_raises_on_an_empty_directory(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="no multi-turn golden case files"):
+            load_multi_turn_cases(tmp_path)
+
+    def test_load_cases_raises_on_an_empty_directory(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="no golden case files"):
+            load_cases(tmp_path)
+
+    def test_load_multi_turn_cases_rejects_a_duplicate_case_id(self, tmp_path: Path) -> None:
+        (tmp_path / "a.json").write_text(
+            json.dumps(_multi_turn_payload(case_id="dup")), encoding="utf-8"
+        )
+        (tmp_path / "b.json").write_text(
+            json.dumps(_multi_turn_payload(case_id="dup")), encoding="utf-8"
+        )
+        with pytest.raises(ValueError, match="duplicate case_id"):
+            load_multi_turn_cases(tmp_path)
+
+    def test_load_cases_rejects_a_duplicate_case_id(self, tmp_path: Path) -> None:
+        (tmp_path / "a.json").write_text(json.dumps(_case_payload()), encoding="utf-8")
+        (tmp_path / "b.json").write_text(json.dumps(_case_payload()), encoding="utf-8")
+        with pytest.raises(ValueError, match="duplicate case_id"):
+            load_cases(tmp_path)
+
 
 class TestHistoryResponseOffset:
     def test_offset_counts_only_non_empty_assistant_messages(self) -> None:
@@ -1539,11 +1667,6 @@ class TestHistoryLookup:
         with pytest.raises(UnexpectedModelBehavior, match="absent"):
             doubles_module._resolve_history_lookup(turn, [])
 
-    def test_returns_the_turn_unchanged_when_absence_is_tolerated(self) -> None:
-        turn = self._turn(require_present=False)
-        resolved = doubles_module._resolve_history_lookup(turn, [])
-        assert resolved is turn
-
     def test_raises_when_a_consistency_check_finds_a_stale_antecedent(self) -> None:
         turn = self._turn(
             require_field=(("items", 0, "record_id"), "a-999"),
@@ -1559,6 +1682,46 @@ class TestHistoryLookup:
         messages = self._messages_with_result("{'items': ({'worker_id': 'w9'},)}")
         with pytest.raises(UnexpectedModelBehavior, match="antecedent field"):
             doubles_module._resolve_history_lookup(turn, messages)
+
+    # Code review 2026-09-14 (Decision 2/patch): absence is always fatal now
+    # (no more `require_present=False`), and malformed content / a bad
+    # `arg_path` are named faults instead of raw uncaught exceptions.
+
+    def test_absence_is_always_fatal(self) -> None:
+        turn = self._turn()
+        with pytest.raises(doubles_module.AntecedentFaultError) as excinfo:
+            doubles_module._resolve_history_lookup(turn, [])
+        assert excinfo.value.code == "antecedent_absent"
+
+    def test_raises_a_named_fault_for_unparseable_content(self) -> None:
+        turn = self._turn()
+        messages = self._messages_with_result("not a literal")
+        with pytest.raises(doubles_module.AntecedentFaultError) as excinfo:
+            doubles_module._resolve_history_lookup(turn, messages)
+        assert excinfo.value.code == "antecedent_malformed"
+
+    def test_raises_a_named_fault_for_empty_string_content(self) -> None:
+        turn = self._turn()
+        messages = self._messages_with_result("")
+        with pytest.raises(doubles_module.AntecedentFaultError) as excinfo:
+            doubles_module._resolve_history_lookup(turn, messages)
+        assert excinfo.value.code == "antecedent_malformed"
+
+    def test_raises_a_named_fault_for_an_invalid_arg_path(self) -> None:
+        turn = self._turn(arg_path=("request", "nonexistent", "record_id"))
+        messages = self._messages_with_result({"items": ({"worker_id": "w9"},)})
+        with pytest.raises(doubles_module.AntecedentFaultError) as excinfo:
+            doubles_module._resolve_history_lookup(turn, messages)
+        assert excinfo.value.code == "antecedent_argpath_invalid"
+
+    def test_stale_and_absent_field_faults_are_named_distinctly(self) -> None:
+        stale_turn = self._turn(require_field=(("items", 0, "record_id"), "a-999"))
+        messages = self._messages_with_result(
+            "{'items': ({'worker_id': 'w9', 'record_id': 'a-1'},)}"
+        )
+        with pytest.raises(doubles_module.AntecedentFaultError) as excinfo:
+            doubles_module._resolve_history_lookup(stale_turn, messages)
+        assert excinfo.value.code == "antecedent_stale"
 
 
 class TestMultiTurnGoldenCasesPassDeterministically:
@@ -1592,6 +1755,39 @@ class TestMultiTurnGoldenCasesPassDeterministically:
         )
         exercised = {name for turn in case.turns for name in turn.capabilities}
         assert exercised == {"scheduling_inspect", "scheduling_draft"}
+
+
+class TestMultiTurnAnswerTypeDerivation:
+    """Code review 2026-09-14: the multi-turn runner used to hardcode
+    `answer_type=None`, making `expected_outcome: "clarify"/"refuse"` and a
+    scripted `response_data` turn unreachable -- the schema accepted case
+    shapes the runner could only ever turn into a generic
+    `UnexpectedModelBehavior -> failed`.
+    """
+
+    def _turn(self, **overrides: object) -> GoldenTurn:
+        base = dict(
+            prompt="hi", capabilities=(), scripted_turns=(ScriptedModelTurn(response_text="hi"),),
+            expected_outcome="allow", expected_tool_calls=(),
+            expected_visible_state="completed", expected_visible_text="hi",
+        )
+        base.update(overrides)
+        return GoldenTurn(**base)  # type: ignore[arg-type]
+
+    def test_an_allow_turn_needs_no_named_output_tools(self) -> None:
+        assert _needs_named_output_tools_for_turn(self._turn()) is False
+
+    def test_a_refuse_turn_needs_named_output_tools(self) -> None:
+        assert _needs_named_output_tools_for_turn(self._turn(expected_outcome="refuse")) is True
+
+    def test_a_clarify_turn_needs_named_output_tools(self) -> None:
+        assert _needs_named_output_tools_for_turn(self._turn(expected_outcome="clarify")) is True
+
+    def test_a_scripted_response_data_turn_needs_named_output_tools(self) -> None:
+        turn = self._turn(
+            scripted_turns=(ScriptedModelTurn(response_data={"draft_id": "x"}),),
+        )
+        assert _needs_named_output_tools_for_turn(turn) is True
 
 
 def _load_multi_turn_case_by_id(case_id: str) -> MultiTurnGoldenCase:
@@ -1677,6 +1873,125 @@ class TestMultiTurnMutationGuards:
 
         assert run_multi_turn_case(case, installed).passed is True
 
+    def test_live_state_gate_guard_catches_a_dead_provider(self) -> None:
+        """Code review 2026-09-14 (Decision 1): the live path used to skip
+        the state/text gate entirely, so a turn expecting `completed` with
+        zero tool calls was "passed" by a provider that raises on every
+        call -- `PolicyOutcomeEvaluator` itself treats a non-`completed`
+        status as PASSING for an `expected_outcome: "allow"` turn ("terminated
+        ... before any policy decision"), so only the STATE check catches
+        this. `_evaluate_turn` now gates state on live too (Decision 1's own
+        live evidence priority: production runs against the real provider).
+        """
+        case = _trivial_live_cases(1)[0]
+        installed = installed_modules()
+
+        def _dead(messages, info):
+            raise ModelHTTPError(status_code=503, model_name="dead", body="down")
+
+        from pydantic_ai.models.function import FunctionModel
+
+        live_evaluation = run_multi_turn_case(
+            case, installed, model=FunctionModel(_dead), run_source="live"
+        )
+        assert live_evaluation.passed is False
+        assert "visible differed" in live_evaluation.turn_evaluations[0].verdict.reason
+
+    def test_history_absence_guard_catches_a_widened_window(self, monkeypatch) -> None:
+        """Code review 2026-09-14 (Decision 3): `long-history-window` used
+        to pass regardless of whether the 100-message bound actually
+        excluded the oldest filler activity -- nothing observed the window
+        it received. Widening the bound now must turn this red for the
+        stated reason on EITHER run source, since the check runs before
+        either a double or a real model is ever called.
+        """
+        case = _load_multi_turn_case_by_id("multi-turn-long-history-window")
+        installed = installed_modules()
+        assert run_multi_turn_case(case, installed).passed is True
+
+        monkeypatch.setattr(execute_turn_module, "HISTORY_MESSAGE_BOUND", 1000)
+        mutated = run_multi_turn_case(case, installed)
+        assert mutated.passed is False
+        assert "history window leaked" in mutated.turn_evaluations[1].verdict.reason
+        monkeypatch.undo()
+
+        assert run_multi_turn_case(case, installed).passed is True
+
+    def test_failure_reason_naming_guard_catches_a_misclassified_fault(self, monkeypatch) -> None:
+        """Code review 2026-09-14 (Decision 2): before `AntecedentFaultError`
+        carried a `.code`, EVERY antecedent fault (absent, stale, malformed,
+        bad arg_path) collapsed into the same generic `failed` outcome --
+        indistinguishable from an unrelated harness crash. Forcing every
+        fault to report the WRONG code must turn the named check red.
+        """
+        case = _load_multi_turn_case_by_id("multi-turn-dependent-call-missing-antecedent")
+        installed = installed_modules()
+        assert run_multi_turn_case(case, installed).passed is True
+
+        monkeypatch.setattr(
+            report_module, "_antecedent_fault_code", lambda exc: "wrong_code"
+        )
+        mutated = run_multi_turn_case(case, installed)
+        assert mutated.passed is False
+        assert "failure reason differed" in mutated.turn_evaluations[1].verdict.reason
+        monkeypatch.undo()
+
+        assert run_multi_turn_case(case, installed).passed is True
+
+    def test_classify_reason_passed_gate_guard(self, monkeypatch) -> None:
+        """Code review 2026-09-14: the `passed` gate is what keeps a PASSING
+        verdict's own incidental wording from reading as a failure label
+        (`PolicyOutcomeEvaluator`'s own passing "terminated as ... before any
+        policy decision", or a live turn's ever-present "visible differed"
+        segment). Removing the gate reproduces the exact misclassification
+        bug found in review.
+        """
+        passing_reason = "routing: matched; policy: terminated as completed before any policy decision"
+        assert report_module._classify_reason(passing_reason, passed=True) == "matched"
+
+        def _unconditional_classify(reason: str, *, passed: bool) -> str:  # the pre-fix algorithm
+            lowered = reason.lower()
+            for needle, label in (
+                ("terminated as", "terminated_before_policy_decision"),
+                *report_module._REASON_CLASSIFICATIONS,
+            ):
+                if needle in lowered:
+                    return label
+            return "other"
+
+        monkeypatch.setattr(report_module, "_classify_reason", _unconditional_classify)
+        assert (
+            report_module._classify_reason(passing_reason, passed=True)
+            == "terminated_before_policy_decision"
+        )
+        monkeypatch.undo()
+
+        assert report_module._classify_reason(passing_reason, passed=True) == "matched"
+
+    def test_per_turn_budget_check_catches_mid_case_exhaustion(self) -> None:
+        """Code review 2026-09-14 mutation finding: deleting the aggregate-
+        exhaustion stop, or checking it only at case boundaries (the
+        pre-fix structure), left every existing test green -- nothing
+        exercised a ceiling crossed DURING a run. A 2-turn case with a
+        1-request budget must stop AFTER turn 1 and never run turn 2; the
+        surviving-mutant scenario from review (a single trivial case whose
+        own usage exceeds the ceiling) must no longer read `stopped_reason:
+        None` / `readiness: "eligible"`.
+        """
+        case = _trivial_two_turn_live_case("mutation-guard-mid-case")
+        budget = LiveSuiteBudgetV1(
+            case_limit=10, request_limit=1, tool_call_limit=1000,
+            token_limit=1_000_000, elapsed_seconds_limit=60.0, spend_usd_limit=1000.0,
+        )
+        result = run_bounded_live_multi_turn_suite(
+            [case], model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        assert result["stopped_reason"] == "aggregate_budget_exhausted"
+        assert len(result["results"][0]["turns"]) == 1  # turn 2 never ran
+        assert result["results"][0]["partial"] is True
+        assert result["results"][0]["passed"] is False
+        assert result["readiness"] == "blocked"
+
 
 def test_build_multi_turn_evaluation_report_scopes_to_authoritative_results() -> None:
     case = _load_multi_turn_case_by_id("multi-turn-dependent-call-success")
@@ -1720,13 +2035,67 @@ class TestLiveDiagnosticsRedaction:
             'tool arguments differed at call 0: expected {"secret": "sk-do-not-leak"}, '
             'actual {"secret": "sk-other"}'
         )
-        classification = _classify_reason(sensitive_reason)
+        classification = _classify_reason(sensitive_reason, passed=False)
         assert classification == "tool_arguments_mismatch"
         assert "sk-do-not-leak" not in classification
         assert "sk-other" not in classification
 
     def test_unrecognized_reasons_classify_as_other_not_raw(self) -> None:
-        assert _classify_reason("sk-live-abc123 leaked verbatim") == "other"
+        assert _classify_reason("sk-live-abc123 leaked verbatim", passed=False) == "other"
+
+    def test_a_passing_verdict_always_classifies_as_matched(self) -> None:
+        """Code review 2026-09-14: a passing verdict must never classify as
+        a failure label merely because its reason string's WORDING happens
+        to contain a failure needle (`PolicyOutcomeEvaluator`'s own passing
+        "terminated as ... before any policy decision", or a live turn's
+        "visible differed" segment, which appears on every live turn
+        regardless of pass/fail since text is never gated live).
+        """
+        assert _classify_reason("terminated as completed before any policy decision", passed=True) == "matched"
+        assert _classify_reason("routing: matched; policy: matched; visible differed: ...", passed=True) == "matched"
+
+    def test_grounding_failure_phrasings_are_classified_not_matched(self) -> None:
+        """A grounding failure used to have no needle at all, so the routing
+        segment's own 'matched' substring won the classification.
+        """
+        assert (
+            _classify_reason("grounded response or oracle is missing", passed=False)
+            == "grounding_response_missing"
+        )
+        assert (
+            _classify_reason("expected supported, got ('missing_evidence',)", passed=False)
+            == "grounding_supported_mismatch"
+        )
+        assert (
+            _classify_reason(
+                "grounding input relation is unverifiable: the response carried no claims",
+                passed=False,
+            )
+            == "grounding_relation_unverifiable"
+        )
+        assert (
+            _classify_reason(
+                "grounding input relation differed: expected argument_mismatch=True, actual=False",
+                passed=False,
+            )
+            == "grounding_relation_mismatch"
+        )
+
+    def test_history_window_not_checked_does_not_collide_with_a_real_failure(self) -> None:
+        """Found running the live suite for real (2026-09-15): the
+        `"history window"` needle was broad enough to also match the
+        ALWAYS-PRESENT `"history window: not checked"` segment `_evaluate_turn`
+        appends to every reason, masking the actual failure (visible-state
+        mismatch) behind `"history_window_leak"` on a turn whose case never
+        even declares `expected_history_absent`.
+        """
+        reason = (
+            "routing: matched 0 expected tool route(s); policy: matched; "
+            "visible differed: state expected failed, actual completed; "
+            "text expected '', actual 'ok'; tool results: not checked; "
+            "failure reason: not checked; history window: not checked"
+        )
+        assert _classify_reason(reason, passed=False) == "visible_mismatch"
 
     def test_safe_diagnostic_record_shape_has_no_argument_or_content_keys(self) -> None:
         record = _safe_diagnostic_record(
@@ -1790,7 +2159,7 @@ class TestLiveDiagnosticsRedaction:
         assert set(record) == {
             "case_id", "case_version", "model", "passed", "reason_classification",
             "run_source", "tool_call_names", "tool_call_count",
-            "tool_result_names", "tool_result_count",
+            "tool_result_names", "tool_result_count", "exception_type",
         }
 
     def test_a_serialization_failure_fallback_record_also_carries_no_sentinel(
@@ -1907,6 +2276,33 @@ def _trivial_live_cases(count: int) -> list[MultiTurnGoldenCase]:
     ]
 
 
+def _trivial_two_turn_live_case(case_id: str) -> MultiTurnGoldenCase:
+    """Two independent turns, each a flat text exchange -- enough to prove a
+    per-turn (mid-case) budget stop without any history/tool machinery.
+    """
+    return multi_turn_case_from_mapping(
+        _multi_turn_payload(
+            case_id=case_id,
+            turns=[
+                {
+                    "prompt": "hi", "capabilities": [],
+                    "scripted_turns": [{"response_text": "hello"}],
+                    "expected_outcome": "allow", "expected_tool_calls": [],
+                    "expected_visible_state": "completed", "expected_visible_text": "hello",
+                    "history_mode": "independent",
+                },
+                {
+                    "prompt": "hi again", "capabilities": [],
+                    "scripted_turns": [{"response_text": "hello again"}],
+                    "expected_outcome": "allow", "expected_tool_calls": [],
+                    "expected_visible_state": "completed", "expected_visible_text": "hello again",
+                    "history_mode": "independent",
+                },
+            ],
+        )
+    )
+
+
 class TestBoundedLiveMultiTurnSuite:
     """Story 5.6 Decision 5 / AC2 / AC7: explicit opt-in, finite budgets,
     cumulative accounting, fail-closed stop, safe partial results. Exercised
@@ -1972,6 +2368,62 @@ class TestBoundedLiveMultiTurnSuite:
         # happens to match its own scripted expectation.
         assert "reason_classification" not in result["results"][1]
         assert "exception_type" not in result["results"][1]
+
+    def test_a_single_cases_own_overrun_is_recorded_not_silently_eligible(self) -> None:
+        """Code review 2026-09-14: the exact surviving-mutant scenario found
+        at review -- one trivial case whose own usage already meets or
+        exceeds the ceiling used to leave `stopped_reason: None` and
+        `readiness: "eligible"`, because nothing ran AFTERWARD to notice.
+        """
+        cases = _trivial_live_cases(1)
+        budget = LiveSuiteBudgetV1(
+            case_limit=10, request_limit=1, tool_call_limit=1000,
+            token_limit=1_000_000, elapsed_seconds_limit=60.0, spend_usd_limit=1000.0,
+        )
+        result = run_bounded_live_multi_turn_suite(
+            cases, model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        assert result["stopped_reason"] is not None
+        assert result["readiness"] == "blocked"
+
+    def test_spend_measured_reflects_whether_pricing_was_supplied(self) -> None:
+        """Code review 2026-09-14: `spend_usd_limit` is a REQUIRED positive
+        ceiling, but with no pricing supplied `spend_usd` stays 0.0 forever
+        and that ceiling can never trip -- `spend_measured` makes that
+        visible in the report instead of silently vacuous.
+        """
+        cases = _trivial_live_cases(1)
+        budget = LiveSuiteBudgetV1(
+            case_limit=10, request_limit=1000, tool_call_limit=1000,
+            token_limit=1_000_000, elapsed_seconds_limit=60.0, spend_usd_limit=1000.0,
+        )
+        unmeasured = run_bounded_live_multi_turn_suite(
+            cases, model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        assert unmeasured["spend_measured"] is False
+        assert unmeasured["usage"]["spend_usd"] == 0.0
+
+        measured = run_bounded_live_multi_turn_suite(
+            cases, model=_flat_text_model(), budget=budget, model_name="test-flat",
+            input_usd_per_mtok=1.0, output_usd_per_mtok=1.0,
+        )
+        assert measured["spend_measured"] is True
+
+    def test_live_report_carries_release_gate_fields_and_is_never_sufficient(self) -> None:
+        cases = _trivial_live_cases(1)
+        budget = LiveSuiteBudgetV1(
+            case_limit=10, request_limit=1000, tool_call_limit=1000,
+            token_limit=1_000_000, elapsed_seconds_limit=60.0, spend_usd_limit=1000.0,
+        )
+        result = run_bounded_live_multi_turn_suite(
+            cases, model=_flat_text_model(), budget=budget, model_name="test-flat",
+        )
+        assert result["release_gate_eligible"] is False
+        assert "Gate B" in result["release_gate_status"]
+        turn_record = result["results"][0]["turns"][0]
+        assert turn_record["run_source"] == "live"
+        assert "tool_call_names" in turn_record
+        assert "tool_result_names" in turn_record
 
     def test_never_reads_a_credential_or_allows_requests_outside_its_own_scope(self) -> None:
         assert models.ALLOW_MODEL_REQUESTS is False  # module-level default, unchanged

@@ -76,6 +76,8 @@
       "expected_visible_state": "failed",
       "expected_visible_text": "",
       "expected_tool_result_names": [],
+      "expected_failure_reason": "antecedent_absent",
+      "live_expected_visible_state": "completed",
       "history_mode": "raw_turn"
     }
   ]
