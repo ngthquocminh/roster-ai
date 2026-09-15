@@ -2530,7 +2530,73 @@ development_status:
   # have only two user turns; their pass does not establish natural conversation readiness.
   # 5.7 requires real progressive conversations, every tool/operation, and draft-to-baseline
   # effects. It blocks the next Gate B assessment; no new live proof has been run yet.
-  5-7-prove-live-conversations-through-baseline-promotion: backlog
+  #
+  # NOTE (2026-09-15): Story 5.7 created and moved to ready-for-dev at 80e6242 (clean tree
+  # except two untracked, unrelated artifacts -- `.1devtool/`, `rosterai-schema.sql`). It does
+  # NOT flip epic-5 (already in-progress). Its acceptance criteria, scenario catalogue, and
+  # judging protocol were already frozen by the 2026-09-15 sprint-change-proposal and epics.md
+  # entry BEFORE this creation pass -- this pass only adds the developer-context sections
+  # (facts, decisions, file plan, previous-story intelligence, references) around that frozen
+  # contract, per the epics.md row's own "Implement the complete contract in Story 5.7" framing.
+  #
+  # THE LOAD-BEARING FINDING, measured at creation rather than left for dev to discover: the
+  # HTTP execute-turn endpoint's suspended-turn-to-approval-request bridge hardcodes acceptance
+  # of exactly ONE capability. `execute_agent_turn`'s `_finish()` (api/routers/conversations.py
+  # :365-366) raises a bare `RuntimeError("suspended turn requested an unsupported approval
+  # capability")` for any suspended tool call whose name is not `scheduling_baseline`. The
+  # demonstration capability's own test
+  # (test_demonstration_capability.py::test_an_unapproved_repetition_suspends_the_run_through_
+  # the_real_runtime) proves the runtime legitimately suspends on `shiftmind_demonstration`
+  # with `repeat > 1` -- so the scenario catalogue's Scenario G turn 4 ("Now repeat the same
+  # label twice"), driven through the real HTTP path, is measured to hit this RuntimeError
+  # today, not a graceful refusal. This is exactly the gap AC3/Scenario G's own text already
+  # anticipated ("if no supported path exists, report a blocking implementation gap rather
+  # than bypassing authority") -- confirmed, not merely anticipated. `RequestApprovalCommandV1`
+  # (application/use_cases/request_approval.py) is schedule-run-shaped by contract (non-
+  # nullable `schedule_run_id`), so a full capability-agnostic generalization is an AD-20
+  # contract change outside a narrow bug fix; the story records both the finding and this
+  # scoping tension as Decision 1, recommending "report the gap" per AC3's own escape hatch
+  # unless a cheap non-contract-changing fix is found at the dispatch site.
+  #
+  # FOUR MORE FACTS RECORDED AT CREATION, each closing a place a fresh reading would get
+  # wrong: (1) the installed-tool inventory is a literal static tuple of exactly six capability
+  # modules (application/capabilities/installed.py); (2) a real, production-shaped composed
+  # stack ALREADY proves the exact draft -> real solver -> candidate -> approval -> baseline
+  # journey once, end to end over real HTTP -- backend/tests/compose_proof.py (pytest marker
+  # `compose`; the file name does not match `test_*.py` so it is never auto-collected) -- reuse
+  # this shape rather than reinventing composed-stack orchestration; (3) EVERY existing
+  # Playwright spec runs against a stubbed backend (frontend/e2e/support/apiStubs.ts
+  # intercepts every /api/v1/** call; playwright.config.ts's webServer always starts `vite
+  # preview`, never a real API) -- the required real-browser, no-stub journey needs NEW
+  # infrastructure, not a flag on the existing suite; (4) Gate B has NO code-level aggregator
+  # (unlike Gate A's gate_a_checks.py/test_gate_a_readiness.py) -- `evidence/epic-5/release-
+  # gate-report.json` is named only as a documented FUTURE consumer in evidence_binding.py's
+  # own docstring, so "wire live_conversation_journeys into Gate B" means emitting this
+  # story's own versioned evidence report, not building a new gate_b_checks.py.
+  #
+  # ALSO RECORDED: the existing eval harness (backend/evals/report.py, Stories 5.5/5.6) drives
+  # turns by calling `execute_turn(runtime, deps, ...)` directly in-process -- it does not go
+  # through ConversationRepository, session auth, CSRF, or the /execute endpoint's claim/
+  # finalize transaction. AC1/AC2/AC4/AC5's "authenticated application conversation path" is a
+  # different seam; Decision 2 states plainly that the eval harness's budget/redaction/report
+  # shape is still worth reusing even though its turn-execution seam is not.
+  #
+  # MEASURED AT CREATION (80e6242, clean tree except the two untracked artifacts above):
+  # backend default 1780 passed / 1 failed / 2 skipped / 10 deselected (`live` marker);
+  # `-m postgres` 160 passed / 1633 deselected -- both total 1793, confirming postgres-marked
+  # tests run inside the default suite. test_evidence_convention.py 99 passed; tests/
+  # architecture/ 79 passed; test_gate_a_readiness.py 44 passed. Frontend Vitest 85 files / 648
+  # tests; Playwright 80 tests / 10 files -- unchanged since Story 5.3/5.3a, no drift. The one
+  # backend failure (test_conversations_api.py::test_execute_turn_emits_claim_to_finalize_
+  # telemetry) is the SAME pre-existing, unrelated local .env AGENT_RUNTIME_MODEL leak Stories
+  # 5.5/5.6 already documented and deferred -- do not attribute it to this story.
+  #
+  # NOT DECIDED HERE, deliberately: whether the demonstration-approval gap gets a narrow fix
+  # or a documented-gap report (Decision 1 leaves this to reproduction); the exact shape of the
+  # new real-backend Playwright infrastructure (Decision 3); and the new live-suite budget
+  # ceilings, which must be re-derived for ~3-7x the per-run turn volume of Story 5.6's matrix
+  # (Decision 5), not copied from it. First action per the story's own AC1 is live reproduction.
+  5-7-prove-live-conversations-through-baseline-promotion: ready-for-dev
   # Code review 2026-09-14/15: all decision-needed and patch findings fixed and verified
   # (full default suite 1612/1613, the one failure pre-existing/unrelated). Decision 4 also
   # closed: live suite re-run on a clean, committed tree (eea9148); readiness "eligible",
