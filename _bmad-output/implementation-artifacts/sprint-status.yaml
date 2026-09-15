@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-14
+last_updated: 2026-09-15
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2526,6 +2526,11 @@ development_status:
   # It follows Story 5.5 and must complete before the AI feature can claim readiness for its
   # pinned release provider/model configuration; deterministic evidence remains authoritative.
   5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity: done
+  # 2026-09-15: Minh approved the live-conversation course correction. Existing 5.6 cases
+  # have only two user turns; their pass does not establish natural conversation readiness.
+  # 5.7 requires real progressive conversations, every tool/operation, and draft-to-baseline
+  # effects. It blocks the next Gate B assessment; no new live proof has been run yet.
+  5-7-prove-live-conversations-through-baseline-promotion: backlog
   # Code review 2026-09-14/15: all decision-needed and patch findings fixed and verified
   # (full default suite 1612/1613, the one failure pre-existing/unrelated). Decision 4 also
   # closed: live suite re-run on a clean, committed tree (eea9148); readiness "eligible",

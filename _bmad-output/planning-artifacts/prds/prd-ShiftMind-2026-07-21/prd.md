@@ -286,7 +286,9 @@ Reviewing or accepting draft parameters authorizes a bounded computation, not a 
 
 ## 7. Evaluation and Release Evidence
 
-Release evaluation is deterministic-first. A live model demonstration supplements but does not replace automated evidence.
+Live conversation acceptance is mandatory for AI-feature readiness. The configured real provider must complete natural persisted conversations and the draft → real optimization → candidate → explicit approval → baseline journey. A deterministic pass cannot establish conversational reliability or satisfy missing live evidence. Deterministic checks continue to protect scheduling and application invariants.
+
+Story 5.7 requires at least eight distinct conversations of varied lengths (6–20 user turns, including a complete 20-turn conversation), independently executed at the five scenario-specific prefix endpoints in the catalogue, coverage of every installed tool and supported operation, and three consecutive complete live runs on the same release configuration. Browser evidence must include the reported invalid-output reproduction and full baseline journey. Missing, skipped, failed, or partial required live evidence blocks completion and Gate B; a release exception cannot count as passing this requirement. Assess useful answers, grounded facts, actual tool results, and persisted effects rather than response shape alone. See `../../../implementation-artifacts/5-7-prove-live-conversations-through-baseline-promotion.md` for the acceptance contract.
 
 Required suites cover:
 

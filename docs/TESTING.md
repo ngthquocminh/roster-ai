@@ -1,6 +1,24 @@
 <!-- generated-by: gsd-doc-writer -->
 # Testing
 
+## Required live conversation acceptance — Story 5.7
+
+**AI conversational readiness requires live evidence.** Passing deterministic tests or Story 5.6's six two-user-turn cases does not establish that natural conversations work. Story 5.7 is currently planned, not implemented or passed; the commands below for existing suites do not run its required matrix.
+
+The [Story 5.7 contract](../_bmad-output/implementation-artifacts/5-7-prove-live-conversations-through-baseline-promotion.md) and [scenario catalogue](../_bmad-output/implementation-artifacts/live-conversation-scenarios-5-7.md) require:
+
+- Reproduce `HI my name is Minh` → `how can you help me?` → `how many work are therre?` using the configured real provider through the actual chat path.
+- At least eight distinct varied-length conversations of 6, 7, 8, 10, 12, 14, 16, and 20 user turns, each executed from fresh state through five scenario-specific prefixes including its full length: at least 40 tests and 273 user turns per full run. Generate all replies and history live. Count narratives, prefixes, and repetitions separately.
+- Inventory every installed tool and supported operation, including `shiftmind_demonstration`; show attempted calls, successful results, and verified effects separately. Disabled or unreachable required coverage is a gap, not a pass. Application commands do not count as LLM tool calls.
+- Prove persisted draft creation/revision, explicit optimization, actual worker/solver candidate, comparison, agent-proposed approval, authenticated approval, and the exact baseline change. Use isolated test state. Verify both initial and replacement baseline journeys.
+- Run against real application persistence and services. Include real-browser reproduction and the full journey with reload, without API stubs. Score useful answers, exact grounded facts, and durable effects, not just a valid response envelope.
+- Require three consecutive complete live matrix runs on the same code/configuration/dataset, plus browser evidence. Preserve every first-attempt failure and retry. Missing, skipped, partial, failed, or stale required evidence blocks completion and Gate B; no exception can mark this obligation passed.
+- Enforce explicit finite budgets and version-bound evidence. Retain only sanitized authored-test planner-visible transcripts and safe outcomes in dedicated test artifacts; no credentials, hidden reasoning, raw provider payloads, unrelated conversations, or production telemetry content.
+
+Implementation must add the runnable command and wire the required `live_conversation_journeys` Gate B verdict. Until then this requirement is **unproven**. Existing live `authoritative: false` fields distinguish provider observations from deterministic invariant proof; they do not make live conversation failures optional. Deterministic tests remain regression safeguards and cannot substitute for this acceptance evidence.
+
+**Answer scoring:** Story 5.7 requires independent checks of actual data, units, tool results and saved effects, plus a separately configured LLM-as-judge for relevance, continuity, completeness and clarification/refusal. The judge receives prior conversation and verified facts, not future messages. Its 0–2 rubric requires 2 on every applicable dimension for automatic pass; uncertain grades require recorded human review. Wrong facts/effects always fail, regardless of judge scores. Calibrate the judge against human-reviewed examples and report disagreements/false passes before relying on automatic grades. See the story's “How answers are judged” section for the complete protocol.
+
 ShiftMind has two independent test suites: `pytest` for the Python backend
 (`backend/`) and `vitest` for the React/TypeScript frontend (`frontend/`).
 Neither suite makes live network calls by default — the backend drives all
