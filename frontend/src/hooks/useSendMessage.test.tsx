@@ -71,8 +71,11 @@ describe("useSendMessage", () => {
       queryClient.getQueryData<Timeline>(conversationTimelineKey("conversation-1"))
         ?.latest_agent_run_status,
     ).toBe("agent_queued");
-    releaseExecute();
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Sending succeeds as soon as the server accepts and persists the planner
+    // message. The agent run can take much longer, and must not keep a sent
+    // composer draft visible while it does.
+    releaseExecute();
   });
   it("refetches the timeline when executeTurn fails so a queued turn cannot wedge", async () => {
     // The optimistic write has already put the accepted message and
@@ -120,7 +123,7 @@ describe("useSendMessage", () => {
 
     act(() => result.current.mutate({ text: "Check coverage" }));
 
-    await waitFor(() => expect(result.current.isError).toBe(true));
+    await waitFor(() => expect(mockExecute).toHaveBeenCalledWith("conversation-1", "run-1"));
     expect(invalidated).toHaveBeenCalledWith({
       queryKey: conversationTimelineKey("conversation-1"),
     });

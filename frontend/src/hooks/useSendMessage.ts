@@ -19,18 +19,23 @@ export function useSendMessage(conversationId: string, scenarioId: string) {
             }
           : current,
       );
-      return executeTurn(conversationId, accepted.agent_run_id);
-    },
-    // onSettled, not onSuccess: the optimistic write above has already put the
-    // accepted message and `agent_queued` into the cache, so an executeTurn
-    // rejection (409, a 500, a dropped connection) would otherwise leave the
-    // timeline showing a queued turn that never refetches and never resolves.
-    // Refetching on both paths lets the server state win either way.
-    onSettled: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: conversationTimelineKey(conversationId) }),
-        queryClient.invalidateQueries({ queryKey: conversationsKey(scenarioId) }),
-      ]);
+      // The planner's message has been persisted, so this mutation resolves
+      // here and the composer clears its draft. Executing an agent turn is a
+      // separate, potentially long-running operation; coupling it to send
+      // success kept already-sent text in the input until the run finished.
+      void (async () => {
+        try {
+          await executeTurn(conversationId, accepted.agent_run_id);
+        } finally {
+          // Whether execution completes or rejects, replace queued optimistic
+          // state with the server's persisted timeline.
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: conversationTimelineKey(conversationId) }),
+            queryClient.invalidateQueries({ queryKey: conversationsKey(scenarioId) }),
+          ]);
+        }
+      })().catch(() => undefined);
+      return accepted;
     },
   });
 }

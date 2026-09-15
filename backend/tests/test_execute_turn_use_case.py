@@ -48,6 +48,24 @@ from application.use_cases.execute_turn import (
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
 
 
+def test_terminal_outcome_preserves_a_complete_refusal_description() -> None:
+    detail = (
+        "Not supported: I don't have a tool to run the solver directly. However, "
+        "I can help you prepare for optimization by inspecting the current scenario, "
+        "computing metrics, or creating draft constraint proposals. To run the solver, "
+        "open Runs and start an optimization run."
+    )
+
+    terminal = terminal_outcome(
+        AgentRunOutcomeV1(
+            refusal=RefusalV1(reason="unsupported_request", detail=detail),
+        ),
+    )
+
+    assert terminal is not None
+    assert terminal.detail == detail
+
+
 class _Runtime:
     name = "capture"
 

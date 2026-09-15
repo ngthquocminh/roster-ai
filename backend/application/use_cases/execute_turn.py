@@ -152,7 +152,10 @@ _CAPABILITY_TERMINAL_COPY = (
 # BOTH `detail` and `next_step`: bounding one and not the other left arbitrary
 # model prose unbounded on the refusal path, which is the only path whose copy
 # is model-authored at all.
-_MODEL_COPY_LIMIT = 200
+# A refusal can include a concise explanation and a concrete recovery path.
+# Keep a finite persistence limit for untrusted model copy, but leave enough
+# room that an ordinary supported-action explanation is not cut off mid-word.
+_MODEL_COPY_LIMIT = 1_000
 
 
 def _bounded(text: str | None) -> str | None:
