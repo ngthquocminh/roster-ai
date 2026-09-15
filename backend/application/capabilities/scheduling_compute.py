@@ -333,6 +333,13 @@ def scheduling_compute_module() -> CapabilityModuleV1:
         # The model gets a receipt, never the number. See
         # SchedulingComputeModelViewV1 for why `matched` is qualitative.
         model_facing_view=_model_view,
+        model_description=(
+            "scheduling_compute calculates one supported scheduling metric from a supplied metric "
+            "name and its exact arguments. Call it for a factual metric question after the user has "
+            "specified every required identifier, family, and time window. It returns a citation "
+            "handle, not a numeric value; use that handle in the grounded answer. Outbound and "
+            "inbound demand are volume, while indirect demand is headcount."
+        ),
     )
 
 

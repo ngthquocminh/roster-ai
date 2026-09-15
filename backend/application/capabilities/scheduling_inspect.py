@@ -290,6 +290,12 @@ def scheduling_inspect_module() -> CapabilityModuleV1:
         # flag and its counts are exactly what the model needs to reason about
         # coverage and to ask a narrower follow-up question.
         model_facing_view=lambda result: result,
+        model_description=(
+            "scheduling_inspect reads current scenario facts. Call it to inspect exactly one group "
+            "such as overview, workers, assignments, demand, constraints, or locks, using explicit "
+            "filters and sort keys when the user asks for a narrowed result. It is read-only and "
+            "does not compute a metric, create a draft, optimize, promote, or grant permissions."
+        ),
     )
 
 

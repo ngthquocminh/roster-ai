@@ -45,13 +45,9 @@ class _ProjectionReader:
         )
 
 
-def test_configured_deterministic_model_executes_a_real_tool_then_answers() -> None:
+def test_configured_deterministic_model_executes_a_real_tool_then_answers(monkeypatch) -> None:
+    monkeypatch.delenv("AGENT_RUNTIME_MODEL", raising=False)
     assert default_settings().agent_runtime_model == "deterministic"
-    compose = (Path(__file__).resolve().parents[2] / "docker-compose.yml").read_text(
-        encoding="utf-8"
-    )
-    assert "AGENT_RUNTIME_MODEL: ${AGENT_RUNTIME_MODEL:-deterministic}" in compose
-
     deps = AgentDepsV1(
         actor_id=UUID(int=1), site_id=UUID(int=2), membership_id=UUID(int=3),
         request_id=UUID(int=4), agent_run_id=UUID(int=5), conversation_id=UUID(int=6),
@@ -74,3 +70,12 @@ def test_configured_deterministic_model_executes_a_real_tool_then_answers() -> N
     assert outcome.answer.segments
     assert all(not char.isnumeric() for segment in outcome.answer.segments for char in segment.text)
     assert [result.tool_name for result in outcome.tool_results] == ["scheduling_inspect"]
+
+
+def test_compose_uses_anthropic_key_when_no_runtime_key_is_supplied() -> None:
+    compose = (Path(__file__).resolve().parents[2] / "docker-compose.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "AGENT_RUNTIME_MODEL: ${AGENT_RUNTIME_MODEL:-deterministic}" in compose
+    assert "AGENT_RUNTIME_API_KEY: ${AGENT_RUNTIME_API_KEY:-${ANTHROPIC_API_KEY:-}}" in compose

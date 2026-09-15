@@ -42,7 +42,10 @@ services:
       # these keep the keyless deterministic model as the composed default;
       # default; without the passthrough, exporting them would do nothing.
       AGENT_RUNTIME_MODEL: ${AGENT_RUNTIME_MODEL:-deterministic}
-      AGENT_RUNTIME_API_KEY: ${AGENT_RUNTIME_API_KEY:-}
+      # Anthropic's standard credential name is accepted for an Anthropic
+      # runtime, while AGENT_RUNTIME_API_KEY remains the explicit generic
+      # override for any provider.
+      AGENT_RUNTIME_API_KEY: ${AGENT_RUNTIME_API_KEY:-${ANTHROPIC_API_KEY:-}}
     depends_on:
       bootstrap:
         condition: service_completed_successfully

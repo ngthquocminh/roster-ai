@@ -36,6 +36,41 @@ GROUNDING_ORACLES: tuple[GroundingOracle, ...] = (
 
 
 @dataclass(frozen=True)
+class HistoryLookupV1:
+    """Story 5.6: instructs the multi-turn double to READ a value out of the
+    injected owned history rather than replaying one hardcoded in the case
+    script. This is what makes the double "observe and validate" a trusted
+    antecedent instead of merely reproducing one by coincidence -- Decision 3
+    of the 5.6 story spec: "a response-index-only double is not evidence."
+
+    ``source_tool_name`` names the capability whose most-recent
+    ``ToolReturnPart`` in the accumulated framework messages carries the
+    antecedent. ``field_path`` descends into that result (after
+    ``ast.literal_eval`` of its stringified content, since a raw resumed
+    transcript stores tool-result content as text -- see
+    ``agent/translate.py:_from_request``) to the value that gets deep-set into
+    this scripted turn's ``arguments`` at ``arg_path``.
+
+    ``require_field`` is an optional extra consistency check: (path, expected)
+    evaluated against the SAME parsed result. It is how a "stale antecedent"
+    case proves fail-closed behaviour without inventing model-side judgement --
+    the check simply fails when the persisted fact has moved on.
+
+    Absence is ALWAYS fatal (code review 2026-09-14, Decision 2): there used
+    to be a `require_present=False` escape that returned the turn unchanged
+    -- proceeding with whatever hardcoded literal the case script carried --
+    which is exactly what Decision 3 forbids ("a response-index-only double
+    is not evidence"). No committed case ever set it false; removed rather
+    than left as a live footgun.
+    """
+
+    source_tool_name: str
+    field_path: tuple[str | int, ...]
+    arg_path: tuple[str | int, ...]
+    require_field: tuple[tuple[str | int, ...], object] | None = None
+
+
+@dataclass(frozen=True)
 class ScriptedModelTurn:
     """One deterministic response emitted by the generated model double.
 
@@ -45,6 +80,11 @@ class ScriptedModelTurn:
     ``response_data`` (which named structured output tool to answer through) and
     is rejected with any other discriminant. Tool-call arguments retain their
     JSON object shape so future cases remain data-only.
+
+    ``history_lookup`` is additive (Story 5.6): when present on a ``tool_name``
+    turn, the double resolves it against the accumulated messages BEFORE
+    emitting the call, deep-setting the extracted value into ``arguments`` at
+    the declared path. Single-turn cases never set it and are unaffected.
     """
 
     tool_name: str | None = None
@@ -54,6 +94,7 @@ class ScriptedModelTurn:
     response_data: dict[str, object] | None = None
     output_tool: str = "final_result"
     response_error: Literal["provider_error"] | None = None
+    history_lookup: HistoryLookupV1 | None = None
 
 
 @dataclass(frozen=True)
@@ -79,6 +120,370 @@ class GoldenCase:
     expected_visible_text: str
     expected_grounding_outcome: GroundingOracle | None = None
     scenario_fixtures: tuple[str, ...] = ()
+    # Deterministic security simulations may include an attempted call to an
+    # unavailable tool. A real provider was never offered that tool, so its
+    # separately authored live expectation can require a direct refusal.
+    # `None` deliberately means the canonical deterministic expectation applies.
+    live_expected_tool_calls: tuple[ExpectedToolCall, ...] | None = None
+    # Some deterministic cases intentionally script a malformed model answer to
+    # prove a grounding oracle. A live provider should instead be held to the
+    # truthful supported result it receives from the capability.
+    live_expected_grounding_outcome: GroundingOracle | None = None
+    live_expected_evidence_refs: tuple[str, ...] | None = None
+    live_expected_outcome: ExpectedOutcome | None = None
+    live_eligible: bool = True
+
+
+HistoryModeV1 = Literal["independent", "raw_turn", "rehydrated_activities"]
+HISTORY_MODES: tuple[HistoryModeV1, ...] = (
+    "independent", "raw_turn", "rehydrated_activities",
+)
+
+
+@dataclass(frozen=True)
+class GoldenTurn:
+    """Story 5.6: one turn of a versioned multi-turn scenario.
+
+    Deliberately NOT a `GoldenCase` (which also carries `case_version`,
+    `scenario_fixtures`, and grounding fields that are case-level, not
+    per-turn) -- but its evaluation-facing field NAMES mirror `GoldenCase`
+    exactly (`expected_outcome`, `expected_tool_calls`, `live_expected_*`) so
+    `ToolRoutingEvaluator` and `PolicyOutcomeEvaluator` (Story 2.2/2.9) can
+    judge one turn's outcome UNCHANGED, by duck typing, per Decision 1: reuse
+    the current evaluation authority rather than build a second one.
+
+    ``capabilities`` grants exactly these modules for this turn's runtime --
+    NOT the case-level singular `capability` tag `GoldenCase` uses, because a
+    negative "unauthorized" scenario must be able to grant a DIFFERENT set on
+    a later turn than an earlier one granted (Decision 4: installed-but-
+    ungranted modules are unavailable).
+
+    ``history_mode`` selects how this turn's `execute_turn(..., history=...)`
+    argument is built from every prior turn's outcome in the same case:
+
+    - ``independent``: `history=()` -- always used for a case's first turn.
+    - ``raw_turn``: `history=<previous turn's raw AgentTurnV1>`, the exact
+      "owned resume transcript" mechanism the approval-resume path already
+      uses (api/routers/approvals.py). Preserves real tool-call/tool-result
+      content verbatim, which is what proves genuine trusted-antecedent use
+      (Decision 2/3) -- never a second, invented raw-persistence mechanism.
+    - ``rehydrated_activities``: `history=<tuple[ActivityItemV1, ...]>` built
+      from every prior turn via the SAME production `rehydrate_history()`
+      (Decision: "must invoke execute_turn / rehydrate_history"), which
+      carries planner-VISIBLE text only -- proving the ordinary conversational
+      path and its 100-message bound (AC5), never tool-result bodies.
+
+    ``raw_turn_padding`` appends N synthetic filler messages after the prior
+    turn's real messages before `execute_turn`'s `HISTORY_MESSAGE_BOUND` slice
+    -- the mechanism the truncated-antecedent fault case uses to push a real
+    antecedent out of the provider-bound window without inventing a second
+    bound.
+
+    ``filler_activity_count`` prepends N synthetic old `PlannerMessageActivityV1`
+    entries (durable, but old enough to fall outside the window) ahead of the
+    real prior activities when `history_mode == "rehydrated_activities"` --
+    the long-history proof for AC5.
+    """
+
+    prompt: str
+    capabilities: tuple[str, ...]
+    scripted_turns: tuple[ScriptedModelTurn, ...]
+    expected_outcome: ExpectedOutcome
+    expected_tool_calls: tuple[ExpectedToolCall, ...]
+    expected_visible_state: VisibleState
+    expected_visible_text: str
+    history_mode: HistoryModeV1 = "independent"
+    raw_turn_padding: int = 0
+    filler_activity_count: int = 0
+    # `ToolRoutingEvaluator` (Decision 1's REUSED evaluator) judges only
+    # ATTEMPTED assistant tool calls -- it cannot distinguish "attempted and
+    # rejected by the trust boundary" from "attempted and actually executed".
+    # An `unauthorized`-antecedent case needs exactly that distinction: the
+    # model may still attempt the call (and `expected_tool_calls` still
+    # records the attempt, matching `injection-chat-text.json`'s precedent),
+    # but a real capability RESULT must never appear once the boundary held.
+    # `None` means "not checked" -- every case predating this field.
+    expected_tool_result_names: tuple[str, ...] | None = None
+    # Mirrors `live_expected_tool_calls`'s existing split (GoldenCase): a
+    # deterministic-only scripted double can force a scenario a real provider
+    # never reproduces (e.g. `stale-antecedent`'s consistency check has no
+    # live analog -- a real model simply succeeds like the success case, and
+    # SUCCEEDING produces a real result the deterministic `()` expectation
+    # would wrongly reject). `None` means the canonical
+    # `expected_tool_result_names` applies unchanged.
+    live_expected_tool_result_names: tuple[str, ...] | None = None
+    live_expected_tool_calls: tuple[ExpectedToolCall, ...] | None = None
+    live_expected_outcome: ExpectedOutcome | None = None
+    # Code review 2026-09-14 (Decision 1): the live path used to skip the
+    # state/text gate entirely -- a dead or do-nothing provider could "pass"
+    # a turn expecting zero tool calls. The gate now applies on BOTH paths;
+    # `None` means the canonical `expected_visible_state` applies unchanged,
+    # and a declared value is the one place a live/deterministic divergence
+    # is allowed to live, instead of the silent `run_source != "live"` bypass.
+    live_expected_visible_state: VisibleState | None = None
+    # Code review 2026-09-14 (Decision 2): names WHY a negative-antecedent
+    # turn failed (by the `AntecedentFaultError.code` the eval seam observes
+    # from `evals/doubles.py`), so "failed because the antecedent was
+    # genuinely absent/stale/malformed" is distinguishable from "failed
+    # because the harness crashed for an unrelated reason". Deterministic-
+    # only: the double is the only thing that ever raises one of these
+    # named faults, so this is never checked on `run_source == "live"`.
+    expected_failure_reason: str | None = None
+    # Code review 2026-09-14 (Decision 3): substrings that must NOT appear
+    # in the text content of the history THIS turn actually observes, after
+    # `execute_turn`'s own `HISTORY_MESSAGE_BOUND` truncation -- computed the
+    # same way for a double OR a real live model, since the truncation
+    # happens before either is ever called. This is what lets the
+    # long-history-window case prove AC5 through the harness on both paths
+    # instead of merely not crashing.
+    expected_history_absent: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class MultiTurnGoldenCase:
+    """Story 5.6: one version-controlled multi-turn regression scenario.
+
+    ``capability`` is a case-level dataset-classification TAG, not an
+    authority grant -- each turn's OWN ``capabilities`` tuple governs what its
+    runtime actually registers. It exists so `scripts/evidence_binding.py`'s
+    unmodified golden-dataset NFR27 binding (which requires every `.json`
+    dataset file to carry `case_id`/`case_version`/`capability`/`risk_class`)
+    can bind this dataset exactly like the single-turn one, rather than this
+    story widening a shared binding module it does not own.
+    """
+
+    case_id: str
+    case_version: str
+    capability: str
+    risk_class: RiskClass
+    scenario_fixtures: tuple[str, ...]
+    turns: tuple[GoldenTurn, ...]
+    live_eligible: bool = True
+
+
+MULTI_TURN_CASE_FIELDS: frozenset[str] = frozenset(
+    {
+        "case_id", "case_version", "capability", "risk_class",
+        "scenario_fixtures", "turns", "live_eligible",
+    }
+)
+
+GOLDEN_TURN_FIELDS: frozenset[str] = frozenset(
+    {
+        "prompt", "capabilities", "scripted_turns", "expected_outcome",
+        "expected_tool_calls", "expected_visible_state", "expected_visible_text",
+        "history_mode", "raw_turn_padding", "filler_activity_count",
+        "expected_tool_result_names", "live_expected_tool_result_names",
+        "live_expected_tool_calls", "live_expected_outcome",
+        "live_expected_visible_state", "expected_failure_reason",
+        "expected_history_absent",
+    }
+)
+
+
+def load_multi_turn_case(path: Path) -> MultiTurnGoldenCase:
+    """Load and validate one multi-turn case file, mirroring `load_case`."""
+    source = Path(path)
+    try:
+        raw = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid multi-turn golden case {source}: {exc}") from exc
+    return multi_turn_case_from_mapping(_mapping(raw, "case"), source=source)
+
+
+def load_multi_turn_cases(directory: Path) -> tuple[MultiTurnGoldenCase, ...]:
+    """Load every JSON case recursively; no malformed file is silently skipped.
+
+    Code review 2026-09-14: an empty or mistyped `directory` used to load
+    silently as zero cases, so a typo'd path produced a clean-looking report
+    with nothing in it rather than an error. A duplicate `case_id` across
+    files used to load as two distinct cases too, double-consuming a live
+    suite's `case_limit` under one identity.
+    """
+    paths = sorted(Path(directory).rglob("*.json"))
+    if not paths:
+        raise ValueError(f"no multi-turn golden case files found under {directory}")
+    cases = tuple(load_multi_turn_case(path) for path in paths)
+    _require_unique_case_ids(cases, directory)
+    return cases
+
+
+def _require_unique_case_ids(cases: tuple, directory: Path) -> None:
+    seen: set[str] = set()
+    for case in cases:
+        if case.case_id in seen:
+            raise ValueError(
+                f"duplicate case_id {case.case_id!r} found under {directory}; "
+                "golden case ids must be unique across the dataset"
+            )
+        seen.add(case.case_id)
+
+
+def multi_turn_case_from_mapping(
+    raw: Mapping[str, object], *, source: Path | None = None
+) -> MultiTurnGoldenCase:
+    label = str(source) if source is not None else "case"
+    unknown = sorted(set(raw) - MULTI_TURN_CASE_FIELDS)
+    if unknown:
+        raise ValueError(
+            f"{label} has unknown field(s) {', '.join(unknown)}; allowed fields "
+            f"are {', '.join(sorted(MULTI_TURN_CASE_FIELDS))}"
+        )
+    risk = _string(raw.get("risk_class"), f"{label}.risk_class")
+    if risk not in RISK_CLASSES:
+        raise ValueError(
+            f"{label}.risk_class {risk!r} is outside the allowed vocabulary: "
+            f"{', '.join(RISK_CLASSES)}"
+        )
+    turns_raw = _list(raw.get("turns"), "turns")
+    if not turns_raw:
+        raise ValueError(f"{label}.turns must contain at least one turn")
+    turns = tuple(
+        _golden_turn(item, f"{label}.turns[{index}]") for index, item in enumerate(turns_raw)
+    )
+    if turns[0].history_mode != "independent":
+        raise ValueError(f"{label}.turns[0].history_mode must be 'independent'")
+    live_eligible = raw.get("live_eligible", True)
+    if not isinstance(live_eligible, bool):
+        raise ValueError(f"{label}.live_eligible must be boolean")
+    return MultiTurnGoldenCase(
+        case_id=_string(raw.get("case_id"), f"{label}.case_id"),
+        case_version=_string(raw.get("case_version"), f"{label}.case_version"),
+        capability=_string(raw.get("capability"), f"{label}.capability"),
+        risk_class=cast(RiskClass, risk),
+        scenario_fixtures=tuple(
+            _string(value, f"{label}.scenario_fixtures")
+            for value in _list(raw.get("scenario_fixtures"), "scenario_fixtures")
+        ),
+        turns=turns,
+        live_eligible=live_eligible,
+    )
+
+
+def _golden_turn(value: object, label: str) -> GoldenTurn:
+    raw = _mapping(value, label)
+    unknown = sorted(set(raw) - GOLDEN_TURN_FIELDS)
+    if unknown:
+        raise ValueError(f"{label} has unknown field(s) {', '.join(unknown)}")
+    outcome = _string(raw.get("expected_outcome"), f"{label}.expected_outcome")
+    if outcome not in EXPECTED_OUTCOMES:
+        raise ValueError(f"{label}.expected_outcome {outcome!r} is invalid")
+    visible_state = _string(
+        raw.get("expected_visible_state"), f"{label}.expected_visible_state"
+    )
+    if visible_state not in VISIBLE_STATES:
+        raise ValueError(f"{label}.expected_visible_state {visible_state!r} is invalid")
+    history_mode = _string(raw.get("history_mode"), f"{label}.history_mode")
+    if history_mode not in HISTORY_MODES:
+        raise ValueError(
+            f"{label}.history_mode {history_mode!r} is invalid; allowed: "
+            f"{', '.join(HISTORY_MODES)}"
+        )
+    scripted = tuple(
+        _scripted_turn(item, f"{label}.scripted_turns[{index}]")
+        for index, item in enumerate(_list(raw.get("scripted_turns"), "scripted_turns"))
+    )
+    if not scripted:
+        raise ValueError(f"{label}.scripted_turns must contain at least one turn")
+    expected_calls = tuple(
+        _expected_tool_call(item, f"{label}.expected_tool_calls[{index}]")
+        for index, item in enumerate(
+            _list(raw.get("expected_tool_calls"), "expected_tool_calls")
+        )
+    )
+    live_expected_calls = (
+        None
+        if "live_expected_tool_calls" not in raw
+        else tuple(
+            _expected_tool_call(item, f"{label}.live_expected_tool_calls[{index}]")
+            for index, item in enumerate(
+                _list(raw.get("live_expected_tool_calls"), "live_expected_tool_calls")
+            )
+        )
+    )
+    live_outcome = _optional_string(raw.get("live_expected_outcome"), f"{label}.live_expected_outcome")
+    if live_outcome is not None and live_outcome not in EXPECTED_OUTCOMES:
+        raise ValueError(f"{label}.live_expected_outcome {live_outcome!r} is invalid")
+    raw_turn_padding = raw.get("raw_turn_padding", 0)
+    if not isinstance(raw_turn_padding, int) or isinstance(raw_turn_padding, bool) or raw_turn_padding < 0:
+        raise ValueError(f"{label}.raw_turn_padding must be a non-negative integer")
+    # Code review 2026-09-14 (patch 13): a nonzero padding/filler field under
+    # the WRONG history_mode used to load silently and do nothing, despite
+    # the story's own claim that "every new field is consumed".
+    if raw_turn_padding > 0 and history_mode != "raw_turn":
+        raise ValueError(
+            f"{label}.raw_turn_padding is only meaningful when history_mode is "
+            "'raw_turn'"
+        )
+    filler_activity_count = raw.get("filler_activity_count", 0)
+    if (
+        not isinstance(filler_activity_count, int)
+        or isinstance(filler_activity_count, bool)
+        or filler_activity_count < 0
+    ):
+        raise ValueError(f"{label}.filler_activity_count must be a non-negative integer")
+    if filler_activity_count > 0 and history_mode != "rehydrated_activities":
+        raise ValueError(
+            f"{label}.filler_activity_count is only meaningful when history_mode "
+            "is 'rehydrated_activities'"
+        )
+    live_visible_state = _optional_string(
+        raw.get("live_expected_visible_state"), f"{label}.live_expected_visible_state"
+    )
+    if live_visible_state is not None and live_visible_state not in VISIBLE_STATES:
+        raise ValueError(
+            f"{label}.live_expected_visible_state {live_visible_state!r} is invalid"
+        )
+    expected_failure_reason = _optional_string(
+        raw.get("expected_failure_reason"), f"{label}.expected_failure_reason"
+    )
+    expected_history_absent = tuple(
+        _string(value, f"{label}.expected_history_absent")
+        for value in _list(raw.get("expected_history_absent", []), "expected_history_absent")
+    )
+    expected_tool_result_names = (
+        None
+        if "expected_tool_result_names" not in raw
+        else tuple(
+            _string(value, f"{label}.expected_tool_result_names")
+            for value in _list(raw.get("expected_tool_result_names"), "expected_tool_result_names")
+        )
+    )
+    live_expected_tool_result_names = (
+        None
+        if "live_expected_tool_result_names" not in raw
+        else tuple(
+            _string(value, f"{label}.live_expected_tool_result_names")
+            for value in _list(
+                raw.get("live_expected_tool_result_names"), "live_expected_tool_result_names"
+            )
+        )
+    )
+    return GoldenTurn(
+        prompt=_string(raw.get("prompt"), f"{label}.prompt"),
+        capabilities=tuple(
+            _string(value, f"{label}.capabilities")
+            for value in _list(raw.get("capabilities"), "capabilities")
+        ),
+        scripted_turns=scripted,
+        expected_outcome=cast(ExpectedOutcome, outcome),
+        expected_tool_calls=expected_calls,
+        expected_visible_state=cast(VisibleState, visible_state),
+        expected_visible_text=_string(
+            raw.get("expected_visible_text"), f"{label}.expected_visible_text",
+            allow_empty=True,
+        ),
+        history_mode=cast(HistoryModeV1, history_mode),
+        raw_turn_padding=raw_turn_padding,
+        filler_activity_count=filler_activity_count,
+        expected_tool_result_names=expected_tool_result_names,
+        live_expected_tool_result_names=live_expected_tool_result_names,
+        live_expected_tool_calls=live_expected_calls,
+        live_expected_outcome=cast(ExpectedOutcome | None, live_outcome),
+        live_expected_visible_state=cast(VisibleState | None, live_visible_state),
+        expected_failure_reason=expected_failure_reason,
+        expected_history_absent=expected_history_absent,
+    )
 
 
 def load_case(path: Path) -> GoldenCase:
@@ -92,8 +497,18 @@ def load_case(path: Path) -> GoldenCase:
 
 
 def load_cases(directory: Path) -> tuple[GoldenCase, ...]:
-    """Load every JSON case recursively; no malformed file is silently skipped."""
-    return tuple(load_case(path) for path in sorted(Path(directory).rglob("*.json")))
+    """Load every JSON case recursively; no malformed file is silently skipped.
+
+    Code review 2026-09-14: see `load_multi_turn_cases`' docstring -- the
+    same empty-directory and duplicate-id gaps applied to the single-turn
+    loader.
+    """
+    paths = sorted(Path(directory).rglob("*.json"))
+    if not paths:
+        raise ValueError(f"no golden case files found under {directory}")
+    cases = tuple(load_case(path) for path in paths)
+    _require_unique_case_ids(cases, directory)
+    return cases
 
 
 CASE_FIELDS: frozenset[str] = frozenset(
@@ -111,14 +526,23 @@ CASE_FIELDS: frozenset[str] = frozenset(
         "expected_visible_text",
         "scenario_fixtures",
         "expected_grounding_outcome",
+        "live_expected_tool_calls",
+        "live_expected_grounding_outcome",
+        "live_expected_evidence_refs",
+        "live_expected_outcome",
+        "live_eligible",
     }
 )
 
 SCRIPTED_TURN_FIELDS: frozenset[str] = frozenset(
     {
         "tool_name", "arguments", "tool_call_id", "response_text",
-        "response_data", "output_tool", "response_error",
+        "response_data", "output_tool", "response_error", "history_lookup",
     }
+)
+
+HISTORY_LOOKUP_FIELDS: frozenset[str] = frozenset(
+    {"source_tool_name", "field_path", "arg_path", "require_field"}
 )
 
 
@@ -162,6 +586,18 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
             _list(raw.get("expected_tool_calls"), "expected_tool_calls")
         )
     )
+    live_expected_calls = (
+        None
+        if "live_expected_tool_calls" not in raw
+        else tuple(
+            _expected_tool_call(
+                item, f"{label}.live_expected_tool_calls[{index}]"
+            )
+            for index, item in enumerate(
+                _list(raw.get("live_expected_tool_calls"), "live_expected_tool_calls")
+            )
+        )
+    )
 
     grounding_oracle = _optional_string(
         raw.get("expected_grounding_outcome"),
@@ -171,6 +607,28 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
         raise ValueError(
             f"{label}.expected_grounding_outcome {grounding_oracle!r} is invalid"
         )
+    live_grounding_oracle = _optional_string(
+        raw.get("live_expected_grounding_outcome"),
+        f"{label}.live_expected_grounding_outcome",
+    )
+    if live_grounding_oracle is not None and live_grounding_oracle not in GROUNDING_ORACLES:
+        raise ValueError(
+            f"{label}.live_expected_grounding_outcome {live_grounding_oracle!r} is invalid"
+        )
+    live_evidence_refs = (
+        None
+        if "live_expected_evidence_refs" not in raw
+        else tuple(
+            _string(value, f"{label}.live_expected_evidence_refs")
+            for value in _list(raw.get("live_expected_evidence_refs"), "live_expected_evidence_refs")
+        )
+    )
+    live_outcome = _optional_string(raw.get("live_expected_outcome"), f"{label}.live_expected_outcome")
+    if live_outcome is not None and live_outcome not in EXPECTED_OUTCOMES:
+        raise ValueError(f"{label}.live_expected_outcome {live_outcome!r} is invalid")
+    live_eligible = raw.get("live_eligible", True)
+    if not isinstance(live_eligible, bool):
+        raise ValueError(f"{label}.live_eligible must be boolean")
 
     return GoldenCase(
         case_id=_string(raw.get("case_id"), f"{label}.case_id"),
@@ -197,6 +655,11 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
             _string(value, f"{label}.scenario_fixtures")
             for value in _list(raw.get("scenario_fixtures"), "scenario_fixtures")
         ),
+        live_expected_tool_calls=live_expected_calls,
+        live_expected_grounding_outcome=cast(GroundingOracle | None, live_grounding_oracle),
+        live_expected_evidence_refs=live_evidence_refs,
+        live_expected_outcome=cast(ExpectedOutcome | None, live_outcome),
+        live_eligible=live_eligible,
     )
 
 
@@ -220,6 +683,9 @@ def _scripted_turn(value: object, label: str) -> ScriptedModelTurn:
     if response_error not in (None, "provider_error"):
         raise ValueError(f"{label}.response_error {response_error!r} is invalid")
     output_tool = _optional_string(raw.get("output_tool"), f"{label}.output_tool")
+    history_lookup_raw = raw.get("history_lookup")
+    if history_lookup_raw is not None and tool_name is None:
+        raise ValueError(f"{label}.history_lookup requires tool_name")
     if sum(
         value is not None
         for value in (tool_name, response_text, response_data, response_error)
@@ -247,7 +713,54 @@ def _scripted_turn(value: object, label: str) -> ScriptedModelTurn:
         tool_name=tool_name,
         arguments=dict(_mapping(raw.get("arguments"), f"{label}.arguments")),
         tool_call_id=_string(raw.get("tool_call_id"), f"{label}.tool_call_id"),
+        history_lookup=(
+            None
+            if history_lookup_raw is None
+            else _history_lookup(history_lookup_raw, f"{label}.history_lookup")
+        ),
     )
+
+
+def _history_lookup(value: object, label: str) -> HistoryLookupV1:
+    raw = _mapping(value, label)
+    unknown = sorted(set(raw) - HISTORY_LOOKUP_FIELDS)
+    if unknown:
+        raise ValueError(f"{label} has unknown field(s) {', '.join(unknown)}")
+    require_field_raw = raw.get("require_field")
+    require_field: tuple[tuple[str | int, ...], object] | None = None
+    if require_field_raw is not None:
+        pair = _list(require_field_raw, f"{label}.require_field")
+        if len(pair) != 2:
+            raise ValueError(f"{label}.require_field must be [path, expected_value]")
+        require_field = (
+            _path_tuple(pair[0], f"{label}.require_field[0]"),
+            pair[1],
+        )
+    return HistoryLookupV1(
+        source_tool_name=_string(raw.get("source_tool_name"), f"{label}.source_tool_name"),
+        field_path=_path_tuple(raw.get("field_path"), f"{label}.field_path"),
+        arg_path=_path_tuple(raw.get("arg_path"), f"{label}.arg_path"),
+        require_field=require_field,
+    )
+
+
+def _path_tuple(value: object, label: str) -> tuple[str | int, ...]:
+    """A `history_lookup` path segment list, type-checked element-by-element.
+
+    Code review 2026-09-14 (patch 13): `_list` alone let a float, a dict, or
+    any other JSON value ride through as a path segment, surfacing later as
+    an opaque `KeyError`/`TypeError` deep inside `_dig`/`_deep_set` instead
+    of a clear authoring error at load time.
+    """
+    items = _list(value, label)
+    result: list[str | int] = []
+    for index, item in enumerate(items):
+        if isinstance(item, bool) or not isinstance(item, (str, int)):
+            raise ValueError(
+                f"{label}[{index}] must be a string or integer path segment, got {item!r}"
+            )
+        result.append(item)
+    return tuple(result)
 
 
 def _expected_tool_call(value: object, label: str) -> ExpectedToolCall:
@@ -289,8 +802,16 @@ __all__ = [
     "ExpectedOutcome",
     "ExpectedToolCall",
     "GoldenCase",
+    "GoldenTurn",
+    "GOLDEN_TURN_FIELDS",
     "GROUNDING_ORACLES",
     "GroundingOracle",
+    "HistoryLookupV1",
+    "HistoryModeV1",
+    "HISTORY_LOOKUP_FIELDS",
+    "HISTORY_MODES",
+    "MultiTurnGoldenCase",
+    "MULTI_TURN_CASE_FIELDS",
     "RiskClass",
     "SCRIPTED_TURN_FIELDS",
     "ScriptedModelTurn",
@@ -298,4 +819,7 @@ __all__ = [
     "case_from_mapping",
     "load_case",
     "load_cases",
+    "load_multi_turn_case",
+    "load_multi_turn_cases",
+    "multi_turn_case_from_mapping",
 ]

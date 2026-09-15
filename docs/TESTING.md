@@ -46,6 +46,122 @@ It deliberately does **not** load `LLM_PROVIDER` / `LLM_MODEL` from `.env`, so
 the default (non-`live`) suite always runs against the keyless `stub`
 provider regardless of a developer's local configuration.
 
+### Agent evaluation harness (golden datasets, `backend/evals/`)
+
+The chat/agent surface (`backend/agent/`, `backend/application/use_cases/
+execute_turn.py`) is evaluated by a SEPARATE, versioned golden-case harness in
+`backend/evals/` — distinct from the `LLMProvider`/Gemini/OpenRouter tests
+above, which cover the older constraint-parsing seam. Every golden case has a
+deterministic execution (a case-driven PydanticAI `FunctionModel` double,
+`backend/evals/doubles.py`) that is the **authoritative** safety/correctness
+evidence, run in the default suite with no network access:
+
+```bash
+cd backend
+uv run pytest tests/test_evaluation_harness.py tests/test_execute_turn_use_case.py
+```
+
+**Single-turn golden cases** (`backend/evals/golden/**/*.json`, schema in
+`evals/cases.py::GoldenCase`) exercise one prompt/response pair per case —
+tool routing, grounding, clarification, refusal, and drafts.
+
+**Multi-turn golden cases** (`backend/evals/golden_multi_turn/**/*.json`,
+schema in `evals/cases.py::MultiTurnGoldenCase`/`GoldenTurn`, added in Story
+5.6) exercise history and tool continuity ACROSS turns through the real
+product seam (`execute_turn` / `rehydrate_history`), never a single-turn
+shortcut:
+
+- A later turn's `history_mode: "raw_turn"` replays a prior turn's exact owned
+  transcript (the same "owned resume transcript" mechanism
+  `api/routers/approvals.py` already uses to resume after an approval), so a
+  dependent tool call can be proven to use a REAL trusted antecedent — the
+  double reads the value out of prior history (`evals/doubles.py`'s
+  `HistoryLookupV1` mechanism) rather than replaying a hardcoded literal.
+- A later turn's `history_mode: "rehydrated_activities"` exercises the
+  ordinary conversational path every other multi-turn request takes, proving
+  the `HISTORY_MESSAGE_BOUND` (100-message) window: old activities stay
+  durable in the caller's own record but never reach the provider once a
+  conversation exceeds the bound.
+- Four cases prove the antecedent fails closed on its own: a missing,
+  stale (an explicit consistency-check mismatch), unauthorized
+  (installed-but-ungranted capability), or truncated (pushed outside the
+  100-message window) antecedent must never be guessed, silently retargeted,
+  or granted new authority — see `evals/golden_multi_turn/history_and_tools/`.
+  Each names WHICH fault fired via `GoldenTurn.expected_failure_reason`
+  (`"antecedent_absent"`/`"antecedent_stale"`/…, deterministic-only —
+  `evals/doubles.py::AntecedentFaultError.code`), so a case cannot pass
+  vacuously on an unrelated harness crash landing on the same generic
+  `failed` outcome (code review 2026-09-14).
+- The long-history case additionally asserts `expected_history_absent`: a
+  substring that must NOT appear in the text this turn actually observes
+  after `execute_turn`'s own `HISTORY_MESSAGE_BOUND` truncation. This is
+  computed identically for a double OR a real live model (before either is
+  ever called), so the 100-message bound is proven through the harness on
+  BOTH run sources, not only by a separate unit test.
+
+Both dataset shapes generate an NFR27-bound demonstration report the same way:
+
+```bash
+uv run python -c "from pathlib import Path; from evals.report import generate_demonstration_report; generate_demonstration_report(Path('/tmp/report.json'))"
+uv run python -c "from pathlib import Path; from evals.report import generate_multi_turn_demonstration_report; generate_multi_turn_demonstration_report(Path('/tmp/multi-turn-report.json'))"
+```
+
+**Live counterpart (opt-in, non-authoritative, explicitly budgeted).** Both
+single- and multi-turn datasets have a live counterpart that scores the same
+cases against the real configured provider (`AGENT_RUNTIME_MODEL` /
+`AGENT_RUNTIME_API_KEY`). Neither is selected by the default suite, neither
+can ever become authoritative (`run_source="live"` always yields
+`EvalVerdict.authoritative is False`), and neither reads a credential or
+allows a network call outside its own explicit, scoped
+`models.override_allow_model_requests(True)` block:
+
+```bash
+uv run pytest -m live tests/test_evaluation_harness.py::test_golden_cases_against_live_agent_are_non_authoritative
+uv run pytest -m live tests/test_evaluation_harness.py::test_live_multi_turn_suite_is_bounded_and_non_authoritative
+```
+
+A multi-turn live turn is scored under the SAME gate as deterministic
+(state must match — via `GoldenTurn.live_expected_visible_state` when a real
+provider legitimately diverges — tool routing and results must match; only
+free TEXT stays ungated, since a real model's prose never reproduces a
+scripted double's exact wording). Code review 2026-09-14: the state gate
+used to be skipped entirely on the live path, so a dead or do-nothing
+provider could "pass" a turn expecting zero tool calls regardless of
+behaviour — live evidence is what runs against the real, shipped provider,
+so a live-side gap is treated as more serious than an equivalent
+deterministic-only one, not less.
+
+The multi-turn live suite additionally requires an explicit
+`evals.report.LiveSuiteBudgetV1` — every one of its six ceilings (case count,
+total requests, total tool calls, total tokens, elapsed seconds, spend USD)
+is a **required, positive, finite** number; there is no default that lets an
+ordinary test call a provider. Cumulative usage/cost is accounted, and every
+ceiling re-checked, **after every turn** (not only at a case boundary), so a
+ceiling crossed mid-case stops the run before its next turn and a case cut
+short is marked `partial` and never counts as passed. `spend_usd_limit` is
+enforced only when the caller supplies real per-token pricing
+(`input_usd_per_mtok`/`output_usd_per_mtok`); the report's own
+`spend_measured` field says whether it actually was, so a `spend_usd_limit`
+declared but never measured is visible rather than silently vacuous.
+`evals.report.generate_bounded_live_multi_turn_report` is the documented
+explicit command that runs this suite and persists a safe, NFR27-bound
+report (carrying its own `release_gate_eligible: False`/`release_gate_status`
+pair, same as the deterministic report) — its `readiness` field is
+`blocked`, `eligible`, or `excepted` (an explicit, validated, time-bounded
+`LiveReadinessExceptionV1`, itself rejected at CONSTRUCTION for an
+incomplete field or a timezone-naive `expires_at` rather than only lazily at
+use time — an incomplete or expired one blocks exactly like having none).
+**A live pass is necessary, but never sufficient, to ship**: it cannot
+satisfy, weaken, or replace the deterministic report above, and it never
+decides the separate Gate B release-gate question.
+
+Diagnostics persisted from a live run (`generate_live_diagnostics`,
+`evals.report._safe_diagnostic_record`) carry only ordered tool-call/
+tool-result NAMES and COUNTS plus a closed-vocabulary outcome classification
+— never a raw prompt, tool argument, tool-result body, or credential. A
+write/serialization failure for one case never erases diagnostics already
+flushed for earlier cases.
+
 ### Where tests live
 
 All backend tests are in `backend/tests/`, named `test_*.py`, separate from

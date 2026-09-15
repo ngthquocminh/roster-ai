@@ -139,6 +139,34 @@ def test_rehydrated_history_is_capped_at_one_hundred_activities() -> None:
     assert runtime.request.history.messages[0].parts[0].text == "m20"
 
 
+def test_an_already_owned_turn_is_ALSO_capped_at_one_hundred_messages() -> None:
+    """Story 5.6: the approval-resume branch (an already-owned `AgentTurnV1`,
+    not a `tuple[ActivityItemV1, ...]`) applies the IDENTICAL bound.
+
+    Undertested before this story: every prior test of `HISTORY_MESSAGE_BOUND`
+    exercised the `rehydrate_history()` path above; a resumed turn replaying
+    an unbounded persisted transcript is the docstring's OWN stated risk
+    ("the one path in the app that can hand a provider an arbitrarily long
+    history") and had no test of its own.
+    """
+    deps = _deps()
+    owned_turn = AgentTurnV1(
+        messages=tuple(
+            AgentMessageV1(role="user", parts=(AgentPartV1(kind="text", text=f"m{index}"),))
+            for index in range(120)
+        )
+    )
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt="now", calculation_results=[], history=owned_turn)
+    assert len(runtime.request.history.messages) == 100
+    assert runtime.request.history.messages[0].parts[0].text == "m20"
+    # The bound only ever TRIMS the exact tail; it cannot reorder or duplicate.
+    assert runtime.request.history.messages[-1].parts[0].text == "m119"
+    # The caller's own 120-message turn is untouched -- `execute_turn` returns
+    # a NEW bounded copy, never mutates what it was handed.
+    assert len(owned_turn.messages) == 120
+
+
 def test_execute_turn_resolves_clarification_at_the_use_case_boundary() -> None:
     deps = _deps()
     worker = WorkerV1(

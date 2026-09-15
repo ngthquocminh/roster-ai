@@ -109,6 +109,8 @@ _FILTERS = {
     "demand": {
         "family": lambda item, value: item.family == value,
         "task_id": lambda item, value: item.task_id == value,
+        "start_minute_gte": lambda item, value: item.start_minute >= value,
+        "end_minute_lte": lambda item, value: item.end_minute <= value,
     },
     "assignments": {"task_id": lambda item, value: item.task_id == value},
     "workers": {
@@ -118,7 +120,10 @@ _FILTERS = {
     },
 }
 _KEYS = {
-    "demand": (("start_minute",), ("family", "task_id")),
+    "demand": (
+        ("start_minute",),
+        ("family", "task_id", "start_minute_gte", "end_minute_lte"),
+    ),
     "assignments": (("start_minute",), ("worker_id", "task_id")),
     "workers": (("contact_id",), ("contact_id", "qualified_task_id")),
     "locks": (("scope",), ("scope",)),

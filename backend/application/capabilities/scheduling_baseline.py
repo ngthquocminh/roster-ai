@@ -69,7 +69,14 @@ def scheduling_baseline_module() -> CapabilityModuleV1:
         manifest=scheduling_baseline_manifest(), handler=scheduling_baseline,
         request_type=SchedulingBaselineRequestV1, error_type=SchedulingBaselineError,
         retryable_error_codes=frozenset({"invalid_query"}), required_role="planner",
-        required_feature_policy=SCHEDULING_BASELINE_POLICY, model_facing_view=lambda result: result,
+        required_feature_policy=SCHEDULING_BASELINE_POLICY,
+        model_facing_view=lambda result: result,
+        model_description=(
+            "scheduling_baseline requests promotion of one candidate schedule run to the site's "
+            "baseline. Call it only when the user explicitly asks to promote a candidate and gives "
+            "its schedule_run_id; include the expected_baseline_schedule_version (or null). Every "
+            "request requires exact human approval before any promotion occurs."
+        ),
     )
 
 

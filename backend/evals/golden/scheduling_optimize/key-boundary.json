@@ -1,9 +1,9 @@
 {
   "case_id": "optimize-idempotency-key-boundary",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "scheduling_optimize",
   "risk_class": "compute",
-  "prompt": "Validate optimization with the maximum command key length.",
+  "prompt": "Submit optimization for proposal_id 00000000-0000-0000-0000-00000000000b with expected_resource_version 2, idempotency_key kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk, and schema_version 1.",
   "scripted_turns": [
     {"tool_name": "scheduling_optimize", "arguments": {"request": {"proposal_id": "00000000-0000-0000-0000-00000000000b", "expected_resource_version": 2, "idempotency_key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk", "schema_version": "1"}}, "tool_call_id": "optimize-4"},
     {"response_text": "Bounded command key validated."}

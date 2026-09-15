@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-10T12:24:59.722428+00:00",
+  "generated_at": "2026-09-13T07:10:18.133757+00:00",
   "metrics": {
     "authoritative_case_count": 2,
     "consequential_prohibited_case_count": 1,
@@ -22,7 +22,7 @@
       "case_id": "demonstration-repeat-once",
       "case_version": "1",
       "passed": true,
-      "reason": "matched 1 expected tool route(s)",
+      "reason": "matched 1 expected tool route(s); policy: matched policy outcome allow with no unauthorized result; visible: state expected completed, actual completed; text expected 'tool said alpha', actual 'tool said alpha'",
       "risk_class": "inspect",
       "run_source": "double"
     },
@@ -30,9 +30,9 @@
       "authoritative": true,
       "capability": "demonstration",
       "case_id": "demonstration-repeat-with-approval",
-      "case_version": "1",
+      "case_version": "2",
       "passed": true,
-      "reason": "matched 1 expected tool route(s)",
+      "reason": "matched 1 expected tool route(s); policy: terminated as suspended before any policy decision; visible: state expected suspended, actual suspended; text expected '', actual ''",
       "risk_class": "consequential",
       "run_source": "double"
     }
@@ -40,7 +40,7 @@
   "version_bindings": {
     "application": "ShiftMind Story 2.2 deterministic evaluation harness",
     "code": {
-      "git_commit": "45e5e08a40cd06a34e1e59e556a52a0f271b6794",
+      "git_commit": "822a3a8524fef999da3d65c6ff6c0b68968cf8d0",
       "working_tree_dirty": false
     },
     "dataset": {
@@ -50,7 +50,7 @@
       "case_count": 2,
       "case_versions": {
         "demonstration-repeat-once": "1",
-        "demonstration-repeat-with-approval": "1"
+        "demonstration-repeat-with-approval": "2"
       },
       "files": {
         "backend/evals/golden/demonstration/repeat-once.json": {
@@ -60,8 +60,8 @@
         },
         "backend/evals/golden/demonstration/repeat-with-approval.json": {
           "case_id": "demonstration-repeat-with-approval",
-          "case_version": "1",
-          "sha256": "241b449b51d2d698a189d7244004ee46d46ce837c0f9c2098c94dbb4802ca0cb"
+          "case_version": "2",
+          "sha256": "2ae6df6cfa91e411c7936b786b639f884efe38dbd1eba2193de1a8cfe3372858"
         }
       },
       "kind": "version-controlled golden evaluation dataset",
@@ -72,16 +72,16 @@
     },
     "evaluator": "ToolRoutingEvaluator v1 (exact tool name and JSON arguments)",
     "image": {
-      "api": "local source tree",
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
       "database": "postgres:18",
-      "web": "local source tree"
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959"
     },
     "model": "case-driven PydanticAI FunctionModel deterministic double",
     "policy": "AD-5 risk tags; only double-sourced verdicts are authoritative",
     "prompt": "versioned prompts in backend/evals/golden/**/*.json",
     "scenario": "not applicable \u2014 no scenario fixture touched",
-    "schema_version": "5e2a4c9d1f70",
+    "schema_version": "e5f6a7b8c9d0",
     "solver": "not applicable \u2014 demonstration tool invokes no solver",
-    "tool": "shiftmind_demonstration from the Story 2.1 AgentRuntime adapter"
+    "tool": "shiftmind_demonstration@2"
   }
 }

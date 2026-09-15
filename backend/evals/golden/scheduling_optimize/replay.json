@@ -1,9 +1,9 @@
 {
   "case_id": "optimize-replay-request",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "scheduling_optimize",
   "risk_class": "compute",
-  "prompt": "Validate the repeated explicit optimization request.",
+  "prompt": "Submit optimization for proposal_id 00000000-0000-0000-0000-000000000009 with expected_resource_version 1, idempotency_key run-replay, and schema_version 1.",
   "scripted_turns": [
     {"tool_name": "scheduling_optimize", "arguments": {"request": {"proposal_id": "00000000-0000-0000-0000-000000000009", "expected_resource_version": 1, "idempotency_key": "run-replay", "schema_version": "1"}}, "tool_call_id": "optimize-2"},
     {"response_text": "Repeated run request validated."}

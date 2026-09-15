@@ -1,9 +1,9 @@
 {
   "case_id": "draft-out-of-range-argument",
-  "case_version": "1",
+  "case_version": "3",
   "capability": "scheduling_draft",
   "risk_class": "draft",
-  "prompt": "Create a draft with an invalid weekly cap.",
+  "prompt": "Call scheduling_draft exactly once. Its request has expected_scenario_version_id '00000000-0000-0000-0000-000000000001' and schema_version '1'. Its sole constraint object has kind 'set_max_hours', group 'workers' (the literal group; never constraints-and-objectives), record_id 'w1', max_hours 57, related_group null, related_record_id null, n null, factor null, start_minute null, end_minute null, and schema_version '1'. This 57-hour cap is intentionally invalid; do not retry or broaden the call after the governed refusal.",
   "scripted_turns": [
     {
       "tool_name": "scheduling_draft",

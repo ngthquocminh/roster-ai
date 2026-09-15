@@ -899,3 +899,69 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   them, but the *numbers* are not.
   **Owner/revisit trigger:** the next solver, fixture, or metric change; re-run the
   composed proof and replace the snapshot from real output.
+
+## Deferred from: code review of story-5.5 (2026-09-11)
+
+- **A local `.env` with a real `AGENT_RUNTIME_MODEL` set leaks into ordinary test runs.**
+  `backend/settings.py:313`'s `default_settings()` reads `AGENT_RUNTIME_MODEL` straight from the
+  process environment with no test-time override, so a developer's local `.env` — set to a real
+  provider for Story 5.5's live testing — makes `test_agent_deterministic_model.py` and
+  `test_conversations_api.py` fail outside this diff's own scope (both expect the "deterministic"
+  default). `conftest.py`/`settings.py` are unchanged by this diff; the isolation gap is pre-existing,
+  but Story 5.5 is the first story to require real provider credentials in the local dev environment,
+  so the risk is newly live for the first time.
+  **Owner/revisit trigger:** the next story doing live-provider work, or a dedicated conftest fixture
+  that pins `AGENT_RUNTIME_MODEL=deterministic` for the default test session regardless of `.env`.
+
+- **`generate_live_diagnostics` has no committed CLI entry point.** `backend/evals/report.py`'s
+  `main()` still only calls `generate_demonstration_report`; the new live-diagnostics function
+  (`report.py:149-205`) was only exercised ad hoc during Story 5.5's own dev session per its Debug
+  Log, and is otherwise reachable only from `test_live_diagnostics_flushes_one_result_per_case`
+  (double model). A future maintainer diagnosing a live-suite regression has no scripted way to
+  actually run it against a real provider.
+  **Owner/revisit trigger:** the next story that needs to re-diagnose a live-routing regression;
+  add an argparse entry point (or `main()` flag) that wires a real model into
+  `generate_live_diagnostics`.
+
+- **`grounding-supported.json` grounds a live claim in a fixture row that violates the demand
+  family/unit rule.** `backend/evals/golden/scheduling_compute/supported.json` (pre-existing;
+  untouched by Story 5.5 except its prompt wording) expects the live agent to produce a `supported`
+  `required_headcount_minutes` answer for `family="outbound"`, citing `d-outbound-0`/`d-outbound-1`
+  (`backend/evals/fixture_projection.py:49-50`). Those rows are tagged `unit="headcount"`, but
+  `docs/DOMAIN-MODEL.md` §1 requires `outbound` demand to be `unit="volume"` always, and §4 states
+  minutes-denominated demand exists only for `indirect` — this combination cannot legitimately exist.
+  Unlike the three sibling cases resolved at Story 5.5's code review (2026-09-12, `live_eligible:
+  false` — they scripted a double-only malformed citation, structurally unreproducible live),
+  `grounding-supported` asks a real question with a real correct answer; it just currently gets that
+  answer only because the test fixture (not the real Postgres adapter, which `_normalize_demand`
+  guarantees can't produce this pairing) has a data-entry bug. Fixing it means retagging the fixture
+  rows to `unit="volume"`, which would make `required_headcount_minutes(family=outbound)` fail-closed
+  with `metric_dimension_mismatch` instead of a number (per DOMAIN-MODEL.md §3) — changing the case's
+  correct prompt/expectation entirely and requiring a fresh live re-verification against both models.
+  **Owner/revisit trigger:** the next story touching `scheduling_compute` golden cases or
+  `fixture_projection.py`'s `DEMAND` tuple, or the Gate B dataset-floor decision this story's Open
+  Question already flags as owed.
+
+## Deferred from: code review of 5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity (2026-09-14)
+
+- **Usage consumed by a turn that raises is never accounted in the live suite.**
+  `backend/evals/report.py` `run_bounded_live_multi_turn_suite` reads `turn_eval.outcome.usage`, but
+  `failed_outcome_for_exception` (and a runtime `failed`/`timed_out` return) carries `usage=None`, so a
+  live turn that makes several provider requests and then fails adds 0 to every aggregate total.
+  **Owner/revisit trigger:** the story that next touches `agent/runtime.py:run_turn` — surface partial
+  usage on the failure path so the eval seam can account it.
+
+- **`raw_turn_padding` between 1 and 99 can leave an orphan `tool_result` at the head of the truncated
+  window.** `_history_for_turn` appends filler after the prior turn's real messages; a `[-100:]` slice
+  can start on a `tool_result` with no preceding `tool_call`. The deterministic double ignores it, but
+  a real provider rejects it and the case records `suite_exception` for a harness artifact. No committed
+  case uses partial padding today.
+  **Owner/revisit trigger:** the first multi-turn case that needs padding < `HISTORY_MESSAGE_BOUND`;
+  pad to a clean message boundary or reject the combination at load.
+
+- **`.env` `AGENT_RUNTIME_MODEL` / `AGENT_RUNTIME_API_KEY` leak into the default suite (pre-existing,
+  now load-bearing).** Already ledgered at Story 5.5; Story 5.6's "0 regressions" figure was reached by
+  deselecting the leaked `test_execute_turn_emits_claim_to_finalize_telemetry` failure, and
+  `_HAS_LIVE_AGENT` is computed from `.env` contents.
+  **Owner/revisit trigger:** same as the 5.5 entry — pin `AGENT_RUNTIME_MODEL=deterministic` in
+  `conftest.py` for the default session.

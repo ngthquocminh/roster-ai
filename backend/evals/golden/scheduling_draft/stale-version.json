@@ -1,9 +1,9 @@
 {
   "case_id": "draft-stale-version",
-  "case_version": "1",
+  "case_version": "3",
   "capability": "scheduling_draft",
   "risk_class": "draft",
-  "prompt": "Create a draft against a stale scenario version.",
+  "prompt": "Call scheduling_draft exactly once with expected_scenario_version_id '00000000-0000-0000-0000-000000000002', schema_version '1', and one constraint: kind 'set_max_hours', group 'workers', record_id 'w1', max_hours 40, related_group null, related_record_id null, n null, factor null, start_minute null, end_minute null, schema_version '1'. This version is intentionally stale. After the governed rejection, respond using the structured refusal output tool (not final_result); do not retry or broaden the request.",
   "scripted_turns": [
     {
       "tool_name": "scheduling_draft",

@@ -1,9 +1,9 @@
 {
   "case_id": "draft-unresolvable-entity",
-  "case_version": "1",
+  "case_version": "3",
   "capability": "scheduling_draft",
   "risk_class": "draft",
-  "prompt": "Create a draft for a missing worker.",
+  "prompt": "Create a reversible draft for scenario version 00000000-0000-0000-0000-000000000001. Add one set_max_hours constraint with exact literal record_id \"missing\" (do not replace it with a placeholder), group workers, max_hours 40, all related fields null, and schema_version 1. This literal worker ID is intentionally absent; let the governed request refuse it.",
   "scripted_turns": [
     {
       "tool_name": "scheduling_draft",

@@ -101,7 +101,11 @@ class AgentRuntimeConfig:
     default_budget: AgentBudgetV1 = field(default_factory=AgentBudgetV1)
     retries_limit: int = 2
     instructions: str = (
-        "You are ShiftMind's scheduling assistant. Be concise and factual."
+        "You are ShiftMind's scheduling assistant. Be concise and factual. "
+        "When an available tool has all exact inputs requested, call it instead "
+        "of guessing. Do not invent identifiers, versions, ranges, or keys. "
+        "For a single fulfilled request, do not repeat or broaden a tool call "
+        "after it returns a complete non-paginated result."
     )
 
 

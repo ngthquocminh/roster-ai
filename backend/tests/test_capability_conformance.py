@@ -141,6 +141,13 @@ def test_installed_module_conforms(module) -> None:
 
 
 @pytest.mark.parametrize("module", INSTALLED)
+def test_installed_module_declares_model_facing_tool_guidance(module) -> None:
+    """Live providers need actionable tool guidance, not a generic label."""
+    assert module.model_description.strip()
+    assert module.manifest.capability_name in module.model_description
+
+
+@pytest.mark.parametrize("module", INSTALLED)
 def test_installed_module_records_its_scope_controls(module) -> None:
     """Scope-as-data (Story 2.5's convention): every control names what it does
     NOT cover, so a reduction cannot outlive the story that recorded it."""
@@ -196,6 +203,12 @@ def test_conformance_rejects_a_module_that_declares_no_model_facing_view() -> No
     """
     invalid = _synthetic_module(model_facing_view=None)
     with pytest.raises(IncompleteManifestError, match="model may see"):
+        validate_module(invalid)
+
+
+def test_conformance_rejects_a_module_with_no_model_tool_guidance() -> None:
+    invalid = _synthetic_module(model_description="")
+    with pytest.raises(IncompleteManifestError, match="model_description"):
         validate_module(invalid)
 
 
