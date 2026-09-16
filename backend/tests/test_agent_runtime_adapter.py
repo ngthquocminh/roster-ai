@@ -41,6 +41,9 @@ def test_default_instructions_bound_broad_orientation_inspection():
     assert 'workflow snapshot' in instructions
     assert 'copy its worker_id or task_id' in instructions
     assert 'current_scenario_version_id' in instructions
+    assert 'asks generally how you can help' in instructions
+    assert 'placeholder result_id' in instructions
+    assert 'return a failed claim' in instructions
     assert 'Routing rules:' in instructions
     assert 'scheduling_inspect(group="overview")' in instructions
 from evals.doubles import build_model_double
