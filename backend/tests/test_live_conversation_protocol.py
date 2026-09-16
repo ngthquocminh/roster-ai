@@ -110,6 +110,16 @@ def test_judgment_rejects_malformed_score_and_extra_provider_content():
     data['relevance']['score'] = '2'
     with pytest.raises(ValidationError):
         ConversationJudgment.model_validate(data)
+
+
+def test_judge_reason_is_bounded_but_allows_concise_multi_fact_explanations():
+    accepted = judgment(completeness={
+        'score': 2, 'evidence_ids': ['turn-1'], 'reason': 'x' * 1000})
+    assert len(accepted.completeness.reason) == 1000
+    data = judgment().model_dump()
+    data['completeness']['reason'] = 'x' * 1001
+    with pytest.raises(ValidationError):
+        ConversationJudgment.model_validate(data)
     data = judgment().model_dump()
     data['reasoning'] = 'must not enter evidence'
     with pytest.raises(ValidationError):

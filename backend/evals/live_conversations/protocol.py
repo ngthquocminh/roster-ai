@@ -77,7 +77,7 @@ class DimensionGrade(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     score: Literal[0, 1, 2] | None
     evidence_ids: list[str] = Field()
-    reason: str = Field(min_length=1, max_length=500)
+    reason: str = Field(min_length=1, max_length=1000)
 
 
 class ConversationJudgment(BaseModel):
