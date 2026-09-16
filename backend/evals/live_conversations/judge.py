@@ -30,6 +30,20 @@ def normalize_openrouter_model(model: str) -> str:
     return model[len(prefix):] if model.startswith(prefix) else model
 
 
+def _validate_judgment_content(content):
+    if isinstance(content, dict):
+        return ConversationJudgment.model_validate(content)
+    if isinstance(content, str):
+        return ConversationJudgment.model_validate_json(content)
+    if (isinstance(content, list) and len(content) == 1
+            and isinstance(content[0], dict)
+            and content[0].get('type') in {'text', 'output_text'}
+            and isinstance(content[0].get('text'), str)):
+        return ConversationJudgment.model_validate_json(content[0]['text'])
+    # Produce a closed validation category without retaining provider content.
+    return ConversationJudgment.model_validate(content)
+
+
 def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: str,
                verified: dict, budget: ConversationBudget,
                not_applicable: frozenset[str] = frozenset(), client: httpx.Client | None = None):
@@ -78,9 +92,7 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
                 # OpenRouter-compatible providers may return a JSON string or
                 # the already-decoded JSON object for a strict response format.
                 # Validate either representation against the same owned model.
-                result = (ConversationJudgment.model_validate(content)
-                          if isinstance(content, dict)
-                          else ConversationJudgment.model_validate_json(content))
+                result = _validate_judgment_content(content)
             except ValidationError as exc:
                 first = exc.errors(include_url=False, include_input=False)[0]
                 category = str(first.get('type', 'invalid'))

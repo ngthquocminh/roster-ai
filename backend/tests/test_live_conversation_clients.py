@@ -89,6 +89,20 @@ def test_judge_accepts_provider_decoded_strict_json_object():
     assert usage['attempts'][0]['outcome'] == 'accepted'
 
 
+def test_judge_accepts_single_openai_text_content_block():
+    response = {
+        'id': 'generation-block', 'model': 'test-model',
+        'choices': [{'message': {'content': [
+            {'type': 'text', 'text': judgment().model_dump_json()}]}}],
+        'usage': {'prompt_tokens': 100, 'completion_tokens': 20, 'cost': .001},
+    }
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=response)))
+    grade, _ = judge_turn(api_key='test', model='test', transcript=[], obligation='Answer',
+        verified={}, budget=ConversationBudget(limits()), client=client)
+    assert grade.verdict == 'pass'
+
+
 def test_application_client_uses_real_auth_csrf_and_new_conversations():
     posts = []
 
