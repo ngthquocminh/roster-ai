@@ -60,14 +60,25 @@ def test_judge_receives_only_entities_named_in_visible_reply():
         {'record_id': 't2', 'task_id': 't2', 'name': 'Loading', 'function': 'Inbound'},
     ]
     assignments = [{'record_id': 'a1', 'worker_id': 'w1', 'task_id': 't1'}]
-    assert relevant_entities(activity, workers, tasks, assignments) == {
+    demand = [{'task_id': 't1', 'family': 'outbound'}, {'task_id': 't1', 'family': 'outbound'}]
+    assert relevant_entities(activity, workers, tasks, assignments, demand) == {
         'named_workers': [{'record_id': 'w1', 'name': 'Jae',
                            'employment_type': 'Full Time', 'grade': 'G3', 'eba': 'E1',
                            'contracted_hours': 40, 'qualified_task_ids': ['t1'],
                            'roster_window_count': 1,
                            'extra_availability_window_count': 1}],
         'named_tasks': [{'record_id': 't1', 'task_id': 't1', 'name': 'Packing',
-                         'function': 'Outbound'}],
+                         'function': 'Outbound', 'demand_families': ['outbound']}],
         'named_assignments': [{'record_id': 'a1', 'worker_id': 'w1', 'worker_name': 'Jae',
                                'task_id': 't1', 'task_name': 'Packing'}],
     }
+
+
+def test_named_task_with_no_demand_rows_reports_no_family():
+    activity = {'activity_type': 'agent_response', 'response': {'segments': [
+        {'kind': 'prose', 'text': 'Loading has no demand rows.'},
+    ]}}
+    tasks = [{'record_id': 't2', 'task_id': 't2', 'name': 'Loading', 'function': 'Inbound'}]
+    result = relevant_entities(activity, [], tasks, [], demand=())
+    assert result['named_tasks'] == [{'record_id': 't2', 'task_id': 't2', 'name': 'Loading',
+                                      'function': 'Inbound', 'demand_families': []}]

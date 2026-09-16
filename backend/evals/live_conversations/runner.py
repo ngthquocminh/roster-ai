@@ -46,7 +46,7 @@ def compact_reload_effect(timeline):
     }
 
 
-def relevant_entities(activity, workers, tasks, assignments):
+def relevant_entities(activity, workers, tasks, assignments, demand=()):
     """Give the judge exact facts only for entities visible in this reply."""
     text = ' '.join(segment.get('text', '') for segment in
                     activity.get('response', {}).get('segments', ())).casefold()
@@ -64,11 +64,16 @@ def relevant_entities(activity, workers, tasks, assignments):
                 'extra_availability_window_count': sum(
                     row.get('kind') == 'availability' for row in windows),
             })
+    demand_families_by_task = {}
+    for row in demand:
+        demand_families_by_task.setdefault(row['task_id'], set()).add(row['family'])
     named_tasks = []
     for task in tasks:
         if task['name'].casefold() in text or task['record_id'].casefold() in text:
-            named_tasks.append({key: task.get(key) for key in
-                                ('record_id', 'task_id', 'name', 'function')})
+            entry = {key: task.get(key) for key in
+                     ('record_id', 'task_id', 'name', 'function')}
+            entry['demand_families'] = sorted(demand_families_by_task.get(task['task_id'], ()))
+            named_tasks.append(entry)
     workers_by_id = {row['record_id']: row['name'] for row in workers}
     tasks_by_id = {row['record_id']: row['name'] for row in tasks}
     named_assignments = []
@@ -114,7 +119,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
     try:
         workers = read_group(app, 'workers')
         tasks = read_group(app, 'work-areas-and-tasks')
-        demand = None
+        demand = read_group(app, 'demand')
         projection_path = '/api/v1/scenarios/' + app.fixture['scenario_id'] + '/projection'
         for index, turn in enumerate(case.turns[:endpoint], 1):
             budget.admit(reserve_usd=.05, tokens=150000)
@@ -143,11 +148,9 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             assignments = read_group(app, 'baseline-assignments')
             claims = [s for s in activity.get('response', {}).get('segments', []) if s['kind'] == 'claim']
             for claim in claims:
-                if claim['metric'].startswith('required_') and demand is None:
-                    demand = read_group(app, 'demand')
-                failures.extend(verify_claim(claim, workers=workers, assignments=assignments, demand=demand or ()))
+                failures.extend(verify_claim(claim, workers=workers, assignments=assignments, demand=demand))
             verified = {'id': row['id'] + ':facts', 'worker_count': len(workers),
-                **relevant_entities(activity, workers, tasks, assignments),
+                **relevant_entities(activity, workers, tasks, assignments, demand),
                 'baseline_before': before['baseline_schedule_version'],
                 'baseline_assignment_count': len(assignments),
                 'independent_claim_failures': failures.copy(), 'effects_after_reply': []}
