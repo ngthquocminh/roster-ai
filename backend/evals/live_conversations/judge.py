@@ -56,16 +56,14 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
             {'role': 'user', 'content': json.dumps({
                 'transcript_so_far': transcript, 'current_obligation': obligation,
                 'verified_facts_and_effects': verified, 'not_applicable': sorted(not_applicable),
+                'required_judgment_schema': ConversationJudgment.model_json_schema(),
             }, ensure_ascii=False)},
         ],
         'max_tokens': 2048,
         'temperature': 0,
         'reasoning': {'effort': 'low', 'exclude': True},
         'provider': {'require_parameters': True},
-        'response_format': {'type': 'json_schema', 'json_schema': {
-            'name': 'conversation_judgment', 'strict': True,
-            'schema': ConversationJudgment.model_json_schema(),
-        }},
+        'response_format': {'type': 'json_object'},
     }
     owned = client is None
     transport = client or httpx.Client(timeout=45)
