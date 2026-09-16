@@ -93,11 +93,12 @@ class ConversationJudgment(BaseModel):
             return False
         for name in ('relevance', 'continuity', 'completeness', 'clarification_refusal'):
             grade = getattr(self, name)
+            if name in not_applicable:
+                continue
             if not set(grade.evidence_ids) <= known_ids:
                 return False
             if grade.score is None:
-                if name not in not_applicable:
-                    return False
+                return False
             elif grade.score != 2 or not grade.evidence_ids:
                 return False
         return True
