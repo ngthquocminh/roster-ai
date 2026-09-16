@@ -36,6 +36,11 @@ field in the supplied facts, not by the task's function or name. A reply claimin
 belongs to a given family is grounded, not an unsupported inference, exactly when that family
 appears in that task's demand_families; it fails only when the claimed family is absent from
 demand_families or the task itself is not named/grounded at all.
+A request to preserve an existing set (e.g. "preserve the existing locks") is fully satisfied
+when the persisted result retains exactly the set that existed immediately before this turn,
+including the empty set. If zero such items existed beforehand (per this conversation's own
+earlier turns or the supplied facts), a report of zero items preserved is complete on its own
+and must not be scored down for the count being zero.
 When a reply supplies the substantive requested information and additionally, honestly
 discloses a legitimate coverage limit of that answer (e.g. a paginated read may not cover
 every matching record), score completeness 2 for that disclosure alone; only lower it if the
