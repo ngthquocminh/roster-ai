@@ -23,7 +23,7 @@
         },
         {
           "user": "how many work are therre?",
-          "obligation": "Clarify whether work means workers or tasks, or give a relevant independently grounded answer; generic help, empty output and fabricated counts fail.",
+          "obligation": "PASS if EITHER (A) the assistant clarifies whether work means workers or tasks OR (B) it gives a relevant independently grounded answer such as the actual worker count. Do not require both alternatives. Generic help, empty output, and fabricated counts fail.",
           "actions_after": []
         },
         {

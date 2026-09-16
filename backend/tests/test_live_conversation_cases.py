@@ -17,6 +17,7 @@ def test_catalogue_preserves_all_narratives_lengths_and_independent_prefixes():
     assert [turn.user for turn in cases[0].turns[:3]] == [
         'HI my name is Minh', 'how can you help me?', 'how many work are therre?',
     ]
+    assert 'Do not require both alternatives' in cases[0].turns[2].obligation
     for scenario, endpoint, turns in prefixes:
         assert turns == scenario.turns[:endpoint]
         assert len(turns) == endpoint
