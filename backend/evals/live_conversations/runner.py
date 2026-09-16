@@ -12,6 +12,20 @@ from evals.live_conversations.protocol import IncompleteConversationRun, turn_ve
 _ASSIGNMENT_FIELDS = ('worker_id', 'task_id', 'shift_id', 'start_minute', 'end_minute')
 
 
+def supplied_citation_ids(value):
+    """Collect explicit IDs the judge actually received in sanitized input."""
+    found = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if (key == 'id' or key == 'result_id' or key.endswith('_id')) and isinstance(item, str):
+                found.add(item)
+            found.update(supplied_citation_ids(item))
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            found.update(supplied_citation_ids(item))
+    return found
+
+
 def _canonical_assignment(row):
     return tuple(row.get(field) for field in _ASSIGNMENT_FIELDS)
 
@@ -186,7 +200,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             transcript.append({'id': row['id'], 'user': turn.user, 'assistant': visible_activity(activity)})
             judgment, judge_usage = judge_turn(api_key=judge_key, model=judge_model,
                 transcript=transcript, obligation=turn.obligation, verified=verified, budget=budget)
-            known = {item['id'] for item in transcript} | {verified['id']} | {e['id'] for e in verified['effects_after_reply']}
+            known = supplied_citation_ids(transcript) | supplied_citation_ids(verified)
             row.update(factual_failures=failures, judgment=judgment.model_dump(), judge_usage=judge_usage,
                        verified=verified, verdict=turn_verdict(factual_failures=failures,
                        judgment=judgment, known_ids=known))
