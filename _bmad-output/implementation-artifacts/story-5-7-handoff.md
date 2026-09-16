@@ -1,21 +1,21 @@
 # Story 5.7 continuation handoff
 
-Updated: 2026-09-16
+Updated: 2026-09-16 (Scenario B endpoint 4 complete)
 
 ## Resume point
 
-Story 5.7 remains `in-progress`. Scenario A is complete. Resume with Scenario B, beginning with its shortest independent prefix (`--endpoint 4`) to limit spend and isolate failures before running all five Scenario B prefixes.
+Story 5.7 remains `in-progress`. Scenario A is complete. Scenario B endpoint 4 (the shortest independent prefix) now passes after a routing-prompt fix. Resume with Scenario B endpoint 8, then 12, 16, 20, one prefix at a time.
 
 Suggested fresh-session instruction:
 
-> Continue `$bmad-dev-story 5.7` from `_bmad-output/implementation-artifacts/story-5-7-handoff.md`; start Scenario B endpoint 4 and keep total story spend under USD 10.
+> Continue `$bmad-dev-story 5.7` from `_bmad-output/implementation-artifacts/story-5-7-handoff.md`; start Scenario B endpoint 8 and keep total story spend under USD 10.
 
 ## Current live configuration and budget
 
 - Application agent: `openrouter:~deepseek/deepseek-flash-latest`
 - Independent judge: `openrouter:google/gemini-2.5-flash-lite`
 - Total story API budget: USD 10; minimize spend.
-- Conservative prior-spend reserve for the next invocation: USD 1.25.
+- Conservative prior-spend reserve for the next invocation: USD 1.30 (bumped from 1.25 after USD 0.046262 measured spend across three B4 runs on 2026-09-16).
 - Keep secrets in `backend/.env`; never print them. An ignored `backend/.env.before-story-5-7` backup exists.
 - Baseline assignment context is temporarily capped at 10, as requested.
 
@@ -33,15 +33,19 @@ Scenario A passed.
 
 The two files are ignored development evidence. They establish the continuation point but are not final version-bound release evidence. The full matrix, three consecutive final runs, and real-browser evidence are still outstanding.
 
-## Start Scenario B
+## Scenario B endpoint 4 result
+
+Passed on the third attempt (`live-scenario-B-endpoint4-r3.json`, run `dca2e4de-9c42-4434-99df-6b6e2489290e`): all four turns pass, `incomplete_reason: None`. See lesson 13 below for the root cause and fix; `r1`/`r2` are retained as before/after diagnostics.
+
+## Continue with Scenario B endpoint 8
 
 From `backend`:
 
 ```powershell
-uv run python -m evals.live_conversations.suite --scenario B --endpoint 4 --agent-model 'openrouter:~deepseek/deepseek-flash-latest' --judge-model 'openrouter:google/gemini-2.5-flash-lite' --reasoning-effort low --repetitions 1 --spend-limit-usd 10 --prior-spend-usd 1.25 --output '../_bmad-output/test-artifacts/live-scenario-B-endpoint4-r1.json'
+uv run python -m evals.live_conversations.suite --scenario B --endpoint 8 --agent-model 'openrouter:~deepseek/deepseek-flash-latest' --judge-model 'openrouter:google/gemini-2.5-flash-lite' --reasoning-effort low --repetitions 1 --spend-limit-usd 10 --prior-spend-usd 1.30 --output '../_bmad-output/test-artifacts/live-scenario-B-endpoint8-r1.json'
 ```
 
-Scenario B prefixes end at turns 4, 8, 12, 16, and 20. After endpoint 4 passes, advance one prefix at a time. Run the full Scenario B only after the individual prefixes are green. The runner already fails fast, so preserve each failed JSON report and fix the earliest failure before spending on later turns.
+Scenario B prefixes end at turns 4, 8, 12, 16, and 20. Endpoint 4 is green; advance one prefix at a time. Run the full Scenario B only after the individual prefixes are green. The runner already fails fast, so preserve each failed JSON report and fix the earliest failure before spending on later turns.
 
 ## Fast path learned from Scenario A
 
@@ -57,6 +61,7 @@ Scenario B prefixes end at turns 4, 8, 12, 16, and 20. After endpoint 4 passes, 
 10. **Keep reasons useful but bounded.** Judge reason length is capped at 1,000 characters, enough for multi-fact worker summaries.
 11. **Use the correct demo flag.** The environment setting is `DEMONSTRATION_ENABLED`, not `SHIFTMIND_DEMONSTRATION_ENABLED`.
 12. **Fix the first failing prefix, then rerun it.** This saved most of the cost during Scenario A. Preserve failures as diagnostics rather than weakening scenario obligations.
+13. **Family-scoped questions need explicit routing, and grounded answers must name their entities.** `family` (outbound/inbound/indirect) lives only on demand records — `TaskV1`/`AssignmentV1` carry no family field, and `scheduling_inspect`'s assignment filter is single-value equality only (no `task_id` list). Without being told this, the agent falls back to broad unbounded inspection and burns its tool-call budget (Scenario B endpoint 4 turn 2 hit `budget_exhausted` at 12 tool calls this way). Fixed in `agent/scheduling_instructions.py`: (a) inspect demand filtered by family once, collect distinct task_ids, then inspect assignments per distinct task_id (capped, report partial coverage rather than exhausting budget silently); (b) name each resolved task/worker by its exact current name — the harness's grounding (`evals/live_conversations/runner.py::relevant_entities`) only captures verified facts for entities whose literal name appears in the reply, so an unnamed reference ("a single outbound task") stays `needs_review` even when factually correct. After both fixes, the same turn used 3-5 tool calls instead of 12 and passed. Watch for the same shape in any other family-scoped turn across the remaining scenarios (Scenario C is the most likely to hit this again, per its family/unit-heavy obligations).
 
 ## Verification already completed
 
