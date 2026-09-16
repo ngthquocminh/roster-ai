@@ -32,6 +32,7 @@ def _arguments(argv=None):
     parser.add_argument('--scenario', help='Run one authored scenario during development.')
     parser.add_argument('--endpoint', type=int, help='Run one authored endpoint during development.')
     parser.add_argument('--agent-model', help='Override only the application agent model for this run.')
+    parser.add_argument('--judge-model', help='Override only the separate evaluation judge model.')
     parser.add_argument('--reasoning-effort', choices=('none', 'low', 'medium', 'high'), default='low')
     parser.add_argument('--repetitions', type=int, default=1)
     parser.add_argument('--spend-limit-usd', type=float, default=7.0)
@@ -51,7 +52,8 @@ def main(argv=None) -> int:
     model = (args.agent_model or values.get('AGENT_RUNTIME_MODEL')
              or os.environ.get('AGENT_RUNTIME_MODEL'))
     key = values.get('AGENT_RUNTIME_API_KEY') or os.environ.get('AGENT_RUNTIME_API_KEY')
-    judge_model = values.get('LIVE_CONVERSATION_JUDGE_MODEL') or os.environ.get('LIVE_CONVERSATION_JUDGE_MODEL')
+    judge_model = (args.judge_model or values.get('LIVE_CONVERSATION_JUDGE_MODEL')
+                   or os.environ.get('LIVE_CONVERSATION_JUDGE_MODEL'))
     judge_key = values.get('LIVE_CONVERSATION_JUDGE_API_KEY') or key
     if not all(isinstance(value, str) and value.strip() for value in (model, key, judge_model, judge_key)):
         raise SystemExit('agent and separate judge model/key configuration is required')
