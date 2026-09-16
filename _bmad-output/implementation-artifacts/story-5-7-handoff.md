@@ -84,4 +84,3 @@ Do not mark the story or any remaining acceptance criterion complete based on Sc
 - No `shiftmind-live-*` containers remain.
 - Preserve unrelated untracked `.1devtool/` and `rosterai-schema.sql`.
 - Development JSON under `_bmad-output/test-artifacts/` is intentionally ignored.
-
