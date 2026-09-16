@@ -212,6 +212,7 @@ Codex (GPT-5) for implementation; OpenRouter `~deepseek/deepseek-flash-latest` f
 
 ### Completion Notes List
 
+- 2026-09-16 Scenario A completion supersedes the earlier model-suitability rejection below. After adding explicit routing instructions, limiting baseline assignment context to 10, proving each chat-facing tool with a two-turn live smoke conversation, and tightening result-ID/factual grounding, OpenRouter DeepSeek Flash passed Scenario A as the application agent. A2-A5 passed together in `_bmad-output/test-artifacts/live-scenario-A-final.json`; A6 passed all six turns and all independent judge verdicts in `_bmad-output/test-artifacts/live-scenario-A-endpoint6-r5.json`. The separate judge is `openrouter:google/gemini-2.5-flash-lite`; A6 recorded USD 0.00661903. This acceptance applies to Scenario A only. Scenarios B-H, the full three-run matrix, browser evidence, and final version-bound evidence remain incomplete. Detailed continuation commands and lessons are recorded in `story-5-7-handoff.md`; retain a conservative USD 1.25 prior-spend reserve under the USD 10 total story ceiling.
 - 2026-09-15 continuation supersedes the earlier budget hold below: Minh selected OpenRouter DeepSeek Flash for the application agent and separately configured judge, with USD 7 TOTAL story API spend. Credentials were read locally without disclosure; the running local backend configuration was updated, with an ignored `.env.before-story-5-7` backup. Flash resolves to `deepseek/deepseek-v4.1-flash` in the judge response. No complete matrix or affordability guarantee is claimed.
 - Added executable user-only scenario data (93 authored messages, 40 independent prefix definitions, 273 executed turns per complete matrix), separate structured judge client, real authenticated HTTP/action client, derived operation inventory, and fail-closed verdict/budget protocol. Current harness verification: 38 deterministic tests passed. These HTTP doubles verify protocol behavior only; they are not live acceptance evidence.
 - Flash Scenario A diagnostic completed five turns and timed out on turn three. Separate judge calibration rejected the timeout and accepted the worker-count answer against an independent HTTP worker read; two judgments cost USD 0.001055235. This is limited calibration, not full judge validation.
@@ -249,6 +250,7 @@ Remaining new harness guards still require their own demonstrated mutation verif
 
 ### File List
 
+- `_bmad-output/implementation-artifacts/story-5-7-handoff.md`
 - `backend/evals/live_conversations/__init__.py`
 - `backend/evals/live_conversations/cases.py`
 - `backend/evals/live_conversations/scenarios.json`
