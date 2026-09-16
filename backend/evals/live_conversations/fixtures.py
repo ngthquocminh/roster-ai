@@ -14,6 +14,20 @@ from evals.live_conversations.protocol import IncompleteConversationRun
 from worker.lease_worker import runtime_context
 
 
+def _run_feasible_candidate(app, *, proposal_id, resource_version):
+    attempts = []
+    terminal = None
+    for _ in range(2):
+        run = app._request('POST', '/api/v1/schedule-runs', command=True,
+            body={'proposal_id': str(proposal_id),
+                  'expected_resource_version': resource_version})
+        terminal = app.wait_for_run(run['schedule_run_id'])
+        attempts.append(terminal['run'])
+        if terminal['run']['status'] == 'solver_completed' and terminal['candidate']:
+            return terminal, attempts
+    raise IncompleteConversationRun('fixture_seed_solve_not_feasible_after_retry')
+
+
 def prepare_candidate(app, *, session, database_url, conversation_id):
     """Create a real proposal and feasible candidate for a specified conversation."""
     tasks = app.projection('work-areas-and-tasks')['items']
@@ -38,14 +52,11 @@ def prepare_candidate(app, *, session, database_url, conversation_id):
                 proposal=result.proposal, site_id=site, conversation_id=UUID(conversation_id), actor_id=actor)
     finally:
         engine.dispose()
-    run = app._request('POST', '/api/v1/schedule-runs', command=True,
-        body={'proposal_id': str(proposal.proposal_id), 'expected_resource_version': proposal.resource_version})
-    terminal = app.wait_for_run(run['schedule_run_id'])
-    if terminal['run']['status'] != 'solver_completed' or not terminal['candidate']:
-        raise IncompleteConversationRun('fixture_seed_solve_not_feasible')
+    terminal, attempts = _run_feasible_candidate(app, proposal_id=proposal.proposal_id,
+                                                  resource_version=proposal.resource_version)
     return {'conversation_id': conversation_id, 'proposal_id': str(proposal.proposal_id),
             'proposal_resource_version': proposal.resource_version, 'run': terminal['run'],
-            'candidate': terminal['candidate']}
+            'candidate': terminal['candidate'], 'run_attempts': attempts}
 
 
 def prepare_initial_baseline(app, *, session, database_url):
@@ -68,4 +79,5 @@ def prepare_initial_baseline(app, *, session, database_url):
         raise IncompleteConversationRun('fixture_seed_approval_not_consumed')
     return {'kind': 'fixture_setup_not_conversation_evidence', 'conversation_id': setup['id'],
             'run': terminal['run'], 'candidate_schedule_version_id': terminal['candidate']['schedule_version_id'],
-            'approval_id': approval['approval_id'], 'assignment_count': len(terminal['candidate']['assignments'])}
+            'run_attempts': prepared['run_attempts'], 'approval_id': approval['approval_id'],
+            'assignment_count': len(terminal['candidate']['assignments'])}
