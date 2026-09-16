@@ -34,7 +34,9 @@ def test_judge_sends_only_past_visible_data_and_requires_usable_usage():
     assert seen[0]['max_tokens'] == 2048
     assert seen[0]['provider']['require_parameters'] is True
     assert seen[0]['response_format'] == {'type': 'json_object'}
-    assert 'required_judgment_schema' in json.loads(seen[0]['messages'][1]['content'])
+    judge_input = json.loads(seen[0]['messages'][1]['content'])
+    assert 'required_judgment_schema' in judge_input
+    assert judge_input['current_obligation'] == {'id': 'obligation', 'text': 'Greet the user.'}
     assert 'future' not in seen[0]['messages'][1]['content']
     assert 'score completeness 2' in seen[0]['messages'][0]['content']
     assert 'alternatives with "or"' in seen[0]['messages'][0]['content']

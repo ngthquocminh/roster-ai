@@ -54,6 +54,7 @@ def _validate_judgment_content(content):
 
 
 def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: str,
+               obligation_id: str = 'obligation',
                verified: dict, budget: ConversationBudget,
                not_applicable: frozenset[str] = frozenset(), client: httpx.Client | None = None):
     """One bounded call. Missing usage/verdict cannot become a successful evaluation."""
@@ -63,7 +64,8 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
         'messages': [
             {'role': 'system', 'content': RUBRIC},
             {'role': 'user', 'content': json.dumps({
-                'transcript_so_far': transcript, 'current_obligation': obligation,
+                'transcript_so_far': transcript,
+                'current_obligation': {'id': obligation_id, 'text': obligation},
                 'verified_facts_and_effects': verified, 'not_applicable': sorted(not_applicable),
                 'required_judgment_schema': ConversationJudgment.model_json_schema(),
             }, ensure_ascii=False)},

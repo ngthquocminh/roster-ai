@@ -198,12 +198,17 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 verified['latest_run'] = latest_run['run']
                 verified['candidate_solver_status'] = (latest_run.get('candidate') or {}).get('feasible_solver_status')
             transcript.append({'id': row['id'], 'user': turn.user, 'assistant': visible_activity(activity)})
+            not_applicable = (frozenset({'clarification_refusal'})
+                              if activity['activity_type'] == 'agent_response' else frozenset())
+            obligation_id = row['id'] + ':obligation'
             judgment, judge_usage = judge_turn(api_key=judge_key, model=judge_model,
-                transcript=transcript, obligation=turn.obligation, verified=verified, budget=budget)
-            known = supplied_citation_ids(transcript) | supplied_citation_ids(verified)
+                transcript=transcript, obligation=turn.obligation, obligation_id=obligation_id,
+                verified=verified, budget=budget, not_applicable=not_applicable)
+            known = (supplied_citation_ids(transcript) | supplied_citation_ids(verified)
+                     | {obligation_id})
             row.update(factual_failures=failures, judgment=judgment.model_dump(), judge_usage=judge_usage,
                        verified=verified, verdict=turn_verdict(factual_failures=failures,
-                       judgment=judgment, known_ids=known))
+                       judgment=judgment, known_ids=known, not_applicable=not_applicable))
             save(report)
         report['status'] = 'passed' if all(row['verdict'] == 'pass' for row in report['turns']) else 'failed'
     except IncompleteConversationRun as exc:
