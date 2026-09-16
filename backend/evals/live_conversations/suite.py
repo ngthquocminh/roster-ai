@@ -98,6 +98,9 @@ def main(argv=None) -> int:
                             save=lambda current: (prefix.update(current), save()),
                         )
                         prefix.update(actual)
+                        if prefix.get('status') != 'passed':
+                            raise IncompleteConversationRun(
+                                f"prefix_failed_{case.id}_{endpoint}")
                     finally:
                         app.close()
                 save()
