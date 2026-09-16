@@ -23,6 +23,9 @@ Appropriate clarification may satisfy an ambiguous request; it must resolve real
 When the current obligation explicitly permits clarification and the reply asks that permitted
 clarification, score completeness 2 for this turn; do not lower it merely because the user has
 not answered the clarification yet.
+When an obligation offers alternatives with "or", full satisfaction of any one allowed
+alternative must not be penalized for omitting the others. Apply this to every dimension,
+including relevance and clarification/refusal.
 An invalid output, timeout, or budget failure does not satisfy the user's request.
 If evidence is insufficient or the grade is contested, return uncertain, never pass.
 Return only the requested JSON judgment. Do not include private reasoning or a transcript rewrite.'''

@@ -37,6 +37,7 @@ def test_judge_sends_only_past_visible_data_and_requires_usable_usage():
     assert 'required_judgment_schema' in json.loads(seen[0]['messages'][1]['content'])
     assert 'future' not in seen[0]['messages'][1]['content']
     assert 'score completeness 2' in seen[0]['messages'][0]['content']
+    assert 'alternatives with "or"' in seen[0]['messages'][0]['content']
 
 
 def test_direct_judge_normalizes_application_openrouter_model_reference():
