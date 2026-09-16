@@ -76,7 +76,7 @@ class ConversationBudget:
 class DimensionGrade(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     score: Literal[0, 1, 2] | None
-    evidence_ids: list[str] = Field(min_length=1)
+    evidence_ids: list[str] = Field()
     reason: str = Field(min_length=1, max_length=500)
 
 
@@ -98,7 +98,7 @@ class ConversationJudgment(BaseModel):
             if grade.score is None:
                 if name not in not_applicable:
                     return False
-            elif grade.score != 2:
+            elif grade.score != 2 or not grade.evidence_ids:
                 return False
         return True
 

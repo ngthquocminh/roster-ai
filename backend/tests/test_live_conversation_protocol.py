@@ -86,6 +86,13 @@ def test_judge_cannot_invent_evidence_or_exempt_dimensions():
     exempt = judgment(continuity={'score': None, 'evidence_ids': ['turn-1'], 'reason': 'First turn.'})
     assert not exempt.passes(known_ids={'turn-1'})
     assert exempt.passes(known_ids={'turn-1'}, not_applicable=frozenset({'continuity'}))
+    empty_exempt = judgment(continuity={
+        'score': None, 'evidence_ids': [], 'reason': 'Not applicable.'})
+    assert empty_exempt.passes(known_ids={'turn-1'},
+                              not_applicable=frozenset({'continuity'}))
+    empty_applicable = judgment(continuity={
+        'score': 2, 'evidence_ids': [], 'reason': 'Missing citation.'})
+    assert not empty_applicable.passes(known_ids={'turn-1'})
 
 
 def test_missing_or_uncertain_judgments_are_not_automatic_passes():
