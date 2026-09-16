@@ -74,7 +74,13 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
                 'cost_usd': usage['cost'],
             }
             try:
-                result = ConversationJudgment.model_validate_json(data['choices'][0]['message']['content'])
+                content = data['choices'][0]['message']['content']
+                # OpenRouter-compatible providers may return a JSON string or
+                # the already-decoded JSON object for a strict response format.
+                # Validate either representation against the same owned model.
+                result = (ConversationJudgment.model_validate(content)
+                          if isinstance(content, dict)
+                          else ConversationJudgment.model_validate_json(content))
             except ValidationError as exc:
                 first = exc.errors(include_url=False, include_input=False)[0]
                 category = str(first.get('type', 'invalid'))
