@@ -20,6 +20,9 @@ Use null only for dimensions explicitly listed as not_applicable.
 Pass requires 2 in every applicable dimension. No averaging. A missing required count,
 generic completion, false action-success claim, invented entity, or irrelevant answer fails.
 Appropriate clarification may satisfy an ambiguous request; it must resolve real ambiguity.
+When the current obligation explicitly permits clarification and the reply asks that permitted
+clarification, score completeness 2 for this turn; do not lower it merely because the user has
+not answered the clarification yet.
 An invalid output, timeout, or budget failure does not satisfy the user's request.
 If evidence is insufficient or the grade is contested, return uncertain, never pass.
 Return only the requested JSON judgment. Do not include private reasoning or a transcript rewrite.'''
