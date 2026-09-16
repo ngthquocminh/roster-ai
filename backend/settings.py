@@ -97,6 +97,8 @@ class Settings:
     # LLMProvider are two seams, and overloading one seam's configuration onto
     # the other is what makes them impossible to migrate independently later.
     agent_runtime_model: str = "deterministic"
+    # Optional OpenRouter reasoning control; unset preserves provider defaults.
+    agent_runtime_reasoning_effort: str | None = None
     # USD per million tokens. Zero means no configured price, not a free model.
     agent_model_input_usd_per_mtok: float = 0.0
     agent_model_output_usd_per_mtok: float = 0.0
@@ -255,6 +257,9 @@ def _nonempty(name: str, raw: str | None, fallback: str) -> str:
 
 def default_settings() -> Settings:
     """Read settings fresh each call so env overrides apply at request time."""
+    reasoning_effort = os.environ.get('AGENT_RUNTIME_REASONING_EFFORT') or None
+    if reasoning_effort not in {None, 'none', 'low', 'medium', 'high'}:
+        raise InvalidFlagError('AGENT_RUNTIME_REASONING_EFFORT must be none, low, medium, or high')
     db_path = os.environ.get("ROSTERAI_DB", str(_BACKEND_DIR / "var" / "rosterai.db"))
     data_dir = os.environ.get("ROSTERAI_DATA_DIR", str(_REPO_ROOT / "data"))
     # The API's own connection: a non-superuser login that carries no table
@@ -472,6 +477,7 @@ def default_settings() -> Settings:
         agent_model_cache_read_usd_per_mtok=agent_model_cache_read_usd_per_mtok,
         agent_model_cache_write_usd_per_mtok=agent_model_cache_write_usd_per_mtok,
         agent_runtime_request_limit=agent_runtime_request_limit,
+        agent_runtime_reasoning_effort=reasoning_effort,
         agent_runtime_tool_calls_limit=agent_runtime_tool_calls_limit,
         agent_runtime_deadline_seconds=agent_runtime_deadline_seconds,
         agent_runtime_retries_limit=agent_runtime_retries_limit,

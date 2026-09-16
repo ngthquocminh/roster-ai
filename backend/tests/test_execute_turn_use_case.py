@@ -10,6 +10,8 @@ from agent.translate import to_framework_messages
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.activity import (
     AgentResponseActivityV1,
+    ApprovalRequestActivityV1,
+    RunProgressActivityV1,
     ClarificationActivityV1,
     DraftActivityV1,
     PlannerMessageActivityV1,
@@ -32,6 +34,7 @@ from application.contracts.grounding import (
     GroundedResponseV1,
 )
 from application.contracts.dialogue import ClarificationV1, EntityCandidateProposalV1
+from application.contracts.dialogue import EntityCandidateV1
 from application.contracts.dialogue import RefusalV1, ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.scenario_projection import WorkerV1
 from application.capabilities.scheduling_draft import SchedulingDraftResultV1
@@ -46,6 +49,59 @@ from application.use_cases.execute_turn import (
 )
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+
+
+def test_history_retains_ordered_visible_clarification_choices():
+    deps = _deps()
+    activity = ClarificationActivityV1(
+        activity_id=UUID(int=30), activity_type='clarification',
+        conversation_id=deps.conversation_id, conversation_resource_version=3,
+        scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+        occurred_at=NOW, clarification=ResolvedClarificationV1(
+            question='Which worker?', candidates=(
+                EntityCandidateV1(group='workers', record_id='worker-b', label='Jae',
+                                  scenario_version_id=deps.scenario_version_id),
+                EntityCandidateV1(group='workers', record_id='worker-a', label='Bhargav',
+                                  scenario_version_id=deps.scenario_version_id),
+            ), dropped_candidate_count=6,
+        ),
+    )
+    history = rehydrate_history((activity,))
+    text = history.messages[0].parts[0].text
+    assert text.startswith('Which worker?')
+    assert text.index('Jae') < text.index('Bhargav')
+    assert 'worker-b' in text and 'worker-a' in text
+    assert '6 additional candidates were not displayed' in text
+
+
+def test_history_accepts_persisted_approval_without_inventing_a_decision():
+    deps = _deps()
+    activity = ApprovalRequestActivityV1(
+        activity_id=UUID(int=30), activity_type='approval_request',
+        conversation_id=deps.conversation_id, conversation_resource_version=3,
+        scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+        occurred_at=NOW, approval_id=UUID(int=40), approval_state='pending',
+        agent_run_id=UUID(int=41), schedule_run_id=UUID(int=42),
+        candidate_schedule_version_id=UUID(int=43), baseline_schedule_version=None,
+        consequence_summary='Replace the baseline with this candidate.', parameter_hash='p',
+        consequence_hash='c', policy_version='1', expires_at=NOW,
+    )
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt='Was it approved?', calculation_results=[], history=(activity,))
+    text = runtime.request.history.messages[0].parts[0].text
+    assert str(activity.approval_id) in text
+    assert str(activity.schedule_run_id) in text
+    assert 'pending' in text and 'historical' in text.lower()
+    assert runtime.request.approvals == ()
+
+
+def test_history_preserves_terminal_run_state():
+    activity = RunProgressActivityV1(activity_id=UUID(int=30), activity_type='run_progress',
+        schedule_run_id=UUID(int=31), status='solver_infeasible', reason='no_solution',
+        resource_version=5, occurred_at=NOW)
+    text = rehydrate_history((activity,)).messages[0].parts[0].text
+    assert 'solver_infeasible' in text and 'no_solution' in text
+    assert str(activity.schedule_run_id) in text
 
 
 def test_terminal_outcome_preserves_a_complete_refusal_description() -> None:

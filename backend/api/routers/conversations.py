@@ -59,6 +59,7 @@ from application.ports.conversation import ConversationRepository, ConversationV
 from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
+from application.use_cases.conversation_workflow_context import load_workflow_context
 from application.use_cases.execute_turn import (
     activity_payload,
     execute_turn,
@@ -321,6 +322,19 @@ async def execute_agent_turn(
     # demonstration harness module. Guarded at source level by
     # tests/architecture/test_execute_turn_boundaries.py.
     try:
+        def _workflow_context():
+            with open_site_context(claimed.site_id) as connection:
+                # Lightweight route doubles from older seams do not implement
+                # production SQL/repository reads. Their purpose is to test
+                # turn finalisation, so omit the optional enriched context.
+                if (not callable(getattr(connection, "execute", None))
+                        or not callable(getattr(schedule_runs, "list_runs", None))):
+                    return None
+                return load_workflow_context(connection, claimed=claimed,
+                    proposals=proposal_repository, runs=schedule_runs, baselines=baselines,
+                    projection=projection_reader)
+
+        workflow_context = await run_in_threadpool(_workflow_context)
         feature_policy = enabled_feature_policy(settings)
         granted = compose_capabilities(
             CapabilityGrantContextV1(
@@ -344,6 +358,7 @@ async def execute_agent_turn(
             prompt=claimed.prompt,
             calculation_results=raw_results,
             history=claimed.history,
+            workflow_context=workflow_context,
         )
     except Exception as exc:  # noqa: BLE001
         # Reaching a terminal status is what keeps the accepted conversation

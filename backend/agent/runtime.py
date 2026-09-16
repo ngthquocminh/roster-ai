@@ -33,8 +33,10 @@ from pydantic_ai import (
 from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.models import infer_model
 from pydantic_ai.output import ToolOutput
+from pydantic_ai.usage import RunUsage
 
 from agent.translate import summarize, to_framework_messages, to_owned_turn
+from agent.scheduling_instructions import SCHEDULING_ASSISTANT_INSTRUCTIONS
 from application.contracts.agent_runtime import (
     AgentApprovalPendingV1,
     AgentBudgetV1,
@@ -100,13 +102,8 @@ class AgentRuntimeConfig:
     api_key: str | None = field(repr=False, default=None)
     default_budget: AgentBudgetV1 = field(default_factory=AgentBudgetV1)
     retries_limit: int = 2
-    instructions: str = (
-        "You are ShiftMind's scheduling assistant. Be concise and factual. "
-        "When an available tool has all exact inputs requested, call it instead "
-        "of guessing. Do not invent identifiers, versions, ranges, or keys. "
-        "For a single fulfilled request, do not repeat or broaden a tool call "
-        "after it returns a complete non-paginated result."
-    )
+    reasoning_effort: str | None = None
+    instructions: str = SCHEDULING_ASSISTANT_INSTRUCTIONS
 
 
 class PydanticAIAgentRuntime:
@@ -261,6 +258,7 @@ class PydanticAIAgentRuntime:
 
         model_started = perf_counter()
         usage: AgentUsageV1 | None = None
+        accumulated_usage = RunUsage()
         budget_outcome: BudgetOutcomeV1 = "unknown"
         try:
             result = self._agent.run_sync(
@@ -269,6 +267,7 @@ class PydanticAIAgentRuntime:
                 message_history=history or None,
                 deferred_tool_results=deferred,
                 usage_limits=_to_usage_limits(budget),
+                usage=accumulated_usage,
                 cancellation_token=token,
                 deps=self._deps,
             )
@@ -294,12 +293,25 @@ class PydanticAIAgentRuntime:
         except UsageLimitExceeded as exc:
             # Any other budget ceiling -> `failed` + stable `budget_exhausted`.
             budget_outcome = "budget_exhausted"
+            # Usage limits are checked between completed requests/tools. The
+            # supplied accumulator survives an exception where result.usage
+            # cannot be read. Cancellation/provider failures remain unknown:
+            # an interrupted in-flight request may still be billed.
+            usage = AgentUsageV1(
+                requests=accumulated_usage.requests,
+                tool_calls=accumulated_usage.tool_calls,
+                input_tokens=accumulated_usage.input_tokens,
+                output_tokens=accumulated_usage.output_tokens,
+                cache_read_tokens=accumulated_usage.cache_read_tokens,
+                cache_write_tokens=accumulated_usage.cache_write_tokens,
+            )
             return AgentRunOutcomeV1(
                 status="failed",
                 failure_reason="budget_exhausted",
                 failure_source="agent",
                 summary=str(exc)[:200],
                 budget_outcome=budget_outcome,
+                usage=usage,
             )
         except UnexpectedModelBehavior as exc:
             raise AgentInvalidOutputError(
@@ -547,6 +559,8 @@ def _configured_model(config: AgentRuntimeConfig) -> object:
         return OpenAIChatModel(
             model_name,
             provider=OpenRouterProvider(api_key=config.api_key),
+            settings=({'extra_body': {'reasoning': {'effort': config.reasoning_effort}}}
+                      if config.reasoning_effort is not None else None),
         )
     if provider_name == "google":
         from pydantic_ai.models.google import GoogleModel
@@ -587,6 +601,7 @@ def create_agent_runtime(
                 deadline_seconds=settings.agent_runtime_deadline_seconds,
             ),
             retries_limit=settings.agent_runtime_retries_limit,
+            reasoning_effort=getattr(settings, 'agent_runtime_reasoning_effort', None),
         )
     return PydanticAIAgentRuntime(
         config=config,

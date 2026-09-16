@@ -29,6 +29,20 @@ from pydantic_ai.messages import (
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from agent.runtime import AgentRuntimeConfig, PydanticAIAgentRuntime, create_agent_runtime
+
+
+def test_default_instructions_bound_broad_orientation_inspection():
+    instructions = AgentRuntimeConfig().instructions
+    assert instructions.index('only a greeting') < instructions.index('When an available tool')
+    assert 'broad orientation request' in instructions
+    assert 'scenario overview' in instructions
+    assert 'assigned workers for a family' in instructions
+    assert 'successful scheduling_draft call' in instructions
+    assert 'workflow snapshot' in instructions
+    assert 'copy its worker_id or task_id' in instructions
+    assert 'current_scenario_version_id' in instructions
+    assert 'Routing rules:' in instructions
+    assert 'scheduling_inspect(group="overview")' in instructions
 from evals.doubles import build_model_double
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.deps import AgentDepsV1
@@ -556,7 +570,9 @@ def test_budget_exhaustion_is_failed_with_budget_exhausted() -> None:
     assert outcome.status == "failed"
     assert outcome.failure_reason == "budget_exhausted"
     assert outcome.budget_outcome == "budget_exhausted"
-    assert outcome.usage is None
+    assert outcome.usage is not None
+    assert outcome.usage.requests == 1
+    assert outcome.usage.input_tokens > 0
 
 
 def test_wall_time_exhaustion_is_timed_out_not_budget_exhausted() -> None:

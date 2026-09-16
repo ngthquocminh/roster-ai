@@ -2596,7 +2596,7 @@ development_status:
   # new real-backend Playwright infrastructure (Decision 3); and the new live-suite budget
   # ceilings, which must be re-derived for ~3-7x the per-run turn volume of Story 5.6's matrix
   # (Decision 5), not copied from it. First action per the story's own AC1 is live reproduction.
-  5-7-prove-live-conversations-through-baseline-promotion: ready-for-dev
+  5-7-prove-live-conversations-through-baseline-promotion: in-progress
   # Code review 2026-09-14/15: all decision-needed and patch findings fixed and verified
   # (full default suite 1612/1613, the one failure pre-existing/unrelated). Decision 4 also
   # closed: live suite re-run on a clean, committed tree (eea9148); readiness "eligible",

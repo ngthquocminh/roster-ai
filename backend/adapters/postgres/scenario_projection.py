@@ -29,6 +29,7 @@ from application.contracts.scenario_projection import (
     WorkerV1,
 )
 from adapters.postgres.site_baseline import PostgresSiteBaselineReader
+from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from application.ports.scenario_projection import (
     AssignmentPageV1,
     ConstraintPageV1,
@@ -564,7 +565,7 @@ class PostgresScenarioProjectionReader:
             task_count=len(tasks),
             worker_count=len(workers),
             demand_interval_count=len(demand),
-            baseline_assignment_count=0,
+            baseline_assignment_count=len(self._baseline_assignments(connection, row)),
             lock_count=0,
             constraint_count=len(constraints),
         )
@@ -641,7 +642,7 @@ class PostgresScenarioProjectionReader:
         if row is None:
             return None
         items, next_cursor, total, matching = _apply_query(
-            (), query, ASSIGNMENT_SORTS, ASSIGNMENT_FILTERS
+            self._baseline_assignments(connection, row), query, ASSIGNMENT_SORTS, ASSIGNMENT_FILTERS
         )
         return AssignmentPageV1(
             row.scenario_id,
@@ -652,6 +653,21 @@ class PostgresScenarioProjectionReader:
             total,
             matching,
         )
+
+    @staticmethod
+    def _baseline_assignments(connection: Connection, row):
+        baseline = PostgresSiteBaselineReader().get(connection, row.site_id)
+        if baseline is None:
+            return ()
+        schedule = PostgresScheduleRunRepository().get_version(connection,
+            schedule_version_id=baseline.schedule_version_id, site_id=row.site_id)
+        if schedule is None:
+            raise ValueError('baseline schedule unavailable')
+        # The pointer is site-wide; assignments belong to an immutable scenario
+        # version. Never project another fixture's baseline onto this one.
+        if schedule.scenario_id != row.scenario_id or schedule.scenario_version_id != row.scenario_version_id:
+            return ()
+        return schedule.assignments
 
     def get_locks(
         self, connection: Connection, scenario_id: UUID, query: GroupQueryV1
@@ -765,7 +781,8 @@ class PostgresScenarioProjectionReader:
         if row is None:
             return None
         outcome, item = _resolve_items(
-            lambda: (), scenario_version_id, row.scenario_version_id, record_id
+            lambda: self._baseline_assignments(connection, row),
+            scenario_version_id, row.scenario_version_id, record_id
         )
         return AssignmentResolutionV1(
             outcome, row.scenario_id, row.scenario_version_id, item

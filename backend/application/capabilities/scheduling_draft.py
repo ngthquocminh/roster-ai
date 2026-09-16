@@ -311,8 +311,15 @@ def scheduling_draft_module() -> CapabilityModuleV1:
         model_facing_view=_model_view,
         model_description=(
             "scheduling_draft creates a reversible scheduling proposal from explicit constraints. "
-            "Call it only when the user supplies the intended constraint kind, affected record IDs, "
-            "values, and optional expected_scenario_version_id. It does not optimize or promote a "
+            "Always set expected_scenario_version_id to the current scenario version from the "
+            "workflow snapshot. For set_max_hours, use exactly kind='set_max_hours', "
+            "group='workers', record_id=<worker_id from the snapshot>, and max_hours=<number>; "
+            "leave unrelated constraint fields unset. "
+            "Resolve the user's intended change to a supported constraint kind and exact record IDs "
+            "using scenario inspection and displayed conversation choices. Ask about ambiguous "
+            "workers, tasks, or values in plain language; do not ask the planner for internal IDs "
+            "that are available from those reads. Preserve prior requested constraints when the "
+            "user adds a change. It does not optimize or promote a "
             "schedule; it returns a draft citation handle for a later review or run."
         ),
     )

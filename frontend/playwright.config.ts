@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "**/live-conversations.spec.ts",
   fullyParallel: true,
   // Axe traverses every rendered node across seven Scenario Data groups. Letting Playwright
   // derive this from host CPU count schedules all six Chromium/Edge axe sweeps alongside the

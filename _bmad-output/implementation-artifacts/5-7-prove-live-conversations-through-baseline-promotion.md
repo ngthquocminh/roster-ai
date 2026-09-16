@@ -3,7 +3,7 @@
 baseline_commit: 80e62422b68a9c121697fada6287f4fa3a311532
 ---
 
-Status: ready-for-dev
+Status: in-progress
 
 Date: 2026-09-15
 Origin: Minh's reported natural-conversation failure and approval to correct course.
@@ -202,8 +202,70 @@ The live-provider matrix and real-browser journeys are opt-in, explicitly budget
 
 ### Agent Model Used
 
+Codex (GPT-5) for implementation; OpenRouter `~deepseek/deepseek-flash-latest` for the live application agent and separate judge during development probes.
+
 ### Debug Log References
+
+- 2026-09-15: Started development at working HEAD `078659436406183f38cf40f3b8da931f1a97d3bb`; preserved the existing `baseline_commit`. Loaded the scenario catalogue and normative domain model. No project-context.md or AGENTS.md was found in the workspace search. Existing unrelated untracked artifacts: `.1devtool/` and `rosterai-schema.sql`.
+- Configuration discovery: `backend/.env` selects `anthropic:claude-haiku-4-5-20251001`; runtime and Anthropic credential presence checked without exposing values. No separate judge configuration found. Requested judge provider/model and total live-run spend ceiling from Minh before dependent execution.
+- Startup/authentication: `docker compose ps` reports healthy API/PostgreSQL and running web/worker at `http://localhost:8080`. `backend/tests/compose_proof.py` supplies the real OIDC login/callback/session and CSRF-authenticated conversation command precedent. Existing Playwright configuration serves static Vite preview and cannot establish real-stack browser evidence.
 
 ### Completion Notes List
 
+- 2026-09-15 continuation supersedes the earlier budget hold below: Minh selected OpenRouter DeepSeek Flash for the application agent and separately configured judge, with USD 7 TOTAL story API spend. Credentials were read locally without disclosure; the running local backend configuration was updated, with an ignored `.env.before-story-5-7` backup. Flash resolves to `deepseek/deepseek-v4.1-flash` in the judge response. No complete matrix or affordability guarantee is claimed.
+- Added executable user-only scenario data (93 authored messages, 40 independent prefix definitions, 273 executed turns per complete matrix), separate structured judge client, real authenticated HTTP/action client, derived operation inventory, and fail-closed verdict/budget protocol. Current harness verification: 38 deterministic tests passed. These HTTP doubles verify protocol behavior only; they are not live acceptance evidence.
+- Flash Scenario A diagnostic completed five turns and timed out on turn three. Separate judge calibration rejected the timeout and accepted the worker-count answer against an independent HTTP worker read; two judgments cost USD 0.001055235. This is limited calibration, not full judge validation.
+- Created isolated Compose project `shiftmind-story-5-7` at `http://localhost:18087` with separate database volume and image tags. Live workflow probe conversation `312fc3bb-5e75-46d2-82b3-df81397cd6ca` reproduced loss of displayed clarification choices: turn two showed workers; turn four then claimed no worker list had been shown. The run action correctly stopped with `required_draft_missing`. OpenRouter key usage reported USD 0.026823735 after this probe; provider reporting may lag and prior Haiku failed-turn spend remains unknown.
+- Fixed the owning `rehydrate_history` branch to retain ordered, application-resolved visible clarification choices and the displayed truncation count without expanding the history window. All 23 execute-turn use-case tests passed. Live retest is in progress; no live workflow pass yet.
+- 2026-09-16 model suitability gate: the isolated B4 prefix seeded a real 76-assignment baseline, ran four authored turns, and failed all four. Turn 2 exhausted an expanded finite 12-request/12-tool/150k-token allowance after 11 inspections; turn 3 described a qualification as an assignment; turn 4 invoked `scheduling_draft` but failed to cite its trusted result, so no `DraftActivityV1` was persisted despite prose claiming success. The retained run recorded 302,085 agent/judge tokens and USD 0.025269255 known spend (plus the separate conservative USD 0.50 prior-spend reserve). DeepSeek Flash therefore is not accepted as the Story 5.7 application-agent model. The judge remains usable with a bounded retry and compact, relevant verified facts. Full 819-turn execution is halted pending an explicitly authorized stronger agent model and compatible total budget; no task or acceptance criterion is marked complete.
+
+#### Demonstrated mutation verification
+
+| Invariant | Mutation to finished green code | Guard | Mutated result | Restored result |
+| --- | --- | --- | --- | --- |
+| Follow-up references retain displayed clarification choices in order | Disable the candidate serialization branch in `rehydrate_history` | `test_history_retains_ordered_visible_clarification_choices` | Failed (pytest exit 1, missing Jae) | Passed (pytest exit 0); original source restored in `finally` |
+
+Remaining new harness guards still require their own demonstrated mutation verification before review.
+
+- Discovery and six-turn live HTTP reproduction performed; matrix implementation has not begun. Running API configuration was checked directly: `anthropic:claude-haiku-4-5-20251001`, credential present, input/output token prices unconfigured (both zero). Minh subsequently selected the same model for the separate judge and a USD 5 total ceiling. No live pass, product fix, or release evidence is claimed.
+- Re-derived installed request contracts via `installed_modules()` and Pydantic schema generation:
+
+  | Capability | Current operation surface | Authority boundary |
+  | --- | --- | --- |
+  | `scheduling_compute` | `required_headcount_minutes`, `required_demand_volume`, `staffed_minutes`, `qualified_worker_count` | Planner + enabled feature policy; unit/family validation applies. |
+  | `scheduling_draft` | `set_min_workers_per_task`, `scale_demand`, `lock_worker_shift`, `exclude_worker_from_task`, `set_max_hours` | Planner + enabled feature policy; scenario version and entity validation. |
+  | `scheduling_inspect` | `overview`, `tasks`, `demand`, `assignments`, `workers`, `locks`, `constraints`; cursor/limit/filter/sort/order | Query keys come from the projection adapter's published tables. |
+  | `scheduling_optimize` | Proposal/version/idempotency-key start | Requires transport-owned `explicit_run_request`; ordinary chat cannot grant it. |
+  | `scheduling_baseline` | Propose exact run/baseline-version approval | Schedule-shaped persisted approval contract. |
+  | `shiftmind_demonstration` | Label repetition, bounds 1–64; repeat >1 requires approval | Feature defaults off; HTTP suspension bridge still raises for this capability. |
+
+- This is an initial discovery inventory, not executed operation coverage. Confirmed the unsupported-approval exception at `backend/api/routers/conversations.py:366` and the non-null schedule-run binding; no runtime demonstration reproduction or contract change performed.
+- Frontend baseline: `npm run test -- --run` passed 648 tests in 85 files; `npx playwright test --list` collected 80 tests in 10 files (collection only).
+- Backend baseline: `uv run --frozen pytest -q` returned 1780 passed, 1 failed, 2 skipped, 10 deselected (1793 total), in 196.23 seconds. The failure is `test_execute_turn_emits_claim_to_finalize_telemetry`: expected model `deterministic`, observed configured `anthropic:claude-haiku-4-5-20251001`, matching the pre-existing configuration leak recorded at story creation.
+- Minh supplied the missing decision during discovery: use the same Haiku model for the separate judge and about USD 5 total. Treat USD 5 as the total ceiling. Official Anthropic Haiku pricing checked on 2026-09-15: USD 1/M input tokens and USD 5/M output tokens; actual matrix affordability has not yet been measured. A bounded six-message HTTP development probe is prepared under ignored `_bmad-output/test-artifacts/`; it does not constitute the executable matrix or release evidence.
+- Live reproduction completed against the running real-provider API with OIDC session authentication, CSRF validation, and newly persisted conversation `2208884d-3c17-4545-afe6-d26ccfa74745`, scenario `e760eb2d-bb97-40e4-80ea-a2458c55d9e3`, version `83ae001a-2682-4e7b-9bce-43b014f98baf`. Used the exact six Scenario A messages. Turns 1/2 completed; turn 3 (`how many work are therre?`) failed with `invalid_output` (run `3b34f0c2-edf9-451b-b516-992543f53d37`); turn 4 failed with `budget_exhausted` (run `18e98157-b9e2-4679-a79c-b7244e865e84`); turn 5 remembered Minh; turn 6 produced a worker summary. No correctness/semantic pass is assigned to that summary. Preserved all six planner-visible outcomes in `_bmad-output/test-artifacts/live-reproduction-5-7.json`. This is development diagnostic output, not bound release evidence or browser proof.
+- Cost preflight: four successful turns reported a combined 42,789 input and 1,671 output tokens, with no cache tokens, estimating USD 0.051144 at the cited rates. BOTH failed turns have null usage in `agent.run.completed` AND `agent.model.calls.completed`; their actual cost remains unknown, not zero. Runtime inspection shows usage is assigned from `result.usage` only after successful completion (`backend/agent/runtime.py`), so failures cannot currently support exact total-spend accounting.
+- Budget blocker: even spreading the known successful-turn cost across all six attempted turns projects approximately USD 6.98 for 819 application turns, excluding unknown failed-turn costs, judge calls, browser runs, and reruns. This is an extrapolation from a small probe, not a measured full-suite price or a proven minimum. Full paid acceptance execution is held at budget preflight under Minh's USD 5 total constraint; the allowance is NOT reported as exhausted. Story remains in-progress with all tasks unchecked; no acceptance criteria or readiness verdict are marked passed. Resume requires a feasible budget/scope decision and complete failure-path spend accounting; do not silently reduce required runs or replace live evidence with doubles.
+
 ### File List
+
+- `backend/evals/live_conversations/__init__.py`
+- `backend/evals/live_conversations/cases.py`
+- `backend/evals/live_conversations/scenarios.json`
+- `backend/evals/live_conversations/protocol.py`
+- `backend/evals/live_conversations/judge.py`
+- `backend/evals/live_conversations/http_client.py`
+- `backend/evals/live_conversations/inventory.py`
+- `backend/tests/test_live_conversation_cases.py`
+- `backend/tests/test_live_conversation_protocol.py`
+- `backend/tests/test_live_conversation_clients.py`
+- `backend/tests/test_live_conversation_inventory.py`
+- `backend/application/use_cases/execute_turn.py`
+- `backend/tests/test_execute_turn_use_case.py`
+- `_bmad-output/test-artifacts/live-workflow-pilot-5-7.py` and timestamped JSON outputs (ignored development diagnostics)
+- `_bmad-output/test-artifacts/mutate-history-5-7.py` and `.json` (ignored mutation diagnostic)
+
+- `_bmad-output/implementation-artifacts/5-7-prove-live-conversations-through-baseline-promotion.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/test-artifacts/live-reproduction-5-7.py` (ignored local diagnostic probe)
+- `_bmad-output/test-artifacts/live-reproduction-5-7.json` (ignored local planner-visible reproduction)

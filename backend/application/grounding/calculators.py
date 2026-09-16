@@ -212,6 +212,18 @@ def calculate_metric(
 ) -> CalculatedMetricV1:
     """Produce one value and locators from every normalized row it consumes."""
     overview = _overview(reader, connection, scenario_id, scenario_version_id, site_id)
+    if metric == 'worker_count':
+        if any(value is not None for value in (arguments.task_id, arguments.family,
+                                               arguments.start_minute, arguments.end_minute)):
+            raise CalculationArgumentsError('worker_count is scenario-wide and takes no task, family, or window')
+        workers = drain_projection_group(
+            reader.get_workers, connection, scenario_id,
+            scenario_version_id=scenario_version_id, site_id=site_id,
+            page_size=page_size, max_rows=max_rows,
+        )
+        return CalculatedMetricV1(metric, arguments, len(workers), 'workers',
+            tuple(_evidence(overview, 'workers', worker.record_id, field='name') for worker in workers),
+            scenario_version_id, consumed_row_count=len(workers))
     task_id = _require_task(arguments)
     _check_family_is_meaningful(metric, arguments)
 

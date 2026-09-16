@@ -220,7 +220,9 @@ def test_adapter_resolves_deep_demand_without_paging_or_retargeting() -> None:
     assert missing.item is None
 
 
-def test_adapter_resolves_each_normalized_group_and_keeps_empty_groups_empty() -> None:
+def test_adapter_resolves_each_normalized_group_and_keeps_empty_groups_empty(monkeypatch) -> None:
+    from adapters.postgres.site_baseline import PostgresSiteBaselineReader
+    monkeypatch.setattr(PostgresSiteBaselineReader, 'get', lambda *args: None)
     payload = json.loads(
         (REPO_ROOT / "data" / "sample_tiny_input_more_tm.json").read_text(
             encoding="utf-8"
@@ -232,6 +234,7 @@ def test_adapter_resolves_each_normalized_group_and_keeps_empty_groups_empty() -
         SimpleNamespace(
             scenario_id=scenario_id,
             scenario_version_id=version_id,
+            site_id=uuid4(),
             payload=payload,
         )
     )
