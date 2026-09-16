@@ -34,12 +34,15 @@ def _validate_judgment_content(content):
     if isinstance(content, dict):
         return ConversationJudgment.model_validate(content)
     if isinstance(content, str):
-        return ConversationJudgment.model_validate_json(content)
+        decoded = json.loads(content)
+        if isinstance(decoded, str):
+            decoded = json.loads(decoded)
+        return ConversationJudgment.model_validate(decoded)
     if (isinstance(content, list) and len(content) == 1
             and isinstance(content[0], dict)
             and content[0].get('type') in {'text', 'output_text'}
             and isinstance(content[0].get('text'), str)):
-        return ConversationJudgment.model_validate_json(content[0]['text'])
+        return _validate_judgment_content(content[0]['text'])
     # Produce a closed validation category without retaining provider content.
     return ConversationJudgment.model_validate(content)
 

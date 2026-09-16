@@ -105,6 +105,19 @@ def test_judge_accepts_single_openai_text_content_block():
     assert grade.verdict == 'pass'
 
 
+def test_judge_accepts_one_double_encoded_json_layer():
+    response = {
+        'id': 'generation-encoded', 'model': 'test-model',
+        'choices': [{'message': {'content': json.dumps(judgment().model_dump_json())}}],
+        'usage': {'prompt_tokens': 100, 'completion_tokens': 20, 'cost': .001},
+    }
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=response)))
+    grade, _ = judge_turn(api_key='test', model='test', transcript=[], obligation='Answer',
+        verified={}, budget=ConversationBudget(limits()), client=client)
+    assert grade.verdict == 'pass'
+
+
 def test_application_client_uses_real_auth_csrf_and_new_conversations():
     posts = []
 
