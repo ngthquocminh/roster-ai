@@ -53,9 +53,16 @@ def relevant_entities(activity, workers, tasks, assignments):
     named_workers = []
     for worker in workers:
         if worker['name'].casefold() in text or worker['record_id'].casefold() in text:
+            windows = worker.get('availability_windows', ())
             named_workers.append({
                 'record_id': worker['record_id'], 'name': worker['name'],
+                'employment_type': worker.get('employment_type'),
+                'grade': worker.get('grade'), 'eba': worker.get('eba'),
+                'contracted_hours': worker.get('contracted_hours'),
                 'qualified_task_ids': [row['task_id'] for row in worker.get('qualifications', ())],
+                'roster_window_count': sum(row.get('kind') == 'roster' for row in windows),
+                'extra_availability_window_count': sum(
+                    row.get('kind') == 'availability' for row in windows),
             })
     named_tasks = []
     for task in tasks:

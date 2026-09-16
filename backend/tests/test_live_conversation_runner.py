@@ -49,7 +49,10 @@ def test_judge_receives_only_entities_named_in_visible_reply():
         {'kind': 'prose', 'text': 'Jae is assigned to Packing.'},
     ]}}
     workers = [
-        {'record_id': 'w1', 'name': 'Jae', 'qualifications': [{'task_id': 't1', 'rate': 2}]},
+        {'record_id': 'w1', 'name': 'Jae', 'employment_type': 'Full Time',
+         'grade': 'G3', 'eba': 'E1', 'contracted_hours': 40,
+         'qualifications': [{'task_id': 't1', 'rate': 2}],
+         'availability_windows': [{'kind': 'roster'}, {'kind': 'availability'}]},
         {'record_id': 'w2', 'name': 'Minh', 'qualifications': []},
     ]
     tasks = [
@@ -58,7 +61,11 @@ def test_judge_receives_only_entities_named_in_visible_reply():
     ]
     assignments = [{'record_id': 'a1', 'worker_id': 'w1', 'task_id': 't1'}]
     assert relevant_entities(activity, workers, tasks, assignments) == {
-        'named_workers': [{'record_id': 'w1', 'name': 'Jae', 'qualified_task_ids': ['t1']}],
+        'named_workers': [{'record_id': 'w1', 'name': 'Jae',
+                           'employment_type': 'Full Time', 'grade': 'G3', 'eba': 'E1',
+                           'contracted_hours': 40, 'qualified_task_ids': ['t1'],
+                           'roster_window_count': 1,
+                           'extra_availability_window_count': 1}],
         'named_tasks': [{'record_id': 't1', 'task_id': 't1', 'name': 'Packing',
                          'function': 'Outbound'}],
         'named_assignments': [{'record_id': 'a1', 'worker_id': 'w1', 'worker_name': 'Jae',
