@@ -342,7 +342,8 @@ def scheduling_compute_module() -> CapabilityModuleV1:
             "planner in plain language. Only demand metrics accept a family; staffed minutes and "
             "qualified worker count do not. It returns a citation "
             "handle, not a numeric value; use that handle in the grounded answer. Outbound and "
-            "inbound demand are volume, while indirect demand is headcount."
+            "inbound demand are volume, while indirect demand is headcount. It computes over the "
+            "scenario's stored facts only, never over a run's candidate or a promoted baseline."
         ),
     )
 
