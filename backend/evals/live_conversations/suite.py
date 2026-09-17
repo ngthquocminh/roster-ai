@@ -87,7 +87,8 @@ def main(argv=None) -> int:
                 report['prefixes'].append(prefix)
                 save()
                 with isolated_stack(model=model, api_key=key, override_file=args.override_file,
-                                    reasoning_effort=args.reasoning_effort) as stack:
+                                    reasoning_effort=args.reasoning_effort,
+                                    demonstration_enabled=case.demonstration_enabled) as stack:
                     app = ApplicationConversation(stack['origin'])
                     try:
                         session = app.login()
@@ -100,9 +101,12 @@ def main(argv=None) -> int:
                             save=lambda current: (prefix.update(current), save()),
                         )
                         prefix.update(actual)
-                        if prefix.get('status') != 'passed':
+                        # A failed scenario no longer stops the suite: per-turn
+                        # pass rates need every scenario scored (right-sized
+                        # AC7). Only an incomplete run stops it.
+                        if prefix.get('incomplete_reason'):
                             raise IncompleteConversationRun(
-                                f"prefix_failed_{case.id}_{endpoint}")
+                                f"scenario_incomplete_{case.id}_{prefix['incomplete_reason']}")
                     finally:
                         app.close()
                 save()

@@ -378,7 +378,25 @@ async def execute_agent_turn(
                     raise RuntimeError("suspended turn has no exact pending approval call")
                 call = pending.pending_calls[0]
                 if call.tool_name != SCHEDULING_BASELINE_CAPABILITY:
-                    raise RuntimeError("suspended turn requested an unsupported approval capability")
+                    # Story 5.7 Decision 1: only the baseline capability has an
+                    # approval binding. Raising here fell into the RuntimeError
+                    # arm below, answered 409, and stranded the run at
+                    # `agent_running` -- the conversation could not continue.
+                    # Land it on Decision 10's terminal edge instead: no binding,
+                    # no audit row, and the owned `approval_not_grantable` copy.
+                    logger.info(
+                        "suspended call to %s has no approval path; finalizing run %s as cancelled",
+                        call.tool_name, agent_run_id,
+                    )
+                    return finalize_agent_run(
+                        repository,
+                        proposal_repository,
+                        connection,
+                        claimed=claimed,
+                        status="agent_cancelled",
+                        payload=activity_payload(outcome, deps),
+                        request_id=deps.request_id,
+                    )
                 # `tool_args_json` is the WHOLE tool-argument object, and
                 # `capability_tools._tool_schema` nests the request under the
                 # module's declared `request_argument` -- so the JSON is

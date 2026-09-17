@@ -150,7 +150,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             row['usage'] = usage
             report['tool_observations'].extend(tools)
             failures = []
-            if executed['agent_run_status'] not in {'agent_completed', 'approval_required'}:
+            if executed['agent_run_status'] not in turn.allowed_run_statuses:
                 failures.append('unsuccessful_agent_turn')
             activity = executed['activity']
             if activity['activity_type'] == 'approval_request':

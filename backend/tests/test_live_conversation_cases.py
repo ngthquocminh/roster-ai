@@ -1,4 +1,4 @@
-"""The natural-conversation matrix preserves independent, real user prefixes."""
+"""The right-sized live-conversation catalogue (sprint-change-proposal-2026-09-17)."""
 from dataclasses import replace
 
 import pytest
@@ -6,33 +6,52 @@ import pytest
 from evals.live_conversations.cases import load_scenarios, prefix_executions, validate_scenarios
 
 
-def test_catalogue_preserves_all_narratives_lengths_and_independent_prefixes():
+def test_catalogue_is_three_full_conversations():
     cases = load_scenarios()
-    assert {case.id: len(case.turns) for case in cases} == {
-        'A': 6, 'B': 20, 'C': 12, 'D': 8, 'E': 10, 'F': 16, 'G': 7, 'H': 14,
-    }
-    prefixes = tuple(prefix_executions(cases))
-    assert len(prefixes) == 40
-    assert sum(len(turns) for _, _, turns in prefixes) == 273
+    assert {case.id: len(case.turns) for case in cases} == {'A': 6, 'B': 12, 'C': 12}
+    executions = tuple(prefix_executions(cases))
+    assert len(executions) == 3
+    assert sum(len(turns) for _, _, turns in executions) == 30
+    for scenario, endpoint, turns in executions:
+        assert endpoint == len(scenario.turns) and turns == scenario.turns
     assert [turn.user for turn in cases[0].turns[:3]] == [
         'HI my name is Minh', 'how can you help me?', 'how many work are therre?',
     ]
     assert 'Do not require both alternatives' in cases[0].turns[2].obligation
-    for scenario, endpoint, turns in prefixes:
-        assert turns == scenario.turns[:endpoint]
-        assert len(turns) == endpoint
-        assert all(turn.obligation.strip() for turn in turns)
 
 
-def test_missing_full_length_prefix_is_rejected():
+def test_b_is_one_complete_draft_solve_approve_cycle():
+    b = {case.id: case for case in load_scenarios()}['B']
+    actions = [action for turn in b.turns for action in turn.actions_after]
+    assert actions == ['run_optimization', 'verify_baseline_unchanged', 'approve', 'reload']
+    assert [index for index, turn in enumerate(b.turns, 1)
+            if turn.obligation.startswith('Persist')] == [4, 6]
+
+
+def test_c_runs_with_demonstration_and_allows_the_truthful_unapprovable_outcome():
+    c = {case.id: case for case in load_scenarios()}['C']
+    assert c.demonstration_enabled
+    assert 'agent_cancelled' in c.turns[10].allowed_run_statuses
+    assert all('agent_cancelled' not in turn.allowed_run_statuses
+               for index, turn in enumerate(c.turns) if index != 10)
+
+
+def test_a_partial_conversation_is_rejected():
     cases = load_scenarios()
-    changed = replace(cases[0], prefixes=cases[0].prefixes[:-1])
+    changed = replace(cases[1], prefixes=(4,))
     with pytest.raises(ValueError, match='complete conversation'):
-        validate_scenarios((changed, *cases[1:]))
+        validate_scenarios((cases[0], changed, cases[2]))
 
 
-def test_duplicate_prefix_cannot_pad_execution_count():
+def test_a_missing_scenario_is_rejected():
     cases = load_scenarios()
-    changed = replace(cases[0], prefixes=(2, 3, 4, 6, 6))
-    with pytest.raises(ValueError, match='unique'):
-        validate_scenarios((changed, *cases[1:]))
+    with pytest.raises(ValueError, match='exactly'):
+        validate_scenarios(cases[:2])
+
+
+def test_an_unknown_action_is_rejected():
+    cases = load_scenarios()
+    turn = replace(cases[1].turns[6], actions_after=('run_optimisation',))
+    changed = replace(cases[1], turns=(*cases[1].turns[:6], turn, *cases[1].turns[7:]))
+    with pytest.raises(ValueError, match='unsupported authored actions'):
+        validate_scenarios((cases[0], changed, cases[2]))
