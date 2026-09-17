@@ -147,3 +147,19 @@ def test_judge_reason_is_bounded_but_allows_concise_multi_fact_explanations():
     data['reasoning'] = 'must not enter evidence'
     with pytest.raises(ValidationError):
         ConversationJudgment.model_validate(data)
+
+
+def test_one_garbled_citation_among_real_ones_does_not_fail_a_correct_turn():
+    """Observed in live-suite-v2-final-x3: the judge mistyped its own isolation
+    prefix, so an all-2s verdict with real citations failed the whole turn."""
+    graded = judgment(relevance={'score': 2, 'reason': 'Cites the turn and a typo.',
+                                 'evidence_ids': ['turn-4', 'turn-4-typo']})
+    assert graded.passes(known_ids={'turn-1', 'turn-4'})
+    assert graded.unknown_citations(known_ids={'turn-1', 'turn-4'}) == ['turn-4-typo']
+
+
+def test_a_dimension_citing_only_invented_evidence_still_fails():
+    invented = judgment(relevance={'score': 2, 'reason': 'Invents evidence.',
+                                   'evidence_ids': ['turn-99', 'made-up']})
+    assert not invented.passes(known_ids={'turn-1'})
+    assert invented.unknown_citations(known_ids={'turn-1'}) == ['made-up', 'turn-99']

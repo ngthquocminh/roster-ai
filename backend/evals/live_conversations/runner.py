@@ -134,7 +134,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
         for index, turn in enumerate(case.turns[:endpoint], 1):
             budget.admit(reserve_usd=.05, tokens=150000)
             before = app._request('GET', projection_path)
-            row = {'id': f'{isolation_id}:turn:{index}', 'user': turn.user,
+            row = {'id': f'turn-{index}', 'user': turn.user,
                    'obligation': turn.obligation, 'verdict': 'incomplete'}
             report['turns'].append(row)
             save(report)
@@ -228,12 +228,22 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             not_applicable = (frozenset({'clarification_refusal'})
                               if activity['activity_type'] == 'agent_response' else frozenset())
             obligation_id = row['id'] + ':obligation'
-            judgment, judge_usage = judge_turn(api_key=judge_key, model=judge_model,
-                transcript=transcript, obligation=turn.obligation, obligation_id=obligation_id,
-                verified=verified, budget=budget, not_applicable=not_applicable)
             known = known_citation_ids(transcript, verified, obligation_id)
+            try:
+                judgment, judge_usage = judge_turn(api_key=judge_key, model=judge_model,
+                    transcript=transcript, obligation=turn.obligation, obligation_id=obligation_id,
+                    verified=verified, budget=budget, not_applicable=not_applicable)
+            except IncompleteConversationRun as exc:
+                # A judge outage leaves THIS turn unjudged (AC6: not a pass), but
+                # the remaining turns and scenarios still carry information.
+                row.update(factual_failures=failures, judgment=None, verified=verified,
+                           judge_unavailable_reason=str(exc), verdict='incomplete')
+                save(report)
+                continue
             row.update(factual_failures=failures, judgment=judgment.model_dump(), judge_usage=judge_usage,
-                       verified=verified, verdict=turn_verdict(factual_failures=failures,
+                       verified=verified,
+                       judge_unknown_citations=judgment.unknown_citations(known_ids=known),
+                       verdict=turn_verdict(factual_failures=failures,
                        judgment=judgment, known_ids=known, not_applicable=not_applicable))
             save(report)
         report['status'] = 'passed' if all(row['verdict'] == 'pass' for row in report['turns']) else 'failed'

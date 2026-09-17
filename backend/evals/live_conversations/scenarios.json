@@ -141,8 +141,8 @@
           "obligation": "Persist a draft for that same task requiring at least two workers and scaling its demand by a factor of 1.1."
         },
         {
-          "user": "Add to that draft: keep the first worker you showed on their first shift.",
-          "obligation": "Persist a revision that keeps the two earlier constraints and adds a shift lock for a real worker on a real availability window of theirs."
+          "user": "Add to that draft: lock one worker who is qualified for that task onto one of that worker’s own rostered windows.",
+          "obligation": "Persist a revision that keeps the two earlier constraints and adds a shift lock for a real worker qualified for that task, using one of that worker’s own roster windows as the locked interval."
         },
         {
           "user": "Use the demonstration feature to repeat \"ready\" once.",

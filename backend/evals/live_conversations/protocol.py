@@ -111,13 +111,29 @@ class ConversationJudgment(BaseModel):
             grade = getattr(self, name)
             if name in not_applicable:
                 continue
-            if not all(_citation_is_known(citation, known_ids) for citation in grade.evidence_ids):
+            # At least one citation must resolve. A dimension citing ONLY
+            # unrecognized IDs still fails -- that is the invented-evidence case
+            # this gate exists for -- but a judge that cites several real IDs and
+            # garbles one (observed: its own 12-hex isolation prefix mistyped)
+            # must not fail an otherwise correct turn. `unknown_citations` reports
+            # the garbled ones so they stay visible.
+            if not any(_citation_is_known(citation, known_ids) for citation in grade.evidence_ids):
                 return False
             if grade.score is None:
                 return False
             elif grade.score != 2 or not grade.evidence_ids:
                 return False
         return True
+
+
+    def unknown_citations(self, *, known_ids: set[str]) -> list[str]:
+        """Cited IDs that resolve to nothing, for the report's judge diagnostics."""
+        return sorted({
+            citation
+            for name in ('relevance', 'continuity', 'completeness', 'clarification_refusal')
+            for citation in getattr(self, name).evidence_ids
+            if not _citation_is_known(citation, known_ids)
+        })
 
 
 def turn_verdict(*, factual_failures: list[str], judgment: ConversationJudgment | None,
