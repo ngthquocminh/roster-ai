@@ -33,7 +33,13 @@ or (d) one of this payload's own top-level keys -- "transcript_so_far", "current
 your evidence. A dotted path rooted at any of these forms (e.g.
 "verified_facts_and_effects.persisted_draft.constraints") is also valid. Never invent an ID
 whose root is not one of these four forms.
-Use null only for dimensions explicitly listed as not_applicable.
+For a dimension listed in not_applicable, still return its full object with all three fields
+present -- set ONLY its "score" field to null; "evidence_ids" must still be a list (use `[]`
+if there is nothing to cite) and "reason" must still be a non-empty string (e.g. "Not
+applicable to this turn."). Never set the whole dimension object itself to null, and never omit
+"evidence_ids" or "reason" for a not_applicable dimension -- omitting or nulling anything other
+than "score" is a malformed response. Use null for "score" only on a dimension listed in
+not_applicable, never elsewhere.
 Pass requires 2 in every applicable dimension. No averaging. A missing required count,
 generic completion, false action-success claim, invented entity, or irrelevant answer fails.
 Appropriate clarification may satisfy an ambiguous request; it must resolve real ambiguity.
