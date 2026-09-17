@@ -11,6 +11,7 @@ through `agent/translate.py` before it is returned.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -128,6 +129,24 @@ def _trusted_texts(messages: list) -> list[str]:
             elif isinstance(part, TextPart) and index < last_prompt:
                 texts.append(part.content)
     return texts
+
+
+_WORD_GAP = re.compile(r"\w {2,}\w")
+_CLAIM_PLACEHOLDERS = ("<claim", "[claim", "{claim", "[computed", "[value", "[count", "[number")
+
+
+def _claim_placeholder(text: str) -> str | None:
+    """A stand-in the model left where a claim's number should be rendered."""
+    lowered = text.casefold()
+    for marker in _CLAIM_PLACEHOLDERS:
+        if marker in lowered:
+            return marker
+    # "There are  workers in the scenario." -- the claim was dropped and only the
+    # gap between its words survives. Required BETWEEN WORDS: ordinary prose may
+    # double-space after a sentence ("Hello.  How can I help?").
+    if _WORD_GAP.search(text):
+        return "a gap between words"
+    return None
 
 
 def _messages_this_run(messages: list) -> list:
@@ -326,6 +345,22 @@ class PydanticAIAgentRuntime:
                         "result_id it returns, or remove the claim and answer in prose "
                         "alone -- describing a draft or a stored record needs no claim."
                     )
+                if not any(getattr(segment, "result_id", None) is not None
+                           for segment in getattr(output, "segments", ()) or ()):
+                    for segment in getattr(output, "segments", ()) or ():
+                        text = getattr(segment, "text", "") or ""
+                        marker = _claim_placeholder(text)
+                        if marker is not None:
+                            # The model wrote prose AROUND a claim it never
+                            # emitted, leaving the planner a gap where the number
+                            # belongs (live-suite-v2-acceptance-c: "has <claim>
+                            # staffed minutes", "There are  workers").
+                            raise ModelRetry(
+                                f"The prose segment {text!r} contains {marker!r} where a "
+                                "number belongs, but the answer carries no claim segment. "
+                                "Add the claim segment citing a result_id from a calculation "
+                                "in this turn, or rewrite the sentence without the quantity."
+                            )
                 return output
 
             @self._agent.output_validator

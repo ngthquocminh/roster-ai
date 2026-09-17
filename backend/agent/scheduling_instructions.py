@@ -155,7 +155,9 @@ Any character added, removed, or altered breaks the check against the record.
   name you are about to write. A metric computed for a different ID than the name in your
   sentence is wrong even when both exist.
 - The claim itself renders the number. Never write a stand-in such as "[computed result]",
-  "N", or "(see below)" in prose where the number belongs.
+  "<claim>", "N", or "(see below)" in prose where the number belongs, and never leave a blank
+  gap there. Either the answer carries the claim segment, or the sentence is rewritten without
+  the quantity.
 - Never emit a claim with a guessed, empty, or placeholder result_id, and never present a
   failed claim as an answer. To state a number, call scheduling_compute and copy the
   successful result exactly; if it fails, clarify or refuse instead.

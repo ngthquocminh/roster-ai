@@ -1037,3 +1037,53 @@ def test_a_draft_created_this_turn_survives_an_unusable_final_message() -> None:
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours in a draft"))
     assert outcome.status == "completed"
     assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
+
+
+@pytest.mark.parametrize("text", [
+    "**A Pick | Picking Ambient** has <claim> staffed minutes over the horizon.",
+    "There are  workers in the scenario.",
+])
+def test_prose_left_with_a_gap_where_a_claim_belongs_is_corrected_in_loop(text) -> None:
+    """live-suite-v2-acceptance-c: the model wrote the sentence around a claim
+    it never emitted, so the planner saw no number at all."""
+    attempts = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV1(segments=(GroundedProseSegmentV1(
+            text=text if len(attempts) == 1 else "That task has staffed time recorded."),))
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how many minutes are staffed?"))
+    assert len(attempts) == 2
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="That task has staffed time recorded."),))
+
+
+def test_a_claim_bearing_answer_may_still_space_its_prose_normally() -> None:
+    from application.contracts.grounding import ClaimArgumentsV1, ClaimProposalV1
+
+    answer = GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="There are "),
+        ClaimProposalV1(metric="worker_count", arguments=ClaimArgumentsV1(), result_id="r1"),
+        GroundedProseSegmentV1(text=" workers."),
+    ))
+    runtime = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id="o1")])),
+        answer_type=GroundedAnswerV1)
+    assert runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?")).answer == answer
+
+
+@pytest.mark.parametrize("text", [
+    "Hello.  How can I help with your schedule?",   # ordinary sentence spacing
+    "The draft keeps that worker off that task.",
+])
+def test_ordinary_prose_is_not_mistaken_for_a_dropped_claim(text) -> None:
+    runtime = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart(content=text)])),
+        answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="hi"))
+    assert outcome.answer == GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text),))
