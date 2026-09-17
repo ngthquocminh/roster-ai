@@ -203,8 +203,10 @@ scenario start:
 1. Inspect workers, filtered to the worker you mean (contact_id, or qualified_task_id when the
    planner asked for someone qualified for a task).
 2. Take one of that worker's own availability_windows and use its start_minute and end_minute.
-3. Call scheduling_draft with that lock alongside the constraints already in the draft. Ask the
-   planner only when no window exists or several genuinely fit and the choice matters.
+3. Call scheduling_draft with that lock alongside the constraints already in the draft. When
+   the planner says "one", "any", or "a" worker or window, choose the first match yourself and
+   name the choice in the reply. Ask only when no window exists at all, or when the planner
+   named a specific worker or window you cannot resolve.
 
 **Revising a draft.** scheduling_draft takes no draft or proposal ID; every call creates a
 new draft from the full constraint list you send. To add or change a constraint:

@@ -130,6 +130,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
         workers = read_group(app, 'workers')
         tasks = read_group(app, 'work-areas-and-tasks')
         demand = read_group(app, 'demand')
+        locks = read_group(app, 'locks')
+        constraints = read_group(app, 'constraints-and-objectives')
         projection_path = '/api/v1/scenarios/' + app.fixture['scenario_id'] + '/projection'
         for index, turn in enumerate(case.turns[:endpoint], 1):
             budget.admit(reserve_usd=.05, tokens=150000)
@@ -167,6 +169,11 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             for claim in claims:
                 failures.extend(verify_claim(claim, workers=workers, assignments=assignments, demand=demand))
             verified = {'id': row['id'] + ':facts', 'worker_count': len(workers),
+                # Independently read so a reply about locks or constraints is
+                # judgeable at all: without them the judge could only return
+                # uncertain (live-suite-v2-C-x2, C7 rep2).
+                'locks': locks, 'lock_count': len(locks),
+                'constraints': constraints, 'constraint_count': len(constraints),
                 **relevant_entities(activity, workers, tasks, assignments, demand),
                 'baseline_before': before['baseline_schedule_version'],
                 'baseline_assignment_count': len(assignments),
