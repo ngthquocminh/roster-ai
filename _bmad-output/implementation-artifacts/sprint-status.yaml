@@ -2596,6 +2596,10 @@ development_status:
   # new real-backend Playwright infrastructure (Decision 3); and the new live-suite budget
   # ceilings, which must be re-derived for ~3-7x the per-run turn volume of Story 5.6's matrix
   # (Decision 5), not copied from it. First action per the story's own AC1 is live reproduction.
+  # 2026-09-17: Correct Course approved by Minh (sprint-change-proposal-2026-09-17). Story 5.7
+  # acceptance right-sized to three scenarios A(6)/B(12)/C(12), no prefix endpoints, one clean
+  # run per scenario + three repetitions with per-turn pass rates; false claims still hard-fail;
+  # real-browser journey and judge calibration set removed. Budget raised to USD 15. Status unchanged.
   5-7-prove-live-conversations-through-baseline-promotion: in-progress
   # Code review 2026-09-14/15: all decision-needed and patch findings fixed and verified
   # (full default suite 1612/1613, the one failure pre-existing/unrelated). Decision 4 also

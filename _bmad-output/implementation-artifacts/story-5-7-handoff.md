@@ -4,6 +4,10 @@ Updated: 2026-09-18 (credit topped up; agent model reverted to openai/gpt-5.6-lu
 
 ## Resume point
 
+**SCOPE CHANGED 2026-09-17 (read first):** `sprint-change-proposal-2026-09-17` right-sized the story to three scenarios — A (6, already passed), B (12 turns, single draft/solve/approve cycle, rewritten turns 2/3/9/11/12), C (12-turn tool tour) — with no prefix endpoints and acceptance = one clean run per scenario + three repetitions with per-turn pass rates. The B endpoint 4/8/12 history below is historical. Next step: rewrite `backend/evals/live_conversations/scenarios.json` to the new catalogue, then run B and C in full.
+
+**Update (next session, after this file was written):** commit `082a2dc` rewrote the agent prompt and tool descriptions — the prompt previously told the agent to "inspect" run candidates/baselines, which no tool can read (`scheduling_inspect` assignments are the scenario's own starting assignments; candidates/baseline exist only in the workflow snapshot, truncated to 5/10 rows). Earlier endpoint-12 "constraint verified" passes may have been grounded on the wrong data. A "ShiftMind workflow" section was added. Real OpenRouter key usage was USD 10.58 lifetime at that point (above the old USD 10 budget); **Minh raised the story budget to USD 15 and chose to stay on `openai/gpt-5.6-luna`**. Runs from here use `--spend-limit-usd 15 --prior-spend-usd <real key usage>`; first run is `r40`.
+
 Story 5.7 remains `in-progress`. This entry supersedes everything below it that talks about being blocked on credit — **the account was topped up and confirmed working** (gpt-5-mini and gpt-5.6-luna both made real, billed calls after the top-up). Read this section fully before doing anything; the rest of the file is historical trail, most usefully mined via the lesson numbers cited inline.
 
 **Where the actual live-matrix progress stands:**
