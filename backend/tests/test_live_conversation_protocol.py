@@ -99,6 +99,17 @@ def test_judge_cannot_invent_evidence_or_exempt_dimensions():
                                not_applicable=frozenset({'continuity'}))
 
 
+def test_a_dotted_path_into_a_known_id_is_accepted_but_an_unrelated_path_is_not():
+    known = {'turn-1', 'verified_facts_and_effects'}
+    dotted = judgment(completeness={'score': 2,
+        'evidence_ids': ['verified_facts_and_effects.persisted_draft.constraints'],
+        'reason': 'Cites a nested path into a known fact group.'})
+    assert dotted.passes(known_ids=known)
+    unrelated = judgment(completeness={'score': 2,
+        'evidence_ids': ['unknown_group.nested_field'], 'reason': 'Invents a root.'})
+    assert not unrelated.passes(known_ids=known)
+
+
 def test_missing_or_uncertain_judgments_are_not_automatic_passes():
     assert turn_verdict(factual_failures=[], judgment=None, known_ids={'turn-1'}) == 'incomplete'
     uncertain = judgment().model_copy(update={'verdict': 'uncertain'})

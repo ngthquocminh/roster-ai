@@ -30,7 +30,9 @@ of verified_facts_and_effects when relying on a scalar fact with no id of its ow
 "candidate_solver_status", whose value is a bare status string); (c) the current turn's own id;
 or (d) one of this payload's own top-level keys -- "transcript_so_far", "current_obligation",
 "verified_facts_and_effects", "not_applicable" -- when citing that whole supplied section as
-your evidence. Never invent an ID that is not one of these four forms.
+your evidence. A dotted path rooted at any of these forms (e.g.
+"verified_facts_and_effects.persisted_draft.constraints") is also valid. Never invent an ID
+whose root is not one of these four forms.
 Use null only for dimensions explicitly listed as not_applicable.
 Pass requires 2 in every applicable dimension. No averaging. A missing required count,
 generic completion, false action-success claim, invented entity, or irrelevant answer fails.

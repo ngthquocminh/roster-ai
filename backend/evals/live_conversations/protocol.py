@@ -80,6 +80,17 @@ class DimensionGrade(BaseModel):
     reason: str = Field(min_length=1, max_length=1000)
 
 
+def _citation_is_known(citation: str, known_ids: set[str]) -> bool:
+    """Accept an exact known ID, or a dotted path into one (e.g. a judge citing
+    "verified_facts_and_effects.persisted_draft.constraints" is citing the known
+    top-level key "verified_facts_and_effects" at some depth, not inventing a new
+    identifier)."""
+    if citation in known_ids:
+        return True
+    root, separator, _rest = citation.partition('.')
+    return bool(separator) and root in known_ids
+
+
 class ConversationJudgment(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     relevance: DimensionGrade
@@ -95,7 +106,7 @@ class ConversationJudgment(BaseModel):
             grade = getattr(self, name)
             if name in not_applicable:
                 continue
-            if not set(grade.evidence_ids) <= known_ids:
+            if not all(_citation_is_known(citation, known_ids) for citation in grade.evidence_ids):
                 return False
             if grade.score is None:
                 return False
