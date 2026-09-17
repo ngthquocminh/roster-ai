@@ -130,20 +130,6 @@ def _trusted_texts(messages: list) -> list[str]:
     return texts
 
 
-def _result_ids_this_run(messages: list) -> set[str]:
-    """result_id values tool calls actually returned after the current prompt."""
-    found: set[str] = set()
-    for message in _messages_this_run(messages):
-        if not isinstance(message, ModelRequest):
-            continue
-        for part in message.parts:
-            if isinstance(part, ToolReturnPart) and isinstance(part.content, dict):
-                value = part.content.get("result_id")
-                if isinstance(value, str) and value:
-                    found.add(value)
-    return found
-
-
 def _messages_this_run(messages: list) -> list:
     start = 0
     for index, message in enumerate(messages):
@@ -326,19 +312,20 @@ class PydanticAIAgentRuntime:
                 # to a draft description that needed no number at all).
                 if not isinstance(output, GroundedAnswerV1):
                     return output
-                produced = _result_ids_this_run(ctx.messages)
                 for segment in getattr(output, "segments", ()) or ():
                     result_id = getattr(segment, "result_id", None)
-                    if result_id is None:
+                    if result_id is None or result_id:
+                        # A PRESENT but wrong id stays the gate's business: it
+                        # renders an inspectable `missing_evidence` claim, which
+                        # golden case grounding-missing-evidence pins. Only the
+                        # empty citation is corrected here.
                         continue
-                    if not result_id or result_id not in produced:
-                        raise ModelRetry(
-                            "A claim segment cites result_id "
-                            f"{result_id!r}, which no calculation in this turn returned. "
-                            "Either call the calculation tool and cite the result_id it "
-                            "returns, or remove the claim and answer in prose alone -- "
-                            "describing a draft or a stored record needs no claim."
-                        )
+                    raise ModelRetry(
+                        "A claim segment carries an empty result_id, so it can cite no "
+                        "evidence at all. Either call the calculation tool and cite the "
+                        "result_id it returns, or remove the claim and answer in prose "
+                        "alone -- describing a draft or a stored record needs no claim."
+                    )
                 return output
 
             @self._agent.output_validator
