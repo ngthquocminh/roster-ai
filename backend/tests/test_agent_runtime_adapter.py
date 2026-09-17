@@ -180,7 +180,67 @@ def test_openrouter_model_uses_the_explicit_agent_runtime_key() -> None:
             model="openrouter:openai/gpt-oss-20b:free", api_key="test-key"
         )
     )
-    assert runtime._model.__class__.__name__ == "OpenAIChatModel"
+    model = runtime._model
+    assert model.__class__.__name__ == "FallbackModel"
+    assert [m.__class__.__name__ for m in model.models] == ["OpenRouterModel"] * 3
+    from agent.runtime import _is_transient_openrouter_error, _is_upstream_error_response
+
+    assert model._response_handlers == [_is_upstream_error_response]
+    assert model._exception_handlers == [_is_transient_openrouter_error]
+
+
+def test_openrouter_retries_only_transient_failures() -> None:
+    from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    from agent.runtime import _is_transient_openrouter_error, _is_upstream_error_response
+
+    assert _is_transient_openrouter_error(ModelHTTPError(502, "m"))
+    assert _is_transient_openrouter_error(ModelHTTPError(429, "m"))
+    assert not _is_transient_openrouter_error(ModelHTTPError(400, "m"))
+    assert not _is_transient_openrouter_error(ModelHTTPError(402, "m"))
+    assert _is_transient_openrouter_error(ModelAPIError("m", "no completion"))
+    assert not _is_transient_openrouter_error(ValueError("bad"))
+    assert _is_upstream_error_response(ModelResponse(parts=[TextPart("")], finish_reason="error"))
+    assert not _is_upstream_error_response(ModelResponse(parts=[TextPart("hi")], finish_reason="stop"))
+
+
+def _upstream_error(_messages, _info):
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    return ModelResponse(parts=[TextPart("")], finish_reason="error")
+
+
+def _hello(_messages, _info):
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    return ModelResponse(parts=[TextPart("hello")], finish_reason="stop")
+
+
+def _retrying(*functions):
+    from pydantic_ai.models.fallback import FallbackModel
+
+    from agent.runtime import _is_transient_openrouter_error, _is_upstream_error_response
+
+    return FallbackModel(
+        *(FunctionModel(function) for function in functions),
+        fallback_on=[_is_transient_openrouter_error, _is_upstream_error_response],
+    )
+
+
+def test_an_upstream_error_response_is_retried_instead_of_failing_the_turn() -> None:
+    runtime = PydanticAIAgentRuntime(model=_retrying(_upstream_error, _hello))
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="HI my name is Minh"))
+    assert outcome.status == "completed"
+
+
+def test_exhausted_upstream_retries_are_a_provider_error_not_invalid_output() -> None:
+    from application.ports.agent_runtime import AgentProviderError
+
+    runtime = PydanticAIAgentRuntime(
+        model=_retrying(_upstream_error, _upstream_error, _upstream_error))
+    with pytest.raises(AgentProviderError):
+        runtime.run_turn(AgentTurnRequestV1(prompt="HI my name is Minh"))
 
 
 def test_anthropic_model_uses_the_explicit_agent_runtime_key() -> None:
@@ -450,15 +510,31 @@ def test_opt_in_structured_answer_is_typed_and_output_tool_is_not_a_capability_r
     assert outcome.tool_results == ()
 
 
-def test_strict_answer_rejects_unstructured_prose_with_preserved_cause() -> None:
+def test_plain_text_becomes_a_prose_only_grounded_answer() -> None:
+    """Story 5.7: text is accepted so the provider is not forced into
+    tool_choice="required", under which a model answering in text looped until
+    the upstream stream broke."""
     runtime = _runtime(
         model=FunctionModel(
-            lambda messages, info: ModelResponse(parts=[TextPart(content="confident prose")])
+            lambda messages, info: ModelResponse(parts=[TextPart(content=" Hi Minh, how can I help? ")])
+        ),
+        answer_type=GroundedAnswerV1,
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="HI my name is Minh"))
+    assert outcome.status == "completed"
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="Hi Minh, how can I help?"),))
+
+
+def test_plain_text_with_an_uncited_numeral_is_still_rejected_with_preserved_cause() -> None:
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="There are 24 workers.")])
         ),
         answer_type=GroundedAnswerV1,
     )
     with pytest.raises(AgentRuntimeError) as exc_info:
-        runtime.run_turn(AgentTurnRequestV1(prompt="answer structurally"))
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
     assert isinstance(exc_info.value.__cause__, UnexpectedModelBehavior)
 
 

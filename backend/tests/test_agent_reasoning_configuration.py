@@ -22,6 +22,7 @@ def test_explicit_reasoning_control_reaches_openrouter_request(monkeypatch):
         requests.append(json.loads(request.content))
         return httpx.Response(200, json={
             'id': 'test-completion', 'object': 'chat.completion', 'created': 1, 'model': 'test',
+            'provider': 'Test',  # real OpenRouter responses always name the upstream provider
             'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': 'Hello'}, 'finish_reason': 'stop'}],
             'usage': {'prompt_tokens': 10, 'completion_tokens': 2, 'total_tokens': 12},
         })

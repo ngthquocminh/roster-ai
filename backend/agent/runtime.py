@@ -22,6 +22,7 @@ from pydantic_ai import (
     DeferredToolRequests,
     DeferredToolResults,
     InstrumentationSettings,
+    ModelAPIError,
     ModelHTTPError,
     ModelRetry,
     RunCancelled,
@@ -31,8 +32,10 @@ from pydantic_ai import (
     UsageLimits,
 )
 from pydantic_ai.capabilities import Instrumentation
+from pydantic_ai.exceptions import FallbackExceptionGroup
+from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models import infer_model
-from pydantic_ai.output import ToolOutput
+from pydantic_ai.output import TextOutput, ToolOutput
 from pydantic_ai.usage import RunUsage
 
 from agent.translate import summarize, to_framework_messages, to_owned_turn
@@ -60,7 +63,7 @@ from application.ports.agent_runtime import (
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.proposal import DraftProposalV1
 from application.grounding.gate import numeric_prose_violation
@@ -85,6 +88,11 @@ OUTPUT_TOOL_NAMES = frozenset(
         DRAFT_OUTPUT_TOOL,
     }
 )
+
+
+def _prose_answer(text: str) -> GroundedAnswerV1:
+    """A plain-text model reply as one prose segment of a grounded answer."""
+    return GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text.strip()),))
 
 
 @dataclass(frozen=True)
@@ -158,6 +166,17 @@ class PydanticAIAgentRuntime:
                 ToolOutput(RefusalV1, name=REFUSAL_OUTPUT_TOOL),
                 ToolOutput(DraftProposalV1, name=DRAFT_OUTPUT_TOOL),
                 DeferredToolRequests,
+                # Plain text is accepted as a prose-only grounded answer. With
+                # only output tools, the request carries tool_choice="required";
+                # measured 2026-09-17, openai/gpt-5.6-luna still answered a
+                # greeting in text after a tool result and, unable to end that
+                # text under "required", repeated it until the upstream stream
+                # broke (502 -> invalid_output). Accepting text lets the provider
+                # send tool_choice="auto" and the reply terminate normally.
+                # Nothing is trusted more: the numeric-prose validator below and
+                # the grounding gate apply to this answer exactly as to a tool
+                # answer, so a number still needs a cited claim.
+                *((TextOutput(_prose_answer),) if answer_type is GroundedAnswerV1 else ()),
             ]
         )
         self._agent: Agent = Agent(
@@ -313,6 +332,10 @@ class PydanticAIAgentRuntime:
                 budget_outcome=budget_outcome,
                 usage=usage,
             )
+        except FallbackExceptionGroup as exc:
+            # Every retry of a transient provider failure failed too. That is
+            # the provider's outage, not the model's output.
+            raise AgentProviderError("agent runtime provider call failed") from exc
         except UnexpectedModelBehavior as exc:
             raise AgentInvalidOutputError(
                 "agent runtime produced unusable output"
@@ -553,6 +576,26 @@ def _openrouter_model_settings(reasoning_effort: str | None) -> dict | None:
     return {'extra_body': {'reasoning': {'effort': reasoning_effort}}}
 
 
+#: Extra attempts for ONE model request when OpenRouter reports a transient
+#: upstream failure. Retrying the request, not the turn, never re-runs a tool the
+#: model already called. Measured 2026-09-17: about 1 in 4 live requests on
+#: openai/gpt-5.6-luna ended `finish_reason: "error"`, which the generic
+#: OpenAI chat model rejected as invalid output (Story 5.7 lesson 18).
+OPENROUTER_TRANSIENT_RETRIES = 2
+
+
+def _is_transient_openrouter_error(exc: Exception) -> bool:
+    """Retry provider hiccups; never a request the provider rejected as invalid."""
+    if isinstance(exc, ModelHTTPError):
+        return exc.status_code == 429 or exc.status_code >= 500
+    return isinstance(exc, ModelAPIError)
+
+
+def _is_upstream_error_response(response: ModelResponse) -> bool:
+    """OpenRouter's `finish_reason: "error"`: the upstream model failed mid-generation."""
+    return response.finish_reason == "error"
+
+
 def _configured_model(config: AgentRuntimeConfig) -> object:
     """Resolve the owned model setting without consulting another LLM seam."""
     normalized = config.model.strip().lower()
@@ -568,13 +611,22 @@ def _configured_model(config: AgentRuntimeConfig) -> object:
             "agent runtime model must be 'deterministic', 'test', or '<provider>:<model-name>'"
         )
     if provider_name == "openrouter":
-        from pydantic_ai.models.openai import OpenAIChatModel
+        from pydantic_ai.models.fallback import FallbackModel
+        from pydantic_ai.models.openrouter import OpenRouterModel
         from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-        return OpenAIChatModel(
-            model_name,
-            provider=OpenRouterProvider(api_key=config.api_key),
-            settings=_openrouter_model_settings(config.reasoning_effort),
+        provider = OpenRouterProvider(api_key=config.api_key)
+        attempts = [
+            OpenRouterModel(
+                model_name,
+                provider=provider,
+                settings=_openrouter_model_settings(config.reasoning_effort),
+            )
+            for _ in range(1 + OPENROUTER_TRANSIENT_RETRIES)
+        ]
+        return FallbackModel(
+            *attempts,
+            fallback_on=[_is_transient_openrouter_error, _is_upstream_error_response],
         )
     if provider_name == "google":
         from pydantic_ai.models.google import GoogleModel
