@@ -4,6 +4,37 @@ Updated: 2026-09-18 (credit topped up; agent model reverted to openai/gpt-5.6-lu
 
 ## Resume point
 
+**STATUS 2026-09-18 (read first; supersedes the 2026-09-17 entries below).** The right-sized
+suite (A 6 turns, B 12, C 12) runs green on `openrouter:openai/gpt-5.6-luna` +
+`openrouter:google/gemini-2.5-flash`.
+
+- Best full acceptance run: `live-suite-v2-acceptance-c.json` (images rebuilt, 9 executions,
+  no incomplete): **7/9 executions clean; B 36/36 across all three repetitions; A 17/18;
+  C 35/36**; tracked spend USD 0.51. Every scenario has at least one clean repetition.
+- Its two failures were fixed afterwards in `eece90a` (prose left a gap/placeholder where a
+  claim belonged). The follow-up run `live-suite-v2-acceptance-d.json` aborted at A5 on a NEW
+  infrastructure fault, not content: `application_http_404_POST_/api/v1/conversations/*/
+  agent-runs/*/execute`. That 404 means `claim_queued_run` found no row for a run the
+  immediately preceding POST /messages had just created (`api/routers/conversations.py:278`);
+  seen twice in ~20 executions, never reproduced deterministically. Diagnose before trusting a
+  single green run; it is the last known non-content blocker.
+- **Budget: real OpenRouter usage was USD 14.52 of the USD 15 ceiling at that point.** No
+  further live run may start without Minh raising it.
+- Product fixes this session (all with tests, full backend suite green at 1909 passed):
+  `c268221` OpenRouter transient/`finish_reason: error` retry + text output accepted (root
+  cause of lesson 18's zero-cost `invalid_output`), `42c7c14` draft output required after a
+  draft tool call, `630d126` numerals in prose only when traceable to trusted text (AD-11
+  clarification; lesson 17's "8GR" truncation was this rule, not model unreliability),
+  `32dc6dc`/`e67fc87` empty-citation correction + draft recovery, `eece90a` claim-gap
+  correction. Harness fixes: `3052eaa`, `6f39c8d`, `92fa54f`, `74ffebd`, `1693bf4`.
+- Scope was right-sized by `sprint-change-proposal-2026-09-17` (approved): 3 scenarios, no
+  prefixes, one clean run per scenario + 3 repetitions with per-turn pass rates, no browser
+  journey, no judge calibration set.
+- Still owed: a final clean acceptance run on `eece90a`, `docs/TESTING.md` command + measured
+  results, version-bound `evidence/story-5.7/**` via `backend/scripts/evidence_binding.py`,
+  Gate B `live_conversation_journeys` field, and a demo-stack rebuild (the persistent
+  `rosterai-*` stack on :8080 still runs pre-fix images).
+
 **SCOPE CHANGED 2026-09-17 (read first):** `sprint-change-proposal-2026-09-17` right-sized the story to three scenarios — A (6, already passed), B (12 turns, single draft/solve/approve cycle, rewritten turns 2/3/9/11/12), C (12-turn tool tour) — with no prefix endpoints and acceptance = one clean run per scenario + three repetitions with per-turn pass rates. The B endpoint 4/8/12 history below is historical. Next step: rewrite `backend/evals/live_conversations/scenarios.json` to the new catalogue, then run B and C in full.
 
 **Update (next session, after this file was written):** commit `082a2dc` rewrote the agent prompt and tool descriptions — the prompt previously told the agent to "inspect" run candidates/baselines, which no tool can read (`scheduling_inspect` assignments are the scenario's own starting assignments; candidates/baseline exist only in the workflow snapshot, truncated to 5/10 rows). Earlier endpoint-12 "constraint verified" passes may have been grounded on the wrong data. A "ShiftMind workflow" section was added. Real OpenRouter key usage was USD 10.58 lifetime at that point (above the old USD 10 budget); **Minh raised the story budget to USD 15 and chose to stay on `openai/gpt-5.6-luna`**. Runs from here use `--spend-limit-usd 15 --prior-spend-usd <real key usage>`; first run is `r40`.
