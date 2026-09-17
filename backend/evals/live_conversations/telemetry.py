@@ -5,31 +5,31 @@ import subprocess
 
 from evals.live_conversations.protocol import IncompleteConversationRun
 
-_EXCEPTION_LINE = re.compile(r'^([A-Za-z_][\w.]*(?:Error|Exception|Behavior|Exceeded|Warning))(?::|$)')
-
-
 def failure_exception_type(log_text, agent_run_id):
-    """Class name of the exception logged for one failed run -- never its message.
+    """Exception CLASS chain logged for one failed run -- never its message.
 
-    The route logs `execute_agent_turn failed; finalizing run <id> as terminal`
-    followed by a traceback whose last line is `module.Class: message`. Only the
-    class name is returned; the message can quote model output.
+    The API logs JSON lines (`adapters/telemetry/json_logs.py`). The route's
+    `execute_agent_turn failed` record carries `exception_type` (qualnames only)
+    but no run id, and it is written before that run's own
+    `agent.run.completed` record. Runs execute one at a time per isolated
+    stack, so the nearest preceding failure record belongs to this run.
     """
-    lines = log_text.splitlines()
-    marker = f'finalizing run {agent_run_id} as terminal'
-    for start, line in enumerate(lines):
-        if marker not in line:
+    last_failure = None
+    for line in log_text.splitlines():
+        try:
+            record = json.loads(line)
+        except ValueError:
             continue
-        found = None
-        for candidate in lines[start + 1:start + 400]:
-            if candidate.lstrip().startswith('{'):
-                break
-            match = _EXCEPTION_LINE.match(candidate.strip())
-            if match and not candidate[:1].isspace():
-                found = match.group(1)
-        return found
+        if not isinstance(record, dict):
+            continue
+        if record.get('event') == 'agent.run.completed':
+            if record.get('correlation', {}).get('agent_run_id') == agent_run_id:
+                return last_failure
+            last_failure = None
+        elif (str(record.get('event', '')).startswith('execute_agent_turn failed')
+                and isinstance(record.get('exception_type'), list)):
+            last_failure = [str(name) for name in record['exception_type']]
     return None
-
 
 
 class ContainerTelemetry:

@@ -1,24 +1,29 @@
-"""Only the exception CLASS of a failed run is recovered from container logs."""
+"""Only the exception CLASS chain of a failed run is recovered from container logs."""
+import json
+
 from evals.live_conversations.telemetry import failure_exception_type
 
 RUN = '11111111-2222-3333-4444-555555555555'
 
 
-def test_returns_the_final_exception_class_without_its_message():
+def _completed(run_id):
+    return json.dumps({'event': 'agent.run.completed', 'correlation': {'agent_run_id': run_id}})
+
+
+def _failure(*types):
+    return json.dumps({'event': 'execute_agent_turn failed; finalizing run %s as terminal',
+                       'level': 'ERROR', 'exception_type': list(types)})
+
+
+def test_returns_the_class_chain_logged_before_this_runs_completion():
     log = '\n'.join([
-        '{"event": "agent.tool.call.completed"}',
-        f'ERROR execute_agent_turn failed; finalizing run {RUN} as terminal',
-        'Traceback (most recent call last):',
-        '  File "/app/agent/runtime.py", line 1, in run_turn',
-        'pydantic_ai.exceptions.ModelRetry: rewrite the prose segment "10 workers"',
-        '',
-        'The above exception was the direct cause of the following exception:',
-        'pydantic_ai.exceptions.UnexpectedModelBehavior: Exceeded maximum retries (2) for output validation',
-        '{"event": "agent.run.completed"}',
+        _completed('earlier'),
+        _failure('UnexpectedModelBehavior', 'ModelRetry'),
+        _completed(RUN),
     ])
-    assert failure_exception_type(log, RUN) == 'pydantic_ai.exceptions.UnexpectedModelBehavior'
+    assert failure_exception_type(log, RUN) == ['UnexpectedModelBehavior', 'ModelRetry']
 
 
-def test_other_runs_and_missing_markers_yield_nothing():
-    log = 'ERROR execute_agent_turn failed; finalizing run other as terminal\nValueError: x'
+def test_a_failure_belonging_to_an_earlier_run_is_not_reattributed():
+    log = '\n'.join([_failure('ValueError'), _completed('earlier'), _completed(RUN)])
     assert failure_exception_type(log, RUN) is None
