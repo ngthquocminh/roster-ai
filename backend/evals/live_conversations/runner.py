@@ -26,6 +26,14 @@ def supplied_citation_ids(value):
     return found
 
 
+def known_citation_ids(transcript, verified, obligation_id):
+    """Every ID the judge may legitimately cite: explicit IDs, plus the name of a
+    supplied fact group itself for a scalar fact with no ID of its own (e.g.
+    candidate_solver_status), plus the obligation's own ID."""
+    return (supplied_citation_ids(transcript) | supplied_citation_ids(verified)
+            | set(verified.keys()) | {obligation_id})
+
+
 def _canonical_assignment(row):
     return tuple(row.get(field) for field in _ASSIGNMENT_FIELDS)
 
@@ -214,8 +222,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             judgment, judge_usage = judge_turn(api_key=judge_key, model=judge_model,
                 transcript=transcript, obligation=turn.obligation, obligation_id=obligation_id,
                 verified=verified, budget=budget, not_applicable=not_applicable)
-            known = (supplied_citation_ids(transcript) | supplied_citation_ids(verified)
-                     | {obligation_id})
+            known = known_citation_ids(transcript, verified, obligation_id)
             row.update(factual_failures=failures, judgment=judgment.model_dump(), judge_usage=judge_usage,
                        verified=verified, verdict=turn_verdict(factual_failures=failures,
                        judgment=judgment, known_ids=known, not_applicable=not_applicable))

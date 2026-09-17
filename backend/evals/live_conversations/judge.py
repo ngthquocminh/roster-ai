@@ -16,11 +16,11 @@ Use only the history up to this turn, its predeclared obligation, and verified f
 Grade relevance, continuity, completeness, and appropriate clarification/refusal separately:
 0 = wrong, missing, or contradictory; 1 = partial or ambiguous; 2 = meets the obligation.
 For every dimension cite supplied message/evidence IDs and give a concise reason. A valid ID is
-a string value taken from a field literally named "id", "result_id", or ending in "_id" in the
-supplied data (e.g. a message id or a schedule_run_id value), or the current turn's own id.
-Never cite a JSON field/fact-group name itself as an ID (e.g. "candidate_solver_status" is a
-fact label, not an ID): when the fact you are relying on has no id of its own, cite the
-enclosing turn or facts id instead.
+either (a) a string value taken from a field literally named "id", "result_id", or ending in
+"_id" in the supplied data (e.g. a message id or a schedule_run_id value), (b) the top-level
+fact-group key itself when relying on a scalar fact with no id of its own (e.g.
+"candidate_solver_status", whose value is a bare status string), or (c) the current turn's own
+id. Never invent an ID that is not one of these three forms.
 Use null only for dimensions explicitly listed as not_applicable.
 Pass requires 2 in every applicable dimension. No averaging. A missing required count,
 generic completion, false action-success claim, invented entity, or irrelevant answer fails.

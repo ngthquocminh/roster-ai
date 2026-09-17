@@ -1,5 +1,6 @@
 from evals.live_conversations.runner import (
-    compact_reload_effect, relevant_entities, same_assignments, supplied_citation_ids,
+    compact_reload_effect, known_citation_ids, relevant_entities, same_assignments,
+    supplied_citation_ids,
 )
 
 
@@ -7,6 +8,14 @@ def test_citation_ids_are_limited_to_explicit_identifiers_in_supplied_data():
     value = {'id': 'turn-1', 'assistant': [{'result_id': 'result-1', 'text': 'not-an-id'}],
              'facts': {'worker_id': 'worker-1', 'worker_name': 'Minh'}}
     assert supplied_citation_ids(value) == {'turn-1', 'result-1', 'worker-1'}
+
+
+def test_known_citation_ids_accepts_a_scalar_facts_own_group_name():
+    verified = {'id': 'turn-1:facts', 'candidate_solver_status': 'FEASIBLE',
+                'latest_run': {'schedule_run_id': 'run-1'}}
+    known = known_citation_ids([], verified, 'turn-1:obligation')
+    assert known == {'turn-1:facts', 'run-1', 'candidate_solver_status', 'latest_run',
+                      'turn-1:obligation', 'id'}
 
 
 def test_reload_effect_keeps_only_visible_identity_and_activity_types():
