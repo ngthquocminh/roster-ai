@@ -300,3 +300,67 @@ def test_a_real_calculator_result_grounds_end_to_end_through_the_gate() -> None:
         "d-outbound-0", "d-outbound-1",
     ]
     assert claim.evidence_refs == result.evidence_refs
+
+
+# Story 5.7: the prose rule narrowed from "no numerals" to "no untraceable numerals".
+
+def _prose(text: str) -> GroundedAnswerV1:
+    return GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text),))
+
+
+def test_numerals_copied_from_trusted_text_are_allowed() -> None:
+    from application.grounding.gate import trusted_numeric_words
+
+    trusted = trusted_numeric_words([
+        '{"task_id": "T1", "name": "C Fork | Grid P 8GR", "max_hours": 40.0}',
+        "Revise the draft to cap that worker at 40 hours as well.",
+    ])
+    response = ground_answer(
+        _prose("Capped Rhiannon Hansen at 40 hours; the task is C Fork | Grid P 8GR."),
+        _deps(ReaderStub()), {}, trusted,
+    )
+    assert response.segments[0].text.endswith("Grid P 8GR.")
+
+
+@pytest.mark.parametrize("text", [
+    "There are 24 workers.",           # a count: needs a cited claim
+    "There are 8634 shifts.",          # only present inside a UUID
+    "The digest starts 685.",          # only present inside a long hex string
+    "Grid P 8.",                        # part of a word is not the word
+])
+def test_numerals_not_traceable_to_trusted_text_are_rejected(text) -> None:
+    from application.grounding.gate import trusted_numeric_words
+
+    trusted = trusted_numeric_words([
+        '{"id": "685a2608-8634-4c1b-9f11-1bf63934caae", "task": "Grid P 8GR", "year": "2024"}',
+        "checksum 685a26088634a17330e77510f921b1bf63934caae0eaa5f09f9b99dad883a9fe",
+    ])
+    with pytest.raises(UncitedNumericProseError):
+        ground_answer(_prose(text), _deps(ReaderStub()), {}, trusted)
+
+
+def test_execute_turn_trusts_history_and_tool_results_but_not_tool_call_arguments() -> None:
+    from application.contracts.agent_runtime import (
+        AgentMessageV1, AgentPartV1, AgentRunOutcomeV1, AgentTurnV1,
+    )
+    from application.use_cases.execute_turn import execute_turn
+
+    class Runtime:
+        def __init__(self, text):
+            self.text = text
+
+        def run_turn(self, _request):
+            return AgentRunOutcomeV1(status="completed", answer=_prose(self.text))
+
+    history = AgentTurnV1(messages=(
+        AgentMessageV1(role="system", parts=(AgentPartV1(text='{"task": "Grid P 8GR"}'),)),
+        AgentMessageV1(role="assistant", parts=(
+            AgentPartV1(kind="tool_call", tool_name="x", tool_call_id="c", tool_args_json='{"n": 77}'),)),
+    ))
+    deps = _deps(ReaderStub())
+    ok = execute_turn(Runtime("Grid P 8GR, 40 hours, 60 minutes."), deps,
+                      prompt="cap at 40 hours", calculation_results=[_result("r1")], history=history)
+    assert ok.grounded_response is not None
+    with pytest.raises(UncitedNumericProseError):
+        execute_turn(Runtime("About 77 shifts."), deps, prompt="cap at 40 hours",
+                     calculation_results=[], history=history)

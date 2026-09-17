@@ -1,7 +1,7 @@
 """Execute and ground one already-claimed planner turn."""
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, is_dataclass, replace
 import json
 
 from application.contracts.agent_runtime import (
@@ -24,7 +24,11 @@ from application.contracts.activity import (
 )
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.grounding import GroundedClaimV1, GroundedProseSegmentV1, GroundedResponseV1
-from application.grounding.gate import UncitedNumericProseError, ground_answer
+from application.grounding.gate import (
+    UncitedNumericProseError,
+    ground_answer,
+    trusted_numeric_words,
+)
 from application.clarification.resolve import resolve_clarification
 from application.ports.agent_runtime import AgentRuntime
 from application.ports.agent_runtime import AgentProviderError, AgentRuntimeError
@@ -113,8 +117,38 @@ def execute_turn(
         return outcome
     return replace(
         outcome,
-        grounded_response=ground_answer(outcome.answer, deps, by_id),
+        grounded_response=ground_answer(
+            outcome.answer, deps, by_id,
+            trusted_numeric_words(_trusted_texts(prompt, owned_history, calculation_results)),
+        ),
     )
+
+
+def _trusted_texts(prompt: str, history: AgentTurnV1, results: list[object]) -> list[str]:
+    """What a prose numeral may be copied from (see gate `prose:no_untraceable_numerals`).
+
+    A superset of what the adapter's in-loop validator trusts: the planner's
+    prompt, every owned history text part (planner messages, persisted gate-passed
+    replies, the workflow snapshot), and this turn's trusted capability results --
+    whole records, of which the model saw only a projection. Model-authored tool
+    call arguments are excluded.
+    """
+    texts = [prompt]
+    texts.extend(
+        part.text
+        for message in history.messages
+        for part in message.parts
+        if part.kind != "tool_call" and part.text
+    )
+    for value in results:
+        try:
+            texts.append(json.dumps(
+                asdict(value) if is_dataclass(value) and not isinstance(value, type) else value,
+                default=str, ensure_ascii=False,
+            ))
+        except (TypeError, ValueError):
+            texts.append(str(value))
+    return texts
 
 
 def terminal_status(outcome: AgentRunOutcomeV1) -> str:

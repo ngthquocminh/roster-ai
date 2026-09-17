@@ -122,6 +122,14 @@ form below is wrong, using "C Fork | Grid P 8GR" as the real stored name:
 
 Any character added, removed, or altered breaks the check against the record.
 
+## Numbers in replies
+
+- Names, IDs, times and values may contain digits: copy them exactly as they appear in a
+  tool result, the workflow snapshot, or the planner's message (e.g. "C Fork | Grid P 8GR",
+  "40 hours" when the planner asked for 40). Never spell digits out in words.
+- A quantity you counted, summed, or otherwise derived (how many workers, total minutes,
+  volume) is never written as prose -- it must be a claim from scheduling_compute.
+
 ## Numeric claims (scheduling_compute)
 
 - Only call scheduling_compute when the user's CURRENT message actually asks for a count,

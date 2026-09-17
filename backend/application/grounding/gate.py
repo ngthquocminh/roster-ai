@@ -1,7 +1,8 @@
 """Fail-closed citation verification for planner-visible grounded answers."""
 from __future__ import annotations
 
-from typing import Mapping, Protocol
+import re
+from typing import Iterable, Mapping, Protocol
 from uuid import UUID
 
 from application.capabilities.deps import AgentDepsV1
@@ -47,17 +48,22 @@ SCOPE_CONTROLS: Mapping[str, str] = {
         "COVERS the immutable scenario version and available baseline schedule binding. "
         "NOT COVERED: producing run and schedule-version aggregates, which Epic 3 creates."
     ),
-    "prose:no_numeric_characters": (
+    "prose:no_untraceable_numerals": (
         "COVERS every Unicode character with a numeric value -- decimal digits plus "
-        "superscripts, circled forms, Roman numerals and vulgar fractions -- so a quantity "
-        "cannot bypass a claim node. Enforced TWICE: as an in-loop output validator that gives "
-        "the model one corrective retry, and here as the fail-closed backstop. "
-        "NOT COVERED: spelled-out quantities; the strict model prompt must avoid them. "
-        "NOT COVERED, and previously over-claimed here: any guarantee that the model has not "
-        "SEEN a quantity. It has -- scheduling_inspect hands it rows and counts by design, and "
-        "rehydrated history carries prior claim values so a follow-up question can resolve. "
-        "Correctness does not rest on that: it rests on this rule plus the citation checks "
-        "above, which is why the model gets a retry instead of the turn being killed."
+        "superscripts, circled forms, Roman numerals and vulgar fractions. A prose word "
+        "carrying one is allowed ONLY when that exact word appears in trusted text for "
+        "the turn: the planner's own messages, persisted gate-passed conversation text, "
+        "the application workflow snapshot, and this turn's tool results. So an entity "
+        "name such as 'Grid P 8GR' or a planner-given '40' hours can be copied, while a "
+        "quantity the model counted or summed cannot -- that still needs a cited claim. "
+        "UUIDs and long hex strings are removed from trusted text first, because their "
+        "digit runs would otherwise vouch for almost any short number. Enforced TWICE: as "
+        "an in-loop output validator giving the model a corrective retry, and here as the "
+        "fail-closed backstop over a superset of that trusted text. "
+        "Narrowed 2026-09-17 from 'no numeric characters at all' (Story 5.7), which made "
+        "real task names with digits and planner-given values impossible to state. "
+        "NOT COVERED: a wrong number that coincidentally matches a word in trusted text "
+        "(the per-turn fact checks, not this rule, catch that); spelled-out quantities."
     ),
 }
 
@@ -66,8 +72,33 @@ class UncitedNumericProseError(ValueError):
     failure: GroundingFailureV1 = "uncited_claim"
 
 
-def numeric_prose_violation(text: str) -> str | None:
-    """The prose rule, as a pure predicate. Returns the offending run or None.
+_IDENTIFIER_NOISE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+    r"|\b[0-9a-fA-F]{16,}\b"
+)
+_WORD = re.compile(r"[^\W_]+(?:[.,:][^\W_]+)*")
+
+
+def _numeric_words(text: str) -> list[str]:
+    return [word for word in _WORD.findall(text) if any(c.isnumeric() for c in word)]
+
+
+def trusted_numeric_words(trusted_texts: Iterable[str]) -> frozenset[str]:
+    """Every numeral-bearing word a reply may copy from trusted text."""
+    words: set[str] = set()
+    for text in trusted_texts:
+        for word in _numeric_words(_IDENTIFIER_NOISE.sub(" ", text)):
+            words.add(word)
+            # A trusted `40.0` (e.g. JSON-serialized max_hours) vouches for `40`.
+            if re.fullmatch(r"\d+\.0+", word):
+                words.add(word.split(".")[0])
+    return frozenset(words)
+
+
+def numeric_prose_violation(
+    text: str, trusted_words: frozenset[str] = frozenset()
+) -> str | None:
+    """The prose rule, as a pure predicate. Returns the offending words or None.
 
     Single-sourced deliberately. `backend/agent/` registers this as a pydantic-ai
     output validator so a violation becomes a `ModelRetry` the model can act on,
@@ -79,9 +110,10 @@ def numeric_prose_violation(text: str) -> str | None:
 
     `isnumeric()` rather than `isdecimal()`: the latter is False for
     superscripts, circled digits, Roman numerals and vulgar fractions.
+    With no `trusted_words` every numeral is offending (the original rule).
     """
-    offending = "".join(character for character in text if character.isnumeric())
-    return offending or None
+    offending = [word for word in _numeric_words(text) if word not in trusted_words]
+    return ", ".join(offending) or None
 
 
 class TrustedCalculationResultV1(Protocol):
@@ -196,6 +228,7 @@ def ground_answer(
     answer: GroundedAnswerV1,
     deps: AgentDepsV1,
     results: Mapping[str, TrustedCalculationResultV1],
+    trusted_words: frozenset[str] = frozenset(),
 ) -> GroundedResponseV1:
     """Verify citations and exact targets; perform no metric computation."""
     grounded: list[GroundedResponseSegmentV1] = []
@@ -207,7 +240,7 @@ def ground_answer(
         # already given the model one chance to correct this, so reaching here
         # means it did not -- which is the rare, meaningful signal the design
         # wants, rather than the routine event it used to be.
-        if numeric_prose_violation(segment.text) is not None:
+        if numeric_prose_violation(segment.text, trusted_words) is not None:
             raise UncitedNumericProseError(
                 "numerals in prose must be represented by a cited claim"
             )
@@ -221,4 +254,5 @@ def ground_answer(
 __all__ = [
     "SCOPE_CONTROLS", "TrustedCalculationResultV1",
     "UncitedNumericProseError", "ground_answer", "numeric_prose_violation",
+    "trusted_numeric_words",
 ]

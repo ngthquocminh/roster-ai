@@ -972,3 +972,24 @@ def test_only_a_draft_from_the_current_prompt_requires_the_draft_output() -> Non
     created_now = current + [ModelRequest(parts=[ToolReturnPart(
         tool_name="scheduling_draft", content={"draft_id": "new"}, tool_call_id="b")])]
     assert _latest_draft_id_this_run(earlier_turn + created_now) == "new"
+
+
+def test_plain_text_may_copy_a_numeral_from_the_planners_message() -> None:
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="Capped at 40 hours.")])),
+        answer_type=GroundedAnswerV1,
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours"))
+    assert outcome.answer == GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="Capped at 40 hours."),))
+
+
+def test_a_rejected_reply_cannot_vouch_for_its_own_numeral_on_retry() -> None:
+    """The retry prompt quotes the offending numeral; it must not become trusted."""
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="There are 24 workers.")])),
+        answer_type=GroundedAnswerV1,
+    )
+    with pytest.raises(AgentRuntimeError):
+        runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours"))

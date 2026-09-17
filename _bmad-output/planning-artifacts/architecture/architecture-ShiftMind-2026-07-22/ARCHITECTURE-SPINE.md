@@ -152,6 +152,7 @@ stateDiagram-v2
 - **Binds:** FR-7, FR-14, FR-15, FR-20, FR-24
 - **Prevents:** fabricated KPIs, evidence links that silently retarget, and unrepeatable comparisons
 - **Rule:** an evidence reference identifies scenario version, producing or baseline schedule/run version, evidence group, record ID, and optional field/time range. Application calculators produce or verify every numerical claim and candidate/baseline delta against immutable snapshots. Missing, unauthorized, and version-mismatched evidence are distinct failures; no fallback may target another version or row.
+- **2026-09-17 clarification (Story 5.7):** the prose guard narrowed from "no numeric characters in agent prose" to "no numeral-bearing word absent from trusted text for the turn" (planner messages, persisted gate-passed conversation text, the workflow snapshot, this turn's tool results; UUIDs/long hex removed first). Copying an entity name such as `Grid P 8GR` or a planner-given value is not a numerical claim; a counted, summed, or otherwise derived quantity still requires a calculator-backed claim. The strict rule made real task names and planner values unstatable. Residual risk, owned by fact/effect checks rather than this guard: a wrong number coincidentally matching trusted text.
 
 ### AD-12 — Records of truth stay separate [ADOPTED]
 

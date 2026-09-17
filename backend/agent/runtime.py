@@ -10,6 +10,7 @@ through `agent/translate.py` before it is returned.
 """
 from __future__ import annotations
 
+import json
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -34,7 +35,14 @@ from pydantic_ai import (
 )
 from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.exceptions import FallbackExceptionGroup
-from pydantic_ai.messages import ModelRequest, ModelResponse, ToolReturnPart, UserPromptPart
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    SystemPromptPart,
+    TextPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.models import infer_model
 from pydantic_ai.output import TextOutput, ToolOutput
 from pydantic_ai.usage import RunUsage
@@ -68,7 +76,7 @@ from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegme
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.proposal import DraftProposalV1
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
-from application.grounding.gate import numeric_prose_violation
+from application.grounding.gate import numeric_prose_violation, trusted_numeric_words
 from agent.capability_tools import render_capabilities
 
 # The four named structured-output tools, declared ONCE here where the
@@ -90,6 +98,35 @@ OUTPUT_TOOL_NAMES = frozenset(
         DRAFT_OUTPUT_TOOL,
     }
 )
+
+
+def _trusted_texts(messages: list) -> list[str]:
+    """Text a prose numeral may be copied from: never the model's own output.
+
+    Planner prompts, system messages (the workflow snapshot), and tool results
+    are application data. Assistant text is trusted only BEFORE the current
+    user prompt, where it is rehydrated from persisted, gate-passed activities;
+    text the model produced in this run is exactly what is being checked.
+    """
+    last_prompt = 0
+    for index, message in enumerate(messages):
+        if isinstance(message, ModelRequest) and any(
+            isinstance(part, UserPromptPart) for part in message.parts
+        ):
+            last_prompt = index
+    texts: list[str] = []
+    for index, message in enumerate(messages):
+        for part in message.parts:
+            if isinstance(part, (UserPromptPart, SystemPromptPart)) and isinstance(part.content, str):
+                texts.append(part.content)
+            elif isinstance(part, ToolReturnPart):
+                texts.append(
+                    part.content if isinstance(part.content, str)
+                    else json.dumps(part.content, default=str, ensure_ascii=False)
+                )
+            elif isinstance(part, TextPart) and index < last_prompt:
+                texts.append(part.content)
+    return texts
 
 
 def _latest_draft_id_this_run(messages: list) -> str | None:
@@ -234,26 +271,29 @@ class PydanticAIAgentRuntime:
             # wiring only. `ground_answer` still enforces it as the backstop, so
             # bypassing the validator cannot bypass the invariant.
             @self._agent.output_validator
-            def _reject_numeric_prose(output: object) -> object:
+            def _reject_numeric_prose(
+                ctx: RunContext[AgentDepsV1 | None], output: object
+            ) -> object:
                 # Clarification and refusal are distinct structured outputs. A
                 # numeral in bounded refusal copy is operational context, not
                 # an uncited grounded claim.
                 if not isinstance(output, GroundedAnswerV1):
                     return output
+                trusted = trusted_numeric_words(_trusted_texts(ctx.messages))
                 for segment in getattr(output, "segments", ()) or ():
                     text = getattr(segment, "text", None)
                     if text is None:
                         continue
-                    offending = numeric_prose_violation(text)
+                    offending = numeric_prose_violation(text, trusted)
                     if offending is not None:
                         raise ModelRetry(
-                            f"The prose segment {text!r} contains the numeral(s) "
-                            f"{offending!r}. Every number shown to the planner must be a "
-                            "claim node citing a result_id returned by a tool, because only "
-                            "then does it carry verifiable evidence. Rewrite that segment "
-                            "with no numerals and express the quantity as a claim. Task "
-                            "identifiers and time windows do not belong in prose either -- "
-                            "they are rendered from each claim's own arguments."
+                            f"The prose segment {text!r} contains {offending!r}, which does "
+                            "not appear in any tool result, the workflow snapshot, or the "
+                            "planner's messages. Names, IDs and values may be copied exactly "
+                            "as they appear there. A quantity you counted, summed or "
+                            "otherwise derived must instead be a claim citing a result_id "
+                            "returned by a calculation tool. Never spell a number out in "
+                            "words to avoid this rule."
                         )
                 return output
 
