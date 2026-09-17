@@ -5,7 +5,7 @@ from dataclasses import asdict
 
 from evals.live_conversations.facts import read_group, verify_claim
 from evals.live_conversations.http_client import ApplicationConversation
-from evals.live_conversations.judge import judge_turn
+from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS, judge_turn
 from evals.live_conversations.protocol import IncompleteConversationRun, turn_verdict
 
 
@@ -27,11 +27,13 @@ def supplied_citation_ids(value):
 
 
 def known_citation_ids(transcript, verified, obligation_id):
-    """Every ID the judge may legitimately cite: explicit IDs, plus the name of a
+    """Every ID the judge may legitimately cite: explicit IDs, the name of a
     supplied fact group itself for a scalar fact with no ID of its own (e.g.
-    candidate_solver_status), plus the obligation's own ID."""
+    candidate_solver_status), the judge payload's own top-level wrapper keys
+    (e.g. "current_obligation", the literal key the obligation is nested under),
+    and the obligation's own ID."""
     return (supplied_citation_ids(transcript) | supplied_citation_ids(verified)
-            | set(verified.keys()) | {obligation_id})
+            | set(verified.keys()) | PAYLOAD_STRUCTURE_KEYS | {obligation_id})
 
 
 def _canonical_assignment(row):

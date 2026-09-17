@@ -1,3 +1,4 @@
+from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS
 from evals.live_conversations.runner import (
     compact_reload_effect, known_citation_ids, relevant_entities, same_assignments,
     supplied_citation_ids,
@@ -14,8 +15,8 @@ def test_known_citation_ids_accepts_a_scalar_facts_own_group_name():
     verified = {'id': 'turn-1:facts', 'candidate_solver_status': 'FEASIBLE',
                 'latest_run': {'schedule_run_id': 'run-1'}}
     known = known_citation_ids([], verified, 'turn-1:obligation')
-    assert known == {'turn-1:facts', 'run-1', 'candidate_solver_status', 'latest_run',
-                      'turn-1:obligation', 'id'}
+    assert known == ({'turn-1:facts', 'run-1', 'candidate_solver_status', 'latest_run',
+                      'turn-1:obligation', 'id'} | PAYLOAD_STRUCTURE_KEYS)
 
 
 def test_reload_effect_keeps_only_visible_identity_and_activity_types():
