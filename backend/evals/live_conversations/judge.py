@@ -127,7 +127,7 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
                 'required_judgment_schema': ConversationJudgment.model_json_schema(),
             }, ensure_ascii=False)},
         ],
-        'max_tokens': 2048,
+        'max_tokens': 3072,
         'temperature': 0,
         'reasoning': {'effort': 'low', 'exclude': True},
         'provider': {'require_parameters': True},
@@ -172,8 +172,9 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
             attempts.append({**owned_usage, 'outcome': 'accepted'})
             return result, {**owned_usage, 'attempts': attempts}
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError, ValidationError) as exc:
-        # Never include response bodies/provider payloads in exception text or evidence.
-        raise IncompleteConversationRun('judge_unavailable_or_malformed') from None
+        # The exception CLASS only: never response bodies or provider payloads.
+        raise IncompleteConversationRun(
+            f'judge_unavailable_or_malformed_{type(exc).__name__}') from None
     finally:
         if owned:
             transport.close()

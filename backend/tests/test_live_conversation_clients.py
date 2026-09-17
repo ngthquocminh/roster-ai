@@ -31,7 +31,7 @@ def test_judge_sends_only_past_visible_data_and_requires_usable_usage():
     assert budget.spend_usd == .001 and budget.tokens == 180
     assert usage['generation_id'] == 'generation-test'
     assert 'reasoning' not in usage
-    assert seen[0]['max_tokens'] == 2048
+    assert seen[0]['max_tokens'] == 3072  # raised after malformed (truncated) judgments
     assert seen[0]['provider']['require_parameters'] is True
     assert seen[0]['response_format'] == {'type': 'json_object'}
     judge_input = json.loads(seen[0]['messages'][1]['content'])

@@ -1,10 +1,11 @@
 """Real OIDC/CSRF conversation client used only by opt-in live evaluations."""
 from __future__ import annotations
 
+import math
+import re
+from time import monotonic, sleep
 from urllib.parse import urlsplit
 from uuid import uuid4
-from time import monotonic, sleep
-import math
 
 import httpx
 
@@ -28,7 +29,11 @@ class ApplicationConversation:
         except httpx.HTTPError:
             raise IncompleteConversationRun('application_transport_unavailable') from None
         if response.status_code != expected:
-            raise IncompleteConversationRun(f'application_http_{response.status_code}')
+            # Name the route (IDs masked, no response body) so a mid-scenario
+            # failure is diagnosable after the disposable stack is gone.
+            route = re.sub(r'[0-9a-fA-F-]{36}', '*', path.split('?')[0])
+            raise IncompleteConversationRun(
+                f'application_http_{response.status_code}_{method}_{route}')
         return response.json()
 
     def login(self):
