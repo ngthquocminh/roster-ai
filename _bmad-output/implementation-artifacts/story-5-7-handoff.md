@@ -23,6 +23,10 @@ Story 5.7 remains `in-progress`. This entry supersedes everything below it that 
 
 **Prior-spend reserve:** treat conservatively — this session's own tracked total across every report was small (well under $1 for all the cheap-model comparison work combined), but lesson 20 already proved this harness's own tracking can meaningfully understate real spend when a price rate is stale. Check the account's actual `usage_daily` figure directly rather than trusting a carried-forward number from this file.
 
+**Suggested fresh-session instruction:**
+
+> Continue `/bmad-dev-story 5.7` from `_bmad-output/implementation-artifacts/story-5-7-handoff.md`; read the Resume point and the Cheap-model comparison section, decide whether to continue with `openai/gpt-5.6-luna` or switch back to `anthropic/claude-haiku-4.5` for Scenario B endpoint 12, verify the compose override file's price rates match whichever model is chosen, then continue toward a clean endpoint-12 run (turns 10-12 are still unseen). Keep total story spend well under budget and cross-check real OpenRouter usage before trusting the harness's own tracked total.
+
 ## Cheap-model comparison (2026-09-18)
 
 Minh asked to compare agent models cheaper than Haiku 4.5, all tested on Scenario B endpoint 4 (the cheapest, fastest signal), judge held constant at `google/gemini-2.5-flash`. **None matched Haiku's reliability on turn 2** (family-scoped routing + naming the resolved task) — every one of them at least sometimes said "the outbound task" instead of naming it, exactly the failure class lessons 22 and the naming-discipline section already target.
