@@ -81,14 +81,19 @@ class DimensionGrade(BaseModel):
 
 
 def _citation_is_known(citation: str, known_ids: set[str]) -> bool:
-    """Accept an exact known ID, or a dotted path into one (e.g. a judge citing
-    "verified_facts_and_effects.persisted_draft.constraints" is citing the known
-    top-level key "verified_facts_and_effects" at some depth, not inventing a new
-    identifier)."""
+    """Accept an exact known ID, or a sub-reference INTO one -- a known ID followed
+    immediately by a '.' or ':' separator and more path (e.g. a judge citing
+    "verified_facts_and_effects.persisted_draft.constraints", or extending a turn's
+    own colon-delimited id as "shiftmind-live-<x>:turn:1:assistant:0" to point at
+    that reply's first segment). Prefix alone is not enough -- "turn-10" must not
+    match a known "turn-1" -- the character immediately after the known ID must be
+    a separator, not an arbitrary continuation."""
     if citation in known_ids:
         return True
-    root, separator, _rest = citation.partition('.')
-    return bool(separator) and root in known_ids
+    return any(
+        citation.startswith(known) and citation[len(known):len(known) + 1] in ('.', ':')
+        for known in known_ids
+    )
 
 
 class ConversationJudgment(BaseModel):

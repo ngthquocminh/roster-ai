@@ -30,9 +30,10 @@ of verified_facts_and_effects when relying on a scalar fact with no id of its ow
 "candidate_solver_status", whose value is a bare status string); (c) the current turn's own id;
 or (d) one of this payload's own top-level keys -- "transcript_so_far", "current_obligation",
 "verified_facts_and_effects", "not_applicable" -- when citing that whole supplied section as
-your evidence. A dotted path rooted at any of these forms (e.g.
-"verified_facts_and_effects.persisted_draft.constraints") is also valid. Never invent an ID
-whose root is not one of these four forms.
+your evidence. A sub-reference into any of these forms, joined with "." or ":" (e.g.
+"verified_facts_and_effects.persisted_draft.constraints", or a turn's own id extended as
+"<turn-id>:assistant:0" to point at that reply's first segment), is also valid. Never invent an
+ID whose root is not one of these four forms.
 For a dimension listed in not_applicable, still return its full object with all three fields
 present -- set ONLY its "score" field to null; "evidence_ids" must still be a list (use `[]`
 if there is nothing to cite) and "reason" must still be a non-empty string (e.g. "Not

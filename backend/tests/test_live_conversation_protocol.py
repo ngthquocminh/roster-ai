@@ -110,6 +110,18 @@ def test_a_dotted_path_into_a_known_id_is_accepted_but_an_unrelated_path_is_not(
     assert not unrelated.passes(known_ids=known)
 
 
+def test_a_colon_sub_reference_into_a_known_turn_id_is_accepted_but_a_similar_prefix_is_not():
+    known = {'turn-1', 'shiftmind-live-abc:turn:1'}
+    sub_reference = judgment(completeness={'score': 2,
+        'evidence_ids': ['shiftmind-live-abc:turn:1:assistant:0'],
+        'reason': 'Cites the first reply segment of a known turn.'})
+    assert sub_reference.passes(known_ids=known)
+    different_turn = judgment(completeness={'score': 2,
+        'evidence_ids': ['shiftmind-live-abc:turn:10'],
+        'reason': 'A different turn that merely shares a numeric prefix.'})
+    assert not different_turn.passes(known_ids=known)
+
+
 def test_missing_or_uncertain_judgments_are_not_automatic_passes():
     assert turn_verdict(factual_failures=[], judgment=None, known_ids={'turn-1'}) == 'incomplete'
     uncertain = judgment().model_copy(update={'verdict': 'uncertain'})
