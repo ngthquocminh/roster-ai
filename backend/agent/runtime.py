@@ -538,6 +538,21 @@ def _tool_results(
     )
 
 
+def _openrouter_model_settings(reasoning_effort: str | None) -> dict | None:
+    """Build the OpenRouter extra_body settings, or omit them entirely.
+
+    Not every OpenRouter-routed model accepts the "reasoning" parameter (e.g.
+    qwen/qwen3-235b-a22b-2507 does not list it in its supported_parameters) --
+    sending it anyway makes the provider reject the whole call, failing every
+    turn against that model with no usable content. "none" (like the absence
+    of a configured value) means "send no reasoning settings", not "send
+    reasoning.effort='none'", which is not a real OpenRouter effort value.
+    """
+    if reasoning_effort is None or reasoning_effort == "none":
+        return None
+    return {'extra_body': {'reasoning': {'effort': reasoning_effort}}}
+
+
 def _configured_model(config: AgentRuntimeConfig) -> object:
     """Resolve the owned model setting without consulting another LLM seam."""
     normalized = config.model.strip().lower()
@@ -559,8 +574,7 @@ def _configured_model(config: AgentRuntimeConfig) -> object:
         return OpenAIChatModel(
             model_name,
             provider=OpenRouterProvider(api_key=config.api_key),
-            settings=({'extra_body': {'reasoning': {'effort': config.reasoning_effort}}}
-                      if config.reasoning_effort is not None else None),
+            settings=_openrouter_model_settings(config.reasoning_effort),
         )
     if provider_name == "google":
         from pydantic_ai.models.google import GoogleModel

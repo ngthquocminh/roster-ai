@@ -28,7 +28,9 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from agent.runtime import AgentRuntimeConfig, PydanticAIAgentRuntime, create_agent_runtime
+from agent.runtime import (
+    AgentRuntimeConfig, PydanticAIAgentRuntime, _openrouter_model_settings, create_agent_runtime,
+)
 
 
 def test_default_instructions_bound_broad_orientation_inspection():
@@ -50,6 +52,20 @@ def test_default_instructions_bound_broad_orientation_inspection():
     assert 'present a failed claim' in flat
     assert 'Tool routing' in flat
     assert 'scheduling_inspect(group="overview")' in flat
+
+
+def test_openrouter_settings_omit_reasoning_for_none_and_unset():
+    # A model that doesn't support the "reasoning" parameter (e.g.
+    # qwen/qwen3-235b-a22b-2507) rejects the whole call if it's sent anyway --
+    # "none" must omit the key entirely, not send effort="none".
+    assert _openrouter_model_settings(None) is None
+    assert _openrouter_model_settings('none') is None
+
+
+def test_openrouter_settings_include_reasoning_for_a_real_effort_value():
+    assert _openrouter_model_settings('low') == {'extra_body': {'reasoning': {'effort': 'low'}}}
+    assert _openrouter_model_settings('medium') == {
+        'extra_body': {'reasoning': {'effort': 'medium'}}}
 from evals.doubles import build_model_double
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.deps import AgentDepsV1

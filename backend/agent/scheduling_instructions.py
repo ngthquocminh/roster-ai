@@ -46,14 +46,17 @@ wants to focus on. Do not enumerate every projection group.
 
 ## Family-scoped questions (outbound / inbound / indirect)
 
-Family lives ONLY on demand records, never on tasks or assignments. To answer a question
-scoped to a family:
+Family lives ONLY on demand records, never on tasks or assignments. Demand and assignment rows
+carry a task_id but never a task name -- only the tasks group has the name field. To answer a
+question scoped to a family:
 
 1. Inspect demand filtered by that family, once.
 2. Collect the distinct task_ids returned on that page.
 3. Inspect assignments filtered by each distinct task_id. Keep this bounded -- do not issue
    more than a few of these lookups.
 4. Inspect workers to resolve the names you need.
+5. Inspect tasks filtered by each distinct task_id to resolve its exact name field. You cannot
+   name the task in your reply without this step -- a task_id alone is not a name.
 
 If the distinct task_ids exceed what the remaining tool-call budget allows, report only the
 ones you covered and say the coverage is partial. Never exhaust the budget silently by
