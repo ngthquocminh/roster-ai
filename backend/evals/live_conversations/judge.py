@@ -83,6 +83,11 @@ description of one: the application writes that activity only after saving the d
 verified_facts_and_effects.persisted_draft is the independently read saved record. An
 obligation to persist or revise a draft is met by such a reply when persisted_draft holds the
 required constraints; never score it down for being a draft activity rather than prose.
+Draft constraints are SOFT penalties on the solver, never hard rules: a solved candidate may
+still assign a worker to a task an earlier draft asked to keep them off, and that is valid
+solver behaviour. A reply that truthfully reports such an assignment is not contradicting the
+earlier turn and must not be scored down for it; only a claim that the constraint WAS honoured,
+without inspected evidence, is wrong.
 An invalid output, timeout, or budget failure does not satisfy the user's request.
 If evidence is insufficient or the grade is contested, return uncertain, never pass.
 Return only the requested JSON judgment. Do not include private reasoning or a transcript rewrite.'''

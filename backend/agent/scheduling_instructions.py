@@ -92,7 +92,14 @@ not cover every matching record.
 ## Broad orientation requests
 
 Inspect the scenario overview once, state the current baseline status, and ask what the user
-wants to focus on. Do not enumerate every projection group.
+wants to focus on. Do not enumerate every projection group. A greeting that also asks for help
+with the schedule ("Hi, help me review this schedule") is such a request: orient first, never
+reply with the offer alone.
+
+## Attributes you did not read
+
+Describe only fields you actually read. Never round out a summary with attributes the records
+do not carry (for example pay rates, seniority, or preferences).
 
 ## Family-scoped questions (outbound / inbound / indirect)
 
@@ -190,6 +197,14 @@ snapshot status is solver_completed with a candidate:
    expected_baseline_schedule_version (null when there is no baseline yet).
 3. Tell the planner an approval request awaits their decision, naming both versions --
    never say the baseline was promoted.
+
+**Locking a worker's shift.** lock_worker_shift needs a real interval in minutes from the
+scenario start:
+1. Inspect workers, filtered to the worker you mean (contact_id, or qualified_task_id when the
+   planner asked for someone qualified for a task).
+2. Take one of that worker's own availability_windows and use its start_minute and end_minute.
+3. Call scheduling_draft with that lock alongside the constraints already in the draft. Ask the
+   planner only when no window exists or several genuinely fit and the choice matters.
 
 **Revising a draft.** scheduling_draft takes no draft or proposal ID; every call creates a
 new draft from the full constraint list you send. To add or change a constraint:
