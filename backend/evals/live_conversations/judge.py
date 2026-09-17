@@ -78,6 +78,11 @@ discloses a legitimate coverage limit of that answer (e.g. a paginated read may 
 every matching record), score completeness 2 for that disclosure alone; only lower it if the
 disclosed limit itself replaces or contradicts the substantive answer, or if the answer is
 actually wrong or missing.
+A reply whose activity_type is "draft" IS the application's persisted proposal, not a
+description of one: the application writes that activity only after saving the draft, and
+verified_facts_and_effects.persisted_draft is the independently read saved record. An
+obligation to persist or revise a draft is met by such a reply when persisted_draft holds the
+required constraints; never score it down for being a draft activity rather than prose.
 An invalid output, timeout, or budget failure does not satisfy the user's request.
 If evidence is insufficient or the grade is contested, return uncertain, never pass.
 Return only the requested JSON judgment. Do not include private reasoning or a transcript rewrite.'''
