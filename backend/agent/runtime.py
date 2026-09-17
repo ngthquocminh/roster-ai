@@ -33,6 +33,7 @@ from pydantic_ai import (
     UsageLimitExceeded,
     UsageLimits,
 )
+from pydantic_ai import capture_run_messages
 from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.exceptions import FallbackExceptionGroup
 from pydantic_ai.messages import (
@@ -129,20 +130,38 @@ def _trusted_texts(messages: list) -> list[str]:
     return texts
 
 
-def _latest_draft_id_this_run(messages: list) -> str | None:
-    """The draft_id returned by scheduling_draft after the current user prompt.
+def _result_ids_this_run(messages: list) -> set[str]:
+    """result_id values tool calls actually returned after the current prompt."""
+    found: set[str] = set()
+    for message in _messages_this_run(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if isinstance(part, ToolReturnPart) and isinstance(part.content, dict):
+                value = part.content.get("result_id")
+                if isinstance(value, str) and value:
+                    found.add(value)
+    return found
 
-    Rehydrated history also carries earlier turns' tool returns, so only parts
-    after the last user prompt belong to this run.
-    """
+
+def _messages_this_run(messages: list) -> list:
     start = 0
     for index, message in enumerate(messages):
         if isinstance(message, ModelRequest) and any(
             isinstance(part, UserPromptPart) for part in message.parts
         ):
             start = index
+    return messages[start:]
+
+
+def _latest_draft_id_this_run(messages: list) -> str | None:
+    """The draft_id returned by scheduling_draft after the current user prompt.
+
+    Rehydrated history also carries earlier turns' tool returns, so only parts
+    after the last user prompt belong to this run.
+    """
     draft_id = None
-    for message in messages[start:]:
+    for message in _messages_this_run(messages):
         if not isinstance(message, ModelRequest):
             continue
         for part in message.parts:
@@ -298,6 +317,31 @@ class PydanticAIAgentRuntime:
                 return output
 
             @self._agent.output_validator
+            def _reject_uncited_claim(
+                ctx: RunContext[AgentDepsV1 | None], output: object
+            ) -> object:
+                # A claim with no result_id reaches the gate as a rendered
+                # "failed claim" beside otherwise correct prose (observed twice
+                # in live-suite-v2-acceptance-b B5: a worker_count claim appended
+                # to a draft description that needed no number at all).
+                if not isinstance(output, GroundedAnswerV1):
+                    return output
+                produced = _result_ids_this_run(ctx.messages)
+                for segment in getattr(output, "segments", ()) or ():
+                    result_id = getattr(segment, "result_id", None)
+                    if result_id is None:
+                        continue
+                    if not result_id or result_id not in produced:
+                        raise ModelRetry(
+                            "A claim segment cites result_id "
+                            f"{result_id!r}, which no calculation in this turn returned. "
+                            "Either call the calculation tool and cite the result_id it "
+                            "returns, or remove the claim and answer in prose alone -- "
+                            "describing a draft or a stored record needs no claim."
+                        )
+                return output
+
+            @self._agent.output_validator
             def _require_draft_output_after_drafting(
                 ctx: RunContext[AgentDepsV1 | None], output: object
             ) -> object:
@@ -366,7 +410,12 @@ class PydanticAIAgentRuntime:
         usage: AgentUsageV1 | None = None
         accumulated_usage = RunUsage()
         budget_outcome: BudgetOutcomeV1 = "unknown"
+        # Captured so an unusable FINAL message cannot discard work the run
+        # already did -- see the draft recovery in the UnexpectedModelBehavior
+        # branch below.
+        run_messages: list = []
         try:
+          with capture_run_messages() as run_messages:
             result = self._agent.run_sync(
                 request.prompt,
                 model=self._model,
@@ -424,6 +473,28 @@ class PydanticAIAgentRuntime:
             # the provider's outage, not the model's output.
             raise AgentProviderError("agent runtime provider call failed") from exc
         except UnexpectedModelBehavior as exc:
+            # The model could not produce a usable final message, but a draft it
+            # created in this turn is already persisted work whose identity comes
+            # from the TRUSTED tool result, not from the model's prose. Returning
+            # that citation is strictly better than discarding the draft and
+            # telling the planner nothing happened (live-suite-v2-acceptance-b,
+            # C8/C9: retries exhausted on the draft turn itself).
+            draft_id = _latest_draft_id_this_run(run_messages)
+            if draft_id is not None:
+                return AgentRunOutcomeV1(
+                    status="completed",
+                    draft=DraftProposalV1(draft_id=draft_id),
+                    summary="The draft was saved; the assistant produced no usable summary.",
+                    budget_outcome="unknown",
+                    usage=AgentUsageV1(
+                        requests=accumulated_usage.requests,
+                        tool_calls=accumulated_usage.tool_calls,
+                        input_tokens=accumulated_usage.input_tokens,
+                        output_tokens=accumulated_usage.output_tokens,
+                        cache_read_tokens=accumulated_usage.cache_read_tokens,
+                        cache_write_tokens=accumulated_usage.cache_write_tokens,
+                    ),
+                )
             raise AgentInvalidOutputError(
                 "agent runtime produced unusable output"
             ) from exc

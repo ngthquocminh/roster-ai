@@ -944,16 +944,18 @@ def test_a_draft_created_this_turn_must_be_returned_as_the_draft_output() -> Non
     assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
 
 
-def test_a_model_that_never_returns_the_created_draft_fails_instead_of_claiming_success() -> None:
+def test_prose_never_stands_in_for_a_draft_the_model_did_not_create() -> None:
+    """The prose claim alone must not become a success. (A draft that WAS
+    created is recovered instead -- see the unusable-final-message test below.)"""
     def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-        if not any(isinstance(m, ModelResponse) for m in messages):
-            return _draft_call()
         return ModelResponse(parts=[TextPart(content="Created a reversible draft.")])
 
     runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
                        answer_type=GroundedAnswerV1)
-    with pytest.raises(AgentRuntimeError):
-        runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
+    assert outcome.draft is None
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="Created a reversible draft."),))
 
 
 def test_only_a_draft_from_the_current_prompt_requires_the_draft_output() -> None:
@@ -993,3 +995,45 @@ def test_a_rejected_reply_cannot_vouch_for_its_own_numeral_on_retry() -> None:
     )
     with pytest.raises(AgentRuntimeError):
         runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours"))
+
+
+def test_a_claim_citing_no_calculation_from_this_turn_is_corrected_in_loop() -> None:
+    from application.contracts.grounding import ClaimArgumentsV1, ClaimProposalV1
+
+    attempts = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV1(segments=(
+            GroundedProseSegmentV1(text="The draft keeps that worker off that task."),
+            *((ClaimProposalV1(metric="worker_count", arguments=ClaimArgumentsV1(), result_id=""),)
+              if len(attempts) == 1 else ()),
+        ))
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=answer.__class__.__name__ and _answer_json(answer),
+            tool_call_id=f"out-{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
+    assert len(attempts) == 2, "the uncited claim must be corrected inside the run"
+    assert outcome.answer == GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="The draft keeps that worker off that task."),))
+
+
+def _answer_json(answer) -> str:
+    return json.dumps(asdict(answer))
+
+
+def test_a_draft_created_this_turn_survives_an_unusable_final_message() -> None:
+    """live-suite-v2-acceptance-b C8/C9: the draft was saved, then discarded
+    because the model never produced a usable final message."""
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(m, ModelResponse) for m in messages):
+            return _draft_call()
+        return ModelResponse(parts=[TextPart(content="Created a reversible draft.")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours in a draft"))
+    assert outcome.status == "completed"
+    assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
