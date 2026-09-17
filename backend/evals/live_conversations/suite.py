@@ -39,6 +39,10 @@ def _arguments(argv=None):
     parser.add_argument('--prior-spend-usd', type=float, default=.5,
                         help='Conservative amount already spent on story probes/browser runs.')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--skip-image-build', action='store_true',
+                        help='Reuse images already built from THIS code (the rebuild is the '
+                             'memory peak of a run). Recorded in the report; never use it for '
+                             'version-bound evidence.')
     parser.add_argument('--override-file', type=Path,
                         default=ROOT / '_bmad-output/test-artifacts/story-5-7.compose.override.yml')
     return parser.parse_args(argv)
@@ -75,10 +79,12 @@ def main(argv=None) -> int:
     ), prior_spend_usd=args.prior_spend_usd)
     report = {'schema_version': '1-development', 'run_id': str(uuid4()),
               'started_unix': int(time()), 'model': model, 'judge_model': judge_model,
+              'images_rebuilt': not args.skip_image_build,
               'prefixes': [], 'incomplete_reason': None}
     save = lambda _prefix=None: _atomic_json(args.output, report)
-    build_live_images(model=model, api_key=key, override_file=args.override_file,
-                      reasoning_effort=args.reasoning_effort)
+    if not args.skip_image_build:
+        build_live_images(model=model, api_key=key, override_file=args.override_file,
+                          reasoning_effort=args.reasoning_effort)
     try:
         for repetition in range(1, args.repetitions + 1):
             for case, endpoint in selected:
