@@ -904,3 +904,71 @@ def test_the_prose_rule_has_one_implementation_shared_with_the_gate() -> None:
     )
     assert "numeric_prose_violation" in source
     assert "isnumeric" not in source, "the adapter must call the rule, not restate it"
+
+
+def _stub_draft_module():
+    from types import SimpleNamespace
+
+    from application.capabilities.scheduling_draft import scheduling_draft_module
+
+    return replace(scheduling_draft_module(),
+                   handler=lambda deps, request, manifest: SimpleNamespace(result_id="draft-abc"))
+
+
+def _draft_call():
+    return ModelResponse(parts=[ToolCallPart(
+        tool_name="scheduling_draft",
+        args=json.dumps({"request": {"constraints": []}}),
+        tool_call_id="draft-call-1",
+    )])
+
+
+def test_a_draft_created_this_turn_must_be_returned_as_the_draft_output() -> None:
+    """Story 5.7 lesson 14: prose "Created a draft" after scheduling_draft saved nothing."""
+    seen_retry = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        if not responses:
+            return _draft_call()
+        if len(responses) == 1:
+            return ModelResponse(parts=[TextPart(content="Created a reversible draft.")])
+        seen_retry.append(True)
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="draft", args=json.dumps({"draft_id": "draft-abc"}), tool_call_id="out-1")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
+    assert seen_retry == [True]
+    assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
+
+
+def test_a_model_that_never_returns_the_created_draft_fails_instead_of_claiming_success() -> None:
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(m, ModelResponse) for m in messages):
+            return _draft_call()
+        return ModelResponse(parts=[TextPart(content="Created a reversible draft.")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentRuntimeError):
+        runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
+
+
+def test_only_a_draft_from_the_current_prompt_requires_the_draft_output() -> None:
+    from pydantic_ai.messages import UserPromptPart
+
+    from agent.runtime import _latest_draft_id_this_run
+
+    earlier_turn = [
+        ModelRequest(parts=[UserPromptPart(content="make a draft")]),
+        ModelRequest(parts=[ToolReturnPart(tool_name="scheduling_draft",
+                                           content={"draft_id": "old"}, tool_call_id="a")]),
+    ]
+    current = [ModelRequest(parts=[UserPromptPart(content="show me the draft")])]
+    assert _latest_draft_id_this_run(earlier_turn) == "old"
+    assert _latest_draft_id_this_run(earlier_turn + current) is None
+    created_now = current + [ModelRequest(parts=[ToolReturnPart(
+        tool_name="scheduling_draft", content={"draft_id": "new"}, tool_call_id="b")])]
+    assert _latest_draft_id_this_run(earlier_turn + created_now) == "new"

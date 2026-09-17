@@ -26,6 +26,7 @@ from pydantic_ai import (
     ModelHTTPError,
     ModelRetry,
     RunCancelled,
+    RunContext,
     ToolDenied,
     UnexpectedModelBehavior,
     UsageLimitExceeded,
@@ -33,7 +34,7 @@ from pydantic_ai import (
 )
 from pydantic_ai.capabilities import Instrumentation
 from pydantic_ai.exceptions import FallbackExceptionGroup
-from pydantic_ai.messages import ModelResponse
+from pydantic_ai.messages import ModelRequest, ModelResponse, ToolReturnPart, UserPromptPart
 from pydantic_ai.models import infer_model
 from pydantic_ai.output import TextOutput, ToolOutput
 from pydantic_ai.usage import RunUsage
@@ -66,6 +67,7 @@ from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.proposal import DraftProposalV1
+from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
 from application.grounding.gate import numeric_prose_violation
 from agent.capability_tools import render_capabilities
 
@@ -88,6 +90,30 @@ OUTPUT_TOOL_NAMES = frozenset(
         DRAFT_OUTPUT_TOOL,
     }
 )
+
+
+def _latest_draft_id_this_run(messages: list) -> str | None:
+    """The draft_id returned by scheduling_draft after the current user prompt.
+
+    Rehydrated history also carries earlier turns' tool returns, so only parts
+    after the last user prompt belong to this run.
+    """
+    start = 0
+    for index, message in enumerate(messages):
+        if isinstance(message, ModelRequest) and any(
+            isinstance(part, UserPromptPart) for part in message.parts
+        ):
+            start = index
+    draft_id = None
+    for message in messages[start:]:
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if isinstance(part, ToolReturnPart) and part.tool_name == SCHEDULING_DRAFT_CAPABILITY:
+                content = part.content
+                if isinstance(content, dict) and isinstance(content.get("draft_id"), str):
+                    draft_id = content["draft_id"]
+    return draft_id
 
 
 def _prose_answer(text: str) -> GroundedAnswerV1:
@@ -229,6 +255,27 @@ class PydanticAIAgentRuntime:
                             "identifiers and time windows do not belong in prose either -- "
                             "they are rendered from each claim's own arguments."
                         )
+                return output
+
+            @self._agent.output_validator
+            def _require_draft_output_after_drafting(
+                ctx: RunContext[AgentDepsV1 | None], output: object
+            ) -> object:
+                # Story 5.7 (lesson 14): the model called scheduling_draft, then
+                # answered "Created a draft" in prose. Only the `draft` output
+                # persists a proposal, so that prose was a false success claim.
+                # A draft created in THIS run must be returned as the draft
+                # output; the model is told the exact id it received to cite.
+                if isinstance(output, (DraftProposalV1, DeferredToolRequests)):
+                    return output
+                draft_id = _latest_draft_id_this_run(ctx.messages)
+                if draft_id is not None:
+                    raise ModelRetry(
+                        "You created a draft in this turn (draft_id "
+                        f"{draft_id!r}), but a draft is saved only when you return the "
+                        f"`{DRAFT_OUTPUT_TOOL}` output citing that draft_id. Return the "
+                        f"`{DRAFT_OUTPUT_TOOL}` output now instead of describing the draft."
+                    )
                 return output
 
         # Retained so a capability failure can be checked against the error
