@@ -143,14 +143,21 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                        agent_run_status=executed['agent_run_status'])
             save(report)
             usage, tools = telemetry.read_run(accepted['agent_run_id'])
-            counters = usage['usage']
-            budget.charge(requests=counters['requests'], tool_calls=len(tools),
-                          tokens=counters['input_tokens'] + counters['output_tokens'],
-                          cost_usd=usage['estimated_cost_usd'])
+            if usage.get('usage_unavailable'):
+                # Unknown real cost: charge the full per-turn reservation so the
+                # tracked total errs high, and keep scoring the conversation.
+                budget.charge(requests=1, tool_calls=len(tools), tokens=0, cost_usd=.05)
+            else:
+                counters = usage['usage']
+                budget.charge(requests=counters['requests'], tool_calls=len(tools),
+                              tokens=counters['input_tokens'] + counters['output_tokens'],
+                              cost_usd=usage['estimated_cost_usd'])
             row['usage'] = usage
             report['tool_observations'].extend(tools)
             failures = []
             if executed['agent_run_status'] not in turn.allowed_run_statuses:
+                failures.append('unsuccessful_agent_turn')
+            if usage.get('usage_unavailable') and 'unsuccessful_agent_turn' not in failures:
                 failures.append('unsuccessful_agent_turn')
             activity = executed['activity']
             if activity['activity_type'] == 'approval_request':
