@@ -25,7 +25,7 @@ def failure_exception_type(log_text, agent_run_id):
             if candidate.lstrip().startswith('{'):
                 break
             match = _EXCEPTION_LINE.match(candidate.strip())
-            if match and not candidate.startswith((' ', '	')):
+            if match and not candidate[:1].isspace():
                 found = match.group(1)
         return found
     return None
