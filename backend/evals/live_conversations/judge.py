@@ -40,6 +40,11 @@ applicable to this turn."). Never set the whole dimension object itself to null,
 "evidence_ids" or "reason" for a not_applicable dimension -- omitting or nulling anything other
 than "score" is a malformed response. Use null for "score" only on a dimension listed in
 not_applicable, never elsewhere.
+An APPLICABLE dimension (not listed in not_applicable) must never have empty "evidence_ids",
+including when it scores 2 because nothing needed to happen (e.g. clarification_refusal scores
+2 with no refusal and no ambiguity to resolve): cite the current turn's own id in that case
+rather than leaving the list empty. Empty evidence_ids on an applicable, scored dimension is
+itself a malformed response.
 Pass requires 2 in every applicable dimension. No averaging. A missing required count,
 generic completion, false action-success claim, invented entity, or irrelevant answer fails.
 Appropriate clarification may satisfy an ambiguous request; it must resolve real ambiguity.
