@@ -48,6 +48,14 @@ field in the supplied facts, not by the task's function or name. A reply claimin
 belongs to a given family is grounded, not an unsupported inference, exactly when that family
 appears in that task's demand_families; it fails only when the claimed family is absent from
 demand_families or the task itself is not named/grounded at all.
+effects_after_reply describes what the test harness independently did strictly AFTER this
+reply, as part of scripted scenario setup -- never something the reply itself could have known
+about or is claiming. Never score a reply down for being silent about, or for not matching, an
+effect in effects_after_reply; judge the reply only against what was true up to and including
+this turn. A reply that correctly refuses to claim an action has already happened, and instead
+directs the user to the real application control, is not contradicted by that same action
+later appearing in effects_after_reply -- that is the harness performing the scripted
+follow-up, not a fact the assistant got wrong.
 A request to preserve an existing set (e.g. "preserve the existing locks") is fully satisfied
 when the persisted result retains exactly the set that existed immediately before this turn,
 including the empty set. If zero such items existed beforehand (per this conversation's own
