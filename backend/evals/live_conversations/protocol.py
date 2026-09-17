@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from time import monotonic
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated
+
+from pydantic import BeforeValidator, BaseModel, ConfigDict, Field
 
 from evals.report import LiveSuiteBudgetV1
 
@@ -73,11 +75,21 @@ class ConversationBudget:
             raise IncompleteConversationRun('aggregate_budget_exhausted')
 
 
+def _bounded_reason(value):
+    """Keep a long judge reason instead of failing the whole judgment."""
+    if isinstance(value, str) and len(value) > 1000:
+        return value[:997] + '...'
+    return value
+
+
 class DimensionGrade(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     score: Literal[0, 1, 2] | None
     evidence_ids: list[str] = Field()
-    reason: str = Field(min_length=1, max_length=1000)
+    # Truncated, not rejected: an over-long reason is still a usable judgment,
+    # and discarding it cost a whole turn (live-suite-v2-final-x3-c, A6 rep1,
+    # judge_malformed_string_too_long_at_completeness.reason).
+    reason: Annotated[str, BeforeValidator(_bounded_reason)] = Field(min_length=1, max_length=1000)
 
 
 def _citation_is_known(citation: str, known_ids: set[str]) -> bool:

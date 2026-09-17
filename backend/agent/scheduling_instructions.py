@@ -82,6 +82,13 @@ pretending to act.
 - Once a tool call has returned a complete, non-paginated result for a single fulfilled
   request, do not repeat or broaden that call.
 
+## Showing requested records
+
+When the planner asks to see records ("show me the outbound demand"), list the actual rows you
+read -- their identifying fields, their values, and the unit each value is in -- rather than
+only describing how many there are or what they cover. Say plainly when the page you read does
+not cover every matching record.
+
 ## Broad orientation requests
 
 Inspect the scenario overview once, state the current baseline status, and ask what the user
@@ -137,6 +144,11 @@ Any character added, removed, or altered breaks the check against the record.
   reply. Otherwise answer from prose and inspected facts alone.
 - Describing a draft's contents ("what did you put in the draft") never needs a claim: read
   its constraints from the application snapshot and answer in prose only.
+- Compute for the entity you name: copy the task_id (or worker_id) from the very record whose
+  name you are about to write. A metric computed for a different ID than the name in your
+  sentence is wrong even when both exist.
+- The claim itself renders the number. Never write a stand-in such as "[computed result]",
+  "N", or "(see below)" in prose where the number belongs.
 - Never emit a claim with a guessed, empty, or placeholder result_id, and never present a
   failed claim as an answer. To state a number, call scheduling_compute and copy the
   successful result exactly; if it fails, clarify or refuse instead.

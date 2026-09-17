@@ -138,11 +138,21 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
     attempts = []
     try:
         for attempt_number in (1, 2):
-            response = transport.post('https://openrouter.ai/api/v1/chat/completions',
-                                      headers={'Authorization': 'Bearer ' + api_key}, json=payload)
-            if response.status_code != 200:
-                raise IncompleteConversationRun(f'judge_http_{response.status_code}')
-            data = response.json()
+            try:
+                response = transport.post('https://openrouter.ai/api/v1/chat/completions',
+                                          headers={'Authorization': 'Bearer ' + api_key}, json=payload)
+                if response.status_code != 200:
+                    raise IncompleteConversationRun(f'judge_http_{response.status_code}')
+                data = response.json()
+            except (httpx.HTTPError, ValueError) as exc:
+                # A transport failure or an undecodable body is retryable exactly
+                # like a malformed judgment; only the last attempt is terminal.
+                attempts.append({'attempt': attempt_number, 'outcome': 'transport',
+                                 'error_type': type(exc).__name__})
+                if attempt_number == 1:
+                    continue
+                raise IncompleteConversationRun(
+                    f'judge_unavailable_{type(exc).__name__}') from None
             usage = data.get('usage', {})
             if any(key not in usage for key in ('prompt_tokens', 'completion_tokens', 'cost')):
                 raise IncompleteConversationRun('judge_usage_unavailable')

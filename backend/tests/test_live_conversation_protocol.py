@@ -139,10 +139,13 @@ def test_judge_reason_is_bounded_but_allows_concise_multi_fact_explanations():
     accepted = judgment(completeness={
         'score': 2, 'evidence_ids': ['turn-1'], 'reason': 'x' * 1000})
     assert len(accepted.completeness.reason) == 1000
+    # An over-long reason is TRUNCATED, not rejected: discarding it threw away a
+    # whole judged turn (live-suite-v2-final-x3-c, A6 rep1).
     data = judgment().model_dump()
-    data['completeness']['reason'] = 'x' * 1001
-    with pytest.raises(ValidationError):
-        ConversationJudgment.model_validate(data)
+    data['completeness']['reason'] = 'x' * 1500
+    truncated = ConversationJudgment.model_validate(data)
+    assert len(truncated.completeness.reason) == 1000
+    assert truncated.completeness.reason.endswith('...')
     data = judgment().model_dump()
     data['reasoning'] = 'must not enter evidence'
     with pytest.raises(ValidationError):
