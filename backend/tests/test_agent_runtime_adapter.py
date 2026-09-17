@@ -33,19 +33,23 @@ from agent.runtime import AgentRuntimeConfig, PydanticAIAgentRuntime, create_age
 
 def test_default_instructions_bound_broad_orientation_inspection():
     instructions = AgentRuntimeConfig().instructions
-    assert instructions.index('only a greeting') < instructions.index('When an available tool')
-    assert 'broad orientation request' in instructions
-    assert 'scenario overview' in instructions
-    assert 'assigned workers for a family' in instructions
-    assert 'successful scheduling_draft call' in instructions
-    assert 'workflow snapshot' in instructions
-    assert 'copy its worker_id or task_id' in instructions
-    assert 'current_scenario_version_id' in instructions
-    assert 'asks generally how you can help' in instructions
-    assert 'placeholder result_id' in instructions
-    assert 'return a failed claim' in instructions
-    assert 'Routing rules:' in instructions
-    assert 'scheduling_inspect(group="overview")' in instructions
+    # Normalized so incidental source line-wraps inside a sentence never
+    # break a substring check -- the prompt's own line breaks (markdown
+    # headers/bullets) still matter to the model, but not to this test.
+    flat = ' '.join(instructions.split())
+    assert flat.index('A greeting alone') < flat.index('Call a tool when you already have')
+    assert 'Broad orientation requests' in flat
+    assert 'scenario overview' in flat
+    assert 'scoped to a family' in flat
+    assert 'successful scheduling_draft call' in flat
+    assert 'workflow snapshot' in flat
+    assert 'copy its worker_id or task_id' in flat
+    assert 'current_scenario_version_id' in flat
+    assert 'How can you help' in flat
+    assert 'placeholder result_id' in flat
+    assert 'present a failed claim' in flat
+    assert 'Tool routing' in flat
+    assert 'scheduling_inspect(group="overview")' in flat
 from evals.doubles import build_model_double
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.deps import AgentDepsV1
