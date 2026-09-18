@@ -165,6 +165,15 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     coverage, observation_ids = build_coverage(runs)
     inventory = capability_inventory()
     models = sorted({run.get('model') for run in runs} | {run.get('judge_model') for run in runs})
+    # Bind to the commit the MEASUREMENT ran at, which every run report records,
+    # not to whatever HEAD is when the report is written. Otherwise fixing the
+    # generator moves HEAD and invalidates the measurement that exposed the fix.
+    measured = {json.dumps(run.get('code'), sort_keys=True) for run in runs}
+    if len(measured) != 1 or runs[0].get('code') is None:
+        raise ValueError('every run must record the same code binding')
+    code_binding = runs[0]['code']
+    if code_binding.get('working_tree_dirty') and not ignore_paths:
+        raise ValueError('the measurement ran on a dirty tree and cannot be bound')
     bindings = resolve_bindings(
         {
             'evaluator': ('independent application/fixture reads per turn plus a separately '
@@ -188,11 +197,16 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
         # cannot change what was measured. Each one is named here and recorded
         # below, never waved through with allow_dirty.
         ignore_paths=frozenset(ignore_paths),
+        code_binding=code_binding,
     )
     report = summarize_runs(runs, coverage=coverage, observation_ids=observation_ids,
                             version_bindings=bindings, accepted_findings=accepted_findings)
     report['source_runs'] = [str(Path(path).name) for path in run_paths]
     report['ignored_dirty_paths'] = sorted(ignore_paths)
+    # Stated, never implied: the tree carried uncommitted paths while the
+    # measurement ran. They are named above and lie outside the measured
+    # backend, but a reader must be able to see the condition.
+    report['measurement_tree_dirty'] = bool(code_binding.get('working_tree_dirty'))
     report['images_rebuilt'] = all(run.get('images_rebuilt') for run in runs)
     report['tool_coverage'] = coverage['tool_coverage']
     report['inventory_digest'] = coverage['inventory_digest']
