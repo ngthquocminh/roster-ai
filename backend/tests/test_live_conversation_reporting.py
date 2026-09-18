@@ -79,3 +79,21 @@ def test_incomplete_or_reused_executions_do_not_count_as_repetitions():
     report = _summary([_run(0), partial, reused])
     assert report['complete_repetitions'] == 1
     assert 'three_complete_repetitions_missing' in report['blocking_reasons']
+
+
+def test_a_refused_claim_blocks_until_that_turn_is_accepted():
+    """The planner sees "Claim unavailable", never a wrong number, so this is
+    inspectable and acceptable -- but only when named explicitly."""
+    runs = [_run(0), _run(1), _run(2, verdicts={'C:5': 'fail'},
+                                   failures={'C:5': ['unsupported_claim']})]
+    assert 'false_claim_or_effect_failure' in _summary(runs)['blocking_reasons']
+    accepted = _summary(runs, accepted_findings=[('C', 5)])
+    assert 'false_claim_or_effect_failure' not in accepted['blocking_reasons']
+    assert accepted['turn_pass_rates']['C:5'] == {'passed': 2, 'executed': 3}
+
+
+def test_a_wrong_value_can_never_be_accepted():
+    runs = [_run(0), _run(1), _run(2, verdicts={'C:5': 'fail'},
+                                   failures={'C:5': ['incorrect_claim_value_or_unit']})]
+    report = _summary(runs, accepted_findings=[('C', 5)])
+    assert 'false_claim_or_effect_failure' in report['blocking_reasons']

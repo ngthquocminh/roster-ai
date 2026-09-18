@@ -2600,7 +2600,11 @@ development_status:
   # acceptance right-sized to three scenarios A(6)/B(12)/C(12), no prefix endpoints, one clean
   # run per scenario + three repetitions with per-turn pass rates; false claims still hard-fail;
   # real-browser journey and judge calibration set removed. Budget raised to USD 15. Status unchanged.
-  5-7-prove-live-conversations-through-baseline-promotion: in-progress
+  # 2026-09-18: live suite passed on the configured stack (89/90 turns, 8/9 clean
+  # executions, clean run per scenario, no false claims). Evidence at
+  # evidence/story-5.7/live-conversation-journeys.json; four flaky turns accepted by Minh
+  # with their pass rates. Ready for review.
+  5-7-prove-live-conversations-through-baseline-promotion: review
   # Code review 2026-09-14/15: all decision-needed and patch findings fixed and verified
   # (full default suite 1612/1613, the one failure pre-existing/unrelated). Decision 4 also
   # closed: live suite re-run on a clean, committed tree (eea9148); readiness "eligible",

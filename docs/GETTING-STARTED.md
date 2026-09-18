@@ -25,10 +25,10 @@ Check readiness with `docker compose ps` and inspect failures with `docker compo
 
 Two changes are not replays, and the `bootstrap` service will stop the stack rather than reinterpret them: editing a fixture payload without bumping its version, and changing `SHIFTMIND_SEED_PLANNER_SUBJECT`/`_EMAIL` after the planner exists. Both are resolved by starting from a clean database — `docker compose down --volumes`, then start again.
 
-The composed stack defaults to `AGENT_RUNTIME_MODEL=deterministic`, a keyless model double that inspects the pinned scenario and completes the planner turn. For a live model, set `AGENT_RUNTIME_MODEL` and `AGENT_RUNTIME_API_KEY` in the environment you run `docker compose up` from; compose passes both through to the API and worker. Live-provider output IS required release evidence for the conversational feature: Story 5.7's three-scenario suite must pass on the configured provider before Gate B (AD-16, 2026-09-15 correction). See `docs/TESTING.md` for the command and the measured results. PydanticAI's schema-synthesizing `test` model remains available through `AGENT_RUNTIME_MODEL=test` for focused framework tests.
+The composed stack defaults to `AGENT_RUNTIME_MODEL=deterministic`, a keyless model double that inspects the pinned scenario and completes the planner turn. The validated live model is `openrouter:openai/gpt-5.6-luna` with `google/gemini-2.5-flash` as the evaluation judge -- that pairing is what Story 5.7's acceptance evidence measures. For a live model, set `AGENT_RUNTIME_MODEL` and `AGENT_RUNTIME_API_KEY` in the environment you run `docker compose up` from; compose passes both through to the API and worker. Live-provider output IS required release evidence for the conversational feature: Story 5.7's three-scenario suite must pass on the configured provider before Gate B (AD-16, 2026-09-15 correction). See `docs/TESTING.md` for the command and the measured results. PydanticAI's schema-synthesizing `test` model remains available through `AGENT_RUNTIME_MODEL=test` for focused framework tests.
 
 ```bash
-AGENT_RUNTIME_MODEL=openrouter:openai/gpt-4o-mini AGENT_RUNTIME_API_KEY=… docker compose up -d --build
+AGENT_RUNTIME_MODEL=openrouter:openai/gpt-5.6-luna AGENT_RUNTIME_API_KEY=… docker compose up -d --build
 ```
 
 For Anthropic, the usual `ANTHROPIC_API_KEY` is accepted by the composed

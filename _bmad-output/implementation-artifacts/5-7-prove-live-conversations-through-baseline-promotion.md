@@ -3,7 +3,7 @@
 baseline_commit: 80e62422b68a9c121697fada6287f4fa3a311532
 ---
 
-Status: in-progress
+Status: review
 
 Date: 2026-09-15
 Origin: Minh's reported natural-conversation failure and approval to correct course.
@@ -211,6 +211,36 @@ Codex (GPT-5) for implementation; OpenRouter `~deepseek/deepseek-flash-latest` f
 - Startup/authentication: `docker compose ps` reports healthy API/PostgreSQL and running web/worker at `http://localhost:8080`. `backend/tests/compose_proof.py` supplies the real OIDC login/callback/session and CSRF-authenticated conversation command precedent. Existing Playwright configuration serves static Vite preview and cannot establish real-stack browser evidence.
 
 ### Completion Notes List
+
+- **2026-09-18 completion.** The right-sized suite (A 6 / B 12 / C 12) passes on the configured
+  live stack: recorded matrix `live-matrix-bound.json` scored **89/90 turns, 8/9 clean
+  executions**, with a clean run of every scenario and **no false claim, wrong fact, or missing
+  effect**. Evidence: `evidence/story-5.7/live-conversation-journeys.json`; command and results
+  in `docs/TESTING.md`. Agent `openrouter:openai/gpt-5.6-luna`, judge
+  `openrouter:google/gemini-2.5-flash`, both now named in `docs/GETTING-STARTED.md`.
+- **Accepted findings** (Minh, 2026-09-18), each recorded with its pass rate: A:6 2/3, B:5 1/3
+  in the matrix but 3/3 in a same-code diagnostic, C:1 2/3, C:5 2/3. Each is a turn that
+  produced no answer, or a claim the gate refused to render ("Claim unavailable"); none showed
+  a wrong number. A wrong value/unit/entity/version, a missing or unauthorized effect, or a
+  false success claim remains unacceptable by construction.
+- **Product defects this story found and fixed** (each with tests): OpenRouter transient errors
+  and `finish_reason: "error"` reported as invalid output (root cause of lesson 18's zero-cost
+  failures); plain text rejected as a final answer, which trapped the model in a loop it could
+  not end; a draft created but never returned, so nothing persisted; a draft lost when the
+  model could not phrase its reply; mis-transcribed and empty evidence citations; a claim made
+  with no calculation; prose left with a gap or placeholder where a number belonged; a per-task
+  figure presented as a scenario-wide total; a capped snapshot list presented as complete; a
+  suspended call to a capability with no approval path stranding the run at `agent_running`.
+- **Grounding rule narrowed** (AD-11 clarification): a numeral in prose is allowed only when
+  that exact word appears in trusted text for the turn. The previous "no numerals at all" rule
+  made real task names (`C Fork | Grid P 8GR`) and planner-given values unstatable, and was the
+  true cause of lesson 17's "truncated suffix" finding.
+- **Cost control** built after three full reruns were thrown away: `--resume`, per-execution
+  retry, `--skip-image-build`, and a spend limiter cross-checked against the account's own
+  usage. Total story spend ~USD 27.
+- **Known gap:** `scheduling_optimize` is withheld from chat by the registry, and the
+  demonstration approval path has no binding, so both are covered deterministically and
+  declared in the evidence rather than exercised live.
 
 - 2026-09-17 Correct Course (`_bmad-output/planning-artifacts/sprint-change-proposal-2026-09-17.md`, approved by Minh): acceptance right-sized to three scenarios A (6), B (12), C (12) with no prefix endpoints; one clean run per scenario plus three repetitions reporting per-turn pass rates; false claims/wrong facts still hard-fail; real-browser journey and judge calibration set removed; Decision 3 superseded. Earlier notes below that cite 8 scenarios, 40 prefixes, 273/819 turns, or B endpoints 4/8/12 are historical. Preceded by commit `082a2dc` (prompt/tool-description correction) and run `r40` (B turns 1, 3, 5-9 pass on `openai/gpt-5.6-luna`). Story budget raised to USD 15 by Minh; real key usage USD 10.61 at the time.
 

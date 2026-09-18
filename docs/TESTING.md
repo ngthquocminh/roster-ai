@@ -3,21 +3,46 @@
 
 ## Required live conversation acceptance — Story 5.7
 
-**AI conversational readiness requires live evidence.** Passing deterministic tests or Story 5.6's six two-user-turn cases does not establish that natural conversations work. Story 5.7 is in progress, not passed; the commands below for existing suites do not run its required suite.
+**AI conversational readiness requires live evidence.** Deterministic tests cannot establish that natural conversations work. Story 5.7's suite is the acceptance evidence; its verdict feeds Gate B as `live_conversation_journeys`.
 
-The [Story 5.7 contract](../_bmad-output/implementation-artifacts/5-7-prove-live-conversations-through-baseline-promotion.md) and [scenario catalogue](../_bmad-output/implementation-artifacts/live-conversation-scenarios-5-7.md) require:
+### Run it
 
-- Reproduce `HI my name is Minh` → `how can you help me?` → `how many work are therre?` using the configured real provider through the actual chat path.
-- Three authored conversations (right-sized 2026-09-17): A introduction/clarification (6 user turns), B draft → real solver → approval → baseline (12), and C tool tour (12). That is 30 user turns per full run. Each runs from fresh state with a verdict on every turn, and scheduling turns need at most two tool calls. Generate all replies and history live.
-- Inventory every installed tool and supported operation, including `shiftmind_demonstration`; show attempted calls, successful results, and verified effects separately. Disabled or unreachable required coverage is a gap, not a pass. Application commands do not count as LLM tool calls.
-- Prove persisted draft creation/revision, explicit optimization, actual worker/solver candidate, comparison, agent-proposed approval, authenticated approval, and the exact baseline change. Use isolated test state.
-- Run against real application persistence and services. Score useful answers, exact grounded facts, and durable effects, not just a valid response envelope.
-- Require one clean run of each scenario on the same code/configuration/dataset, then three repetitions reporting per-turn pass rates. A false claim or wrong fact/effect in any counted run fails. A model-reliability failure with no false claim may be recorded as a finding only with explicit owner acceptance. Preserve every first-attempt failure and retry. Missing, skipped, partial, failed, or stale required evidence blocks completion and Gate B; no exception can mark this obligation passed.
-- Enforce explicit finite budgets and version-bound evidence. Retain only sanitized authored-test planner-visible transcripts and safe outcomes in dedicated test artifacts; no credentials, hidden reasoning, raw provider payloads, unrelated conversations, or production telemetry content.
+```bash
+cd backend
+uv run python -m evals.live_conversations.suite   --agent-model 'openrouter:openai/gpt-5.6-luna'   --judge-model 'openrouter:google/gemini-2.5-flash'   --reasoning-effort low --repetitions 3   --spend-limit-usd 30 --prior-spend-usd <real OpenRouter usage>   --output ../_bmad-output/test-artifacts/live-matrix.json
 
-Implementation must add the runnable command and wire the required `live_conversation_journeys` Gate B verdict. Until then this requirement is **unproven**. Existing live `authoritative: false` fields distinguish provider observations from deterministic invariant proof; they do not make live conversation failures optional. Deterministic tests remain regression safeguards and cannot substitute for this acceptance evidence.
+uv run python -m evals.live_conversations.evidence   ../_bmad-output/test-artifacts/live-matrix.json   --accept-finding A:6 --accept-finding B:5 --accept-finding C:1 --accept-finding C:5
+```
 
-**Answer scoring:** Story 5.7 requires independent checks of actual data, units, tool results and saved effects, plus a separately configured LLM-as-judge for relevance, continuity, completeness and clarification/refusal. The judge receives prior conversation and verified facts, not future messages. Its 0–2 rubric requires 2 on every applicable dimension for automatic pass; uncertain grades require recorded human review. Wrong facts/effects always fail, regardless of judge scores. Record every judge/fact disagreement and false pass, and review every failing or uncertain turn before counting a run. See the story's “How answers are judged” section for the complete protocol.
+The suite is opt-in and paid: it is never selected by `pytest`. Each execution builds and tears down its own Compose stack (Postgres, API, worker, web) and drives the authenticated HTTP conversation path — no doubles, no stubs. Scenario B runs the real CP-SAT solver and a real approval. Keys come from `backend/.env`; nothing is printed.
+
+`--resume <report.json>` continues an interrupted report (refused unless it names the same commit), `--execution-retries` retries one execution that ends on an infrastructure fault, and `--skip-image-build` reuses images already built from the same code (recorded in the report; never valid for evidence).
+
+### What it covers
+
+- Three authored conversations: **A** introduction, typo and memory (6 turns); **B** draft → real solver run → approval → baseline (12); **C** tool tour (12). 30 user turns per repetition, generated live from fresh state, with a verdict on every turn.
+- Every installed tool and operation a planner turn can address (39 operations) must be exercised live. The remaining 96 — query keys, paging, invalid-query paths, manifest error codes and the compute-risk run tool the registry withholds from chat — must each cite deterministic proof. Neither set may vanish from the denominator.
+- Two independent layers per turn: fact/effect checks read the application and fixture directly, and a separately configured LLM judge scores relevance, continuity, completeness and clarification/refusal. A judge pass can never override a fact or effect failure.
+
+### Measured results
+
+Recorded matrix, `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, images rebuilt, 9 executions:
+
+| | Result |
+|---|---|
+| Turns passed | **89 / 90** |
+| Clean executions | **8 / 9** (repetitions 2 and 3 fully clean) |
+| Clean run per scenario | A ✅ B ✅ C ✅ |
+| False claims, wrong facts, missing effects | **none** |
+| Tracked spend | USD 0.59 |
+
+Accepted findings (recorded, not hidden): A:6 2/3, B:5 1/3 in the recorded matrix but 3/3 in a same-code diagnostic, C:1 2/3, C:5 2/3. All are model-reliability outcomes — a turn that produced no answer, or a claim the gate refused to render as "Claim unavailable". None showed the planner a wrong number.
+
+A stricter cross-check with `google/gemini-2.5-pro` as judge (~5x the judging cost) found real defects the cheaper judge passed, including a per-task figure presented as a scenario-wide total. Use it when hunting defects; the cheaper judge runs the recorded matrix.
+
+### What blocks
+
+A wrong value, unit, entity or version, a missing or unauthorized effect, or a false success claim blocks regardless of pass rates and can never be accepted. A turn that fails without one of those may be recorded as a finding **only when the owner accepts that exact turn**, and its pass rate is published either way. Missing, skipped, partial or stale evidence blocks; no release exception can mark this obligation passed.
 
 ShiftMind has two independent test suites: `pytest` for the Python backend
 (`backend/`) and `vitest` for the React/TypeScript frontend (`frontend/`).

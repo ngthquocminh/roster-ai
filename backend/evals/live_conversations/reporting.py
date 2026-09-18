@@ -22,6 +22,10 @@ REQUIRED_REPETITIONS = 3
 # reliability outcome (lesson 18's zero-cost transport failures land here), not a
 # claim the assistant made, so it cannot be classed as a false claim.
 RELIABILITY_FAILURES = frozenset({'unsuccessful_agent_turn'})
+#: A claim the gate REFUSED to render (the planner sees "Claim unavailable", not
+#: a number). Blocking unless the owner accepts that exact turn explicitly;
+#: a wrong rendered value can never be accepted.
+ACCEPTABLE_CLAIM_FAILURES = frozenset({'unsupported_claim'})
 
 
 def summarize_runs(runs, *, coverage, observation_ids, version_bindings, accepted_findings=()):
@@ -72,7 +76,15 @@ def summarize_runs(runs, *, coverage, observation_ids, version_bindings, accepte
                     passed = turn.get('verdict') == 'pass'
                     pass_counts[key] = (passes + passed, total + 1)
                     claims = set(turn.get('factual_failures') or ()) - RELIABILITY_FAILURES
-                    if claims:
+                    # A claim whose grounding failed shows the planner "Claim
+                    # unavailable", never a wrong number: the gate refused to
+                    # render it. That is inspectable and may be accepted
+                    # explicitly, exactly like a reliability failure. Everything
+                    # else -- a wrong value, unit, entity or version, a missing
+                    # required effect, an unauthorized one, or a false success
+                    # claim -- can never be accepted and always blocks.
+                    unacceptable = claims - ACCEPTABLE_CLAIM_FAILURES
+                    if unacceptable or (claims and (scenario, index) not in accepted):
                         false_claims.append({'run_id': run['run_id'], 'turn': key,
                                              'failures': sorted(claims)})
                     elif not passed and (scenario, index) not in accepted:
