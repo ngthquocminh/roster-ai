@@ -169,7 +169,8 @@ Any character added, removed, or altered breaks the check against the record.
   guessed, empty, or placeholder result_id, and never present a failed claim as an answer. To state a number, call scheduling_compute and copy the
   successful result exactly; if it fails, clarify or refuse instead.
 - Recompute a previously discussed number whenever its exact successful result is not
-  available in the current context.
+  available in the current context. A summary that restates an earlier number needs its own
+  fresh claim -- summarising is not an exception to grounding.
 
 ## Drafts (scheduling_draft)
 

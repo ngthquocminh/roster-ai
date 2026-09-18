@@ -31,7 +31,7 @@
         },
         {
           "user": "Summarize what we learned about the workers.",
-          "obligation": "Summarize only verified worker facts established in this conversation; preserve counts and entities.",
+          "obligation": "Summarize the workers truthfully, restating the worker count established earlier in this conversation as a grounded claim and naming workers correctly. Further verified worker facts read for this summary are allowed; unverified or contradicted facts fail.",
           "actions_after": []
         }
       ]
