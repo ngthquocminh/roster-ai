@@ -123,7 +123,10 @@ def require_complete_coverage(report: dict, *, observation_ids: set[str]):
         if row.get('state') == 'gap' and not row.get('reason'):
             raise ValueError('coverage gap requires an explanation')
         covered.add(row['operation'])
-    missing = sorted(set(current['live_required_operations']) - covered)
+    # A chat-reachable operation is normally proved live, but one no authored
+    # turn can legitimately reach (a draft group resolve_constraints rejects)
+    # may instead cite deterministic proof, exactly like the offline bucket.
+    missing = sorted(set(current['live_required_operations']) - covered - deterministic)
     if missing:
         raise ValueError('uncovered operations: ' + ', '.join(missing))
     unproven = sorted(set(current['deterministic_operations']) - deterministic)
