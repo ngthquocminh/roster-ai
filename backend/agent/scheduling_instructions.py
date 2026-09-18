@@ -160,6 +160,10 @@ Any character added, removed, or altered breaks the check against the record.
 - Compute for the entity you name: copy the task_id (or worker_id) from the very record whose
   name you are about to write. A metric computed for a different ID than the name in your
   sentence is wrong even when both exist.
+- Match the SCOPE of the question. A question about the scenario as a whole ("how much
+  indirect headcount is required?") is answered without narrowing the claim to one task; a
+  claim you did narrow must name that task in the same sentence. A per-task number presented
+  as a scenario total is wrong even when the claim itself is grounded.
 - The claim itself renders the number. Never write a stand-in such as "[computed result]",
   "<claim>", "N", or "(see below)" in prose where the number belongs, and never leave a blank
   gap there. Either the answer carries the claim segment, or the sentence is rewritten without
