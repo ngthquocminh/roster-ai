@@ -214,12 +214,16 @@ Codex (GPT-5) for implementation; OpenRouter `~deepseek/deepseek-flash-latest` f
 
 - **2026-09-18 completion.** The right-sized suite (A 6 / B 12 / C 12) passes on the configured
   live stack: recorded matrix `live-matrix-bound.json` scored **89/90 turns, 8/9 clean
-  executions**, with a clean run of every scenario and **no false claim, wrong fact, or missing
-  effect**. Evidence: `evidence/story-5.7/live-conversation-journeys.json`; command and results
+  executions** (`live-matrix-clean.json`, measured at 1deb1d0 on a clean tree), with three
+  complete repetitions, a clean run of every scenario and **no false claim, wrong fact, or
+  missing effect**. Evidence: `evidence/story-5.7/live-conversation-journeys.json`, verdict
+  `live_conversation_journeys: passed`; command and results
   in `docs/TESTING.md`. Agent `openrouter:openai/gpt-5.6-luna`, judge
   `openrouter:google/gemini-2.5-flash`, both now named in `docs/GETTING-STARTED.md`.
-- **Accepted findings** (Minh, 2026-09-18), each recorded with its pass rate: A:6 2/3, B:5 1/3
-  in the matrix but 3/3 in a same-code diagnostic, C:1 2/3, C:5 2/3. Each is a turn that
+- **Accepted finding** (Minh, 2026-09-18), recorded with its pass rate: B:5 2/3 in the bound
+  matrix, 3/3 in a same-code diagnostic. Earlier matrices scattered single failures across A:6,
+  B:10, C:1, C:4 and C:5, each passing about two times in three: a per-turn failure rate near
+  2%, not a set of broken turns. Each is a turn that
   produced no answer, or a claim the gate refused to render ("Claim unavailable"); none showed
   a wrong number. A wrong value/unit/entity/version, a missing or unauthorized effect, or a
   false success claim remains unacceptable by construction.

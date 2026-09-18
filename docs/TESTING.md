@@ -30,13 +30,13 @@ Recorded matrix, `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, images rebui
 
 | | Result |
 |---|---|
-| Turns passed | **89 / 90** |
-| Clean executions | **8 / 9** (repetitions 2 and 3 fully clean) |
+| Turns passed | **88 / 90** |
+| Clean executions | **7 / 9** (three complete repetitions; every scenario clean at least once) |
 | Clean run per scenario | A ✅ B ✅ C ✅ |
 | False claims, wrong facts, missing effects | **none** |
 | Tracked spend | USD 0.59 |
 
-Accepted findings (recorded, not hidden): A:6 2/3, B:5 1/3 in the recorded matrix but 3/3 in a same-code diagnostic, C:1 2/3, C:5 2/3. All are model-reliability outcomes — a turn that produced no answer, or a claim the gate refused to render as "Claim unavailable". None showed the planner a wrong number.
+Accepted finding (recorded, not hidden): **B:5 2/3** in this matrix, 3/3 in a same-code diagnostic. The turn produced no answer at all, never a wrong one. Earlier matrices scattered single failures across A:6, B:10, C:1, C:4 and C:5 — each passing ~2 times in 3 — which is a per-turn failure rate of roughly 2%, not a set of broken turns. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates and the verdict.
 
 A stricter cross-check with `google/gemini-2.5-pro` as judge (~5x the judging cost) found real defects the cheaper judge passed, including a per-task figure presented as a scenario-wide total. Use it when hunting defects; the cheaper judge runs the recorded matrix.
 
