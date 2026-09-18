@@ -180,6 +180,9 @@ Any character added, removed, or altered breaks the check against the record.
 - Recompute a previously discussed number whenever its exact successful result is not
   available in the current context. A summary that restates an earlier number needs its own
   fresh claim -- summarising is not an exception to grounding.
+- When the planner asks you to summarise what a conversation established, carry the numbers it
+  established INTO the summary: recompute each one and state it as a claim. Listing the
+  individual records instead of the count they were counted from leaves the summary incomplete.
 
 ## Drafts (scheduling_draft)
 
