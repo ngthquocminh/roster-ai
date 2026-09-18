@@ -1087,3 +1087,65 @@ def test_ordinary_prose_is_not_mistaken_for_a_dropped_claim(text) -> None:
         answer_type=GroundedAnswerV1)
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="hi"))
     assert outcome.answer == GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text),))
+
+
+def _claim_answer(result_id: str) -> GroundedAnswerV1:
+    from application.contracts.grounding import ClaimArgumentsV1, ClaimProposalV1
+
+    return GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="There are "),
+        ClaimProposalV1(metric="worker_count", arguments=ClaimArgumentsV1(), result_id=result_id),
+        GroundedProseSegmentV1(text=" workers."),
+    ))
+
+
+REAL_RESULT_ID = "d7481a87240baee0bdf74d774a2f092090eb5a947670bbee08960b45f34c819a"
+
+
+def _compute_stub_module():
+    from types import SimpleNamespace
+
+    from application.capabilities.scheduling_compute import scheduling_compute_module
+
+    return replace(
+        scheduling_compute_module(),
+        handler=lambda deps, request, manifest: SimpleNamespace(
+            result_id=REAL_RESULT_ID, metric="worker_count", unit="workers",
+            consumed_row_count=1, value=10, arguments=request.arguments,
+            evidence_refs=(), scenario_version_id=None),
+        model_facing_view=lambda result: {"result_id": result.result_id, "metric": "worker_count",
+                                          "unit": "workers", "matched": "some"},
+    )
+
+
+def _compute_then(answers):
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        if not responses:
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="scheduling_compute",
+                args=json.dumps({"request": {"metric": "worker_count", "arguments": {}}}),
+                tool_call_id="c1")])
+        answer = answers[min(len(responses) - 1, len(answers) - 1)]
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(responses)}")])
+    return model
+
+
+def test_a_mistyped_result_id_is_corrected_in_loop() -> None:
+    """live-suite-v2-acceptance-f: the model copied a 64-character hash as 63
+    and as 68 characters, and the gate could only report missing_evidence."""
+    runtime = _runtime(
+        model=FunctionModel(_compute_then([_claim_answer(REAL_RESULT_ID[:-1]),
+                                           _claim_answer(REAL_RESULT_ID)])),
+        capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
+    assert outcome.answer == _claim_answer(REAL_RESULT_ID)
+
+
+def test_an_unrelated_result_id_still_reaches_the_gate_as_missing_evidence() -> None:
+    """golden case grounding-missing-evidence depends on this path staying open."""
+    invented = _claim_answer("f" * 64)
+    runtime = _runtime(model=FunctionModel(_compute_then([invented])),
+                       capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
+    assert runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?")).answer == invented

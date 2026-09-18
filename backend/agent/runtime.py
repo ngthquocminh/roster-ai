@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+from difflib import SequenceMatcher
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import perf_counter
@@ -146,6 +147,34 @@ def _claim_placeholder(text: str) -> str | None:
     # double-space after a sentence ("Hello.  How can I help?").
     if _WORD_GAP.search(text):
         return "a gap between words"
+    return None
+
+
+def _result_ids_this_run(messages: list) -> set[str]:
+    """result_id values the tools actually returned after the current prompt."""
+    found: set[str] = set()
+    for message in _messages_this_run(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if isinstance(part, ToolReturnPart) and isinstance(part.content, dict):
+                value = part.content.get("result_id")
+                if isinstance(value, str) and value:
+                    found.add(value)
+    return found
+
+
+def _mistyped_result_id(cited: str, returned: set[str]) -> str | None:
+    """The id this citation was evidently copied from, if it is a near-miss.
+
+    Deliberately strict: an unrelated or invented id must NOT be treated as a
+    typo, or the gate's `missing_evidence` state becomes unreachable.
+    """
+    if cited in returned:
+        return None
+    for candidate in sorted(returned):
+        if SequenceMatcher(None, cited, candidate).ratio() >= .9:
+            return candidate
     return None
 
 
@@ -331,13 +360,25 @@ class PydanticAIAgentRuntime:
                 # to a draft description that needed no number at all).
                 if not isinstance(output, GroundedAnswerV1):
                     return output
+                returned = _result_ids_this_run(ctx.messages)
                 for segment in getattr(output, "segments", ()) or ():
                     result_id = getattr(segment, "result_id", None)
-                    if result_id is None or result_id:
-                        # A PRESENT but wrong id stays the gate's business: it
-                        # renders an inspectable `missing_evidence` claim, which
-                        # golden case grounding-missing-evidence pins. Only the
-                        # empty citation is corrected here.
+                    if result_id is None:
+                        continue
+                    if result_id:
+                        # A citation the model MIS-TRANSCRIBED from a result it
+                        # really received (observed: a 63- and a 68-character
+                        # copy of a 64-character hash) is a slip it can fix. An
+                        # unrelated id stays the gate's business, rendering an
+                        # inspectable `missing_evidence` claim -- golden case
+                        # grounding-missing-evidence pins that path.
+                        intended = _mistyped_result_id(result_id, returned)
+                        if intended is not None:
+                            raise ModelRetry(
+                                f"The claim cites result_id {result_id!r}, which differs from "
+                                f"the id the calculation returned in this turn: {intended!r}. "
+                                "Copy the returned result_id exactly, character for character."
+                            )
                         continue
                     raise ModelRetry(
                         "A claim segment carries an empty result_id, so it can cite no "
