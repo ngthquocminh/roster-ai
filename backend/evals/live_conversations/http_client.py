@@ -68,7 +68,23 @@ class ApplicationConversation:
     def send(self, user):
         path = '/api/v1/conversations/' + self.conversation['id']
         accepted = self._request('POST', path + '/messages', body={'text': user}, expected=201)
-        executed = self._request('POST', path + '/agent-runs/' + accepted['agent_run_id'] + '/execute')
+        execute = path + '/agent-runs/' + accepted['agent_run_id'] + '/execute'
+        try:
+            executed = self._request('POST', execute)
+        except IncompleteConversationRun as exc:
+            # Seen twice in ~20 executions: execute answered 404 for a run the
+            # immediately preceding 201 had just created. Retried once, briefly,
+            # and the outcome is recorded either way -- a retry that succeeds
+            # means the row was not yet visible to the next request, which is a
+            # product finding; a retry that 404s again means it was never there.
+            if not str(exc).startswith('application_http_404_POST'):
+                raise
+            sleep(1)
+            try:
+                executed = self._request('POST', execute)
+            except IncompleteConversationRun:
+                raise IncompleteConversationRun(str(exc) + '_still_missing_after_retry') from None
+            accepted['execute_retried_after_404'] = True
         return accepted, executed
 
     def timeline(self):

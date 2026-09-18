@@ -245,3 +245,53 @@ def test_approval_decision_uses_current_version_and_explicit_choice():
     app = ApplicationConversation('http://app.test', client=httpx.Client(transport=httpx.MockTransport(handle)))
     assert app.decide('actual', decision='reject')['state'] == 'rejected'
     assert commands == [{'decision': 'reject', 'expected_resource_version': 4}]
+
+
+def test_an_execute_404_is_retried_once_and_recorded(monkeypatch):
+    """The 404 seen twice in ~20 live executions: execute could not find a run
+    the immediately preceding 201 had just created."""
+    from evals.live_conversations.http_client import ApplicationConversation
+    from evals.live_conversations.protocol import IncompleteConversationRun
+
+    calls = []
+
+    class Client:
+        def request(self, method, url, **kwargs):
+            calls.append((method, url))
+            if url.endswith('/messages'):
+                return httpx.Response(201, json={'agent_run_id': 'run-1', 'activity': {},
+                                                 'resource_version': 2, 'sequence': '1',
+                                                 'agent_run_status': 'agent_queued'})
+            if len([c for c in calls if c[1].endswith('/execute')]) == 1:
+                return httpx.Response(404, json={})
+            return httpx.Response(200, json={'activity': {'activity_type': 'agent_response'},
+                                             'agent_run_status': 'agent_completed'})
+
+    app = ApplicationConversation.__new__(ApplicationConversation)
+    app.origin, app.client, app.headers = 'http://x', Client(), {}
+    app.conversation = {'id': 'c-1'}
+    monkeypatch.setattr('evals.live_conversations.http_client.sleep', lambda _seconds: None)
+
+    accepted, executed = app.send('hello')
+    assert accepted['execute_retried_after_404'] is True
+    assert executed['agent_run_status'] == 'agent_completed'
+    assert len([c for c in calls if c[1].endswith('/execute')]) == 2
+
+
+def test_an_execute_404_that_persists_is_reported_as_still_missing(monkeypatch):
+    from evals.live_conversations.http_client import ApplicationConversation
+    from evals.live_conversations.protocol import IncompleteConversationRun
+
+    class Client:
+        def request(self, method, url, **kwargs):
+            if url.endswith('/messages'):
+                return httpx.Response(201, json={'agent_run_id': 'run-1'})
+            return httpx.Response(404, json={})
+
+    app = ApplicationConversation.__new__(ApplicationConversation)
+    app.origin, app.client, app.headers = 'http://x', Client(), {}
+    app.conversation = {'id': 'c-1'}
+    monkeypatch.setattr('evals.live_conversations.http_client.sleep', lambda _seconds: None)
+
+    with pytest.raises(IncompleteConversationRun, match='still_missing_after_retry'):
+        app.send('hello')

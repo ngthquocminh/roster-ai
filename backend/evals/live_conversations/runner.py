@@ -143,6 +143,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             accepted, executed = app.send(turn.user)
             row.update(agent_run_id=accepted['agent_run_id'], activity=executed['activity'],
                        agent_run_status=executed['agent_run_status'])
+            if accepted.get('execute_retried_after_404'):
+                row['execute_retried_after_404'] = True
             save(report)
             usage, tools = telemetry.read_run(accepted['agent_run_id'])
             if usage.get('usage_unavailable'):
