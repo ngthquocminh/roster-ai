@@ -120,10 +120,22 @@ class ApplicationConversation:
                 or type(max_polls) is not int or not 0 < max_polls <= 600):
             raise ValueError('positive bounded solver polling limits are required')
         deadline = monotonic() + timeout_seconds
+        self.run_not_visible_polls = 0
         for _ in range(max_polls):
             if monotonic() >= deadline:
                 break
-            run = self._request('GET', '/api/v1/schedule-runs/' + run_id)
+            try:
+                run = self._request('GET', '/api/v1/schedule-runs/' + run_id)
+            except IncompleteConversationRun as exc:
+                # The run was created moments ago and is not visible to this
+                # request yet (live-suite-evidence-final aborted a whole run on
+                # exactly this). Keep polling inside the existing bound rather
+                # than failing the scenario; the count is reported.
+                if not str(exc).startswith('application_http_404_GET'):
+                    raise
+                self.run_not_visible_polls += 1
+                sleep(min(1, max(0, deadline - monotonic())))
+                continue
             if run['status'] in {'solver_completed', 'solver_infeasible', 'solver_timed_out',
                                  'solver_cancelled', 'solver_failed'}:
                 return self._request('GET', '/api/v1/schedule-runs/' + run_id + '/result')

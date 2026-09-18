@@ -295,3 +295,43 @@ def test_an_execute_404_that_persists_is_reported_as_still_missing(monkeypatch):
 
     with pytest.raises(IncompleteConversationRun, match='still_missing_after_retry'):
         app.send('hello')
+
+
+def test_a_run_that_is_not_visible_yet_is_polled_again_not_abandoned(monkeypatch):
+    """live-suite-evidence-final died on GET /schedule-runs/* 404 for a run its
+    own POST had just created."""
+    from evals.live_conversations.http_client import ApplicationConversation
+
+    calls = []
+
+    class Client:
+        def request(self, method, url, **kwargs):
+            calls.append(url)
+            if url.endswith('/result'):
+                return httpx.Response(200, json={'run': {'status': 'solver_completed'}})
+            if len(calls) == 1:
+                return httpx.Response(404, json={})
+            return httpx.Response(200, json={'status': 'solver_completed'})
+
+    app = ApplicationConversation.__new__(ApplicationConversation)
+    app.origin, app.client, app.headers = 'http://x', Client(), {}
+    monkeypatch.setattr('evals.live_conversations.http_client.sleep', lambda _s: None)
+
+    assert app.wait_for_run('run-1')['run']['status'] == 'solver_completed'
+    assert app.run_not_visible_polls == 1
+
+
+def test_a_run_that_never_becomes_visible_still_exhausts_its_budget(monkeypatch):
+    from evals.live_conversations.http_client import ApplicationConversation
+    from evals.live_conversations.protocol import IncompleteConversationRun
+
+    class Client:
+        def request(self, method, url, **kwargs):
+            return httpx.Response(404, json={})
+
+    app = ApplicationConversation.__new__(ApplicationConversation)
+    app.origin, app.client, app.headers = 'http://x', Client(), {}
+    monkeypatch.setattr('evals.live_conversations.http_client.sleep', lambda _s: None)
+
+    with pytest.raises(IncompleteConversationRun, match='solver_poll_budget_exhausted'):
+        app.wait_for_run('run-1', max_polls=3)
