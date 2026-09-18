@@ -1066,17 +1066,11 @@ def test_prose_left_with_a_gap_where_a_claim_belongs_is_corrected_in_loop(text) 
 
 
 def test_a_claim_bearing_answer_may_still_space_its_prose_normally() -> None:
-    from application.contracts.grounding import ClaimArgumentsV1, ClaimProposalV1
-
-    answer = GroundedAnswerV1(segments=(
-        GroundedProseSegmentV1(text="There are "),
-        ClaimProposalV1(metric="worker_count", arguments=ClaimArgumentsV1(), result_id="r1"),
-        GroundedProseSegmentV1(text=" workers."),
-    ))
-    runtime = _runtime(
-        model=FunctionModel(lambda messages, info: ModelResponse(parts=[ToolCallPart(
-            tool_name="final_result", args=_answer_json(answer), tool_call_id="o1")])),
-        answer_type=GroundedAnswerV1)
+    """The claim cites a result the calculation really returned, so only the
+    prose spacing is under test here."""
+    answer = _claim_answer(REAL_RESULT_ID)
+    runtime = _runtime(model=FunctionModel(_compute_then([answer])),
+                       capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
     assert runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?")).answer == answer
 
 
@@ -1211,3 +1205,21 @@ def test_an_exhausted_in_loop_rule_is_named_on_the_outcome() -> None:
     assert isinstance(caught.value, AgentInvalidOutputError)
     assert caught.value.retry_rule == "numeric_prose"
     assert failed_outcome_for_exception(caught.value).retry_rule == "numeric_prose"
+
+
+def test_a_claim_after_no_calculation_at_all_is_corrected_in_loop() -> None:
+    """live-suite-B-diagnose B5 rep3: a correct prose answer with a stray
+    worker_count claim appended, after zero tool calls."""
+    attempts = []
+    good = GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="The draft excludes that worker."),))
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = _claim_answer("0" * 36) if len(attempts) == 1 else good
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
+    assert len(attempts) == 2
+    assert outcome.answer == good

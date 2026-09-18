@@ -382,6 +382,20 @@ class PydanticAIAgentRuntime:
                     result_id = getattr(segment, "result_id", None)
                     if result_id is None:
                         continue
+                    if result_id and not returned:
+                        # No calculation ran in this turn, so NOTHING could have
+                        # produced a citation: the id is invented outright
+                        # (live-suite-B-diagnose B5 rep3 appended a worker_count
+                        # claim after zero tool calls). Distinct from citing a
+                        # wrong id among real results, which stays the gate's
+                        # inspectable missing_evidence state.
+                        self._last_retry_rule = "claim_without_calculation"
+                        raise ModelRetry(
+                            "A claim segment cites a result_id, but no calculation tool "
+                            "returned a result in this turn, so nothing can support it. "
+                            "Call the calculation tool and cite the result_id it returns, or "
+                            "remove the claim and answer in prose alone." + _COMPLETE_ANSWER
+                        )
                     if result_id:
                         # A citation the model MIS-TRANSCRIBED from a result it
                         # really received (observed: a 63- and a 68-character
