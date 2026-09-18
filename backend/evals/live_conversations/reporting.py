@@ -39,7 +39,10 @@ def summarize_runs(runs, *, coverage, observation_ids, version_bindings, accepte
         scenario_ids = [execution.get('scenario') for execution in executions]
         complete = (len(scenario_ids) == len(set(scenario_ids)) and set(scenario_ids) == set(expected)
                     and not run.get('incomplete_reason')
-                    and run.get('version_bindings') == version_bindings
+                    # The suite records the code binding it measured; the
+                    # evidence carries the full NFR27 set. Compare the one they
+                    # share, or every run looks incomplete.
+                    and run.get('code') == (version_bindings or {}).get('code')
                     and bool(run.get('run_id')) and run.get('run_id') not in seen_runs)
         seen_runs.add(run.get('run_id'))
         turns_executed = 0

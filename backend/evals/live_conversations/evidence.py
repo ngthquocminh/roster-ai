@@ -30,6 +30,10 @@ from evals.live_conversations.stack import ROOT
 #: where it is proved instead; `require_complete_coverage` refuses a row with no
 #: reason, and `missing_declarations` below refuses an operation with no entry.
 UNREACHABLE_IN_CHAT = {
+    'scheduling_inspect:request.properties.group=assignments':
+        'A planner turn reads assignments from the workflow snapshot, which carries them for '
+        'the baseline and any candidate, so no authored turn addresses the projection group '
+        'itself; the group is proved by tests/test_scheduling_inspect.py.',
     'scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=demand':
         'resolve_constraints rejects every draft group except workers and '
         'work-areas-and-tasks; proved by tests/test_scheduling_draft.py.',

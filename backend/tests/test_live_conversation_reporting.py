@@ -20,7 +20,7 @@ def _run(number, *, verdicts=None, failures=None):
             'status': 'passed' if all(r['verdict'] == 'pass' for r in rows) else 'failed',
             'turns': rows,
         })
-    return {'run_id': str(number), 'version_bindings': BINDING, 'prefixes': executions}
+    return {'run_id': str(number), 'code': BINDING['code'], 'prefixes': executions}
 
 
 def _summary(runs, **kwargs):
