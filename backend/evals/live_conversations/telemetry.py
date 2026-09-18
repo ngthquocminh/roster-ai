@@ -65,8 +65,7 @@ class ContainerTelemetry:
         # B5 failed with usage present, so its cause stayed invisible.
         if (terminal[0].get('labels') or {}).get('failure_reason'):
             terminal[0]['failure_exception_type'] = failure_exception_type(
-                result.stdout + '
-' + result.stderr, agent_run_id)
+                result.stdout + '\n' + result.stderr, agent_run_id)
         if terminal[0]['usage'] is None or terminal[0]['estimated_cost_usd'] is None:
             # A failed run whose exception path lost its usage. Scored as a
             # failed turn by the caller, not an incomplete suite; the exception
