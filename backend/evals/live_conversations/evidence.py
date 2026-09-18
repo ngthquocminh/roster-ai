@@ -158,7 +158,7 @@ def build_coverage(runs, inventory=None) -> dict:
 
 
 def generate(run_paths, output: Path, *, allow_dirty: bool = False,
-             accepted_findings=()) -> dict:
+             accepted_findings=(), ignore_paths=()) -> dict:
     from scripts.evidence_binding import resolve_bindings
 
     runs = [json.loads(Path(path).read_text(encoding='utf-8')) for path in run_paths]
@@ -184,10 +184,15 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
         repo_root=ROOT,
         dataset_files=[ROOT / 'backend/evals/live_conversations/scenarios.json'],
         allow_dirty=allow_dirty,
+        # The report being written, and artifacts outside the measured backend,
+        # cannot change what was measured. Each one is named here and recorded
+        # below, never waved through with allow_dirty.
+        ignore_paths=frozenset(ignore_paths),
     )
     report = summarize_runs(runs, coverage=coverage, observation_ids=observation_ids,
                             version_bindings=bindings, accepted_findings=accepted_findings)
     report['source_runs'] = [str(Path(path).name) for path in run_paths]
+    report['ignored_dirty_paths'] = sorted(ignore_paths)
     report['images_rebuilt'] = all(run.get('images_rebuilt') for run in runs)
     report['tool_coverage'] = coverage['tool_coverage']
     report['inventory_digest'] = coverage['inventory_digest']
@@ -203,12 +208,16 @@ def main(argv=None) -> int:
     parser.add_argument('--output', type=Path,
                         default=ROOT / 'evidence/story-5.7/live-conversation-journeys.json')
     parser.add_argument('--allow-dirty', action='store_true')
+    parser.add_argument('--ignore-path', action='append', default=[],
+                        help='A repo-relative path that cannot affect the measurement (the '
+                             'report itself, artifacts outside the measured backend). Recorded '
+                             'in the report.')
     parser.add_argument('--accept-finding', action='append', default=[],
                         help='SCENARIO:TURN a reliability failure is accepted for.')
     args = parser.parse_args(argv)
     accepted = [tuple(value.split(':', 1)) for value in args.accept_finding]
     report = generate(args.runs, args.output, allow_dirty=args.allow_dirty,
-                      accepted_findings=accepted)
+                      accepted_findings=accepted, ignore_paths=args.ignore_path)
     print(json.dumps({key: report[key] for key in (
         'live_conversation_journeys', 'readiness', 'blocking_reasons',
         'complete_repetitions', 'clean_scenarios')}, indent=2))
