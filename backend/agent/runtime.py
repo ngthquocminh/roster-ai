@@ -191,6 +191,20 @@ def _mistyped_result_id(cited: str, returned: set[str]) -> str | None:
     return None
 
 
+_QUANTITY_QUESTION = re.compile(r"\bhow (?:many|much)\b", re.IGNORECASE)
+
+
+def _asks_for_a_quantity(messages: list) -> bool:
+    """True when the CURRENT planner prompt asks for a number."""
+    for message in reversed(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if isinstance(part, UserPromptPart) and isinstance(part.content, str):
+                return bool(_QUANTITY_QUESTION.search(part.content))
+    return False
+
+
 def _messages_this_run(messages: list) -> list:
     start = 0
     for index, message in enumerate(messages):
@@ -420,8 +434,20 @@ class PydanticAIAgentRuntime:
                         "alone -- describing a draft or a stored record needs no claim." + _COMPLETE_ANSWER
                     )
                 segments = list(getattr(output, "segments", ()) or ())
-                if not any(getattr(segment, "result_id", None) is not None
-                           for segment in segments):
+                has_claim = any(getattr(segment, "result_id", None) is not None
+                                for segment in segments)
+                if not has_claim and _asks_for_a_quantity(ctx.messages):
+                    # "How many workers are qualified for it?" answered with
+                    # "has qualified workers" (live-suite-evidence C6): a
+                    # quantity question needs a claim, not a qualitative reply.
+                    self._last_retry_rule = "quantity_without_claim"
+                    raise ModelRetry(
+                        "The planner asked for a quantity, but this answer carries no claim "
+                        "segment, so it shows no number. Call the calculation tool and cite "
+                        "the result_id it returns. If the quantity genuinely cannot be "
+                        "computed, say so plainly instead of implying one." + _COMPLETE_ANSWER
+                    )
+                if not has_claim:
                     for position, segment in enumerate(segments):
                         text = getattr(segment, "text", "") or ""
                         # A lead-in ending in ':' is only a dropped claim when

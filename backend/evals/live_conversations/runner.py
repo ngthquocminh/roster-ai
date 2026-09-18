@@ -128,7 +128,9 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
     latest_run = None
     try:
         workers = read_group(app, 'workers')
+        workers_by_id = {row['record_id']: row['name'] for row in workers}
         tasks = read_group(app, 'work-areas-and-tasks')
+        tasks_by_id = {row['record_id']: row['name'] for row in tasks}
         demand = read_group(app, 'demand')
         locks = read_group(app, 'locks')
         constraints = read_group(app, 'constraints-and-objectives')
@@ -232,7 +234,22 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 verified['effects_after_reply'].append(effect)
             if latest_run:
                 verified['latest_run'] = latest_run['run']
-                verified['candidate_solver_status'] = (latest_run.get('candidate') or {}).get('feasible_solver_status')
+                candidate = latest_run.get('candidate') or {}
+                verified['candidate_solver_status'] = candidate.get('feasible_solver_status')
+                # The rows the assistant can actually see, WITH their minutes: the
+                # judge scored a truthful reply 0 for "inventing" times that were
+                # in the snapshot but absent from its facts (live-suite-evidence
+                # B8).
+                verified['candidate_assignments'] = [
+                    {'record_id': row.get('record_id'), 'worker_id': row.get('worker_id'),
+                     'worker_name': workers_by_id.get(row.get('worker_id')),
+                     'task_id': row.get('task_id'),
+                     'task_name': tasks_by_id.get(row.get('task_id')),
+                     'start_minute': row.get('start_minute'), 'end_minute': row.get('end_minute')}
+                    for row in candidate.get('assignments', ())
+                ]
+                verified['candidate_assignment_count'] = candidate.get('assignment_count')
+                verified['candidate_assignments_truncated'] = candidate.get('assignments_truncated')
             transcript.append({'id': row['id'], 'user': turn.user, 'assistant': visible_activity(activity)})
             not_applicable = (frozenset({'clarification_refusal'})
                               if activity['activity_type'] == 'agent_response' else frozenset())

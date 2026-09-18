@@ -1059,7 +1059,9 @@ def test_prose_left_with_a_gap_where_a_claim_belongs_is_corrected_in_loop(text) 
             tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
 
     runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
-    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how many minutes are staffed?"))
+    # Deliberately NOT a "how many" prompt: the placeholder rule, not the
+    # quantity-question rule, is what this test pins.
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="summarise the staffing on that task"))
     assert len(attempts) == 2
     assert outcome.answer == GroundedAnswerV1(
         segments=(GroundedProseSegmentV1(text="That task has staffed time recorded."),))
@@ -1159,7 +1161,9 @@ def test_a_sentence_that_announces_a_number_and_stops_is_corrected_in_loop() -> 
         return ModelResponse(parts=[TextPart(content=text)])
 
     runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
-    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how many minutes are staffed?"))
+    # Deliberately NOT a "how many" prompt: the placeholder rule, not the
+    # quantity-question rule, is what this test pins.
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="summarise the staffing on that task"))
     assert len(attempts) == 2
     assert outcome.answer == GroundedAnswerV1(
         segments=(GroundedProseSegmentV1(text="That task has staffed time recorded."),))
@@ -1223,3 +1227,39 @@ def test_a_claim_after_no_calculation_at_all_is_corrected_in_loop() -> None:
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
     assert len(attempts) == 2
     assert outcome.answer == good
+
+
+def test_a_quantity_question_answered_without_a_claim_is_corrected_in_loop() -> None:
+    """live-suite-evidence C6: 'How many workers are qualified for it?' answered
+    '**C Fork | Grid P 8GR** has qualified workers.' -- no number at all."""
+    attempts = []
+    grounded = _claim_answer(REAL_RESULT_ID)
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        if not responses:
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="scheduling_compute",
+                args=json.dumps({"request": {"metric": "worker_count", "arguments": {}}}),
+                tool_call_id="c1")])
+        attempts.append(len(attempts))
+        answer = (GroundedAnswerV1(segments=(GroundedProseSegmentV1(
+            text="That task has qualified workers."),)) if len(attempts) == 1 else grounded)
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_compute_stub_module(),),
+                       answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="How many workers are qualified for it?"))
+    assert len(attempts) == 2
+    assert outcome.answer == grounded
+
+
+def test_a_non_quantity_question_may_be_answered_in_prose_alone() -> None:
+    runtime = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(
+            parts=[TextPart(content="The draft keeps that worker off that task.")])),
+        answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Show me what you put in the draft."))
+    assert outcome.answer == GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="The draft keeps that worker off that task."),))

@@ -60,6 +60,10 @@ field in the supplied facts, not by the task's function or name. A reply claimin
 belongs to a given family is grounded, not an unsupported inference, exactly when that family
 appears in that task's demand_families; it fails only when the claimed family is absent from
 demand_families or the task itself is not named/grounded at all.
+One task may carry demand in SEVERAL families: demand_families is a list. Naming a task as
+outbound in one turn and as carrying indirect demand in another is not a contradiction when
+both appear in its demand_families; judge each claim against that list, never against what the
+task was called earlier.
 effects_after_reply describes what the test harness independently did strictly AFTER this
 reply, as part of scripted scenario setup -- never something the reply itself could have known
 about or is claiming. Never score a reply down for being silent about, or for not matching, an
