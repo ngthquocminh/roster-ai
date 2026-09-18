@@ -39,6 +39,14 @@ def _arguments(argv=None):
     parser.add_argument('--prior-spend-usd', type=float, default=.5,
                         help='Conservative amount already spent on story probes/browser runs.')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--resume', type=Path,
+                        help='Continue a report written by an earlier invocation: executions '
+                             'already recorded as passed are skipped. Refused unless that '
+                             'report names the same code commit, so a resumed report can never '
+                             'mix measurements from different code.')
+    parser.add_argument('--execution-retries', type=int, default=2,
+                        help='Retries for ONE execution that ends incomplete (an infrastructure '
+                             'fault, never a failed turn). Each attempt is kept in the report.')
     parser.add_argument('--skip-image-build', action='store_true',
                         help='Reuse images already built from THIS code (the rebuild is the '
                              'memory peak of a run). Recorded in the report; never use it for '
@@ -77,10 +85,24 @@ def main(argv=None) -> int:
         token_limit=max(150_000, authored_turns * 175_000),
         elapsed_seconds_limit=max(1800, executions * 600), spend_usd_limit=args.spend_limit_usd,
     ), prior_spend_usd=args.prior_spend_usd)
+    from scripts.evidence_binding import resolve_code_binding
+
+    code_binding, _ = resolve_code_binding(ROOT, allow_dirty=True)
     report = {'schema_version': '1-development', 'run_id': str(uuid4()),
               'started_unix': int(time()), 'model': model, 'judge_model': judge_model,
-              'images_rebuilt': not args.skip_image_build,
+              'images_rebuilt': not args.skip_image_build, 'code': code_binding,
               'prefixes': [], 'incomplete_reason': None}
+    completed: set[tuple[str, int]] = set()
+    if args.resume is not None:
+        earlier = json.loads(args.resume.read_text(encoding='utf-8'))
+        if earlier.get('code') != code_binding:
+            raise SystemExit('--resume refused: that report was measured on different code')
+        report['resumed_from'] = {'run_id': earlier.get('run_id'),
+                                  'output': str(args.resume.name)}
+        for execution in earlier.get('prefixes', []):
+            if execution.get('status') == 'passed':
+                report['prefixes'].append(execution)
+                completed.add((execution['scenario'], execution['repetition']))
     save = lambda _prefix=None: _atomic_json(args.output, report)
     if not args.skip_image_build:
         build_live_images(model=model, api_key=key, override_file=args.override_file,
@@ -88,34 +110,40 @@ def main(argv=None) -> int:
     try:
         for repetition in range(1, args.repetitions + 1):
             for case, endpoint in selected:
-                prefix = {'scenario': case.id, 'endpoint': endpoint, 'repetition': repetition,
-                          'status': 'incomplete', 'turns': []}
-                report['prefixes'].append(prefix)
-                save()
-                with isolated_stack(model=model, api_key=key, override_file=args.override_file,
-                                    reasoning_effort=args.reasoning_effort,
-                                    demonstration_enabled=case.demonstration_enabled) as stack:
-                    app = ApplicationConversation(stack['origin'])
-                    try:
-                        session = app.login()
-                        prefix['fixture_setup'] = prepare_initial_baseline(
-                            app, session=session, database_url=stack['database_url'])
-                        actual = execute_prefix(
-                            app=app, case=case, endpoint=endpoint,
-                            isolation_id=stack['isolation_id'], telemetry=ContainerTelemetry(stack['container']),
-                            judge_key=judge_key, judge_model=judge_model, budget=budget,
-                            save=lambda current: (prefix.update(current), save()),
-                        )
-                        prefix.update(actual)
-                        # A failed scenario no longer stops the suite: per-turn
-                        # pass rates need every scenario scored (right-sized
-                        # AC7). Only an incomplete run stops it.
-                        if prefix.get('incomplete_reason'):
-                            raise IncompleteConversationRun(
-                                f"scenario_incomplete_{case.id}_{prefix['incomplete_reason']}")
-                    finally:
-                        app.close()
-                save()
+                if (case.id, repetition) in completed:
+                    continue
+                for attempt in range(1, args.execution_retries + 2):
+                    prefix = {'scenario': case.id, 'endpoint': endpoint, 'repetition': repetition,
+                              'attempt': attempt, 'status': 'incomplete', 'turns': []}
+                    report['prefixes'].append(prefix)
+                    save()
+                    with isolated_stack(model=model, api_key=key, override_file=args.override_file,
+                                        reasoning_effort=args.reasoning_effort,
+                                        demonstration_enabled=case.demonstration_enabled) as stack:
+                        app = ApplicationConversation(stack['origin'])
+                        try:
+                            session = app.login()
+                            prefix['fixture_setup'] = prepare_initial_baseline(
+                                app, session=session, database_url=stack['database_url'])
+                            actual = execute_prefix(
+                                app=app, case=case, endpoint=endpoint,
+                                isolation_id=stack['isolation_id'],
+                                telemetry=ContainerTelemetry(stack['container']),
+                                judge_key=judge_key, judge_model=judge_model, budget=budget,
+                                save=lambda current: (prefix.update(current), save()),
+                            )
+                            prefix.update(actual)
+                        finally:
+                            app.close()
+                    save()
+                    # A FAILED scenario is a result and is kept. Only an
+                    # INCOMPLETE one (an infrastructure fault) is retried, and
+                    # the failed attempt stays in the report as a diagnostic.
+                    if not prefix.get('incomplete_reason'):
+                        break
+                    if attempt == args.execution_retries + 1:
+                        raise IncompleteConversationRun(
+                            f"scenario_incomplete_{case.id}_{prefix['incomplete_reason']}")
     except IncompleteConversationRun as exc:
         report['incomplete_reason'] = str(exc)
         save()

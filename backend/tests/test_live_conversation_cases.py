@@ -55,3 +55,14 @@ def test_an_unknown_action_is_rejected():
     changed = replace(cases[1], turns=(*cases[1].turns[:6], turn, *cases[1].turns[7:]))
     with pytest.raises(ValueError, match='unsupported authored actions'):
         validate_scenarios((cases[0], changed, cases[2]))
+
+
+def test_resume_and_retry_are_offered_by_the_runner_cli():
+    """A late infrastructure fault must cost one execution, not a whole run."""
+    from evals.live_conversations.suite import _arguments
+
+    args = _arguments(['--output', 'out.json'])
+    assert args.resume is None and args.execution_retries == 2
+    resumed = _arguments(['--output', 'out.json', '--resume', 'earlier.json',
+                          '--execution-retries', '1'])
+    assert resumed.resume.name == 'earlier.json' and resumed.execution_retries == 1

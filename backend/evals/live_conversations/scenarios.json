@@ -121,8 +121,8 @@
           "obligation": "PASS if EITHER (A) grounded required volumes for the first outbound task shown and for one real inbound task, each stated in volume units, OR (B) a clarification of which task is meant. Do not require both alternatives. Do not require volumes for every task. Fabricated numbers or mixed units fail."
         },
         {
-          "user": "How many worker-minutes of indirect headcount are required?",
-          "obligation": "PASS if EITHER (A) grounded indirect required headcount-minutes stated in minutes OR (B) a clarification of the task or window. Do not require both alternatives. Never convert volume into minutes."
+          "user": "Which task carries the indirect demand, and how many worker-minutes does it require?",
+          "obligation": "Name the task that carries indirect demand and give its grounded required headcount-minutes in minutes, or clarify if several tasks qualify. A demand metric is always per task, so a per-task figure is correct; say plainly when that task is the only one with indirect demand. Never convert volume into minutes."
         },
         {
           "user": "How many minutes are staffed on that first task?",

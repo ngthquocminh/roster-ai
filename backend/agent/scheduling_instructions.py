@@ -160,6 +160,11 @@ Any character added, removed, or altered breaks the check against the record.
 - Compute for the entity you name: copy the task_id (or worker_id) from the very record whose
   name you are about to write. A metric computed for a different ID than the name in your
   sentence is wrong even when both exist.
+- Every demand metric is PER TASK: required_demand_volume and
+  required_headcount_minutes always need a task_id, and only worker_count is scenario-wide.
+  When a question asks for a whole-scenario demand figure, answer for the qualifying task(s)
+  and say which -- adding the totals up yourself is arithmetic and is never allowed. When only
+  one task qualifies, say it is the only one.
 - Match the SCOPE of the question. A question about the scenario as a whole ("how much
   indirect headcount is required?") is answered without narrowing the claim to one task; a
   claim you did narrow must name that task in the same sentence. A per-task number presented
