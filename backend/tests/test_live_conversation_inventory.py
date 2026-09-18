@@ -52,6 +52,24 @@ def test_chat_unreachable_operations_must_still_cite_deterministic_proof():
         require_complete_coverage(value, observation_ids={'observed-1'})
 
 
+def test_an_independently_read_effect_counts_as_live_coverage():
+    """A supported claim's metric and a persisted draft's kind prove the exact
+    operation without a telemetry argument, which the adapter never records."""
+    value = report()
+    for row in value['tool_coverage']:
+        if row['source'] == 'capability':
+            row['source'] = 'effect'
+            row['state'] = 'success'
+    require_complete_coverage(value, observation_ids={'observed-1'})
+
+    value = report()
+    for row in value['tool_coverage']:
+        if row['source'] == 'capability':
+            row['source'] = 'hearsay'
+    with pytest.raises(ValueError, match='uncovered operations'):
+        require_complete_coverage(value, observation_ids={'observed-1'})
+
+
 def test_dropping_coverage_of_a_real_operation_fails():
     value = report()
     value['tool_coverage'] = [row for row in value['tool_coverage']

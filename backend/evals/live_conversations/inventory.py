@@ -110,7 +110,11 @@ def require_complete_coverage(report: dict, *, observation_ids: set[str]):
                 raise ValueError('a deterministic coverage row must cite its proof')
             deterministic.add(row['operation'])
             continue
-        if row.get('source') != 'capability':
+        # 'capability' is a telemetry record of the call; 'effect' is an
+        # independently read application effect proving the exact operation (a
+        # supported claim's metric, a persisted draft's constraint kind). Both
+        # are live evidence and must name an observation; anything else is not.
+        if row.get('source') not in ('capability', 'effect'):
             continue
         if not row.get('observation_id') or row['observation_id'] not in observation_ids:
             raise ValueError('tool coverage has no recorded observation')

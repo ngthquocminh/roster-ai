@@ -5,7 +5,7 @@ from evals.live_conversations.reporting import summarize_runs
 BINDING = {'code': {'git_commit': 'test-only', 'working_tree_dirty': False}}
 
 
-def _run(number, *, verdicts=None, failures=None):
+def _run(number, *, verdicts=None, failures=None, repetition=1):
     verdicts, failures = verdicts or {}, failures or {}
     executions = []
     for case, _endpoint, turns in prefix_executions(load_scenarios()):
@@ -15,7 +15,7 @@ def _run(number, *, verdicts=None, failures=None):
             rows.append({'user': turn.user, 'verdict': verdicts.get(key, 'pass'),
                          'factual_failures': failures.get(key, [])})
         executions.append({
-            'scenario': case.id, 'endpoint': len(turns),
+            'scenario': case.id, 'endpoint': len(turns), 'repetition': repetition,
             'conversation_id': f'{number}-{case.id}', 'isolation_id': f'{number}-{case.id}',
             'status': 'passed' if all(r['verdict'] == 'pass' for r in rows) else 'failed',
             'turns': rows,

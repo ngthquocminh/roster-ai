@@ -172,8 +172,11 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     if len(measured) != 1 or runs[0].get('code') is None:
         raise ValueError('every run must record the same code binding')
     code_binding = runs[0]['code']
-    if code_binding.get('working_tree_dirty') and not ignore_paths:
-        raise ValueError('the measurement ran on a dirty tree and cannot be bound')
+    if code_binding.get('working_tree_dirty') and not (allow_dirty or ignore_paths):
+        # `resolve_bindings` enforces the same rule and records the override, so
+        # this guard only fails fast; it must not be stricter than the binder.
+        raise ValueError('the measurement ran on a dirty tree; pass --allow-dirty to record '
+                         'the override, or measure again on a clean tree')
     bindings = resolve_bindings(
         {
             'evaluator': ('independent application/fixture reads per turn plus a separately '
