@@ -405,6 +405,9 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
         # None on every success path; set at the raise site so the request path
         # can tell an agent-level reason from an identically-spelled manifest code.
         "failure_source": None,
+        # Story 5.7: which in-loop output rule exhausted its retries; None
+        # unless the turn failed as invalid_output.
+        "retry_rule": None,
         "output_text": "tool said alpha",
         # Structured model-side variants stay absent on the default text path.
         "answer": None,
@@ -1190,3 +1193,21 @@ def test_every_in_loop_correction_asks_for_a_complete_answer() -> None:
 
     source = Path(runtime_module.__file__).read_text(encoding="utf-8")
     assert source.count("+ _COMPLETE_ANSWER") == source.count("raise ModelRetry(")
+
+
+def test_an_exhausted_in_loop_rule_is_named_on_the_outcome() -> None:
+    """Story 5.7 B5: an invalid_output failure was undiagnosable because the
+    rejected text is model content and is never logged. The RULE is not."""
+    from application.ports.agent_runtime import AgentInvalidOutputError
+    from application.use_cases.execute_turn import failed_outcome_for_exception
+
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="There are 24 workers.")])),
+        answer_type=GroundedAnswerV1,
+    )
+    with pytest.raises(AgentRuntimeError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
+    assert isinstance(caught.value, AgentInvalidOutputError)
+    assert caught.value.retry_rule == "numeric_prose"
+    assert failed_outcome_for_exception(caught.value).retry_rule == "numeric_prose"

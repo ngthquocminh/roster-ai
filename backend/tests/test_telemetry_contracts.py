@@ -30,6 +30,9 @@ def test_telemetry_contract_has_exact_closed_vocabularies() -> None:
             "status_class",
             "agent_run_status",
             "failure_reason",
+            # Which in-loop output rule exhausted its retries (Story 5.7): a closed
+            # vocabulary rule name, never the rejected model text.
+            "retry_rule",
             "capability_name",
             # Declared by a capability module (Story 5.7): a closed structural
             # vocabulary such as scheduling_inspect's fact group, never content.

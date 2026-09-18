@@ -296,7 +296,8 @@ def failed_outcome_for_exception(exc: Exception) -> AgentRunOutcomeV1:
     # the same honest reason rather than on separate branches that pretend to
     # distinguish them.
     return AgentRunOutcomeV1(
-        status="failed", failure_reason="invalid_output", failure_source="agent"
+        status="failed", failure_reason="invalid_output", failure_source="agent",
+        retry_rule=getattr(exc, "retry_rule", None),
     )
 
 

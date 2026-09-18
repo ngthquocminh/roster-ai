@@ -261,6 +261,9 @@ class PydanticAIAgentRuntime:
         change what is emitted.
         """
         self._config = config or AgentRuntimeConfig()
+        # Name of the last in-loop rule that asked the model to retry. A closed
+        # vocabulary, never the rejected text.
+        self._last_retry_rule: str | None = None
         self._model = model if model is not None else _configured_model(self._config)
         self._deps = deps
         self._answer_type = answer_type
@@ -352,6 +355,7 @@ class PydanticAIAgentRuntime:
                         continue
                     offending = numeric_prose_violation(text, trusted)
                     if offending is not None:
+                        self._last_retry_rule = "numeric_prose"
                         raise ModelRetry(
                             f"The prose segment {text!r} contains {offending!r}, which does "
                             "not appear in any tool result, the workflow snapshot, or the "
@@ -387,12 +391,14 @@ class PydanticAIAgentRuntime:
                         # grounding-missing-evidence pins that path.
                         intended = _mistyped_result_id(result_id, returned)
                         if intended is not None:
+                            self._last_retry_rule = "result_id_mistyped"
                             raise ModelRetry(
                                 f"The claim cites result_id {result_id!r}, which differs from "
                                 f"the id the calculation returned in this turn: {intended!r}. "
                                 "Copy the returned result_id exactly, character for character." + _COMPLETE_ANSWER
                             )
                         continue
+                    self._last_retry_rule = "uncited_claim"
                     raise ModelRetry(
                         "A claim segment carries an empty result_id, so it can cite no "
                         "evidence at all. Either call the calculation tool and cite the "
@@ -415,6 +421,7 @@ class PydanticAIAgentRuntime:
                             # emitted, leaving the planner a gap where the number
                             # belongs (live-suite-v2-acceptance-c: "has <claim>
                             # staffed minutes", "There are  workers").
+                            self._last_retry_rule = "claim_gap"
                             raise ModelRetry(
                                 f"The prose segment {text!r} contains {marker!r} where a "
                                 "number belongs, but the answer carries no claim segment. "
@@ -436,6 +443,7 @@ class PydanticAIAgentRuntime:
                     return output
                 draft_id = _latest_draft_id_this_run(ctx.messages)
                 if draft_id is not None:
+                    self._last_retry_rule = "draft_output_missing"
                     raise ModelRetry(
                         "You created a draft in this turn (draft_id "
                         f"{draft_id!r}), but a draft is saved only when you return the "
@@ -577,9 +585,11 @@ class PydanticAIAgentRuntime:
                         cache_write_tokens=accumulated_usage.cache_write_tokens,
                     ),
                 )
-            raise AgentInvalidOutputError(
-                "agent runtime produced unusable output"
-            ) from exc
+            failure = AgentInvalidOutputError("agent runtime produced unusable output")
+            # Names the RULE, never the rejected text: an invalid-output failure
+            # was otherwise undiagnosable after the fact (Story 5.7, B5).
+            failure.retry_rule = self._last_retry_rule
+            raise failure from exc
         except ModelHTTPError as exc:
             # Typed, not text-tagged: the request path classifies this by class,
             # so rewording the message can never reclassify a provider outage.
