@@ -147,6 +147,10 @@ def _claim_placeholder(text: str) -> str | None:
     # double-space after a sentence ("Hello.  How can I help?").
     if _WORD_GAP.search(text):
         return "a gap between words"
+    # "Staffed minutes for C Fork | Grid P 8GR:" -- the sentence announces a
+    # number and then stops (live-suite-v2-measurement-final, C5).
+    if text.rstrip().endswith((':', '=', '-', '—')):
+        return "a dangling lead-in"
     return None
 
 

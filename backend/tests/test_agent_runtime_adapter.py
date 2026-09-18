@@ -1149,3 +1149,20 @@ def test_an_unrelated_result_id_still_reaches_the_gate_as_missing_evidence() -> 
     runtime = _runtime(model=FunctionModel(_compute_then([invented])),
                        capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
     assert runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?")).answer == invented
+
+
+def test_a_sentence_that_announces_a_number_and_stops_is_corrected_in_loop() -> None:
+    """live-suite-v2-measurement-final C5: 'Staffed minutes for <task>:' with no claim."""
+    attempts = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        text = ("Staffed minutes for C Fork | Grid P 8GR:" if len(attempts) == 1
+                else "That task has staffed time recorded.")
+        return ModelResponse(parts=[TextPart(content=text)])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how many minutes are staffed?"))
+    assert len(attempts) == 2
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="That task has staffed time recorded."),))

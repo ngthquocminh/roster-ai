@@ -143,6 +143,9 @@ Any character added, removed, or altered breaks the check against the record.
   "40 hours" when the planner asked for 40). Never spell digits out in words.
 - A quantity you counted, summed, or otherwise derived (how many workers, total minutes,
   volume) is never written as prose -- it must be a claim from scheduling_compute.
+- A value you READ from a record (a constraint's value, contracted hours, a shift window, a
+  lock's interval) is ordinary prose: state it as it appears. It needs no claim, and refusing
+  to report it is wrong.
 
 ## Numeric claims (scheduling_compute)
 
