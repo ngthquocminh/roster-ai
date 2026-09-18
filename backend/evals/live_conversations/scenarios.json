@@ -1,4 +1,8 @@
 {
+  "case_id": "live-conversation-scenarios-5-7",
+  "case_version": "2",
+  "capability": "scheduling_conversation",
+  "risk_class": "consequential",
   "schema_version": "2",
   "scenarios": [
     {
