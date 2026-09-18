@@ -93,6 +93,15 @@ ANSWER_OUTPUT_TOOL = "final_result"
 CLARIFICATION_OUTPUT_TOOL = "clarification"
 REFUSAL_OUTPUT_TOOL = "refusal"
 DRAFT_OUTPUT_TOOL = "draft"
+#: Appended to every in-loop correction. Without it the model answered the
+#: retry as if it were a new user message ("Correction: ... the previously
+#: displayed rows are unchanged"), so the planner received a delta instead of
+#: the answer (live-suite-final-measurement, C2).
+_COMPLETE_ANSWER = (
+    " Reply with the COMPLETE corrected answer for the planner's request, not a"
+    " correction, apology or description of what changed."
+)
+
 OUTPUT_TOOL_NAMES = frozenset(
     {
         ANSWER_OUTPUT_TOOL,
@@ -136,7 +145,7 @@ _WORD_GAP = re.compile(r"\w {2,}\w")
 _CLAIM_PLACEHOLDERS = ("<claim", "[claim", "{claim", "[computed", "[value", "[count", "[number")
 
 
-def _claim_placeholder(text: str) -> str | None:
+def _claim_placeholder(text: str, *, is_last: bool = True) -> str | None:
     """A stand-in the model left where a claim's number should be rendered."""
     lowered = text.casefold()
     for marker in _CLAIM_PLACEHOLDERS:
@@ -149,7 +158,7 @@ def _claim_placeholder(text: str) -> str | None:
         return "a gap between words"
     # "Staffed minutes for C Fork | Grid P 8GR:" -- the sentence announces a
     # number and then stops (live-suite-v2-measurement-final, C5).
-    if text.rstrip().endswith((':', '=', '-', '—')):
+    if is_last and text.rstrip().endswith((':', '=', '-', '—')):
         return "a dangling lead-in"
     return None
 
@@ -350,7 +359,7 @@ class PydanticAIAgentRuntime:
                             "as they appear there. A quantity you counted, summed or "
                             "otherwise derived must instead be a claim citing a result_id "
                             "returned by a calculation tool. Never spell a number out in "
-                            "words to avoid this rule."
+                            "words to avoid this rule." + _COMPLETE_ANSWER
                         )
                 return output
 
@@ -381,20 +390,26 @@ class PydanticAIAgentRuntime:
                             raise ModelRetry(
                                 f"The claim cites result_id {result_id!r}, which differs from "
                                 f"the id the calculation returned in this turn: {intended!r}. "
-                                "Copy the returned result_id exactly, character for character."
+                                "Copy the returned result_id exactly, character for character." + _COMPLETE_ANSWER
                             )
                         continue
                     raise ModelRetry(
                         "A claim segment carries an empty result_id, so it can cite no "
                         "evidence at all. Either call the calculation tool and cite the "
                         "result_id it returns, or remove the claim and answer in prose "
-                        "alone -- describing a draft or a stored record needs no claim."
+                        "alone -- describing a draft or a stored record needs no claim." + _COMPLETE_ANSWER
                     )
+                segments = list(getattr(output, "segments", ()) or ())
                 if not any(getattr(segment, "result_id", None) is not None
-                           for segment in getattr(output, "segments", ()) or ()):
-                    for segment in getattr(output, "segments", ()) or ():
+                           for segment in segments):
+                    for position, segment in enumerate(segments):
                         text = getattr(segment, "text", "") or ""
-                        marker = _claim_placeholder(text)
+                        # A lead-in ending in ':' is only a dropped claim when
+                        # NOTHING follows it. Flagging every segment rejected a
+                        # correct multi-segment answer until its retries ran out
+                        # (live-suite-final-measurement, C7).
+                        marker = _claim_placeholder(
+                            text, is_last=position == len(segments) - 1)
                         if marker is not None:
                             # The model wrote prose AROUND a claim it never
                             # emitted, leaving the planner a gap where the number
@@ -404,7 +419,7 @@ class PydanticAIAgentRuntime:
                                 f"The prose segment {text!r} contains {marker!r} where a "
                                 "number belongs, but the answer carries no claim segment. "
                                 "Add the claim segment citing a result_id from a calculation "
-                                "in this turn, or rewrite the sentence without the quantity."
+                                "in this turn, or rewrite the sentence without the quantity." + _COMPLETE_ANSWER
                             )
                 return output
 
@@ -425,7 +440,7 @@ class PydanticAIAgentRuntime:
                         "You created a draft in this turn (draft_id "
                         f"{draft_id!r}), but a draft is saved only when you return the "
                         f"`{DRAFT_OUTPUT_TOOL}` output citing that draft_id. Return the "
-                        f"`{DRAFT_OUTPUT_TOOL}` output now instead of describing the draft."
+                        f"`{DRAFT_OUTPUT_TOOL}` output now instead of describing the draft." + _COMPLETE_ANSWER
                     )
                 return output
 

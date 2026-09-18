@@ -1166,3 +1166,27 @@ def test_a_sentence_that_announces_a_number_and_stops_is_corrected_in_loop() -> 
     assert len(attempts) == 2
     assert outcome.answer == GroundedAnswerV1(
         segments=(GroundedProseSegmentV1(text="That task has staffed time recorded."),))
+
+
+def test_a_lead_in_followed_by_more_prose_is_not_a_dropped_claim() -> None:
+    """live-suite-final-measurement C7: 'Active constraints:' followed by the
+    list was rejected until the turn ran out of retries."""
+    answer = GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="Locks: none are active. Active constraints:"),
+        GroundedProseSegmentV1(text="- Maximum agency shifts: 6 weekly."),
+    ))
+    runtime = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id="o1")])),
+        answer_type=GroundedAnswerV1)
+    assert runtime.run_turn(
+        AgentTurnRequestV1(prompt="what locks and constraints are active? 6 56")).answer == answer
+
+
+def test_every_in_loop_correction_asks_for_a_complete_answer() -> None:
+    """live-suite-final-measurement C2 answered a retry with 'Correction: ...',
+    so the planner received a delta instead of the answer."""
+    from agent import runtime as runtime_module
+
+    source = Path(runtime_module.__file__).read_text(encoding="utf-8")
+    assert source.count("+ _COMPLETE_ANSWER") == source.count("raise ModelRetry(")

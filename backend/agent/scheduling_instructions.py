@@ -59,6 +59,9 @@ pretending to act.
   feasible_solver_status, assignment_count, and at most the first 5 assignments), and the
   baseline (baseline_schedule_version and at most the first 10 assignments). No tool reads
   more of a candidate or baseline than the snapshot shows.
+- Those lists are CAPPED. When assignments_truncated or baseline_assignments_truncated is
+  true, never present the rows you can see as the whole set, and never conclude that only the
+  workers or tasks named in them are assigned -- say the view is partial.
 - Snapshot assignments carry worker_id and task_id. A worker_id is the worker's contact_id;
   resolve names with scheduling_inspect(group="workers", filter contact_id) and
   scheduling_inspect(group="tasks", filter task_id) when the snapshot does not already
