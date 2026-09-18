@@ -1,0 +1,951 @@
+{
+  "accepted_findings": [
+    "B:5"
+  ],
+  "blocking_reasons": [],
+  "clean_scenarios": [
+    "A",
+    "B",
+    "C"
+  ],
+  "complete_repetitions": 3,
+  "false_claims": [],
+  "ignored_dirty_paths": [],
+  "images_rebuilt": true,
+  "inventory_digest": "54a37d8e4e027afd1c2addb33da61376c6caf8b9f932c1be3e32d9f0dff2b232",
+  "live_conversation_journeys": "passed",
+  "measurement_tree_dirty": false,
+  "readiness": "eligible",
+  "required_scenarios_per_run": 3,
+  "required_user_turns_per_run": 30,
+  "runs": [
+    {
+      "complete": true,
+      "executed_user_turns": 30,
+      "repetition": 1,
+      "run_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed"
+    },
+    {
+      "complete": true,
+      "executed_user_turns": 30,
+      "repetition": 2,
+      "run_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed"
+    },
+    {
+      "complete": true,
+      "executed_user_turns": 30,
+      "repetition": 3,
+      "run_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed"
+    }
+  ],
+  "schema_version": "3",
+  "source_runs": [
+    "live-matrix-clean.json"
+  ],
+  "tool_coverage": [
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1",
+      "observation_id": "call_qAXUILEthCI7yPhQLEmSZIzn",
+      "operation": "scheduling_baseline:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:A:rep1",
+      "observation_id": "call_9Twx5PKDGFSh9pcXpUKUHFpj",
+      "operation": "scheduling_compute:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-3",
+      "operation": "scheduling_compute:request.$defs.ClaimArgumentsV1.properties.family.anyOf.0=inbound",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-4",
+      "operation": "scheduling_compute:request.$defs.ClaimArgumentsV1.properties.family.anyOf.0=indirect",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-3",
+      "operation": "scheduling_compute:request.$defs.ClaimArgumentsV1.properties.family.anyOf.0=outbound",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-6",
+      "operation": "scheduling_compute:request.properties.metric=qualified_worker_count",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-3",
+      "operation": "scheduling_compute:request.properties.metric=required_demand_volume",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-4",
+      "operation": "scheduling_compute:request.properties.metric=required_headcount_minutes",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-5",
+      "operation": "scheduling_compute:request.properties.metric=staffed_minutes",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:A:rep1 supported claim",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:A:rep1:turn-3",
+      "operation": "scheduling_compute:request.properties.metric=worker_count",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1",
+      "observation_id": "call_fRgAXcw1HwpGwGdJ5J78IWpK",
+      "operation": "scheduling_draft:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=work-areas-and-tasks",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=workers",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=exclude_worker_from_task",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-9",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=lock_worker_shift",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-8",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=scale_demand",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1:turn-6",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=set_max_hours",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1:turn-8",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=set_min_workers_per_task",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=work-areas-and-tasks",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1 persisted draft",
+      "observation_id": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=workers",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:A:rep1",
+      "observation_id": "call_fn8LH9YGMh0z4DG11Qjx8e1Z",
+      "operation": "scheduling_inspect:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1",
+      "observation_id": "call_EJdKEFKvt8y9uaSt14IFE2CW",
+      "operation": "scheduling_inspect:request.properties.group=constraints",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1",
+      "observation_id": "call_vZBGltr7y4wWsBkBJFicqidf",
+      "operation": "scheduling_inspect:request.properties.group=demand",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1",
+      "observation_id": "call_P2iSeua5wTnKjmmNzpmpb1ou",
+      "operation": "scheduling_inspect:request.properties.group=locks",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1",
+      "observation_id": "call_OigDisoZyYd8LmPRlwbJAzVJ",
+      "operation": "scheduling_inspect:request.properties.group=overview",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:B:rep1",
+      "observation_id": "call_h4DxixptEf1CU1h5OAxQO5LX",
+      "operation": "scheduling_inspect:request.properties.group=tasks",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:A:rep1",
+      "observation_id": "call_fn8LH9YGMh0z4DG11Qjx8e1Z",
+      "operation": "scheduling_inspect:request.properties.group=workers",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "7d7a11ee-d25b-484b-824a-44e2e1244fed:C:rep1",
+      "observation_id": "call_62EIROrLcouNCNgBm4xAO0Oq",
+      "operation": "shiftmind_demonstration:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=baseline-assignments",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=constraints-and-objectives",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=demand",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=locks",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=baseline-assignments",
+      "reason": "related_group is only valid as work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=constraints-and-objectives",
+      "reason": "related_group is only valid as work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=demand",
+      "reason": "related_group is only valid as work-areas-and-tasks (exclude_worker_from_task); proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=locks",
+      "reason": "related_group is only valid as work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:request.properties.group=assignments",
+      "reason": "A planner turn reads assignments from the workflow snapshot, which carries them for the baseline and any candidate, so no authored turn addresses the projection group itself; the group is proved by tests/test_scheduling_inspect.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_baseline:error=approval_required",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_baseline:error=baseline_request_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_baseline:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=calculation_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=metric_dimension_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=scenario_not_found",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=site_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=version_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=draft_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=scenario_not_found",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=site_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=version_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:filter=shift_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:filter=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:filter=worker_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:sort=start_minute",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:sort=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:sort=worker_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:filter=constraint_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:filter=value_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:sort=constraint_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:sort=value_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=area_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=end_minute_lte",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=family",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=start_minute_gte",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=amount",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=end_minute",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=family",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=start_minute",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=inspection_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=inspection_timeout",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=scenario_not_found",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=site_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=version_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=scope",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=source",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=target_ref",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=target_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=scope",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=source",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=target_ref",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=target_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:request.properties.order=asc",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:request.properties.order=desc",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=area_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=function",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=name_contains",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=area_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=area_name",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=function",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=name",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=contact_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=employment_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=grade",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=name_contains",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=qualified_task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=contact_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=contracted_hours",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=employment_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=grade",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=name",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:error=optimize_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:invoke",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=approval_required",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=demonstration_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=invalid_repeat",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    }
+  ],
+  "turn_pass_rates": {
+    "A:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:10": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:11": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:12": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:5": {
+      "executed": 3,
+      "passed": 1
+    },
+    "B:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:7": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:8": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:9": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:10": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:11": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:12": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:7": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:8": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:9": {
+      "executed": 3,
+      "passed": 3
+    }
+  },
+  "unaccepted_turn_failures": [],
+  "version_bindings": {
+    "application": "ShiftMind Story 5.7 live conversation suite over the authenticated HTTP path against a disposable composed stack",
+    "code": {
+      "git_commit": "1deb1d0056302f3ea4c64f31a7ee242a1252e1b3",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "capability_distribution": {
+        "scheduling_conversation": 1
+      },
+      "case_count": 1,
+      "case_versions": {
+        "live-conversation-scenarios-5-7": "2"
+      },
+      "files": {
+        "backend/evals/live_conversations/scenarios.json": {
+          "case_id": "live-conversation-scenarios-5-7",
+          "case_version": "2",
+          "sha256": "3fab676cf332812a351698075f58bd5ce8b9c2f1d25c813f1d6d2623066e40cc"
+        }
+      },
+      "kind": "version-controlled golden evaluation dataset",
+      "risk_class_distribution": {
+        "consequential": 1
+      }
+    },
+    "evaluator": "independent application/fixture reads per turn plus a separately configured LLM judge (evals/live_conversations/judge.py RUBRIC); a judge pass can never override a fact or effect failure",
+    "image": {
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
+      "database": "postgres:18",
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959"
+    },
+    "model": [
+      "openrouter:google/gemini-2.5-flash",
+      "openrouter:openai/gpt-5.6-luna"
+    ],
+    "policy": "production grant composition (application/capabilities/registry.py); compute-risk modules are withheld from an ordinary planner turn",
+    "prompt": "agent/scheduling_instructions.py as built into the measured image; authored user turns in evals/live_conversations/scenarios.json",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "schema_version": "e5f6a7b8c9d0",
+    "solver": "real CP-SAT worker run started through POST /api/v1/schedule-runs in Scenario B; no solver participates in Scenarios A and C",
+    "tool": [
+      "scheduling_baseline",
+      "scheduling_compute",
+      "scheduling_draft",
+      "scheduling_inspect",
+      "scheduling_optimize",
+      "shiftmind_demonstration"
+    ]
+  }
+}
