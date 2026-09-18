@@ -46,7 +46,7 @@
         },
         {
           "user": "What tasks are in this scenario?",
-          "obligation": "List real task names from the selected scenario, copied verbatim; invent no task and state no uncomputed count."
+          "obligation": "List the scenario’s real tasks, each task name copied verbatim. Extra context such as a task’s function or area is allowed alongside the name. Invent no task and state no uncomputed count."
         },
         {
           "user": "Show me one worker assigned to one of those tasks.",
@@ -110,7 +110,7 @@
       "turns": [
         {
           "user": "What tasks are in this scenario?",
-          "obligation": "List real task names from the selected scenario, copied verbatim; invent no task and state no uncomputed count."
+          "obligation": "List the scenario’s real tasks, each task name copied verbatim. Extra context such as a task’s function or area is allowed alongside the name. Invent no task and state no uncomputed count."
         },
         {
           "user": "Show me the outbound demand.",
