@@ -159,10 +159,24 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
 
     runs = [json.loads(Path(path).read_text(encoding='utf-8')) for path in run_paths]
     coverage, observation_ids = build_coverage(runs)
+    inventory = capability_inventory()
+    models = sorted({run.get('model') for run in runs} | {run.get('judge_model') for run in runs})
     bindings = resolve_bindings(
-        {'dataset': 'live-conversation-scenarios-5-7',
-         'model': sorted({run.get('model') for run in runs} | {run.get('judge_model') for run in runs}),
-         'scenario': 'A(6)/B(12)/C(12)'},
+        {
+            'evaluator': ('independent application/fixture reads per turn plus a separately '
+                          'configured LLM judge (evals/live_conversations/judge.py RUBRIC); '
+                          'a judge pass can never override a fact or effect failure'),
+            'model': models,
+            'prompt': ('agent/scheduling_instructions.py as built into the measured image; '
+                       'authored user turns in evals/live_conversations/scenarios.json'),
+            'tool': sorted(module['manifest']['capability_name'] for module in inventory['modules']),
+            'policy': ('production grant composition (application/capabilities/registry.py); '
+                       'compute-risk modules are withheld from an ordinary planner turn'),
+            'application': ('ShiftMind Story 5.7 live conversation suite over the authenticated '
+                            'HTTP path against a disposable composed stack'),
+            'solver': ('real CP-SAT worker run started through POST /api/v1/schedule-runs in '
+                       'Scenario B; no solver participates in Scenarios A and C'),
+        },
         repo_root=ROOT,
         dataset_files=[ROOT / 'backend/evals/live_conversations/scenarios.json'],
         allow_dirty=allow_dirty,
