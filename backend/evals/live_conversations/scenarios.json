@@ -117,8 +117,8 @@
           "obligation": "Show real outbound demand records for the scenario with their volume unit; never present outbound volume as headcount."
         },
         {
-          "user": "How much volume does the first task in that demand require?",
-          "obligation": "PASS if EITHER (A) a grounded required outbound volume for the first task shown, stated in volume units, OR (B) a clarification of which task is meant. Do not require both alternatives. Fabricated numbers or mixed units fail."
+          "user": "How much volume does the first task in that demand require, and how much inbound volume is required for the inbound tasks?",
+          "obligation": "PASS if EITHER (A) grounded required volumes for both the first outbound task shown and the scenario’s inbound demand, each stated in volume units, OR (B) a clarification of which task or window is meant. Do not require both alternatives. Fabricated numbers or mixed units fail."
         },
         {
           "user": "How many worker-minutes of indirect headcount are required?",

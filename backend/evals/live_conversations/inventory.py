@@ -49,9 +49,49 @@ def capability_inventory():
                     operations.extend(f'{name}:{group}:{operation}'
                                       for operation in ('pagination', 'empty', 'invalid_query'))
     operations = sorted(set(operations))
-    body = {'schema_version': '1', 'modules': modules, 'operations': operations}
+    body = {'schema_version': '2', 'modules': modules, 'operations': operations,
+            'live_required_operations': sorted(o for o in operations if _is_chat_reachable(o)),
+            'deterministic_operations': sorted(o for o in operations if not _is_chat_reachable(o))}
     body['digest'] = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
     return body
+
+
+#: Operation shapes a planner conversation cannot address on its own: query keys,
+#: paging/empty/invalid-query paths and manifest error codes (several, such as
+#: site_mismatch, are unreachable through a legitimate grant by design). They are
+#: covered by the deterministic backend suite and recorded as such, per Minh's
+#: 2026-09-18 scope decision after the three-scenario right-sizing.
+_DETERMINISTIC_MARKERS = (':filter=', ':sort=', ':error=', ':pagination', ':empty',
+                          ':invalid_query', ':request.properties.order=')
+
+
+def chat_grantable_names() -> frozenset[str]:
+    """Capabilities a PLANNER TURN can address, from the real grant composition.
+
+    `scheduling_optimize` is compute-risk, so an ordinary turn never receives it
+    (registry.py: the module is absent, not present-and-denied). Its operations
+    are therefore not chat-reachable however the scenarios are written.
+    """
+    from uuid import uuid4
+
+    from application.capabilities.registry import (
+        CapabilityGrantContextV1, PLANNER_ROLE, compose_granted_capabilities,
+    )
+
+    site = uuid4()
+    context = CapabilityGrantContextV1(
+        role=PLANNER_ROLE, site_id=site,
+        feature_policy=frozenset(module.required_feature_policy for module in installed_modules()),
+        conversation_id=uuid4(), conversation_site_id=site,
+    )
+    return frozenset(module.manifest.capability_name
+                     for module in compose_granted_capabilities(context))
+
+
+def _is_chat_reachable(operation: str) -> bool:
+    if any(marker in operation for marker in _DETERMINISTIC_MARKERS):
+        return False
+    return operation.split(':', 1)[0] in chat_grantable_names()
 
 
 def require_complete_coverage(report: dict, *, observation_ids: set[str]):
@@ -60,8 +100,16 @@ def require_complete_coverage(report: dict, *, observation_ids: set[str]):
         raise ValueError('capability inventory changed or is unbound')
     rows = report.get('tool_coverage', [])
     covered = set()
+    deterministic = set()
     for row in rows:
         # Application commands and UI actions cannot masquerade as tool executions.
+        if row.get('source') == 'deterministic':
+            # A chat-unreachable operation proved by the offline suite. It must
+            # still name where, so the claim is checkable.
+            if not row.get('reason'):
+                raise ValueError('a deterministic coverage row must cite its proof')
+            deterministic.add(row['operation'])
+            continue
         if row.get('source') != 'capability':
             continue
         if not row.get('observation_id') or row['observation_id'] not in observation_ids:
@@ -71,7 +119,11 @@ def require_complete_coverage(report: dict, *, observation_ids: set[str]):
         if row.get('state') == 'gap' and not row.get('reason'):
             raise ValueError('coverage gap requires an explanation')
         covered.add(row['operation'])
-    missing = sorted(set(current['operations']) - covered)
+    missing = sorted(set(current['live_required_operations']) - covered)
     if missing:
         raise ValueError('uncovered operations: ' + ', '.join(missing))
+    unproven = sorted(set(current['deterministic_operations']) - deterministic)
+    if unproven:
+        raise ValueError('operations with neither live nor deterministic coverage: '
+                         + ', '.join(unproven))
     return current

@@ -290,6 +290,10 @@ def scheduling_inspect_module() -> CapabilityModuleV1:
         # flag and its counts are exactly what the model needs to reason about
         # coverage and to ask a narrower follow-up question.
         model_facing_view=lambda result: result,
+        # The fact GROUP is a closed vocabulary and structural, never workforce
+        # content -- and without it a live run cannot evidence which groups a
+        # conversation actually read (Story 5.7 coverage).
+        telemetry_fact_group=lambda request: request.group,
         model_description=(
             "scheduling_inspect reads the current scenario version's stored facts, one group per "
             "call: overview, tasks, workers, demand, assignments, locks, or constraints. "

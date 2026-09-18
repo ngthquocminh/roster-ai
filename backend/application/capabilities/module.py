@@ -51,6 +51,14 @@ class CapabilityModuleV1:
     model_facing_view: Callable[[object], object]
     model_description: str
     request_argument: str = "request"
+    #: Value for the adapter's own `fact_group` telemetry label, derived from the
+    #: request. Declared per module so the adapter never branches per capability,
+    #: while the label KEY stays a literal there -- a module may choose the value,
+    #: never the key (tests/architecture/test_telemetry_boundaries.py). The value
+    #: must be a closed vocabulary (an enum member, never a record id, name,
+    #: quantity or free text): it leaves the process under AD-12's content
+    #: exclusion exactly like `capability_name`.
+    telemetry_fact_group: Callable[[object], str] | None = None
 
 
 def validate_module(module: CapabilityModuleV1) -> None:

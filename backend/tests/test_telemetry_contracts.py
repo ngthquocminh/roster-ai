@@ -31,6 +31,9 @@ def test_telemetry_contract_has_exact_closed_vocabularies() -> None:
             "agent_run_status",
             "failure_reason",
             "capability_name",
+            # Declared by a capability module (Story 5.7): a closed structural
+            # vocabulary such as scheduling_inspect's fact group, never content.
+            "fact_group",
             "budget_outcome",
             "solver_status",
             "job_type",

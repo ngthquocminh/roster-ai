@@ -87,6 +87,10 @@ def _register_module(
             raise RuntimeError("trusted agent dependencies are unavailable")
         started = perf_counter()
         failure_reason: str | None = None
+        # Declared by the module, never inspected per capability here. Captured
+        # as soon as the request validates so a failing call still labels what
+        # it was addressing.
+        fact_group: str | None = None
         try:
             if request_argument not in kwargs:
                 # `Tool.from_schema`'s default validator does not enforce the
@@ -97,6 +101,8 @@ def _register_module(
                     f"missing required argument {request_argument!r} for {name}"
                 )
             request = request_adapter.validate_python(kwargs[request_argument])
+            if module.telemetry_fact_group is not None:
+                fact_group = str(module.telemetry_fact_group(request))
             # Per-call approval state, so the handler can refuse before acting.
             call_deps = replace(
                 ctx.deps, tool_call_approved=bool(ctx.tool_call_approved)
@@ -124,6 +130,9 @@ def _register_module(
         finally:
             if ctx.deps.telemetry is not None:
                 labels = {"capability_name": name}
+                if fact_group is not None:
+                    # Literal key here, module-supplied closed-vocabulary value.
+                    labels["fact_group"] = fact_group
                 if failure_reason is not None:
                     labels["failure_reason"] = failure_reason
                 try:

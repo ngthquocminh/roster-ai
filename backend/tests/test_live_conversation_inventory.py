@@ -8,7 +8,11 @@ def report():
     return {'inventory_digest': inventory['digest'], 'tool_coverage': [
         {'source': 'capability', 'operation': operation, 'observation_id': 'observed-1',
          'state': 'gap', 'reason': 'A recorded test attempt found no supported path.'}
-        for operation in inventory['operations']
+        for operation in inventory['live_required_operations']
+    ] + [
+        {'source': 'deterministic', 'operation': operation,
+         'reason': 'Covered by the offline backend suite; unreachable from a planner turn.'}
+        for operation in inventory['deterministic_operations']
     ]}
 
 
@@ -20,6 +24,32 @@ def test_inventory_contains_installed_tools_request_variants_and_actual_query_ke
     assert any('set_max_hours' in key for key in inventory['operations'])
     assert 'shiftmind_demonstration:invoke' in inventory['operations']
     require_complete_coverage(report(), observation_ids={'observed-1'})
+
+
+def test_chat_unreachable_operations_must_still_cite_deterministic_proof():
+    """Minh's 2026-09-18 scope decision: query keys, paging/invalid-query paths
+    and manifest error codes are proved offline, but they may not simply vanish
+    from the denominator."""
+    inventory = capability_inventory()
+    assert len(inventory['live_required_operations']) + len(
+        inventory['deterministic_operations']) == len(inventory['operations'])
+    assert 'scheduling_inspect:workers:filter=qualified_task_id' in inventory[
+        'deterministic_operations']
+    assert 'scheduling_compute:request.properties.metric=staffed_minutes' in inventory[
+        'live_required_operations']
+
+    value = report()
+    value['tool_coverage'] = [row for row in value['tool_coverage']
+                              if row['source'] != 'deterministic']
+    with pytest.raises(ValueError, match='neither live nor deterministic'):
+        require_complete_coverage(value, observation_ids={'observed-1'})
+
+    value = report()
+    for row in value['tool_coverage']:
+        if row['source'] == 'deterministic':
+            row.pop('reason')
+    with pytest.raises(ValueError, match='cite its proof'):
+        require_complete_coverage(value, observation_ids={'observed-1'})
 
 
 def test_dropping_coverage_of_a_real_operation_fails():

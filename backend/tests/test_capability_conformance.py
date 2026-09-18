@@ -597,3 +597,22 @@ def test_scheduling_draft_never_hands_the_model_proposal_contents() -> None:
 
     assert rendered == '{"draft_id": "c0ffee", "schema_version": "1"}'
     assert "must remain" not in rendered
+
+
+def test_declared_telemetry_labels_reach_the_record_without_a_per_capability_branch() -> None:
+    """Story 5.7: a live run must be able to evidence WHICH fact group a
+    conversation read. The adapter never inspects the request itself -- the
+    module declares the label -- and only allow-listed keys survive the sink.
+    """
+    from application.capabilities.scheduling_inspect import (
+        SchedulingInspectRequestV1, scheduling_inspect_module,
+    )
+    from application.contracts.telemetry import TELEMETRY_LABEL_KEYS
+
+    module = scheduling_inspect_module()
+    assert module.telemetry_fact_group is not None
+    assert module.telemetry_fact_group(SchedulingInspectRequestV1(group="locks")) == "locks"
+    assert "fact_group" in TELEMETRY_LABEL_KEYS
+
+    source = (BACKEND_ROOT / "agent/capability_tools.py").read_text(encoding="utf-8")
+    assert source.count('"fact_group"') == 1, "one literal key in the adapter, value from the module"
