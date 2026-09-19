@@ -1090,3 +1090,10 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   final attempt alone. **Deferred reason:** a feature gap against AC7's wording, not a regression, and
   the readiness verdict is correct without it; needs a scoping call from Minh before it is built.
   **Owner: open.**
+
+## Deferred from: code review of 5-7-prove-live-conversations-through-baseline-promotion, docs/planning + evidence slice (2026-09-19)
+
+- **`docs/CI-SECRETS-CHECKLIST.md:30` says a CI live suite's result "can never satisfy a release gate on its own" (NFR26).**
+  That reads awkwardly against AD-16, under which live evidence is the acceptance authority for conversational
+  behaviour. **Deferred reason:** the sentence is about a hypothetical, separately gated CI live workflow, not
+  Story 5.7's suite, and nothing in this story's diff caused it. **Owner: open.**

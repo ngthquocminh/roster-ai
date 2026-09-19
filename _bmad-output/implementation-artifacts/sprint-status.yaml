@@ -2591,26 +2591,31 @@ development_status:
   # telemetry) is the SAME pre-existing, unrelated local .env AGENT_RUNTIME_MODEL leak Stories
   # 5.5/5.6 already documented and deferred -- do not attribute it to this story.
   #
-  # NOT DECIDED HERE, deliberately: whether the demonstration-approval gap gets a narrow fix
-  # or a documented-gap report (Decision 1 leaves this to reproduction); the exact shape of the
-  # new real-backend Playwright infrastructure (Decision 3); and the new live-suite budget
-  # ceilings, which must be re-derived for ~3-7x the per-run turn volume of Story 5.6's matrix
-  # (Decision 5), not copied from it. First action per the story's own AC1 is live reproduction.
+  # NOT DECIDED HERE, deliberately (2026-09-15 creation note; SUPERSEDED by the 2026-09-17
+  # right-sizing below): whether the demonstration-approval gap gets a narrow fix or a
+  # documented-gap report (Decision 1 chose a reported gap); the shape of new real-backend
+  # Playwright infrastructure (Decision 3, removed with the browser journey); and live-suite
+  # budget ceilings re-derived for ~3-7x the per-run turn volume (Decision 5; the suite is now
+  # 30 turns per run, not 273).
   # 2026-09-17: Correct Course approved by Minh (sprint-change-proposal-2026-09-17). Story 5.7
   # acceptance right-sized to three scenarios A(6)/B(12)/C(12), no prefix endpoints, one clean
   # run per scenario + three repetitions with per-turn pass rates; false claims still hard-fail;
-  # real-browser journey and judge calibration set removed. Budget raised to USD 15. Status unchanged.
-  # 2026-09-18: live suite passed on the configured stack (89/90 turns, 8/9 clean
-  # executions, clean run per scenario, no false claims). Evidence at
-  # evidence/story-5.7/live-conversation-journeys.json; four flaky turns accepted by Minh
-  # with their pass rates. Ready for review.
+  # real-browser journey and judge calibration set removed. Budget raised to USD 15 (Minh has
+  # since approved a higher ceiling for the measurement runs; the figure is not restated here).
+  # Status unchanged.
+  # 2026-09-18: live suite passed on the configured stack: 88/90 turns, 7/9 clean executions,
+  # a clean run per scenario, no false claims. Evidence at
+  # evidence/story-5.7/live-conversation-journeys.json; one turn (B:5, passed 1 of 3) is
+  # accepted with its pass rate. That evidence is stale on purpose (measured before the review
+  # patches) and is regenerated once after every review slice is done.
   5-7-prove-live-conversations-through-baseline-promotion: in-progress
-  # Code review 2026-09-18 (core-app-code slice only): 3 decision-needed findings deferred
+  # Code review 2026-09-18 (core-app-code slice): 3 decision-needed findings deferred
   # (Minh), 8 patch findings fixed and verified (168 targeted + 44 scenario_projection tests
-  # green), 1 finding deferred, 19 dismissed as noise after code-level verification. Eval
-  # harness, test suite, docs/planning artifacts, evidence JSON, and frontend e2e were NOT
-  # reviewed in this pass -- status held at in-progress pending a follow-up review of those
-  # slices before returning to review.
+  # green), 1 finding deferred, 19 dismissed as noise after code-level verification.
+  # Code review 2026-09-19: eval-harness, test-suite and docs/planning + evidence slices
+  # reviewed; their patches are applied (see the story's Review Findings). Only the frontend
+  # e2e slice is still unreviewed -- status held at in-progress until it is, and until the
+  # evidence is regenerated once for all slices.
   # Code review 2026-09-14/15: all decision-needed and patch findings fixed and verified
   # (full default suite 1612/1613, the one failure pre-existing/unrelated). Decision 4 also
   # closed: live suite re-run on a clean, committed tree (eea9148); readiness "eligible",

@@ -9,24 +9,34 @@
 
 ```bash
 cd backend
-uv run python -m evals.live_conversations.suite   --agent-model 'openrouter:openai/gpt-5.6-luna'   --judge-model 'openrouter:google/gemini-2.5-flash'   --reasoning-effort low --repetitions 3   --spend-limit-usd 30 --prior-spend-usd <real OpenRouter usage>   --output ../_bmad-output/test-artifacts/live-matrix.json
+uv run python -m evals.live_conversations.suite \
+  --agent-model 'openrouter:openai/gpt-5.6-luna' \
+  --judge-model 'openrouter:google/gemini-2.5-flash' \
+  --reasoning-effort low --repetitions 3 \
+  --spend-limit-usd <approved ceiling> --prior-spend-usd <real OpenRouter usage> \
+  --output ../_bmad-output/test-artifacts/live-matrix.json
 
-uv run python -m evals.live_conversations.evidence   ../_bmad-output/test-artifacts/live-matrix.json   --accept-finding A:6 --accept-finding B:5 --accept-finding C:1 --accept-finding C:5
+uv run python -m evals.live_conversations.evidence \
+  ../_bmad-output/test-artifacts/live-matrix.json --accept-finding B:5
 ```
 
-The suite is opt-in and paid: it is never selected by `pytest`. Each execution builds and tears down its own Compose stack (Postgres, API, worker, web) and drives the authenticated HTTP conversation path — no doubles, no stubs. Scenario B runs the real CP-SAT solver and a real approval. Keys come from `backend/.env`; nothing is printed.
+The suite is opt-in and paid: it is never selected by `pytest`. It builds the API and web images once, then each execution brings up and tears down its own Compose stack (Postgres, API, worker, web) and drives the authenticated HTTP conversation path — no doubles, no stubs. Scenario B runs the real CP-SAT solver and a real approval. Keys come from `backend/.env`; nothing is printed.
 
-`--resume <report.json>` continues an interrupted report (refused unless it names the same commit), `--execution-retries` retries one execution that ends on an infrastructure fault, and `--skip-image-build` reuses images already built from the same code (recorded in the report; never valid for evidence).
+`--accept-finding SCENARIO:TURN` is given once per turn the owner has accepted (below); the example is the turn the recorded matrix accepted. Give none when nothing was accepted.
+
+The measured configuration -- reasoning effort, the per-token prices that drive the spend limiter, and the request, tool-call, token and deadline limits -- is the tracked `backend/evals/live_conversations/compose.override.yml`, which `--override-file` defaults to. Every run report records the models, their endpoint identity (no credential), the reasoning effort and that file's sha256, plus the content id of the API and web images it ran; the evidence binds them as `measured_configuration` and `version_bindings.image`. Update the price rates in that file whenever `--agent-model` changes, or every cost figure is wrong.
+
+`--resume <report.json>` continues an interrupted report (refused unless it names the same commit, configuration and image ids; pair it with `--skip-image-build`), `--execution-retries` retries one execution that ends on an infrastructure fault, and `--skip-image-build` reuses images already built from the same code (recorded in the report; never valid for evidence).
 
 ### What it covers
 
 - Three authored conversations: **A** introduction, typo and memory (6 turns); **B** draft → real solver run → approval → baseline (12); **C** tool tour (12). 30 user turns per repetition, generated live from fresh state, with a verdict on every turn.
-- Every installed tool and operation a planner turn can address (39 operations) must be exercised live. The remaining 96 — query keys, paging, invalid-query paths, manifest error codes and the compute-risk run tool the registry withholds from chat — must each cite deterministic proof. Neither set may vanish from the denominator.
+- The inventory is 135 operations, derived from the installed capabilities. 37 are live-required: every one is exercised live, or carries a named reason a planner turn cannot reach it plus the test that proves it instead (10 do, e.g. draft groups the resolver rejects). The other 98 — query keys, paging, invalid-query paths, manifest error codes and the compute-risk run tool the registry withholds from chat — are deterministic-only. Neither set may vanish from the denominator, and a known product gap (the demonstration approval branch, Story 5.7 Decision 1) is stated as one.
 - Two independent layers per turn: fact/effect checks read the application and fixture directly, and a separately configured LLM judge scores relevance, continuity, completeness and clarification/refusal. A judge pass can never override a fact or effect failure.
 
 ### Measured results
 
-Recorded matrix, `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, images rebuilt, 9 executions:
+Recorded matrix (the one the committed evidence file describes; refreshed with it), `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, images rebuilt, 9 executions:
 
 | | Result |
 |---|---|
@@ -36,9 +46,9 @@ Recorded matrix, `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, images rebui
 | False claims, wrong facts, missing effects | **none** |
 | Tracked spend | USD 0.59 |
 
-Accepted finding (recorded, not hidden): **B:5 2/3** in this matrix, 3/3 in a same-code diagnostic. The turn produced no answer at all, never a wrong one. Earlier matrices scattered single failures across A:6, B:10, C:1, C:4 and C:5 — each passing ~2 times in 3 — which is a per-turn failure rate of roughly 2%, not a set of broken turns. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates and the verdict.
+Accepted finding (recorded, not hidden): **B:5 passed 1 of 3** in this matrix (3/3 in a same-code diagnostic). Both failures were an agent turn that ended without an answer (`unsuccessful_agent_turn`), never a wrong one. Earlier matrices scattered single failures across A:6, B:10, C:1, C:4 and C:5, so roughly 1 turn in 90 fails in any one matrix -- about 1%, spread across different turns rather than a fixed set of broken ones. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates, the accepted finding's per-execution failure reasons, the verdict, and the sha256 of each source report.
 
-A stricter cross-check with `google/gemini-2.5-pro` as judge (~5x the judging cost) found real defects the cheaper judge passed, including a per-task figure presented as a scenario-wide total. Use it when hunting defects; the cheaper judge runs the recorded matrix.
+A stricter cross-check with `google/gemini-2.5-pro` as judge (~5x the judging cost) found real defects the cheaper judge passed, including a per-task figure presented as a scenario-wide total (since fixed, with a regression test). Use it when hunting defects; the cheaper judge runs the recorded matrix.
 
 ### What blocks
 

@@ -1,66 +1,55 @@
 # Story 5.7 continuation handoff
 
-Updated: 2026-09-18 (credit topped up; agent model reverted to openai/gpt-5.6-luna; two real production/harness bugs fixed; this handoff written specifically to start a FRESH session — the prior one ran very long)
+Updated: 2026-09-19. **This file is a historical trail plus a short list of what is still owed. It no
+longer contains instructions to run more scenarios, prefixes, matrices or a browser journey: the
+story was right-sized by `sprint-change-proposal-2026-09-17` (approved) to three scenarios (A 6
+turns, B 12, C 12), one clean run per scenario plus three repetitions with per-turn pass rates, and
+no browser journey.** The numbered lessons below are still the most useful part; mine them by number.
 
 ## Resume point
 
-**STATUS 2026-09-18 (read first; supersedes the 2026-09-17 entries below).** The right-sized
-suite (A 6 turns, B 12, C 12) runs green on `openrouter:openai/gpt-5.6-luna` +
-`openrouter:google/gemini-2.5-flash`.
+**STATUS 2026-09-19.** The suite runs green on `openrouter:openai/gpt-5.6-luna` +
+`openrouter:google/gemini-2.5-flash`. The recorded matrix behind `evidence/story-5.7/` passed
+88 of 90 turns and 7 of 9 executions; every scenario has a clean run, and the one accepted finding
+is B:5 (passed 1 of 3, an agent turn that ended without an answer). Code review of the story diff
+is done slice by slice (core app code, eval harness, test suite, docs/planning + evidence; the
+frontend slice remains); findings and their resolutions are in the story file.
 
-- Best full acceptance run: `live-suite-v2-acceptance-c.json` (images rebuilt, 9 executions,
-  no incomplete): **7/9 executions clean; B 36/36 across all three repetitions; A 17/18;
-  C 35/36**; tracked spend USD 0.51. Every scenario has at least one clean repetition.
-- Its two failures were fixed afterwards in `eece90a` (prose left a gap/placeholder where a
-  claim belonged). The follow-up run `live-suite-v2-acceptance-d.json` aborted at A5 on a NEW
-  infrastructure fault, not content: `application_http_404_POST_/api/v1/conversations/*/
-  agent-runs/*/execute`. That 404 means `claim_queued_run` found no row for a run the
-  immediately preceding POST /messages had just created (`api/routers/conversations.py:278`);
-  seen twice in ~20 executions, never reproduced deterministically. Diagnose before trusting a
-  single green run; it is the last known non-content blocker.
-- **Budget: real OpenRouter usage was USD 14.52 of the USD 15 ceiling at that point.** No
-  further live run may start without Minh raising it.
-- Product fixes this session (all with tests, full backend suite green at 1909 passed):
-  `c268221` OpenRouter transient/`finish_reason: error` retry + text output accepted (root
-  cause of lesson 18's zero-cost `invalid_output`), `42c7c14` draft output required after a
-  draft tool call, `630d126` numerals in prose only when traceable to trusted text (AD-11
-  clarification; lesson 17's "8GR" truncation was this rule, not model unreliability),
-  `32dc6dc`/`e67fc87` empty-citation correction + draft recovery, `eece90a` claim-gap
-  correction. Harness fixes: `3052eaa`, `6f39c8d`, `92fa54f`, `74ffebd`, `1693bf4`.
-- Scope was right-sized by `sprint-change-proposal-2026-09-17` (approved): 3 scenarios, no
-  prefixes, one clean run per scenario + 3 repetitions with per-turn pass rates, no browser
-  journey, no judge calibration set.
-- Still owed: a final clean acceptance run on `eece90a`, `docs/TESTING.md` command + measured
-  results, version-bound `evidence/story-5.7/**` via `backend/scripts/evidence_binding.py`,
-  Gate B `live_conversation_journeys` field, and a demo-stack rebuild (the persistent
-  `rosterai-*` stack on :8080 still runs pre-fix images).
+Still owed, in order:
 
-**SCOPE CHANGED 2026-09-17 (read first):** `sprint-change-proposal-2026-09-17` right-sized the story to three scenarios — A (6, already passed), B (12 turns, single draft/solve/approve cycle, rewritten turns 2/3/9/11/12), C (12-turn tool tour) — with no prefix endpoints and acceptance = one clean run per scenario + three repetitions with per-turn pass rates. The B endpoint 4/8/12 history below is historical. Next step: rewrite `backend/evals/live_conversations/scenarios.json` to the new catalogue, then run B and C in full.
+1. Finish the code review of the remaining slice (`frontend/e2e/live-conversations.spec.ts`,
+   `playwright.live.config.ts`, generated `openapi.json`/`schema.d.ts`).
+2. Regenerate the evidence ONCE, after all slices are reviewed, per `docs/EVIDENCE-CONVENTION.md`:
+   commit the code, then measure (this re-runs the paid live suite; the committed evidence is
+   stale on purpose: it predates the harness and agent fixes), then generate through
+   `backend/scripts/evidence_binding.py` (`python -m evals.live_conversations.evidence`), then commit
+   the evidence separately. The command is in `docs/TESTING.md`.
+3. Wire the Gate B `live_conversation_journeys` field from the regenerated evidence.
+4. Rebuild the persistent demo stack (the `rosterai-*` stack on :8080 still runs pre-fix images).
 
-**Update (next session, after this file was written):** commit `082a2dc` rewrote the agent prompt and tool descriptions — the prompt previously told the agent to "inspect" run candidates/baselines, which no tool can read (`scheduling_inspect` assignments are the scenario's own starting assignments; candidates/baseline exist only in the workflow snapshot, truncated to 5/10 rows). Earlier endpoint-12 "constraint verified" passes may have been grounded on the wrong data. A "ShiftMind workflow" section was added. Real OpenRouter key usage was USD 10.58 lifetime at that point (above the old USD 10 budget); **Minh raised the story budget to USD 15 and chose to stay on `openai/gpt-5.6-luna`**. Runs from here use `--spend-limit-usd 15 --prior-spend-usd <real key usage>`; first run is `r40`.
+Budget: the ceiling is whatever Minh has approved for the next measurement (the original proposal
+said USD 15, and real OpenRouter usage passed that); do not start a live run without confirming it,
+and pass the real key usage as `--prior-spend-usd` (check `GET https://openrouter.ai/api/v1/key`).
 
-Story 5.7 remains `in-progress`. This entry supersedes everything below it that talks about being blocked on credit — **the account was topped up and confirmed working** (gpt-5-mini and gpt-5.6-luna both made real, billed calls after the top-up). Read this section fully before doing anything; the rest of the file is historical trail, most usefully mined via the lesson numbers cited inline.
+The measured configuration (prices, limits, reasoning effort) is now the TRACKED
+`backend/evals/live_conversations/compose.override.yml`; where lessons below say the override file is
+git-ignored under `_bmad-output/test-artifacts/`, that was true when they were written.
 
-**Where the actual live-matrix progress stands:**
-- Scenario A: passed, complete.
-- Scenario B endpoint 4: passed, complete.
-- Scenario B endpoint 8: 7/8 turns pass consistently with Haiku 4.5 / Gemini 2.5 Flash. Turn 2's task-name-suffix drop is a recorded model-reliability finding (lesson 17), not chased further.
-- Scenario B endpoint 12: best run (`r31`/`r32`, Haiku 4.5) passed turns 1, 3-9 cleanly, including turn 9 (the real baseline-approval-proposal turn — this story's central claim). Turns 10-12 are still **entirely unseen**. No fully clean 12-turn run yet.
-- Scenarios C-H: not started at all.
+Story 5.7 remains `in-progress`. What follows is the historical trail.
 
-**What changed after that (2026-09-18), and why the CURRENT config is `openai/gpt-5.6-luna`, not Haiku:** Minh asked to compare cheaper agent models against Haiku 4.5 (DeepSeek Pro, GPT Luna, gpt-5-mini, Qwen3-235b), since Haiku's real cost turned out to be the reason the account ran dry (lesson 20). None of the cheaper models matched Haiku's reliability on Scenario B endpoint 4's turn 2 (the family-routing-and-naming turn) — see the "Cheap-model comparison" section below for the full trail. Two REAL, durable bugs were found and fixed along the way (lessons 22-23), independent of which model wins. At the end of that investigation Minh explicitly asked to switch back to `openai/gpt-5.6-luna` as the working agent model — **this is the model configured in `story-5-7.compose.override.yml` right now**, not Haiku. If the next session wants Haiku back for endpoint 12 (recommended, since it's the only model that has ever reached turn 9), that is a deliberate config change to make first, not the current default.
+**Product fixes this story made** (all with tests): `c268221` OpenRouter transient/`finish_reason: error`
+retry + text output accepted, `42c7c14` draft output required after a draft tool call, `630d126`
+numerals in prose only when traceable to trusted text (AD-11 clarification), `32dc6dc`/`e67fc87`
+empty-citation correction + draft recovery, `eece90a` claim-gap correction. Harness fixes: `3052eaa`,
+`6f39c8d`, `92fa54f`, `74ffebd`, `1693bf4`. `082a2dc` rewrote the agent prompt and tool descriptions:
+the prompt had told the agent to "inspect" run candidates and baselines, which no tool can read
+(they exist only in the truncated workflow snapshot), so earlier endpoint-12 passes may have been
+grounded on the wrong data.
 
-**Immediate next steps for a fresh session, in order:**
-1. Read the "Cheap-model comparison" section below before choosing an agent model — it has the real per-turn results, not just a summary.
-2. Decide: continue with `gpt-5.6-luna` (cheaper, Minh's last explicit choice, but unproven past endpoint 4 and still drops task names sometimes even with the fixes below), or switch back to `openai/anthropic/claude-haiku-4.5` for endpoint 12 specifically (proven to reach turn 9, more expensive). Either way, **verify `story-5-7.compose.override.yml`'s price rates match the chosen model** against the live `/api/v1/models` catalog before running anything (lesson 20's bug class) — the file's own header comment has the current values and the exact incident that makes this non-optional.
-3. If continuing endpoint 12: `uv run python -m evals.live_conversations.suite --scenario B --endpoint 12 --agent-model 'openrouter:<chosen>' --judge-model 'openrouter:google/gemini-2.5-flash' --reasoning-effort low --repetitions 1 --spend-limit-usd 10 --prior-spend-usd <see below> --output '../_bmad-output/test-artifacts/live-scenario-B-endpoint12-r40.json'`.
-4. Cross-check the OpenRouter account's real `usage_daily` (`GET https://openrouter.ai/api/v1/key`) against this harness's own tracked total after the first new run, to confirm no new price-drift or undercounting has crept in.
-
-**Prior-spend reserve:** treat conservatively — this session's own tracked total across every report was small (well under $1 for all the cheap-model comparison work combined), but lesson 20 already proved this harness's own tracking can meaningfully understate real spend when a price rate is stale. Check the account's actual `usage_daily` figure directly rather than trusting a carried-forward number from this file.
-
-**Suggested fresh-session instruction:**
-
-> Continue `/bmad-dev-story 5.7` from `_bmad-output/implementation-artifacts/story-5-7-handoff.md`; read the Resume point and the Cheap-model comparison section, decide whether to continue with `openai/gpt-5.6-luna` or switch back to `anthropic/claude-haiku-4.5` for Scenario B endpoint 12, verify the compose override file's price rates match whichever model is chosen, then continue toward a clean endpoint-12 run (turns 10-12 are still unseen). Keep total story spend well under budget and cross-check real OpenRouter usage before trusting the harness's own tracked total.
+**Superseded (2026-09-17/18) and removed from this file:** the per-endpoint resume instructions for
+Scenario B (`--endpoint 12`, prefix ladders 4/8/12/16/20), the plan for Scenarios D-H and the
+browser journey, the "decide Haiku or Luna" step, and the USD 10 budget. Their history survives in
+the sections and lessons below.
 
 ## Cheap-model comparison (2026-09-18)
 
@@ -77,14 +66,13 @@ Minh asked to compare agent models cheaper than Haiku 4.5, all tested on Scenari
 
 ## Current live configuration and budget
 
-- Application agent: **`openrouter:openai/gpt-5.6-luna`** as of 2026-09-18 (Minh's explicit choice after the cheap-model comparison above). This is CHEAPER but LESS PROVEN than `openrouter:anthropic/claude-haiku-4.5`, which is the only model that has ever reached endpoint 12 turn 9 and is also the actual pinned production model (`docs/GETTING-STARTED.md`). Re-read the comparison table above before deciding which to use for endpoint 12 specifically.
+- Application agent: **`openrouter:openai/gpt-5.6-luna`** as of 2026-09-18 (Minh's explicit choice after the cheap-model comparison above). This is CHEAPER but LESS PROVEN than `openrouter:anthropic/claude-haiku-4.5`, which is the only model that reached endpoint 12 turn 9 under the old prefix ladder. The validated pairing is now `gpt-5.6-luna` (`docs/GETTING-STARTED.md`). Re-read the comparison table above before deciding which to use for endpoint 12 specifically.
 - Independent judge: `openrouter:google/gemini-2.5-flash` (unchanged since 2026-09-17 — the non-lite tier reliably applies rubric rules the lite tier missed 3/3 times; see lesson 15).
-- `story-5-7.compose.override.yml`'s price rates are currently set for `openai/gpt-5.6-luna` ($0.20/$1.20 per Mtok). **If you switch the agent model, update this file's rates in the SAME change** — its own header comment explains why this is non-negotiable (lesson 20's incident: a stale rate silently undercounted real spend ~6.75x for an entire session, contributing to the account running out of credit before anyone noticed).
-- Total story API budget: USD 10; minimize spend. The account WAS confirmed out of credit earlier in this session (lesson 19) and has since been topped up by Minh directly — real, billed calls succeeded afterward (gpt-5-mini, gpt-5.6-luna). Do not assume a specific dollar figure of remaining headroom; check `GET https://openrouter.ai/api/v1/key`'s `usage`/`usage_daily` fields against what this harness's own reports track, since lesson 20 proved those two numbers can drift apart silently.
+- `backend/evals/live_conversations/compose.override.yml`'s price rates are currently set for `openai/gpt-5.6-luna` ($0.20/$1.20 per Mtok). **If you switch the agent model, update this file's rates in the SAME change** — its own header comment explains why this is non-negotiable (lesson 20's incident: a stale rate silently undercounted real spend ~6.75x for an entire session, contributing to the account running out of credit before anyone noticed).
+- Story API budget: see the resume point; minimize spend. The account WAS confirmed out of credit earlier in this session (lesson 19) and has since been topped up by Minh directly — real, billed calls succeeded afterward (gpt-5-mini, gpt-5.6-luna). Do not assume a specific dollar figure of remaining headroom; check `GET https://openrouter.ai/api/v1/key`'s `usage`/`usage_daily` fields against what this harness's own reports track, since lesson 20 proved those two numbers can drift apart silently.
 - Keep secrets in `backend/.env`; never print them. An ignored `backend/.env.before-story-5-7` backup exists.
 - Baseline assignment context is temporarily capped at 10, as requested.
 - The unrelated orphaned `shiftmind-story-5-7-*` Compose project (containers/network/volume) from an earlier session was removed 2026-09-17 with Minh's explicit sign-off — do not expect to find it running anymore, and do not recreate it manually; each live suite run creates and tears down its own `shiftmind-live-*` project via `isolated_stack()`.
-- D: drive filled to 0 bytes free mid-session on 2026-09-17 (unrelated personal data, not caused by this story's work — Docker's own WSL2 vhdx is only ~25GB and lives on C:). Resolved by moving two already-compressed archive files from `D:\Download\` to `C:\MovedFromD\` with Minh's explicit direction; check `df -h /d` if `ENOSPC` recurs before assuming a code issue.
 
 The application agent and judge must remain separate model families where practical. DeepSeek Flash was unreliable as its own judge because it frequently returned malformed structured output. Gemini 2.5 Flash Lite was the cheapest probed judge that reliably supported the required JSON response shape, but proved unreliable at applying explicit rubric rules (lesson 15) — Gemini 2.5 Flash (non-lite) replaced it and has not reproduced that specific failure; it has been the judge for every model tried since, including the whole cheap-agent comparison.
 
@@ -105,7 +93,7 @@ Scenario A passed.
 - A6 used a conservative USD 1.24 prior-spend reserve and stayed within the USD 10 story ceiling.
 - No factual failures remained.
 
-The two files are ignored development evidence. They establish the continuation point but are not final version-bound release evidence. The full matrix, three consecutive final runs, and real-browser evidence are still outstanding.
+The two files are ignored development evidence. They establish the continuation point but are not final version-bound release evidence. Those outstanding items were superseded by the right-sized suite (see the resume point).
 
 ## Scenario B endpoint 4 result
 
@@ -115,19 +103,9 @@ Passed on the third attempt (`live-scenario-B-endpoint4-r3.json`, run `dca2e4de-
 
 Effectively solved with the Haiku 4.5 / Gemini 2.5 Flash pairing: 7 of 8 turns pass consistently across `live-scenario-B-endpoint8-haiku-r1.json` through `-r9-medium.json`. The remaining turn (turn 2's task-name-suffix drop) is recorded as a model-reliability finding, not chased further (lesson 17). Do not spend more on this specific prefix unless new evidence changes the picture.
 
-## Scenario B endpoint 12 status: reached turn 9 cleanly; BLOCKED on OpenRouter credit, not content
+## Scenario B endpoint 12 status (historical, pre-right-sizing): reached turn 9 cleanly; then blocked on OpenRouter credit, not content
 
 ~39 attempts total this session (`live-scenario-B-endpoint12-r1.json` through `-r39.json`, plus `-r5-medium.json`/`-r7-medium.json`). Real progress across the session, driven by four separate real fixes (the not_applicable rubric fix, the evidence_ids-on-applicable-dimensions fix, the draft-description claim fix, and the soft-constraint-verification fix — see the story file's Dev Agent Record for exact commits): turns 1, 3, 4, 5, 6, 7, 9 all reached "pass consistently" status, and `r31`/`r32` cleanly passed all the way through **turn 9 — the real baseline-approval-proposal turn**, the core workflow this story exists to prove. Turn 2 remains the already-recorded lesson-17 finding (intermittent — sometimes passes, sometimes still drops the task-name suffix). Turns 10-12 are still entirely unseen (one `r26`/`r27` attempt reached turn 10/11 but with a telemetry-read failure before content could be captured cleanly). The session did not end from a content or harness bug: the last several attempts (`r38`, `r39`) failed with the distinctly-classified `provider_error` reason, and Minh confirmed the OpenRouter account ran out of credit. See lesson 19 for the full diagnostic trail (do not re-diagnose `provider_error` as a code issue on resume).
-
-## Continue with Scenario B endpoint 12 — ONLY AFTER CONFIRMING OPENROUTER CREDIT
-
-From `backend`:
-
-```powershell
-uv run python -m evals.live_conversations.suite --scenario B --endpoint 12 --agent-model 'openrouter:anthropic/claude-haiku-4.5' --judge-model 'openrouter:google/gemini-2.5-flash' --reasoning-effort low --repetitions 1 --spend-limit-usd 10 --prior-spend-usd 2.20 --output '../_bmad-output/test-artifacts/live-scenario-B-endpoint12-r40.json'
-```
-
-Scenario B prefixes end at turns 4, 8, 12, 16, and 20. Endpoints 4 and 8 are green (or recorded-finding green); advance one prefix at a time. Run the full Scenario B only after the individual prefixes are green. The runner already fails fast, so preserve each failed JSON report and fix the earliest failure before spending on later turns. Expect to need several retries per endpoint-12 attempt purely from lesson 18's infra pattern — this is not a sign of a new content bug unless the SAME turn fails with actual usage/cost recorded, not zero.
 
 ## Fast path learned from Scenario A
 
@@ -166,14 +144,9 @@ Small verifier/protocol changes were made after the last full backend run. Run t
 
 ## Remaining Story 5.7 work
 
-- Execute and repair Scenarios B through H.
-- Complete tool/operation coverage and its fail-closed completeness assertion.
-- Run three complete consecutive live matrices after the final relevant change.
-- Add the real composed-stack browser journey and reload evidence.
-- Generate version-bound Story 5.7 evidence and wire the Gate B evidence field.
-- Update testing documentation and only then assess the story for completion.
-
-Do not mark the story or any remaining acceptance criterion complete based on Scenario A alone.
+See "Still owed" under the resume point. Nothing here asks for further scenarios, prefixes,
+consecutive matrices or a browser journey; those obligations were removed by the approved
+right-sizing.
 
 ## Repository state at handoff
 
@@ -181,7 +154,6 @@ Do not mark the story or any remaining acceptance criterion complete based on Sc
 - No `shiftmind-live-*` containers remain (each live suite run tears down its own isolated compose project via `isolated_stack`'s context manager); the persistent `rosterai-*` dev stack on port 8080 is unrelated and was left running. The unrelated orphaned `shiftmind-story-5-7-*` project (containers, network, volume) from an earlier session was removed 2026-09-17 with Minh's explicit sign-off.
 - Preserve unrelated untracked `.1devtool/` and `rosterai-schema.sql`.
 - Development JSON under `_bmad-output/test-artifacts/` is intentionally ignored.
-- **D: drive filled to 0 bytes free mid-session on 2026-09-17** (unrelated personal media/game data, not this story's work). Resolved with Minh's explicit direction by moving two already-compressed archives (`BKU-20250627T020751Z-1-001.zip`, `AssetStore-20250228T044039Z-002.zip`) from `D:\Download\` to `C:\MovedFromD\`; D: had ~19GB free and C: ~29GB free afterward. If disk errors recur, check `df -h /d` first. Did not recur on 2026-09-18.
 - **OpenRouter credit exhaustion (2026-09-17) is RESOLVED** — Minh topped up the account directly, confirmed by real billed calls succeeding afterward (2026-09-18: gpt-5-mini, gpt-5.6-luna). Do not re-diagnose `provider_error` as a credit issue without checking `GET /api/v1/key` first; it can also mean a genuine model-compatibility problem now (lesson 23).
-- `story-5-7.compose.override.yml` is currently priced for `openai/gpt-5.6-luna` ($0.20/$1.20 per Mtok) — this is git-ignored, so it will not show in `git status`/`git log`; check its own header comment for the current model/rate before trusting `estimated_cost_usd` in any new report.
+- `backend/evals/live_conversations/compose.override.yml` is currently priced for `openai/gpt-5.6-luna` ($0.20/$1.20 per Mtok) and is tracked; check its own header comment for the current model/rate before trusting `estimated_cost_usd` in any new report.
 - **This handoff was written specifically because the prior session ran very long** (Minh's own words: "session này quá dài rồi"). The next session should start fresh from this file rather than trying to resume the old conversation.

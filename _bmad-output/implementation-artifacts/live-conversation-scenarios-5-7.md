@@ -89,4 +89,6 @@ Checks:
 | inspect `assignments`; draft `exclude_worker_from_task`, `set_max_hours`; `scheduling_baseline`; Run optimization command; approval command | B |
 | inspect `tasks`, `demand`, `locks`, `constraints`; compute `required_demand_volume`, `required_headcount_minutes`, `staffed_minutes`, `qualified_worker_count`; draft `set_min_workers_per_task`, `scale_demand`, `lock_worker_shift`; `shiftmind_demonstration` | C |
 
+The table is what the authored turns are meant to exercise. What the evidence counts is only what the run observed, and it classifies some of these rows differently: query keys such as `demand`'s `family` filter (C turn 2 asks it, but the harness records no per-key observation for it) are deterministic-only; inspect's `assignments` group is excused because assignments arrive in the workflow snapshot; `related_group` is proved live only as `work-areas-and-tasks` by B's worker-task exclusion; and the `shiftmind_demonstration` approval branch (C turn 11) is a reported gap under Decision 1. `tool_coverage` in the evidence file is the authority for which is which.
+
 The coverage-completeness guardrail derives the inventory from `installed_modules()` and fails on any row with zero coverage. Expected numerical facts are computed from fixture/application data, never copied from the model's answer.
