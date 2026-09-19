@@ -26,7 +26,7 @@ The suite is opt-in and paid: it is never selected by `pytest`. It builds the AP
 
 The measured configuration -- reasoning effort, the per-token prices that drive the spend limiter, and the request, tool-call, token and deadline limits -- is the tracked `backend/evals/live_conversations/compose.override.yml`, which `--override-file` defaults to. Every run report records the models, their endpoint identity (no credential), the reasoning effort and that file's sha256, plus the content id of the API and web images it ran; the evidence binds them as `measured_configuration` and `version_bindings.image`. Update the price rates in that file whenever `--agent-model` changes, or every cost figure is wrong.
 
-`--resume <report.json>` continues an interrupted report (refused unless it names the same commit, configuration and image ids; pair it with `--skip-image-build`), `--execution-retries` retries one execution that ends on an infrastructure fault, and `--skip-image-build` reuses images already built from the same code (recorded in the report; never valid for evidence).
+`--resume <report.json>` continues an interrupted report (refused unless it names the same commit, configuration and image ids; pair it with `--skip-image-build`), `--execution-retries` retries one execution that ends on an infrastructure fault, and `--skip-image-build` reuses images already built from the same code (recorded in the report). Evidence generation refuses a set of reports of which none built its images, so a first run must build; only a resume of a report that did may skip the build.
 
 ### What it covers
 
