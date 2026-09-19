@@ -97,3 +97,54 @@ def test_a_teardown_failure_never_hides_the_real_root_cause(monkeypatch):
     with pytest.raises(RuntimeError, match='the real problem'):
         with _stack():
             raise RuntimeError('the real problem')
+
+
+# --- the digests of the images the suite actually ran (Story 5.7 docs/evidence review) --
+
+from evals.live_conversations.stack import (  # noqa: E402
+    DATABASE_IMAGE, LIVE_IMAGES, ROOT, live_image_digests,
+)
+
+_ID = 'sha256:' + 'e' * 64
+
+
+def _inspect(monkeypatch, *, stdout=_ID, returncode=0, error=None):
+    seen = []
+
+    def run(command, **_kwargs):
+        seen.append(command)
+        if error is not None:
+            raise error
+        return SimpleNamespace(returncode=returncode, stdout=stdout + '\n')
+
+    monkeypatch.setattr(stack_module.subprocess, 'run', run)
+    return seen
+
+
+def test_the_recorded_digests_are_those_of_the_live_eval_images_not_the_local_build(monkeypatch):
+    seen = _inspect(monkeypatch)
+    digests = live_image_digests()
+    assert digests == {'api': _ID, 'web': _ID, 'database': DATABASE_IMAGE}
+    assert [command[3] for command in seen] == [LIVE_IMAGES['api'], LIVE_IMAGES['web']]
+    assert all(image.endswith(':live-conversation-eval') for image in LIVE_IMAGES.values())
+
+
+def test_the_stack_runs_the_very_images_whose_digests_are_recorded():
+    env = _stack_environment(origin='http://localhost:18097', postgres_port=55497, model='m',
+                             api_key='k', reasoning_effort='low', demonstration_enabled=False)
+    assert (env['BACKEND_IMAGE'], env['WEB_IMAGE']) == (LIVE_IMAGES['api'], LIVE_IMAGES['web'])
+
+
+@pytest.mark.parametrize('kwargs', [
+    {'returncode': 1}, {'stdout': ''}, {'stdout': 'sha256:short'},
+    {'stdout': 'shiftmind-backend:live-conversation-eval'},
+    {'error': subprocess.TimeoutExpired('docker', 1)}, {'error': FileNotFoundError('docker')},
+])
+def test_an_image_whose_content_id_cannot_be_read_is_an_incomplete_run(monkeypatch, kwargs):
+    _inspect(monkeypatch, **kwargs)
+    with pytest.raises(IncompleteConversationRun, match='image_digest_unavailable'):
+        live_image_digests()
+
+
+def test_the_database_image_recorded_is_the_one_docker_compose_pins():
+    assert f'image: {DATABASE_IMAGE}' in (ROOT / 'docker-compose.yml').read_text(encoding='utf-8')

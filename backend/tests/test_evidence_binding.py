@@ -520,6 +520,27 @@ def test_a_present_but_malformed_manifest_refuses_rather_than_falling_back(
         resolve_image_binding(tmp_path)
 
 
+def test_a_suite_supplied_image_binding_replaces_the_build_manifest():
+    """A suite that builds its own images binds THOSE, never a manifest another build wrote."""
+    ran = {"api": "sha256:" + "c" * 64, "web": "sha256:" + "d" * 64, "database": "postgres:18"}
+    bindings = resolve_bindings(
+        _DECLARED, repo_root=REPO_ROOT, allow_dirty=True, image_binding=ran
+    )
+    assert bindings["image"] == ran
+
+
+@pytest.mark.parametrize(
+    "document",
+    (
+        {"api": "local source tree", "web": "sha256:" + "b" * 64, "database": "postgres:18"},
+        {"api": "sha256:" + "a" * 64, "web": "sha256:" + "b" * 64},
+    ),
+)
+def test_a_suite_supplied_image_binding_holds_to_the_same_shape_rules(document):
+    with pytest.raises(ValueError):
+        resolve_bindings(_DECLARED, repo_root=REPO_ROOT, allow_dirty=True, image_binding=document)
+
+
 def test_digest_recorder_rejects_a_truncated_image_id(monkeypatch):
     from scripts import record_image_digests
 

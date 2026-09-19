@@ -18,6 +18,7 @@ stronger one:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -68,6 +69,19 @@ UNREACHABLE_IN_CHAT = {
     'workers':
         'related_group is only valid as work-areas-and-tasks; proved by '
         'tests/test_scheduling_draft.py.',
+}
+
+#: Operations outside the live denominator that need a reason more specific than the
+#: generic one below -- a known product gap must be stated, not filed under "not
+#: addressable".
+DETERMINISTIC_REASONS = {
+    'shiftmind_demonstration:error=approval_required':
+        'A suspended demonstration call has no approval path over the authenticated HTTP '
+        'conversation route: it finalizes the run as cancelled (api/routers/conversations.py) '
+        'instead of raising an approval request, so no live turn can complete this branch. '
+        'Story 5.7 Decision 1 reports it as a gap rather than widening the schedule-run-shaped '
+        'approval contract; the approval branch of the capability itself is proved by '
+        'tests/test_demonstration_capability.py.',
 }
 
 
@@ -126,10 +140,18 @@ def _observed(runs) -> tuple[dict, set[str]]:
                                f"properties.group={entity['group']}", source='effect',
                                state='success', observation_id=identifier,
                                detail=f'{where} persisted draft')
-                        record('scheduling_draft:request.$defs.DraftConstraintProposalV1.'
-                               f"properties.related_group.anyOf.0={entity['group']}",
-                               source='effect', state='success', observation_id=identifier,
-                               detail=f'{where} persisted draft')
+                        # The persisted constraint keeps only resolved entities, not the
+                        # proposal's `related_group` field. Only exclude_worker_from_task
+                        # carries one, and only as work-areas-and-tasks
+                        # (application/drafting/resolve.py), so that is the single
+                        # live-provable value; every other resolved entity says nothing
+                        # about `related_group`.
+                        if (constraint['kind'] == 'exclude_worker_from_task'
+                                and entity['group'] == 'work-areas-and-tasks'):
+                            record('scheduling_draft:request.$defs.DraftConstraintProposalV1.'
+                                   'properties.related_group.anyOf.0=work-areas-and-tasks',
+                                   source='effect', state='success', observation_id=identifier,
+                                   detail=f'{where} persisted draft')
     return coverage, observation_ids
 
 
@@ -154,10 +176,60 @@ def build_coverage(runs, inventory=None) -> dict:
         rows.append({'operation': operation, 'source': 'deterministic', 'reason': reason})
     for operation in inventory['deterministic_operations']:
         rows.append({'operation': operation, 'source': 'deterministic',
-                     'reason': 'Not addressable by a planner turn (query key, paging or '
-                               'invalid-query path, manifest error code, or the compute-risk '
-                               'run tool); proved by the offline backend suite.'})
+                     'reason': DETERMINISTIC_REASONS.get(
+                         operation,
+                         'Not addressable by a planner turn (query key, paging or '
+                         'invalid-query path, manifest error code, or the compute-risk '
+                         'run tool); proved by the offline backend suite.')})
     return {'inventory_digest': inventory['digest'], 'tool_coverage': rows}, observation_ids
+
+
+def _agreed(runs, key: str, what: str):
+    """The one value every run report records for `key`, or a refusal.
+
+    Runs measured under different images or configurations cannot be combined into
+    one bound report, and a report that recorded neither cannot be bound at all.
+    """
+    seen = {json.dumps(run.get(key), sort_keys=True) for run in runs}
+    if len(seen) != 1 or runs[0].get(key) is None:
+        raise ValueError(f'every run must record the same {what}; a report without it was '
+                         'measured by an older suite and must be measured again')
+    return runs[0][key]
+
+
+def _source_runs(run_paths, runs) -> list[dict]:
+    """Each source report by name, run id and sha256, so the (git-ignored) transcripts
+    the verdict rests on are bound by digest even though they are not committed."""
+    return [{'name': Path(path).name, 'run_id': run.get('run_id'),
+             'sha256': hashlib.sha256(Path(path).read_bytes()).hexdigest()}
+            for path, run in zip(run_paths, runs)]
+
+
+def _accepted_finding_details(runs, accepted, pass_rates) -> list[dict]:
+    """Why each accepted turn was accepted: its pass rate and what its failures were.
+
+    Read from each execution's FINAL attempt, the same rule the readiness summary
+    counts by, so the file states the failure the owner accepted rather than only
+    naming the turn.
+    """
+    details = []
+    for scenario, turn in sorted((s, int(t)) for s, t in accepted):
+        key = f'{scenario}:{turn}'
+        failures = []
+        for run in runs:
+            final = {}
+            for execution in run.get('prefixes', []):
+                final[(execution.get('repetition'), execution.get('scenario'))] = execution
+            for (repetition, name), execution in sorted(final.items(), key=lambda i: (i[0][0] or 0, i[0][1] or '')):
+                turns = execution.get('turns', [])
+                if name != scenario or len(turns) < turn or turns[turn - 1].get('verdict') == 'pass':
+                    continue
+                failed = turns[turn - 1]
+                failures.append({'repetition': repetition,
+                                 'agent_run_status': failed.get('agent_run_status'),
+                                 'factual_failures': sorted(failed.get('factual_failures') or ())})
+        details.append({'turn': key, **pass_rates.get(key, {}), 'failures': failures})
+    return details
 
 
 def generate(run_paths, output: Path, *, allow_dirty: bool = False,
@@ -169,7 +241,6 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     runs = [json.loads(Path(path).read_text(encoding='utf-8')) for path in run_paths]
     coverage, observation_ids = build_coverage(runs)
     inventory = capability_inventory()
-    models = sorted({run.get('model') for run in runs} | {run.get('judge_model') for run in runs})
     # Bind to the commit the MEASUREMENT ran at, which every run report records,
     # not to whatever HEAD is when the report is written. Otherwise fixing the
     # generator moves HEAD and invalidates the measurement that exposed the fix.
@@ -182,6 +253,13 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
         # this guard only fails fast; it must not be stricter than the binder.
         raise ValueError('the measurement ran on a dirty tree; pass --allow-dirty to record '
                          'the override, or measure again on a clean tree')
+    # Both come from what the suite recorded it RAN, never from a manifest another build
+    # wrote: the api/web digests are the live-eval images' content ids, and the
+    # configuration is the measured models, endpoints, effort and override-file digest.
+    image_binding = _agreed(runs, 'images', 'image digests')
+    configuration = _agreed(runs, 'configuration', 'measured configuration')
+    models = sorted({f"agent:{run.get('model')}" for run in runs}
+                    | {f"judge:{run.get('judge_model')}" for run in runs})
     bindings = resolve_bindings(
         {
             'evaluator': ('independent application/fixture reads per turn plus a separately '
@@ -206,10 +284,14 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
         # below, never waved through with allow_dirty.
         ignore_paths=frozenset(ignore_paths),
         code_binding=code_binding,
+        image_binding=image_binding,
     )
     report = summarize_runs(runs, coverage=coverage, observation_ids=observation_ids,
                             version_bindings=bindings, accepted_findings=accepted_findings)
-    report['source_runs'] = [str(Path(path).name) for path in run_paths]
+    report['source_runs'] = _source_runs(run_paths, runs)
+    report['measured_configuration'] = configuration
+    report['accepted_finding_details'] = _accepted_finding_details(
+        runs, accepted_findings, report['turn_pass_rates'])
     report['ignored_dirty_paths'] = sorted(ignore_paths)
     # Stated, never implied: the tree carried uncommitted paths while the
     # measurement ran. They are named above and lie outside the measured

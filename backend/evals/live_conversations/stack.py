@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from time import monotonic, sleep
@@ -13,13 +14,20 @@ from evals.live_conversations.protocol import IncompleteConversationRun
 
 ROOT = Path(__file__).resolve().parents[3]
 
+#: The images this suite builds and runs -- NOT the `:local` ones the Compose proof
+#: builds -- so their digests are the ones the evidence must bind.
+LIVE_IMAGES = {'api': 'shiftmind-backend:live-conversation-eval',
+               'web': 'shiftmind-web:live-conversation-eval'}
+#: The database image `docker-compose.yml` pins by tag (a test keeps the two in step).
+DATABASE_IMAGE = 'postgres:18'
+_IMAGE_ID = re.compile(r'sha256:[0-9a-f]{64}')
+
 
 def _stack_environment(*, origin, postgres_port, model, api_key, reasoning_effort,
                        demonstration_enabled):
     return {**os.environ, 'APP_ORIGIN': origin, 'WEB_PORT': '18097',
             'POSTGRES_PORT': str(postgres_port),
-            'BACKEND_IMAGE': 'shiftmind-backend:live-conversation-eval',
-            'WEB_IMAGE': 'shiftmind-web:live-conversation-eval',
+            'BACKEND_IMAGE': LIVE_IMAGES['api'], 'WEB_IMAGE': LIVE_IMAGES['web'],
             'AGENT_RUNTIME_MODEL': model, 'AGENT_RUNTIME_API_KEY': api_key,
             'AGENT_RUNTIME_REASONING_EFFORT': reasoning_effort,
             'DEMONSTRATION_ENABLED': str(demonstration_enabled).lower()}
@@ -38,6 +46,27 @@ def build_live_images(*, model, api_key, override_file, origin='http://localhost
         raise IncompleteConversationRun('isolated_stack_build_failed') from None
     if result.returncode:
         raise IncompleteConversationRun('isolated_stack_build_failed')
+
+
+def live_image_digests() -> dict[str, str]:
+    """Content ids of the images this run is about to use, read from Docker itself.
+
+    Read after the build (or, with `--skip-image-build`, from the images already
+    present) so the report states what was RUN. A missing or non-content-addressed
+    id is an incomplete run: evidence must never bind an image nobody measured.
+    """
+    digests: dict[str, str] = {}
+    for key, image in LIVE_IMAGES.items():
+        try:
+            result = subprocess.run(['docker', 'image', 'inspect', image, '--format', '{{.Id}}'],
+                                    capture_output=True, text=True, timeout=60)
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            raise IncompleteConversationRun('image_digest_unavailable') from None
+        value = (result.stdout or '').strip()
+        if result.returncode or _IMAGE_ID.fullmatch(value) is None:
+            raise IncompleteConversationRun('image_digest_unavailable')
+        digests[key] = value
+    return {**digests, 'database': DATABASE_IMAGE}
 
 
 @contextmanager

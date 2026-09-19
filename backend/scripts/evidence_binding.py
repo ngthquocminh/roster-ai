@@ -116,17 +116,28 @@ def resolve_image_binding(repo_root: Path) -> dict[str, str]:
         document = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ValueError(f"{manifest} exists but is unreadable: {exc}") from exc
+    return validate_image_binding(document, source=str(manifest))
+
+
+def validate_image_binding(document: Any, *, source: str) -> dict[str, str]:
+    """The `image` binding's shape rules, shared by the manifest and a run report.
+
+    A suite that builds its own images (Story 5.7's live suite) records the ids it
+    ran in its report; the evidence binds THAT, never a manifest another build
+    wrote earlier. Both paths hold to the same three keys and content-addressed
+    `api`/`web` digests.
+    """
     if not isinstance(document, dict) or set(document) != set(_IMAGE_KEYS):
         raise ValueError(
-            f"{manifest} must be an object with exactly the keys "
+            f"{source} must be an object with exactly the keys "
             f"{sorted(_IMAGE_KEYS)}; got {sorted(document) if isinstance(document, dict) else type(document).__name__}"
         )
     if not all(isinstance(document[key], str) and document[key].strip() for key in _IMAGE_KEYS):
-        raise ValueError(f"{manifest} carries a non-string or empty image value")
+        raise ValueError(f"{source} carries a non-string or empty image value")
     for key in ("api", "web"):
         if _IMAGE_DIGEST_RE.fullmatch(document[key]) is None:
             raise ValueError(
-                f"{manifest} records {key}={document[key]!r}, which is not a "
+                f"{source} records {key}={document[key]!r}, which is not a "
                 "content-addressed sha256 digest"
             )
     return {key: document[key] for key in _IMAGE_KEYS}
@@ -472,6 +483,7 @@ def resolve_bindings(
     contract_dir: Path | None = None,
     code_extra: Mapping[str, Any] | None = None,
     code_binding: Mapping[str, Any] | None = None,
+    image_binding: Mapping[str, Any] | None = None,
     allow_dirty: bool = False,
     ignore_paths: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
@@ -488,6 +500,9 @@ def resolve_bindings(
     binding while ``fixtures`` continues to describe scenario data. Golden JSON
     keeps semantic case accounting; other fixture artifacts receive an exact,
     line-ending-stable file binding.
+
+    ``image_binding`` carries the digests a suite recorded for the images it ran;
+    omitted, the binding derives from the local build manifest as before.
 
     ``ignore_paths`` exempts a caller's own output file from the dirty-tree
     refusal (see :func:`working_tree_status`). When an exemption is actually
@@ -587,7 +602,11 @@ def resolve_bindings(
         ),
         "solver": declared["solver"],
         "code": code,
-        "image": resolve_image_binding(repo_root),
+        "image": (
+            validate_image_binding(dict(image_binding), source="image_binding")
+            if image_binding is not None
+            else resolve_image_binding(repo_root)
+        ),
         "schema_version": resolve_alembic_head(versions_dir),
     }
 

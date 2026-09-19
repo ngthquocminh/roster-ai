@@ -10,6 +10,9 @@ from evals.live_conversations.protocol import (
     ConversationBudget, ConversationJudgment, IncompleteConversationRun,
 )
 
+#: The judge's endpoint identity (no credential), recorded in every run report.
+JUDGE_ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
+
 # The judge payload's own top-level keys (see the `payload['messages'][1]` literal
 # below) are themselves legitimate citation targets -- kept here, not duplicated in
 # runner.py's known_citation_ids, so the two cannot drift apart.
@@ -158,7 +161,7 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
     try:
         for attempt_number in (1, 2):
             try:
-                response = transport.post('https://openrouter.ai/api/v1/chat/completions',
+                response = transport.post(JUDGE_ENDPOINT,
                                           headers={'Authorization': 'Bearer ' + api_key}, json=payload)
                 if response.status_code != 200:
                     raise _RetryableJudgeFailure(f'http_{response.status_code}')

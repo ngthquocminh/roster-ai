@@ -11,11 +11,14 @@ from uuid import uuid4
 from dotenv import dotenv_values
 
 from evals.live_conversations.cases import load_scenarios
+from evals.live_conversations.configuration import DEFAULT_OVERRIDE_FILE, measured_configuration
 from evals.live_conversations.fixtures import prepare_initial_baseline
 from evals.live_conversations.http_client import ApplicationConversation
 from evals.live_conversations.protocol import ConversationBudget, IncompleteConversationRun
 from evals.live_conversations.runner import execute_prefix
-from evals.live_conversations.stack import ROOT, build_live_images, isolated_stack
+from evals.live_conversations.stack import (
+    ROOT, build_live_images, isolated_stack, live_image_digests,
+)
 from evals.live_conversations.telemetry import ContainerTelemetry
 from evals.report import LiveSuiteBudgetV1
 
@@ -50,9 +53,12 @@ def _arguments(argv=None):
     parser.add_argument('--skip-image-build', action='store_true',
                         help='Reuse images already built from THIS code (the rebuild is the '
                              'memory peak of a run). Recorded in the report; never use it for '
-                             'version-bound evidence.')
-    parser.add_argument('--override-file', type=Path,
-                        default=ROOT / '_bmad-output/test-artifacts/story-5-7.compose.override.yml')
+                             'version-bound evidence. A --resume needs it (or a rebuild that '
+                             'yields identical image ids): passed executions from different '
+                             'images are never mixed.')
+    parser.add_argument('--override-file', type=Path, default=DEFAULT_OVERRIDE_FILE,
+                        help='The tracked measured configuration (prices, limits); its sha256 '
+                             'is recorded in the report and bound into the evidence.')
     return parser.parse_args(argv)
 
 
@@ -69,6 +75,12 @@ def main(argv=None) -> int:
     judge_key = values.get('LIVE_CONVERSATION_JUDGE_API_KEY') or key
     if not all(isinstance(value, str) and value.strip() for value in (model, key, judge_model, judge_key)):
         raise SystemExit('agent and separate judge model/key configuration is required')
+    try:
+        configuration = measured_configuration(
+            model=model, judge_model=judge_model, reasoning_effort=args.reasoning_effort,
+            override_file=args.override_file)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     scenarios = load_scenarios()
     selected = [(case, endpoint) for case in scenarios for endpoint in case.prefixes
                 if (args.scenario is None or case.id == args.scenario)
@@ -91,12 +103,18 @@ def main(argv=None) -> int:
     report = {'schema_version': '1-development', 'run_id': str(uuid4()),
               'started_unix': int(time()), 'model': model, 'judge_model': judge_model,
               'images_rebuilt': not args.skip_image_build, 'code': code_binding,
+              'configuration': configuration, 'images': None,
               'prefixes': [], 'incomplete_reason': None}
     completed: set[tuple[str, int]] = set()
+    earlier_images = None
     if args.resume is not None:
         earlier = json.loads(args.resume.read_text(encoding='utf-8'))
         if earlier.get('code') != code_binding:
             raise SystemExit('--resume refused: that report was measured on different code')
+        if earlier.get('configuration') != configuration:
+            raise SystemExit('--resume refused: that report was measured under a different '
+                             'configuration (models, endpoints, reasoning effort or override file)')
+        earlier_images = earlier.get('images')
         report['resumed_from'] = {'run_id': earlier.get('run_id'),
                                   'output': str(args.resume.name)}
         for execution in earlier.get('prefixes', []):
@@ -104,9 +122,18 @@ def main(argv=None) -> int:
                 report['prefixes'].append(execution)
                 completed.add((execution['scenario'], execution['repetition']))
     save = lambda _prefix=None: _atomic_json(args.output, report)
-    if not args.skip_image_build:
-        build_live_images(model=model, api_key=key, override_file=args.override_file,
-                          reasoning_effort=args.reasoning_effort)
+    try:
+        if not args.skip_image_build:
+            build_live_images(model=model, api_key=key, override_file=args.override_file,
+                              reasoning_effort=args.reasoning_effort)
+        report['images'] = live_image_digests()
+        if args.resume is not None and earlier_images != report['images']:
+            raise SystemExit('--resume refused: the images now built differ from the ones that '
+                             'report ran; passed executions from different images cannot be mixed')
+    except IncompleteConversationRun as exc:
+        report['incomplete_reason'] = str(exc)
+        save()
+        return 2
     try:
         for repetition in range(1, args.repetitions + 1):
             for case, endpoint in selected:

@@ -12,6 +12,7 @@ from evals.live_conversations.cases import load_scenarios
 from evals.live_conversations.protocol import IncompleteConversationRun
 
 PASSED = {'status': 'passed', 'turns': []}
+IMAGES = {'api': 'sha256:' + 'a' * 64, 'web': 'sha256:' + 'b' * 64, 'database': 'postgres:18'}
 
 
 class Script:
@@ -35,10 +36,11 @@ def run_suite(monkeypatch, tmp_path):
     import scripts.evidence_binding as binding
 
     monkeypatch.setattr(suite, 'dotenv_values', lambda _path: {
-        'AGENT_RUNTIME_MODEL': 'm', 'AGENT_RUNTIME_API_KEY': 'k',
+        'AGENT_RUNTIME_MODEL': 'openrouter:m', 'AGENT_RUNTIME_API_KEY': 'k',
         'LIVE_CONVERSATION_JUDGE_MODEL': 'j'})
     monkeypatch.setattr(binding, 'resolve_code_binding',
                         lambda *_args, **_kwargs: ({'git_commit': 'test-only'}, False))
+    monkeypatch.setattr(suite, 'live_image_digests', lambda: IMAGES)
 
     def go(script, *extra):
         scenario = next(iter(load_scenarios()))
@@ -123,3 +125,47 @@ def test_a_run_that_recovered_on_retry_exits_zero_but_a_last_attempt_that_failed
     failed_last = Script(login=[IncompleteConversationRun('authentication_failed')],
                          execute=[{'status': 'failed', 'turns': []}])
     assert run_suite(failed_last)[0] == 1
+
+
+# --- what the report says it ran (Story 5.7 docs/evidence review) -----------------
+
+def test_the_report_records_the_images_and_the_configuration_it_ran(run_suite):
+    _code, report = run_suite(Script())
+    assert report['images'] == IMAGES
+    configuration = report['configuration']
+    assert configuration['agent']['model'] == 'openrouter:m' and configuration['judge']['model'] == 'j'
+    assert configuration['reasoning_effort'] == 'low'
+    assert configuration['override_file'] == 'backend/evals/live_conversations/compose.override.yml'
+    assert 'k' not in {value for value in configuration.values() if isinstance(value, str)}
+
+
+def test_images_that_cannot_be_read_end_the_run_before_any_execution(run_suite, monkeypatch):
+    def unreadable():
+        raise IncompleteConversationRun('image_digest_unavailable')
+
+    monkeypatch.setattr(suite, 'live_image_digests', unreadable)
+    script = Script()
+    code, report = run_suite(script)
+    assert code == 2 and script.calls == {'login': 0, 'baseline': 0, 'execute': 0}
+    assert report['incomplete_reason'] == 'image_digest_unavailable' and report['images'] is None
+
+
+def test_a_report_from_a_different_configuration_cannot_be_resumed(run_suite, tmp_path):
+    earlier = tmp_path / 'earlier.json'
+    earlier.write_text(json.dumps({'code': {'git_commit': 'test-only'}, 'images': IMAGES,
+                                   'configuration': {'reasoning_effort': 'high'},
+                                   'prefixes': []}), encoding='utf-8')
+    with pytest.raises(SystemExit, match='different configuration'):
+        run_suite(Script(), '--resume', str(earlier))
+
+
+def test_a_report_measured_on_different_images_cannot_be_resumed(run_suite, monkeypatch, tmp_path):
+    _code, first = run_suite(Script())
+    earlier = tmp_path / 'earlier.json'
+    earlier.write_text(json.dumps(first), encoding='utf-8')
+    monkeypatch.setattr(suite, 'live_image_digests',
+                        lambda: {**IMAGES, 'api': 'sha256:' + 'c' * 64})
+    with pytest.raises(SystemExit, match='images now built differ'):
+        run_suite(Script(), '--resume', str(earlier))
+    monkeypatch.setattr(suite, 'live_image_digests', lambda: IMAGES)
+    assert run_suite(Script(), '--resume', str(earlier))[0] == 0
