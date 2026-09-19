@@ -218,3 +218,19 @@ def test_a_run_started_at_a_docs_only_head_is_bound_to_the_code_commit_it_measur
     written = json.loads((tmp_path / 'out.json').read_text(encoding='utf-8'))
     assert report['version_bindings']['code']['git_commit'] == 'code-commit'
     assert written['measured_at_commit'] == 'test-only'
+
+
+def test_the_runs_stay_bound_when_the_binding_names_the_code_commit_not_the_start_commit(
+        tmp_path, monkeypatch):
+    import scripts.evidence_binding as binding
+    monkeypatch.setattr(binding, 'nearest_code_commit', lambda root, commit: 'code-commit')
+    seen = {}
+
+    def fake_summarize(runs, **kwargs):
+        seen['codes'] = [run['code'] for run in runs]
+        seen['binding'] = kwargs['version_bindings']['code']
+        return {'turn_pass_rates': {}}
+
+    monkeypatch.setattr(evidence, 'summarize_runs', fake_summarize)
+    evidence.generate([_write_run(tmp_path, 'a.json')], tmp_path / 'out.json')
+    assert seen['codes'] == [seen['binding']] and seen['binding']['git_commit'] == 'code-commit'

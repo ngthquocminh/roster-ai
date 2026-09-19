@@ -305,6 +305,10 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
         code_binding=code_binding,
         image_binding=image_binding,
     )
+    # The runs carry the commit they started from; the binding names the code commit proved
+    # identical to it, so compare them on the code commit (the source reports stay untouched
+    # and are bound by sha256 in `source_runs`).
+    runs = [{**run, 'code': code_binding} for run in runs]
     report = summarize_runs(runs, coverage=coverage, observation_ids=observation_ids,
                             version_bindings=bindings, accepted_findings=accepted_findings)
     report['source_runs'] = _source_runs(run_paths, runs)
