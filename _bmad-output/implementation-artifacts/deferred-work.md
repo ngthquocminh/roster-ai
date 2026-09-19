@@ -965,3 +965,83 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   `_HAS_LIVE_AGENT` is computed from `.env` contents.
   **Owner/revisit trigger:** same as the 5.5 entry — pin `AGENT_RUNTIME_MODEL=deterministic` in
   `conftest.py` for the default session.
+
+## Deferred from: code review of story-5.7, core-app-code slice (2026-09-18)
+
+- **Two independently-sourced "trusted numeric words" lists can diverge.** `backend/agent/runtime.py:
+  _trusted_texts` (in-loop retry check) sources trusted words from `ToolReturnPart.content` — the
+  narrowed `model_facing_view` the model actually saw. `backend/application/use_cases/execute_turn.py:
+  _trusted_texts` (fail-closed backstop) sources them from raw `calculation_results` before projection.
+  The backstop's own docstring calls itself "a superset," but nothing enforces that a value's
+  narrowed-view formatting and its raw-JSON formatting produce the same literal token — a reformatted
+  number the in-loop check trusts could still trip the backstop, burning the model's last retry.
+  **Deferred reason:** Minh chose to accept the current documented-superset design for now.
+  **Owner/revisit trigger:** the live eval suite surfacing a divergence-caused retry failure — then
+  unify both call sites onto one trusted-word source.
+
+- **`trusted_numeric_words` strips UUID digit-groups from the trusted set (deliberate anti-fabrication
+  measure), but the checked prose side isn't stripped of the same noise, so a raw ID cited verbatim in
+  prose can falsely trip the numeric-prose gate** — in tension with `scheduling_instructions.py:
+  816-820` telling the model it may copy an ID's digits verbatim. [`backend/application/grounding/
+  gate.py:_IDENTIFIER_NOISE`/`trusted_numeric_words`] **Deferred reason:** Minh judged this likely
+  low-frequency since the instructions push the model toward resolved names over raw IDs in prose.
+  **Owner/revisit trigger:** the live eval suite surfacing a false rejection on a legitimate raw-ID
+  citation — then either strip identifier noise from the checked prose too, or preserve an ID's own
+  digit-groups as trusted on both sides.
+
+- **`_WORD_GAP`/`_claim_placeholder` heuristics in `backend/agent/runtime.py` have real false-positive
+  surfaces** — `_WORD_GAP = re.compile(r"\w {2,}\w")` trips on an accidental double space between
+  ordinary words (not a dropped number), and prose ending in `:`/`=`/`-`/`—` is flagged as "a dangling
+  lead-in" even when nothing numeric was intended. **Deferred reason:** Minh judged these are heuristics
+  already tuned against observed live-suite failures; narrowing them without new failure evidence risks
+  reintroducing the bugs they were added to catch. **Owner/revisit trigger:** eval-driven — the live
+  suite surfacing a new false-positive retry from either heuristic.
+
+- **`telemetry_fact_group` (AC3 per-operation coverage label) is wired only for `scheduling_inspect`,
+  not for `scheduling_compute`, `scheduling_draft`, or `scheduling_baseline`.** `backend/application/
+  capabilities/module.py` adds the generic `telemetry_fact_group` hook and `backend/agent/
+  capability_tools.py` reads it in `_register_module`, but only `scheduling_inspect_module()` sets
+  `telemetry_fact_group=lambda request: request.group`. If the eval/evidence slice relies on
+  `fact_group` labels to disaggregate coverage by metric name (`scheduling_compute`) or constraint kind
+  (`scheduling_draft`), that granularity is unavailable from telemetry alone for those capabilities.
+  **Deferred reason:** not a hard AC3 violation on its own — coverage can still be assigned via
+  `capability_name` + turn mapping — and this diff's eval/evidence slice (not reviewed in this pass)
+  may already cover it a different way. **Owner: open** — wire `telemetry_fact_group` for
+  `scheduling_compute` (metric name), `scheduling_draft` (constraint kind), and `scheduling_baseline`
+  if the evidence slice turns out to need per-operation telemetry granularity.
+
+## Deferred from: code review of story-5.7, eval-harness slice (2026-09-18)
+
+- **`RELIABILITY_FAILURES` puts a genuine infra hiccup and "the agent's run status didn't match what
+  the turn authorized" under the same reliability umbrella.** `backend/evals/live_conversations/
+  reporting.py:25`'s `unsuccessful_agent_turn` covers both, and both require the identical
+  `--accept-finding` override to unblock — so it's easy to wave off an actual product regression as
+  "just reliability." **Deferred reason:** pending — worth revisiting once the harness has run enough
+  live repetitions to know whether this distinction matters in practice. **Owner: open.**
+
+- **The judge's pre-flight budget check is a fixed reservation, not scaled to actual transcript size.**
+  `backend/evals/live_conversations/judge.py:127`'s `budget.admit(reserve_usd=.03, tokens=4096)` doesn't
+  grow with the cumulative transcript across a scenario's turns (Scenario B: 12 turns); real usage is
+  only charged post-hoc via `budget.charge()`. Bounded overshoot (at most one call's actual cost beyond
+  the declared budget), and consistent with the same reservation pattern used everywhere else in this
+  harness. **Deferred reason:** not new to this diff, and consistent with the rest of the harness's
+  budget design — revisit only as part of a broader budget-accuracy pass. **Owner: open.**
+
+- **`failure_exception_type`'s "runs execute strictly one at a time" assumption is shakier after this
+  diff's retry-after-404 path.** `backend/evals/live_conversations/telemetry.py::failure_exception_type`
+  assumes the nearest preceding failure log record belongs to the current run, but `http_client.py::
+  send()`'s new retry-after-404 path can issue a second `execute` POST for what may be an overlapping
+  run boundary. Diagnostics-only field, doesn't affect any pass/fail verdict. **Deferred reason:**
+  low-blast-radius; revisit if a report's `failure_exception_type` is ever observed to be wrong.
+  **Owner: open.**
+
+- **The `prefix`/`endpoint` abstraction is now vestigial dead complexity.** `backend/evals/
+  live_conversations/cases.py`'s own docstring admits scenarios always run in full and `prefixes` is
+  "kept as a one-element tuple ... so the runner's endpoint seam is unchanged" — threaded through
+  `runner.py`, `suite.py`, and `evidence.py` for no current functional purpose, guarded today only by
+  `validate_scenarios`. **Deferred reason:** cosmetic; a future cleanup pass. **Owner: open.**
+
+- **`judge.py`'s module docstring ("One bounded call") misstates the actual retry behavior** (up to two
+  attempts for transport errors and malformed judgments). Doesn't affect behavior, misleads a future
+  reader auditing the retry guarantee. **Deferred reason:** cosmetic doc/behavior mismatch, fix
+  opportunistically. **Owner: open.**
