@@ -11,6 +11,14 @@ CONFIGURATION = {'agent': {'model': 'openrouter:m', 'endpoint': 'https://openrou
                  'override_sha256': '1' * 64, 'configuration_digest': '2' * 64}
 
 
+@pytest.fixture(autouse=True)
+def _code_commit_is_the_recorded_one(monkeypatch):
+    # The fake commit ids below name no real commit; the walk back to a code commit has its
+    # own tests (test_evidence_binding.py); the test below pins that generate uses it.
+    import scripts.evidence_binding as binding
+    monkeypatch.setattr(binding, 'nearest_code_commit', lambda root, commit: commit)
+
+
 def _write_run(tmp_path, name, code=CODE, images=IMAGES, configuration=CONFIGURATION,
                images_rebuilt=True, **extra):
     import json
@@ -197,3 +205,16 @@ def test_a_retried_execution_is_read_by_its_final_attempt_only():
             {'verdict': 'pass', 'factual_failures': []}]},
     ]}]
     assert evidence._accepted_finding_details(runs, [('B', '5')], {})[0]['failures'] == []
+
+
+def test_a_run_started_at_a_docs_only_head_is_bound_to_the_code_commit_it_measured(
+        tmp_path, monkeypatch):
+    import json
+
+    import scripts.evidence_binding as binding
+    monkeypatch.setattr(binding, 'nearest_code_commit',
+                        lambda root, commit: 'code-commit' if commit == 'test-only' else commit)
+    report = evidence.generate([_write_run(tmp_path, 'a.json')], tmp_path / 'out.json')
+    written = json.loads((tmp_path / 'out.json').read_text(encoding='utf-8'))
+    assert report['version_bindings']['code']['git_commit'] == 'code-commit'
+    assert written['measured_at_commit'] == 'test-only'

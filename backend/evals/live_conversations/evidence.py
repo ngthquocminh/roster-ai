@@ -241,7 +241,7 @@ def _accepted_finding_details(runs, accepted, pass_rates) -> list[dict]:
 
 def generate(run_paths, output: Path, *, allow_dirty: bool = False,
              accepted_findings=(), ignore_paths=()) -> dict:
-    from scripts.evidence_binding import resolve_bindings
+    from scripts.evidence_binding import nearest_code_commit, resolve_bindings
 
     if not run_paths:
         raise ValueError('at least one run report is required')
@@ -255,6 +255,11 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     if len(measured) != 1 or runs[0].get('code') is None:
         raise ValueError('every run must record the same code binding')
     code_binding = runs[0]['code']
+    # A run started right after a docs-only commit measured the code of the closest earlier
+    # commit that touched code; the binding names that one (checked to be the same code),
+    # and `measured_at_commit` keeps the commit the run actually started from.
+    measured_at_commit = code_binding['git_commit']
+    code_binding = {**code_binding, 'git_commit': nearest_code_commit(ROOT, measured_at_commit)}
     if code_binding.get('working_tree_dirty') and not (allow_dirty or ignore_paths):
         # `resolve_bindings` enforces the same rule and records the override, so
         # this guard only fails fast; it must not be stricter than the binder.
@@ -310,6 +315,7 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     # Stated, never implied: the tree carried uncommitted paths while the
     # measurement ran. They are named above and lie outside the measured
     # backend, but a reader must be able to see the condition.
+    report['measured_at_commit'] = measured_at_commit
     report['measurement_tree_dirty'] = bool(code_binding.get('working_tree_dirty'))
     report['images_rebuilt'] = any(run.get('images_rebuilt') for run in runs)
     report['tool_coverage'] = coverage['tool_coverage']

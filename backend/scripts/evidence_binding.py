@@ -766,6 +766,30 @@ def _commit_touches(repo_root: Path, commit: str) -> list[str]:
     ).splitlines()
 
 
+def nearest_code_commit(repo_root: Path, commit: str) -> str:
+    """The commit a measurement's code actually belongs to.
+
+    A measurement taken at a docs-only HEAD (a story record or doc edit committed
+    just before the run) measured exactly the code of the closest earlier commit
+    that touched code. Returns `commit` itself when it touches code; otherwise that
+    ancestor, but only after checking that no code file differs between the two --
+    the evidence may name the code commit only if it is provably the same code.
+    """
+    for candidate in _git(repo_root, "rev-list", "--first-parent", commit).splitlines():
+        if any(_is_code_path(path) for path in _commit_touches(repo_root, candidate)):
+            break
+    else:
+        raise ValueError(f"no commit at or before {commit} touches a code file")
+    if candidate != commit:
+        changed = _git(repo_root, "diff", "--name-only", candidate, commit).splitlines()
+        if any(_is_code_path(path) for path in changed):
+            raise ValueError(
+                f"code changed between {candidate} and {commit}; the measurement at "
+                f"{commit} cannot be bound to the earlier commit"
+            )
+    return candidate
+
+
 def audit_evidence_file(
     evidence_path: Path,
     *,
@@ -926,6 +950,7 @@ __all__ = [
     "commit_date",
     "contract_digests",
     "file_digest",
+    "nearest_code_commit",
     "resolve_alembic_chain",
     "resolve_alembic_head",
     "resolve_bindings",
