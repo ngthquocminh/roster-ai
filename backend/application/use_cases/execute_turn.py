@@ -1,7 +1,8 @@
 """Execute and ground one already-claimed planner turn."""
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, is_dataclass, replace
+import json
 
 from application.contracts.agent_runtime import (
     AgentMessageV1,
@@ -14,6 +15,8 @@ from application.contracts.agent_runtime import (
 from application.contracts.activity import (
     ActivityItemV1,
     AgentResponseActivityV1,
+    ApprovalRequestActivityV1,
+    RunProgressActivityV1,
     ClarificationActivityV1,
     DraftActivityV1,
     PlannerMessageActivityV1,
@@ -21,7 +24,11 @@ from application.contracts.activity import (
 )
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.grounding import GroundedClaimV1, GroundedProseSegmentV1, GroundedResponseV1
-from application.grounding.gate import UncitedNumericProseError, ground_answer
+from application.grounding.gate import (
+    UncitedNumericProseError,
+    ground_answer,
+    trusted_numeric_words,
+)
 from application.clarification.resolve import resolve_clarification
 from application.ports.agent_runtime import AgentRuntime
 from application.ports.agent_runtime import AgentProviderError, AgentRuntimeError
@@ -71,8 +78,12 @@ def execute_turn(
     calculation_results: list[object],
     history: tuple[ActivityItemV1, ...] | AgentTurnV1 = (),
     approvals: tuple[AgentApprovalDecisionV1, ...] = (),
+    workflow_context: AgentMessageV1 | None = None,
 ) -> AgentRunOutcomeV1:
     """Run outside a database transaction, then bind claims to raw tool results."""
+    owned_history = history if isinstance(history, AgentTurnV1) else rehydrate_history(history)
+    if workflow_context is not None:
+        owned_history = replace(owned_history, messages=(*owned_history.messages, workflow_context))
     outcome = runtime.run_turn(
         AgentTurnRequestV1(
             prompt=prompt,
@@ -83,9 +94,7 @@ def execute_turn(
             # turn replaying an unbounded persisted transcript would be the one
             # path in the app that can hand a provider an arbitrarily long history.
             history=(
-                replace(history, messages=history.messages[-HISTORY_MESSAGE_BOUND:])
-                if isinstance(history, AgentTurnV1)
-                else rehydrate_history(history)
+                replace(owned_history, messages=owned_history.messages[-HISTORY_MESSAGE_BOUND:])
             ),
             approvals=approvals,
         )
@@ -108,8 +117,38 @@ def execute_turn(
         return outcome
     return replace(
         outcome,
-        grounded_response=ground_answer(outcome.answer, deps, by_id),
+        grounded_response=ground_answer(
+            outcome.answer, deps, by_id,
+            trusted_numeric_words(_trusted_texts(prompt, owned_history, calculation_results)),
+        ),
     )
+
+
+def _trusted_texts(prompt: str, history: AgentTurnV1, results: list[object]) -> list[str]:
+    """What a prose numeral may be copied from (see gate `prose:no_untraceable_numerals`).
+
+    A superset of what the adapter's in-loop validator trusts: the planner's
+    prompt, every owned history text part (planner messages, persisted gate-passed
+    replies, the workflow snapshot), and this turn's trusted capability results --
+    whole records, of which the model saw only a projection. Model-authored tool
+    call arguments are excluded.
+    """
+    texts = [prompt]
+    texts.extend(
+        part.text
+        for message in history.messages
+        for part in message.parts
+        if part.kind != "tool_call" and part.text
+    )
+    for value in results:
+        try:
+            texts.append(json.dumps(
+                asdict(value) if is_dataclass(value) and not isinstance(value, type) else value,
+                default=str, ensure_ascii=False,
+            ))
+        except (TypeError, ValueError):
+            texts.append(str(value))
+    return texts
 
 
 def terminal_status(outcome: AgentRunOutcomeV1) -> str:
@@ -250,14 +289,16 @@ def failed_outcome_for_exception(exc: Exception) -> AgentRunOutcomeV1:
         )
     if isinstance(exc, AgentProviderError):
         return AgentRunOutcomeV1(
-            status="failed", failure_reason="provider_error", failure_source="agent"
+            status="failed", failure_reason="provider_error", failure_source="agent",
+            usage=getattr(exc, "usage", None),
         )
     # `UncitedNumericProseError` is a `ValueError` subclass, and an unclassified
     # exception is no better understood than a malformed output, so both land on
     # the same honest reason rather than on separate branches that pretend to
     # distinguish them.
     return AgentRunOutcomeV1(
-        status="failed", failure_reason="invalid_output", failure_source="agent"
+        status="failed", failure_reason="invalid_output", failure_source="agent",
+        retry_rule=getattr(exc, "retry_rule", None),
     )
 
 
@@ -331,8 +372,40 @@ def rehydrate_history(activities: tuple[ActivityItemV1, ...]) -> AgentTurnV1:
             )
         elif isinstance(activity, ClarificationActivityV1):
             role, text = "assistant", activity.clarification.question
+            # These ordered choices were rendered alongside the question. Losing
+            # them makes a follow-up such as "the first worker" unresolvable.
+            # Serialize labels as data, never as instructions or invented tools.
+            if activity.clarification.candidates:
+                text += "\nDisplayed choices (in order): " + json.dumps([
+                    {'group': candidate.group, 'record_id': candidate.record_id,
+                     'label': candidate.label}
+                    for candidate in activity.clarification.candidates
+                ], ensure_ascii=False)
+            if activity.clarification.dropped_candidate_count:
+                text += (f"\n{activity.clarification.dropped_candidate_count} additional "
+                         "candidates were not displayed.")
         elif isinstance(activity, DraftActivityV1):
             role, text = "assistant", activity.consequence_summary
+        elif isinstance(activity, ApprovalRequestActivityV1):
+            role = "assistant"
+            # This is a historical request, never an approval grant or a claim
+            # about its current state. Only the authenticated decision path can
+            # populate AgentTurnRequestV1.approvals.
+            text = "Historical approval request: " + json.dumps({
+                'approval_id': str(activity.approval_id),
+                'state_at_event': activity.approval_state,
+                'schedule_run_id': str(activity.schedule_run_id),
+                'candidate_schedule_version_id': str(activity.candidate_schedule_version_id),
+                'baseline_schedule_version': activity.baseline_schedule_version,
+                'consequence_summary': activity.consequence_summary,
+            }, ensure_ascii=False)
+        elif isinstance(activity, RunProgressActivityV1):
+            role = "assistant"
+            text = "Historical schedule run progress: " + json.dumps({
+                'schedule_run_id': str(activity.schedule_run_id),
+                'status': activity.status, 'reason': activity.reason,
+                'resource_version': activity.resource_version,
+            })
         elif isinstance(activity, TerminalOutcomeActivityV1):
             role = "assistant"
             text = f"The previous turn did not complete: {activity.outcome.reason}."

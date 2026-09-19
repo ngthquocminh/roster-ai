@@ -20,6 +20,7 @@ from scripts.evidence_binding import (
     DirtyTreeError,
     MigrationGraphError,
     contract_digests,
+    nearest_code_commit,
     resolve_alembic_chain,
     resolve_alembic_head,
     resolve_bindings,
@@ -520,6 +521,27 @@ def test_a_present_but_malformed_manifest_refuses_rather_than_falling_back(
         resolve_image_binding(tmp_path)
 
 
+def test_a_suite_supplied_image_binding_replaces_the_build_manifest():
+    """A suite that builds its own images binds THOSE, never a manifest another build wrote."""
+    ran = {"api": "sha256:" + "c" * 64, "web": "sha256:" + "d" * 64, "database": "postgres:18"}
+    bindings = resolve_bindings(
+        _DECLARED, repo_root=REPO_ROOT, allow_dirty=True, image_binding=ran
+    )
+    assert bindings["image"] == ran
+
+
+@pytest.mark.parametrize(
+    "document",
+    (
+        {"api": "local source tree", "web": "sha256:" + "b" * 64, "database": "postgres:18"},
+        {"api": "sha256:" + "a" * 64, "web": "sha256:" + "b" * 64},
+    ),
+)
+def test_a_suite_supplied_image_binding_holds_to_the_same_shape_rules(document):
+    with pytest.raises(ValueError):
+        resolve_bindings(_DECLARED, repo_root=REPO_ROOT, allow_dirty=True, image_binding=document)
+
+
 def test_digest_recorder_rejects_a_truncated_image_id(monkeypatch):
     from scripts import record_image_digests
 
@@ -658,3 +680,53 @@ def test_a_dirty_code_binding_cannot_be_laundered_by_reuse():
 def test_code_binding_without_a_commit_is_refused():
     with pytest.raises(ValueError, match="git_commit"):
         resolve_bindings(_DECLARED, repo_root=REPO_ROOT, code_binding={})
+
+
+# --- nearest_code_commit (Story 5.7: a run started at a docs-only HEAD) -----------
+
+def _repo_with_commits(tmp_path, *commits):
+    """Each commit is a {path: content} dict; returns the commit ids, oldest first."""
+    env = ["-c", "user.name=t", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false"]
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    ids = []
+    for index, files in enumerate(commits):
+        for name, content in files.items():
+            target = tmp_path / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+        subprocess.run(["git", *env, "commit", "-q", "-m", f"c{index}"], cwd=tmp_path, check=True)
+        ids.append(subprocess.run(["git", "rev-parse", "HEAD"], cwd=tmp_path, check=True,
+                                  capture_output=True, text=True).stdout.strip())
+    return ids
+
+
+def test_a_commit_that_touches_code_is_its_own_code_commit(tmp_path):
+    code, = _repo_with_commits(tmp_path, {"backend/app.py": "1"})
+    assert nearest_code_commit(tmp_path, code) == code
+
+
+def test_a_docs_only_head_binds_to_the_code_commit_beneath_it(tmp_path):
+    code, docs1, docs2 = _repo_with_commits(
+        tmp_path, {"backend/app.py": "1"}, {"docs/a.md": "x"}, {"_bmad-output/b.md": "y"})
+    assert nearest_code_commit(tmp_path, docs2) == code
+    assert nearest_code_commit(tmp_path, docs1) == code
+
+
+def test_a_history_with_no_code_commit_is_refused(tmp_path):
+    docs, = _repo_with_commits(tmp_path, {"docs/a.md": "x"})
+    with pytest.raises(ValueError, match="touches a code file"):
+        nearest_code_commit(tmp_path, docs)
+
+
+def test_code_that_changed_between_the_two_commits_is_never_papered_over(tmp_path, monkeypatch):
+    # The first-parent walk cannot skip a code commit, so the diff check is exercised with a
+    # candidate the walk was made to pick: it must refuse rather than name earlier code.
+    import scripts.evidence_binding as binding
+
+    old, new = _repo_with_commits(tmp_path, {"backend/app.py": "1"}, {"backend/app.py": "2"})
+    monkeypatch.setattr(binding, "_commit_touches",
+                        lambda root, commit: ["docs/x.md"] if commit == new else ["backend/app.py"])
+    with pytest.raises(ValueError, match="code changed between"):
+        nearest_code_commit(tmp_path, new)
+    assert old != new

@@ -965,3 +965,155 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   `_HAS_LIVE_AGENT` is computed from `.env` contents.
   **Owner/revisit trigger:** same as the 5.5 entry — pin `AGENT_RUNTIME_MODEL=deterministic` in
   `conftest.py` for the default session.
+
+## Deferred from: code review of story-5.7, core-app-code slice (2026-09-18)
+
+- **Two independently-sourced "trusted numeric words" lists can diverge.** `backend/agent/runtime.py:
+  _trusted_texts` (in-loop retry check) sources trusted words from `ToolReturnPart.content` — the
+  narrowed `model_facing_view` the model actually saw. `backend/application/use_cases/execute_turn.py:
+  _trusted_texts` (fail-closed backstop) sources them from raw `calculation_results` before projection.
+  The backstop's own docstring calls itself "a superset," but nothing enforces that a value's
+  narrowed-view formatting and its raw-JSON formatting produce the same literal token — a reformatted
+  number the in-loop check trusts could still trip the backstop, burning the model's last retry.
+  **Deferred reason:** Minh chose to accept the current documented-superset design for now.
+  **Owner/revisit trigger:** the live eval suite surfacing a divergence-caused retry failure — then
+  unify both call sites onto one trusted-word source.
+
+- **`trusted_numeric_words` strips UUID digit-groups from the trusted set (deliberate anti-fabrication
+  measure), but the checked prose side isn't stripped of the same noise, so a raw ID cited verbatim in
+  prose can falsely trip the numeric-prose gate** — in tension with `scheduling_instructions.py:
+  816-820` telling the model it may copy an ID's digits verbatim. [`backend/application/grounding/
+  gate.py:_IDENTIFIER_NOISE`/`trusted_numeric_words`] **Deferred reason:** Minh judged this likely
+  low-frequency since the instructions push the model toward resolved names over raw IDs in prose.
+  **Owner/revisit trigger:** the live eval suite surfacing a false rejection on a legitimate raw-ID
+  citation — then either strip identifier noise from the checked prose too, or preserve an ID's own
+  digit-groups as trusted on both sides.
+
+- **`_WORD_GAP`/`_claim_placeholder` heuristics in `backend/agent/runtime.py` have real false-positive
+  surfaces** — `_WORD_GAP = re.compile(r"\w {2,}\w")` trips on an accidental double space between
+  ordinary words (not a dropped number), and prose ending in `:`/`=`/`-`/`—` is flagged as "a dangling
+  lead-in" even when nothing numeric was intended. **Deferred reason:** Minh judged these are heuristics
+  already tuned against observed live-suite failures; narrowing them without new failure evidence risks
+  reintroducing the bugs they were added to catch. **Owner/revisit trigger:** eval-driven — the live
+  suite surfacing a new false-positive retry from either heuristic.
+
+- **`telemetry_fact_group` (AC3 per-operation coverage label) is wired only for `scheduling_inspect`,
+  not for `scheduling_compute`, `scheduling_draft`, or `scheduling_baseline`.** `backend/application/
+  capabilities/module.py` adds the generic `telemetry_fact_group` hook and `backend/agent/
+  capability_tools.py` reads it in `_register_module`, but only `scheduling_inspect_module()` sets
+  `telemetry_fact_group=lambda request: request.group`. If the eval/evidence slice relies on
+  `fact_group` labels to disaggregate coverage by metric name (`scheduling_compute`) or constraint kind
+  (`scheduling_draft`), that granularity is unavailable from telemetry alone for those capabilities.
+  **Deferred reason:** not a hard AC3 violation on its own — coverage can still be assigned via
+  `capability_name` + turn mapping — and this diff's eval/evidence slice (not reviewed in this pass)
+  may already cover it a different way. **Owner: open** — wire `telemetry_fact_group` for
+  `scheduling_compute` (metric name), `scheduling_draft` (constraint kind), and `scheduling_baseline`
+  if the evidence slice turns out to need per-operation telemetry granularity.
+
+## Deferred from: code review of story-5.7, eval-harness slice (2026-09-18)
+
+- **`RELIABILITY_FAILURES` puts a genuine infra hiccup and "the agent's run status didn't match what
+  the turn authorized" under the same reliability umbrella.** `backend/evals/live_conversations/
+  reporting.py:25`'s `unsuccessful_agent_turn` covers both, and both require the identical
+  `--accept-finding` override to unblock — so it's easy to wave off an actual product regression as
+  "just reliability." **Deferred reason:** pending — worth revisiting once the harness has run enough
+  live repetitions to know whether this distinction matters in practice. **Owner: open.**
+
+- **The judge's pre-flight budget check is a fixed reservation, not scaled to actual transcript size.**
+  `backend/evals/live_conversations/judge.py:127`'s `budget.admit(reserve_usd=.03, tokens=4096)` doesn't
+  grow with the cumulative transcript across a scenario's turns (Scenario B: 12 turns); real usage is
+  only charged post-hoc via `budget.charge()`. Bounded overshoot (at most one call's actual cost beyond
+  the declared budget), and consistent with the same reservation pattern used everywhere else in this
+  harness. **Deferred reason:** not new to this diff, and consistent with the rest of the harness's
+  budget design — revisit only as part of a broader budget-accuracy pass. **Owner: open.**
+
+- **`failure_exception_type`'s "runs execute strictly one at a time" assumption is shakier after this
+  diff's retry-after-404 path.** `backend/evals/live_conversations/telemetry.py::failure_exception_type`
+  assumes the nearest preceding failure log record belongs to the current run, but `http_client.py::
+  send()`'s new retry-after-404 path can issue a second `execute` POST for what may be an overlapping
+  run boundary. Diagnostics-only field, doesn't affect any pass/fail verdict. **Deferred reason:**
+  low-blast-radius; revisit if a report's `failure_exception_type` is ever observed to be wrong.
+  **Owner: open.**
+
+- **The `prefix`/`endpoint` abstraction is now vestigial dead complexity.** `backend/evals/
+  live_conversations/cases.py`'s own docstring admits scenarios always run in full and `prefixes` is
+  "kept as a one-element tuple ... so the runner's endpoint seam is unchanged" — threaded through
+  `runner.py`, `suite.py`, and `evidence.py` for no current functional purpose, guarded today only by
+  `validate_scenarios`. **Deferred reason:** cosmetic; a future cleanup pass. **Owner: open.**
+
+- **`judge.py`'s module docstring ("One bounded call") misstates the actual retry behavior** (up to two
+  attempts for transport errors and malformed judgments). Doesn't affect behavior, misleads a future
+  reader auditing the retry guarantee. **Deferred reason:** cosmetic doc/behavior mismatch, fix
+  opportunistically. **Owner: open.**
+
+## Deferred from: code review of story-5.7, test-suite slice (2026-09-19)
+
+- **Long-tail edge coverage across the live-eval harness and product guards.** Client fail-closed
+  branches (`login` non-302 / hop limit / second-hop host, `wait_for_run` deadline and bounds, non-404
+  execute error), `facts.py` oracle branches (`verify_claim` verdicts, `expected_metric` windows,
+  `read_group` cycle / count / `max_rows`), smoke-runner branches, `ContainerTelemetry.read_run`,
+  `validate_scenarios` blank / duplicate branches, placeholder-marker and dangling-lead-in variants,
+  `trusted_numeric_words` separators and the 16-char hex cutoff. **Deferred reason:** real, but none
+  decides a pass/fail verdict on its own once the slice's patches land. **Owner: open.**
+
+- **Change-detector tests.** `test_every_in_loop_correction_asks_for_a_complete_answer` and the
+  `fact_group` label test count source text; the default-instruction, `scheduling_draft` and
+  `scheduling_inspect` description tests pin ~13 prose substrings. **Deferred reason:** brittle on
+  refactor, not wrong; precedent exists in
+  `test_the_prose_rule_has_one_implementation_shared_with_the_gate`. **Owner: open.**
+
+- **Draft recovery covers only `UnexpectedModelBehavior`** (`backend/agent/runtime.py`, the
+  `run_turn` handler). A draft saved before `UsageLimitExceeded`, `FallbackExceptionGroup` or a timeout
+  is still discarded. **Deferred reason:** a runtime product-scope call, not a test defect.
+  **Owner: open.**
+
+- **`relevant_entities` matches names by raw substring** (`backend/evals/live_conversations/runner.py`):
+  `w1` matches inside `w10`, and an empty name always matches, so the judge can be sent more entities
+  than the reply named. **Deferred reason:** over-includes judge context only; not independently
+  verified. **Owner: open.**
+
+- **Cross-test coupling.** Tests import private helpers across modules (`tests.test_execute_turn_use_case`
+  `_deps`, `tests.test_scheduling_compute`, `tests.test_live_conversation_protocol`), and
+  `test_explicit_reasoning_control_reaches_openrouter_request` works around other modules setting
+  `models.ALLOW_MODEL_REQUESTS = False` at import without resetting it. **Deferred reason:** hygiene.
+  **Owner: open.**
+
+- **`_last_retry_rule` can still be stale WITHIN one turn.** `run_turn` now resets it on entry (the
+  cross-turn case is tested), but a rule that retried successfully and a later, unrelated
+  `UnexpectedModelBehavior` in the same run (for example exhausted tool-argument retries) still reports
+  the earlier rule as `retry_rule`. **Deferred reason:** diagnostic mislabel only, blast radius one turn;
+  a fix needs a way to tell a rule-caused exhaustion from a tool-caused one. **Owner: open.**
+
+- **AC7 recovered-turn reporting is not in the readiness summary** (`backend/evals/live_conversations/
+  reporting.py`). AC7 asks for recovered turns to be reported separately from first-attempt passes;
+  earlier attempts survive only in the raw run report, and `summarize_runs` counts each execution's
+  final attempt alone. **Deferred reason:** a feature gap against AC7's wording, not a regression, and
+  the readiness verdict is correct without it; needs a scoping call from Minh before it is built.
+  **Owner: open.**
+
+## Deferred from: code review of 5-7-prove-live-conversations-through-baseline-promotion, docs/planning + evidence slice (2026-09-19)
+
+- **`docs/CI-SECRETS-CHECKLIST.md:30` says a CI live suite's result "can never satisfy a release gate on its own" (NFR26).**
+  That reads awkwardly against AD-16, under which live evidence is the acceptance authority for conversational
+  behaviour. **Deferred reason:** the sentence is about a hypothetical, separately gated CI live workflow, not
+  Story 5.7's suite, and nothing in this story's diff caused it. **Owner: open.**
+
+## Deferred from: code review of 5-7-prove-live-conversations-through-baseline-promotion, frontend e2e + harness-patch slice (2026-09-19)
+
+- **Nothing checks that `compose.override.yml`'s price rates belong to `--agent-model`.** The file's own history comment
+  records the incident (a Haiku run priced at the Flash rate, ~6.75x undercount); the configuration digest proves which
+  override file ran, not that its rates suit the model. **Deferred reason:** a design change (a price table keyed by
+  model, or a rate check against the OpenRouter catalogue) beyond this story; the file header and `TESTING.md` already
+  instruct verifying rates on every model change. **Owner: open.**
+
+## Deferred from: Story 5.7 final measurement (2026-09-19)
+
+- **`suite.py::_atomic_json` has no retry around `os.replace`.** On Windows a reader holding the report open makes it
+  raise `PermissionError`, which aborted run `33821ef3` after eight paid executions (probably the reviewer's own status
+  read). The last successful save survives, but the run cannot finish. **Deferred reason:** measured code is frozen for
+  the evidence; a short retry is a one-line hardening for a later story. **Owner: open.**
+- **`--resume` re-runs executions that FAILED, not only incomplete ones**, and reports built from different image builds
+  cannot be combined by `evidence.generate`. Together they mean a crashed run cannot be completed without either
+  re-drawing its failures or discarding it (this run was re-measured in full and the crashed run disclosed in
+  `docs/TESTING.md`). **Deferred reason:** re-running failures on resume would need a decision on what counts as a
+  result; the safe direction (refuse to mix) is the documented one. **Owner: open.**

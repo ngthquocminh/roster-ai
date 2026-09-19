@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -244,7 +245,11 @@ def test_manifest_is_complete_configured_and_fixture_backed(monkeypatch) -> None
     assert manifest.risk_class == "inspect" and manifest.approval_policy == "none"
     backend = Path(__file__).resolve().parents[1]
     assert all((backend / path).is_file() for path in manifest.evaluation_fixtures)
-    assert all(getattr(manifest, name) for name in manifest.__dataclass_fields__)
+    # `citable_result_id` is an opt-in flag: False is its correct value here, so it is
+    # checked on its own rather than by the every-field-is-non-empty rule.
+    assert all(getattr(manifest, name) for name in manifest.__dataclass_fields__
+               if name != 'citable_result_id')
+    assert manifest.citable_result_id is False
     assert set(manifest.errors) == set(ERROR_CODES)
 
     # Proves the numbers come from settings rather than a literal that happens
@@ -582,3 +587,17 @@ def test_an_invalid_model_query_never_escapes_as_a_raw_builtin() -> None:
     assert outcome.status in {"completed", "failed"}
     if outcome.status == "failed":
         assert outcome.failure_reason in set(ERROR_CODES) | {"budget_exhausted"}
+
+
+def test_model_description_names_every_group_and_real_filter_key() -> None:
+    # The description spells out filter keys so the model stops guessing them
+    # (e.g. `worker_id` on workers, which is invalid). Derived from the
+    # adapter's own tables so the prose cannot drift from what is enforced.
+    from adapters.postgres.scenario_projection import GROUP_QUERY_TABLES
+
+    description = scheduling_inspect_module().model_description
+    for group in get_args(ScenarioFactGroupV1):
+        assert group in description
+    for group, (_sorts, filters) in GROUP_QUERY_TABLES.items():
+        segment = re.split(r"[;.]", description.split(f"{group} -- ", 1)[1], maxsplit=1)[0]
+        assert sorted(key.strip() for key in segment.split(",")) == sorted(filters)

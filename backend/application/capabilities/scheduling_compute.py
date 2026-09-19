@@ -268,6 +268,8 @@ def scheduling_compute_manifest() -> CapabilityManifestV1:
         evidence_mapping="exact consumed records, fields/ranges, checksum, and scenario version",
         errors=ERROR_CODES,
         evaluation_fixtures=EVALUATION_FIXTURES,
+        # Its result_id is the content-addressed calculation id a claim cites.
+        citable_result_id=True,
     )
 
 
@@ -335,10 +337,15 @@ def scheduling_compute_module() -> CapabilityModuleV1:
         model_facing_view=_model_view,
         model_description=(
             "scheduling_compute calculates one supported scheduling metric from a supplied metric "
-            "name and its exact arguments. Call it for a factual metric question after the user has "
-            "specified every required identifier, family, and time window. It returns a citation "
+            "name and its exact arguments. Resolve identifiers from scenario inspection and prior "
+            "displayed choices. For the total number of workers in the scenario, use worker_count "
+            "with empty arguments; qualified_worker_count counts qualifications for a particular task. Resolve "
+            "materially ambiguous task, family, or time windows by clarifying with the "
+            "planner in plain language. Only demand metrics accept a family; staffed minutes and "
+            "qualified worker count do not. It returns a citation "
             "handle, not a numeric value; use that handle in the grounded answer. Outbound and "
-            "inbound demand are volume, while indirect demand is headcount."
+            "inbound demand are volume, while indirect demand is headcount. It computes over the "
+            "scenario's stored facts only, never over a run's candidate or a promoted baseline."
         ),
     )
 

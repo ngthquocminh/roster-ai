@@ -73,9 +73,13 @@ def scheduling_baseline_module() -> CapabilityModuleV1:
         model_facing_view=lambda result: result,
         model_description=(
             "scheduling_baseline requests promotion of one candidate schedule run to the site's "
-            "baseline. Call it only when the user explicitly asks to promote a candidate and gives "
-            "its schedule_run_id; include the expected_baseline_schedule_version (or null). Every "
-            "request requires exact human approval before any promotion occurs."
+            "baseline. Call it only when the user explicitly asks to promote or approve a "
+            "candidate, and only for a run whose workflow-snapshot status is solver_completed "
+            "with a candidate. Copy that run's schedule_run_id and the snapshot's "
+            "baseline_schedule_version as expected_baseline_schedule_version (null when there is "
+            "none); clarify if the candidate is ambiguous. It only creates an approval request: "
+            "the planner approves or rejects it through the approval control, and nothing is "
+            "promoted until they do."
         ),
     )
 

@@ -28,7 +28,44 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from agent.runtime import AgentRuntimeConfig, PydanticAIAgentRuntime, create_agent_runtime
+from agent.runtime import (
+    AgentRuntimeConfig, PydanticAIAgentRuntime, _openrouter_model_settings, create_agent_runtime,
+)
+
+
+def test_default_instructions_bound_broad_orientation_inspection():
+    instructions = AgentRuntimeConfig().instructions
+    # Normalized so incidental source line-wraps inside a sentence never
+    # break a substring check -- the prompt's own line breaks (markdown
+    # headers/bullets) still matter to the model, but not to this test.
+    flat = ' '.join(instructions.split())
+    assert flat.index('A greeting alone') < flat.index('Call a tool when you already have')
+    assert 'Broad orientation requests' in flat
+    assert 'scenario overview' in flat
+    assert 'scoped to a family' in flat
+    assert 'successful scheduling_draft call' in flat
+    assert 'workflow snapshot' in flat
+    assert 'copy its worker_id or task_id' in flat
+    assert 'current_scenario_version_id' in flat
+    assert 'How can you help' in flat
+    assert 'placeholder result_id' in flat
+    assert 'present a failed claim' in flat
+    assert 'Tool routing' in flat
+    assert 'scheduling_inspect(group="overview")' in flat
+
+
+def test_openrouter_settings_omit_reasoning_for_none_and_unset():
+    # A model that doesn't support the "reasoning" parameter (e.g.
+    # qwen/qwen3-235b-a22b-2507) rejects the whole call if it's sent anyway --
+    # "none" must omit the key entirely, not send effort="none".
+    assert _openrouter_model_settings(None) is None
+    assert _openrouter_model_settings('none') is None
+
+
+def test_openrouter_settings_include_reasoning_for_a_real_effort_value():
+    assert _openrouter_model_settings('low') == {'extra_body': {'reasoning': {'effort': 'low'}}}
+    assert _openrouter_model_settings('medium') == {
+        'extra_body': {'reasoning': {'effort': 'medium'}}}
 from evals.doubles import build_model_double
 from application.capabilities.demonstration import demonstration_module
 from application.capabilities.deps import AgentDepsV1
@@ -143,7 +180,105 @@ def test_openrouter_model_uses_the_explicit_agent_runtime_key() -> None:
             model="openrouter:openai/gpt-oss-20b:free", api_key="test-key"
         )
     )
-    assert runtime._model.__class__.__name__ == "OpenAIChatModel"
+    model = runtime._model
+    assert model.__class__.__name__ == "FallbackModel"
+    assert [m.__class__.__name__ for m in model.models] == ["OpenRouterModel"] * 3
+    from agent.runtime import _is_transient_openrouter_error, _is_upstream_error_response
+
+    assert model._response_handlers == [_is_upstream_error_response]
+    assert model._exception_handlers == [_is_transient_openrouter_error]
+
+
+def test_openrouter_retries_only_transient_failures() -> None:
+    from pydantic_ai.exceptions import ModelAPIError, ModelHTTPError
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    from agent.runtime import _is_transient_openrouter_error, _is_upstream_error_response
+
+    assert _is_transient_openrouter_error(ModelHTTPError(502, "m"))
+    assert _is_transient_openrouter_error(ModelHTTPError(429, "m"))
+    assert not _is_transient_openrouter_error(ModelHTTPError(400, "m"))
+    assert not _is_transient_openrouter_error(ModelHTTPError(402, "m"))
+    assert _is_transient_openrouter_error(ModelAPIError("m", "no completion"))
+    assert not _is_transient_openrouter_error(ValueError("bad"))
+    assert _is_upstream_error_response(ModelResponse(parts=[TextPart("")], finish_reason="error"))
+    assert not _is_upstream_error_response(ModelResponse(parts=[TextPart("hi")], finish_reason="stop"))
+
+
+@pytest.mark.parametrize("status,retried", [
+    (408, False), (429, True), (499, False), (500, True), (502, True), (503, True), (504, True),
+    (400, False), (401, False), (402, False), (403, False), (404, False),
+])
+def test_only_rate_limits_and_server_errors_are_retried(status, retried) -> None:
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    from agent.runtime import _is_transient_openrouter_error
+
+    assert _is_transient_openrouter_error(ModelHTTPError(status, "m")) is retried
+
+
+def _upstream_error(_messages, _info):
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    return ModelResponse(parts=[TextPart("")], finish_reason="error")
+
+
+def _hello(_messages, _info):
+    from pydantic_ai.messages import ModelResponse, TextPart
+
+    return ModelResponse(parts=[TextPart("hello")], finish_reason="stop")
+
+
+def _retrying(*functions):
+    from pydantic_ai.models.fallback import FallbackModel
+
+    from agent.runtime import _is_transient_openrouter_error, _is_upstream_error_response
+
+    return FallbackModel(
+        *(FunctionModel(function) for function in functions),
+        fallback_on=[_is_transient_openrouter_error, _is_upstream_error_response],
+    )
+
+
+def test_an_upstream_error_response_is_retried_instead_of_failing_the_turn() -> None:
+    runtime = PydanticAIAgentRuntime(model=_retrying(_upstream_error, _hello))
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="HI my name is Minh"))
+    assert outcome.status == "completed"
+
+
+def test_exhausted_upstream_retries_are_a_provider_error_not_invalid_output() -> None:
+    from application.ports.agent_runtime import AgentProviderError
+
+    runtime = PydanticAIAgentRuntime(
+        model=_retrying(_upstream_error, _upstream_error, _upstream_error))
+    with pytest.raises(AgentProviderError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="HI my name is Minh"))
+    # Whatever the failed attempts already billed must survive the outage, the
+    # same accounting as the budget-exhausted branch.
+    assert caught.value.usage is not None
+
+
+def test_result_ids_are_trusted_only_from_this_runs_citable_tool_returns() -> None:
+    from pydantic_ai.messages import ModelRequest, ToolReturnPart, UserPromptPart
+
+    from agent.runtime import _result_ids_this_run
+
+    citable = frozenset({"a_citable_tool"})
+    def returned(tool_name, result_id, call_id):
+        return ModelRequest(parts=[ToolReturnPart(
+            tool_name=tool_name, content={"result_id": result_id}, tool_call_id=call_id)])
+
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="earlier question")]),
+        returned("a_citable_tool", "from-an-earlier-turn", "c0"),
+        ModelRequest(parts=[UserPromptPart(content="this turn's question")]),
+        returned("a_citable_tool", "from-this-turns-calculation", "c1"),
+        # another tool's model-facing view can carry a `result_id` too (a draft's id):
+        # trusting it would let a draft id vouch for a numeric claim.
+        returned("a_tool_that_is_not_citable", "a-drafts-id", "c2"),
+    ]
+    assert _result_ids_this_run(messages, citable) == {"from-this-turns-calculation"}
+    assert _result_ids_this_run(messages, frozenset()) == set()
 
 
 def test_anthropic_model_uses_the_explicit_agent_runtime_key() -> None:
@@ -308,6 +443,9 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
         # None on every success path; set at the raise site so the request path
         # can tell an agent-level reason from an identically-spelled manifest code.
         "failure_source": None,
+        # Story 5.7: which in-loop output rule exhausted its retries; None
+        # unless the turn failed as invalid_output.
+        "retry_rule": None,
         "output_text": "tool said alpha",
         # Structured model-side variants stay absent on the default text path.
         "answer": None,
@@ -413,16 +551,34 @@ def test_opt_in_structured_answer_is_typed_and_output_tool_is_not_a_capability_r
     assert outcome.tool_results == ()
 
 
-def test_strict_answer_rejects_unstructured_prose_with_preserved_cause() -> None:
+def test_plain_text_becomes_a_prose_only_grounded_answer() -> None:
+    """Story 5.7: text is accepted so the provider is not forced into
+    tool_choice="required", under which a model answering in text looped until
+    the upstream stream broke."""
     runtime = _runtime(
         model=FunctionModel(
-            lambda messages, info: ModelResponse(parts=[TextPart(content="confident prose")])
+            lambda messages, info: ModelResponse(parts=[TextPart(content=" Hi Minh, how can I help? ")])
+        ),
+        answer_type=GroundedAnswerV1,
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="HI my name is Minh"))
+    assert outcome.status == "completed"
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="Hi Minh, how can I help?"),))
+
+
+def test_plain_text_with_an_uncited_numeral_is_still_rejected_with_preserved_cause() -> None:
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="There are 24 workers.")])
         ),
         answer_type=GroundedAnswerV1,
     )
     with pytest.raises(AgentRuntimeError) as exc_info:
-        runtime.run_turn(AgentTurnRequestV1(prompt="answer structurally"))
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
     assert isinstance(exc_info.value.__cause__, UnexpectedModelBehavior)
+    # The numeral rule fired, not the quantity-question rule the prompt would also invite.
+    assert exc_info.value.retry_rule == "numeric_prose"
 
 
 def test_structured_output_tools_keep_the_four_exact_stable_names() -> None:
@@ -556,7 +712,9 @@ def test_budget_exhaustion_is_failed_with_budget_exhausted() -> None:
     assert outcome.status == "failed"
     assert outcome.failure_reason == "budget_exhausted"
     assert outcome.budget_outcome == "budget_exhausted"
-    assert outcome.usage is None
+    assert outcome.usage is not None
+    assert outcome.usage.requests == 1
+    assert outcome.usage.input_tokens > 0
 
 
 def test_wall_time_exhaustion_is_timed_out_not_budget_exhausted() -> None:
@@ -789,3 +947,446 @@ def test_the_prose_rule_has_one_implementation_shared_with_the_gate() -> None:
     )
     assert "numeric_prose_violation" in source
     assert "isnumeric" not in source, "the adapter must call the rule, not restate it"
+
+
+def _stub_draft_module():
+    from types import SimpleNamespace
+
+    from application.capabilities.scheduling_draft import scheduling_draft_module
+
+    return replace(scheduling_draft_module(),
+                   handler=lambda deps, request, manifest: SimpleNamespace(result_id="draft-abc"))
+
+
+def _draft_call():
+    return ModelResponse(parts=[ToolCallPart(
+        tool_name="scheduling_draft",
+        args=json.dumps({"request": {"constraints": []}}),
+        tool_call_id="draft-call-1",
+    )])
+
+
+def test_a_draft_created_this_turn_must_be_returned_as_the_draft_output() -> None:
+    """Story 5.7 lesson 14: prose "Created a draft" after scheduling_draft saved nothing."""
+    seen_retry = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        if not responses:
+            return _draft_call()
+        if len(responses) == 1:
+            return ModelResponse(parts=[TextPart(content="Created a reversible draft.")])
+        seen_retry.append(True)
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="draft", args=json.dumps({"draft_id": "draft-abc"}), tool_call_id="out-1")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
+    assert seen_retry == [True]
+    assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
+
+
+def test_prose_never_stands_in_for_a_draft_the_model_did_not_create() -> None:
+    """The prose claim alone must not become a success. (A draft that WAS
+    created is recovered instead -- see the unusable-final-message test below.)"""
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[TextPart(content="Created a reversible draft.")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
+    assert outcome.draft is None
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="Created a reversible draft."),))
+
+
+def test_only_a_draft_from_the_current_prompt_requires_the_draft_output() -> None:
+    from pydantic_ai.messages import UserPromptPart
+
+    from agent.runtime import _latest_draft_id_this_run
+
+    earlier_turn = [
+        ModelRequest(parts=[UserPromptPart(content="make a draft")]),
+        ModelRequest(parts=[ToolReturnPart(tool_name="scheduling_draft",
+                                           content={"draft_id": "old"}, tool_call_id="a")]),
+    ]
+    current = [ModelRequest(parts=[UserPromptPart(content="show me the draft")])]
+    assert _latest_draft_id_this_run(earlier_turn) == "old"
+    assert _latest_draft_id_this_run(earlier_turn + current) is None
+    created_now = current + [ModelRequest(parts=[ToolReturnPart(
+        tool_name="scheduling_draft", content={"draft_id": "new"}, tool_call_id="b")])]
+    assert _latest_draft_id_this_run(earlier_turn + created_now) == "new"
+
+
+def test_plain_text_may_copy_a_numeral_from_the_planners_message() -> None:
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="Capped at 40 hours.")])),
+        answer_type=GroundedAnswerV1,
+    )
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours"))
+    assert outcome.answer == GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="Capped at 40 hours."),))
+
+
+def test_a_rejected_reply_cannot_vouch_for_its_own_numeral_on_retry() -> None:
+    """The retry prompt quotes the offending numeral; it must not become trusted."""
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="There are 24 workers.")])),
+        answer_type=GroundedAnswerV1,
+    )
+    with pytest.raises(AgentRuntimeError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours"))
+    # Still refused for the numeral, after the retry prompt quoted it.
+    assert caught.value.retry_rule == "numeric_prose"
+
+
+@pytest.mark.parametrize("result_id,rule", [
+    ("", "uncited_claim"),                       # a claim that carries no citation at all
+    ("0" * 36, "claim_without_calculation"),     # a citation, but no calculation ran this turn
+])
+def test_a_claim_that_cannot_be_supported_names_the_rule_that_refused_it(result_id, rule) -> None:
+    from application.ports.agent_runtime import AgentInvalidOutputError
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(_claim_answer(result_id)),
+            tool_call_id=f"o{len(messages)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
+    assert caught.value.retry_rule == rule
+
+
+def test_a_claim_with_an_empty_result_id_is_corrected_in_loop() -> None:
+    from application.contracts.grounding import ClaimArgumentsV1, ClaimProposalV1
+
+    attempts = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV1(segments=(
+            GroundedProseSegmentV1(text="The draft keeps that worker off that task."),
+            *((ClaimProposalV1(metric="worker_count", arguments=ClaimArgumentsV1(), result_id=""),)
+              if len(attempts) == 1 else ()),
+        ))
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer),
+            tool_call_id=f"out-{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
+    assert len(attempts) == 2, "the uncited claim must be corrected inside the run"
+    assert outcome.answer == GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="The draft keeps that worker off that task."),))
+
+
+def _answer_json(answer) -> str:
+    return json.dumps(asdict(answer))
+
+
+def test_a_draft_created_this_turn_survives_an_unusable_final_message() -> None:
+    """live-suite-v2-acceptance-b C8/C9: the draft was saved, then discarded
+    because the model never produced a usable final message."""
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(m, ModelResponse) for m in messages):
+            return _draft_call()
+        return ModelResponse(parts=[TextPart(content="Created a reversible draft.")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours in a draft"))
+    assert outcome.status == "completed"
+    assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
+
+
+@pytest.mark.parametrize("text", [
+    "**A Pick | Picking Ambient** has <claim> staffed minutes over the horizon.",
+    "There are  workers in the scenario.",
+])
+def test_prose_left_with_a_gap_where_a_claim_belongs_is_corrected_in_loop(text) -> None:
+    """live-suite-v2-acceptance-c: the model wrote the sentence around a claim
+    it never emitted, so the planner saw no number at all."""
+    attempts = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV1(segments=(GroundedProseSegmentV1(
+            text=text if len(attempts) == 1 else "That task has staffed time recorded."),))
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    # Deliberately NOT a "how many" prompt: the placeholder rule, not the
+    # quantity-question rule, is what this test pins.
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="summarise the staffing on that task"))
+    assert len(attempts) == 2
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="That task has staffed time recorded."),))
+
+
+def test_a_claim_bearing_answer_may_still_space_its_prose_normally() -> None:
+    """The claim cites a result the calculation really returned, so only the
+    prose spacing is under test here."""
+    answer = _claim_answer(REAL_RESULT_ID)
+    runtime = _runtime(model=FunctionModel(_compute_then([answer])),
+                       capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
+    assert runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?")).answer == answer
+
+
+@pytest.mark.parametrize("text", [
+    "Hello.  How can I help with your schedule?",   # ordinary sentence spacing
+    "The draft keeps that worker off that task.",
+])
+def test_ordinary_prose_is_not_mistaken_for_a_dropped_claim(text) -> None:
+    runtime = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(parts=[TextPart(content=text)])),
+        answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="hi"))
+    assert outcome.answer == GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text),))
+
+
+def _claim_answer(result_id: str) -> GroundedAnswerV1:
+    from application.contracts.grounding import ClaimArgumentsV1, ClaimProposalV1
+
+    return GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="There are "),
+        ClaimProposalV1(metric="worker_count", arguments=ClaimArgumentsV1(), result_id=result_id),
+        GroundedProseSegmentV1(text=" workers."),
+    ))
+
+
+REAL_RESULT_ID = "d7481a87240baee0bdf74d774a2f092090eb5a947670bbee08960b45f34c819a"
+
+
+def _compute_stub_module():
+    from types import SimpleNamespace
+
+    from application.capabilities.scheduling_compute import scheduling_compute_module
+
+    return replace(
+        scheduling_compute_module(),
+        handler=lambda deps, request, manifest: SimpleNamespace(
+            result_id=REAL_RESULT_ID, metric="worker_count", unit="workers",
+            consumed_row_count=1, value=10, arguments=request.arguments,
+            evidence_refs=(), scenario_version_id=None),
+        model_facing_view=lambda result: {"result_id": result.result_id, "metric": "worker_count",
+                                          "unit": "workers", "matched": "some"},
+    )
+
+
+def _compute_then(answers):
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        if not responses:
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="scheduling_compute",
+                args=json.dumps({"request": {"metric": "worker_count", "arguments": {}}}),
+                tool_call_id="c1")])
+        answer = answers[min(len(responses) - 1, len(answers) - 1)]
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(responses)}")])
+    return model
+
+
+def test_a_mistyped_result_id_is_corrected_in_loop() -> None:
+    """live-suite-v2-acceptance-f: the model copied a 64-character hash as 63
+    and as 68 characters, and the gate could only report missing_evidence."""
+    runtime = _runtime(
+        model=FunctionModel(_compute_then([_claim_answer(REAL_RESULT_ID[:-1]),
+                                           _claim_answer(REAL_RESULT_ID)])),
+        capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
+    assert outcome.answer == _claim_answer(REAL_RESULT_ID)
+
+
+def test_an_unrelated_result_id_still_reaches_the_gate_as_missing_evidence() -> None:
+    """golden case grounding-missing-evidence depends on this path staying open."""
+    invented = _claim_answer("f" * 64)
+    runtime = _runtime(model=FunctionModel(_compute_then([invented])),
+                       capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
+    assert runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?")).answer == invented
+
+
+def test_a_sentence_that_announces_a_number_and_stops_is_corrected_in_loop() -> None:
+    """live-suite-v2-measurement-final C5: 'Staffed minutes for <task>:' with no claim."""
+    attempts = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        text = ("Staffed minutes for C Fork | Grid P 8GR:" if len(attempts) == 1
+                else "That task has staffed time recorded.")
+        return ModelResponse(parts=[TextPart(content=text)])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    # Deliberately NOT a "how many" prompt: the placeholder rule, not the
+    # quantity-question rule, is what this test pins.
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="summarise the staffing on that task"))
+    assert len(attempts) == 2
+    assert outcome.answer == GroundedAnswerV1(
+        segments=(GroundedProseSegmentV1(text="That task has staffed time recorded."),))
+
+
+def test_a_lead_in_followed_by_more_prose_is_not_a_dropped_claim() -> None:
+    """live-suite-final-measurement C7: 'Active constraints:' followed by the
+    list was rejected until the turn ran out of retries."""
+    answer = GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="Locks: none are active. Active constraints:"),
+        GroundedProseSegmentV1(text="- Maximum agency shifts: 6 weekly."),
+    ))
+    runtime = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id="o1")])),
+        answer_type=GroundedAnswerV1)
+    assert runtime.run_turn(
+        AgentTurnRequestV1(prompt="what locks and constraints are active? 6 56")).answer == answer
+
+
+def test_every_in_loop_correction_asks_for_a_complete_answer() -> None:
+    """live-suite-final-measurement C2 answered a retry with 'Correction: ...',
+    so the planner received a delta instead of the answer."""
+    from agent import runtime as runtime_module
+
+    source = Path(runtime_module.__file__).read_text(encoding="utf-8")
+    assert source.count("+ _COMPLETE_ANSWER") == source.count("raise ModelRetry(")
+
+
+def test_an_exhausted_in_loop_rule_is_named_on_the_outcome() -> None:
+    """Story 5.7 B5: an invalid_output failure was undiagnosable because the
+    rejected text is model content and is never logged. The RULE is not."""
+    from application.ports.agent_runtime import AgentInvalidOutputError
+    from application.use_cases.execute_turn import failed_outcome_for_exception
+
+    runtime = _runtime(
+        model=FunctionModel(
+            lambda messages, info: ModelResponse(parts=[TextPart(content="There are 24 workers.")])),
+        answer_type=GroundedAnswerV1,
+    )
+    with pytest.raises(AgentRuntimeError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
+    assert isinstance(caught.value, AgentInvalidOutputError)
+    assert caught.value.retry_rule == "numeric_prose"
+    assert failed_outcome_for_exception(caught.value).retry_rule == "numeric_prose"
+
+
+def test_a_claim_after_no_calculation_at_all_is_corrected_in_loop() -> None:
+    """live-suite-B-diagnose B5 rep3: a correct prose answer with a stray
+    worker_count claim appended, after zero tool calls."""
+    attempts = []
+    good = GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="The draft excludes that worker."),))
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = _claim_answer("0" * 36) if len(attempts) == 1 else good
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
+    assert len(attempts) == 2
+    assert outcome.answer == good
+
+
+def test_an_answer_with_no_segments_is_corrected_in_loop() -> None:
+    """A structured answer carrying no prose and no claim is an empty reply the
+    planner would see as nothing happening (Story 5.7 core-app review patch)."""
+    attempts = []
+    good = GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="Here is what I found."),))
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV1(segments=()) if len(attempts) == 1 else good
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me the current constraints"))
+    assert len(attempts) == 2
+    assert outcome.answer == good
+
+
+def test_an_answer_that_stays_empty_names_the_empty_answer_rule() -> None:
+    from application.ports.agent_runtime import AgentInvalidOutputError
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(GroundedAnswerV1(segments=())),
+            tool_call_id=f"o{len(messages)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="show me the current constraints"))
+    assert caught.value.retry_rule == "empty_answer"
+
+
+def test_a_retry_rule_from_an_earlier_turn_is_not_reported_on_a_later_unrelated_failure() -> None:
+    """`_last_retry_rule` names the rule behind an invalid-output failure. It is
+    per-instance state, so a rule left over from one turn must not be blamed for
+    a failure in the next one that no rule caused."""
+    from application.ports.agent_runtime import AgentInvalidOutputError
+
+    unrelated = False
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if unrelated:
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="no_such_tool", args="{}", tool_call_id=f"t{len(messages)}")])
+        return ModelResponse(parts=[TextPart(content="There are 24 workers.")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError) as first:
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
+    assert first.value.retry_rule == "numeric_prose"
+
+    unrelated = True
+    with pytest.raises(AgentInvalidOutputError) as second:
+        runtime.run_turn(AgentTurnRequestV1(prompt="tell me about the schedule"))
+    assert second.value.retry_rule is None
+
+
+def test_a_quantity_question_answered_without_a_claim_is_corrected_in_loop() -> None:
+    """live-suite-evidence C6: 'How many workers are qualified for it?' answered
+    '**C Fork | Grid P 8GR** has qualified workers.' -- no number at all."""
+    attempts = []
+    grounded = _claim_answer(REAL_RESULT_ID)
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        if not responses:
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="scheduling_compute",
+                args=json.dumps({"request": {"metric": "worker_count", "arguments": {}}}),
+                tool_call_id="c1")])
+        attempts.append(len(attempts))
+        answer = (GroundedAnswerV1(segments=(GroundedProseSegmentV1(
+            text="That task has qualified workers."),)) if len(attempts) == 1 else grounded)
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_compute_stub_module(),),
+                       answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="How many workers are qualified for it?"))
+    assert len(attempts) == 2
+    assert outcome.answer == grounded
+
+
+def test_a_non_quantity_question_may_be_answered_in_prose_alone() -> None:
+    runtime = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(
+            parts=[TextPart(content="The draft keeps that worker off that task.")])),
+        answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Show me what you put in the draft."))
+    assert outcome.answer == GroundedAnswerV1(segments=(
+        GroundedProseSegmentV1(text="The draft keeps that worker off that task."),))
+
+
+def test_the_runtime_derives_the_citable_tools_from_the_manifests_it_was_granted() -> None:
+    module = demonstration_module()
+    assert _runtime(capabilities=(module,))._citable_result_tools == frozenset()
+    assert _runtime(capabilities=())._citable_result_tools == frozenset()
+
+    opted_in = replace(module, manifest=replace(module.manifest, citable_result_id=True))
+    assert _runtime(capabilities=(opted_in,))._citable_result_tools == frozenset(
+        {module.manifest.capability_name})

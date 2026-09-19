@@ -47,8 +47,10 @@ Automated accessibility coverage is recorded in `evidence/story-4.6/state-semant
 No live provider or model was configured for this run, so no illustrative
 model prose is quoted. The behavioral proof above ran under
 `AGENT_RUNTIME_MODEL=deterministic` — the keyless model double — and that is the
-release-relevant result. Live-provider output is optional here and is never
-release evidence.
+release-relevant result for this walkthrough's deterministic behavior. Live-provider
+output is not needed to follow it. It is not release evidence for the conversational
+feature either way: that comes from Story 5.7's separate live suite (AD-16;
+`docs/TESTING.md`), never from a walkthrough transcript.
 
 ## Evidence and gates
 

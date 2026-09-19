@@ -310,10 +310,24 @@ def scheduling_draft_module() -> CapabilityModuleV1:
         required_feature_policy=SCHEDULING_DRAFT_POLICY,
         model_facing_view=_model_view,
         model_description=(
-            "scheduling_draft creates a reversible scheduling proposal from explicit constraints. "
-            "Call it only when the user supplies the intended constraint kind, affected record IDs, "
-            "values, and optional expected_scenario_version_id. It does not optimize or promote a "
-            "schedule; it returns a draft citation handle for a later review or run."
+            "scheduling_draft creates a new reversible draft of soft solver constraints. "
+            "Always set expected_scenario_version_id to current_scenario_version_id from the "
+            "workflow snapshot. Each constraint uses exactly these fields and leaves every other "
+            "field unset: "
+            "set_min_workers_per_task -- group='work-areas-and-tasks', record_id=<task_id>, n>0; "
+            "scale_demand -- group='work-areas-and-tasks', record_id=<task_id>, factor>0; "
+            "lock_worker_shift -- group='workers', record_id=<worker contact_id>, start_minute, "
+            "end_minute (minutes from scenario start, half-open, within the horizon); "
+            "exclude_worker_from_task -- group='workers', record_id=<worker contact_id>, "
+            "related_group='work-areas-and-tasks', related_record_id=<task_id>; "
+            "set_max_hours -- kind='set_max_hours', group='workers', record_id=<worker contact_id>, "
+            "max_hours=<number, at most 56>. "
+            "Resolve the user's intended change to these kinds and exact record IDs using scenario "
+            "inspection and the workflow snapshot. Ask about ambiguous workers, tasks, or values in "
+            "plain language; do not ask the planner for internal IDs available from those reads. "
+            "It takes no draft ID: to revise a draft, send every constraint that should remain "
+            "plus the change. It does not run the solver or promote a schedule; it returns a "
+            "draft_id to cite in the draft output."
         ),
     )
 

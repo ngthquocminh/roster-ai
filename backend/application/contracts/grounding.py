@@ -37,6 +37,7 @@ MetricV1 = Literal[
     "required_demand_volume",
     "staffed_minutes",
     "qualified_worker_count",
+    "worker_count",
 ]
 DemandFamilyV1 = Literal["outbound", "inbound", "indirect"]
 

@@ -4346,6 +4346,142 @@
           }
         }
       }
+    },
+    "/oidc/authorize": {
+      "get": {
+        "tags": [
+          "local-oidc"
+        ],
+        "summary": "Authorize",
+        "operationId": "authorize_oidc_authorize_get",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "State"
+            }
+          },
+          {
+            "name": "nonce",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Nonce"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code Challenge"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Redirect Uri"
+            }
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Client Id"
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Response Type"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code Challenge Method"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oidc/token": {
+      "post": {
+        "tags": [
+          "local-oidc"
+        ],
+        "summary": "Token",
+        "operationId": "token_oidc_token_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/oidc/jwks": {
+      "get": {
+        "tags": [
+          "local-oidc"
+        ],
+        "summary": "Jwks",
+        "operationId": "jwks_oidc_jwks_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Jwks Oidc Jwks Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8076,7 +8212,8 @@
               "required_headcount_minutes",
               "required_demand_volume",
               "staffed_minutes",
-              "qualified_worker_count"
+              "qualified_worker_count",
+              "worker_count"
             ],
             "title": "Metric",
             "default": "required_headcount_minutes"

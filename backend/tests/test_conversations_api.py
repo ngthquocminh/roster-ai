@@ -292,6 +292,7 @@ def conversation_client(tmp_path):
         default_settings(),
         db_path=str(tmp_path / "legacy.db"),
         maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
+        agent_runtime_model="deterministic",
     )
     previous_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_settings] = lambda: settings
@@ -429,6 +430,71 @@ def test_execute_turn_is_conversation_scoped_and_persists_terminal_response(
     assert response.json()["agent_run_id"] == str(run_id)
     assert response.json()["activity"]["activity_type"] == "agent_response"
     assert repository.claimed_statuses == ["agent_completed"]
+
+
+@contextmanager
+def _open_executing_context(_site_id):
+    from types import SimpleNamespace
+
+    yield SimpleNamespace(execute=lambda *args, **kwargs: None)
+
+
+def _with_workflow_context_reader(loader, monkeypatch):
+    """Give the route a connection and run repository rich enough that it calls the loader."""
+    from types import SimpleNamespace
+
+    from api.deps import get_schedule_run_repository
+
+    app.dependency_overrides[get_site_context_opener] = lambda: _open_executing_context
+    app.dependency_overrides[get_schedule_run_repository] = lambda: SimpleNamespace(
+        list_runs=lambda *args, **kwargs: None)
+    monkeypatch.setattr("api.routers.conversations.load_workflow_context", loader)
+
+
+@pytest.mark.parametrize("reason", [
+    "baseline schedule unavailable", "workflow context is too large",
+    "candidate does not match conversation scenario pin",
+])
+def test_a_workflow_context_that_cannot_be_built_degrades_to_no_context_not_a_failed_turn(
+    conversation_client, monkeypatch, reason
+) -> None:
+    """The snapshot is read-only enrichment: a dangling baseline pointer, an
+    oversized snapshot or a pin mismatch must not fail the planner's turn."""
+    client, repository, settings = conversation_client
+    calls = []
+
+    def unbuildable(*_args, **_kwargs):
+        calls.append(reason)
+        raise ValueError(reason)
+
+    _with_workflow_context_reader(unbuildable, monkeypatch)
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+    assert calls == [reason]
+    assert response.status_code == 200
+    assert response.json()["activity"]["activity_type"] == "agent_response"
+    assert repository.claimed_statuses == ["agent_completed"]
+
+
+def test_any_other_workflow_context_failure_still_fails_the_turn(
+    conversation_client, monkeypatch
+) -> None:
+    # Only ValueError is the documented, degradable condition. A wider catch would
+    # hide a real defect (a broken repository, a programming error) behind an
+    # answer that silently lacks the workflow state the planner relies on.
+    client, repository, settings = conversation_client
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("repository exploded")
+
+    _with_workflow_context_reader(broken, monkeypatch)
+    client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+    assert repository.claimed_statuses != ["agent_completed"]
 
 
 def test_execute_turn_emits_claim_to_finalize_telemetry(conversation_client) -> None:

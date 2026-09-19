@@ -10,6 +10,8 @@ from agent.translate import to_framework_messages
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.activity import (
     AgentResponseActivityV1,
+    ApprovalRequestActivityV1,
+    RunProgressActivityV1,
     ClarificationActivityV1,
     DraftActivityV1,
     PlannerMessageActivityV1,
@@ -32,6 +34,7 @@ from application.contracts.grounding import (
     GroundedResponseV1,
 )
 from application.contracts.dialogue import ClarificationV1, EntityCandidateProposalV1
+from application.contracts.dialogue import EntityCandidateV1
 from application.contracts.dialogue import RefusalV1, ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.scenario_projection import WorkerV1
 from application.capabilities.scheduling_draft import SchedulingDraftResultV1
@@ -46,6 +49,59 @@ from application.use_cases.execute_turn import (
 )
 
 NOW = datetime(2026, 8, 13, tzinfo=timezone.utc)
+
+
+def test_history_retains_ordered_visible_clarification_choices():
+    deps = _deps()
+    activity = ClarificationActivityV1(
+        activity_id=UUID(int=30), activity_type='clarification',
+        conversation_id=deps.conversation_id, conversation_resource_version=3,
+        scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+        occurred_at=NOW, clarification=ResolvedClarificationV1(
+            question='Which worker?', candidates=(
+                EntityCandidateV1(group='workers', record_id='worker-b', label='Jae',
+                                  scenario_version_id=deps.scenario_version_id),
+                EntityCandidateV1(group='workers', record_id='worker-a', label='Bhargav',
+                                  scenario_version_id=deps.scenario_version_id),
+            ), dropped_candidate_count=6,
+        ),
+    )
+    history = rehydrate_history((activity,))
+    text = history.messages[0].parts[0].text
+    assert text.startswith('Which worker?')
+    assert text.index('Jae') < text.index('Bhargav')
+    assert 'worker-b' in text and 'worker-a' in text
+    assert '6 additional candidates were not displayed' in text
+
+
+def test_history_accepts_persisted_approval_without_inventing_a_decision():
+    deps = _deps()
+    activity = ApprovalRequestActivityV1(
+        activity_id=UUID(int=30), activity_type='approval_request',
+        conversation_id=deps.conversation_id, conversation_resource_version=3,
+        scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+        occurred_at=NOW, approval_id=UUID(int=40), approval_state='pending',
+        agent_run_id=UUID(int=41), schedule_run_id=UUID(int=42),
+        candidate_schedule_version_id=UUID(int=43), baseline_schedule_version=None,
+        consequence_summary='Replace the baseline with this candidate.', parameter_hash='p',
+        consequence_hash='c', policy_version='1', expires_at=NOW,
+    )
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt='Was it approved?', calculation_results=[], history=(activity,))
+    text = runtime.request.history.messages[0].parts[0].text
+    assert str(activity.approval_id) in text
+    assert str(activity.schedule_run_id) in text
+    assert 'pending' in text and 'historical' in text.lower()
+    assert runtime.request.approvals == ()
+
+
+def test_history_preserves_terminal_run_state():
+    activity = RunProgressActivityV1(activity_id=UUID(int=30), activity_type='run_progress',
+        schedule_run_id=UUID(int=31), status='solver_infeasible', reason='no_solution',
+        resource_version=5, occurred_at=NOW)
+    text = rehydrate_history((activity,)).messages[0].parts[0].text
+    assert 'solver_infeasible' in text and 'no_solution' in text
+    assert str(activity.schedule_run_id) in text
 
 
 def test_terminal_outcome_preserves_a_complete_refusal_description() -> None:
@@ -183,6 +239,54 @@ def test_an_already_owned_turn_is_ALSO_capped_at_one_hundred_messages() -> None:
     # The caller's own 120-message turn is untouched -- `execute_turn` returns
     # a NEW bounded copy, never mutates what it was handed.
     assert len(owned_turn.messages) == 120
+
+
+def _workflow_message() -> AgentMessageV1:
+    return AgentMessageV1(role="user", parts=(AgentPartV1(kind="text", text="WORKFLOW-SNAPSHOT"),))
+
+
+def _planner_messages(count: int, deps: AgentDepsV1) -> tuple[PlannerMessageActivityV1, ...]:
+    return tuple(
+        PlannerMessageActivityV1(
+            activity_id=UUID(int=3000 + index), activity_type="planner_message",
+            conversation_id=deps.conversation_id, conversation_resource_version=index + 1,
+            scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+            occurred_at=NOW, message_id=UUID(int=4000 + index), text=f"m{index}",
+        )
+        for index in range(count)
+    )
+
+
+def test_the_workflow_snapshot_reaches_the_runtime_as_the_last_history_message() -> None:
+    deps = _deps()
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt="now", calculation_results=[],
+                 history=_planner_messages(3, deps), workflow_context=_workflow_message())
+    texts = [message.parts[0].text for message in runtime.request.history.messages]
+    assert texts == ["m0", "m1", "m2", "WORKFLOW-SNAPSHOT"]
+
+
+def test_the_workflow_snapshot_survives_a_full_history_and_the_bound_still_holds() -> None:
+    deps = _deps()
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt="now", calculation_results=[],
+                 history=_planner_messages(120, deps), workflow_context=_workflow_message())
+    messages = runtime.request.history.messages
+    assert len(messages) == 100
+    assert messages[-1].parts[0].text == "WORKFLOW-SNAPSHOT"
+    # The snapshot displaces the OLDEST message, not a recent one.
+    assert messages[0].parts[0].text == "m21"
+
+
+def test_no_workflow_snapshot_adds_nothing_and_an_owned_turn_is_never_mutated() -> None:
+    deps = _deps()
+    owned = AgentTurnV1(messages=(_workflow_message(),))
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt="now", calculation_results=[], history=owned)
+    assert len(runtime.request.history.messages) == 1
+    execute_turn(runtime, deps, prompt="now", calculation_results=[], history=owned,
+                 workflow_context=_workflow_message())
+    assert len(owned.messages) == 1  # the caller's turn is copied, not appended to
 
 
 def test_execute_turn_resolves_clarification_at_the_use_case_boundary() -> None:

@@ -342,3 +342,42 @@ def test_a_refused_agent_approval_lands_terminal_instead_of_stranding_the_run(
     assert approvals.binding is None
     assert audit.items == []
     assert conversations.paused == []
+
+
+def test_a_suspended_call_to_a_capability_without_an_approval_path_lands_terminal(
+    agent_client, monkeypatch,
+) -> None:
+    """Story 5.7 Decision 1: e.g. `shiftmind_demonstration` with repeat > 1.
+
+    Before the fix `_finish` raised `RuntimeError`, the route answered 409, and
+    the run stayed `agent_running`, so the conversation could not continue.
+
+    Fails if the non-baseline branch raises again or creates a binding.
+    """
+    client, conversations, _runs, approvals, audit, settings = agent_client
+    demonstration_pending = AgentApprovalPendingV1(
+        pending_calls=(
+            AgentToolCallProposalV1(
+                tool_call_id=_TOOL_CALL_ID,
+                tool_name="shiftmind_demonstration",
+                tool_args_json='{"payload": {"label": "ready", "repeat": 2}}',
+            ),
+        ),
+        turn=AgentTurnV1(messages=(AgentMessageV1(role="user"),)),
+    )
+    monkeypatch.setattr(
+        _SuspendingRuntime, "run_turn",
+        lambda self, _request: AgentRunOutcomeV1(status="suspended", approval=demonstration_pending),
+    )
+
+    response = client.post(
+        f"/api/v1/conversations/{conversations.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert conversations.finished_statuses == ["agent_cancelled"]
+    assert conversations.finished_payloads[0].reason == "approval_not_grantable"
+    assert approvals.binding is None
+    assert audit.items == []
+    assert conversations.paused == []

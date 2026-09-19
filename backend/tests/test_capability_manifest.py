@@ -38,6 +38,7 @@ def test_capability_manifest_v1_has_the_exact_ad20_shape() -> None:
         "errors",
         "evaluation_fixtures",
         "schema_version",
+        "citable_result_id",
     }
 
 
@@ -114,3 +115,34 @@ def test_the_vocabulary_module_re_exports_the_contract_definition() -> None:
     from application.capabilities.vocabulary import RiskClassV1 as ReExported
 
     assert ReExported is RiskClassV1
+
+
+def _example_manifest(**changes) -> CapabilityManifestV1:
+    return replace(CapabilityManifestV1(
+        capability_name="example", capability_version="1",
+        input_schema_ref="example.RequestV1", output_schema_ref="example.ResultV1",
+        risk_class="inspect", permission="example:inspect", scope="current_site",
+        version_semantics="pinned", idempotency_semantics="read-only", budget_limit=1,
+        timeout_seconds=1.0, approval_policy="none", audit_mapping="tool call id",
+        evidence_mapping="result fields", errors=("example_error",),
+        evaluation_fixtures=("evals/golden/example.json",),
+    ), **changes)
+
+
+def test_a_capability_must_opt_in_to_having_its_result_id_cited() -> None:
+    assert _example_manifest().citable_result_id is False
+    validate_manifest(_example_manifest(citable_result_id=True))
+
+
+@pytest.mark.parametrize("value", [1, "yes", None])
+def test_citable_result_id_must_be_a_real_boolean(value) -> None:
+    with pytest.raises(IncompleteManifestError, match="citable_result_id"):
+        validate_manifest(_example_manifest(citable_result_id=value))
+
+
+def test_only_the_calculation_capability_declares_a_citable_result_id() -> None:
+    # A claim's evidence is a calculation. Any other installed capability declaring
+    # this would let its own ids vouch for a number, so a new one is a review event.
+    citable = {module.manifest.capability_name for module in INSTALLED_MODULES
+               if module.manifest.citable_result_id}
+    assert citable == {"scheduling_compute"}

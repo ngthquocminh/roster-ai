@@ -1,0 +1,48 @@
+# The MEASURED configuration of the Story 5.7 live suite: reasoning effort, the
+# per-token prices that drive the spend limiter, and the request/tool/token/
+# deadline limits. It is tracked and is `suite.py`'s default --override-file
+# so a fresh clone runs the same configuration; its sha256 is recorded in every
+# run report and bound into the evidence as `configuration_digest`
+# (evals/live_conversations/configuration.py). Change it only together with a
+# new measurement -- an edit changes the digest and stales earlier reports.
+# PRICE RATES MUST MATCH THE CURRENT --agent-model OR EVERY COST FIGURE IN THE
+# REPORT IS WRONG. Verified against OpenRouter's live /api/v1/models catalog
+# EVERY time the model changes -- prices drift over time, do not trust a
+# remembered number from earlier in the same session (confirmed 2026-09-18:
+# ~deepseek/deepseek-pro-latest moved from $0.66/$1.98 to $0.70/$2.96 per Mtok
+# within the same day).
+# History: 0.15/0.60 was ~deepseek/deepseek-flash-latest's real rate. On
+# 2026-09-17 the agent model was switched to anthropic/claude-haiku-4.5
+# without updating these rates, silently undercounting every Haiku run's
+# reported cost by ~6.75x for the rest of that session (discovered only when
+# the OpenRouter account ran out of credit far sooner than tracked spend
+# predicted). Before changing --agent-model again, look up its real
+# CURRENT per-token price and update BOTH service blocks below in the same
+# change.
+# Current model: openai/gpt-5.6-luna -- $0.20/M input, $1.20/M output,
+# $0.02/M cache read (checked 2026-09-18 against /api/v1/models).
+# z-ai/glm-5.2 was tried 2026-09-18 and rejected: it contradicted its own
+# verified claims and failed to persist drafts (live-suite-glm52-r1.json).
+services:
+  api:
+    environment:
+      AGENT_RUNTIME_REASONING_EFFORT: ${AGENT_RUNTIME_REASONING_EFFORT:-low}
+      AGENT_MODEL_INPUT_USD_PER_MTOK: '0.20'
+      AGENT_MODEL_OUTPUT_USD_PER_MTOK: '1.20'
+      AGENT_MODEL_CACHE_READ_USD_PER_MTOK: '0.02'
+      AGENT_RUNTIME_TOTAL_TOKENS_LIMIT: '150000'
+      AGENT_RUNTIME_DEADLINE_SECONDS: '120'
+      AGENT_RUNTIME_REQUEST_LIMIT: '12'
+      AGENT_RUNTIME_TOOL_CALLS_LIMIT: '12'
+      DEMONSTRATION_ENABLED: ${DEMONSTRATION_ENABLED:-false}
+  worker:
+    environment:
+      AGENT_RUNTIME_REASONING_EFFORT: ${AGENT_RUNTIME_REASONING_EFFORT:-low}
+      AGENT_MODEL_INPUT_USD_PER_MTOK: '0.20'
+      AGENT_MODEL_OUTPUT_USD_PER_MTOK: '1.20'
+      AGENT_MODEL_CACHE_READ_USD_PER_MTOK: '0.02'
+      AGENT_RUNTIME_TOTAL_TOKENS_LIMIT: '150000'
+      AGENT_RUNTIME_DEADLINE_SECONDS: '120'
+      AGENT_RUNTIME_REQUEST_LIMIT: '12'
+      AGENT_RUNTIME_TOOL_CALLS_LIMIT: '12'
+      DEMONSTRATION_ENABLED: ${DEMONSTRATION_ENABLED:-false}

@@ -290,11 +290,26 @@ def scheduling_inspect_module() -> CapabilityModuleV1:
         # flag and its counts are exactly what the model needs to reason about
         # coverage and to ask a narrower follow-up question.
         model_facing_view=lambda result: result,
+        # The fact GROUP is a closed vocabulary and structural, never workforce
+        # content -- and without it a live run cannot evidence which groups a
+        # conversation actually read (Story 5.7 coverage).
+        telemetry_fact_group=lambda request: request.group,
         model_description=(
-            "scheduling_inspect reads current scenario facts. Call it to inspect exactly one group "
-            "such as overview, workers, assignments, demand, constraints, or locks, using explicit "
-            "filters and sort keys when the user asks for a narrowed result. It is read-only and "
-            "does not compute a metric, create a draft, optimize, promote, or grant permissions."
+            "scheduling_inspect reads the current scenario version's stored facts, one group per "
+            "call: overview, tasks, workers, demand, assignments, locks, or constraints. "
+            "Filters are [key, value] pairs matched by equality (name_contains is a "
+            "case-insensitive substring). Filter keys per group: tasks -- task_id, "
+            "name_contains, function, area_id; workers -- contact_id, name_contains, "
+            "employment_type, grade, qualified_task_id; demand -- family, task_id, area_id, "
+            "start_minute_gte, end_minute_lte; assignments -- worker_id, task_id, shift_id; "
+            "locks -- target_type, target_ref, scope, source; constraints -- constraint_type, "
+            "value_type. overview accepts no filters or sort. Only tasks carry a task name, only "
+            "workers carry a worker name (worker_id elsewhere equals a worker's contact_id), and "
+            "only demand carries a family. Results are paged: follow next_cursor when truncated "
+            "is true. assignments are the site's promoted baseline assignments for this exact "
+            "scenario version -- empty until a baseline matching this version has been promoted, "
+            "never a run's candidate. It is read-only and does not compute a metric, "
+            "create a draft, optimize, promote, or grant permissions."
         ),
     )
 

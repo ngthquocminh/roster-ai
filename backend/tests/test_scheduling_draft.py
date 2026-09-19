@@ -122,6 +122,10 @@ def test_capability_resolves_validates_preserves_real_locks_and_hides_details_fr
     )
     assert asdict(projected) == {"draft_id": result.result_id, "schema_version": "1"}
     assert "scheduling_draft" == scheduling_draft_manifest().capability_name
+    description = scheduling_draft_module().model_description
+    assert "expected_scenario_version_id" in description
+    assert "kind='set_max_hours'" in description
+    assert "group='workers'" in description
 
 
 @pytest.mark.parametrize(

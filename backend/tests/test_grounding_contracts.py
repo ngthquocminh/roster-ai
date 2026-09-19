@@ -32,6 +32,7 @@ def test_grounding_contracts_are_closed_versioned_and_frozen() -> None:
         "required_demand_volume",
         "staffed_minutes",
         "qualified_worker_count",
+        "worker_count",
     }
     # family lives only on demand rows and is not a function of task_id, so
     # only demand-reading metrics may accept it.

@@ -226,6 +226,10 @@ class AgentRunOutcomeV1:
     # reported to the planner as "The configured agent budget was exhausted".
     # Set at the raise site; `None` only for outcomes that did not fail.
     failure_source: Literal["agent", "capability"] | None = None
+    #: Which in-loop output rule the model could not satisfy before its retries
+    #: ran out, as a closed vocabulary name (never the rejected text, which is
+    #: model content). Set only on an invalid-output failure.
+    retry_rule: str | None = None
     # Planner-visible final content. None unless status == "completed".
     output_text: str | None = None
     # These fields deliberately sit on opposite sides of the trust boundary.

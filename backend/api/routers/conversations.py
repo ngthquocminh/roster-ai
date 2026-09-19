@@ -59,6 +59,7 @@ from application.ports.conversation import ConversationRepository, ConversationV
 from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
+from application.use_cases.conversation_workflow_context import load_workflow_context
 from application.use_cases.execute_turn import (
     activity_payload,
     execute_turn,
@@ -204,6 +205,8 @@ def _emit_agent_run_completed(
     }
     if outcome.failure_reason is not None:
         labels["failure_reason"] = outcome.failure_reason
+    if outcome.retry_rule is not None:
+        labels["retry_rule"] = outcome.retry_rule
     if outcome.budget_outcome is not None:
         labels["budget_outcome"] = outcome.budget_outcome
     try:
@@ -321,6 +324,32 @@ async def execute_agent_turn(
     # demonstration harness module. Guarded at source level by
     # tests/architecture/test_execute_turn_boundaries.py.
     try:
+        def _workflow_context():
+            with open_site_context(claimed.site_id) as connection:
+                # Lightweight route doubles from older seams do not implement
+                # production SQL/repository reads. Their purpose is to test
+                # turn finalisation, so omit the optional enriched context.
+                if (not callable(getattr(connection, "execute", None))
+                        or not callable(getattr(schedule_runs, "list_runs", None))):
+                    return None
+                try:
+                    return load_workflow_context(connection, claimed=claimed,
+                        proposals=proposal_repository, runs=schedule_runs, baselines=baselines,
+                        projection=projection_reader)
+                except ValueError:
+                    # The snapshot is read-only enrichment, not required state: a
+                    # dangling baseline pointer, an oversized snapshot, or a
+                    # route double that doesn't implement every port method it
+                    # calls must degrade to no context, never fail the whole
+                    # turn -- the same resilience precedent as insight
+                    # generation being a separate post-run step.
+                    logger.exception(
+                        "workflow context unavailable for run %s; proceeding without it",
+                        agent_run_id,
+                    )
+                    return None
+
+        workflow_context = await run_in_threadpool(_workflow_context)
         feature_policy = enabled_feature_policy(settings)
         granted = compose_capabilities(
             CapabilityGrantContextV1(
@@ -344,6 +373,7 @@ async def execute_agent_turn(
             prompt=claimed.prompt,
             calculation_results=raw_results,
             history=claimed.history,
+            workflow_context=workflow_context,
         )
     except Exception as exc:  # noqa: BLE001
         # Reaching a terminal status is what keeps the accepted conversation
@@ -363,7 +393,25 @@ async def execute_agent_turn(
                     raise RuntimeError("suspended turn has no exact pending approval call")
                 call = pending.pending_calls[0]
                 if call.tool_name != SCHEDULING_BASELINE_CAPABILITY:
-                    raise RuntimeError("suspended turn requested an unsupported approval capability")
+                    # Story 5.7 Decision 1: only the baseline capability has an
+                    # approval binding. Raising here fell into the RuntimeError
+                    # arm below, answered 409, and stranded the run at
+                    # `agent_running` -- the conversation could not continue.
+                    # Land it on Decision 10's terminal edge instead: no binding,
+                    # no audit row, and the owned `approval_not_grantable` copy.
+                    logger.info(
+                        "suspended call to %s has no approval path; finalizing run %s as cancelled",
+                        call.tool_name, agent_run_id,
+                    )
+                    return finalize_agent_run(
+                        repository,
+                        proposal_repository,
+                        connection,
+                        claimed=claimed,
+                        status="agent_cancelled",
+                        payload=activity_payload(outcome, deps),
+                        request_id=deps.request_id,
+                    )
                 # `tool_args_json` is the WHOLE tool-argument object, and
                 # `capability_tools._tool_schema` nests the request under the
                 # module's declared `request_argument` -- so the JSON is
