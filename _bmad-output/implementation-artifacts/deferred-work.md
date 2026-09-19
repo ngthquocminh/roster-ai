@@ -1097,3 +1097,11 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   That reads awkwardly against AD-16, under which live evidence is the acceptance authority for conversational
   behaviour. **Deferred reason:** the sentence is about a hypothetical, separately gated CI live workflow, not
   Story 5.7's suite, and nothing in this story's diff caused it. **Owner: open.**
+
+## Deferred from: code review of 5-7-prove-live-conversations-through-baseline-promotion, frontend e2e + harness-patch slice (2026-09-19)
+
+- **Nothing checks that `compose.override.yml`'s price rates belong to `--agent-model`.** The file's own history comment
+  records the incident (a Haiku run priced at the Flash rate, ~6.75x undercount); the configuration digest proves which
+  override file ran, not that its rates suit the model. **Deferred reason:** a design change (a price table keyed by
+  model, or a rate check against the OpenRouter catalogue) beyond this story; the file header and `TESTING.md` already
+  instruct verifying rates on every model change. **Owner: open.**
