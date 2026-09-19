@@ -11,13 +11,15 @@ CONFIGURATION = {'agent': {'model': 'openrouter:m', 'endpoint': 'https://openrou
                  'override_sha256': '1' * 64, 'configuration_digest': '2' * 64}
 
 
-def _write_run(tmp_path, name, code=CODE, images=IMAGES, configuration=CONFIGURATION):
+def _write_run(tmp_path, name, code=CODE, images=IMAGES, configuration=CONFIGURATION,
+               images_rebuilt=True, **extra):
     import json
 
     path = tmp_path / name
     path.write_text(json.dumps({'run_id': name, 'code': code, 'prefixes': [],
                                 'model': 'openrouter:m', 'judge_model': 'openrouter:j',
-                                'images': images, 'configuration': configuration}),
+                                'images': images, 'configuration': configuration,
+                                'images_rebuilt': images_rebuilt, **extra}),
                     encoding='utf-8')
     return path
 
@@ -87,6 +89,27 @@ def test_runs_measured_under_different_images_or_configurations_cannot_be_combin
     runs = [_write_run(tmp_path, 'a.json'), _write_run(tmp_path, 'b.json', **{field: other})]
     with pytest.raises(ValueError, match='same'):
         evidence.generate(runs, tmp_path / 'out.json')
+
+
+def test_a_report_that_stopped_before_recording_images_is_named_with_its_reason(tmp_path):
+    early = _write_run(tmp_path, 'early.json', images=None,
+                       incomplete_reason='isolated_stack_build_failed')
+    with pytest.raises(ValueError, match=r'early\.json records no image digests.*'
+                                         r'isolated_stack_build_failed.*left out'):
+        evidence.generate([_write_run(tmp_path, 'a.json'), early], tmp_path / 'out.json')
+
+
+def test_images_that_no_report_built_cannot_be_tied_to_the_measured_code(tmp_path):
+    with pytest.raises(ValueError, match='no run report built its images'):
+        evidence.generate([_write_run(tmp_path, 'a.json', images_rebuilt=False)],
+                          tmp_path / 'out.json')
+
+
+def test_a_resumed_chain_counts_as_built_when_one_report_built_the_images(tmp_path):
+    built = _write_run(tmp_path, 'built.json')
+    resumed = _write_run(tmp_path, 'resumed.json', images_rebuilt=False)
+    report = evidence.generate([built, resumed], tmp_path / 'out.json')
+    assert report['images_rebuilt'] is True
 
 
 def test_the_evidence_binds_what_the_runs_recorded_and_the_source_reports_by_digest(tmp_path):

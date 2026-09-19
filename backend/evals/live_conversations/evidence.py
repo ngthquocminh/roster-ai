@@ -184,16 +184,23 @@ def build_coverage(runs, inventory=None) -> dict:
     return {'inventory_digest': inventory['digest'], 'tool_coverage': rows}, observation_ids
 
 
-def _agreed(runs, key: str, what: str):
+def _agreed(run_paths, runs, key: str, what: str):
     """The one value every run report records for `key`, or a refusal.
 
     Runs measured under different images or configurations cannot be combined into
     one bound report, and a report that recorded neither cannot be bound at all.
     """
-    seen = {json.dumps(run.get(key), sort_keys=True) for run in runs}
-    if len(seen) != 1 or runs[0].get(key) is None:
-        raise ValueError(f'every run must record the same {what}; a report without it was '
-                         'measured by an older suite and must be measured again')
+    for path, run in zip(run_paths, runs):
+        if run.get(key) is None:
+            reason = run.get('incomplete_reason')
+            raise ValueError(
+                f'{Path(path).name} records no {what}'
+                + (f' (it stopped early: {reason}; a report with no executions can be left '
+                   'out)' if reason else '; it was measured by an older suite and must be '
+                   'measured again'))
+    if len({json.dumps(run[key], sort_keys=True) for run in runs}) != 1:
+        raise ValueError(f'every run must record the same {what}; these reports were '
+                         'measured under different ones and cannot be combined')
     return runs[0][key]
 
 
@@ -256,8 +263,15 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     # Both come from what the suite recorded it RAN, never from a manifest another build
     # wrote: the api/web digests are the live-eval images' content ids, and the
     # configuration is the measured models, endpoints, effort and override-file digest.
-    image_binding = _agreed(runs, 'images', 'image digests')
-    configuration = _agreed(runs, 'configuration', 'measured configuration')
+    image_binding = _agreed(run_paths, runs, 'images', 'image digests')
+    configuration = _agreed(run_paths, runs, 'configuration', 'measured configuration')
+    # `_agreed` makes every report name the same image ids, so it is enough that ONE report
+    # built them (a resume reuses them with --skip-image-build). None built them: the ids
+    # are whatever was lying around, and binding them to the measured commit would claim an
+    # image nobody built from this code.
+    if not any(run.get('images_rebuilt') for run in runs):
+        raise ValueError('no run report built its images (every one used --skip-image-build); '
+                         'the image ids cannot be tied to the measured code')
     models = sorted({f"agent:{run.get('model')}" for run in runs}
                     | {f"judge:{run.get('judge_model')}" for run in runs})
     bindings = resolve_bindings(
@@ -297,7 +311,7 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     # measurement ran. They are named above and lie outside the measured
     # backend, but a reader must be able to see the condition.
     report['measurement_tree_dirty'] = bool(code_binding.get('working_tree_dirty'))
-    report['images_rebuilt'] = all(run.get('images_rebuilt') for run in runs)
+    report['images_rebuilt'] = any(run.get('images_rebuilt') for run in runs)
     report['tool_coverage'] = coverage['tool_coverage']
     report['inventory_digest'] = coverage['inventory_digest']
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -52,13 +52,21 @@ def test_the_digest_moves_with_every_recorded_field(override, change):
 
 
 def test_the_digest_moves_with_the_override_file_but_not_with_its_line_endings(tmp_path, override):
+    # Same file NAME in each directory: the recorded name is part of the digest body, so
+    # differently named files would differ whatever the content hashing does.
+    def variant(directory, content):
+        (tmp_path / directory).mkdir()
+        path = tmp_path / directory / override.name
+        path.write_bytes(content.encode('utf-8'))
+        return path
+
     base = _configuration(override)
-    crlf = tmp_path / 'crlf.yml'
-    crlf.write_bytes(OVERRIDE.replace('\n', '\r\n').encode('utf-8'))
-    assert _configuration(crlf)['override_sha256'] == base['override_sha256']
-    edited = tmp_path / 'edited.yml'
-    edited.write_bytes(OVERRIDE.replace('"12"', '"13"').encode('utf-8'))
-    assert _configuration(edited)['configuration_digest'] != base['configuration_digest']
+    crlf = _configuration(variant('crlf', OVERRIDE.replace('\n', '\r\n')))
+    edited = _configuration(variant('edited', OVERRIDE.replace('"12"', '"13"')))
+    assert crlf['override_sha256'] == base['override_sha256']
+    assert crlf['configuration_digest'] == base['configuration_digest']
+    assert edited['override_sha256'] != base['override_sha256']
+    assert edited['configuration_digest'] != base['configuration_digest']
 
 
 def test_the_record_holds_no_credential_field(override):
