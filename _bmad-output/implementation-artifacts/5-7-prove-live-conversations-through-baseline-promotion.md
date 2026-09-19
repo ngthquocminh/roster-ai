@@ -3,7 +3,7 @@
 baseline_commit: 80e62422b68a9c121697fada6287f4fa3a311532
 ---
 
-Status: review (all review slices are done -- core app code, eval harness, test suite, docs/planning + evidence, frontend e2e + harness patches -- and every finding is resolved; the evidence was regenerated once at `db0a5dd`, run `64ca2862`: 87/90 turns, 6/9 clean executions, accepted findings B:5, B:8, C:3 (each 2 of 3), no false claims)
+Status: done (accepted by Minh 2026-09-19; all review slices are done -- core app code, eval harness, test suite, docs/planning + evidence, frontend e2e + harness patches -- and every finding is resolved; the evidence was regenerated once at `db0a5dd`, run `64ca2862`: 87/90 turns, 6/9 clean executions, accepted findings B:5, B:8, C:3 (each 2 of 3), no false claims)
 
 Date: 2026-09-15
 Origin: Minh's reported natural-conversation failure and approval to correct course.
