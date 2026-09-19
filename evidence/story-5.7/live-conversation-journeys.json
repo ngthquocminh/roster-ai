@@ -58,6 +58,7 @@
   "images_rebuilt": true,
   "inventory_digest": "3787866aa33edab4ea31f59f239c4632c2224f826c20f8500f817ee299c7b459",
   "live_conversation_journeys": "passed",
+  "measured_at_commit": "db0a5dd0e5ace0929b8115299f57b10fb73c6c90",
   "measured_configuration": {
     "agent": {
       "endpoint": "https://openrouter.ai/api/v1",
@@ -961,7 +962,7 @@
   "version_bindings": {
     "application": "ShiftMind Story 5.7 live conversation suite over the authenticated HTTP path against a disposable composed stack",
     "code": {
-      "git_commit": "db0a5dd0e5ace0929b8115299f57b10fb73c6c90",
+      "git_commit": "437b63abd5f56605ac518003e73f87c15fad44d4",
       "working_tree_dirty": false
     },
     "dataset": {
