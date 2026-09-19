@@ -2,9 +2,13 @@
 
 One owner per audience prevents drift.
 
+- **The reviewer entry point is the repository [README](../README.md)**: what the
+  system is, how authority is partitioned, what the evidence shows, and what is
+  still open. Everything else supports it.
 - **Reviewer-facing system documentation** lives in `docs/`: the
   [walkthrough](WALKTHROUGH.md), [architecture](ARCHITECTURE.md), setup,
-  configuration, and the API pointer.
+  configuration, and the API pointer. Diagrams referenced by the README live in
+  `docs/assets/`.
 - **Planning lifecycle and implementation records** live in `_bmad-output/`.
   They record what was decided, built, and still deferred; they are not the
   reviewer entry point.

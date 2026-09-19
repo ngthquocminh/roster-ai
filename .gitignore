@@ -99,3 +99,5 @@ _bmad-output/test-artifacts/
 
 # Local, content-addressed container build metadata.
 /.build/
+/.local/
+/.codeboarding/
