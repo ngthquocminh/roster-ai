@@ -14,6 +14,28 @@ def test_invalid_reasoning_effort_fails_configuration(monkeypatch):
         default_settings()
 
 
+@pytest.mark.parametrize('value', ['none', 'low', 'medium', 'high'])
+def test_every_documented_reasoning_effort_is_accepted_as_configured(monkeypatch, value):
+    monkeypatch.setenv('AGENT_RUNTIME_REASONING_EFFORT', value)
+    assert default_settings().agent_runtime_reasoning_effort == value
+
+
+@pytest.mark.parametrize('value', ['', None])
+def test_an_empty_or_absent_reasoning_effort_means_unset(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv('AGENT_RUNTIME_REASONING_EFFORT', raising=False)
+    else:
+        monkeypatch.setenv('AGENT_RUNTIME_REASONING_EFFORT', value)
+    assert default_settings().agent_runtime_reasoning_effort is None
+
+
+@pytest.mark.parametrize('value', ['LOW', 'minimal', ' low', 'off'])
+def test_reasoning_effort_outside_the_documented_set_is_refused(monkeypatch, value):
+    monkeypatch.setenv('AGENT_RUNTIME_REASONING_EFFORT', value)
+    with pytest.raises(InvalidFlagError, match='AGENT_RUNTIME_REASONING_EFFORT'):
+        default_settings()
+
+
 def test_explicit_reasoning_control_reaches_openrouter_request(monkeypatch):
     from pydantic_ai.providers.openrouter import OpenRouterProvider
     requests = []

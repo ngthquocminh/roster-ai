@@ -19,8 +19,10 @@ def test_scenario_count_has_a_valid_citable_tool_request_and_counts_unqualified_
 
 
 @pytest.mark.parametrize('arguments', [ClaimArgumentsV1(task_id='pick'),
-    ClaimArgumentsV1(family='outbound'), ClaimArgumentsV1(start_minute=0, end_minute=60)])
+    ClaimArgumentsV1(family='outbound'), ClaimArgumentsV1(start_minute=0, end_minute=60),
+    # the guard checks each bound separately: dropping either check must not go unnoticed
+    ClaimArgumentsV1(start_minute=0), ClaimArgumentsV1(end_minute=60)])
 def test_scenario_count_rejects_arguments_that_would_misrepresent_its_scope(arguments):
-    with pytest.raises(CalculationArgumentsError):
+    with pytest.raises(CalculationArgumentsError, match='worker_count is scenario-wide'):
         calculate_metric(ProjectionStub(), None, scenario_id=SCENARIO,
             scenario_version_id=VERSION, site_id=SITE, metric='worker_count', arguments=arguments)

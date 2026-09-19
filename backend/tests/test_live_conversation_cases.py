@@ -24,8 +24,21 @@ def test_b_is_one_complete_draft_solve_approve_cycle():
     b = {case.id: case for case in load_scenarios()}['B']
     actions = [action for turn in b.turns for action in turn.actions_after]
     assert actions == ['run_optimization', 'verify_baseline_unchanged', 'approve', 'reload']
+    # The runner's persisted-draft check keys on the explicit field, not on how the
+    # obligation happens to be worded.
     assert [index for index, turn in enumerate(b.turns, 1)
-            if turn.obligation.startswith('Persist')] == [4, 6]
+            if turn.requires_persisted_draft] == [4, 6]
+
+
+def test_every_turn_that_must_persist_a_draft_says_so_explicitly_and_only_those():
+    required = {(case.id, index) for case in load_scenarios()
+                for index, turn in enumerate(case.turns, 1) if turn.requires_persisted_draft}
+    worded = {(case.id, index) for case in load_scenarios()
+              for index, turn in enumerate(case.turns, 1) if turn.obligation.startswith('Persist')}
+    assert required == {('B', 4), ('B', 6), ('C', 8), ('C', 9)}
+    # A turn worded as persisting a draft that carries no flag would never be
+    # checked for the draft it claims.
+    assert worded == required
 
 
 def test_c_runs_with_demonstration_and_allows_the_truthful_unapprovable_outcome():
@@ -66,3 +79,44 @@ def test_resume_and_retry_are_offered_by_the_runner_cli():
     resumed = _arguments(['--output', 'out.json', '--resume', 'earlier.json',
                           '--execution-retries', '1'])
     assert resumed.resume.name == 'earlier.json' and resumed.execution_retries == 1
+
+
+def _with_turn(**changes):
+    cases = list(load_scenarios())
+    first = replace(cases[0].turns[0], **changes)
+    cases[0] = replace(cases[0], turns=(first, *cases[0].turns[1:]))
+    return tuple(cases)
+
+
+def test_duplicate_scenario_ids_are_rejected():
+    cases = load_scenarios()
+    with pytest.raises(ValueError, match='unique'):
+        validate_scenarios((cases[0], replace(cases[1], id=cases[0].id), cases[2]))
+
+
+@pytest.mark.parametrize('field', ['user', 'obligation'])
+def test_a_blank_turn_is_rejected(field):
+    with pytest.raises(ValueError, match='requires user text'):
+        validate_scenarios(_with_turn(**{field: '   '}))
+
+
+def test_a_repeated_authored_action_is_rejected():
+    with pytest.raises(ValueError, match='duplicate authored actions'):
+        validate_scenarios(_with_turn(actions_after=('reload', 'reload')))
+
+
+def test_a_turn_that_allows_no_run_status_is_rejected():
+    with pytest.raises(ValueError, match='at least one agent run status'):
+        validate_scenarios(_with_turn(allowed_run_statuses=()))
+
+
+def test_a_dataset_of_another_schema_version_is_rejected(tmp_path):
+    import json
+    from evals.live_conversations.cases import DATASET
+
+    data = json.loads(DATASET.read_text(encoding='utf-8'))
+    data['schema_version'] = '1'
+    other = tmp_path / 'scenarios.json'
+    other.write_text(json.dumps(data), encoding='utf-8')
+    with pytest.raises(ValueError, match='dataset version'):
+        load_scenarios(other)

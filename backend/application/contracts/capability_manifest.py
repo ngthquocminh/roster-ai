@@ -76,6 +76,12 @@ class CapabilityManifestV1:
     errors: tuple[str, ...]
     evaluation_fixtures: tuple[str, ...]
     schema_version: str = SCHEMA_VERSION
+    # True only for a capability whose model-facing result carries a `result_id`
+    # that a grounded claim may cite as its evidence. The agent core reads this
+    # to decide which tool results can vouch for a claim, so it never has to
+    # know a capability by name. Defaulted so every existing declaration stays
+    # valid and NOT citable: a capability must opt in.
+    citable_result_id: bool = False
 
 
 def validate_manifest(manifest: CapabilityManifestV1) -> None:
@@ -102,6 +108,8 @@ def validate_manifest(manifest: CapabilityManifestV1) -> None:
         raise IncompleteManifestError("risk_class is not recognized")
     if manifest.approval_policy not in get_args(ApprovalPolicyV1):
         raise IncompleteManifestError("approval_policy is not recognized")
+    if type(manifest.citable_result_id) is not bool:
+        raise IncompleteManifestError("citable_result_id must be a boolean")
     if not manifest.errors:
         raise IncompleteManifestError("errors must not be empty")
     if not manifest.evaluation_fixtures:

@@ -1,6 +1,7 @@
 """Opt-in real HTTP prefix execution with independent facts and a separate judge."""
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import asdict
 
 from evals.live_conversations.facts import read_group, verify_claim
@@ -42,7 +43,10 @@ def _canonical_assignment(row):
 
 def same_assignments(projected, candidate):
     """Compare scheduling substance across projection and candidate transports."""
-    return sorted(map(_canonical_assignment, projected)) == sorted(map(_canonical_assignment, candidate))
+    # A multiset comparison, not sorted(): rows whose `shift_id` is None on one
+    # side and a string on the other are not orderable, and sorting them raised.
+    return (Counter(map(_canonical_assignment, projected))
+            == Counter(map(_canonical_assignment, candidate)))
 
 
 def compact_reload_effect(timeline):

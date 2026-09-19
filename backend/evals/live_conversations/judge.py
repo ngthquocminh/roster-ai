@@ -189,8 +189,9 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
                 # the already-decoded JSON object for a strict response format.
                 # Validate either representation against the same owned model.
                 result = _validate_judgment_content(content)
-            except (ValidationError, KeyError, IndexError, TypeError) as exc:
-                # A malformed judgment shape (missing/short `choices`) is exactly
+            except (ValidationError, KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+                # A malformed judgment shape (missing/short `choices`) or a body that
+                # is not JSON at all (truncated, or prose around a verdict) is exactly
                 # as retryable as a malformed judgment CONTENT.
                 if isinstance(exc, ValidationError):
                     first = exc.errors(include_url=False, include_input=False)[0]

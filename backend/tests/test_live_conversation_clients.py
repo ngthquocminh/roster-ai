@@ -37,7 +37,12 @@ def test_judge_sends_only_past_visible_data_and_requires_usable_usage():
     judge_input = json.loads(seen[0]['messages'][1]['content'])
     assert 'required_judgment_schema' in judge_input
     assert judge_input['current_obligation'] == {'id': 'obligation', 'text': 'Greet the user.'}
-    assert 'future' not in seen[0]['messages'][1]['content']
+    # The judge sends exactly what it was given plus the fixed rubric fields, so a
+    # caller that slices the transcript to past turns cannot leak more through here.
+    assert judge_input['transcript_so_far'] == [{'id': 'turn-1', 'user': 'Hello', 'reply': 'Hello'}]
+    assert set(judge_input) == {'transcript_so_far', 'current_obligation',
+                                'verified_facts_and_effects', 'not_applicable',
+                                'required_judgment_schema'}
     assert 'score completeness 2' in seen[0]['messages'][0]['content']
     assert 'alternatives with "or"' in seen[0]['messages'][0]['content']
 
@@ -55,9 +60,11 @@ def test_direct_judge_normalizes_application_openrouter_model_reference():
 ])
 def test_judge_missing_fields_are_incomplete_and_never_leak_response(reply):
     client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=reply)))
-    with pytest.raises(IncompleteConversationRun):
+    with pytest.raises(IncompleteConversationRun, match='^judge_') as raised:
         judge_turn(api_key='test-only', model='test', transcript=[], obligation='Answer', verified={},
                    budget=ConversationBudget(limits()), client=client)
+    # The reason names a failure class, never the provider's body.
+    assert 'choices' not in str(raised.value) and 'verdict' not in str(raised.value)
 
 
 def test_judge_retries_one_malformed_structured_answer_and_charges_both_attempts():
@@ -79,6 +86,60 @@ def test_judge_retries_one_malformed_structured_answer_and_charges_both_attempts
     assert grade.verdict == 'pass'
     assert budget.requests == 2 and budget.spend_usd == .002
     assert [attempt['outcome'] for attempt in usage['attempts']] == ['malformed', 'accepted']
+
+
+_USAGE = {'prompt_tokens': 100, 'completion_tokens': 20, 'cost': .001}
+
+
+def _judged_body(generation, content=None):
+    return {'id': generation, 'model': 'test-model', 'usage': _USAGE,
+            'choices': [{'message': {'content': content or judgment().model_dump_json()}}]}
+
+
+# first-attempt failure -> (reply, outcome recorded, spend the failed attempt was charged)
+_FIRST_ATTEMPT_FAILURES = {
+    'prose_instead_of_json': (
+        lambda: httpx.Response(200, json=_judged_body('g1', 'Sure! Here is my verdict: pass')),
+        'malformed', .001),
+    'no_choices': (
+        lambda: httpx.Response(200, json={**_judged_body('g1'), 'choices': []}), 'malformed', .001),
+    'non_200_status': (lambda: httpx.Response(503, json={}), 'transport', 0),
+    'missing_usage': (
+        lambda: httpx.Response(200, json={**_judged_body('g1'), 'usage': {}}), 'transport', 0),
+}
+
+
+@pytest.mark.parametrize('failure', sorted(_FIRST_ATTEMPT_FAILURES))
+def test_judge_retries_every_transient_first_attempt_failure_once(failure):
+    first, outcome, first_spend = _FIRST_ATTEMPT_FAILURES[failure]
+    calls = 0
+
+    def handle(request):
+        nonlocal calls
+        calls += 1
+        return first() if calls == 1 else httpx.Response(200, json=_judged_body('g2'))
+
+    budget = ConversationBudget(limits())
+    grade, usage = judge_turn(api_key='test', model='test', transcript=[], obligation='Answer',
+        verified={}, budget=budget, client=httpx.Client(transport=httpx.MockTransport(handle)))
+    assert calls == 2 and grade.verdict == 'pass'
+    assert [a['outcome'] for a in usage['attempts']] == [outcome, 'accepted']
+    assert budget.spend_usd == pytest.approx(first_spend + .001)
+
+
+def test_judge_gives_up_after_a_second_non_json_answer_and_charges_both_calls():
+    calls = 0
+
+    def handle(request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json=_judged_body(f'g{calls}', 'not json at all'))
+
+    budget = ConversationBudget(limits())
+    with pytest.raises(IncompleteConversationRun, match='judge_malformed_JSONDecodeError'):
+        judge_turn(api_key='test', model='test', transcript=[], obligation='Answer', verified={},
+                   budget=budget, client=httpx.Client(transport=httpx.MockTransport(handle)))
+    assert calls == 2 and budget.spend_usd == pytest.approx(.002)
 
 
 def test_judge_accepts_provider_decoded_strict_json_object():
@@ -155,9 +216,14 @@ def test_application_client_uses_real_auth_csrf_and_new_conversations():
     first = app.create()['id']
     app.send('HI my name is Minh')
     second = app.create()['id']
-    assert first != second
+    app.send('HI my name is Minh')
+    # The proof of "a NEW conversation" is the client's own requests, not the ids the
+    # double hands back: create() posted again, and the next message went to that one.
     assert posts == ['/api/v1/conversations', f'/api/v1/conversations/{first}/messages',
-                     f'/api/v1/conversations/{first}/agent-runs/run-1/execute', '/api/v1/conversations']
+                     f'/api/v1/conversations/{first}/agent-runs/run-1/execute', '/api/v1/conversations',
+                     f'/api/v1/conversations/{second}/messages',
+                     f'/api/v1/conversations/{second}/agent-runs/run-1/execute']
+    assert first != second
 
 
 def test_login_does_not_follow_an_unexpected_host():
@@ -335,3 +401,72 @@ def test_a_run_that_never_becomes_visible_still_exhausts_its_budget(monkeypatch)
 
     with pytest.raises(IncompleteConversationRun, match='solver_poll_budget_exhausted'):
         app.wait_for_run('run-1', max_polls=3)
+
+
+def _client_over(handler):
+    app = ApplicationConversation.__new__(ApplicationConversation)
+    app.origin, app.headers = 'http://x', {}
+    app.client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=False)
+    return app
+
+
+def test_a_body_that_is_not_json_is_an_undecodable_response_not_a_crash():
+    app = _client_over(lambda request: httpx.Response(200, content=b'<html>gateway error</html>'))
+    with pytest.raises(IncompleteConversationRun, match='^application_response_undecodable$'):
+        app._request('GET', '/api/v1/anything')
+
+
+def test_an_unexpected_status_names_the_route_with_ids_masked_and_no_body():
+    app = _client_over(lambda request: httpx.Response(500, text='secret provider payload'))
+    with pytest.raises(IncompleteConversationRun) as raised:
+        app._request('GET', '/api/v1/schedule-runs/123e4567-e89b-12d3-a456-426614174000?x=1')
+    assert str(raised.value) == 'application_http_500_GET_/api/v1/schedule-runs/*'
+
+
+def test_a_transport_failure_is_reported_as_unavailable():
+    def refuse(request):
+        raise httpx.ConnectError('refused')
+
+    with pytest.raises(IncompleteConversationRun, match='^application_transport_unavailable$'):
+        _client_over(refuse)._request('GET', '/api/v1/anything')
+
+
+def test_login_needs_a_redirect_at_every_hop():
+    app = _client_over(lambda request: httpx.Response(200, json={}))
+    with pytest.raises(IncompleteConversationRun, match='^authentication_failed$'):
+        app.login()
+
+
+def test_a_redirect_with_no_location_cannot_authenticate():
+    app = _client_over(lambda request: httpx.Response(302))
+    with pytest.raises(IncompleteConversationRun, match='^authentication_failed$'):
+        app.login()
+
+
+def test_login_gives_up_after_three_redirects_that_never_set_a_session():
+    hops = []
+
+    def loop(request):
+        hops.append(str(request.url))
+        return httpx.Response(302, headers={'location': 'http://x/api/v1/auth/again'})
+
+    with pytest.raises(IncompleteConversationRun, match='^authentication_failed$'):
+        _client_over(loop).login()
+    assert len(hops) == 3
+
+
+def test_login_stops_when_a_later_hop_leaves_the_application_origin():
+    def leave(request):
+        return httpx.Response(302, headers={'location': 'http://evil.example/steal'})
+
+    with pytest.raises(IncompleteConversationRun, match='^unexpected_login_origin$'):
+        _client_over(leave).login()
+
+
+def test_login_keeps_only_the_session_cookie_pair(monkeypatch):
+    app = _client_over(lambda request: httpx.Response(302, headers={
+        'set-cookie': '__Host-shiftmind_session=abc; Path=/; HttpOnly; Secure'}))
+    monkeypatch.setattr(app, '_request', lambda method, path, **kw: {'csrf_token': 'csrf-1'})
+    app.login()
+    assert app.headers['Cookie'] == '__Host-shiftmind_session=abc'
+    assert app.headers['X-CSRF-Token'] == 'csrf-1' and app.headers['Origin'] == 'http://x'

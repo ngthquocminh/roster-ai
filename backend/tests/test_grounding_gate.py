@@ -315,11 +315,28 @@ def test_numerals_copied_from_trusted_text_are_allowed() -> None:
         '{"task_id": "T1", "name": "C Fork | Grid P 8GR", "max_hours": 40.0}',
         "Revise the draft to cap that worker at 40 hours as well.",
     ])
-    response = ground_answer(
-        _prose("Capped Rhiannon Hansen at 40 hours; the task is C Fork | Grid P 8GR."),
-        _deps(ReaderStub()), {}, trusted,
-    )
-    assert response.segments[0].text.endswith("Grid P 8GR.")
+    text = "Capped Rhiannon Hansen at 40 hours; the task is C Fork | Grid P 8GR."
+    # 40.0 in the tool payload vouches for `40`; the task name's own token is copied.
+    assert {"40", "8GR"} <= trusted
+    response = ground_answer(_prose(text), _deps(ReaderStub()), {}, trusted)
+    assert response.segments[0].text == text
+    # The very same text is a violation when nothing vouches for its numerals, so the
+    # pass above is the trusted set's doing and not a leniency of the rule.
+    from application.grounding.gate import numeric_prose_violation
+
+    assert numeric_prose_violation(text) is not None
+    assert numeric_prose_violation(text, trusted) is None
+
+
+def test_a_serialized_float_vouches_for_its_integer_form_and_nothing_else() -> None:
+    from application.grounding.gate import trusted_numeric_words
+
+    # `40.0` is how a JSON-serialized max_hours arrives; the model may say "40".
+    assert "40" in trusted_numeric_words(['{"max_hours": 40.0}'])
+    assert "40" in trusted_numeric_words(["hours: 40.00"])
+    # ... but a different number, or a real fraction, is not vouched for.
+    assert "41" not in trusted_numeric_words(['{"max_hours": 40.0}'])
+    assert "3" not in trusted_numeric_words(["ratio 3.5"])
 
 
 @pytest.mark.parametrize("text", [
@@ -353,14 +370,23 @@ def test_execute_turn_trusts_history_and_tool_results_but_not_tool_call_argument
             return AgentRunOutcomeV1(status="completed", answer=_prose(self.text))
 
     history = AgentTurnV1(messages=(
-        AgentMessageV1(role="system", parts=(AgentPartV1(text='{"task": "Grid P 8GR"}'),)),
+        AgentMessageV1(role="system", parts=(AgentPartV1(text='{"task": "Grid P 8GR", "window_hours": 55}'),)),
         AgentMessageV1(role="assistant", parts=(
             AgentPartV1(kind="tool_call", tool_name="x", tool_call_id="c", tool_args_json='{"n": 77}'),)),
     ))
     deps = _deps(ReaderStub())
-    ok = execute_turn(Runtime("Grid P 8GR, 40 hours, 60 minutes."), deps,
-                      prompt="cap at 40 hours", calculation_results=[_result("r1")], history=history)
-    assert ok.grounded_response is not None
+    # Each source is isolated: a numeral is allowed by exactly the trusted text it came from.
+    for reply in ("Grid P 8GR.",        # history: the persisted system text
+                  "55 hours.",          # history: a bare numeral
+                  "40 hours.",          # the planner's own prompt
+                  "60 minutes."):       # a tool RESULT (the calculation's value)
+        ok = execute_turn(Runtime(reply), deps, prompt="cap at 40 hours",
+                          calculation_results=[_result("r1")], history=history)
+        assert ok.grounded_response is not None, reply
+    # And the history numeral is trusted only BECAUSE it is in history:
+    with pytest.raises(UncitedNumericProseError):
+        execute_turn(Runtime("55 hours."), deps, prompt="cap at 40 hours",
+                     calculation_results=[_result("r1")], history=AgentTurnV1(messages=()))
     with pytest.raises(UncitedNumericProseError):
         execute_turn(Runtime("About 77 shifts."), deps, prompt="cap at 40 hours",
                      calculation_results=[], history=history)

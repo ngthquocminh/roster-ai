@@ -1,3 +1,5 @@
+import pytest
+
 from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS
 from evals.live_conversations.runner import (
     compact_reload_effect, known_citation_ids, relevant_entities, same_assignments,
@@ -38,20 +40,44 @@ def test_reload_effect_keeps_only_visible_identity_and_activity_types():
     }
 
 
+def _row(worker, task, start, end, shift=None, **transport):
+    return {'worker_id': worker, 'task_id': task, 'shift_id': shift,
+            'start_minute': start, 'end_minute': end, **transport}
+
+
 def test_assignment_comparison_ignores_order_and_transport_only_fields():
-    projected = [
-        {'worker_id': 'w2', 'task_id': 't2', 'start': '2026-01-02', 'end': '2026-01-03',
-         'record_id': 'projection-row-2'},
-        {'worker_id': 'w1', 'task_id': 't1', 'start': '2026-01-01', 'end': '2026-01-02',
-         'record_id': 'projection-row-1'},
-    ]
-    candidate = [
-        {'worker_id': 'w1', 'task_id': 't1', 'start': '2026-01-01', 'end': '2026-01-02'},
-        {'worker_id': 'w2', 'task_id': 't2', 'start': '2026-01-02', 'end': '2026-01-03'},
-    ]
+    projected = [_row('w2', 't2', 60, 120, record_id='projection-row-2'),
+                 _row('w1', 't1', 0, 60, record_id='projection-row-1')]
+    candidate = [_row('w1', 't1', 0, 60), _row('w2', 't2', 60, 120)]
     assert same_assignments(projected, candidate)
     candidate[0]['worker_id'] = 'different'
     assert not same_assignments(projected, candidate)
+
+
+@pytest.mark.parametrize('field,value', [('start_minute', 30), ('end_minute', 90), ('shift_id', 's9'),
+                                         ('task_id', 't9')])
+def test_a_difference_in_any_compared_field_alone_is_a_mismatch(field, value):
+    # The promoted baseline must be EXACTLY the approved candidate: a wrong time
+    # with the right worker and task is still a wrong baseline.
+    projected = [_row('w1', 't1', 0, 60)]
+    assert same_assignments(projected, [_row('w1', 't1', 0, 60)])
+    assert not same_assignments(projected, [{**_row('w1', 't1', 0, 60), field: value}])
+
+
+def test_assignment_comparison_counts_rows_not_just_distinct_values():
+    row = _row('w1', 't1', 0, 60)
+    assert not same_assignments([row], [row, row])
+    assert not same_assignments([row, row], [row])
+    assert not same_assignments([row, row], [row, _row('w1', 't1', 0, 61)])
+    assert same_assignments([], [])
+
+
+def test_assignment_comparison_orders_rows_whose_shift_is_none_on_one_side_only():
+    # sorted() over these tuples raised TypeError (None vs str at the same worker
+    # and task); the comparison must report a mismatch or a match, never crash.
+    with_shift = [_row('w1', 't1', 0, 60, shift='s1'), _row('w1', 't1', 60, 120)]
+    assert same_assignments(with_shift, list(reversed(with_shift)))
+    assert not same_assignments(with_shift, [_row('w1', 't1', 0, 60), _row('w1', 't1', 60, 120)])
 
 
 def test_judge_receives_only_entities_named_in_visible_reply():

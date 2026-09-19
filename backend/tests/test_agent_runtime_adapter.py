@@ -205,6 +205,18 @@ def test_openrouter_retries_only_transient_failures() -> None:
     assert not _is_upstream_error_response(ModelResponse(parts=[TextPart("hi")], finish_reason="stop"))
 
 
+@pytest.mark.parametrize("status,retried", [
+    (408, False), (429, True), (499, False), (500, True), (502, True), (503, True), (504, True),
+    (400, False), (401, False), (402, False), (403, False), (404, False),
+])
+def test_only_rate_limits_and_server_errors_are_retried(status, retried) -> None:
+    from pydantic_ai.exceptions import ModelHTTPError
+
+    from agent.runtime import _is_transient_openrouter_error
+
+    assert _is_transient_openrouter_error(ModelHTTPError(status, "m")) is retried
+
+
 def _upstream_error(_messages, _info):
     from pydantic_ai.messages import ModelResponse, TextPart
 
@@ -239,8 +251,34 @@ def test_exhausted_upstream_retries_are_a_provider_error_not_invalid_output() ->
 
     runtime = PydanticAIAgentRuntime(
         model=_retrying(_upstream_error, _upstream_error, _upstream_error))
-    with pytest.raises(AgentProviderError):
+    with pytest.raises(AgentProviderError) as caught:
         runtime.run_turn(AgentTurnRequestV1(prompt="HI my name is Minh"))
+    # Whatever the failed attempts already billed must survive the outage, the
+    # same accounting as the budget-exhausted branch.
+    assert caught.value.usage is not None
+
+
+def test_result_ids_are_trusted_only_from_this_runs_citable_tool_returns() -> None:
+    from pydantic_ai.messages import ModelRequest, ToolReturnPart, UserPromptPart
+
+    from agent.runtime import _result_ids_this_run
+
+    citable = frozenset({"a_citable_tool"})
+    def returned(tool_name, result_id, call_id):
+        return ModelRequest(parts=[ToolReturnPart(
+            tool_name=tool_name, content={"result_id": result_id}, tool_call_id=call_id)])
+
+    messages = [
+        ModelRequest(parts=[UserPromptPart(content="earlier question")]),
+        returned("a_citable_tool", "from-an-earlier-turn", "c0"),
+        ModelRequest(parts=[UserPromptPart(content="this turn's question")]),
+        returned("a_citable_tool", "from-this-turns-calculation", "c1"),
+        # another tool's model-facing view can carry a `result_id` too (a draft's id):
+        # trusting it would let a draft id vouch for a numeric claim.
+        returned("a_tool_that_is_not_citable", "a-drafts-id", "c2"),
+    ]
+    assert _result_ids_this_run(messages, citable) == {"from-this-turns-calculation"}
+    assert _result_ids_this_run(messages, frozenset()) == set()
 
 
 def test_anthropic_model_uses_the_explicit_agent_runtime_key() -> None:
@@ -539,6 +577,8 @@ def test_plain_text_with_an_uncited_numeral_is_still_rejected_with_preserved_cau
     with pytest.raises(AgentRuntimeError) as exc_info:
         runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
     assert isinstance(exc_info.value.__cause__, UnexpectedModelBehavior)
+    # The numeral rule fired, not the quantity-question rule the prompt would also invite.
+    assert exc_info.value.retry_rule == "numeric_prose"
 
 
 def test_structured_output_tools_keep_the_four_exact_stable_names() -> None:
@@ -996,11 +1036,31 @@ def test_a_rejected_reply_cannot_vouch_for_its_own_numeral_on_retry() -> None:
             lambda messages, info: ModelResponse(parts=[TextPart(content="There are 24 workers.")])),
         answer_type=GroundedAnswerV1,
     )
-    with pytest.raises(AgentRuntimeError):
+    with pytest.raises(AgentRuntimeError) as caught:
         runtime.run_turn(AgentTurnRequestV1(prompt="cap that worker at 40 hours"))
+    # Still refused for the numeral, after the retry prompt quoted it.
+    assert caught.value.retry_rule == "numeric_prose"
 
 
-def test_a_claim_citing_no_calculation_from_this_turn_is_corrected_in_loop() -> None:
+@pytest.mark.parametrize("result_id,rule", [
+    ("", "uncited_claim"),                       # a claim that carries no citation at all
+    ("0" * 36, "claim_without_calculation"),     # a citation, but no calculation ran this turn
+])
+def test_a_claim_that_cannot_be_supported_names_the_rule_that_refused_it(result_id, rule) -> None:
+    from application.ports.agent_runtime import AgentInvalidOutputError
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(_claim_answer(result_id)),
+            tool_call_id=f"o{len(messages)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
+    assert caught.value.retry_rule == rule
+
+
+def test_a_claim_with_an_empty_result_id_is_corrected_in_loop() -> None:
     from application.contracts.grounding import ClaimArgumentsV1, ClaimProposalV1
 
     attempts = []
@@ -1013,7 +1073,7 @@ def test_a_claim_citing_no_calculation_from_this_turn_is_corrected_in_loop() -> 
               if len(attempts) == 1 else ()),
         ))
         return ModelResponse(parts=[ToolCallPart(
-            tool_name="final_result", args=answer.__class__.__name__ and _answer_json(answer),
+            tool_name="final_result", args=_answer_json(answer),
             tool_call_id=f"out-{len(attempts)}")])
 
     runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
@@ -1229,6 +1289,63 @@ def test_a_claim_after_no_calculation_at_all_is_corrected_in_loop() -> None:
     assert outcome.answer == good
 
 
+def test_an_answer_with_no_segments_is_corrected_in_loop() -> None:
+    """A structured answer carrying no prose and no claim is an empty reply the
+    planner would see as nothing happening (Story 5.7 core-app review patch)."""
+    attempts = []
+    good = GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="Here is what I found."),))
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV1(segments=()) if len(attempts) == 1 else good
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me the current constraints"))
+    assert len(attempts) == 2
+    assert outcome.answer == good
+
+
+def test_an_answer_that_stays_empty_names_the_empty_answer_rule() -> None:
+    from application.ports.agent_runtime import AgentInvalidOutputError
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(GroundedAnswerV1(segments=())),
+            tool_call_id=f"o{len(messages)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="show me the current constraints"))
+    assert caught.value.retry_rule == "empty_answer"
+
+
+def test_a_retry_rule_from_an_earlier_turn_is_not_reported_on_a_later_unrelated_failure() -> None:
+    """`_last_retry_rule` names the rule behind an invalid-output failure. It is
+    per-instance state, so a rule left over from one turn must not be blamed for
+    a failure in the next one that no rule caused."""
+    from application.ports.agent_runtime import AgentInvalidOutputError
+
+    unrelated = False
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if unrelated:
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="no_such_tool", args="{}", tool_call_id=f"t{len(messages)}")])
+        return ModelResponse(parts=[TextPart(content="There are 24 workers.")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError) as first:
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
+    assert first.value.retry_rule == "numeric_prose"
+
+    unrelated = True
+    with pytest.raises(AgentInvalidOutputError) as second:
+        runtime.run_turn(AgentTurnRequestV1(prompt="tell me about the schedule"))
+    assert second.value.retry_rule is None
+
+
 def test_a_quantity_question_answered_without_a_claim_is_corrected_in_loop() -> None:
     """live-suite-evidence C6: 'How many workers are qualified for it?' answered
     '**C Fork | Grid P 8GR** has qualified workers.' -- no number at all."""
@@ -1263,3 +1380,13 @@ def test_a_non_quantity_question_may_be_answered_in_prose_alone() -> None:
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Show me what you put in the draft."))
     assert outcome.answer == GroundedAnswerV1(segments=(
         GroundedProseSegmentV1(text="The draft keeps that worker off that task."),))
+
+
+def test_the_runtime_derives_the_citable_tools_from_the_manifests_it_was_granted() -> None:
+    module = demonstration_module()
+    assert _runtime(capabilities=(module,))._citable_result_tools == frozenset()
+    assert _runtime(capabilities=())._citable_result_tools == frozenset()
+
+    opted_in = replace(module, manifest=replace(module.manifest, citable_result_id=True))
+    assert _runtime(capabilities=(opted_in,))._citable_result_tools == frozenset(
+        {module.manifest.capability_name})

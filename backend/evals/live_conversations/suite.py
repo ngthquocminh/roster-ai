@@ -164,7 +164,11 @@ def main(argv=None) -> int:
     finally:
         report['finished_unix'] = int(time())
         save()
-    return 0 if all(prefix.get('status') == 'passed' for prefix in report['prefixes']) else 1
+    # Only an execution's FINAL attempt decides the exit code, exactly as the
+    # readiness report counts it: an earlier attempt that ended incomplete stays in
+    # the report as a diagnostic but must not fail a run that recovered.
+    final = {(p['scenario'], p.get('endpoint'), p['repetition']): p for p in report['prefixes']}
+    return 0 if all(p.get('status') == 'passed' for p in final.values()) else 1
 
 
 if __name__ == '__main__':

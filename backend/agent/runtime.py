@@ -78,7 +78,6 @@ from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.proposal import DraftProposalV1
-from application.capabilities.scheduling_compute import CAPABILITY_NAME as SCHEDULING_COMPUTE_CAPABILITY
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
 from application.grounding.gate import numeric_prose_violation, trusted_numeric_words
 from agent.capability_tools import render_capabilities
@@ -164,13 +163,14 @@ def _claim_placeholder(text: str, *, is_last: bool = True) -> str | None:
     return None
 
 
-def _result_ids_this_run(messages: list) -> set[str]:
-    """result_id values scheduling_compute actually returned after the current prompt.
+def _result_ids_this_run(messages: list, citable_tools: frozenset[str]) -> set[str]:
+    """result_id values a citable tool actually returned after the current prompt.
 
-    Scoped to scheduling_compute specifically: scheduling_draft's model-facing
-    view also carries a `result_id` field (its draft_id, under a different
-    name), and trusting that as if it were a calculation citation would let a
-    model cite a draft's id as a numeric claim's evidence.
+    Scoped to the tools whose manifest declares `citable_result_id`: another
+    capability's model-facing view can carry a `result_id`-shaped field too (a
+    draft tool's is its draft id), and trusting that as if it were a
+    calculation citation would let a model cite a draft's id as a numeric
+    claim's evidence.
     """
     found: set[str] = set()
     for message in _messages_this_run(messages):
@@ -178,7 +178,7 @@ def _result_ids_this_run(messages: list) -> set[str]:
             continue
         for part in message.parts:
             if (isinstance(part, ToolReturnPart)
-                    and part.tool_name == SCHEDULING_COMPUTE_CAPABILITY
+                    and part.tool_name in citable_tools
                     and isinstance(part.content, dict)):
                 value = part.content.get("result_id")
                 if isinstance(value, str) and value:
@@ -287,6 +287,12 @@ class PydanticAIAgentRuntime:
         # Name of the last in-loop rule that asked the model to retry. A closed
         # vocabulary, never the rejected text.
         self._last_retry_rule: str | None = None
+        # Which granted tools' results a claim may cite, read from their manifests.
+        self._citable_result_tools = frozenset(
+            module.manifest.capability_name
+            for module in capabilities
+            if module.manifest.citable_result_id
+        )
         self._model = model if model is not None else _configured_model(self._config)
         self._deps = deps
         self._answer_type = answer_type
@@ -411,7 +417,7 @@ class PydanticAIAgentRuntime:
                         "Answer the planner's request, clarify, or refuse; do not "
                         "return an empty response." + _COMPLETE_ANSWER
                     )
-                returned = _result_ids_this_run(ctx.messages)
+                returned = _result_ids_this_run(ctx.messages, self._citable_result_tools)
                 for segment in getattr(output, "segments", ()) or ():
                     result_id = getattr(segment, "result_id", None)
                     if result_id is None:
@@ -542,6 +548,9 @@ class PydanticAIAgentRuntime:
         )
 
     def run_turn(self, request: AgentTurnRequestV1) -> AgentRunOutcomeV1:
+        # A rule that asked for a retry and then succeeded must not be reported
+        # as the cause of some later, unrelated invalid-output failure.
+        self._last_retry_rule = None
         budget = _merge_budget(self._config.default_budget, request.budget)
         history = to_framework_messages(request.history)
         deferred = _to_deferred_results(request)

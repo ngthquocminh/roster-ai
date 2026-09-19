@@ -268,6 +268,8 @@ def scheduling_compute_manifest() -> CapabilityManifestV1:
         evidence_mapping="exact consumed records, fields/ranges, checksum, and scenario version",
         errors=ERROR_CODES,
         evaluation_fixtures=EVALUATION_FIXTURES,
+        # Its result_id is the content-addressed calculation id a claim cites.
+        citable_result_id=True,
     )
 
 

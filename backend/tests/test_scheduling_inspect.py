@@ -245,7 +245,11 @@ def test_manifest_is_complete_configured_and_fixture_backed(monkeypatch) -> None
     assert manifest.risk_class == "inspect" and manifest.approval_policy == "none"
     backend = Path(__file__).resolve().parents[1]
     assert all((backend / path).is_file() for path in manifest.evaluation_fixtures)
-    assert all(getattr(manifest, name) for name in manifest.__dataclass_fields__)
+    # `citable_result_id` is an opt-in flag: False is its correct value here, so it is
+    # checked on its own rather than by the every-field-is-non-empty rule.
+    assert all(getattr(manifest, name) for name in manifest.__dataclass_fields__
+               if name != 'citable_result_id')
+    assert manifest.citable_result_id is False
     assert set(manifest.errors) == set(ERROR_CODES)
 
     # Proves the numbers come from settings rather than a literal that happens

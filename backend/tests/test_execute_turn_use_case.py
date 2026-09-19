@@ -241,6 +241,54 @@ def test_an_already_owned_turn_is_ALSO_capped_at_one_hundred_messages() -> None:
     assert len(owned_turn.messages) == 120
 
 
+def _workflow_message() -> AgentMessageV1:
+    return AgentMessageV1(role="user", parts=(AgentPartV1(kind="text", text="WORKFLOW-SNAPSHOT"),))
+
+
+def _planner_messages(count: int, deps: AgentDepsV1) -> tuple[PlannerMessageActivityV1, ...]:
+    return tuple(
+        PlannerMessageActivityV1(
+            activity_id=UUID(int=3000 + index), activity_type="planner_message",
+            conversation_id=deps.conversation_id, conversation_resource_version=index + 1,
+            scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
+            occurred_at=NOW, message_id=UUID(int=4000 + index), text=f"m{index}",
+        )
+        for index in range(count)
+    )
+
+
+def test_the_workflow_snapshot_reaches_the_runtime_as_the_last_history_message() -> None:
+    deps = _deps()
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt="now", calculation_results=[],
+                 history=_planner_messages(3, deps), workflow_context=_workflow_message())
+    texts = [message.parts[0].text for message in runtime.request.history.messages]
+    assert texts == ["m0", "m1", "m2", "WORKFLOW-SNAPSHOT"]
+
+
+def test_the_workflow_snapshot_survives_a_full_history_and_the_bound_still_holds() -> None:
+    deps = _deps()
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt="now", calculation_results=[],
+                 history=_planner_messages(120, deps), workflow_context=_workflow_message())
+    messages = runtime.request.history.messages
+    assert len(messages) == 100
+    assert messages[-1].parts[0].text == "WORKFLOW-SNAPSHOT"
+    # The snapshot displaces the OLDEST message, not a recent one.
+    assert messages[0].parts[0].text == "m21"
+
+
+def test_no_workflow_snapshot_adds_nothing_and_an_owned_turn_is_never_mutated() -> None:
+    deps = _deps()
+    owned = AgentTurnV1(messages=(_workflow_message(),))
+    runtime = _Runtime()
+    execute_turn(runtime, deps, prompt="now", calculation_results=[], history=owned)
+    assert len(runtime.request.history.messages) == 1
+    execute_turn(runtime, deps, prompt="now", calculation_results=[], history=owned,
+                 workflow_context=_workflow_message())
+    assert len(owned.messages) == 1  # the caller's turn is copied, not appended to
+
+
 def test_execute_turn_resolves_clarification_at_the_use_case_boundary() -> None:
     deps = _deps()
     worker = WorkerV1(

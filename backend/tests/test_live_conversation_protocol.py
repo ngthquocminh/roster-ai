@@ -1,4 +1,5 @@
 from dataclasses import replace
+from time import monotonic
 
 import pytest
 from pydantic import ValidationError
@@ -60,7 +61,9 @@ def test_final_call_exceeding_any_ceiling_is_incomplete(usage):
 
 
 def test_elapsed_ceiling_applies_even_to_last_call():
-    budget = ConversationBudget(limits(), started=0)
+    # Relative to now, not to the clock's epoch: `started=0` only exceeded the
+    # limit on a host whose monotonic clock had already passed 600 s.
+    budget = ConversationBudget(limits(), started=monotonic() - 601)
     with pytest.raises(IncompleteConversationRun, match='budget_exhausted'):
         budget.charge(requests=1, tool_calls=0, tokens=1, cost_usd=.01)
 
@@ -166,3 +169,61 @@ def test_a_dimension_citing_only_invented_evidence_still_fails():
                                    'evidence_ids': ['turn-99', 'made-up']})
     assert not invented.passes(known_ids={'turn-1'})
     assert invented.unknown_citations(known_ids={'turn-1'}) == ['made-up', 'turn-99']
+
+
+def test_admission_refuses_a_call_that_would_pass_any_ceiling_but_allows_one_that_just_fits():
+    fits = lambda **used: (ConversationBudget(limits(), **used))
+    # requests: 99 used + 1 reserved == the limit of 100
+    fits(requests=99).admit(reserve_usd=.01, requests=1)
+    with pytest.raises(IncompleteConversationRun, match='aggregate_budget_exhausted'):
+        fits(requests=99).admit(reserve_usd=.01, requests=2)
+    # tokens: 9900 used + 100 reserved == the limit of 10000
+    fits(tokens=9900).admit(reserve_usd=.01, tokens=100)
+    with pytest.raises(IncompleteConversationRun, match='aggregate_budget_exhausted'):
+        fits(tokens=9900).admit(reserve_usd=.01, tokens=101)
+    # spend: 1 prior + 5 spent + 1 reserved == the limit of 7
+    fits(prior_spend_usd=1, spend_usd=5).admit(reserve_usd=1)
+    with pytest.raises(IncompleteConversationRun, match='aggregate_budget_exhausted'):
+        fits(prior_spend_usd=1, spend_usd=5).admit(reserve_usd=2)
+
+
+def test_admission_needs_a_tool_call_left_but_charging_the_last_one_is_allowed():
+    budget = ConversationBudget(limits())
+    budget.charge(requests=1, tool_calls=100, tokens=0, cost_usd=0)  # exactly the limit: fine
+    with pytest.raises(IncompleteConversationRun, match='aggregate_budget_exhausted'):
+        budget.admit(reserve_usd=.01)  # but nothing further may start
+    with pytest.raises(IncompleteConversationRun, match='aggregate_budget_exhausted'):
+        budget.charge(requests=0, tool_calls=1, tokens=0, cost_usd=0)  # 101 is over
+
+
+def test_charging_exactly_up_to_a_ceiling_is_not_exhaustion():
+    budget = ConversationBudget(limits())
+    budget.charge(requests=100, tool_calls=0, tokens=10000, cost_usd=7)
+    assert (budget.requests, budget.tokens, budget.spend_usd) == (100, 10000, 7)
+
+
+def test_admission_refuses_once_the_elapsed_ceiling_has_passed():
+    ConversationBudget(limits()).admit(reserve_usd=.01)
+    with pytest.raises(IncompleteConversationRun, match='aggregate_budget_exhausted'):
+        ConversationBudget(limits(), started=monotonic() - 601).admit(reserve_usd=.01)
+
+
+def test_prior_story_spend_counts_against_the_final_charge_too():
+    budget = ConversationBudget(limits(), prior_spend_usd=3)
+    with pytest.raises(IncompleteConversationRun, match='aggregate_budget_exhausted'):
+        budget.charge(requests=1, tool_calls=0, tokens=0, cost_usd=4.01)
+
+
+def test_the_case_limit_stops_a_further_execution():
+    budget = ConversationBudget(replace(limits(), case_limit=2))
+    budget.begin_execution()
+    budget.begin_execution()
+    with pytest.raises(IncompleteConversationRun, match='case_budget_exhausted'):
+        budget.begin_execution()
+    assert budget.executions == 2
+
+
+def test_a_judged_fail_is_a_fail_even_when_every_dimension_scores_two():
+    failed = judgment().model_copy(update={'verdict': 'fail'})
+    assert not failed.passes(known_ids={'turn-1'})
+    assert turn_verdict(factual_failures=[], judgment=failed, known_ids={'turn-1'}) == 'fail'
