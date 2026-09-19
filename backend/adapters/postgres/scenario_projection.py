@@ -542,6 +542,7 @@ class PostgresScenarioProjectionReader:
             for area in _rows(payload, "Area")
             if area.get("AreaID")
         }
+        baseline = PostgresSiteBaselineReader().get(connection, row.site_id)
         return ScenarioOverviewV1(
             scenario_id=row.scenario_id,
             scenario_version_id=row.scenario_version_id,
@@ -556,16 +557,16 @@ class PostgresScenarioProjectionReader:
             site_timezone=SITE_TIMEZONE,
             horizon_minutes=horizon_minutes,
             baseline_schedule_version=(
-                str(baseline.schedule_version_id)
-                if (baseline := PostgresSiteBaselineReader().get(connection, row.site_id))
-                else None
+                str(baseline.schedule_version_id) if baseline else None
             ),
             projection_generated_at=datetime.now(timezone.utc),
             work_area_count=len(work_areas),
             task_count=len(tasks),
             worker_count=len(workers),
             demand_interval_count=len(demand),
-            baseline_assignment_count=len(self._baseline_assignments(connection, row)),
+            baseline_assignment_count=len(
+                self._baseline_assignments(connection, row, baseline=baseline)
+            ),
             lock_count=0,
             constraint_count=len(constraints),
         )
@@ -655,14 +656,23 @@ class PostgresScenarioProjectionReader:
         )
 
     @staticmethod
-    def _baseline_assignments(connection: Connection, row):
-        baseline = PostgresSiteBaselineReader().get(connection, row.site_id)
+    def _baseline_assignments(connection: Connection, row, *, baseline=None):
+        # Callers that already resolved the site baseline pointer for their own
+        # purposes (e.g. `get_overview`'s `baseline_schedule_version`) pass it
+        # through instead of paying for a second, identical lookup.
+        if baseline is None:
+            baseline = PostgresSiteBaselineReader().get(connection, row.site_id)
         if baseline is None:
             return ()
         schedule = PostgresScheduleRunRepository().get_version(connection,
             schedule_version_id=baseline.schedule_version_id, site_id=row.site_id)
         if schedule is None:
-            raise ValueError('baseline schedule unavailable')
+            # A dangling pointer is a data-integrity condition this read path
+            # cannot repair; failing the whole projection read with an
+            # unhandled 500 is worse than reporting no baseline assignments
+            # for now, so treat it the same as the "doesn't match this
+            # scenario" case below rather than raising.
+            return ()
         # The pointer is site-wide; assignments belong to an immutable scenario
         # version. Never project another fixture's baseline onto this one.
         if schedule.scenario_id != row.scenario_id or schedule.scenario_version_id != row.scenario_version_id:

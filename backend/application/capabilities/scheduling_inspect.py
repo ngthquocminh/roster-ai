@@ -306,8 +306,9 @@ def scheduling_inspect_module() -> CapabilityModuleV1:
             "value_type. overview accepts no filters or sort. Only tasks carry a task name, only "
             "workers carry a worker name (worker_id elsewhere equals a worker's contact_id), and "
             "only demand carries a family. Results are paged: follow next_cursor when truncated "
-            "is true. assignments are the scenario's own starting assignments, never a run's "
-            "candidate or a promoted baseline. It is read-only and does not compute a metric, "
+            "is true. assignments are the site's promoted baseline assignments for this exact "
+            "scenario version -- empty until a baseline matching this version has been promoted, "
+            "never a run's candidate. It is read-only and does not compute a metric, "
             "create a draft, optimize, promote, or grant permissions."
         ),
     )

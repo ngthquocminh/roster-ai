@@ -332,9 +332,22 @@ async def execute_agent_turn(
                 if (not callable(getattr(connection, "execute", None))
                         or not callable(getattr(schedule_runs, "list_runs", None))):
                     return None
-                return load_workflow_context(connection, claimed=claimed,
-                    proposals=proposal_repository, runs=schedule_runs, baselines=baselines,
-                    projection=projection_reader)
+                try:
+                    return load_workflow_context(connection, claimed=claimed,
+                        proposals=proposal_repository, runs=schedule_runs, baselines=baselines,
+                        projection=projection_reader)
+                except ValueError:
+                    # The snapshot is read-only enrichment, not required state: a
+                    # dangling baseline pointer, an oversized snapshot, or a
+                    # route double that doesn't implement every port method it
+                    # calls must degrade to no context, never fail the whole
+                    # turn -- the same resilience precedent as insight
+                    # generation being a separate post-run step.
+                    logger.exception(
+                        "workflow context unavailable for run %s; proceeding without it",
+                        agent_run_id,
+                    )
+                    return None
 
         workflow_context = await run_in_threadpool(_workflow_context)
         feature_policy = enabled_feature_policy(settings)

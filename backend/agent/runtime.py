@@ -78,6 +78,7 @@ from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.proposal import DraftProposalV1
+from application.capabilities.scheduling_compute import CAPABILITY_NAME as SCHEDULING_COMPUTE_CAPABILITY
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
 from application.grounding.gate import numeric_prose_violation, trusted_numeric_words
 from agent.capability_tools import render_capabilities
@@ -164,13 +165,21 @@ def _claim_placeholder(text: str, *, is_last: bool = True) -> str | None:
 
 
 def _result_ids_this_run(messages: list) -> set[str]:
-    """result_id values the tools actually returned after the current prompt."""
+    """result_id values scheduling_compute actually returned after the current prompt.
+
+    Scoped to scheduling_compute specifically: scheduling_draft's model-facing
+    view also carries a `result_id` field (its draft_id, under a different
+    name), and trusting that as if it were a calculation citation would let a
+    model cite a draft's id as a numeric claim's evidence.
+    """
     found: set[str] = set()
     for message in _messages_this_run(messages):
         if not isinstance(message, ModelRequest):
             continue
         for part in message.parts:
-            if isinstance(part, ToolReturnPart) and isinstance(part.content, dict):
+            if (isinstance(part, ToolReturnPart)
+                    and part.tool_name == SCHEDULING_COMPUTE_CAPABILITY
+                    and isinstance(part.content, dict)):
                 value = part.content.get("result_id")
                 if isinstance(value, str) and value:
                     found.add(value)
@@ -391,6 +400,17 @@ class PydanticAIAgentRuntime:
                 # to a draft description that needed no number at all).
                 if not isinstance(output, GroundedAnswerV1):
                     return output
+                if not getattr(output, "segments", ()):
+                    # A structured-output answer with zero segments carries no
+                    # text and no claim -- an empty reply the planner would see
+                    # as nothing happening. Every other branch below assumes at
+                    # least one segment.
+                    self._last_retry_rule = "empty_answer"
+                    raise ModelRetry(
+                        "This answer carries no content -- no prose and no claim. "
+                        "Answer the planner's request, clarify, or refuse; do not "
+                        "return an empty response." + _COMPLETE_ANSWER
+                    )
                 returned = _result_ids_this_run(ctx.messages)
                 for segment in getattr(output, "segments", ()) or ():
                     result_id = getattr(segment, "result_id", None)
@@ -601,7 +621,19 @@ class PydanticAIAgentRuntime:
         except FallbackExceptionGroup as exc:
             # Every retry of a transient provider failure failed too. That is
             # the provider's outage, not the model's output.
-            raise AgentProviderError("agent runtime provider call failed") from exc
+            failure = AgentProviderError("agent runtime provider call failed")
+            # Partial usage from the failed attempts, same accounting as the
+            # UsageLimitExceeded branch above -- otherwise a provider outage
+            # silently drops whatever was already billed.
+            failure.usage = AgentUsageV1(
+                requests=accumulated_usage.requests,
+                tool_calls=accumulated_usage.tool_calls,
+                input_tokens=accumulated_usage.input_tokens,
+                output_tokens=accumulated_usage.output_tokens,
+                cache_read_tokens=accumulated_usage.cache_read_tokens,
+                cache_write_tokens=accumulated_usage.cache_write_tokens,
+            )
+            raise failure from exc
         except UnexpectedModelBehavior as exc:
             # The model could not produce a usable final message, but a draft it
             # created in this turn is already persisted work whose identity comes

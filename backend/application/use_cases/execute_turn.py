@@ -289,7 +289,8 @@ def failed_outcome_for_exception(exc: Exception) -> AgentRunOutcomeV1:
         )
     if isinstance(exc, AgentProviderError):
         return AgentRunOutcomeV1(
-            status="failed", failure_reason="provider_error", failure_source="agent"
+            status="failed", failure_reason="provider_error", failure_source="agent",
+            usage=getattr(exc, "usage", None),
         )
     # `UncitedNumericProseError` is a `ValueError` subclass, and an unclassified
     # exception is no better understood than a malformed output, so both land on

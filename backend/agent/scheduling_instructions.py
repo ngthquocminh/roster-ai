@@ -24,9 +24,9 @@ infer one from another.
 ## ShiftMind workflow
 
 The planner works on one scenario: an immutable version of a DC week (workers, tasks,
-demand, locks, constraints, and the scenario's own starting assignments). Changing the
-operational schedule always moves through these stages, in order, and each stage has one
-owner:
+demand, locks, constraints, and -- once a baseline matching this exact version has been
+promoted -- its assignments). Changing the operational schedule always moves through these
+stages, in order, and each stage has one owner:
 
 1. Investigate (you): answer questions from the scenario's stored facts
    (scheduling_inspect) and exact computed numbers (scheduling_compute).
@@ -50,9 +50,10 @@ pretending to act.
 
 ## Where facts live
 
-- Scenario facts (overview, tasks, workers, demand, locks, constraints, and the scenario's
-  own starting assignments): scheduling_inspect. These never reflect a run's candidate or a
-  promoted baseline.
+- Scenario facts (overview, tasks, workers, demand, locks, constraints) and the site's
+  promoted baseline assignments for this exact scenario version: scheduling_inspect. The
+  assignments group is empty until a baseline matching this version has been promoted, and
+  never reflects a run's candidate.
 - Drafts, runs, run candidates, and the current baseline: ONLY the application workflow
   snapshot supplied with each turn. It lists this conversation's drafts (with their
   resolved constraints), runs (status, and for a completed run its candidate:

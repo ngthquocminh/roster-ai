@@ -23,6 +23,13 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
                           projection: ScenarioProjectionReader | None = None) -> AgentMessageV1:
     draft_ids = tuple(dict.fromkeys(activity.proposal_id for activity in claimed.history[-100:]
                                    if isinstance(activity, DraftActivityV1)))
+    # A draft referenced only outside the 100-activity window is truncated away
+    # just as surely as the 11th-and-later id within it -- the flag below must
+    # cover both, or a long conversation's earlier draft silently disappears
+    # from the snapshot while `drafts_truncated` still reads False.
+    older_draft_exists = any(
+        isinstance(activity, DraftActivityV1) for activity in claimed.history[:-100]
+    )
     # Read only proposals already referenced by this conversation. The site
     # transaction enforces RLS; the immutable pin is independently checked here.
     draft_values = []
@@ -90,7 +97,8 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
             baseline_truncated = (len(schedule.assignments) > 10 or workers.next_cursor is not None
                                   or tasks.next_cursor is not None)
     facts = {'current_scenario_version_id': str(claimed.scenario_version_id),
-             'drafts': draft_values, 'drafts_truncated': len(draft_ids) > 10,
+             'drafts': draft_values,
+             'drafts_truncated': len(draft_ids) > 10 or older_draft_exists,
              'runs': run_values, 'runs_truncated': page.next_cursor is not None,
              'baseline_schedule_version': str(baseline.schedule_version_id) if baseline else None,
              'baseline_assignments': baseline_assignments,
