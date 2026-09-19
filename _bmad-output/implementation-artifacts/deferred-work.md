@@ -1105,3 +1105,15 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   override file ran, not that its rates suit the model. **Deferred reason:** a design change (a price table keyed by
   model, or a rate check against the OpenRouter catalogue) beyond this story; the file header and `TESTING.md` already
   instruct verifying rates on every model change. **Owner: open.**
+
+## Deferred from: Story 5.7 final measurement (2026-09-19)
+
+- **`suite.py::_atomic_json` has no retry around `os.replace`.** On Windows a reader holding the report open makes it
+  raise `PermissionError`, which aborted run `33821ef3` after eight paid executions (probably the reviewer's own status
+  read). The last successful save survives, but the run cannot finish. **Deferred reason:** measured code is frozen for
+  the evidence; a short retry is a one-line hardening for a later story. **Owner: open.**
+- **`--resume` re-runs executions that FAILED, not only incomplete ones**, and reports built from different image builds
+  cannot be combined by `evidence.generate`. Together they mean a crashed run cannot be completed without either
+  re-drawing its failures or discarding it (this run was re-measured in full and the crashed run disclosed in
+  `docs/TESTING.md`). **Deferred reason:** re-running failures on resume would need a decision on what counts as a
+  result; the safe direction (refuse to mix) is the documented one. **Owner: open.**

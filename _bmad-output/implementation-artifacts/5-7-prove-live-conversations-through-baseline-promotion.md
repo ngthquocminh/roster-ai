@@ -3,7 +3,7 @@
 baseline_commit: 80e62422b68a9c121697fada6287f4fa3a311532
 ---
 
-Status: in-progress (code review covered the "core app code" (2026-09-18), "eval harness", "test suite" and "docs/planning + evidence" (2026-09-19) slices; every finding of those slices is resolved. Still owed before this returns to `review`: the frontend e2e review slice, then ONE evidence regeneration for the final code -- the committed evidence is stale on purpose and, since the docs/evidence patches, must be re-measured because run reports now record image ids and the measured configuration)
+Status: review (all review slices are done -- core app code, eval harness, test suite, docs/planning + evidence, frontend e2e + harness patches -- and every finding is resolved; the evidence was regenerated once at `db0a5dd`, run `64ca2862`: 87/90 turns, 6/9 clean executions, accepted findings B:5, B:8, C:3 (each 2 of 3), no false claims)
 
 Date: 2026-09-15
 Origin: Minh's reported natural-conversation failure and approval to correct course.

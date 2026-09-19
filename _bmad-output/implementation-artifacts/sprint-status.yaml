@@ -2608,7 +2608,11 @@ development_status:
   # evidence/story-5.7/live-conversation-journeys.json; one turn (B:5, passed 1 of 3) is
   # accepted with its pass rate. That evidence is stale on purpose (measured before the review
   # patches) and is regenerated once after every review slice is done.
-  5-7-prove-live-conversations-through-baseline-promotion: in-progress
+  # 2026-09-19: all review slices done; evidence regenerated once at db0a5dd (run 64ca2862): 87/90
+  # turns, 6/9 clean executions, a clean run per scenario, no false claims; B:5, B:8 and C:3
+  # (each passed 2 of 3) accepted by Minh. Earlier attempts of the session are disclosed in
+  # docs/TESTING.md. Returned to review.
+  5-7-prove-live-conversations-through-baseline-promotion: review
   # Code review 2026-09-18 (core-app-code slice): 3 decision-needed findings deferred
   # (Minh), 8 patch findings fixed and verified (168 targeted + 44 scenario_projection tests
   # green), 1 finding deferred, 19 dismissed as noise after code-level verification.

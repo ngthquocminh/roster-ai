@@ -40,13 +40,17 @@ Recorded matrix (the one the committed evidence file describes; refreshed with i
 
 | | Result |
 |---|---|
-| Turns passed | **88 / 90** |
-| Clean executions | **7 / 9** (three complete repetitions; every scenario clean at least once) |
+| Turns passed | **87 / 90** |
+| Clean executions | **6 / 9** (three complete repetitions; every scenario clean at least once) |
 | Clean run per scenario | A ✅ B ✅ C ✅ |
 | False claims, wrong facts, missing effects | **none** |
-| Tracked spend | USD 0.59 |
+| Tracked spend | USD 0.58 |
 
-Accepted finding (recorded, not hidden): **B:5 passed 1 of 3** in this matrix (3/3 in a same-code diagnostic). Both failures were an agent turn that ended without an answer (`unsuccessful_agent_turn`), never a wrong one. Earlier matrices scattered single failures across A:6, B:10, C:1, C:4 and C:5, so roughly 1 turn in 90 fails in any one matrix -- about 1%, spread across different turns rather than a fixed set of broken ones. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates, the accepted finding's per-execution failure reasons, the verdict, and the sha256 of each source report.
+Run `64ca2862-a81c-45f7-adcb-56586f62d57f`, measured at commit `db0a5dd` on a clean tree.
+
+Accepted findings (recorded, not hidden), each passed 2 of 3 and none involved a false claim: **B:5** and **C:3** were an agent turn that ended without an answer (`unsuccessful_agent_turn`: an invalid output and a run-budget exhaustion), and **B:8** was a completed answer (feasible candidate, 76 assignments) that the judge scored 1 for completeness. Roughly 1 turn in 30 fails in this matrix, spread across different turns rather than a fixed set of broken ones. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates, the accepted findings' per-execution failure reasons, the verdict, and the sha256 of the source report.
+
+Earlier attempts of the same measurement session, not counted in the evidence (a report's images must match, and each rebuild produced new image ids): two stopped at the image build because Docker was not running (no execution, no spend), and run `33821ef3-03c9-4bf4-9fc9-ec5ca8355c4a` crashed on a Windows `PermissionError` while saving its ninth execution, after 8 executions and 2 turns of the ninth (USD 0.53). Its turn failures were B:5, C:8, C:9 (`unsuccessful_agent_turn`, C:8 and C:9 also `required_persisted_draft_missing`) and A:4 in repetition 2, an `unsupported_claim`: the reply was cut to "This scenario has " because its `worker_count` claim carried no evidence (`missing_evidence`, no value), so no wrong figure was shown. The owner accepted evidence from the complete run only, with this disclosure.
 
 A stricter cross-check with `google/gemini-2.5-pro` as judge (~5x the judging cost) found real defects the cheaper judge passed, including a per-task figure presented as a scenario-wide total (since fixed, with a regression test). Use it when hunting defects; the cheaper judge runs the recorded matrix.
 
