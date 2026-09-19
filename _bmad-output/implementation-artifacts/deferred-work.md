@@ -1045,3 +1045,48 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   attempts for transport errors and malformed judgments). Doesn't affect behavior, misleads a future
   reader auditing the retry guarantee. **Deferred reason:** cosmetic doc/behavior mismatch, fix
   opportunistically. **Owner: open.**
+
+## Deferred from: code review of story-5.7, test-suite slice (2026-09-19)
+
+- **Long-tail edge coverage across the live-eval harness and product guards.** Client fail-closed
+  branches (`login` non-302 / hop limit / second-hop host, `wait_for_run` deadline and bounds, non-404
+  execute error), `facts.py` oracle branches (`verify_claim` verdicts, `expected_metric` windows,
+  `read_group` cycle / count / `max_rows`), smoke-runner branches, `ContainerTelemetry.read_run`,
+  `validate_scenarios` blank / duplicate branches, placeholder-marker and dangling-lead-in variants,
+  `trusted_numeric_words` separators and the 16-char hex cutoff. **Deferred reason:** real, but none
+  decides a pass/fail verdict on its own once the slice's patches land. **Owner: open.**
+
+- **Change-detector tests.** `test_every_in_loop_correction_asks_for_a_complete_answer` and the
+  `fact_group` label test count source text; the default-instruction, `scheduling_draft` and
+  `scheduling_inspect` description tests pin ~13 prose substrings. **Deferred reason:** brittle on
+  refactor, not wrong; precedent exists in
+  `test_the_prose_rule_has_one_implementation_shared_with_the_gate`. **Owner: open.**
+
+- **Draft recovery covers only `UnexpectedModelBehavior`** (`backend/agent/runtime.py`, the
+  `run_turn` handler). A draft saved before `UsageLimitExceeded`, `FallbackExceptionGroup` or a timeout
+  is still discarded. **Deferred reason:** a runtime product-scope call, not a test defect.
+  **Owner: open.**
+
+- **`relevant_entities` matches names by raw substring** (`backend/evals/live_conversations/runner.py`):
+  `w1` matches inside `w10`, and an empty name always matches, so the judge can be sent more entities
+  than the reply named. **Deferred reason:** over-includes judge context only; not independently
+  verified. **Owner: open.**
+
+- **Cross-test coupling.** Tests import private helpers across modules (`tests.test_execute_turn_use_case`
+  `_deps`, `tests.test_scheduling_compute`, `tests.test_live_conversation_protocol`), and
+  `test_explicit_reasoning_control_reaches_openrouter_request` works around other modules setting
+  `models.ALLOW_MODEL_REQUESTS = False` at import without resetting it. **Deferred reason:** hygiene.
+  **Owner: open.**
+
+- **`_last_retry_rule` can still be stale WITHIN one turn.** `run_turn` now resets it on entry (the
+  cross-turn case is tested), but a rule that retried successfully and a later, unrelated
+  `UnexpectedModelBehavior` in the same run (for example exhausted tool-argument retries) still reports
+  the earlier rule as `retry_rule`. **Deferred reason:** diagnostic mislabel only, blast radius one turn;
+  a fix needs a way to tell a rule-caused exhaustion from a tool-caused one. **Owner: open.**
+
+- **AC7 recovered-turn reporting is not in the readiness summary** (`backend/evals/live_conversations/
+  reporting.py`). AC7 asks for recovered turns to be reported separately from first-attempt passes;
+  earlier attempts survive only in the raw run report, and `summarize_runs` counts each execution's
+  final attempt alone. **Deferred reason:** a feature gap against AC7's wording, not a regression, and
+  the readiness verdict is correct without it; needs a scoping call from Minh before it is built.
+  **Owner: open.**
