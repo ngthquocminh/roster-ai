@@ -184,7 +184,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 'independent_claim_failures': failures.copy(), 'effects_after_reply': []}
             if activity['activity_type'] == 'draft':
                 verified['persisted_draft'] = app.latest_draft()
-            if turn.obligation.startswith('Persist') and activity['activity_type'] != 'draft':
+            if turn.requires_persisted_draft and activity['activity_type'] != 'draft':
                 failures.append('required_persisted_draft_missing')
             for action in turn.actions_after:
                 effect = {'action': action, 'id': row['id'] + ':' + action, 'source': 'application_command'}
@@ -220,8 +220,9 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                         if len(promotions) != 1 or promotions[0]['after_version'] != expected:
                             failures.append('baseline_promotion_provenance_not_exactly_once')
                         after_assignments = read_group(app, 'baseline-assignments')
-                        if latest_run is None or not same_assignments(
-                                after_assignments, latest_run['candidate']['assignments']):
+                        candidate_assignments = (latest_run or {}).get('candidate') or {}
+                        if not candidate_assignments.get('assignments') or not same_assignments(
+                                after_assignments, candidate_assignments['assignments']):
                             failures.append('promoted_assignments_do_not_match_candidate')
                     pending_approval = None
                 elif action == 'reload':

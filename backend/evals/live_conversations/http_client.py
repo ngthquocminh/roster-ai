@@ -34,7 +34,10 @@ class ApplicationConversation:
             route = re.sub(r'[0-9a-fA-F-]{36}', '*', path.split('?')[0])
             raise IncompleteConversationRun(
                 f'application_http_{response.status_code}_{method}_{route}')
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            raise IncompleteConversationRun('application_response_undecodable') from None
 
     def login(self):
         url = self.origin + '/api/v1/auth/login'
@@ -47,7 +50,10 @@ class ApplicationConversation:
             if '__Host-shiftmind_session=' in response.headers.get('set-cookie', ''):
                 self.headers['Cookie'] = response.headers['set-cookie'].split(';', 1)[0]
                 break
-            url = response.headers['location']
+            location = response.headers.get('location')
+            if not location:
+                raise IncompleteConversationRun('authentication_failed')
+            url = location
         if 'Cookie' not in self.headers:
             raise IncompleteConversationRun('authentication_failed')
         session = self._request('GET', '/api/v1/auth/session')

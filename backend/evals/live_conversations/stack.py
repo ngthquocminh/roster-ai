@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import os
 from pathlib import Path
 import subprocess
+import sys
 from time import monotonic, sleep
 from uuid import uuid4
 
@@ -31,7 +32,10 @@ def build_live_images(*, model, api_key, override_file, origin='http://localhost
         reasoning_effort=reasoning_effort, demonstration_enabled=demonstration_enabled)
     command = ['docker', 'compose', '-f', str(ROOT / 'docker-compose.yml'),
                '-f', str(override_file), 'build', 'api', 'web']
-    result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=300)
+    try:
+        result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        raise IncompleteConversationRun('isolated_stack_build_failed') from None
     if result.returncode:
         raise IncompleteConversationRun('isolated_stack_build_failed')
 
@@ -51,8 +55,11 @@ def isolated_stack(*, model, api_key, override_file, origin='http://localhost:18
         # Both images are rebuilt under the fixed evaluation origin. Reusing a
         # web image compiled for another port would send API calls to that stack.
         started = True
-        result = subprocess.run([*command, 'up', '-d', '--no-build'], cwd=ROOT, env=env,
-                                capture_output=True, text=True, timeout=240)
+        try:
+            result = subprocess.run([*command, 'up', '-d', '--no-build'], cwd=ROOT, env=env,
+                                    capture_output=True, text=True, timeout=240)
+        except subprocess.TimeoutExpired:
+            raise IncompleteConversationRun('isolated_stack_start_failed') from None
         if result.returncode:
             raise IncompleteConversationRun('isolated_stack_start_failed')
         deadline = monotonic() + 60
@@ -71,7 +78,14 @@ def isolated_stack(*, model, api_key, override_file, origin='http://localhost:18
         if started:
             # Generated here, never taken from caller input: teardown can only
             # affect this prefix's disposable project, including its own volume.
-            result = subprocess.run([*command, 'down', '--volumes', '--remove-orphans'],
-                                    cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
-            if result.returncode:
+            try:
+                result = subprocess.run([*command, 'down', '--volumes', '--remove-orphans'],
+                                        cwd=ROOT, env=env, capture_output=True, text=True, timeout=90)
+                cleanup_failed = bool(result.returncode)
+            except subprocess.TimeoutExpired:
+                cleanup_failed = True
+            if cleanup_failed and sys.exc_info()[0] is None:
+                # Only surface a cleanup failure when nothing else is already
+                # propagating -- raising here would replace and hide the real
+                # root cause (e.g. isolated_stack_start_failed).
                 raise IncompleteConversationRun('isolated_stack_cleanup_failed')

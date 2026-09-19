@@ -39,8 +39,11 @@ class ContainerTelemetry:
         self.container = container
 
     def read_run(self, agent_run_id):
-        result = subprocess.run(['docker', 'logs', '--tail', '10000', self.container],
-                                 capture_output=True, text=True, timeout=20)
+        try:
+            result = subprocess.run(['docker', 'logs', '--tail', '10000', self.container],
+                                     capture_output=True, text=True, timeout=20)
+        except subprocess.TimeoutExpired:
+            raise IncompleteConversationRun('application_telemetry_unavailable') from None
         if result.returncode:
             raise IncompleteConversationRun('application_telemetry_unavailable')
         records = []

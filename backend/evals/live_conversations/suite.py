@@ -122,17 +122,24 @@ def main(argv=None) -> int:
                                         demonstration_enabled=case.demonstration_enabled) as stack:
                         app = ApplicationConversation(stack['origin'])
                         try:
-                            session = app.login()
-                            prefix['fixture_setup'] = prepare_initial_baseline(
-                                app, session=session, database_url=stack['database_url'])
-                            actual = execute_prefix(
-                                app=app, case=case, endpoint=endpoint,
-                                isolation_id=stack['isolation_id'],
-                                telemetry=ContainerTelemetry(stack['container']),
-                                judge_key=judge_key, judge_model=judge_model, budget=budget,
-                                save=lambda current: (prefix.update(current), save()),
-                            )
-                            prefix.update(actual)
+                            try:
+                                session = app.login()
+                                prefix['fixture_setup'] = prepare_initial_baseline(
+                                    app, session=session, database_url=stack['database_url'])
+                            except IncompleteConversationRun as exc:
+                                # A fixture-seeding fault is an infrastructure fault like any
+                                # other: fall through to the same retry/raise decision below
+                                # rather than skipping it and silently burning an attempt.
+                                prefix['incomplete_reason'] = str(exc)
+                            else:
+                                actual = execute_prefix(
+                                    app=app, case=case, endpoint=endpoint,
+                                    isolation_id=stack['isolation_id'],
+                                    telemetry=ContainerTelemetry(stack['container']),
+                                    judge_key=judge_key, judge_model=judge_model, budget=budget,
+                                    save=lambda current: (prefix.update(current), save()),
+                                )
+                                prefix.update(actual)
                         finally:
                             app.close()
                     save()
@@ -141,6 +148,12 @@ def main(argv=None) -> int:
                     # the failed attempt stays in the report as a diagnostic.
                     if not prefix.get('incomplete_reason'):
                         break
+                    if prefix['incomplete_reason'] in ('aggregate_budget_exhausted', 'case_budget_exhausted'):
+                        # The shared, process-wide budget is exhausted -- a fresh
+                        # isolated stack cannot fix that, so retrying here only
+                        # burns setup time on a guaranteed-identical failure.
+                        raise IncompleteConversationRun(
+                            f"scenario_incomplete_{case.id}_{prefix['incomplete_reason']}")
                     if attempt == args.execution_retries + 1:
                         raise IncompleteConversationRun(
                             f"scenario_incomplete_{case.id}_{prefix['incomplete_reason']}")

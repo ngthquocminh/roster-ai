@@ -23,10 +23,15 @@ def execute_conversation_smoke(*, app, case, telemetry, budget, before_second=No
                        agent_run_status=executed['agent_run_status'],
                        activity_type=executed['activity']['activity_type'])
             usage, tools = telemetry.read_run(accepted['agent_run_id'])
-            counters = usage['usage']
-            budget.charge(requests=counters['requests'], tool_calls=len(tools),
-                          tokens=counters['input_tokens'] + counters['output_tokens'],
-                          cost_usd=usage['estimated_cost_usd'])
+            if usage.get('usage_unavailable'):
+                # Unknown real cost: charge the full per-turn reservation so the
+                # tracked total errs high, and keep scoring the smoke turn.
+                budget.charge(requests=1, tool_calls=len(tools), tokens=0, cost_usd=.10)
+            else:
+                counters = usage['usage']
+                budget.charge(requests=counters['requests'], tool_calls=len(tools),
+                              tokens=counters['input_tokens'] + counters['output_tokens'],
+                              cost_usd=usage['estimated_cost_usd'])
             names = [tool['labels']['capability_name'] for tool in tools]
             # Keep only the owned closed labels. This makes a failed routing
             # smoke diagnosable without admitting arguments, results, prompts,

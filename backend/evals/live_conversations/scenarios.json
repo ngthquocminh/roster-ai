@@ -59,7 +59,8 @@
         {
           "user": "Keep that worker off that task in a draft, and preserve the existing locks.",
           "obligation": "Persist a draft excluding that worker from that task, preserving existing locks.",
-          "actions_after": []
+          "actions_after": [],
+          "requires_persisted_draft": true
         },
         {
           "user": "Show me what you put in the draft.",
@@ -69,7 +70,8 @@
         {
           "user": "Revise the draft to cap that worker at 40 hours as well.",
           "obligation": "Persist a revision retaining the exclusion and adding a forty-hour cap for the same worker.",
-          "actions_after": []
+          "actions_after": [],
+          "requires_persisted_draft": true
         },
         {
           "user": "I have reviewed it. Run optimization for this draft.",
@@ -142,11 +144,13 @@
         },
         {
           "user": "Draft a change requiring at least two workers on that task and increasing its demand by ten percent.",
-          "obligation": "Persist a draft for that same task requiring at least two workers and scaling its demand by a factor of 1.1."
+          "obligation": "Persist a draft for that same task requiring at least two workers and scaling its demand by a factor of 1.1.",
+          "requires_persisted_draft": true
         },
         {
           "user": "Add to that draft: lock one worker who is qualified for that task onto one of that worker’s own rostered windows.",
-          "obligation": "Persist a revision that keeps the two earlier constraints and adds a shift lock for a real worker qualified for that task, using one of that worker’s own roster windows as the locked interval."
+          "obligation": "Persist a revision that keeps the two earlier constraints and adds a shift lock for a real worker qualified for that task, using one of that worker’s own roster windows as the locked interval.",
+          "requires_persisted_draft": true
         },
         {
           "user": "Use the demonstration feature to repeat \"ready\" once.",

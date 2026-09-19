@@ -116,12 +116,18 @@ def require_complete_coverage(report: dict, *, observation_ids: set[str]):
         # are live evidence and must name an observation; anything else is not.
         if row.get('source') not in ('capability', 'effect'):
             continue
-        if not row.get('observation_id') or row['observation_id'] not in observation_ids:
-            raise ValueError('tool coverage has no recorded observation')
         if row.get('state') not in ('success', 'failure', 'gap'):
             raise ValueError('tool coverage must record a result or explicit gap')
-        if row.get('state') == 'gap' and not row.get('reason'):
-            raise ValueError('coverage gap requires an explanation')
+        if row.get('state') == 'gap':
+            # A gap has no live observation to point to by definition -- that IS
+            # the gap. Requiring a real observation_id here would force borrowing
+            # an unrelated one, which proves nothing and would let a stale
+            # borrowed id slip past this check unnoticed.
+            if not row.get('reason'):
+                raise ValueError('coverage gap requires an explanation')
+            continue
+        if not row.get('observation_id') or row['observation_id'] not in observation_ids:
+            raise ValueError('tool coverage has no recorded observation')
         covered.add(row['operation'])
     # A chat-reachable operation is normally proved live, but one no authored
     # turn can legitimately reach (a draft group resolve_constraints rejects)

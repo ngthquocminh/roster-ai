@@ -25,6 +25,7 @@ class ConversationTurn:
     obligation: str
     actions_after: tuple[str, ...] = ()
     allowed_run_statuses: tuple[str, ...] = DEFAULT_RUN_STATUSES
+    requires_persisted_draft: bool = False
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,8 @@ def validate_scenarios(scenarios: tuple[ConversationScenario, ...]) -> None:
             unknown = set(turn.actions_after) - SUPPORTED_ACTIONS
             if unknown:
                 raise ValueError(f'unsupported authored actions: {sorted(unknown)}')
+            if len(turn.actions_after) != len(set(turn.actions_after)):
+                raise ValueError(f'duplicate authored actions: {turn.actions_after}')
             if not turn.allowed_run_statuses:
                 raise ValueError('each turn must allow at least one agent run status')
 
@@ -65,6 +68,7 @@ def load_scenarios(path: Path = DATASET) -> tuple[ConversationScenario, ...]:
             user=turn['user'], obligation=turn['obligation'],
             actions_after=tuple(turn.get('actions_after', ())),
             allowed_run_statuses=tuple(turn.get('allowed_run_statuses', DEFAULT_RUN_STATUSES)),
+            requires_persisted_draft=bool(turn.get('requires_persisted_draft', False)),
         ) for turn in row['turns']),
     ) for row in data['scenarios'])
     validate_scenarios(cases)

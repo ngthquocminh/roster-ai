@@ -102,6 +102,16 @@ def normalize_openrouter_model(model: str) -> str:
     return model[len(prefix):] if model.startswith(prefix) else model
 
 
+class _RetryableJudgeFailure(Exception):
+    """Any transient judge-call failure attempt 1 should retry once before
+    raising -- a non-200 status, missing usage, or a malformed response shape
+    are exactly as retryable as a transport error or a malformed JSON body."""
+
+    def __init__(self, error_type):
+        super().__init__(error_type)
+        self.error_type = error_type
+
+
 def _validate_judgment_content(content):
     if isinstance(content, dict):
         return ConversationJudgment.model_validate(content)
@@ -151,20 +161,21 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
                 response = transport.post('https://openrouter.ai/api/v1/chat/completions',
                                           headers={'Authorization': 'Bearer ' + api_key}, json=payload)
                 if response.status_code != 200:
-                    raise IncompleteConversationRun(f'judge_http_{response.status_code}')
+                    raise _RetryableJudgeFailure(f'http_{response.status_code}')
                 data = response.json()
-            except (httpx.HTTPError, ValueError) as exc:
-                # A transport failure or an undecodable body is retryable exactly
-                # like a malformed judgment; only the last attempt is terminal.
+                usage = data.get('usage', {})
+                if any(key not in usage for key in ('prompt_tokens', 'completion_tokens', 'cost')):
+                    raise _RetryableJudgeFailure('usage_unavailable')
+            except (httpx.HTTPError, ValueError, _RetryableJudgeFailure) as exc:
+                # A transport failure, an undecodable body, a non-200 status, or
+                # missing usage are all equally retryable; only the last attempt
+                # is terminal.
+                error_type = exc.error_type if isinstance(exc, _RetryableJudgeFailure) else type(exc).__name__
                 attempts.append({'attempt': attempt_number, 'outcome': 'transport',
-                                 'error_type': type(exc).__name__})
+                                 'error_type': error_type})
                 if attempt_number == 1:
                     continue
-                raise IncompleteConversationRun(
-                    f'judge_unavailable_{type(exc).__name__}') from None
-            usage = data.get('usage', {})
-            if any(key not in usage for key in ('prompt_tokens', 'completion_tokens', 'cost')):
-                raise IncompleteConversationRun('judge_usage_unavailable')
+                raise IncompleteConversationRun(f'judge_unavailable_{error_type}') from None
             budget.charge(requests=1, tool_calls=0,
                           tokens=usage['prompt_tokens'] + usage['completion_tokens'], cost_usd=usage['cost'])
             owned_usage = {
@@ -178,10 +189,15 @@ def judge_turn(*, api_key: str, model: str, transcript: list[dict], obligation: 
                 # the already-decoded JSON object for a strict response format.
                 # Validate either representation against the same owned model.
                 result = _validate_judgment_content(content)
-            except ValidationError as exc:
-                first = exc.errors(include_url=False, include_input=False)[0]
-                category = str(first.get('type', 'invalid'))
-                location = '.'.join(map(str, first.get('loc', ()))) or 'root'
+            except (ValidationError, KeyError, IndexError, TypeError) as exc:
+                # A malformed judgment shape (missing/short `choices`) is exactly
+                # as retryable as a malformed judgment CONTENT.
+                if isinstance(exc, ValidationError):
+                    first = exc.errors(include_url=False, include_input=False)[0]
+                    category = str(first.get('type', 'invalid'))
+                    location = '.'.join(map(str, first.get('loc', ()))) or 'root'
+                else:
+                    category, location = type(exc).__name__, 'root'
                 attempts.append({**owned_usage, 'outcome': 'malformed',
                                  'error_type': category, 'error_location': location})
                 if attempt_number == 1:

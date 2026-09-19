@@ -144,8 +144,11 @@ def build_coverage(runs, inventory=None) -> dict:
             continue
         reason = UNREACHABLE_IN_CHAT.get(operation)
         if reason is None:
+            # A sentinel guaranteed absent from `observation_ids`, never a real,
+            # unrelated observation borrowed just to satisfy the membership check
+            # in `require_complete_coverage` -- a gap row proves nothing live.
             rows.append({'operation': operation, 'source': 'capability', 'state': 'gap',
-                         'observation_id': next(iter(observation_ids), 'none'),
+                         'observation_id': 'gap:' + operation,
                          'reason': 'No authored turn exercised this operation.'})
             continue
         rows.append({'operation': operation, 'source': 'deterministic', 'reason': reason})
@@ -161,6 +164,8 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
              accepted_findings=(), ignore_paths=()) -> dict:
     from scripts.evidence_binding import resolve_bindings
 
+    if not run_paths:
+        raise ValueError('at least one run report is required')
     runs = [json.loads(Path(path).read_text(encoding='utf-8')) for path in run_paths]
     coverage, observation_ids = build_coverage(runs)
     inventory = capability_inventory()
@@ -232,7 +237,12 @@ def main(argv=None) -> int:
     parser.add_argument('--accept-finding', action='append', default=[],
                         help='SCENARIO:TURN a reliability failure is accepted for.')
     args = parser.parse_args(argv)
-    accepted = [tuple(value.split(':', 1)) for value in args.accept_finding]
+    accepted = []
+    for value in args.accept_finding:
+        scenario, sep, turn = value.partition(':')
+        if not sep or not turn.isdigit():
+            parser.error(f'--accept-finding must be SCENARIO:TURN (an integer), got {value!r}')
+        accepted.append((scenario, turn))
     report = generate(args.runs, args.output, allow_dirty=args.allow_dirty,
                       accepted_findings=accepted, ignore_paths=args.ignore_path)
     print(json.dumps({key: report[key] for key in (

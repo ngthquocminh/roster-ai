@@ -7,7 +7,7 @@ def report():
     inventory = capability_inventory()
     return {'inventory_digest': inventory['digest'], 'tool_coverage': [
         {'source': 'capability', 'operation': operation, 'observation_id': 'observed-1',
-         'state': 'gap', 'reason': 'A recorded test attempt found no supported path.'}
+         'state': 'success'}
         for operation in inventory['live_required_operations']
     ] + [
         {'source': 'deterministic', 'operation': operation,
@@ -82,6 +82,19 @@ def test_api_commands_cannot_replace_llm_tool_coverage():
     value = report()
     value['tool_coverage'][0]['source'] = 'application_command'
     with pytest.raises(ValueError, match='uncovered operations'):
+        require_complete_coverage(value, observation_ids={'observed-1'})
+
+
+def test_a_gap_row_never_counts_as_covered():
+    """A gap row records an explicit, explained absence of live proof -- it must
+    never satisfy the "is this operation covered" check itself (the defect a
+    2026-09-18 review found: a gap row was being credited into `covered`)."""
+    value = report()
+    target = value['tool_coverage'][0]
+    target['state'] = 'gap'
+    target['reason'] = 'No authored turn exercised this operation.'
+    target.pop('observation_id', None)
+    with pytest.raises(ValueError, match='uncovered operations: ' + target['operation'].replace('.', r'\.')):
         require_complete_coverage(value, observation_ids={'observed-1'})
 
 
