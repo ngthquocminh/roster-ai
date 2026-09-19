@@ -46,7 +46,7 @@ Recorded matrix (the one the committed evidence file describes; refreshed with i
 | False claims, wrong facts, missing effects | **none** |
 | Tracked spend | USD 0.58 |
 
-Run `64ca2862-a81c-45f7-adcb-56586f62d57f`, measured at commit `db0a5dd` on a clean tree.
+Run `64ca2862-a81c-45f7-adcb-56586f62d57f`, measured on a clean tree at `437b63a`, the code commit the evidence binds (the run started at `db0a5dd`, a docs-only commit; no code file differs between the two, which `evidence.generate` checks and records as `measured_at_commit`).
 
 Accepted findings (recorded, not hidden), each passed 2 of 3 and none involved a false claim: **B:5** and **C:3** were an agent turn that ended without an answer (`unsuccessful_agent_turn`: an invalid output and a run-budget exhaustion), and **B:8** was a completed answer (feasible candidate, 76 assignments) that the judge scored 1 for completeness. Roughly 1 turn in 30 fails in this matrix, spread across different turns rather than a fixed set of broken ones. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates, the accepted findings' per-execution failure reasons, the verdict, and the sha256 of the source report.
 

@@ -9,7 +9,7 @@ no browser journey.** The numbered lessons below are still the most useful part;
 ## Resume point
 
 **STATUS 2026-09-19.** All review slices are done and the evidence was regenerated once (commit `2d2bdda`,
-measured at `db0a5dd`, run `64ca2862`): 87 of 90 turns, 6 of 9 executions clean, every scenario clean at least
+bound to code commit `437b63a`, run `64ca2862`): 87 of 90 turns, 6 of 9 executions clean, every scenario clean at least
 once, no false claims. Accepted findings (Minh): B:5, B:8, C:3, each passed 2 of 3. The story is in `review`.
 Earlier attempts of the measurement session (two build failures, one crashed run) are disclosed in
 `docs/TESTING.md`.
