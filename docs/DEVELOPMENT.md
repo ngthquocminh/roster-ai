@@ -1,4 +1,3 @@
-<!-- generated-by: gsd-doc-writer -->
 # Development Guide
 
 ShiftMind is two independently run halves that talk to each other over HTTP in

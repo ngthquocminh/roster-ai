@@ -1,24 +1,3 @@
-## BMAD workflows are an authorized entry point
-
-The BMAD story workflows — `/bmad-create-story`, `/bmad-dev-story`,
-`/bmad-code-review`, and the `bmad-*` skills they invoke — are authorized to
-create, edit, and delete repository files directly. This is a standing bypass of
-the **GSD Workflow Enforcement** section below, not a per-invocation one, and it
-satisfies that section's own "unless the user explicitly asks to bypass it"
-clause.
-
-Rationale: these workflows carry their own planning and execution artifacts —
-story files under `_bmad-output/implementation-artifacts/`, status tracking in
-`sprint-status.yaml`, and a Dev Agent Record plus File List inside each story —
-so the state-tracking concern GSD enforcement exists to protect is already met by
-a parallel mechanism. Routing them through `/gsd-quick` would produce duplicate,
-competing records of the same work.
-
-This bypass does **not** extend to ad-hoc direct edits outside a BMAD or GSD
-workflow; those still start through a GSD command.
-
-<!-- GSD:project-start source:PROJECT.md -->
-
 ## Project
 
 **ShiftMind**
@@ -81,10 +60,6 @@ Accessibility Floor; accessibility is proven by automated coverage alone.
   never invalidates a successfully computed schedule.
 
 - **Testing**: No live LLM API in CI — a stubbed provider must drive tests.
-
-<!-- GSD:project-end -->
-
-<!-- GSD:stack-start source:codebase/STACK.md -->
 
 ## Technology Stack
 
@@ -176,10 +151,6 @@ Accessibility Floor; accessibility is proven by automated coverage alone.
 - **Frontend:** S3 + CloudFront (static content delivery network)
 - **Backend:** Docker container on AWS App Runner / ECS / EC2 (not Lambda — CP-SAT solves are CPU-heavy and long-running)
 - Database: SQLite locally; future migration to RDS or EFS for distributed deployments
-
-<!-- GSD:stack-end -->
-
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
 
 ## Conventions
 
@@ -367,10 +338,6 @@ Accessibility Floor; accessibility is proven by automated coverage alone.
 ### Error Handling Philosophy
 
 ### Documentation Style
-
-<!-- GSD:conventions-end -->
-
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
 
 ## Architecture
 
@@ -590,10 +557,6 @@ Accessibility Floor; accessibility is proven by automated coverage alone.
 - Insight reports cached in `runs.insight_json` (avoid repeated LLM calls)
 - Error messages stored in `runs.error` for debugging failed runs
 
-<!-- GSD:architecture-end -->
-
-<!-- GSD:skills-start source:skills/ -->
-
 ## Project Skills
 
 | Skill | Description | Path |
@@ -672,27 +635,3 @@ Accessibility Floor; accessibility is proven by automated coverage alone.
 | bmad-ux | Plan UX patterns and design specifications. Use when the user says "lets create UX design" or "create UX specifications" or "help me plan the UX" | `.claude/skills/bmad-ux/SKILL.md` |
 | bmad-validate-prd | 'DEPRECATED — consolidated into bmad-prd validate intent - this skill will be removed in v7 in favor of `bmad-prd`.' | `.claude/skills/bmad-validate-prd/SKILL.md` |
 | bmad-workflow-builder | Builds, edits, and analyzes workflows and skills. Use when the user requests to "build a workflow", "modify a workflow", "quality check workflow", or "analyze skill". | `.claude/skills/bmad-workflow-builder/SKILL.md` |
-<!-- GSD:skills-end -->
-
-<!-- GSD:workflow-start source:GSD defaults -->
-
-## GSD Workflow Enforcement
-
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
-
-Use these entry points:
-
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
-
-<!-- GSD:profile-start -->
-
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->

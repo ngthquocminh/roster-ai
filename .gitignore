@@ -40,19 +40,14 @@ Thumbs.db
 node_modules/
 dist/
 
-# GSD Core — installed project-locally via `npx @opengsd/gsd-core@latest --claude --local`.
-# Reinstallable from that one command, so the tree stays out of history.
+# Claude Code local tooling — reinstallable, stays out of history.
 # .claude/CLAUDE.md is authored by us and stays tracked.
 .claude/agents/
 .claude/commands/
 .claude/hooks/
 .claude/scripts/
-.claude/gsd-core/
 .claude/worktrees/
 .claude/package.json
-.claude/gsd-file-manifest.json
-.claude/gsd-install-state.json
-.claude/.gsd-profile
 .claude/settings.local.json
 .claude/skills/
 
@@ -69,20 +64,11 @@ _bmad/config.user.toml
 # regenerates it) — same treatment as the already-ignored .claude/skills/
 .agents/skills/
 
-# GSD Core for Codex — project-local, reinstallable tooling
-.codex/agents/gsd-*
-.codex/gsd-core/
-.codex/gsd-migration-journal/
-.codex/hooks/gsd-*
+# Codex local tooling — project-local, reinstallable
+.codex/agents/
 .codex/scripts/
 .codex/config.toml
-.codex/gsd-file-manifest.json
-.codex/gsd-install-state.json
-.codex/.gsd-profile
 .codex/hooks.json
-
-# Generated GSD research cache
-.planning/research/.cache/
 
 # Machine-readable test reports written at the repository root by the CI jobs
 # in .github/workflows/ci.yml (and by anyone mirroring them locally per

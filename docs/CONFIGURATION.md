@@ -1,4 +1,3 @@
-<!-- generated-by: gsd-doc-writer -->
 # Configuration
 
 ShiftMind has two independently configured halves: the Python backend (FastAPI +
