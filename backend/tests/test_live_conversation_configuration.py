@@ -73,7 +73,7 @@ def test_the_record_holds_no_credential_field(override):
     configuration = _configuration(override)
     assert set(configuration) == {
         'agent', 'judge', 'reasoning_effort', 'override_file', 'override_sha256',
-        'configuration_digest'}
+        'configuration_digest', 'behavioral_digest'}
     assert 'api_key' not in json.dumps(configuration).lower()
 
 

@@ -46,6 +46,13 @@ dev = [
     # attributes. Deliberately in the dev group, never [project].dependencies:
     # it is not shipped at runtime, and it is not the Logfire SDK (Story 5.1).
     "opentelemetry-sdk",
+    # TEST-ONLY (Story 5.8). `behavioral_digest` parses the tracked compose
+    # override's `environment` maps so the price keys can be excluded from the
+    # digest the live-conversation drop check compares on. Deliberately in the
+    # dev group, never [project].dependencies: `Dockerfile:13` builds with
+    # `uv sync --no-dev`, so `yaml` is absent at runtime and must never be
+    # imported outside `backend/evals/` and `backend/scripts/`.
+    "pyyaml",
 ]
 
 [tool.pytest.ini_options]

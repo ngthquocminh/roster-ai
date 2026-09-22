@@ -3,7 +3,7 @@
 baseline_commit: ec98efb4d8396244e3471ab7b2b35ec23c577252
 ---
 
-Status: ready-for-dev
+Status: review
 
 Date: 2026-09-22
 Origin: Minh's review of what this repository calls a "golden dataset" and a "regression test", and the four scoping decisions settled in that session.
@@ -96,14 +96,14 @@ Each decision states its mechanism and, in one sentence, what that mechanism doe
 
 ## Implementation tasks
 
-- [ ] Re-derive the Facts table at HEAD: confirm the Story 5.7 evidence's per-turn counts and digests, re-measure the backend/frontend suite baselines, and confirm the CRLF/LF divergence still holds on this machine. Record the numbers; do not trust this file's. (AC: 1 — per the Facts table's final row.)
-- [ ] Add `behavioral_digest` to `measured_configuration`, and `PyYAML` to the `dev` group with a regenerated `uv.lock`. (AC: 3 — per Decisions 7 and 9.)
-- [ ] Promote the normalising digest routine and derive `backend/evals/baselines/live-conversations.json` from the committed Story 5.7 evidence through a committed script. (AC: 1 — per Decisions 1, 2 and 3.)
-- [ ] Implement the comparator: three tiers, the `clean_scenarios` structural check, the configuration and truncation refusals, and the Gate-A-shaped per-check result. (AC: 2, 3, 4 — per Decisions 4, 5, 6, 8 and 11.)
-- [ ] Write the offline test suite using the committed evidence as a fixture, and demonstrate every new guard failing first before it passes. (AC: 5)
-- [ ] Add the free consistency check to the default pytest suite, and publish the operator-invoked drop-check command. Add no workflow job, cron entry or secret. (AC: 4 — per Decision 6.)
-- [ ] Correct `backend/evals/README.md` and `docs/TESTING.md`, and publish the checker's runnable command. Remove `docs/TESTING.md:70`'s dangling `.planning/codebase/` link in the same edit. (AC: 6 — per Decision 10; the pinned substrings in `test_evaluation_harness.py:693` must still pass, and the dangling link is per the Facts table's pre-existing-failures row.)
-- [ ] Run the full default backend and frontend suites and confirm no regression against Task 1's re-measured floors. State the `DEVELOPMENT.md` link failure as pre-existing and out of scope rather than inheriting it silently. (AC: 5, 7 — per the Facts table's pre-existing-failures row.)
+- [x] Re-derive the Facts table at HEAD: confirm the Story 5.7 evidence's per-turn counts and digests, re-measure the backend/frontend suite baselines, and confirm the CRLF/LF divergence still holds on this machine. Record the numbers; do not trust this file's. (AC: 1 — per the Facts table's final row.)
+- [x] Add `behavioral_digest` to `measured_configuration`, and `PyYAML` to the `dev` group with a regenerated `uv.lock`. (AC: 3 — per Decisions 7 and 9.)
+- [x] Promote the normalising digest routine and derive `backend/evals/baselines/live-conversations.json` from the committed Story 5.7 evidence through a committed script. (AC: 1 — per Decisions 1, 2 and 3.)
+- [x] Implement the comparator: three tiers, the `clean_scenarios` structural check, the configuration and truncation refusals, and the Gate-A-shaped per-check result. (AC: 2, 3, 4 — per Decisions 4, 5, 6, 8 and 11.)
+- [x] Write the offline test suite using the committed evidence as a fixture, and demonstrate every new guard failing first before it passes. (AC: 5)
+- [x] Add the free consistency check to the default pytest suite, and publish the operator-invoked drop-check command. Add no workflow job, cron entry or secret. (AC: 4 — per Decision 6.)
+- [x] Correct `backend/evals/README.md` and `docs/TESTING.md`, and publish the checker's runnable command. Remove `docs/TESTING.md:70`'s dangling `.planning/codebase/` link in the same edit. (AC: 6 — per Decision 10; the pinned substrings in `test_evaluation_harness.py:693` must still pass, and the dangling link is per the Facts table's pre-existing-failures row.)
+- [x] Run the full default backend and frontend suites and confirm no regression against Task 1's re-measured floors. State the `DEVELOPMENT.md` link failure as pre-existing and out of scope rather than inheriting it silently. (AC: 5, 7 — per the Facts table's pre-existing-failures row.)
 
 ### Project Structure Notes
 
@@ -172,8 +172,93 @@ The live-conversation suite itself is opt-in and paid and is NOT run by this sto
 
 ### Agent Model Used
 
+claude-opus-5 (Claude Code, bmad-dev-story)
+
 ### Debug Log References
+
+**Task 1 — Facts re-derived at HEAD (`ec98efb`), not trusted from this file.**
+
+| Fact | Re-measured value | Verdict |
+| --- | --- | --- |
+| Story 5.7 per-turn counts | 30 turns, 87/90; partials exactly `B:5`, `B:8`, `C:3` at 2/3 | confirmed |
+| `measured_at_commit` | `db0a5dd0e5ace0929b8115299f57b10fb73c6c90`; `clean_scenarios [A,B,C]`, `complete_repetitions 3`, `blocking_reasons []`, `schema_version "3"` | confirmed |
+| CRLF/LF divergence | working tree 47,776 B sha `4ca6215c…`; LF-normalised 46,764 B sha `5a760cee…` (= committed blob) | confirmed, still live on this machine |
+| `compose.override.yml` digest equality | `_file_digest` → `1aaef516…` == the recorded `override_sha256` | confirmed; the baseline's `behavioral_digest` is computed from the working tree, no git archaeology |
+| `_dataset_file_digest` call sites | 3, all inside `evidence_binding.py`; no test pins `__all__` or the symbol | confirmed, promotion safe |
+| Backend default suite floor | 2160 passed, 2 failed, 1 skipped, 10 deselected (193s) | confirmed as the diff floor |
+| Frontend suite floor | 85 files, 648 tests passed | measured |
+
+Derived `behavioral_digest` for the baseline configuration: `c065dd87f5aa8ef0311dfea7fdb1dc7a9525e6389231b7c0f63c01dedbc73bec`.
+Baseline `source_evidence_sha256`: `5a760cee43b6f95b5f22c68953a83a30265de9aae32d3a02d1c910a022f35609` (LF-normalised; equals the committed blob).
+
+**Mutation table (AC5).** Every row mutated FINISHED product code, observed the named guard fail, then restored; the tree was left clean. No red came from an unresolved import or an unwritten module.
+
+| Mutation applied to real code | Guard that should redden | Before | After |
+| --- | --- | --- | --- |
+| `tier_1` qualifier drops `passed == executed` | `test_tier_1_exempts_the_three_turns_the_baseline_never_scored_full` | 1 passed | 1 failed |
+| `tier_1` collapse test `== 0` → `< 0` | `test_tier_1_names_a_collapsed_full_marks_turn` | 1 passed | 1 failed |
+| `tier_1` missing-turn detection → `[]` | `test_tier_1_fails_when_a_watched_turn_is_missing_from_the_run` | 1 passed | 1 failed |
+| `tier_2` reads `[]` instead of `false_claims` | `test_tier_2_fails_on_a_single_never_accept_occurrence` | 1 passed | 1 failed |
+| `tier_2` detail renders the whole claim dict | `test_tier_2_failure_names_turns_and_categories_only` | 1 passed | 1 failed |
+| `AGGREGATE_FLOOR` 83 → 0 | `test_tier_3_fails_one_turn_below_the_floor` | 1 passed | 1 failed |
+| `AGGREGATE_FLOOR` 83 → 84 | `test_tier_3_passes_exactly_at_the_floor` | 1 passed | 1 failed |
+| `structural_check` missing set → `[]` | `test_structural_check_fails_when_a_scenario_lost_its_clean_run` | 1 passed | 1 failed |
+| `configuration_refusal` digest-mismatch branch disabled | `test_a_changed_behavioural_configuration_is_refused_not_compared` | 1 passed | 1 failed |
+| `configuration_refusal` absent-digest branch disabled | `test_a_report_without_a_behavioural_digest_is_refused` | 1 passed | 1 failed |
+| `_truncation_reasons` ignores `blocking_reasons` | `test_a_truncated_run_is_refused_…` | 3 passed | 1 failed, 2 passed |
+| `_truncation_reasons` ignores `complete_repetitions` | `test_a_truncated_run_is_refused_…` | 3 passed | 1 failed, 2 passed |
+| `_truncation_reasons` ignores `runs[].complete` | `test_a_truncated_run_is_refused_…` | 3 passed | 1 failed, 2 passed |
+| `compare` emits real tier verdicts under a refusal | `test_a_changed_behavioural_configuration_is_refused_not_compared` | 1 passed | 1 failed |
+| `baseline_matches_source` digest branch disabled | `test_consistency_check_names_the_drift_when_the_source_moves` | 1 passed | 1 failed |
+| `baseline_matches_source` missing-file branch disabled | `test_consistency_check_fails_when_the_source_is_absent` | 1 passed | 1 failed |
+| `main` always returns 0 | `test_the_drop_check_exits_non_zero_on_a_tier_failure` | 1 passed | 1 failed |
+| `NON_PROVING` drops `"skipped"` | `test_every_check_uses_the_gate_a_status_vocabulary` | 1 passed | 1 failed |
+| `main` stops folding consistency into `passed` | `test_a_drifted_baseline_makes_the_drop_check_exit_non_zero` | 1 passed | 1 failed |
+| `behavioral_environment` keeps the price keys | `test_behavioral_digest_is_stable_across_a_price_or_comment_edit` | 1 passed | 1 failed |
+| `behavioral_environment` becomes an allow-list | `test_a_newly_added_environment_key_is_included_by_default` | 1 passed | 1 failed |
+| `behavioral_environment` keeps only the `api` block | `test_behavioral_digest_excludes_only_the_price_keys` | 1 passed | 1 failed |
+| deriver hashes raw bytes instead of LF-normalised | `test_committed_baseline_is_exactly_what_the_script_derives` | 1 passed | 1 failed |
+| deriver hard-codes `total_passed: 90` | `test_committed_baseline_is_exactly_what_the_script_derives` | 1 passed | 1 failed |
+| `BASELINE_PATH` moved under `evidence/story-5.8/` | `test_baseline_is_not_in_the_evidence_tree` | 1 passed | 1 failed |
+| `measured_configuration` changes the digested body | `test_adding_behavioral_digest_left_configuration_digest_untouched` | 1 passed | 1 failed |
+
+Two mutations initially did NOT redden. Both are recorded rather than quietly dropped:
+
+1. Disabling `main`'s `result["passed"] = result["passed"] and consistent` changed nothing, because the only test over that row asserted the row EXISTED, not that a drifted baseline fails the gate — a real gap. **Fixed** by adding `test_a_drifted_baseline_makes_the_drop_check_exit_non_zero`, which the same mutation now reddens.
+2. Mutating the deriver's digest to raw bytes was aimed at `test_baseline_source_digest_is_line_ending_normalised`, which reads the committed file and therefore cannot see a deriver change. The guard that actually covers it is `test_committed_baseline_is_exactly_what_the_script_derives`; re-pointed and confirmed red. This revealed no coverage gap — the normalisation is guarded — only a mis-stated claim, corrected here.
+
+**Pre-existing failure, not inherited silently.** `test_walkthrough_claims.py::test_reviewer_facing_relative_links_resolve[DEVELOPMENT.md]` fails at HEAD and still fails: `docs/DEVELOPMENT.md:195` links to `../.planning/codebase/CONVENTIONS.md`, which `ec98efb` deleted. `docs/DEVELOPMENT.md` is outside this story's scope, so the link is left in place and recorded here. The sibling `[TESTING.md]` case WAS in scope (AC6 edits that file) and is now green.
+
+**Skip count.** The suite reports 2 skipped rather than the floor's 1 while the tree is dirty: `test_evidence_binding.py:592` skips with "binding realism check needs a clean tree". It returns to 1 skipped once the work is committed, which the final clean-tree run confirms.
 
 ### Completion Notes List
 
+- **AC1** — `backend/evals/baselines/live-conversations.json` is derived by `backend/scripts/derive_live_conversation_baseline.py` and is byte-identical to what that script re-derives (asserted, not claimed). It carries per-turn `{executed, passed}`, `source_evidence_path`, `source_evidence_sha256`, `measured_at_commit`, both models, `reasoning_effort`, `configuration_digest` and `behavioral_digest`. It sits outside `evidence/`, which is Decision 1's entire mechanism; `test_baseline_is_not_in_the_evidence_tree` asserts the location rather than the intent.
+- **AC2** — three tiers plus the structural check, each a separate result row. Tier 1 watches the 27 full-marks turns and exempts `B:5`/`B:8`/`C:3`; Tier 2 READS the existing fact/effect layer's `false_claims` verdict and never re-derives a metric (per `docs/DOMAIN-MODEL.md`); Tier 3's floor is 83/90; the structural check requires `A`, `B`, `C`. `test_a_pass_on_one_tier_never_masks_a_failure_on_another` proves the non-masking directly.
+- **AC3** — a behavioural-configuration mismatch or a truncated run on either side yields `outcome: "refused"` with a non-proving `skipped` status, and the tiers then report no verdict at all. Truncation is detected through this suite's own vocabulary (`blocking_reasons`, `complete_repetitions`, `runs[].complete`), never an invented `stopped_reason`.
+- **AC4** — the operator-invoked drop check exits 1 on any tier failure, any refusal, and on a drifted baseline (all three proved through a real subprocess, not a function call). Results use the Gate A vocabulary, asserted equal to `gate_a_readiness._NON_PROVING` by import rather than by transcription. The free half — committed baseline still matches committed Story 5.7 evidence — runs in the default suite. **No workflow job, secret or cron entry added**; `.github/` is untouched.
+- **AC5** — 34 new tests, all offline, all using the committed evidence as fixture; the mutation table above demonstrates each guard failing first.
+- **AC6** — `backend/evals/README.md` and `docs/TESTING.md` now call the scripted corpus a conformance suite whose model output is authored, name what it therefore cannot prove (model routing quality), and point at the live counterpart. The four pinned substrings in `test_evaluation_harness.py:693` still pass. `docs/TESTING.md`'s dangling `.planning/codebase/` link is removed in the same edit and the drop check's runnable command published.
+- **AC7** — no directory renamed, no Gate B aggregator built, `evidence/epic-5/release-gate-report.json` not created. No file under `evidence/` is modified. `configuration_digest` is unchanged: `behavioral_digest` is added to the RETURNED dict after the digest is computed over the original body, and `test_adding_behavioral_digest_left_configuration_digest_untouched` re-derives the Story 5.7 value and asserts equality.
+- **Deviation worth naming.** `test_live_conversation_configuration.py::test_the_record_holds_no_credential_field` asserts a CLOSED key set on `measured_configuration`, so the new field correctly reddened it. The set was extended with `behavioral_digest`; the guard's purpose (no credential ever appears) is unchanged and the closed-set mechanism was preserved rather than loosened to a subset check.
+- **`PyYAML`** is in the `dev` group with the `opentelemetry-sdk` TEST-ONLY rationale written inline, `uv.lock` regenerated in the same change, and `yaml` imported only inside `backend/evals/` — lazily, inside the function, so importing the module in an image built with `uv sync --no-dev` does not fail.
+
 ### File List
+
+- `backend/evals/baselines/live-conversations.json` (new)
+- `backend/scripts/derive_live_conversation_baseline.py` (new)
+- `backend/scripts/live_conversation_drop_check.py` (new)
+- `backend/tests/test_live_conversation_drop_check.py` (new)
+- `backend/evals/live_conversations/configuration.py` (modified)
+- `backend/scripts/evidence_binding.py` (modified)
+- `backend/tests/test_live_conversation_configuration.py` (modified)
+- `backend/evals/README.md` (modified)
+- `backend/pyproject.toml` (modified)
+- `backend/uv.lock` (modified)
+- `docs/TESTING.md` (modified)
+
+## Change Log
+
+| Date | Change |
+| --- | --- |
+| 2026-09-22 | Story 5.8 implemented: committed live-conversation baseline, three-tier + structural comparator with configuration and truncation refusals, Gate-A-shaped operator drop check, free default-suite consistency check, `behavioral_digest`, and the README/TESTING wording correction. Backend 2195 passed / 1 pre-existing failure; frontend 648 passed. |

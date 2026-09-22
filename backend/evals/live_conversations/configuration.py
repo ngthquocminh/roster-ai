@@ -5,6 +5,16 @@ model with their endpoint identity, the reasoning effort, and the sha256 of the
 tracked compose override that carries the price rates and the request/tool/
 token/deadline limits. `configuration_digest` covers all of it, so two reports
 share a digest only if they ran the same configuration.
+
+`behavioral_digest` (Story 5.8) is the narrower companion a regression gate can
+actually compare on: the same models and effort, but the override reduced to its
+parsed `environment` maps with the per-token PRICE keys excluded, so editing the
+file's comment header or correcting a price does not invalidate a comparison.
+Prices are behaviourally coupled through the spend limiter, not the model, so a
+truncated run is refused separately (`blocking_reasons`, `complete_repetitions`)
+rather than by pinning prices here. The rule is an EXCLUSION, never an
+allow-list: a newly added environment key is included by default and fails
+closed.
 """
 from __future__ import annotations
 
@@ -22,9 +32,33 @@ AGENT_ENDPOINTS = {'openrouter': 'https://openrouter.ai/api/v1'}
 DEFAULT_OVERRIDE_FILE = ROOT / 'backend/evals/live_conversations/compose.override.yml'
 
 
+#: Environment keys excluded from `behavioral_digest`: the per-token prices feed
+#: the spend limiter's accounting, not the agent's behaviour.
+PRICE_KEY_SUFFIX = '_USD_PER_MTOK'
+
+
 def _file_digest(path: Path) -> str:
     # Line endings normalised, so the digest does not move with `core.autocrlf`.
     return hashlib.sha256(path.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+
+
+def behavioral_environment(override_file: Path) -> dict:
+    """The override's `environment` maps, per service, minus the price keys.
+
+    Both the `api` and `worker` service blocks are kept SEPARATELY: they are
+    expected to agree, and silently merging them would hide a configuration
+    where they do not.
+    """
+    import yaml  # dev-group, test-only -- see backend/pyproject.toml
+
+    document = yaml.safe_load(Path(override_file).read_text(encoding='utf-8')) or {}
+    services = document.get('services') or {}
+    return {
+        name: {key: str(value)
+               for key, value in (services.get(name, {}).get('environment') or {}).items()
+               if not key.endswith(PRICE_KEY_SUFFIX)}
+        for name in sorted(services)
+    }
 
 
 def measured_configuration(*, model: str, judge_model: str, reasoning_effort: str,
@@ -47,4 +81,23 @@ def measured_configuration(*, model: str, judge_model: str, reasoning_effort: st
         'override_sha256': _file_digest(override),
     }
     digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode('utf-8')).hexdigest()
-    return {**body, 'configuration_digest': digest}
+    return {**body, 'configuration_digest': digest,
+            'behavioral_digest': behavioral_digest(
+                model=model, judge_model=judge_model,
+                reasoning_effort=reasoning_effort, override_file=override)}
+
+
+def behavioral_digest(*, model: str, judge_model: str, reasoning_effort: str,
+                      override_file: Path) -> str:
+    """The digest a regression comparison is refused on when it differs.
+
+    Serialised exactly as `configuration_digest` is: `json.dumps(sort_keys=True)`
+    over the body, sha256 of its UTF-8 bytes.
+    """
+    body = {
+        'agent_model': model,
+        'judge_model': judge_model,
+        'reasoning_effort': reasoning_effort,
+        'environment': behavioral_environment(Path(override_file)),
+    }
+    return hashlib.sha256(json.dumps(body, sort_keys=True).encode('utf-8')).hexdigest()
