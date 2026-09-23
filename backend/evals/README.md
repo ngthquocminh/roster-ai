@@ -1,7 +1,17 @@
 # ShiftMind golden evaluation dataset
 
-This directory is the shared, version-controlled regression dataset introduced
-by Story 2.2. Cases live as one JSON file per case under
+This directory is the shared, version-controlled **scripted conformance suite**
+introduced by Story 2.2. Its model output is authored, not sampled: each case
+fixes what the model is taken to have produced and asserts what the application
+then does with it. That makes it a strong conformance check on tool contracts,
+refusals, evidence and visible state -- and it is deliberately NOT a check on
+model routing quality, since a case can never disagree with its own authored
+output. Whether a real model picks the right tool, grounds its claims and keeps
+its promises across a conversation is proved only by the live counterpart,
+`evals/live_conversations/`, whose results are gated against the committed
+baseline in `evals/baselines/live-conversations.json` (Story 5.8).
+
+Cases live as one JSON file per case under
 `golden/<capability>/`. The harness loads every `*.json` recursively; a malformed
 file fails normal CI rather than being skipped.
 

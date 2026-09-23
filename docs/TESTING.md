@@ -25,6 +25,31 @@ The suite is opt-in and paid: it is never selected by `pytest`. It builds the AP
 
 The measured configuration -- reasoning effort, the per-token prices that drive the spend limiter, and the request, tool-call, token and deadline limits -- is the tracked `backend/evals/live_conversations/compose.override.yml`, which `--override-file` defaults to. Every run report records the models, their endpoint identity (no credential), the reasoning effort and that file's sha256, plus the content id of the API and web images it ran; the evidence binds them as `measured_configuration` and `version_bindings.image`. Update the price rates in that file whenever `--agent-model` changes, or every cost figure is wrong.
 
+### Gate the result against the committed baseline
+
+The suite above answers *how good is it right now*. `backend/evals/baselines/live-conversations.json` records what known-good looked like -- the per-turn `{executed, passed}` counts of the Story 5.7 measurement (87/90), its models, effort and behavioural configuration digest. It is a projection of that one measurement, derived by `backend/scripts/derive_live_conversation_baseline.py` and never hand-typed, and it is deliberately tracked config rather than evidence, so it does not live under `evidence/`.
+
+After a paid run, compare the evidence document it produced against that baseline:
+
+```bash
+cd backend
+uv run --frozen python scripts/live_conversation_drop_check.py   --report ../evidence/story-5.7/live-conversation-journeys.json
+```
+
+Pass the *evidence* document (what `evals.live_conversations.evidence` writes), not the raw `live-matrix.json` run report -- only the former carries `turn_pass_rates`.
+
+The path above is illustrative, not a working example to copy-paste as-is: the committed Story 5.7 evidence predates `behavioral_digest` and can never gain one, so running the command verbatim against it always exits 1 with a `configuration_match` refusal. Point `--report` at the evidence document *your own* paid run just produced.
+
+The check exits non-zero on any of:
+
+- **Tier 1** -- a turn the baseline recorded at full marks now passes zero executions, named. Turns the baseline never scored full (`B:5`, `B:8`, `C:3` at 2/3) are exempt from this tier and watched by Tier 3 instead.
+- **Tier 2** -- any never-accept occurrence, on a single instance: a wrong value, unit, entity or version, a missing or unauthorized effect, or a false success claim.
+- **Tier 3** -- fewer than 83 of 90 turns passed.
+- **Structural** -- `clean_scenarios` no longer contains `A`, `B` and `C`.
+- **Refusal** -- the run's `behavioral_digest` differs from the baseline's, or either side was truncated (`blocking_reasons`, `complete_repetitions`, `runs[].complete`). A refusal is reported as a distinct outcome from a failure and never yields a tier verdict.
+
+Each verdict is reported separately in the Gate A readiness status vocabulary (`passed` / `failed` / `skipped` / `missing`), so a future Gate B assessment consumes them as rows. It is operator-invoked on the machine that ran the paid suite: the live suite may never run in `ci.yml` (NFR26/AD-16), so no workflow job, secret or cron entry exists for it. The half that needs no credential -- that the committed baseline still matches the committed Story 5.7 evidence -- runs in the default `pytest` suite on every CI run (`backend/tests/test_live_conversation_drop_check.py`). Re-derive the baseline whenever that evidence is regenerated.
+
 `--resume <report.json>` continues an interrupted report (refused unless it names the same commit, configuration and image ids; pair it with `--skip-image-build`), `--execution-retries` retries one execution that ends on an infrastructure fault, and `--skip-image-build` reuses images already built from the same code (recorded in the report). Evidence generation refuses a set of reports of which none built its images, so a first run must build; only a resume of a report that did may skip the build.
 
 ### What it covers
@@ -65,9 +90,6 @@ API client at the module boundary. A small number of backend tests are tagged
 `@pytest.mark.live` and exercise a real LLM provider; they are excluded from
 the default run and require a real API key.
 
-For a deeper walkthrough of test structure, fixtures, and mocking
-conventions with more code examples, see
-[`.planning/codebase/TESTING.md`](../.planning/codebase/TESTING.md).
 
 ## Backend (pytest)
 
@@ -111,6 +133,14 @@ above, which cover the older constraint-parsing seam. Every golden case has a
 deterministic execution (a case-driven PydanticAI `FunctionModel` double,
 `backend/evals/doubles.py`) that is the **authoritative** safety/correctness
 evidence, run in the default suite with no network access:
+
+This corpus is a **scripted conformance suite**, not a regression dataset over
+model quality: its model output is authored per case, so it proves what the
+application does with a given model turn — tool contracts, refusals, grounding,
+evidence and visible state — and it cannot prove model routing quality, because
+a case never disagrees with its own authored output. That question belongs to
+the live counterpart above, gated against `backend/evals/baselines/
+live-conversations.json`.
 
 ```bash
 cd backend

@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-19
+last_updated: 2026-09-23
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2633,6 +2633,47 @@ development_status:
   # capability as the cause. Two new stories owed (action items 1-2 below) before Gate B's
   # release-gate-report.json / the 50-case dataset-floor decision can be made. Epic 4 action A1
   # reopened (see that entry).
+
+  # Story 5.8 created 2026-09-22 (ready-for-dev) at ec98efb, clean tree. Continues the
+  # 5.5/5.6/5.7 live-eval lineage: those three MEASURE, none of them GATES. The live suites
+  # carry no recorded baseline and their verdicts are non-authoritative by construction, so
+  # nothing answers "is it worse than it was" -- the regression question. 5.8 adds the
+  # committed baseline plus a drop-checker for the live-conversation suite.
+  # NO PAID RUN IS OWED: evidence/story-5.7/live-conversation-journeys.json already carries
+  # turn_pass_rates for all 30 turns (27 at 3/3, 3 at 2/3 = B:5, B:8, C:3; 87/90), and
+  # git diff 437b63a..HEAD touches no conversation-path code, so those numbers still describe
+  # today's product. Comparator and every test are buildable offline against that file.
+  # FOUR DECISIONS settled with Minh before creation, so none arrives at review:
+  # (1) the baseline is ordinary tracked config under backend/evals/baselines/, NOT evidence/
+  #     -- membership in the NFR27 regime is decided by location alone
+  #     (test_evidence_convention.py::_evidence_files), so placement IS the enforcement;
+  #     a source_evidence_sha256 check supplies the tamper-evidence instead.
+  # (2) three tiers: a baseline-3/3 turn falling to 0/3 blocks (~0.07% false alarm, and the
+  #     primary detector); never-accept categories block on one instance; aggregate blocks
+  #     below 83/90 (~1.2% false alarm, vs ~8.4% at 85). Turns at 2/3 are exempt from tier 1.
+  # (3) all three tiers fail red, but the gate splits across two homes: CI-SECRETS-CHECKLIST.md
+  #     forbids OPENROUTER_API_KEY in ci.yml outright, so the paid drop check is
+  #     operator-invoked after a paid run, while a free consistency check (committed baseline
+  #     still matches the committed 5.7 evidence) rides the default pytest suite. NO secret,
+  #     workflow job or cron entry is added. NO Gate B aggregator is built; WALKTHROUGH.md:88
+  #     still stands ("Gate B has not passed") and release-gate-report.json stays uncreated.
+  # (4) add behavioral_digest beside an unchanged configuration_digest -- the existing digest
+  #     covers compose.override.yml's 24-line comment header, so editing a chronology comment
+  #     invalidates the baseline. Prices are excluded but ARE behaviourally coupled through
+  #     ConversationBudget, so a truncated run refuses comparison via the EXISTING
+  #     blocking_reasons/complete vocabulary (NOT stopped_reason/spend_measured -- those are
+  #     Story 5.6's report fields, and naming them here would never fire).
+  # MEASURED AT CREATION (ec98efb, clean): backend default 2160 passed, 2 failed, 1 skipped,
+  # 10 deselected. Both failures are PRE-EXISTING and caused by HEAD itself: ec98efb deleted
+  # .planning/, leaving docs/TESTING.md:70 and docs/DEVELOPMENT.md:195 pointing at
+  # .planning/codebase/*. TESTING.md is a file the story edits anyway so its link is in scope;
+  # DEVELOPMENT.md is not and stays recorded. Do not attribute either to 5.8.
+  # Renaming backend/evals/golden/ was considered and REJECTED: 40+ referencing files, three
+  # committed evidence files holding the paths as dict keys, ~20 historical story artifacts
+  # that must not be rewritten, and renaming golden_multi_turn/ would force a paid
+  # re-measurement of Story 5.6's evidence. The naming is corrected in prose instead.
+  # Like 5.5/5.6/5.7 this carries no epic-status side effect; epic-5 is already in-progress.
+  5-8-gate-live-conversation-evals-against-a-committed-baseline: done
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog

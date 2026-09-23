@@ -626,8 +626,8 @@ def resolve_bindings(
     return bindings
 
 
-def _dataset_file_digest(source: Path) -> str:
-    """sha256 of a golden case file with line endings normalized to LF.
+def dataset_file_digest(source: Path) -> str:
+    """sha256 of a tracked JSON/text file with line endings normalized to LF.
 
     Deliberately NOT :func:`file_digest`. That hashes raw working-tree bytes,
     and under `core.autocrlf` the working tree holds CRLF on Windows while the
@@ -635,7 +635,9 @@ def _dataset_file_digest(source: Path) -> str:
     the platform rather than the dataset. Two engineers on different systems
     must derive the same binding from the same committed cases.
 
-    Scoped to the evaluation dataset on purpose: `file_digest()`'s other call
+    Promoted out of private scope by Story 5.8, which needs the same rule for
+    the live-conversation baseline's `source_evidence_sha256`. Scoped to tracked
+    source data on purpose: `file_digest()`'s other call
     sites hash generated artifacts (JUnit XML) and Gate A contract fixtures,
     where raw bytes are the right identity and where changing the rule would
     retroactively unbind Story 1.4/1.5/1.9/1.10/1.11 evidence.
@@ -659,7 +661,7 @@ def _artifact_dataset_binding(
             key = source.name
         if key in files:
             raise ValueError(f"Evaluation fixture binding path collision on {key!r}")
-        files[key] = {"sha256": _dataset_file_digest(source)}
+        files[key] = {"sha256": dataset_file_digest(source)}
     return {
         "kind": "version-controlled evaluation fixture artifacts",
         "file_count": len(files),
@@ -711,7 +713,7 @@ def _evaluation_dataset_binding(
         files[key] = {
             "case_id": case_id,
             "case_version": document["case_version"],
-            "sha256": _dataset_file_digest(source),
+            "sha256": dataset_file_digest(source),
         }
 
     return {
@@ -949,6 +951,7 @@ __all__ = [
     "REPO_ROOT",
     "commit_date",
     "contract_digests",
+    "dataset_file_digest",
     "file_digest",
     "nearest_code_commit",
     "resolve_alembic_chain",

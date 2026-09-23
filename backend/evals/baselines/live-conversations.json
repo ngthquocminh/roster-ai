@@ -1,0 +1,144 @@
+{
+  "clean_scenarios": [
+    "A",
+    "B",
+    "C"
+  ],
+  "complete_repetitions": 3,
+  "configuration": {
+    "agent_model": "openrouter:openai/gpt-5.6-luna",
+    "behavioral_digest": "c065dd87f5aa8ef0311dfea7fdb1dc7a9525e6389231b7c0f63c01dedbc73bec",
+    "configuration_digest": "8c9a1d5f4d6439c73848aed022045a57fb848fab2f811c0c41c91eb025126422",
+    "judge_model": "openrouter:google/gemini-2.5-flash",
+    "reasoning_effort": "low"
+  },
+  "measured_at_commit": "db0a5dd0e5ace0929b8115299f57b10fb73c6c90",
+  "note": "A projection of the committed Story 5.7 measurement, not a second measurement. Tracked config, deliberately outside evidence/.",
+  "schema_version": "1",
+  "source_evidence_path": "evidence/story-5.7/live-conversation-journeys.json",
+  "source_evidence_sha256": "5a760cee43b6f95b5f22c68953a83a30265de9aae32d3a02d1c910a022f35609",
+  "total_executed": 90,
+  "total_passed": 87,
+  "turn_pass_rates": {
+    "A:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:10": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:11": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:12": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:5": {
+      "executed": 3,
+      "passed": 2
+    },
+    "B:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:7": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:8": {
+      "executed": 3,
+      "passed": 2
+    },
+    "B:9": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:10": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:11": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:12": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:3": {
+      "executed": 3,
+      "passed": 2
+    },
+    "C:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:7": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:8": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:9": {
+      "executed": 3,
+      "passed": 3
+    }
+  }
+}

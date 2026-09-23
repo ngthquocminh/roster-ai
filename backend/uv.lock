@@ -1343,6 +1343,7 @@ dev = [
     { name = "httpx" },
     { name = "opentelemetry-sdk" },
     { name = "pytest" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -1367,6 +1368,7 @@ dev = [
     { name = "httpx" },
     { name = "opentelemetry-sdk" },
     { name = "pytest" },
+    { name = "pyyaml" },
 ]
 
 [[package]]
