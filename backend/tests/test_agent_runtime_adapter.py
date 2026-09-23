@@ -446,6 +446,7 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
         # Story 5.7: which in-loop output rule exhausted its retries; None
         # unless the turn failed as invalid_output.
         "retry_rule": None,
+        "retry_cause": None,
         "output_text": "tool said alpha",
         # Structured model-side variants stay absent on the default text path.
         "answer": None,
@@ -1344,6 +1345,117 @@ def test_a_retry_rule_from_an_earlier_turn_is_not_reported_on_a_later_unrelated_
     with pytest.raises(AgentInvalidOutputError) as second:
         runtime.run_turn(AgentTurnRequestV1(prompt="tell me about the schedule"))
     assert second.value.retry_rule is None
+
+
+def test_every_turn_starts_with_no_retry_rule() -> None:
+    """The reset itself: a rule left from a failed turn must be gone after a
+    later clean turn, or a later failure would be blamed on it."""
+    from application.ports.agent_runtime import AgentInvalidOutputError
+
+    clean = False
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        text = "Here is the schedule." if clean else "There are 24 workers."
+        return ModelResponse(parts=[TextPart(content=text)])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError):
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
+    assert runtime._last_retry_rule == "numeric_prose"
+    clean = True
+    runtime.run_turn(AgentTurnRequestV1(prompt="tell me about the schedule"))
+    assert runtime._last_retry_rule is None
+
+
+def _repeating(*parts_factories):
+    """A model that answers with the next factory's parts, then repeats the last."""
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        make = parts_factories[min(len(responses), len(parts_factories) - 1)]
+        return ModelResponse(parts=make(len(responses)))
+    return model
+
+
+def _calls(*calls: tuple[str, str]):
+    return lambda n: [ToolCallPart(tool_name=name, args=args, tool_call_id=f"c{n}-{index}")
+                      for index, (name, args) in enumerate(calls)]
+
+
+_MARKER = "SECRET-PLANNER-NOTE-7731"
+
+
+@pytest.mark.parametrize("model,cause,rule", [
+    # The answer's own structure is wrong.
+    (_repeating(_calls(("final_result", json.dumps({"segments": 5, "note": _MARKER})))),
+     "ValidationError:GroundedAnswerV1:tuple_type", None),
+    # A tool was called with input its schema rejects...
+    (_repeating(_calls(("scheduling_compute", json.dumps({"request": _MARKER})))),
+     "ValidationError:SchedulingComputeRequestV1:dataclass_type", None),
+    # ...or that is missing a required field.
+    (_repeating(_calls(("scheduling_compute",
+                        json.dumps({"request": {"arguments": {"x": _MARKER}}})))),
+     "ValidationError:SchedulingComputeRequestV1:missing", None),
+    # A tool asked for a correction, or the tool does not exist.
+    (_repeating(_calls(("scheduling_compute", json.dumps({"metric": _MARKER})))),
+     "ModelRetry", None),
+    (_repeating(_calls((_MARKER, "{}"))), "ModelRetry", None),
+    # A reply with nothing in it.
+    (_repeating(lambda n: []), "ToolRetryError", None),
+    # One of our own rules: the rule names itself as before.
+    (_repeating(lambda n: [TextPart(content=f"There are 24 workers. {_MARKER}")]),
+     "ModelRetry", "numeric_prose"),
+])
+def test_a_framework_give_up_records_the_cause_it_actually_raised(model, cause, rule) -> None:
+    """Story 5.7 B5 failed invalid_output with no cause logged: only our own
+    rules named themselves, and PydanticAI's reason was discarded."""
+    from application.ports.agent_runtime import AgentInvalidOutputError
+    from application.use_cases.execute_turn import failed_outcome_for_exception
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_compute_stub_module(),),
+                       answer_type=GroundedAnswerV1)
+    with pytest.raises(AgentInvalidOutputError) as caught:
+        runtime.run_turn(AgentTurnRequestV1(prompt="how many workers are there?"))
+    outcome = failed_outcome_for_exception(caught.value)
+    assert (outcome.retry_cause, outcome.retry_rule) == (cause, rule)
+    # Model output never reaches the value telemetry will carry.
+    assert _MARKER not in (outcome.retry_cause or "")
+
+
+def test_a_failure_that_is_not_a_give_up_carries_no_cause() -> None:
+    from application.ports.agent_runtime import AgentProviderError
+    from application.use_cases.execute_turn import failed_outcome_for_exception
+
+    assert failed_outcome_for_exception(AgentProviderError("down")).retry_cause is None
+
+
+def test_a_derived_schema_title_is_left_out_of_the_cause() -> None:
+    from pydantic import TypeAdapter, ValidationError
+    from pydantic_ai import UnexpectedModelBehavior
+
+    from agent.runtime import _retry_cause
+
+    try:
+        TypeAdapter(list[int]).validate_python("x")
+    except ValidationError as error:
+        exhausted = UnexpectedModelBehavior("exhausted")
+        exhausted.__cause__ = error
+    assert _retry_cause(exhausted) == "ValidationError:list_type"
+
+
+def test_the_prompt_states_the_candidate_preview_the_snapshot_uses() -> None:
+    from agent.scheduling_instructions import SCHEDULING_ASSISTANT_INSTRUCTIONS
+    from application.use_cases.conversation_workflow_context import CANDIDATE_ASSIGNMENT_PREVIEW
+
+    assert (f"at most the first {CANDIDATE_ASSIGNMENT_PREVIEW} assignments"
+            in SCHEDULING_ASSISTANT_INSTRUCTIONS)
+
+
+def test_a_give_up_with_no_cause_records_none() -> None:
+    from pydantic_ai import UnexpectedModelBehavior
+
+    from agent.runtime import _retry_cause
+
+    assert _retry_cause(UnexpectedModelBehavior("exhausted")) is None
 
 
 def test_a_quantity_question_answered_without_a_claim_is_corrected_in_loop() -> None:

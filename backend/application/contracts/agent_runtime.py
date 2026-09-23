@@ -226,10 +226,16 @@ class AgentRunOutcomeV1:
     # reported to the planner as "The configured agent budget was exhausted".
     # Set at the raise site; `None` only for outcomes that did not fail.
     failure_source: Literal["agent", "capability"] | None = None
-    #: Which in-loop output rule the model could not satisfy before its retries
-    #: ran out, as a closed vocabulary name (never the rejected text, which is
-    #: model content). Set only on an invalid-output failure.
+    #: The last in-loop output rule that FIRED this turn, as a closed vocabulary
+    #: name (never the rejected text, which is model content). Set only on an
+    #: invalid-output failure; `retry_cause` says what finally exhausted the
+    #: retries, which need not be this rule.
     retry_rule: str | None = None
+    #: Why the framework gave up, from the exception's structure only: the
+    #: cause's class, plus a `ValidationError`'s schema name and first error
+    #: code (e.g. `ValidationError:GroundedAnswerV1:tuple_type`). Never message
+    #: text. Set only on an invalid-output failure that has a cause.
+    retry_cause: str | None = None
     # Planner-visible final content. None unless status == "completed".
     output_text: str | None = None
     # These fields deliberately sit on opposite sides of the trust boundary.

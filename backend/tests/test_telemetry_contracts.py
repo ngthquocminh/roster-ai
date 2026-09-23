@@ -33,6 +33,10 @@ def test_telemetry_contract_has_exact_closed_vocabularies() -> None:
             # Which in-loop output rule exhausted its retries (Story 5.7): a closed
             # vocabulary rule name, never the rejected model text.
             "retry_rule",
+            # Why the framework itself gave up: bounded structural values (cause
+            # class, schema name, error code), never message text. Not a closed
+            # vocabulary -- a framework upgrade can add values.
+            "retry_cause",
             "capability_name",
             # Declared by a capability module (Story 5.7): a closed structural
             # vocabulary such as scheduling_inspect's fact group, never content.

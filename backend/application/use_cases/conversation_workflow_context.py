@@ -16,6 +16,10 @@ from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.site_baseline import SiteBaselineReader
 from application.ports.scenario_projection import GroupQueryV1, ScenarioProjectionReader
 
+#: How many of a run candidate's assignments the assistant is shown. The live
+#: evaluation harness imports this to tell its judge what the assistant could see.
+CANDIDATE_ASSIGNMENT_PREVIEW = 5
+
 
 def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
                           proposals: ProposalRepository, runs: ScheduleRunRepository,
@@ -59,9 +63,10 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
             value['candidate'] = {
                 'schedule_version_id': candidate.schedule_version_id,
                 'feasible_solver_status': candidate.feasible_solver_status,
-                'assignments': [asdict(item) for item in candidate.assignments[:5]],
+                'assignments': [asdict(item) for item in
+                                candidate.assignments[:CANDIDATE_ASSIGNMENT_PREVIEW]],
                 'assignment_count': len(candidate.assignments),
-                'assignments_truncated': len(candidate.assignments) > 5,
+                'assignments_truncated': len(candidate.assignments) > CANDIDATE_ASSIGNMENT_PREVIEW,
             }
         run_values.append(value)
     baseline = baselines.get(connection, claimed.site_id)

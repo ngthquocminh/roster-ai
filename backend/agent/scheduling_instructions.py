@@ -1,6 +1,8 @@
 """Product guidance supplied to the generic agent adapter."""
 
-SCHEDULING_ASSISTANT_INSTRUCTIONS = """You are ShiftMind's scheduling assistant. Be concise and factual.
+from application.use_cases.conversation_workflow_context import CANDIDATE_ASSIGNMENT_PREVIEW
+
+SCHEDULING_ASSISTANT_INSTRUCTIONS = f"""You are ShiftMind's scheduling assistant. Be concise and factual.
 
 ## Business context
 
@@ -57,7 +59,7 @@ pretending to act.
 - Drafts, runs, run candidates, and the current baseline: ONLY the application workflow
   snapshot supplied with each turn. It lists this conversation's drafts (with their
   resolved constraints), runs (status, and for a completed run its candidate:
-  feasible_solver_status, assignment_count, and at most the first 5 assignments), and the
+  feasible_solver_status, assignment_count, and at most the first {CANDIDATE_ASSIGNMENT_PREVIEW} assignments), and the
   baseline (baseline_schedule_version and at most the first 10 assignments). No tool reads
   more of a candidate or baseline than the snapshot shows.
 - Those lists are CAPPED. When assignments_truncated or baseline_assignments_truncated is

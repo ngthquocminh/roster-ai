@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import asdict
 
+from application.use_cases.conversation_workflow_context import CANDIDATE_ASSIGNMENT_PREVIEW
 from evals.live_conversations.facts import read_group, verify_claim
 from evals.live_conversations.http_client import ApplicationConversation
 from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS, judge_turn
@@ -47,6 +48,31 @@ def same_assignments(projected, candidate):
     # side and a string on the other are not orderable, and sorting them raised.
     return (Counter(map(_canonical_assignment, projected))
             == Counter(map(_canonical_assignment, candidate)))
+
+
+def candidate_assignment_count(candidate):
+    """The candidate's assignment count, and whether the assistant saw all of it.
+
+    The result endpoint's candidate (`ScheduleVersionOut`) carries its complete
+    assignment list and states the count only at `metrics.assignment_count`;
+    `assignment_count`/`assignments_truncated` are the ASSISTANT's snapshot
+    keys. Reading them here always gave None, so the judge counted 76 rows
+    itself, got 50, and failed a correct reply (live-matrix-5-7-final3, B:8).
+    The assistant is shown only a preview, so truncation is judged against it.
+    """
+    if candidate is None:
+        return None, None
+    if not isinstance(candidate, dict):
+        raise IncompleteConversationRun('candidate_payload_malformed')
+    rows = candidate.get('assignments')
+    metrics = candidate.get('metrics')
+    if (not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows)
+            or not isinstance(metrics, dict)):
+        raise IncompleteConversationRun('candidate_payload_malformed')
+    stated = metrics.get('assignment_count')
+    if type(stated) is not int or stated != len(rows):
+        raise IncompleteConversationRun('candidate_assignment_count_mismatch')
+    return len(rows), len(rows) > CANDIDATE_ASSIGNMENT_PREVIEW
 
 
 def compact_reload_effect(timeline):
@@ -130,6 +156,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
     transcript = []
     pending_approval = None
     latest_run = None
+    latest_count = (None, None)
     try:
         workers = read_group(app, 'workers')
         workers_by_id = {row['record_id']: row['name'] for row in workers}
@@ -197,11 +224,25 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                     if action == 'run_and_cancel':
                         run = app.cancel_run(run)
                     latest_run = app.wait_for_run(run['schedule_run_id'])
-                    effect['run'] = latest_run['run']
-                    effect['candidate_schedule_version_id'] = (latest_run.get('candidate') or {}).get('schedule_version_id')
                     wanted = 'solver_cancelled' if action == 'run_and_cancel' else 'solver_completed'
                     if latest_run['run']['status'] != wanted:
                         failures.append('required_solver_outcome_missing')
+                    # Checked as soon as the result is read, before any action or
+                    # fact touches its rows. A payload the harness cannot trust is
+                    # an infrastructure fault: keep what this turn already proved,
+                    # then stop the report rather than score the model on it.
+                    try:
+                        latest_count = candidate_assignment_count(latest_run.get('candidate'))
+                    except IncompleteConversationRun:
+                        # Enough to diagnose the drift: the run and candidate ids.
+                        effect['run'] = latest_run.get('run')
+                        report['command_observations'].append(effect)
+                        verified['effects_after_reply'].append(effect)
+                        row.update(factual_failures=failures, verified=verified)
+                        save(report)
+                        raise
+                    effect['run'] = latest_run['run']
+                    effect['candidate_schedule_version_id'] = (latest_run.get('candidate') or {}).get('schedule_version_id')
                 elif action == 'verify_baseline_unchanged':
                     now = app._request('GET', projection_path)
                     if now['baseline_schedule_version'] != before['baseline_schedule_version']:
@@ -240,11 +281,12 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             if latest_run:
                 verified['latest_run'] = latest_run['run']
                 candidate = latest_run.get('candidate') or {}
+                count, truncated = latest_count
                 verified['candidate_solver_status'] = candidate.get('feasible_solver_status')
-                # The rows the assistant can actually see, WITH their minutes: the
-                # judge scored a truthful reply 0 for "inventing" times that were
-                # in the snapshot but absent from its facts (live-suite-evidence
-                # B8).
+                # Every candidate row, WITH its minutes: the judge scored a truthful
+                # reply 0 for "inventing" times that were in the snapshot but absent
+                # from its facts (live-suite-evidence B8). The assistant itself saw
+                # only a preview; `candidate_assignments_truncated` says so.
                 verified['candidate_assignments'] = [
                     {'record_id': row.get('record_id'), 'worker_id': row.get('worker_id'),
                      'worker_name': workers_by_id.get(row.get('worker_id')),
@@ -253,8 +295,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                      'start_minute': row.get('start_minute'), 'end_minute': row.get('end_minute')}
                     for row in candidate.get('assignments', ())
                 ]
-                verified['candidate_assignment_count'] = candidate.get('assignment_count')
-                verified['candidate_assignments_truncated'] = candidate.get('assignments_truncated')
+                verified['candidate_assignment_count'] = count
+                verified['candidate_assignments_truncated'] = truncated
             transcript.append({'id': row['id'], 'user': turn.user, 'assistant': visible_activity(activity)})
             not_applicable = (frozenset({'clarification_refusal'})
                               if activity['activity_type'] == 'agent_response' else frozenset())

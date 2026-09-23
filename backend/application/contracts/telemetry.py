@@ -44,6 +44,7 @@ TELEMETRY_LABEL_KEYS = frozenset(
         "agent_run_status",
         "failure_reason",
         "retry_rule",
+        "retry_cause",
         "capability_name",
         "fact_group",
         "budget_outcome",

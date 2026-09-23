@@ -207,6 +207,8 @@ def _emit_agent_run_completed(
         labels["failure_reason"] = outcome.failure_reason
     if outcome.retry_rule is not None:
         labels["retry_rule"] = outcome.retry_rule
+    if outcome.retry_cause is not None:
+        labels["retry_cause"] = outcome.retry_cause
     if outcome.budget_outcome is not None:
         labels["budget_outcome"] = outcome.budget_outcome
     try:
