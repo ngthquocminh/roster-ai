@@ -312,6 +312,14 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
     }
     if outcome.failure_reason is not None:
         labels["failure_reason"] = outcome.failure_reason
+    # A resumed run fails the same ways a fresh one does; without these its
+    # invalid-output failures were logged with no cause.
+    retry_rule = getattr(outcome, "retry_rule", None)
+    if retry_rule is not None:
+        labels["retry_rule"] = retry_rule
+    retry_cause = getattr(outcome, "retry_cause", None)
+    if retry_cause is not None:
+        labels["retry_cause"] = retry_cause
     if outcome.budget_outcome is not None:
         labels["budget_outcome"] = outcome.budget_outcome
     try:

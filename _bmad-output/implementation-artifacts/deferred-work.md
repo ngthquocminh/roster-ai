@@ -1117,3 +1117,10 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   re-drawing its failures or discarding it (this run was re-measured in full and the crashed run disclosed in
   `docs/TESTING.md`). **Deferred reason:** re-running failures on resume would need a decision on what counts as a
   result; the safe direction (refuse to mix) is the documented one. **Owner: open.**
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-live-eval-diagnosability.md`
+  summary: The live judge receives every candidate row but not which preview rows the assistant actually saw.
+  evidence: The snapshot previews `candidate.assignments[:CANDIDATE_ASSIGNMENT_PREVIEW]` in repository order while the harness reads the result endpoint's list, whose order is not guaranteed to match; with `truncated=True` the judge cannot tell a quoted preview row from an invented one (review rounds 1-3).
+- source_spec: `_bmad-output/implementation-artifacts/spec-live-eval-diagnosability.md`
+  summary: The approval-resume route's `agent.run.completed` emission (now carrying `retry_rule`/`retry_cause`) has no label test.
+  evidence: It is built inline in `decide_approval_route` with `getattr` (tests pass stand-in outcomes), so a regression dropping those labels would go unnoticed; only `conversations._emit_agent_run_completed` is tested.

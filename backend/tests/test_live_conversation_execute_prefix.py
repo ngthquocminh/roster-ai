@@ -21,7 +21,11 @@ APPROVAL = {'activity_type': 'approval_request', 'approval_id': 'ap-1',
             'candidate_schedule_version_id': CANDIDATE, 'schedule_run_id': 'sr-1'}
 COMPLETED = {'run': {'status': 'solver_completed'},
              'candidate': {'schedule_version_id': CANDIDATE, 'assignments': CANDIDATE_ROWS,
-                           'feasible_solver_status': 'OPTIMAL', 'assignment_count': 1}}
+                           'feasible_solver_status': 'OPTIMAL',
+                           # Shaped like the API's ScheduleVersionOut: the count lives
+                           # only under metrics. A top-level `assignment_count` here
+                           # once hid that the runner read a key the API never sends.
+                           'metrics': {'assignment_count': 1}}}
 
 
 class FakeApp:
@@ -94,11 +98,13 @@ def _judge_always_passes(monkeypatch):
     monkeypatch.setattr(runner, 'judge_turn', lambda **_kwargs: (judgment(), {'attempts': []}))
 
 
-def drive(app, *actions, requires_persisted_draft=False):
-    case = ConversationScenario(id='X', prefixes=(1,), turns=(ConversationTurn(
-        user='go', obligation='Answer', actions_after=tuple(actions),
-        requires_persisted_draft=requires_persisted_draft),))
-    return execute_prefix(app=app, case=case, endpoint=1, isolation_id='iso', telemetry=Telemetry(),
+def drive(app, *actions, requires_persisted_draft=False, turns=1):
+    first = ConversationTurn(user='go', obligation='Answer', actions_after=tuple(actions),
+                             requires_persisted_draft=requires_persisted_draft)
+    rest = tuple(ConversationTurn(user='and then?', obligation='Answer')
+                 for _ in range(turns - 1))
+    case = ConversationScenario(id='X', prefixes=(turns,), turns=(first, *rest))
+    return execute_prefix(app=app, case=case, endpoint=turns, isolation_id='iso', telemetry=Telemetry(),
                           judge_key='k', judge_model='m', budget=ConversationBudget(LiveSuiteBudgetV1(
                               case_limit=1, request_limit=50, tool_call_limit=50, token_limit=1000000,
                               elapsed_seconds_limit=600, spend_usd_limit=5)),
@@ -177,10 +183,82 @@ def test_promoted_assignments_that_differ_from_the_candidate_fail(after):
 def test_a_candidate_with_no_assignments_cannot_prove_the_promotion():
     app = FakeApp(activity=APPROVAL,
                   run_result={'run': {'status': 'solver_completed'},
-                              'candidate': {'schedule_version_id': CANDIDATE, 'assignments': []}})
+                              'candidate': {'schedule_version_id': CANDIDATE, 'assignments': [],
+                                            'metrics': {'assignment_count': 0}}})
     app.assignments_after_approval = []
     assert 'promoted_assignments_do_not_match_candidate' in failures_of(
         drive(app, 'run_optimization', 'approve'))
+
+
+def _with_candidate(**changes):
+    return FakeApp(activity={'activity_type': 'agent_response', 'response': {'segments': []}},
+                   run_result={'run': {'status': 'solver_completed'},
+                               'candidate': {**COMPLETED['candidate'], **changes}})
+
+
+@pytest.mark.parametrize('size,truncated', [(76, True), (6, True), (5, False), (3, False)])
+def test_the_judge_receives_a_computed_count_and_what_the_assistant_could_see(size, truncated):
+    # live-matrix-5-7-final3 B:8: with no count the judge counted 76 rows as 50.
+    rows = [{**CANDIDATE_ROWS[0], 'record_id': f'a{index}'} for index in range(size)]
+    app = _with_candidate(assignments=rows, metrics={'assignment_count': size})
+    verified = drive(app, 'run_optimization')['turns'][0]['verified']
+    assert verified['candidate_assignment_count'] == size
+    # The assistant's snapshot previews only the first CANDIDATE_ASSIGNMENT_PREVIEW rows.
+    assert verified['candidate_assignments_truncated'] is truncated
+
+
+def test_a_run_with_no_candidate_states_no_count():
+    app = FakeApp(activity={'activity_type': 'agent_response', 'response': {'segments': []}},
+                  run_result={'run': {'status': 'solver_cancelled'}, 'candidate': None})
+    verified = drive(app, 'run_and_cancel')['turns'][0]['verified']
+    assert verified['candidate_assignment_count'] is None
+    assert verified['candidate_assignments_truncated'] is None
+
+
+_UNTRUSTWORTHY = [
+    ({'metrics': {'assignment_count': 2}}, 'candidate_assignment_count_mismatch'),
+    ({'metrics': {}}, 'candidate_assignment_count_mismatch'),
+    ({'metrics': {'assignment_count': '1'}}, 'candidate_assignment_count_mismatch'),
+    ({'metrics': None}, 'candidate_payload_malformed'),
+    ({'metrics': ['1']}, 'candidate_payload_malformed'),
+    ({'assignments': None}, 'candidate_payload_malformed'),
+    ({'assignments': 'rows'}, 'candidate_payload_malformed'),
+    ({'assignments': ['not-a-row']}, 'candidate_payload_malformed'),
+]
+
+
+@pytest.mark.parametrize('changes,reason', _UNTRUSTWORTHY)
+def test_a_candidate_the_harness_cannot_trust_stops_the_report_as_infrastructure(changes, reason):
+    # An API/harness contract drift, not a model failure: the report is
+    # incomplete (retryable, never a drop in the model's pass rate).
+    report = drive(_with_candidate(**changes), 'run_optimization', turns=2)
+    assert report['status'] == 'incomplete' and report['incomplete_reason'] == reason
+    assert len(report['turns']) == 1 and report['turns'][0]['verdict'] == 'incomplete'
+
+
+@pytest.mark.parametrize('changes,reason', _UNTRUSTWORTHY)
+def test_an_untrusted_candidate_is_refused_before_approval_reads_its_rows(changes, reason):
+    app = FakeApp(activity=APPROVAL, run_result={'run': {'status': 'solver_completed'},
+                                                 'candidate': {**COMPLETED['candidate'], **changes}})
+    assert drive(app, 'run_optimization', 'approve')['incomplete_reason'] == reason
+
+
+def test_a_candidate_that_is_not_an_object_is_malformed():
+    app = FakeApp(activity={'activity_type': 'agent_response', 'response': {'segments': []}},
+                  run_result={'run': {'status': 'solver_completed'}, 'candidate': ['rows']})
+    assert drive(app, 'run_optimization')['incomplete_reason'] == 'candidate_payload_malformed'
+
+
+def test_what_the_turn_already_proved_is_kept_when_the_report_stops():
+    app = FakeApp(activity={'activity_type': 'agent_response', 'response': {'segments': []}},
+                  run_result={'run': {'status': 'solver_failed'},
+                              'candidate': {**COMPLETED['candidate'], 'assignments': None}})
+    report = drive(app, 'run_optimization')
+    assert report['incomplete_reason'] == 'candidate_payload_malformed'
+    assert failures_of(report) == ['required_solver_outcome_missing']
+    # The run that exposed the drift stays identifiable after the stop.
+    assert report['command_observations'][0]['run'] == {'status': 'solver_failed'}
+    assert report['turns'][0]['verified']['effects_after_reply']
 
 
 def test_a_baseline_that_moves_before_approval_is_a_failure():

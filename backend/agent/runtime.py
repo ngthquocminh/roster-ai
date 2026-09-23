@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import perf_counter
 
+from pydantic import ValidationError
 from pydantic_ai import (
     Agent,
     AgentRunError,
@@ -240,6 +241,36 @@ def _latest_draft_id_this_run(messages: list) -> str | None:
                 if isinstance(content, dict) and isinstance(content.get("draft_id"), str):
                     draft_id = content["draft_id"]
     return draft_id
+
+
+def _retry_cause(exc: BaseException) -> str | None:
+    """Why PydanticAI gave up, read from its exception's STRUCTURE only.
+
+    The framework's own checks never set a named rule, so their failures were
+    logged with no cause at all (Story 5.7, B5). The cause's class, and for a
+    `ValidationError` the schema that rejected it (`.title`, one of our own
+    class names) plus its first error code, say which check failed. The message,
+    input and location are left out: they can carry model content, and this
+    value reaches telemetry (AD-12/AD-15).
+    """
+    cause = exc.__cause__
+    if cause is None:
+        return None
+    # One wrapper level: a retry wrapping the real failure reports the failure.
+    if not isinstance(cause, ValidationError) and cause.__cause__ is not None:
+        cause = cause.__cause__
+    if isinstance(cause, ValidationError):
+        errors = cause.errors(include_url=False, include_input=False, include_context=False)
+        code = errors[0].get("type") if errors else None
+        return ":".join(part for part in ("ValidationError", _bounded_name(cause.title), code)
+                        if part)
+    return _bounded_name(type(cause).__name__)
+
+
+def _bounded_name(name: str) -> str | None:
+    """A code identifier, or nothing: a derived schema title can be a type repr
+    such as `list[...]`, which is neither bounded nor parseable in a label."""
+    return name if name.isidentifier() and len(name) <= 64 else None
 
 
 def _prose_answer(text: str) -> GroundedAnswerV1:
@@ -670,6 +701,7 @@ class PydanticAIAgentRuntime:
             # Names the RULE, never the rejected text: an invalid-output failure
             # was otherwise undiagnosable after the fact (Story 5.7, B5).
             failure.retry_rule = self._last_retry_rule
+            failure.retry_cause = _retry_cause(exc)
             raise failure from exc
         except ModelHTTPError as exc:
             # Typed, not text-tagged: the request path classifies this by class,

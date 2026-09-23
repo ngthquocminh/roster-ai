@@ -299,6 +299,7 @@ def failed_outcome_for_exception(exc: Exception) -> AgentRunOutcomeV1:
     return AgentRunOutcomeV1(
         status="failed", failure_reason="invalid_output", failure_source="agent",
         retry_rule=getattr(exc, "retry_rule", None),
+        retry_cause=getattr(exc, "retry_cause", None),
     )
 
 
