@@ -191,9 +191,8 @@ suite never depends on a developer's local `.env`.
   enabled (`frontend/tsconfig*.json`) — `npm run typecheck` enforces these.
 
 For full naming, import-order, error-handling, and module-design conventions
-across both halves, see the freshly regenerated
-[`.planning/codebase/CONVENTIONS.md`](../.planning/codebase/CONVENTIONS.md) —
-this guide intentionally doesn't re-derive that detail.
+across both halves, see [`CLAUDE.md`](../.claude/CLAUDE.md)'s Conventions
+section — this guide intentionally doesn't re-derive that detail.
 
 ## Extension points: the two Protocol seams
 
