@@ -45,12 +45,19 @@ BASELINE_PATH = BACKEND_ROOT / "evals" / "baselines" / "live-conversations.json"
 
 BASELINE_SCHEMA_VERSION = "1"
 
+#: Mirrors `live_conversation_drop_check.REQUIRED_REPETITIONS`. Not imported from
+#: there: that module already imports `BASELINE_PATH`/`SOURCE_EVIDENCE` from this
+#: one, and importing back would be circular. Kept equal by
+#: `test_required_repetitions_matches_the_drop_check`.
+REQUIRED_REPETITIONS = 3
+
 
 def derive_baseline(
     source: Path = SOURCE_EVIDENCE, *, override_file: Path = DEFAULT_OVERRIDE_FILE
 ) -> dict:
     """Build the baseline document from a committed Story 5.7 evidence file."""
     evidence = json.loads(Path(source).read_text(encoding="utf-8"))
+    _ensure_source_is_clean(evidence, source=source)
     configuration = evidence["measured_configuration"]
     turn_pass_rates = {
         turn: {"executed": int(counts["executed"]), "passed": int(counts["passed"])}
@@ -89,6 +96,41 @@ def derive_baseline(
         "total_executed": sum(c["executed"] for c in turn_pass_rates.values()),
         "total_passed": sum(c["passed"] for c in turn_pass_rates.values()),
     }
+
+
+def _ensure_source_is_clean(evidence: dict, *, source: Path) -> None:
+    """Refuse to derive a baseline from evidence that was itself truncated.
+
+    The baseline doc carries only `complete_repetitions` forward (§ `compare`'s
+    `truncation_refusal`); it has no `blocking_reasons` or `runs[]` fields of its
+    own, so a not-fully-clean source would otherwise pass through silently and
+    no downstream check could ever catch it (Story 5.8 review). Raised here,
+    at the one place a bad baseline could be created, the same way
+    `_baseline_behavioral_digest` already refuses on a digest mismatch.
+    """
+    blocking = evidence.get("blocking_reasons") or []
+    if blocking:
+        raise ValueError(
+            f"{source} carries blocking_reasons {sorted(blocking)}; a baseline "
+            "cannot be derived from a run that was not fully clean"
+        )
+    repetitions = int(evidence.get("complete_repetitions", 0))
+    if repetitions < REQUIRED_REPETITIONS:
+        raise ValueError(
+            f"{source} recorded complete_repetitions {repetitions} < "
+            f"{REQUIRED_REPETITIONS}; a baseline cannot be derived from a "
+            "truncated run"
+        )
+    incomplete = sorted(
+        str(run.get("run_id"))
+        for run in evidence.get("runs", [])
+        if not run.get("complete")
+    )
+    if incomplete:
+        raise ValueError(
+            f"{source} has incomplete runs {incomplete}; a baseline cannot be "
+            "derived from a run that did not finish"
+        )
 
 
 def _baseline_behavioral_digest(configuration: dict, *, override_file: Path) -> str:

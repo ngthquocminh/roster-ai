@@ -46,11 +46,15 @@ from scripts.derive_live_conversation_baseline import (  # noqa: E402
     BASELINE_PATH,
     SOURCE_EVIDENCE,
 )
-from scripts.evidence_binding import dataset_file_digest  # noqa: E402
+from scripts.evidence_binding import REPO_ROOT, dataset_file_digest  # noqa: E402
 
 #: Tier 3's floor, chosen against the measured distribution: Poisson around the
 #: baseline's 3 failures puts a drop to <= 82 at ~1.2% per run, versus ~8.4% at
 #: a floor of 85. It catches BROAD degradation; a single broken turn is Tier 1's.
+#: NOT derived from the baseline file at runtime -- it is a one-time judgement
+#: against the CURRENT 87/90 baseline (Decision 5). If a future re-derivation
+#: changes `total_passed`/`total_executed`, re-run the Poisson comparison by
+#: hand and update this constant; nothing here will flag the staleness.
 AGGREGATE_FLOOR = 83
 
 #: Structural: a run that lost a whole scenario is not comparable on turn counts.
@@ -123,6 +127,26 @@ def configuration_refusal(baseline: dict, report: dict) -> dict | None:
     return None
 
 
+def document_shape_refusal(report: dict) -> dict | None:
+    """Refuse when `report` is not a reporting-builder document.
+
+    The module docstring already warns not to pass the raw `live-matrix.json`
+    run report -- only the document `evals.live_conversations.evidence.generate`
+    writes carries `turn_pass_rates`. Without this check, that mistake falls
+    through `configuration_refusal`'s missing-`behavioral_digest` branch: an
+    accurate but confusing diagnosis of the wrong problem.
+    """
+    if "turn_pass_rates" not in report:
+        return _refused(
+            "report_shape",
+            "The report is a reporting-builder document",
+            "the report has no turn_pass_rates; pass the document "
+            "evals.live_conversations.evidence.generate writes, not a raw "
+            "live-matrix.json run report",
+        )
+    return None
+
+
 def _truncation_reasons(document: dict, side: str) -> list[str]:
     """Why `document` is not a complete run, in the suite's OWN vocabulary.
 
@@ -177,8 +201,16 @@ def tier_1(baseline: dict, report: dict) -> dict:
     """Any baseline full-marks turn that now scores zero FAILS, by name.
 
     Turns not at full marks in the baseline (`B:5`, `B:8`, `C:3` at 2/3) are
-    EXEMPT: a 2/3 turn reaching 0/3 is ~3.6% likely by chance, which would make
-    a hard block a false-alarm generator. They are watched by Tier 3 only.
+    EXEMPT from the score-collapse check: a 2/3 turn reaching 0/3 is ~3.6%
+    likely by chance, which would make a hard block a false-alarm generator.
+    They are watched by Tier 3 only for a SCORE drop.
+
+    A turn vanishing entirely from the report is a different failure mode --
+    structural, not a score change -- and Decision 4 never exempted it: an
+    exempt turn that simply never appears would otherwise be invisible to
+    every tier as long as the aggregate stayed above Tier 3's floor. So the
+    `missing` check below covers ALL baseline turns, exempt or not; only the
+    score-collapse check stays scoped to the full-marks-qualifying set.
     """
     rates = report.get("turn_pass_rates") or {}
     qualifying = [
@@ -191,13 +223,13 @@ def tier_1(baseline: dict, report: dict) -> dict:
         for turn in qualifying
         if int((rates.get(turn) or {}).get("passed", 0)) == 0
     )
-    missing = sorted(turn for turn in qualifying if turn not in rates)
+    missing = sorted(turn for turn in baseline["turn_pass_rates"] if turn not in rates)
     title = f"Tier 1: no baseline full-marks turn collapsed ({len(qualifying)} watched)"
     if missing:
         return _failed(
             "tier_1_full_marks_collapse",
             title,
-            f"the run does not report {len(missing)} watched turn(s): {missing}",
+            f"the run does not report {len(missing)} baseline turn(s): {missing}",
         )
     if dropped:
         return _failed(
@@ -281,6 +313,7 @@ def compare(baseline: dict, report: dict) -> dict:
     refusals = [
         refusal
         for refusal in (
+            document_shape_refusal(report),
             configuration_refusal(baseline, report),
             truncation_refusal(baseline, report),
         )
@@ -333,6 +366,11 @@ def baseline_matches_source(
     Nothing existing would notice: `audit_evidence_drift` collects path strings
     only from values under `contract`/`checklist`/`path`/`source_path` keys, so
     it never walks this relationship.
+
+    `source` defaults to the one baseline that exists today, but a caller
+    checking a DIFFERENT baseline (e.g. `--baseline` pointed elsewhere) must
+    pass that baseline's own `source_evidence_path` explicitly -- the default
+    is never right for someone else's baseline. `main()` always does this.
     """
     if not Path(source).is_file():
         return False, f"the baseline's source evidence {source} does not exist"
@@ -363,7 +401,12 @@ def main(argv: list[str] | None = None) -> int:
     report = json.loads(args.report.read_text(encoding="utf-8"))
     result = compare(baseline, report)
 
-    consistent, detail = baseline_matches_source(baseline)
+    # Always the LOADED baseline's own declared source, never the module
+    # default: a `--baseline` pointed at a different file must be checked
+    # against what IT claims, not against today's one true baseline's source.
+    consistent, detail = baseline_matches_source(
+        baseline, REPO_ROOT / baseline["source_evidence_path"]
+    )
     result["checks"].insert(
         0,
         _passed("baseline_source_consistency", "Baseline matches its source", detail)

@@ -38,6 +38,8 @@ uv run --frozen python scripts/live_conversation_drop_check.py   --report ../evi
 
 Pass the *evidence* document (what `evals.live_conversations.evidence` writes), not the raw `live-matrix.json` run report -- only the former carries `turn_pass_rates`.
 
+The path above is illustrative, not a working example to copy-paste as-is: the committed Story 5.7 evidence predates `behavioral_digest` and can never gain one, so running the command verbatim against it always exits 1 with a `configuration_match` refusal. Point `--report` at the evidence document *your own* paid run just produced.
+
 The check exits non-zero on any of:
 
 - **Tier 1** -- a turn the baseline recorded at full marks now passes zero executions, named. Turns the baseline never scored full (`B:5`, `B:8`, `C:3` at 2/3) are exempt from this tier and watched by Tier 3 instead.

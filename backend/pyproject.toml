@@ -49,9 +49,13 @@ dev = [
     # TEST-ONLY (Story 5.8). `behavioral_digest` parses the tracked compose
     # override's `environment` maps so the price keys can be excluded from the
     # digest the live-conversation drop check compares on. Deliberately in the
-    # dev group, never [project].dependencies: `Dockerfile:13` builds with
-    # `uv sync --no-dev`, so `yaml` is absent at runtime and must never be
-    # imported outside `backend/evals/` and `backend/scripts/`.
+    # dev group, never [project].dependencies. NOTE (corrected at review):
+    # pyyaml already arrives transitively via uvicorn[standard]'s "standard"
+    # extra even under `Dockerfile:13`'s `uv sync --no-dev` -- the original
+    # "yaml is absent at runtime" claim here was wrong. It still must never be
+    # imported outside `backend/evals/`: relying on an unrelated package's
+    # transitive pull-in from `api`/`worker` code would be fragile if that
+    # extra ever changed.
     "pyyaml",
 ]
 

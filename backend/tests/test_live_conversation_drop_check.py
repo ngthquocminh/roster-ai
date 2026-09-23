@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,11 +25,15 @@ from evals.live_conversations.configuration import (
 from scripts.derive_live_conversation_baseline import (
     BASELINE_PATH,
     SOURCE_EVIDENCE,
-    derive_baseline,
 )
+from scripts.derive_live_conversation_baseline import (
+    REQUIRED_REPETITIONS as DERIVE_REQUIRED_REPETITIONS,
+)
+from scripts.derive_live_conversation_baseline import derive_baseline
 from scripts.evidence_binding import REPO_ROOT, dataset_file_digest
 from scripts.live_conversation_drop_check import (
     AGGREGATE_FLOOR,
+    REQUIRED_REPETITIONS,
     baseline_matches_source,
     compare,
 )
@@ -44,6 +49,23 @@ def baseline() -> dict:
 @pytest.fixture(scope="module")
 def committed_evidence() -> dict:
     return json.loads(SOURCE_EVIDENCE.read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def repo_local_tmp_path():
+    """A scratch directory INSIDE the repo tree.
+
+    `derive_baseline` resolves its source path relative to `REPO_ROOT`; a
+    source under pytest's own `tmp_path` (outside the repo) trips that
+    unrelated check before a mutation to the guard under test ever runs,
+    confounding the demonstration. This fixture keeps the source in-tree so a
+    mutation reddens for the reason the test names, not a path-resolution
+    side effect.
+    """
+    path = BACKEND_ROOT / "tests" / "_tmp_derive_baseline_fixtures"
+    path.mkdir(exist_ok=True)
+    yield path
+    shutil.rmtree(path, ignore_errors=True)
 
 
 @pytest.fixture
@@ -95,6 +117,50 @@ def test_baseline_records_the_measurement_it_projects(baseline: dict):
     }
 
 
+def test_required_repetitions_matches_the_drop_check():
+    """The two modules can't share this constant (would be circular); kept in sync here."""
+    assert DERIVE_REQUIRED_REPETITIONS == REQUIRED_REPETITIONS
+
+
+def test_a_baseline_cannot_be_derived_from_evidence_with_blocking_reasons(
+    committed_evidence: dict, repo_local_tmp_path: Path
+):
+    """Decision 8's baseline-side truncation check only sees `complete_repetitions`;
+
+    it cannot see `blocking_reasons`/`runs[].complete` because the baseline doc
+    never carries them. Refusing here, at derive time, is the only place that
+    can catch a not-fully-clean source (Story 5.8 review).
+    """
+    dirty = copy.deepcopy(committed_evidence)
+    dirty["blocking_reasons"] = ["three_complete_repetitions_missing"]
+    path = repo_local_tmp_path / "dirty-evidence.json"
+    path.write_text(json.dumps(dirty), encoding="utf-8")
+    with pytest.raises(ValueError, match="blocking_reasons"):
+        derive_baseline(path)
+
+
+def test_a_baseline_cannot_be_derived_from_an_incomplete_run(
+    committed_evidence: dict, repo_local_tmp_path: Path
+):
+    dirty = copy.deepcopy(committed_evidence)
+    dirty["runs"][0]["complete"] = False
+    path = repo_local_tmp_path / "dirty-evidence.json"
+    path.write_text(json.dumps(dirty), encoding="utf-8")
+    with pytest.raises(ValueError, match="incomplete runs"):
+        derive_baseline(path)
+
+
+def test_a_baseline_cannot_be_derived_from_too_few_complete_repetitions(
+    committed_evidence: dict, repo_local_tmp_path: Path
+):
+    dirty = copy.deepcopy(committed_evidence)
+    dirty["complete_repetitions"] = 1
+    path = repo_local_tmp_path / "dirty-evidence.json"
+    path.write_text(json.dumps(dirty), encoding="utf-8")
+    with pytest.raises(ValueError, match="complete_repetitions"):
+        derive_baseline(path)
+
+
 def test_baseline_source_digest_is_line_ending_normalised(baseline: dict):
     """The Story 1.9/1.10/1.11 CRLF defect, guarded in a new place.
 
@@ -141,6 +207,56 @@ def test_consistency_check_fails_when_the_source_is_absent(
     consistent, detail = baseline_matches_source(baseline, tmp_path / "gone.json")
     assert not consistent
     assert "does not exist" in detail
+
+
+def test_baseline_matches_source_default_is_wrong_for_a_different_baseline(
+    baseline: dict, tmp_path: Path
+):
+    """A caller checking a DIFFERENT baseline must pass its OWN source path.
+
+    `baseline_matches_source`'s `source` parameter defaults to today's one
+    baseline's source; relying on that default for a hypothetical SECOND
+    baseline whose declared source is a different file digests the wrong
+    thing entirely (Story 5.8 review). `main()` never relies on the default
+    for exactly this reason -- see its own call site.
+    """
+    other_evidence_path = tmp_path / "other-evidence.json"
+    other_evidence_path.write_text(json.dumps({"unrelated": "content"}), encoding="utf-8")
+    other_baseline = copy.deepcopy(baseline)
+    other_baseline["source_evidence_path"] = str(other_evidence_path)
+    other_baseline["source_evidence_sha256"] = dataset_file_digest(other_evidence_path)
+
+    # Checked against ITS OWN declared source: consistent.
+    consistent, detail = baseline_matches_source(
+        other_baseline, Path(other_baseline["source_evidence_path"])
+    )
+    assert consistent
+    assert str(other_evidence_path) in detail
+
+    # Checked against the DEFAULT (today's baseline's source, unrelated content):
+    # wrongly reports drift on a baseline that is actually fine.
+    wrongly_consistent, wrong_detail = baseline_matches_source(other_baseline)
+    assert not wrongly_consistent
+    assert "re-derive the baseline" in wrong_detail
+
+
+def test_the_drop_check_uses_the_loaded_baselines_own_source_path(
+    baseline: dict, green_report: dict, tmp_path: Path
+):
+    """End-to-end: `main()` must not fall back to the hardcoded default."""
+    other_evidence_path = tmp_path / "other-evidence.json"
+    other_evidence_path.write_text(json.dumps({"unrelated": "content"}), encoding="utf-8")
+    other_baseline = copy.deepcopy(baseline)
+    other_baseline["source_evidence_path"] = str(other_evidence_path)
+    other_baseline["source_evidence_sha256"] = dataset_file_digest(other_evidence_path)
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(other_baseline), encoding="utf-8")
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(green_report), encoding="utf-8")
+
+    completed = _run_cli(report_path, "--baseline", str(baseline_path))
+    assert "baseline_source_consistency" in completed.stderr
+    assert "passed  baseline_source_consistency" in completed.stderr, completed.stderr
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +307,24 @@ def test_tier_1_fails_when_a_watched_turn_is_missing_from_the_run(
     tier1 = _check(compare(baseline, green_report), "tier_1_full_marks_collapse")
     assert tier1["status"] == "failed"
     assert "does not report" in tier1["detail"]
+
+
+def test_tier_1_fails_when_an_exempt_partial_turn_vanishes_entirely(
+    baseline: dict, green_report: dict
+):
+    """`B:5` is exempt from the SCORE-collapse check, never from PRESENCE.
+
+    A turn that simply never appears in the report is a structural gap, not a
+    score drop -- if nothing named it, it could hide under Tier 3's floor as
+    long as the aggregate stayed at or above 83 (Story 5.8 review).
+    """
+    green_report["turn_pass_rates"].pop("B:5")
+    result = compare(baseline, green_report)
+    tier1 = _check(result, "tier_1_full_marks_collapse")
+    assert tier1["status"] == "failed"
+    assert "'B:5'" in tier1["detail"]
+    # 87 - 2 = 85, still above the floor: only Tier 1's presence check catches it.
+    assert _check(result, "tier_3_aggregate")["status"] == "passed"
 
 
 def test_tier_2_fails_on_a_single_never_accept_occurrence(
@@ -295,6 +429,25 @@ def test_a_report_without_a_behavioural_digest_is_refused(
     assert "records no behavioral_digest" in _check(result, "configuration_match")[
         "detail"
     ]
+
+
+def test_the_wrong_shaped_report_is_refused_by_name_not_misdiagnosed(
+    baseline: dict, green_report: dict
+):
+    """A raw `live-matrix.json` run report, not the evidence document.
+
+    The module's own docstring warns against this misuse; before this check
+    it fell through `configuration_refusal`'s missing-`behavioral_digest`
+    branch -- an accurate but confusing diagnosis of the wrong problem
+    (Story 5.8 review).
+    """
+    wrong_shape = {"measured_configuration": green_report["measured_configuration"]}
+    result = compare(baseline, wrong_shape)
+    assert result["refused"] is True
+    assert "report_shape" in result["refusal_reasons"]
+    shape = _check(result, "report_shape")
+    assert "turn_pass_rates" in shape["detail"]
+    assert "live-matrix.json" in shape["detail"]
 
 
 @pytest.mark.parametrize(

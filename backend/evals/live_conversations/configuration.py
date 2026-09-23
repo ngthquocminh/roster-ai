@@ -48,6 +48,17 @@ def behavioral_environment(override_file: Path) -> dict:
     Both the `api` and `worker` service blocks are kept SEPARATELY: they are
     expected to agree, and silently merging them would hide a configuration
     where they do not.
+
+    KNOWN GAP (Story 5.8 review, accepted rather than fixed): `yaml.safe_load`
+    never resolves docker-compose `${VAR:-default}` substitution, so a value
+    like `DEMONSTRATION_ENABLED: ${DEMONSTRATION_ENABLED:-false}` is captured
+    as that literal placeholder string, identical regardless of what
+    `stack.py` actually injected at runtime. `reasoning_effort` has the same
+    substitution syntax but is safe because `measured_configuration` also
+    records it as its own explicit field; `demonstration_enabled` has no such
+    field and so is invisible to `behavioral_digest` either way. Accepted
+    because it does not affect this suite's authored conversation paths
+    today -- revisit if a future scenario becomes sensitive to it.
     """
     import yaml  # dev-group, test-only -- see backend/pyproject.toml
 
