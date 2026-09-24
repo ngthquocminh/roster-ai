@@ -8,12 +8,12 @@
     },
     "span_export_boundary": {
       "module": "backend/adapters/telemetry/spans.py",
-      "sha256": "601cb29db60eb97404efb9dc56fcbcb287a710bf9ca72282dc6d66fecc838866",
+      "sha256": "1275d6a27f01217a2c77fd71fddde1fdb60975871699e5e3293a298de90127ce",
       "version": "1"
     },
     "span_export_policy": {
       "module": "backend/adapters/telemetry/span_policy.py",
-      "sha256": "8943b9876490e5b663549da084df6771700cf38cde42b73b29ee261fec10d67b",
+      "sha256": "ce48ed741e4e65461f71feee6217088a135922873e016c5f36a9c686e5df713c",
       "version": "1"
     },
     "telemetry_record": {
@@ -78,7 +78,7 @@
       ]
     }
   },
-  "generated_at": "2026-09-24T11:19:36.563725+00:00",
+  "generated_at": "2026-09-24T14:52:42.421529+00:00",
   "passed": true,
   "proof_nodes": {
     "c1_telemetry_adversarial": {
@@ -216,7 +216,7 @@
   "version_bindings": {
     "application": "ShiftMind Story 5.2 telemetry boundaries and Story 5.9 export boundary",
     "code": {
-      "git_commit": "085360dbf681ae89f3c22127b51054b9af97516c",
+      "git_commit": "edb2efefb698e2c36773ae287c86b475627199ef",
       "working_tree_dirty": false
     },
     "dataset": {
