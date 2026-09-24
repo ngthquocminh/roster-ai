@@ -50,14 +50,14 @@ The recovery boundary is persisted product state, not an HTTP stream, an ECS tas
 | Browser updates | REST/JSON commands plus persisted SSE replay | Commands remain durable without the stream; use `Last-Event-ID` replay |
 | Authentication | Cognito User Pool with application BFF/session boundary | Public sign-up off; map Cognito subject to current membership |
 | Evidence | PostgreSQL business records plus checksummed S3 snapshots | Business audit is authoritative and unsampled |
-| Agent observability | Hosted Logfire Personal through OpenTelemetry | Optional for correctness; disable prompt/tool content capture by default |
+| Agent observability | Hosted Logfire through standard OpenTelemetry (OTLP), full request path: API, database, agent, worker | Optional for correctness; content-free by default behind an export-boundary allow-list; content only in the authorized synthetic-eval mode (§6) |
 | AWS operations | Structured JSON stdout and CloudWatch logs/alarms | Keep diagnosis available when external telemetry fails |
 | Evaluation | Pydantic Evals, pytest, deterministic model doubles, Playwright | Version-controlled datasets and CI gates remain application-owned |
 | Infrastructure | Terraform and GitHub Actions OIDC | Immutable images, reviewed plans, no long-lived AWS deploy keys |
 
 ### 2.1 Why Logfire is used
 
-Hosted Logfire Personal is appropriate for the portfolio as a convenience observability and evaluation control plane: PydanticAI/FastAPI/database instrumentation, agent/tool traces, token and cost visibility, dashboards, alerts, and Pydantic Evals comparison. It is not self-hosted, not the domain audit trail, and not required for product operation. Its finite quota/retention and external hosting are acceptable only because authoritative evidence remains in PostgreSQL/S3, JSON logs remain in CloudWatch, telemetry content is minimized, and export failure never blocks the workflow. A paid Logfire tier, a different OTLP backend, or Phoenix can be evaluated when collaboration, retention, compliance, or self-hosting requirements become real.
+Hosted Logfire Personal is appropriate for the portfolio as a convenience observability and evaluation control plane: PydanticAI/FastAPI/database instrumentation, agent/tool traces, token and cost visibility, dashboards, alerts, and Pydantic Evals comparison. It is not self-hosted, not the domain audit trail, and not required for product operation. Its finite quota/retention and external hosting are acceptable only because authoritative evidence remains in PostgreSQL/S3, JSON logs remain in CloudWatch, telemetry content is minimized, and export failure never blocks the workflow. A paid Logfire tier, a different OTLP backend, or Phoenix can be evaluated when collaboration, retention, compliance, or self-hosting requirements become real. ShiftMind exports with the standard OpenTelemetry SDK and its own export-boundary sanitizer rather than the Logfire SDK, so the allow-list is enforced before data leaves the process; the Logfire SDK and Pydantic Evals are used only by evaluation tooling to publish live-evaluation results as Logfire experiments (sprint-change-proposal-2026-09-24).
 
 ## 3. Agent runtime and tool contract
 
@@ -146,7 +146,7 @@ S3 evidence objects use content-addressed or immutable version-addressed keys, c
 
 Use stable identifiers across these systems: request, conversation, agent run, tool call, approval, job, solver run, audit event, site, actor, and schedule version. Do not use high-cardinality identifiers as metric labels.
 
-Logfire must use PydanticAI instrumentation with content and binary capture disabled by default. Export only allow-listed attributes and scrub as defense in depth. Never export credentials, raw workforce data, full prompts/completions, schedule payloads, tool arguments/results, or approval evidence unless a specific safe diagnostic mode is authorized.
+Logfire export must use PydanticAI instrumentation with content and binary capture disabled by default, and an export-boundary sanitizer that forwards only allow-listed attributes for every span type (agent, HTTP, database, worker), strips URL query strings, never exports SQL parameter values, and records exceptions by type only. Never export credentials, raw workforce data, full prompts/completions, schedule payloads, tool arguments/results, or approval evidence, except in the one authorized diagnostic mode: `AGENT_TRACE_CONTENT_MODE=synthetic-eval`, set only by the disposable live-evaluation stack running seeded synthetic fixtures and tagged `deployment.environment=live-eval`. Credentials and exception text are withheld in every mode. Client-supplied trace context is never trusted.
 
 ## 7. AWS target deployment
 
