@@ -4,7 +4,7 @@ baseline_commit: 67584d5
 
 # Story 5.9: Trace the Full Request Path to Logfire Behind One Export Boundary
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -870,17 +870,17 @@ of the override) — deliberately left as the measured value; Decision 13 is wha
 - [x] **Task 15 — Demonstrated-red mutation table (retro A1)** — minimum rows in *Dev Notes → Mutation
       table minimum*. Every new canary test must be shown red by removing the sanitizer rule it relies on.
 
-- [ ] **Task 16 — Commit, measure, generate, commit — in this order (AC6) — per Decision 14**
-  - [ ] Follow *Dev Notes → The commit plan* literally.
+- [x] **Task 16 — Commit, measure, generate, commit — in this order (AC6) — per Decision 14**
+  - [x] Follow *Dev Notes → The commit plan* literally.
 
-- [ ] **Task 17 — One real Logfire smoke check, at the end (AC1, AC2, AC4)**
-  - [ ] Minh puts `LOGFIRE_TOKEN` (and `LOGFIRE_BASE_URL` if EU) in `backend/.env` himself — never in
+- [x] **Task 17 — One real Logfire smoke check, at the end (AC1, AC2, AC4)**
+  - [x] Minh puts `LOGFIRE_TOKEN` (and `LOGFIRE_BASE_URL` if EU) in `backend/.env` himself — never in
         chat. Run API + worker locally (`uvicorn api.main:app`, `python -m worker.main`), one
         deterministic conversation turn, one optimization run, one SSE session. In Logfire confirm: one
         trace per conversation; `invoke_agent` searchable by `shiftmind.agent_run.id`; the enqueue span
         and the worker trace joined by `shiftmind.schedule_run.id`; no query strings, no exception
         text, no `db.user`/`net.peer.ip`; how the synthesized parent renders (Decision 6).
-  - [ ] Then set `AGENT_TRACE_CONTENT_MODE=synthetic-eval` by hand for one turn (deterministic model —
+  - [x] Then set `AGENT_TRACE_CONTENT_MODE=synthetic-eval` by hand for one turn (deterministic model —
         no provider spend) and confirm the content keys and `deployment.environment=live-eval`. Record
         observations in the Dev Agent Record; this is not evidence.
 
@@ -1068,6 +1068,17 @@ Each row mutated already-green code through a harness that ran the named guard b
 | m21 | `logfire.msg` removed from the agent table | `test_export_agent_raw_key_drift` | 1 passed | 1 failed |
 | m22 | OpenTelemetry imported by `adapters/telemetry/json_logs.py` | `test_telemetry_adapter_imports_no_framework` (exemption is `spans.py` only) | 1 passed | 1 failed |
 
+### Task 16 and Task 17 records
+
+- **Task 16 (commit plan, followed literally):** `085360d` feat (clean, suite green) -> 5.2 report measured on the clean tree (32 proof nodes, `passed: true`, code bound to `085360d`, no skips) -> `9cf5858` evidence(story-5.2) alone -> Gate A three runners on the clean tree (pytest **2340 passed, 1 skipped** by design, 10 deselected; Vitest **648**; Playwright **80**, streaming reporter) -> `gate_a_readiness.py --code-from ../evidence/story-5.2/content-minimization-report.json` -> **`gate_a_passed: true`**, every row passed including `content_minimization` and `measurement_integrity`, code binding `085360d` -> `552668e` evidence(gate-a) alone. No `--allow-dirty`, no hand edits.
+- **Task 17 smoke check (observation only, not evidence), 2026-09-24, project `ngthquocminh/shiftmind` (US):** Minh put the token in `backend/.env`; it was never read, echoed or written by the agent. API (`uvicorn`, port 8791, `AGENT_RUNTIME_MODEL=deterministic` forced in the process env) and worker (`python -m worker.main --runtime-factory worker.composition:create_runtime`) run locally against Docker PostgreSQL. One deterministic turn (with a hostile `traceparent` on every request and `?probe=CANARY-QUERY-SMOKE` on one), one optimization run (`solver_completed`), one SSE session. Queried through the Logfire MCP (SQL on `records`):
+  - **One trace per conversation:** conversation `d1f48987-...` -> trace `d1f48987ba7e4e8c840d1d123465786f`; `messages`, `execute`, the SSE `events` span, `invoke_agent`, both `chat` spans, `execute_tool scheduling_inspect` and the turn's statement spans all in it. The hostile trace ID appears on no span.
+  - **Synthesized parent:** the three request spans carry `parent_span_id = 840d1d123465786f` (the UUID's low 64 bits), a span Logfire never receives. Logfire stores and renders the trace normally with those request spans as its top level (an orphan parent, not an error); UI link for a visual check: https://logfire-us.pydantic.dev/ngthquocminh/shiftmind/?q=trace_id%3D%27d1f48987ba7e4e8c840d1d123465786f%27
+  - **Correlation:** `invoke_agent` carries `shiftmind.agent_run.id = 01e9f5d0-...` (the turn's agent run) and `shiftmind.conversation.id`. `POST /api/v1/schedule-runs` carries `shiftmind.schedule_run.id`; for run `6ad492c5-...` the enqueue span (trace `78e7d5cd...`) and the worker's `shiftmind.worker.execute` root (trace `6cca6569...`, status `solver_completed`, queue age 0.17 s) share it, with `lease` (5.7 ms) and `solve` (FEASIBLE, 27.3 s) as children plus the job's 79 INSERT and other statement spans. Two later runs have enqueue spans but no worker spans: Minh's Docker compose stack was also up, and its untraced `rosterai-worker-1` (same PostgreSQL) leased them. A local-setup artifact, not a defect.
+  - **Hygiene over all 1,094 exported spans in the window:** 0 containing a canary, 0 server spans with `http.url`, 0 `http.target` with a query, 0 with `db.user`/`net.peer.ip`/`http.user_agent`, 0 status messages, 0 `exception.message`. `/health` exported nothing; the SSE span has no child spans. Each `GET /api/v1/schedule-runs/{run_id}` poll is its own small root trace (expected: not a conversation route).
+  - **Content mode**, one deterministic turn with `AGENT_TRACE_CONTENT_MODE=synthetic-eval` set by hand on the API process (conversation `6901778f-...`): every agent span has resource `deployment.environment=live-eval`; `gen_ai.system_instructions` and the prompt text on `invoke_agent`/`chat`, `gen_ai.tool.call.arguments`/`.result` on `execute_tool`, `final_result` on `invoke_agent`; still no status message.
+  - Logfire's suggested `agent-setup.md` (`logfire-cli setup --task instrumentation`) was read and deliberately NOT followed: it instruments with the Logfire SDK, which the spine and this story's architecture guard forbid in the runtime. The OTLP path already delivers everything above.
+
 ### Completion Notes List
 
 - One export boundary: the policy is production data in `adapters/telemetry/span_policy.py` (stdlib only, default-deny, per-category tables as measured), applied by `SanitizingSpanExporter` in `adapters/telemetry/spans.py`, the only SDK/exporter importer besides `api/tracing.py`. Events keep `exception.type` only; status descriptions, links and scope attributes never leave; the resource is rebuilt from its allow-list. A sanitization error fails the batch; it never raises or exports unsanitized.
@@ -1095,3 +1106,4 @@ Evidence (separate commits, Task 16): `evidence/story-5.2/content-minimization-r
 |---|---|
 | 2026-09-24 | Story created at `67584d5`. Allow-list measured, not written from docs: a throwaway harness drove eight channels against the real app and Docker PostgreSQL with the exact pins. Eleven measured facts shaped fifteen decisions, including three leak channels Story 5.2 never read (status descriptions on agent and DB spans; `instruction_parts` in default mode; outbound `baggage`), four placements that silently fail (lifespan instrumentation, `add_middleware`, `context.attach`, the global SQLAlchemy instrumentor), and a collision with Story 5.8's baseline that the AC4 file choice causes. Baseline: backend 2240 passed / 2 skipped / 10 deselected; Vitest 648 / 85 files. |
 | 2026-09-24 | Implemented (dev-story). Two stops resolved with Minh: Story 3.9 manual-path telemetry guard exempts only the export boundary; F1 excludes evidence/. 22-row demonstrated-red mutation table; backend 2339 passed / 2 skipped pre-commit. |
+| 2026-09-24 | Evidence regenerated (`9cf5858`, `552668e`, gate_a_passed true); real Logfire smoke check recorded; status -> review. |
