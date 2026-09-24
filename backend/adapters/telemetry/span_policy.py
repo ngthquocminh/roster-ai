@@ -92,15 +92,43 @@ def _closed(vocabulary: frozenset[str]) -> Callable[[object], object | None]:
 Transform = Callable[[object, Mapping[str, object]], object | None]
 
 
-def strip_target_query(value: object, attributes: Mapping[str, object]) -> object | None:
-    """`http.target`: cut at the first `?` or `#`; drop on an unmatched route.
+def _is_identifier(segment: str) -> bool:
+    if segment.isdigit():
+        return True
+    try:
+        UUID(segment)
+    except ValueError:
+        return False
+    return True
 
-    An unmatched route has no `http.route`, and its path is client free text
-    (a canary rode it in the measurement).
+
+def strip_target_query(value: object, attributes: Mapping[str, object]) -> object | None:
+    """`http.target`: the path only, and only when it is template + identifiers.
+
+    Cut at the first `?` or `#`, then keep the path only if it lines up with
+    `http.route` segment for segment, with every `{param}` filled by a UUID or
+    an integer. An unmatched route has no `http.route` (a canary rode its path
+    in the measurement), and a MATCHED route is no better on its own: Starlette
+    matches `{param}` as `[^/]+` before FastAPI validates the type, so a 401 or
+    422 request carries whatever text the client put there (code review
+    2026-09-24, observed in hosted Logfire). Anything else drops the key;
+    `http.route` still names the template.
     """
-    if not isinstance(value, str) or not attributes.get("http.route"):
+    route = attributes.get("http.route")
+    if not isinstance(value, str) or not isinstance(route, str) or not route:
         return None
-    return re.split(r"[?#]", value, maxsplit=1)[0]
+    path = re.split(r"[?#]", value, maxsplit=1)[0]
+    template_segments = route.split("/")
+    path_segments = path.split("/")
+    if len(template_segments) != len(path_segments):
+        return None
+    for template, segment in zip(template_segments, path_segments):
+        if template.startswith("{") and template.endswith("}"):
+            if not _is_identifier(segment):
+                return None
+        elif template != segment:
+            return None
+    return path
 
 
 def strip_url_to_origin_and_path(

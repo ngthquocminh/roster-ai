@@ -13,7 +13,7 @@ from functools import lru_cache
 from typing import Callable, ContextManager, Iterator
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, params
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import Connection, Engine, create_engine as create_postgres_engine, text
 
@@ -146,9 +146,10 @@ def get_agent_runtime_factory(
     Keyless it is plain `create_agent_runtime`; with tracing, the process
     provider is passed explicitly -- the global tracer provider is never set.
     """
-    if not isinstance(tracing, ProcessTracing):
+    if isinstance(tracing, params.Depends):
         # Called directly rather than through FastAPI, the default is the
-        # `Depends` marker itself.
+        # `Depends` marker itself. A real `None` -- an override disabling
+        # tracing -- is honoured, never replaced by the process global.
         tracing = get_process_tracing()
     if tracing is None:
         return create_agent_runtime

@@ -18,7 +18,10 @@ import requests
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
     ExportTraceServiceRequest,
 )
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from adapters.telemetry import span_policy
 from adapters.telemetry.spans import ProcessTracing, build_process_tracing
 from settings import default_settings
 
@@ -33,10 +36,15 @@ class CapturingSession(requests.Session):
         self.status = status
         self.bodies: list[bytes] = []
         self.headers_seen: list[dict[str, str]] = []
+        self.urls_seen: list[str] = []
+        #: Every span as the SDK produced it, BEFORE the sanitizer -- the
+        #: drift check's input (Decision 4). Never what leaves the process.
+        self.raw_exporter = InMemorySpanExporter()
 
     def post(self, url, data=None, **_kwargs):  # type: ignore[override]
         self.bodies.append(bytes(data or b""))
         self.headers_seen.append(dict(self.headers))
+        self.urls_seen.append(url)
         response = requests.Response()
         response.status_code = self.status
         response._content = b""
@@ -154,7 +162,29 @@ def capture_tracing(
         session=session,
     )
     assert tracing is not None
+    tracing.provider.add_span_processor(SimpleSpanProcessor(session.raw_exporter))
     return tracing, session
+
+
+def assert_raw_keys_classified(session: CapturingSession, category: str) -> None:
+    """Decision 4's drift check on OBSERVED spans, for any category.
+
+    Every key the SDK emitted -- before sanitization -- on a span of
+    `category` must be decided by that category's table (allowed,
+    transformed, content, or known-dropped). An unclassified key reddens here
+    naming itself, while the runtime independently drops it. Non-vacuous: at
+    least one span of the category must have been observed.
+    """
+    observed: set[str] = set()
+    seen = False
+    for span in session.raw_exporter.get_finished_spans():
+        scope = span.instrumentation_scope.name if span.instrumentation_scope else None
+        if span_policy.categorize(scope) != category:
+            continue
+        seen = True
+        observed.update((span.attributes or {}).keys())
+    assert seen, f"no {category} span was observed"
+    assert span_policy.unclassified_keys(category, observed) == set()
 
 
 def flush(tracing: ProcessTracing) -> None:

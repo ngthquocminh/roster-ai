@@ -1358,8 +1358,9 @@ def test_not_found_and_policy_precheck_write_no_denial_audit_without_telemetry(
     assert after == before
 
 
+@pytest.mark.parametrize("kind", ("unreachable", "slow", "rejected"))
 def test_authoritative_audit_survives_a_failing_span_exporter(
-    governed_postgres_engine, site_ids, decision_http_client, request
+    kind, governed_postgres_engine, site_ids, decision_http_client, request
 ) -> None:
     """AC4: observability being disabled or broken cannot remove the record.
 
@@ -1372,12 +1373,13 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
     """
     # Story 5.9: the REAL export pipeline -- sampler, batch processor,
     # sanitizer, OTLP exporter -- installed on the app exactly as production
-    # installs it, pointed at an unreachable Logfire. A counting session keeps
-    # the case from passing because nothing was ever exported.
+    # installs it, pointed at each broken Logfire of Decision 12 (unreachable,
+    # slow, rejecting the token). A counting session keeps the case from
+    # passing because nothing was ever exported.
     from api.tracing import install_api_tracing
     from tests.test_trace_export_failure_independence import failing_tracing
 
-    pipeline = failing_tracing("unreachable", service_name="shiftmind-api")
+    pipeline = failing_tracing(kind, service_name="shiftmind-api")
     tracing, exports = pipeline.__enter__()
     undo = install_api_tracing(app, tracing)
     uninstalled = False
@@ -1412,12 +1414,12 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
     app.dependency_overrides[get_clock] = lambda: NOW
 
     denial = client.post(
-        url, headers=_governance_headers(settings, key="otel-denial"),
+        url, headers=_governance_headers(settings, key=f"otel-denial-{kind}"),
         json={"decision": "approve", "expected_resource_version": 99},
     )
     tracing.provider.force_flush(10_000)  # an export really fails in between
     success = client.post(
-        url, headers=_governance_headers(settings, key="otel-success"),
+        url, headers=_governance_headers(settings, key=f"otel-success-{kind}"),
         json={"decision": "approve", "expected_resource_version": 1},
     )
     additional: list[tuple[object, str]] = []
@@ -1446,7 +1448,7 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
                 c.execute(update(schedule_run).where(schedule_run.c.id == extra["schedule_run"]).values(resource_version=3))
         extra_response = client.post(
             f"/api/v1/approvals/{extra_binding.approval_id}/decision",
-            headers=_governance_headers(settings, key=f"otel-{expected_outcome}"),
+            headers=_governance_headers(settings, key=f"otel-{expected_outcome}-{kind}"),
             json={"decision": "reject" if expected_outcome == "rejected" else "approve", "expected_resource_version": 1},
         )
         additional.append((extra_binding.approval_id, expected_outcome))

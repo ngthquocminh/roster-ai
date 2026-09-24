@@ -52,7 +52,12 @@ def conversation_traceparent(path: str) -> bytes | None:
 
 
 class TraceContextBoundary:
-    """Outermost ASGI wrapper: drop client trace headers, add the derived one."""
+    """Outermost ASGI wrapper: drop client trace headers, add the derived one.
+
+    It runs before authentication (it must: fact 6), so a request naming a
+    conversation it may not read still joins that conversation's trace --
+    telemetry integrity only, ledgered at code review 2026-09-24.
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app

@@ -884,6 +884,35 @@ of the override) — deliberately left as the measured value; Decision 13 is wha
         no provider spend) and confirm the content keys and `deployment.environment=live-eval`. Record
         observations in the Dev Agent Record; this is not evidence.
 
+### Review Findings
+
+Code review 2026-09-24 (`2960de0..cad2f05`; Blind Hunter, Edge Case Hunter, Acceptance Auditor, plus
+reviewer-run mutations). Independent mutations by the reviewer, via a pytest plugin that patched the live
+policy tables with no repo file touched: m04 (`instruction_parts` transform → identity) turned the C4
+off-mode test red; an unlisted mutation (client `http.url` transform → identity) turned C6 key/query and C6
+adversarial red with the canary in the exported bytes; worker `schedule_run.status` closed vocabulary →
+identity left C8 green but turned `test_worker_keys_are_closed_vocabularies_uuids_and_numbers` red. The
+delivered guards are real; the gaps are listed below. 15 findings dismissed as noise or spec-conforming.
+
+**All 12 applied (Minh: "apply every patch").** Each fix is shown red by mutation rows m23-m47 in the Dev
+Agent Record. Note for the record: during review an ad-hoc probe script imported `settings`, which reloaded
+the real `LOGFIRE_TOKEN` from `backend/.env`, so ONE sanitized 401 span carrying the probe string
+`IGNORE-PREVIOUS-INSTRUCTIONS-CANARY` in `http.target` reached the hosted `shiftmind` project -- the same
+observation that confirmed the first finding. No other review traffic reached Logfire (queried).
+
+- [x] [Review][Patch] **HIGH — `http.target` exports client free text on MATCHED routes** [backend/adapters/telemetry/span_policy.py:95] — `strip_target_query` drops the key only when `http.route` is absent, but Starlette matches every `{param}` as `[^/]+` before FastAPI validates it, so `/api/v1/conversations/<any text>/messages` (a 401/422) keeps its raw path. Confirmed end to end in hosted Logfire during review: `http.target = /api/v1/conversations/IGNORE-PREVIOUS-INSTRUCTIONS-CANARY/messages` on the `shiftmind-api` service. Violates AC3 ("adversarial fixtures are absent … including HTTP") and the table's own premise ("path IDs are identifiers"). Fix: keep `http.target` (query-cut) only when every segment that fills a `{param}` of `http.route` parses as a UUID (or is all digits); otherwise drop the key — `http.route` still carries the template. Add C5 cells with a canary in a matched route's path segment, and a mutation row.
+- [x] [Review][Patch] **Shutdown is not bounded at 5 s; the API lifespan flush is unguarded** [backend/adapters/telemetry/spans.py:243] — in SDK 1.44 `BatchProcessor.force_flush` ignores `timeout_millis` (upstream TODO #4568) and synchronously exports the whole queue (up to 4 × 512 spans × 5 s deadline ≈ 20 s against a slow collector), and `provider.shutdown()` joins the worker for up to 30 s — past the API's 10 s stop grace. `api/main.py:68-72` also skips the flush if `run_service.shutdown()` raises. Fix: run flush+shutdown on a daemon thread joined with a hard deadline; wrap the lifespan call in `try/finally` + `except Exception`. Extend `test_shutdown_is_bounded` to a FULL queue against the slow server.
+- [x] [Review][Patch] **AC5's approval-and-audit leg runs against only the `unreachable` exporter** [backend/tests/test_approval_governance_postgres.py:1380] — Decision 12 requires an approval decision with its audit rows for EACH of unreachable/slow/rejected; `turn_and_job` in `test_trace_export_failure_independence.py` has no approval. Parametrize the approval-audit test over the three fixtures.
+- [x] [Review][Patch] **Worker telemetry runs unguarded on the product path** [backend/adapters/telemetry/spans.py:364] — `_JobScope.open` (after the DB lease) and the post-solve `set_attribute(… float(outcome.wall_time_seconds))` (`:472-474`) are not isolated; any raise aborts a leased job or makes `execute_schedule_run` replace a finished solve with `UNKNOWN`. Not reachable with today's contracts, but AD-12 says telemetry never blocks product work. Wrap both in `try/except Exception` that disables the span and never propagates.
+- [x] [Review][Patch] **Mutation table incomplete; four canary cells assert on surfaces that are never populated** [backend/tests/test_content_minimization.py:792] — Task 15 requires every new canary cell shown red; never shown: C4 secrets, C5 secrets, C6 prompt-injection, C6 adversarial, C7 prompt-injection, C7 adversarial, C8 secrets, C8 prompt-injection. Vacuous: C7 adversarial's `all(... for _ in events)` over zero events (m02 cannot redden it); C8 adversarial raises in `solve()` so `job.finish(status=ADVERSARIAL)` never runs (closed-vocabulary mutation left it green — reviewer-run); C8 prompt-injection puts text in `reason`/`warnings`, which no span emits. Guards with no mutation row: `logfire` ban + exact pins, `/health` exclusion, `exclude_spans`, resource rebuild, links/scope-attribute drop, sanitizer-failure → FAILURE. Fix the three cells so each can go red, then add the rows.
+- [x] [Review][Patch] **AC4's content-mode proof never shows completions or tool results exported** [backend/tests/test_content_minimization.py:921] — the scripted model raises on its second call, so `final_result`, `gen_ai.tool.call.result` and output-message content are asserted nowhere (seen only in the Task 17 smoke check, which is not evidence). Use a completing scripted turn and assert all five content keys plus the text.
+- [x] [Review][Patch] **Decision 4's drift check observes only the agent category** [backend/tests/test_trace_export_boundary.py:310] — HTTP server and database are checked against hand-typed copies of the table (circular); HTTP client and worker have none. Capture pre-sanitizer keys in the C5/C6/C7/C8 fixtures and run `unclassified_keys` on what was observed.
+- [x] [Review][Patch] **The exporter still reads `OTEL_EXPORTER_OTLP_*` TLS vars and the credential-provider session; the env-independence test cannot fail on endpoint** [backend/adapters/telemetry/spans.py:289] — `OTLPSpanExporter.__init__` still takes certificate/client-cert/client-key from env and, with `session=None`, `_OTEL_PYTHON_EXPORTER_OTLP_HTTP_TRACES_CREDENTIAL_PROVIDER`; `CapturingSession.post` discards `url`, so `test_the_exporter_is_built_from_settings_not_otel_env` never checks the endpoint. Pass an explicit `requests.Session()` and `certificate_file=True`, record and assert the posted URL, and correct the module docstring for what remains env-controlled.
+- [x] [Review][Patch] **`LOGFIRE_BASE_URL` validation accepts an empty `?`/`#`, userinfo and invalid ports** [backend/settings.py:274] — `https://host?` yields endpoint `https://host?/v1/traces`; `https://u:p@host` makes `requests` replace the `Authorization` token header with Basic auth; `:99999` passes. All fail silently on every export. Reject userinfo, any literal `?`/`#`, and a port `urlsplit` cannot parse.
+- [x] [Review][Patch] **`get_agent_runtime_factory` ignores a `None` override of `get_process_tracing`** [backend/api/deps.py:149] — `isinstance(tracing, ProcessTracing)` treats a real `None` like the `Depends` marker and falls back to the process global. Test for the `Depends` marker (`fastapi.params.Depends`) instead.
+- [x] [Review][Patch] **Decision 6's edge rules are untested** [backend/api/tracing.py:36] — no test references `conversation_traceparent`/`TraceContextBoundary` directly: a 36-character non-UUID segment → no parent, zero low-64 bits → parent `1`, and websocket scopes. Add unit tests.
+- [x] [Review][Patch] **Undocumented residual: any caller can put spans into any conversation's trace** [backend/api/tracing.py:60] — the parent is synthesized from the path before authentication, so 401/403/404 requests naming a conversation UUID join that conversation's trace. Telemetry-integrity only (no product effect), and the outermost placement is required (fact 6). Record it in Decision 6's "does not cover" and in `docs/CONFIGURATION.md` or the ledger.
+
 ---
 
 ## Dev Notes
@@ -1068,6 +1097,36 @@ Each row mutated already-green code through a harness that ran the named guard b
 | m21 | `logfire.msg` removed from the agent table | `test_export_agent_raw_key_drift` | 1 passed | 1 failed |
 | m22 | OpenTelemetry imported by `adapters/telemetry/json_logs.py` | `test_telemetry_adapter_imports_no_framework` (exemption is `spans.py` only) | 1 passed | 1 failed |
 
+**Code-review rows (2026-09-24).** Same discipline, through a scratchpad harness: live-policy mutations patch `span_policy` module attributes from a pytest plugin (`spans.py` calls them through the module), file mutations are exact-string edits restored from saved bytes in `finally`; the tree's `git diff` hash was `e335561d006e` before and after. They cover the eight canary cells the rows above never showed red (C4 secrets, C5 secrets, C6 prompt-injection, C6 adversarial, C7 prompt-injection, C7 adversarial, C8 secrets, C8 prompt-injection) and every guard added or left unrowed at review.
+
+| # | Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|---|
+| m23 | `http.target` back to "drop only when `http.route` is absent" | C5 prompt-injection + C5 adversarial (matched-route path segment) + 4 `test_http_server_drops_a_matched_route_target_carrying_free_text` cases | all passed | 6 failed |
+| m24 | client `http.url` transform → identity | C6 key/query + C6 adversarial | 2 passed | 2 failed |
+| m25 | worker `shiftmind.schedule_run.status` closed vocabulary → identity | C8 prompt-injection + C8 adversarial (the finishing job) | 2 passed | 2 failed |
+| m26 | worker `shiftmind.solver.status` closed vocabulary → identity | C8 prompt-injection | 1 passed | 1 failed |
+| m27 | `http.user_agent` added to the server allow-list | C5 secrets | 1 passed | 1 failed |
+| m28 | sanitizer treats every mode as content mode AND `include_content=True` forced | C4 secrets + C6 prompt-injection (C6 can only redden through the agent rules: httpx records no bodies) | 2 passed | 2 failed |
+| m29 | exported status keeps its description | C7 prompt-injection + C7 adversarial | 2 passed | 2 failed |
+| m30 | `sanitize_event` keeps every attribute | C8 secrets + C5 adversarial | 2 passed | 2 failed |
+| m31 | `ProcessTracing.shutdown` flushes on the calling thread (no deadline) | `test_shutdown_is_bounded_with_a_full_queue` | 3 passed | 2 failed, 1 passed (`rejected`: a 401 is not retried, so the queue drains fast -- by design) |
+| m32 | `_JobScope.open` unguarded in `lease_next_job` | `test_a_failing_trace_call_never_costs_the_lease_or_the_solve` | 1 passed | 1 failed |
+| m33 | post-solve attribute setting unguarded | same | 1 passed | 1 failed |
+| m34 | exporter built with `session=session` and no `certificate_file` | `test_the_environment_cannot_choose_the_exporters_session_or_ca` | 1 passed | 1 failed |
+| m35 | base-URL `@`/`?`/`#` checks removed | `test_an_invalid_logfire_base_url_fails_at_startup` | 11 passed | 5 failed, 6 passed (the host/port cases have their own checks) |
+| m36 | `get_agent_runtime_factory` back to `isinstance(tracing, ProcessTracing)` | `test_a_none_tracing_override_is_honoured_over_the_process_global` | 1 passed | 1 failed |
+| m37 | `or 1` removed from the synthesized parent | `test_a_zero_low_half_still_yields_a_valid_parent_span_id` | 1 passed | 1 failed |
+| m38 | `import logfire` in `worker/lease_worker.py` | `test_no_runtime_root_imports_logfire` | 1 passed | 1 failed |
+| m39 | `opentelemetry-sdk>=1.44.0` in `pyproject.toml` | `test_logfire_is_not_a_runtime_dependency_and_otel_pins_are_exact` | 1 passed | 1 failed |
+| m40 | `excluded_urls="/health$"` removed | `test_trace_request_path.py` (`/health` exports none) | 1 passed | 1 failed |
+| m41 | `exclude_spans=["receive","send"]` removed | `test_trace_request_path.py` (SSE exports one span) | 1 passed | 1 failed |
+| m42 | `sanitize_resource` passes every key | `test_resource_is_rebuilt_from_its_allow_list` | 1 passed | 1 failed. Whole-path tests stay green: `_resource` builds only allow-listed keys and never merges the environment, so the export-time filter is defence in depth with no real-path input |
+| m43 | exported span keeps its links | `test_the_sanitizer_strips_events_status_links_and_scope_on_real_spans` | 1 passed | 1 failed |
+| m44 | a sanitization error re-raises instead of returning FAILURE | `test_a_sanitizer_failure_drops_the_batch_and_never_raises` | 1 passed | 1 failed |
+| m45 | sanitizer forced to `off` whatever the mode | `test_export_content_mode_key_set` | 1 passed | 1 failed |
+| m46 | `net.peer.ip` removed from the server's `KNOWN_DROPPED` | C5 secrets (observed-key drift check) | 1 passed | 1 failed |
+| m47 | `db.user` removed from the database's `KNOWN_DROPPED` | C7 secrets (observed-key drift check) | 1 passed | 1 failed |
+
 ### Task 16 and Task 17 records
 
 - **Task 16 (commit plan, followed literally):** `085360d` feat (clean, suite green) -> 5.2 report measured on the clean tree (32 proof nodes, `passed: true`, code bound to `085360d`, no skips) -> `9cf5858` evidence(story-5.2) alone -> Gate A three runners on the clean tree (pytest **2340 passed, 1 skipped** by design, 10 deselected; Vitest **648**; Playwright **80**, streaming reporter) -> `gate_a_readiness.py --code-from ../evidence/story-5.2/content-minimization-report.json` -> **`gate_a_passed: true`**, every row passed including `content_minimization` and `measurement_integrity`, code binding `085360d` -> `552668e` evidence(gate-a) alone. No `--allow-dirty`, no hand edits.
@@ -1098,6 +1157,8 @@ Modified: `backend/pyproject.toml`, `backend/uv.lock`, `backend/settings.py`, `b
 
 Evidence (separate commits, Task 16): `evidence/story-5.2/content-minimization-report.json`, `evidence/story-1.11/gate-a-readiness-report.json`.
 
+Code-review fixes (2026-09-24): `backend/adapters/telemetry/span_policy.py`, `backend/adapters/telemetry/spans.py`, `backend/api/tracing.py`, `backend/api/main.py`, `backend/api/deps.py`, `backend/settings.py`, `backend/tests/trace_capture.py`, `backend/tests/test_trace_export_boundary.py`, `backend/tests/test_trace_export_failure_independence.py`, `backend/tests/test_content_minimization.py`, `backend/tests/test_approval_governance_postgres.py`, `backend/tests/test_settings.py`, `_bmad-output/implementation-artifacts/deferred-work.md`, this story file; both evidence files regenerated per Task 16's order.
+
 ---
 
 ## Change Log
@@ -1107,3 +1168,4 @@ Evidence (separate commits, Task 16): `evidence/story-5.2/content-minimization-r
 | 2026-09-24 | Story created at `67584d5`. Allow-list measured, not written from docs: a throwaway harness drove eight channels against the real app and Docker PostgreSQL with the exact pins. Eleven measured facts shaped fifteen decisions, including three leak channels Story 5.2 never read (status descriptions on agent and DB spans; `instruction_parts` in default mode; outbound `baggage`), four placements that silently fail (lifespan instrumentation, `add_middleware`, `context.attach`, the global SQLAlchemy instrumentor), and a collision with Story 5.8's baseline that the AC4 file choice causes. Baseline: backend 2240 passed / 2 skipped / 10 deselected; Vitest 648 / 85 files. |
 | 2026-09-24 | Implemented (dev-story). Two stops resolved with Minh: Story 3.9 manual-path telemetry guard exempts only the export boundary; F1 excludes evidence/. 22-row demonstrated-red mutation table; backend 2339 passed / 2 skipped pre-commit. |
 | 2026-09-24 | Evidence regenerated (`9cf5858`, `552668e`, gate_a_passed true); real Logfire smoke check recorded; status -> review. |
+| 2026-09-24 | Code review (three layers + reviewer-run mutations): 12 patch findings, 0 decision, 0 defer, 15 dismissed. All 12 applied: matched-route `http.target` free text (HIGH, observed in hosted Logfire), bounded shutdown, AC5 approval leg on all three fixtures, worker tracing isolated from the product path, three vacuous cells fixed, AC4 completion/tool-result proof, observed-key drift check in every category, exporter session/CA pinned, base-URL validation, `None` tracing override, Decision 6 unit tests, two residuals ledgered. Mutation rows m23-m47; evidence regenerated in Task 16's order. |

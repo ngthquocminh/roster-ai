@@ -56,6 +56,7 @@ from application.contracts.agent_runtime import AgentTurnRequestV1
 from tests.test_agent_runtime_adapter import _call_demo, _runtime
 from tests.trace_capture import (
     TOKEN_CANARY,
+    assert_raw_keys_classified,
     capture_tracing,
     exported_spans,
     flush,
@@ -526,6 +527,7 @@ def _instrumented_app(**overrides):
 
 
 def _server_spans(session):
+    assert_raw_keys_classified(session, span_policy.HTTP_SERVER)
     return [span for span in exported_spans(session) if span.kind == SERVER_KIND]
 
 
@@ -570,10 +572,17 @@ def test_c5_http_server_spans_withhold_prompt_injection_text() -> None:
             json={"text": injection},
         )
         client.get("/" + injection.replace("/", " ")[:80])  # an unmatched route
+        # A MATCHED route: Starlette matches `{conversation_id}` before FastAPI
+        # rejects the non-UUID segment (code review 2026-09-24).
+        client.post(
+            f"/api/v1/conversations/{injection.replace('/', ' ')[:80]}/messages",
+            json={"text": "x"},
+        )
         flush(tracing)
     spans = _server_spans(session)
-    assert len(spans) == 2
+    assert len(spans) == 3
     _no_query_or_url(spans)
+    assert sum("http.route" in span.attributes for span in spans) == 2
     payload = _decoded_payload(session)
     for prompt in INJECTION_PROMPTS.values():
         assert prompt not in payload
@@ -588,9 +597,15 @@ def test_c5_http_server_spans_withhold_adversarial_paths_and_exception_text() ->
         failed = client.get("/api/v1/scenarios", params={"q": ADVERSARIAL_TEXT})
         assert failed.status_code == 500
         client.get("/ADVERSARIAL-PATH-100%25s-DIRECTIVE")
+        client.get("/api/v1/approvals/ADVERSARIAL-PATHPARAM-100%25s")  # a matched route
         flush(tracing)
     spans = _server_spans(session)
     _no_query_or_url(spans)
+    assert any(
+        span.attributes.get("http.route") == "/api/v1/approvals/{approval_id}"
+        and "http.target" not in span.attributes
+        for span in spans
+    )
     events = [event for span in spans for event in span.events]
     assert ("exception", {"exception.type": "RuntimeError"}) in events
     assert all(span.status_message == "" for span in spans)
@@ -675,6 +690,8 @@ def _outbound_turn(prompt: str, *, base_url: str, api_key: str):
     finally:
         undo()
         tracing.shutdown()
+    assert_raw_keys_classified(session, span_policy.HTTP_CLIENT)
+    assert_raw_keys_classified(session, span_policy.AGENT)
     return session
 
 
@@ -762,6 +779,7 @@ def _database_payload(engine_url, value: str):
     finally:
         engine.dispose()
         tracing.shutdown()
+    assert_raw_keys_classified(session, span_policy.DATABASE)
     spans = [span for span in exported_spans(session) if span.scope.endswith(".sqlalchemy")]
     assert len(spans) >= 2
     assert any(span.status_code == 2 for span in spans), "the failing statement was not traced"
@@ -795,9 +813,12 @@ def test_c7_database_spans_withhold_bound_adversarial_values_and_errors(
     session = _database_payload(governed_postgres_engine.url, ADVERSARIAL_TEXT)
     # The engine tracer records the failure as a STATUS, whose description
     # echoed the bound value (measured fact 2); `_database_payload` asserts it
-    # is exported empty. Any event that does appear keeps its type only.
+    # is exported empty, and that is the rule this cell proves (m03). The
+    # tracer records NO exception event, so the event rule cannot be shown
+    # here: this tripwire reddens the day it starts to, so the cell gets an
+    # event assertion that can fail instead of an `all()` over nothing.
     events = [event for span in exported_spans(session) for event in span.events]
-    assert all(set(attributes) <= {"exception.type"} for _, attributes in events)
+    assert events == [], "database spans now carry events; prove the event rule here"
     assert "ADVERSARIAL" not in payload_text(session)
 
 
@@ -822,17 +843,22 @@ class _LeaseOnce:
 
 
 def _worker_payload(
-    *, raises: str | None = None, reason: str | None = None, status: str = "solver_completed"
+    *,
+    raises: str | None = None,
+    reason: str | None = None,
+    status: str = "solver_completed",
+    solver_status: str = "FEASIBLE",
 ):
+    """`solver_status`/`status` reach the two closed-vocabulary span keys; a
+    fake scheduler is how text gets there past `SolverOutcomeV1`'s contract."""
     from adapters.telemetry.spans import traced_scheduler, traced_worker_job
-    from application.contracts.schedule_version import SolverOutcomeV1
 
     class Scheduler:
         def solve(self, _snapshot):
             if raises is not None:
                 raise RuntimeError(raises)
-            return SolverOutcomeV1(
-                solver_status="FEASIBLE", reason=reason, warnings=(reason or "",),
+            return SimpleNamespace(
+                solver_status=solver_status, reason=reason, warnings=(reason or "",),
                 wall_time_seconds=0.1,
             )
 
@@ -849,6 +875,7 @@ def _worker_payload(
         flush(tracing)
     finally:
         tracing.shutdown()
+    assert_raw_keys_classified(session, span_policy.WORKER)
     spans = exported_spans(session)
     assert {span.name for span in spans} == {
         "shiftmind.worker.execute", "shiftmind.worker.lease", "shiftmind.worker.solve",
@@ -864,31 +891,58 @@ def test_c8_worker_spans_withhold_secret_exception_text() -> None:
 
 
 def test_c8_worker_spans_withhold_prompt_injection_text() -> None:
-    reason = INJECTION_PROMPTS["scheduling-inspect-injection-tool-output"]
-    session, spans = _worker_payload(reason=reason)
+    # The injection rides the two worker keys that DO carry solver-produced
+    # strings -- solver status and run status -- plus the outcome's free-text
+    # `reason`, which no span emits. The closed vocabularies are what drop it.
+    injection = INJECTION_PROMPTS["scheduling-inspect-injection-tool-output"]
+    session, spans = _worker_payload(
+        reason=injection, solver_status=injection, status=injection
+    )
     solve = next(span for span in spans if span.name == "shiftmind.worker.solve")
-    assert solve.attributes["shiftmind.solver.status"] == "FEASIBLE"
+    execute = next(span for span in spans if span.name == "shiftmind.worker.execute")
+    assert "shiftmind.solver.status" not in solve.attributes
+    assert "shiftmind.schedule_run.status" not in execute.attributes
+    assert solve.attributes["shiftmind.solver.wall_time_s"] == 0.1  # the span is real
     payload = payload_text(session)
     for prompt in INJECTION_PROMPTS.values():
         assert prompt not in payload
 
 
 def test_c8_worker_spans_withhold_adversarial_exception_and_status_text() -> None:
-    session, spans = _worker_payload(raises=ADVERSARIAL_TEXT, status=ADVERSARIAL_TEXT)
-    execute = next(span for span in spans if span.name == "shiftmind.worker.execute")
+    # Two jobs: one whose solve raises (events and status), and one that
+    # FINISHES with adversarial status text -- the raising job never reaches
+    # `job.finish`, so it cannot exercise the status vocabulary (code review).
+    failed, failed_spans = _worker_payload(raises=ADVERSARIAL_TEXT)
+    assert all(span.status_message == "" for span in failed_spans)
+    assert any(span.events for span in failed_spans)
+    assert "ADVERSARIAL" not in payload_text(failed)
+    finished, finished_spans = _worker_payload(status=ADVERSARIAL_TEXT)
+    execute = next(span for span in finished_spans if span.name == "shiftmind.worker.execute")
     assert "shiftmind.schedule_run.status" not in execute.attributes
-    assert all(span.status_message == "" for span in spans)
-    assert any(span.events for span in spans)
-    assert "ADVERSARIAL" not in payload_text(session)
+    assert execute.attributes["shiftmind.job.type"] == "schedule_run_execute"
+    assert "ADVERSARIAL" not in payload_text(finished)
 
 
 # ------------------------------------------ export boundary surface nodes
 
 
 def test_export_content_mode_key_set(monkeypatch) -> None:
-    """AC4: synthetic-eval exports content keys, never credentials or exception text."""
+    """AC4: synthetic-eval exports content keys, never credentials or exception text.
+
+    Two turns: one that defers an approval-gated tool and then fails late (tool
+    arguments, instructions, and exception text that must stay out), and one
+    that COMPLETES through a tool result into a final answer -- AC4's
+    "completions and tool results" (code review 2026-09-24).
+    """
     from agent.runtime import create_agent_runtime
-    from tests.test_agent_runtime_adapter import demonstration_module
+    from application.contracts.grounding import GroundedAnswerV1
+    from tests.test_agent_runtime_adapter import (
+        REAL_RESULT_ID,
+        _claim_answer,
+        _compute_stub_module,
+        _compute_then,
+        demonstration_module,
+    )
 
     for name, value in CREDENTIAL_CANARIES.items():
         monkeypatch.setenv(name, value)
@@ -911,17 +965,31 @@ def test_export_content_mode_key_set(monkeypatch) -> None:
                 ).run_turn(AgentTurnRequestV1(prompt="synthetic planner question"))
             except Exception:  # noqa: BLE001
                 pass
+            completed = create_agent_runtime(
+                settings=settings,
+                model=FunctionModel(_compute_then([_claim_answer(REAL_RESULT_ID)])),
+                capabilities=(_compute_stub_module(),), deps=deps,
+                answer_type=GroundedAnswerV1, tracer_provider=tracing.provider,
+            ).run_turn(AgentTurnRequestV1(prompt="synthetic worker count"))
+            assert completed.answer == _claim_answer(REAL_RESULT_ID)
         flush(tracing)
     finally:
         tracing.shutdown()
     spans = _agent_spans(session)
     keys = _span_keys(spans)
-    # The demonstration tool is approval-gated, so it defers rather than
-    # returning a result; its arguments and the instructions are the content.
-    assert {"gen_ai.tool.call.arguments", "gen_ai.system_instructions"} <= keys
+    # Every content key is exported: prompts and instructions, tool arguments
+    # AND results, and the run's final result.
+    assert {
+        "gen_ai.tool.call.arguments", "gen_ai.tool.call.result",
+        "gen_ai.system_instructions", "final_result",
+    } <= keys
     assert keys <= SPAN_ATTRIBUTE_ALLOW_LIST | span_policy.AGENT_CONTENT_MODE_KEYS
     payload = payload_text(session)
-    assert "synthetic planner question" in payload
+    assert "synthetic planner question" in payload and "synthetic worker count" in payload
+    # The tool result (the model-facing view carries the result id) and the
+    # completion (the grounded answer's prose) left as content.
+    assert REAL_RESULT_ID in payload
+    assert " workers." in payload
     assert {span.resource.get("deployment.environment") for span in spans} == {"live-eval"}
     for value in CREDENTIAL_CANARIES.values():
         assert value not in payload

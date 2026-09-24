@@ -196,6 +196,8 @@ def test_logfire_token_is_kept_out_of_the_settings_repr(monkeypatch) -> None:
 def test_logfire_base_url_accepts_the_eu_region_and_strips_a_trailing_slash(monkeypatch) -> None:
     monkeypatch.setenv("LOGFIRE_BASE_URL", "https://logfire-eu.pydantic.dev/")
     assert default_settings().logfire_base_url == "https://logfire-eu.pydantic.dev"
+    monkeypatch.setenv("LOGFIRE_BASE_URL", "http://127.0.0.1:4318")
+    assert default_settings().logfire_base_url == "http://127.0.0.1:4318"
 
 
 @pytest.mark.parametrize(
@@ -206,6 +208,14 @@ def test_logfire_base_url_accepts_the_eu_region_and_strips_a_trailing_slash(monk
         "https://logfire-eu.pydantic.dev/v1/traces",
         "https://logfire-eu.pydantic.dev?x=1",
         "https://logfire-eu.pydantic.dev#frag",
+        # Code review 2026-09-24: each of these parsed as a valid origin and
+        # then failed silently on every export.
+        "https://logfire-eu.pydantic.dev?",
+        "https://logfire-eu.pydantic.dev#",
+        "https://user:pass@logfire-eu.pydantic.dev",
+        "https://:443",
+        "https://logfire-eu.pydantic.dev:99999",
+        "https://logfire-eu.pydantic.dev:0",
     ],
 )
 def test_an_invalid_logfire_base_url_fails_at_startup(monkeypatch, raw) -> None:

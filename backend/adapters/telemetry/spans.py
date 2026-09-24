@@ -11,14 +11,20 @@ Invariants kept here, each measured at story creation:
   no exporter, provider, propagator change or instrumentation.
 * The global tracer provider is NEVER set. Every instrumentation receives the
   provider explicitly, so an un-wired library records nothing.
-* The exporter is built from settings only, never from `OTEL_EXPORTER_OTLP_*`
-  or `OTEL_BSP_*`/`OTEL_RESOURCE_ATTRIBUTES` environment variables.
+* The exporter's endpoint, headers, timeout, compression, CA trust and HTTP
+  session come from settings or are fixed here, never from `OTEL_EXPORTER_OTLP_*`,
+  the OTLP credential-provider variable, or `OTEL_BSP_*`/`OTEL_RESOURCE_ATTRIBUTES`.
+  One residual: `OTEL_EXPORTER_OTLP[_TRACES]_CLIENT_CERTIFICATE`/`_CLIENT_KEY`
+  still reach the exporter when set (its constructor falls back to them for
+  any falsy argument). They only add TLS client authentication; nothing in
+  this repository sets them.
 * Export never blocks a request or a job: a bounded batch processor, a 5 s
   exporter deadline, and a sanitizer whose failure drops the batch rather than
   raising or exporting it unsanitized (NFR10).
 """
 from __future__ import annotations
 
+import threading
 import time
 import weakref
 from collections.abc import Callable, Iterator, Sequence
@@ -28,6 +34,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
+import requests
 from opentelemetry import context as otel_context
 from opentelemetry import propagate, trace
 from opentelemetry.exporter.otlp.proto.http import Compression
@@ -66,6 +73,13 @@ SCHEDULE_DELAY_MILLIS = 5000
 MAX_EXPORT_BATCH_SIZE = 512
 EXPORT_TIMEOUT_MILLIS = 5000
 FORCE_FLUSH_TIMEOUT_MILLIS = 5000
+#: The whole of `ProcessTracing.shutdown()`, flush included. Needed because SDK
+#: 1.44's `BatchProcessor.force_flush` IGNORES its timeout (upstream TODO,
+#: opentelemetry-python#4568) and exports the whole queue synchronously, and
+#: `provider.shutdown()` joins the worker for up to 30 s -- against a slow
+#: collector that is ~20 s + 30 s, past the API's 10 s stop grace (code review
+#: 2026-09-24).
+SHUTDOWN_DEADLINE_SECONDS = FORCE_FLUSH_TIMEOUT_MILLIS / 1000
 
 DATABASE_SCOPE = "opentelemetry.instrumentation.sqlalchemy"
 
@@ -236,17 +250,36 @@ class ProcessTracing:
     content_mode: str
     service_name: str
     _previous_textmap: TextMapPropagator | None = None
+    _closed: bool = False
 
     def tracer(self, name: str) -> trace.Tracer:
         return self.provider.get_tracer(name)
 
     def shutdown(self) -> None:
-        """Force-flush (bounded), then shut the provider down."""
-        try:
-            self.provider.force_flush(FORCE_FLUSH_TIMEOUT_MILLIS)
-        finally:
-            self.provider.shutdown()
-            self.restore_textmap()
+        """Force-flush, then shut the provider down -- returning within
+        `SHUTDOWN_DEADLINE_SECONDS` whatever the collector does, and never
+        raising. Work still running at the deadline is abandoned on a daemon
+        thread; its spans are lost (Decision 12's accepted loss)."""
+        if self._closed:
+            return
+        self._closed = True
+
+        def flush_then_shut_down() -> None:
+            try:
+                self.provider.force_flush(FORCE_FLUSH_TIMEOUT_MILLIS)
+            except Exception:  # noqa: BLE001 - export never breaks shutdown
+                pass
+            try:
+                self.provider.shutdown()
+            except Exception:  # noqa: BLE001
+                pass
+
+        worker = threading.Thread(
+            target=flush_then_shut_down, name="shiftmind-trace-shutdown", daemon=True
+        )
+        worker.start()
+        worker.join(SHUTDOWN_DEADLINE_SECONDS)
+        self.restore_textmap()
 
     def restore_textmap(self) -> None:
         if self._previous_textmap is not None:
@@ -291,11 +324,20 @@ def build_process_tracing(
         headers={"Authorization": token},
         timeout=EXPORT_TIMEOUT_SECONDS,
         compression=Compression.Gzip,
-        session=session,
+        # Both explicit so the environment cannot choose them: an
+        # `OTEL_EXPORTER_OTLP_CERTIFICATE` CA would decide whom the token is
+        # sent to, and with `session=None` the exporter loads a session from
+        # the OTLP credential-provider variable -- which sees every payload
+        # and the token (code review 2026-09-24).
+        certificate_file=True,  # type: ignore[arg-type]  # requests' default trust
+        session=session if session is not None else requests.Session(),
     )
     provider = TracerProvider(
         resource=_resource(service_name, content_mode),
         sampler=ShiftMindSampler(quiet_parent_span_names),
+        # Shutdown is ours and bounded (`ProcessTracing.shutdown`); the SDK's
+        # own atexit hook would re-enter an abandoned flush and join for 30 s.
+        shutdown_on_exit=False,
     )
     provider.add_span_processor(
         BatchSpanProcessor(
@@ -349,6 +391,11 @@ def annotate_enqueued_schedule_run(schedule_run_id: UUID | str | None) -> None:
 
 
 # --- worker (Decision 10) ---------------------------------------------------
+#
+# Every tracing call below runs INSIDE the product path (after the database
+# lease, after the solve), so each is isolated: a failure disables that span
+# and is swallowed. AD-12: no telemetry system authorizes or blocks product
+# work (code review 2026-09-24).
 
 
 class _TracedLeaseRepository:
@@ -366,7 +413,10 @@ class _TracedLeaseRepository:
         lease = self._inner.lease_next_job(*args, **kwargs)
         ended = time.time_ns()
         if lease is not None:
-            self._scope.open(lease, started, ended)
+            try:
+                self._scope.open(lease, started, ended)
+            except Exception:  # noqa: BLE001 - the lease is already held
+                self._scope.abandon()
         return lease
 
 
@@ -391,39 +441,54 @@ class _JobScope:
             attributes["shiftmind.job.queue_age_s"] = max(
                 0.0, (datetime.now(timezone.utc) - lease.created_at).total_seconds()
             )
-        span = self._tracer.start_span(
+        # Held at once so `abandon` can end it if anything below raises.
+        self._span = self._tracer.start_span(
             "shiftmind.worker.execute",
             context=otel_context.Context(),
             kind=SpanKind.INTERNAL,
             attributes=attributes,
             start_time=started,
         )
-        parent = trace.set_span_in_context(span)
+        parent = trace.set_span_in_context(self._span)
         self._tracer.start_span(
             "shiftmind.worker.lease",
             context=parent,
             attributes=common,
             start_time=started,
         ).end(end_time=ended)
-        self._span = span
         self._token = otel_context.attach(parent)
 
+    def abandon(self) -> None:
+        """`open` failed part-way: end whatever it started, attach nothing."""
+        span, self._span = self._span, None
+        token, self._token = self._token, None
+        try:
+            if token is not None:
+                otel_context.detach(token)
+            if span is not None:
+                span.end()
+        except Exception:  # noqa: BLE001
+            pass
+
     def finish(self, outcome: Any) -> None:
-        if self._span is not None and outcome is not None:
+        if self._span is None or outcome is None:
+            return
+        try:
             self._span.set_attribute("shiftmind.schedule_run.status", outcome.status)
+        except Exception:  # noqa: BLE001
+            pass
 
     def fail(self, error: BaseException) -> None:
-        if self._span is not None:
+        if self._span is None:
+            return
+        try:
             self._span.record_exception(error)
             self._span.set_status(Status(StatusCode.ERROR))
+        except Exception:  # noqa: BLE001
+            pass
 
     def close(self) -> None:
-        if self._token is not None:
-            otel_context.detach(self._token)
-            self._token = None
-        if self._span is not None:
-            self._span.end()
-            self._span = None
+        self.abandon()
 
 
 class _PassThroughScope:
@@ -470,8 +535,15 @@ class _TracedScheduler:
             "shiftmind.worker.solve", attributes=attributes
         ) as span:
             outcome = self._inner.solve(snapshot)
-            span.set_attribute("shiftmind.solver.status", outcome.solver_status)
-            span.set_attribute("shiftmind.solver.wall_time_s", float(outcome.wall_time_seconds))
+            # After a finished solve: an unreadable outcome costs the two
+            # attributes, never the outcome itself.
+            try:
+                span.set_attribute("shiftmind.solver.status", outcome.solver_status)
+                span.set_attribute(
+                    "shiftmind.solver.wall_time_s", float(outcome.wall_time_seconds)
+                )
+            except Exception:  # noqa: BLE001
+                pass
             return outcome
 
 

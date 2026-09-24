@@ -19,6 +19,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import replace
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from uuid import UUID
@@ -30,6 +31,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 
 from adapters.telemetry.spans import (
+    MAX_QUEUE_SIZE,
+    SHUTDOWN_DEADLINE_SECONDS,
     build_process_tracing,
     trace_engine,
     traced_scheduler,
@@ -41,7 +44,7 @@ from tests.test_content_minimization import (
     PINNED_INJECTION_CASES,
     _sanitized_stream,
 )
-from tests.trace_capture import TOKEN_CANARY
+from tests.trace_capture import TOKEN_CANARY, exported_spans, flush
 
 SLOW_SECONDS = 30
 
@@ -181,8 +184,24 @@ def test_shutdown_is_bounded(kind) -> None:
             pass
         started = time.monotonic()
         tracing.shutdown()
-        # 5 s force-flush wait + at most one in-flight 5 s export deadline + margin.
-        assert time.monotonic() - started < 12.0
+        assert time.monotonic() - started < SHUTDOWN_DEADLINE_SECONDS + 1.0
+        assert session.posts >= 1
+
+
+@pytest.mark.parametrize("kind", FIXTURES)
+def test_shutdown_is_bounded_with_a_full_queue(kind) -> None:
+    """SDK 1.44's `force_flush` ignores its timeout and drains the WHOLE queue
+    synchronously: four 512-span batches at a 5 s deadline each is ~20 s
+    against a broken collector, past the API's 10 s stop grace. Shutdown must
+    return by its own deadline anyway (code review 2026-09-24)."""
+    with failing_tracing(kind) as (tracing, session):
+        tracer = tracing.tracer("shiftmind.proof")
+        for _ in range(MAX_QUEUE_SIZE):
+            with tracer.start_as_current_span("shiftmind.proof"):
+                pass
+        started = time.monotonic()
+        tracing.shutdown()
+        assert time.monotonic() - started < SHUTDOWN_DEADLINE_SECONDS + 1.0
         assert session.posts >= 1
 
 
@@ -292,6 +311,48 @@ def test_worker_job_outcome_is_identical_with_a_failing_exporter() -> None:
             assert job(tracing) == baseline
             tracing.provider.force_flush(1_000)
             assert session.posts >= 1
+
+
+def test_a_failing_trace_call_never_costs_the_lease_or_the_solve() -> None:
+    """AD-12: the worker's tracing runs INSIDE the product path -- after the
+    database lease and after the solve -- so a failure there must cost the
+    span, never the job (code review 2026-09-24)."""
+    from adapters.telemetry.spans import traced_worker_job
+    from tests.test_content_minimization import _LeaseOnce
+    from tests.trace_capture import capture_tracing
+
+    class NaiveLease(_LeaseOnce):
+        def lease_next_job(self, *args, **kwargs):
+            # `JobLeaseV1` refuses a naive timestamp, so stand in for any lease
+            # whose shape the span code does not expect: a naive `created_at`
+            # makes the queue-age subtraction raise.
+            lease = super().lease_next_job(*args, **kwargs)
+            return SimpleNamespace(**{**vars(lease), "created_at": datetime(2026, 1, 1)})
+
+    class Unreadable:
+        solver_status = "FEASIBLE"
+        wall_time_seconds = None  # typed float, not enforced
+
+    class Scheduler:
+        def solve(self, _snapshot):
+            return Unreadable()
+
+    tracing, session = capture_tracing(service_name="shiftmind-worker")
+    try:
+        with traced_worker_job(NaiveLease(), tracing) as scope:
+            lease = scope.repository.lease_next_job()
+            outcome = traced_scheduler(Scheduler(), tracing).solve(
+                SimpleNamespace(schedule_run_id=lease.schedule_run_id)
+            )
+            scope.finish(SimpleNamespace(status="solver_completed"))
+        flush(tracing)
+    finally:
+        tracing.shutdown()
+    assert lease.schedule_run_id == UUID(int=15)
+    assert isinstance(outcome, Unreadable)
+    # Nothing was left open: the solve span still exported, as a root of its
+    # own because the job's root was abandoned.
+    assert [span.name for span in exported_spans(session)] == ["shiftmind.worker.solve"]
 
 
 # --- the whole path, against PostgreSQL ------------------------------------

@@ -66,10 +66,13 @@ async def lifespan(app: FastAPI):
     configure_json_logging()
     db.init_db(get_settings().db_path)
     yield
-    run_service.shutdown()
-    if _process_tracing is not None:
-        # Bounded: a 5 s force-flush, then provider shutdown (Decision 12).
-        _process_tracing.shutdown()
+    try:
+        run_service.shutdown()
+    finally:
+        if _process_tracing is not None:
+            # Bounded and never raises (Decision 12): whatever the collector
+            # does, it returns within `spans.SHUTDOWN_DEADLINE_SECONDS`.
+            _process_tracing.shutdown()
 
 
 app = FastAPI(title="ShiftMind API", version=APP_VERSION, lifespan=lifespan)

@@ -84,7 +84,10 @@ _MEASURED_SERVER = {
     "http.scheme": "http",
     "http.flavor": "1.1",
     "net.host.port": 80,
-    "http.target": f"/api/v1/conversations/{UUID_SAMPLE}/messages?probe=CANARY-QUERY-5-9#frag",
+    "http.target": (
+        f"/api/v1/conversations/{UUID_SAMPLE}/agent-runs/{UUID_SAMPLE}/execute"
+        "?probe=CANARY-QUERY-5-9#frag"
+    ),
     "http.url": "http://shiftmind.test/api/v1/conversations?scenario_id=x&probe=CANARY-QUERY-5-9",
     "http.host": "shiftmind.test",
     "http.server_name": "shiftmind.test",
@@ -105,7 +108,7 @@ def test_http_server_keeps_the_allow_list_and_cuts_the_target_query() -> None:
         "http.scheme": "http",
         "http.flavor": "1.1",
         "net.host.port": 80,
-        "http.target": f"/api/v1/conversations/{UUID_SAMPLE}/messages",
+        "http.target": f"/api/v1/conversations/{UUID_SAMPLE}/agent-runs/{UUID_SAMPLE}/execute",
     }
     # Content mode widens nothing outside the agent category.
     assert _on(HTTP_SERVER, _MEASURED_SERVER) == kept
@@ -115,6 +118,38 @@ def test_http_server_drops_the_target_of_an_unmatched_route() -> None:
     """An unmatched route's raw path is client free text (measured fact 5)."""
     kept = _off(HTTP_SERVER, {"http.method": "GET", "http.target": "/CANARY-PATH-5-9"})
     assert kept == {"http.method": "GET"}
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        # Observed in hosted Logfire at code review: Starlette matched the
+        # route before FastAPI rejected the non-UUID segment.
+        "/api/v1/conversations/IGNORE-PREVIOUS-INSTRUCTIONS-CANARY/messages",
+        # A decoded `%2F` becomes an extra segment.
+        f"/api/v1/conversations/{UUID_SAMPLE}/CANARY/messages",
+        f"/api/v1/conversations/{UUID_SAMPLE}/messages/CANARY",
+        f"/api/v1/CANARY/{UUID_SAMPLE}/messages",
+    ],
+)
+def test_http_server_drops_a_matched_route_target_carrying_free_text(target) -> None:
+    route = "/api/v1/conversations/{conversation_id}/messages"
+    kept = _off(HTTP_SERVER, {"http.route": route, "http.target": target})
+    assert kept == {"http.route": route}
+
+
+@pytest.mark.parametrize(
+    ("route", "target"),
+    [
+        ("/api/v1/conversations/{conversation_id}/messages",
+         f"/api/v1/conversations/{UUID_SAMPLE.upper()}/messages"),
+        ("/runs/{run_id}", "/runs/42"),
+        ("/api/v1/scenarios", "/api/v1/scenarios"),
+    ],
+)
+def test_http_server_keeps_a_target_of_template_segments_and_identifiers(route, target) -> None:
+    kept = _off(HTTP_SERVER, {"http.route": route, "http.target": f"{target}?q=CANARY"})
+    assert kept["http.target"] == target
 
 
 def test_the_schedule_run_join_key_must_be_a_uuid() -> None:
@@ -307,15 +342,13 @@ def test_resource_is_rebuilt_from_its_allow_list() -> None:
     ).get("deployment.environment") is None
 
 
-def test_every_measured_key_is_classified_and_a_new_one_names_itself() -> None:
-    for category, keys in {
-        HTTP_SERVER: _MEASURED_SERVER,
-        DATABASE: {"db.user", "net.peer.name", "db.statement"},
-    }.items():
-        assert span_policy.unclassified_keys(category, keys) == set()
-    assert span_policy.unclassified_keys(AGENT, {"gen_ai.brand_new_key"}) == {
-        "gen_ai.brand_new_key"
-    }
+def test_a_new_key_names_itself() -> None:
+    """The drift check's naming property. The check itself runs on OBSERVED,
+    pre-sanitizer keys in every C4-C8 cell (`assert_raw_keys_classified`); a
+    table checked against a hand-typed copy of itself proves nothing."""
+    for category in (HTTP_SERVER, HTTP_CLIENT, DATABASE, AGENT, WORKER):
+        assert span_policy.unclassified_keys(category, {"brand.new_key"}) == {"brand.new_key"}
+    assert span_policy.unclassified_keys(HTTP_SERVER, {"http.request.header.cookie"}) == set()
 
 
 # --- the exporter, sampler and propagator ----------------------------------
@@ -358,9 +391,41 @@ def test_the_exporter_is_built_from_settings_not_otel_env(monkeypatch) -> None:
     [span] = exported_spans(session)
     assert span.resource["service.name"] == "shiftmind-api"
     assert set(span.resource) == span_policy.RESOURCE_ALLOW
+    # The endpoint is the settings' Logfire origin, not the env's collector.
+    assert session.urls_seen == [f"{default_settings().logfire_base_url}/v1/traces"]
     assert session.headers_seen[0]["Authorization"] == "CANARY-LOGFIRE-5-9"
     assert "x-canary" not in session.headers_seen[0]
     assert "CANARY-RESOURCE" not in payload_text(session)
+
+
+def test_the_environment_cannot_choose_the_exporters_session_or_ca(monkeypatch) -> None:
+    """With `session=None` (production) the OTLP exporter would load a session
+    from the credential-provider variable, and take its CA bundle from
+    `OTEL_EXPORTER_OTLP_CERTIFICATE` -- both decide who sees the token."""
+    from dataclasses import replace
+
+    import requests
+
+    import adapters.telemetry.spans as spans
+
+    monkeypatch.setenv(
+        "_OTEL_PYTHON_EXPORTER_OTLP_HTTP_TRACES_CREDENTIAL_PROVIDER", "canary-provider"
+    )
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_CERTIFICATE", "/CANARY/ca.pem")
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_TRACES_CERTIFICATE", "/CANARY/ca.pem")
+    tracing = build_process_tracing(
+        replace(default_settings(), logfire_token="CANARY-LOGFIRE-5-9"),
+        service_name="shiftmind-api",
+    )
+    assert tracing is not None
+    try:
+        exporter = tracing.provider._active_span_processor._span_processors[0].span_exporter
+        inner = exporter._inner
+        assert type(inner._session) is requests.Session
+        assert inner._certificate_file is True
+    finally:
+        tracing.shutdown()
+    assert isinstance(exporter, spans.SanitizingSpanExporter)
 
 
 def test_the_sanitizer_strips_events_status_links_and_scope_on_real_spans() -> None:
@@ -463,3 +528,110 @@ def test_building_tracing_swaps_and_shutdown_restores_the_global_textmap() -> No
     assert propagate.get_global_textmap() is before
     # And the global tracer provider was never set.
     assert not isinstance(trace.get_tracer_provider(), type(tracing.provider))
+
+
+def test_a_none_tracing_override_is_honoured_over_the_process_global() -> None:
+    """`dependency_overrides[get_process_tracing] = lambda: None` must turn the
+    runtime factory keyless even when the process global is set (code review
+    2026-09-24: the `None` used to fall back to the global)."""
+    from functools import partial
+
+    from agent.runtime import create_agent_runtime
+    from api.deps import get_agent_runtime_factory, set_process_tracing
+
+    tracing, _session = capture_tracing()
+    set_process_tracing(tracing)
+    try:
+        assert get_agent_runtime_factory(None) is create_agent_runtime
+        called_directly = get_agent_runtime_factory()  # the `Depends` default
+        assert isinstance(called_directly, partial)
+        assert called_directly.keywords == {"tracer_provider": tracing.provider}
+    finally:
+        set_process_tracing(None)
+        tracing.shutdown()
+
+
+# --- the ASGI trace boundary (Decision 6) ------------------------------------
+
+
+def test_the_conversation_uuid_is_the_trace_id() -> None:
+    from uuid import UUID
+
+    from api.tracing import conversation_traceparent
+
+    conversation = UUID(UUID_SAMPLE)
+    parent = conversation.int & ((1 << 64) - 1)
+    for path in (
+        f"/api/v1/conversations/{UUID_SAMPLE}/messages",
+        f"/api/v1/conversations/{UUID_SAMPLE}",
+    ):
+        assert conversation_traceparent(path) == (
+            f"00-{conversation.hex}-{parent:016x}-01".encode("ascii")
+        )
+
+
+def test_no_parent_is_synthesized_off_the_conversation_routes() -> None:
+    from api.tracing import conversation_traceparent
+
+    # 36 characters that do not parse as a UUID: an ordinary root trace.
+    assert conversation_traceparent("/api/v1/conversations/" + "x" * 36 + "/messages") is None
+    for path in (
+        "/api/v1/conversations",
+        f"/api/v1/scenarios/{UUID_SAMPLE}",
+        f"/conversations/{UUID_SAMPLE}/messages",  # not under /api/v1
+        f"/api/v1/conversations/{UUID_SAMPLE}x/messages",
+    ):
+        assert conversation_traceparent(path) is None
+
+
+def test_a_zero_low_half_still_yields_a_valid_parent_span_id() -> None:
+    from api.tracing import conversation_traceparent
+
+    header = conversation_traceparent(
+        "/api/v1/conversations/3b52c7b4-6c0a-4f5e-0000-000000000000/events"
+    )
+    assert header is not None and header.decode().split("-")[2] == "0000000000000001"
+
+
+@pytest.mark.parametrize("scope_type", ["http", "websocket"])
+def test_the_boundary_drops_client_trace_context_and_adds_the_derived_one(scope_type) -> None:
+    import asyncio
+
+    from api.tracing import TraceContextBoundary, conversation_traceparent
+
+    seen: list[dict] = []
+
+    async def inner(scope, _receive, _send) -> None:
+        seen.append(scope)
+
+    path = f"/api/v1/conversations/{UUID_SAMPLE}/events"
+    scope = {
+        "type": scope_type,
+        "path": path,
+        "headers": [
+            (b"TraceParent", b"00-" + b"a" * 32 + b"-" + b"b" * 16 + b"-01"),
+            (b"tracestate", b"canary=CANARY-TRACESTATE"),
+            (b"Baggage", b"canary=CANARY-BAGGAGE"),
+            (b"cookie", b"kept"),
+        ],
+    }
+    asyncio.run(TraceContextBoundary(inner)(scope, None, None))
+    assert seen[0]["headers"] == [
+        (b"cookie", b"kept"), (b"traceparent", conversation_traceparent(path)),
+    ]
+    assert scope["headers"][0][0] == b"TraceParent"  # the caller's scope is not mutated
+
+
+def test_the_boundary_passes_lifespan_scopes_through_untouched() -> None:
+    import asyncio
+
+    from api.tracing import TraceContextBoundary
+
+    seen: list[dict] = []
+
+    async def inner(scope, _receive, _send) -> None:
+        seen.append(scope)
+
+    scope = {"type": "lifespan"}
+    asyncio.run(TraceContextBoundary(inner)(scope, None, None))
+    assert seen == [scope] and seen[0] is scope

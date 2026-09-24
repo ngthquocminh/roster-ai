@@ -275,15 +275,25 @@ def _logfire_base_url(raw: str | None) -> str:
     """An origin only: `http(s)://host[:port]`; the exporter appends `/v1/traces`."""
     value = (raw or "").strip() or _LOGFIRE_DEFAULT_BASE_URL
     parts = urlsplit(value.rstrip("/"))
+    try:
+        port_is_valid = parts.port is None or parts.port > 0
+    except ValueError:
+        port_is_valid = False
     if (
         parts.scheme not in ("http", "https")
-        or not parts.netloc
+        or not parts.hostname
+        or not port_is_valid
+        # Userinfo would make `requests` replace the `Authorization: <token>`
+        # header with Basic auth; an empty `?`/`#` parses as no query or
+        # fragment but still swallows the `/v1/traces` the exporter appends.
+        or "@" in parts.netloc
+        or "?" in value
+        or "#" in value
         or parts.path
-        or parts.query
-        or parts.fragment
     ):
         raise InvalidFlagError(
-            "LOGFIRE_BASE_URL must be an http(s) origin with no path, query or fragment"
+            "LOGFIRE_BASE_URL must be an http(s) origin (scheme://host[:port]) "
+            "with no credentials, path, query or fragment"
         )
     return value.rstrip("/")
 
