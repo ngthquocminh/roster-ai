@@ -4,7 +4,7 @@ baseline_commit: 67584d5
 
 # Story 5.9: Trace the Full Request Path to Logfire Behind One Export Boundary
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -1168,4 +1168,4 @@ Code-review fixes (2026-09-24): `backend/adapters/telemetry/span_policy.py`, `ba
 | 2026-09-24 | Story created at `67584d5`. Allow-list measured, not written from docs: a throwaway harness drove eight channels against the real app and Docker PostgreSQL with the exact pins. Eleven measured facts shaped fifteen decisions, including three leak channels Story 5.2 never read (status descriptions on agent and DB spans; `instruction_parts` in default mode; outbound `baggage`), four placements that silently fail (lifespan instrumentation, `add_middleware`, `context.attach`, the global SQLAlchemy instrumentor), and a collision with Story 5.8's baseline that the AC4 file choice causes. Baseline: backend 2240 passed / 2 skipped / 10 deselected; Vitest 648 / 85 files. |
 | 2026-09-24 | Implemented (dev-story). Two stops resolved with Minh: Story 3.9 manual-path telemetry guard exempts only the export boundary; F1 excludes evidence/. 22-row demonstrated-red mutation table; backend 2339 passed / 2 skipped pre-commit. |
 | 2026-09-24 | Evidence regenerated (`9cf5858`, `552668e`, gate_a_passed true); real Logfire smoke check recorded; status -> review. |
-| 2026-09-24 | Code review (three layers + reviewer-run mutations): 12 patch findings, 0 decision, 0 defer, 15 dismissed. All 12 applied: matched-route `http.target` free text (HIGH, observed in hosted Logfire), bounded shutdown, AC5 approval leg on all three fixtures, worker tracing isolated from the product path, three vacuous cells fixed, AC4 completion/tool-result proof, observed-key drift check in every category, exporter session/CA pinned, base-URL validation, `None` tracing override, Decision 6 unit tests, two residuals ledgered. Mutation rows m23-m47; evidence regenerated in Task 16's order. |
+| 2026-09-24 | Code review (three layers + reviewer-run mutations): 12 patch findings, 0 decision, 0 defer, 15 dismissed. All 12 applied: matched-route `http.target` free text (HIGH, observed in hosted Logfire), bounded shutdown, AC5 approval leg on all three fixtures, worker tracing isolated from the product path, three vacuous cells fixed, AC4 completion/tool-result proof, observed-key drift check in every category, exporter session/CA pinned, base-URL validation, `None` tracing override, Decision 6 unit tests, two residuals ledgered. Mutation rows m23-m47; evidence regenerated in Task 16's order. | Commits: `edb2efe` fix, `ae9ea0f` evidence(story-5.2), `9623e6c` evidence(gate-a) -- three runners on the clean tree (pytest 2367 passed / 1 skipped, Vitest 648, Playwright 80), `gate_a_passed: true`, code bound to `edb2efe`. Status -> done.
