@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-23
+last_updated: 2026-09-24
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2674,6 +2674,30 @@ development_status:
   # re-measurement of Story 5.6's evidence. The naming is corrected in prose instead.
   # Like 5.5/5.6/5.7 this carries no epic-status side effect; epic-5 is already in-progress.
   5-8-gate-live-conversation-evals-against-a-committed-baseline: done
+  # 5.9/5.10 added 2026-09-24 by sprint-change-proposal-2026-09-24.md (Logfire; Langfuse and
+  # LangSmith were compared and rejected there). Additive, NOT Gate B criteria.
+  # 5.9 = full request-path tracing (API/DB/httpx/agent/worker) behind ONE export boundary, raw
+  # OTel SDK + OTLP to Logfire -- NOT the Logfire SDK in any runtime process. It owns
+  # deferred-work.md:696 (exception text in span events) and the AD-1 enforcement change
+  # (add opentelemetry.sdk/.exporter/.instrumentation to FORBIDDEN_ROOT_MODULES). Settle the
+  # complete per-span-type allow-list AT CREATION by measuring real spans -- do not leave it for
+  # review. Proposal findings F1-F5 are binding: content mode runs inside a real API container
+  # (F1); the conversation trace ID is set by ASGI middleware at the HTTP boundary, not in the
+  # agent runtime (F2); API->worker stays two attribute-joined traces (F3).
+  # 5.10 = post-hoc verdict spans + pydantic-evals replay; must not touch the live report schema,
+  # configuration_digest, the 5.8 drop check, or any evidence.
+  # Minh puts LOGFIRE_TOKEN in backend/.env directly (never in chat); first needed at the end of
+  # 5.9 dev for the real-export smoke check. CI never needs it.
+  # 5.9 CREATED 2026-09-24 at 67584d5 (planning edits uncommitted), Docker PostgreSQL up:
+  # backend default 2240 passed, 2 skipped (one is the dirty-tree realism skip), 10 deselected;
+  # Vitest 648 passed / 85 files. Allow-list MEASURED with a throwaway harness at the exact pins
+  # (OTel 1.44.0 / instrumentations 0.65b0; 12 packages added, 0 versions changed). Three leak
+  # channels 5.2 never read: span STATUS descriptions (agent + DB, DB echoes bound values despite
+  # hide_parameters), instruction_parts in model_request_parameters in default mode, outbound
+  # baggage carrying the conversation UUID. Adding the content-mode key to compose.override.yml
+  # reddens two 5.8 tests -- Decision 13 of the story keeps the committed baseline comparable.
+  5-9-trace-the-full-request-path-to-logfire-behind-one-export-boundary: ready-for-dev
+  5-10-publish-live-evaluation-results-to-logfire: backlog
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog
