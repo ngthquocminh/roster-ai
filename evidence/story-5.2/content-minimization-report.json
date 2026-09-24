@@ -6,9 +6,19 @@
       "sha256": "632accdb38ec5ee6f49eab58f84168be5d53ae535495872fd539779d4a41c0b6",
       "version": "1"
     },
+    "span_export_boundary": {
+      "module": "backend/adapters/telemetry/spans.py",
+      "sha256": "601cb29db60eb97404efb9dc56fcbcb287a710bf9ca72282dc6d66fecc838866",
+      "version": "1"
+    },
+    "span_export_policy": {
+      "module": "backend/adapters/telemetry/span_policy.py",
+      "sha256": "8943b9876490e5b663549da084df6771700cf38cde42b73b29ee261fec10d67b",
+      "version": "1"
+    },
     "telemetry_record": {
       "module": "backend/application/contracts/telemetry.py",
-      "sha256": "b2826b9d5448c1226ca9bad3b5600c48e7218dc006dda53f9d478c7de350a15e",
+      "sha256": "5d0b4fa542d2c660bd8a33c0d084e644f08b75ad3f10e023abd748ce4e084aae",
       "version": "1"
     }
   },
@@ -16,8 +26,27 @@
     "C1 telemetry JSON",
     "C2 fallback JSON logs",
     "C3 worker stderr",
-    "C4 OpenTelemetry spans"
+    "C4 exported agent spans",
+    "C5 exported HTTP server spans",
+    "C6 exported HTTP client spans",
+    "C7 exported database spans",
+    "C8 exported worker spans"
   ],
+  "export_boundary": {
+    "boundary_module": "backend/adapters/telemetry/spans.py",
+    "client_trace_context": "discarded on every route",
+    "content_modes": [
+      "off",
+      "synthetic-eval"
+    ],
+    "default_content_mode": "off",
+    "exception_events": "exception.type only",
+    "observed_at": "OTLP protobuf payload captured at the real OTLPSpanExporter",
+    "policy_module": "backend/adapters/telemetry/span_policy.py",
+    "sql_parameters": "placeholders only; status description dropped",
+    "status_description": "never exported",
+    "url_query": "stripped"
+  },
   "fixtures": {
     "adversarial": [
       "control character",
@@ -34,9 +63,22 @@
       "scheduling-inspect-injection-fixture-field",
       "scheduling-inspect-injection-tool-output"
     ],
-    "secrets": "seven synthetic configuration canaries"
+    "secrets": {
+      "description": "synthetic canaries in every credential-bearing environment variable",
+      "environment_variables": [
+        "GEMINI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "OIDC_CLIENT_SECRET",
+        "CSRF_SECRET",
+        "AGENT_RUNTIME_API_KEY",
+        "ROSTERAI_DATABASE_URL",
+        "ROSTERAI_PROVISIONING_DATABASE_URL",
+        "LOGFIRE_TOKEN"
+      ]
+    }
   },
-  "generated_at": "2026-09-05T08:02:36.692845+00:00",
+  "generated_at": "2026-09-24T11:19:36.563725+00:00",
   "passed": true,
   "proof_nodes": {
     "c1_telemetry_adversarial": {
@@ -87,6 +129,70 @@
       "node": "tests/test_content_minimization.py::test_c4_spans_withhold_secret_prompt_and_tool_content",
       "passed": true
     },
+    "c5_http_server_spans_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c5_http_server_spans_withhold_adversarial_paths_and_exception_text",
+      "passed": true
+    },
+    "c5_http_server_spans_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c5_http_server_spans_withhold_prompt_injection_text",
+      "passed": true
+    },
+    "c5_http_server_spans_secrets": {
+      "node": "tests/test_content_minimization.py::test_c5_http_server_spans_withhold_secret_headers_and_query",
+      "passed": true
+    },
+    "c6_http_client_spans_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c6_http_client_spans_withhold_adversarial_url_parts_and_errors",
+      "passed": true
+    },
+    "c6_http_client_spans_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c6_http_client_spans_withhold_prompt_injection_text",
+      "passed": true
+    },
+    "c6_http_client_spans_secrets": {
+      "node": "tests/test_content_minimization.py::test_c6_http_client_spans_withhold_the_key_and_query",
+      "passed": true
+    },
+    "c7_database_spans_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c7_database_spans_withhold_bound_adversarial_values_and_errors",
+      "passed": true
+    },
+    "c7_database_spans_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c7_database_spans_withhold_bound_prompt_injection_text",
+      "passed": true
+    },
+    "c7_database_spans_secrets": {
+      "node": "tests/test_content_minimization.py::test_c7_database_spans_withhold_bound_secret_values",
+      "passed": true
+    },
+    "c8_worker_spans_adversarial": {
+      "node": "tests/test_content_minimization.py::test_c8_worker_spans_withhold_adversarial_exception_and_status_text",
+      "passed": true
+    },
+    "c8_worker_spans_prompt_injection": {
+      "node": "tests/test_content_minimization.py::test_c8_worker_spans_withhold_prompt_injection_text",
+      "passed": true
+    },
+    "c8_worker_spans_secrets": {
+      "node": "tests/test_content_minimization.py::test_c8_worker_spans_withhold_secret_exception_text",
+      "passed": true
+    },
+    "export_agent_raw_key_drift": {
+      "node": "tests/test_content_minimization.py::test_export_agent_raw_key_drift",
+      "passed": true
+    },
+    "export_client_trace_context_discarded": {
+      "node": "tests/test_content_minimization.py::test_export_client_trace_context_discarded",
+      "passed": true
+    },
+    "export_content_mode_key_set": {
+      "node": "tests/test_content_minimization.py::test_export_content_mode_key_set",
+      "passed": true
+    },
+    "export_keyless_constructs_no_exporter": {
+      "node": "tests/test_content_minimization.py::test_export_keyless_constructs_no_exporter",
+      "passed": true
+    },
     "instrumentation_binary_capture": {
       "node": "tests/test_content_minimization.py::test_both_instrumentation_constructors_disable_binary_capture",
       "passed": true
@@ -108,9 +214,9 @@
   "result": "passed",
   "story": "5.2",
   "version_bindings": {
-    "application": "ShiftMind Story 5.2 telemetry boundaries",
+    "application": "ShiftMind Story 5.2 telemetry boundaries and Story 5.9 export boundary",
     "code": {
-      "git_commit": "562f57d99ec3b975a2d46120cdd45efe55ef3892",
+      "git_commit": "085360dbf681ae89f3c22127b51054b9af97516c",
       "working_tree_dirty": false
     },
     "dataset": {
@@ -120,31 +226,31 @@
       },
       "case_count": 4,
       "case_versions": {
-        "scheduling-baseline-injection-chat-text": "1",
-        "scheduling-inspect-injection-chat-text": "1",
-        "scheduling-inspect-injection-fixture-field": "1",
-        "scheduling-inspect-injection-tool-output": "1"
+        "scheduling-baseline-injection-chat-text": "2",
+        "scheduling-inspect-injection-chat-text": "2",
+        "scheduling-inspect-injection-fixture-field": "3",
+        "scheduling-inspect-injection-tool-output": "3"
       },
       "files": {
         "backend/evals/golden/scheduling_baseline/injection-chat-text.json": {
           "case_id": "scheduling-baseline-injection-chat-text",
-          "case_version": "1",
-          "sha256": "da4bcff93c2a27e5dcd130a71bb680d51506f82b48e729d14ebefdd6d4f103e3"
+          "case_version": "2",
+          "sha256": "2e5811791cb201bf434cc5658ce3f028d90c3b3088452667555f2d6a405494c0"
         },
         "backend/evals/golden/scheduling_inspect/injection-chat-text.json": {
           "case_id": "scheduling-inspect-injection-chat-text",
-          "case_version": "1",
-          "sha256": "08f67b1df7110c070a5cdd2ae614491da4030fa2785a00a9aceccfa1d2724e77"
+          "case_version": "2",
+          "sha256": "9d78e6cc90d5e13b3d59e3ee85cc259a260c5e80fe5e169a541c121b45c9d13b"
         },
         "backend/evals/golden/scheduling_inspect/injection-fixture-field.json": {
           "case_id": "scheduling-inspect-injection-fixture-field",
-          "case_version": "1",
-          "sha256": "61a52796c1b51c144c876bc39e8b9a6c5a7d56bd23906874e05463c9f45ce8d1"
+          "case_version": "3",
+          "sha256": "ff12fd39353e3c1aa016cd3a222c07adb619dffdd029bedc43574e80f9b1da59"
         },
         "backend/evals/golden/scheduling_inspect/injection-tool-output.json": {
           "case_id": "scheduling-inspect-injection-tool-output",
-          "case_version": "1",
-          "sha256": "27c57683cf152fee4c6fe57431898d45e1f74d6c53d6e031c28790f50ae76110"
+          "case_version": "3",
+          "sha256": "538771a47feadd5b4070670774b96e1e9007acdd33e63f0763f472f5b041fc81"
         }
       },
       "kind": "version-controlled golden evaluation dataset",
@@ -154,16 +260,16 @@
     },
     "evaluator": "pytest Story 5.2 content-minimization suite",
     "image": {
-      "api": "local source tree",
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
       "database": "postgres:18",
-      "web": "local source tree"
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959"
     },
     "model": "deterministic FunctionModel; no external provider",
-    "policy": "Story 5.2 AC1/AC2; NFR3/NFR4/NFR5/NFR27/NFR29/NFR30",
+    "policy": "Story 5.2 AC1/AC2, Story 5.9 AC3/AC4/AC6; NFR3/NFR4/NFR5/NFR27/NFR29/NFR30",
     "prompt": "synthetic canaries and four pinned prompt-injection cases",
     "scenario": "not applicable \u2014 no scenario fixture touched",
     "schema_version": "e5f6a7b8c9d0",
     "solver": "not applicable \u2014 no scheduling solve",
-    "tool": "demonstration tool double and JSON logging boundary"
+    "tool": "demonstration tool double, JSON logging boundary and span export boundary"
   }
 }
