@@ -503,6 +503,24 @@ def test_manual_run_end_to_end_and_replay_survive_a_raising_runtime_factory(
     _exercise_manual_run_flow(tmp_path, monkeypatch)
 
 
+EXPORT_BOUNDARY_MODULE = "adapters/telemetry/spans.py"
+_TELEMETRY_ROOTS = ("opentelemetry", "logfire")
+_BOUNDARY_ALLOWED_ROOTS = {EXPORT_BOUNDARY_MODULE: ("opentelemetry",)}
+
+
+def _under(name: str, roots: tuple[str, ...]) -> bool:
+    return any(name == root or name.startswith(f"{root}.") for root in roots)
+
+
+def telemetry_imports_outside_boundary(relative: str, names) -> list[str]:
+    """Telemetry imports in `relative` that the one export boundary does not excuse."""
+    allowed = _BOUNDARY_ALLOWED_ROOTS.get(relative, ())
+    return sorted(
+        name for name in names
+        if _under(name, _TELEMETRY_ROOTS) and not _under(name, allowed)
+    )
+
+
 def test_manual_solver_path_imports_no_telemetry_at_all() -> None:
     """AC3 for the deterministic path, proven by ABSENCE rather than by miming.
 
@@ -519,8 +537,13 @@ def test_manual_solver_path_imports_no_telemetry_at_all() -> None:
     telemetry surface out of the deterministic path, and goes red the moment an
     import is added.
     """
-    telemetry_roots = ("opentelemetry", "logfire")
     offenders: dict[str, list[str]] = {}
+    # Story 5.9 puts worker and enqueue spans on this path on purpose (AC1,
+    # AC2), so "no telemetry import" can no longer hold. The rule moved: the
+    # ONE sanitizing export boundary may import OpenTelemetry (never logfire),
+    # and every other reachable module still may not. That the boundary cannot
+    # affect this path is proven behaviourally by Story 5.9's AC5 tests against
+    # an unreachable, slow and rejecting exporter.
     seen: set[str] = set()
     stack = list(_manual_solver_files())
     while stack:
@@ -530,10 +553,7 @@ def test_manual_solver_path_imports_no_telemetry_at_all() -> None:
             continue
         seen.add(relative)
         names = _imports(path)
-        found = sorted(
-            name for name in names
-            if any(name == root or name.startswith(f"{root}.") for root in telemetry_roots)
-        )
+        found = telemetry_imports_outside_boundary(relative, names)
         if found:
             offenders[relative] = found
         for name in names:
@@ -544,7 +564,22 @@ def test_manual_solver_path_imports_no_telemetry_at_all() -> None:
                 stack.append(resolved)
 
     assert len(seen) > len(_manual_solver_files()), "the walk never left the seeds"
+    # Non-vacuity: the exemption is used, i.e. the boundary really is reached.
+    assert EXPORT_BOUNDARY_MODULE in seen
     assert offenders == {}
+
+
+def test_manual_solver_telemetry_guard_detects_synthetic_violations() -> None:
+    assert telemetry_imports_outside_boundary(
+        "worker/lease_worker.py", {"opentelemetry.trace"}
+    ) == ["opentelemetry.trace"]
+    assert telemetry_imports_outside_boundary(
+        "api/routers/schedule_runs.py", {"logfire", "json"}
+    ) == ["logfire"]
+    # The boundary may import OpenTelemetry, never logfire.
+    assert telemetry_imports_outside_boundary(
+        EXPORT_BOUNDARY_MODULE, {"opentelemetry.sdk.trace", "logfire"}
+    ) == ["logfire"]
 
 
 def test_manual_run_result_and_evidence_survive_a_failing_span_exporter(

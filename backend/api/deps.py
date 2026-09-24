@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Callable, ContextManager, Iterator
@@ -24,6 +25,7 @@ from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditReader, PostgresAuditWriter
 from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
 from adapters.telemetry.json_logs import JsonLogTelemetrySink
+from adapters.telemetry.spans import ProcessTracing, trace_engine
 from adapters.postgres.membership import PostgresMembershipReader
 from adapters.postgres.scenario_catalogue import PostgresScenarioCatalogueReader
 from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
@@ -74,7 +76,11 @@ def get_llm_provider(settings: Settings = Depends(get_settings)) -> LLMProvider:
 
 @lru_cache(maxsize=8)
 def _identity_store(database_url: str) -> PostgresIdentitySessionStore:
-    return PostgresIdentitySessionStore(database_url)
+    # The engine is built here, not inside the adapter, so it can be traced
+    # per instance (Story 5.9 Decision 8); the adapter already accepts it.
+    engine = create_postgres_engine(database_url, hide_parameters=True)
+    trace_engine(engine, get_process_tracing())
+    return PostgresIdentitySessionStore(database_url, engine=engine)
 
 
 def get_identity_store(
@@ -118,9 +124,35 @@ def get_capability_registry() -> CapabilityComposer:
     return compose_granted_capabilities
 
 
-def get_agent_runtime_factory() -> AgentRuntimeFactory:
-    """Depends-overridable constructor for one fully scoped agent runtime."""
-    return create_agent_runtime
+_process_tracing: ProcessTracing | None = None
+
+
+def set_process_tracing(tracing: ProcessTracing | None) -> None:
+    """Record this process's tracing; `api/main.py` calls it once at import."""
+    global _process_tracing
+    _process_tracing = tracing
+
+
+def get_process_tracing() -> ProcessTracing | None:
+    """Depends-overridable process tracing; `None` when no token is configured."""
+    return _process_tracing
+
+
+def get_agent_runtime_factory(
+    tracing: ProcessTracing | None = Depends(get_process_tracing),
+) -> AgentRuntimeFactory:
+    """Depends-overridable constructor for one fully scoped agent runtime.
+
+    Keyless it is plain `create_agent_runtime`; with tracing, the process
+    provider is passed explicitly -- the global tracer provider is never set.
+    """
+    if not isinstance(tracing, ProcessTracing):
+        # Called directly rather than through FastAPI, the default is the
+        # `Depends` marker itself.
+        tracing = get_process_tracing()
+    if tracing is None:
+        return create_agent_runtime
+    return partial(create_agent_runtime, tracer_provider=tracing.provider)
 
 
 _telemetry_sink: TelemetrySink = JsonLogTelemetrySink()
@@ -235,7 +267,10 @@ async def get_session(
 
 @lru_cache(maxsize=8)
 def _site_context_engine(database_url: str) -> Engine:
-    return create_postgres_engine(database_url, hide_parameters=True)
+    engine = create_postgres_engine(database_url, hide_parameters=True)
+    # Traced per instance (Story 5.9 Decision 8). An engine first built before
+    # tracing was installed stays untraced; production installs at import.
+    return trace_engine(engine, get_process_tracing())
 
 
 @contextmanager

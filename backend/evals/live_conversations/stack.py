@@ -71,12 +71,17 @@ def live_image_digests() -> dict[str, str]:
 
 @contextmanager
 def isolated_stack(*, model, api_key, override_file, origin='http://localhost:18097', postgres_port=55497,
-                   reasoning_effort='low', demonstration_enabled=False):
+                   reasoning_effort='low', demonstration_enabled=False, trace_export=None):
+    """`trace_export` (Story 5.9) is `LOGFIRE_TOKEN`/`LOGFIRE_BASE_URL`, merged
+    into the compose environment ONLY when given. It never enters
+    `measured_configuration`, a report or a log."""
     if origin != 'http://localhost:18097' or postgres_port != 55497:
         raise ValueError('use the fixed isolated evaluation ports')
     project = 'shiftmind-live-' + uuid4().hex[:12]
     env = _stack_environment(origin=origin, postgres_port=postgres_port, model=model, api_key=api_key,
         reasoning_effort=reasoning_effort, demonstration_enabled=demonstration_enabled)
+    if trace_export:
+        env.update({key: value for key, value in trace_export.items() if value})
     command = ['docker', 'compose', '-f', str(ROOT / 'docker-compose.yml'),
                '-f', str(override_file), '-p', project]
     started = False

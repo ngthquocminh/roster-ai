@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import Connection, Engine, text
 
+from adapters.telemetry.spans import traced_worker_job
 from application.ports.scheduler import SchedulerFactory, SchedulerPort
 from application.ports.schedule_run import ScheduleRunRepository
 from application.ports.telemetry import TelemetrySink
@@ -85,24 +86,32 @@ def run_once(
     lease_owner: str,
     lease_seconds: int,
     telemetry: TelemetrySink | None = None,
+    tracing: Any = None,
 ) -> LeaseOutcomeV1 | None:
     """Lease and advance at most one job; process supervision stays external.
 
     `lease_seconds` must exceed the solver wall-time budget — see
     `default_lease_seconds`, which callers without their own ceiling should use.
+
+    `tracing` (Story 5.9) opens one trace per LEASED job; an idle poll exports
+    nothing, and keyless the repository passes through unchanged.
     """
     if lease_seconds <= 0:
         raise ValueError("lease_seconds must be positive")
-    with lease_context(engine) as lease_connection:
-        return lease_and_execute_schedule_run(
+    with traced_worker_job(repository, tracing) as job, lease_context(
+        engine
+    ) as lease_connection:
+        outcome = lease_and_execute_schedule_run(
             lease_connection,
             lambda site_id: runtime_context(engine, site_id),
-            repository,
+            job.repository,
             scheduler,
             lease_owner=lease_owner,
             lease_seconds=lease_seconds,
             telemetry=telemetry,
         )
+        job.finish(outcome)
+        return outcome
 
 
 __all__ = [

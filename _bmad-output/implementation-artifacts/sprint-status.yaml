@@ -2696,7 +2696,7 @@ development_status:
   # hide_parameters), instruction_parts in model_request_parameters in default mode, outbound
   # baggage carrying the conversation UUID. Adding the content-mode key to compose.override.yml
   # reddens two 5.8 tests -- Decision 13 of the story keeps the committed baseline comparable.
-  5-9-trace-the-full-request-path-to-logfire-behind-one-export-boundary: ready-for-dev
+  5-9-trace-the-full-request-path-to-logfire-behind-one-export-boundary: in-progress
   5-10-publish-live-evaluation-results-to-logfire: backlog
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)

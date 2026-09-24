@@ -23,7 +23,9 @@ covers the WHOLE evidence file, so any regeneration requires re-deriving.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -84,10 +86,14 @@ def derive_baseline(
             "reasoning_effort": configuration["reasoning_effort"],
             "configuration_digest": configuration["configuration_digest"],
             # The 5.7 evidence predates `behavioral_digest`, so it is computed
-            # from the tracked override -- valid only because that file's
-            # digest still equals the recorded `override_sha256`, asserted here.
+            # from the override AS MEASURED -- the blob at `measured_at_commit`,
+            # whose digest must equal the recorded `override_sha256`. A committed
+            # blob never changes, so this stays derivable after the tracked
+            # file moves on (Story 5.9 Decision 13).
             "behavioral_digest": _baseline_behavioral_digest(
-                configuration, override_file=override_file
+                configuration,
+                measured_at_commit=evidence["measured_at_commit"],
+                override_file=override_file,
             ),
         },
         "clean_scenarios": list(evidence["clean_scenarios"]),
@@ -133,22 +139,38 @@ def _ensure_source_is_clean(evidence: dict, *, source: Path) -> None:
         )
 
 
-def _baseline_behavioral_digest(configuration: dict, *, override_file: Path) -> str:
-    from evals.live_conversations.configuration import _file_digest
+def _measured_override_text(commit: str, override_file: Path) -> str:
+    relative = Path(override_file).resolve().relative_to(REPO_ROOT).as_posix()
+    return subprocess.run(
+        ["git", "show", f"{commit}:{relative}"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout
 
+
+def _baseline_behavioral_digest(
+    configuration: dict, *, measured_at_commit: str, override_file: Path
+) -> str:
+    text = _measured_override_text(measured_at_commit, override_file)
     recorded = configuration["override_sha256"]
-    current = _file_digest(Path(override_file))
-    if recorded != current:
+    # Same LF normalisation as `configuration._file_digest`.
+    measured = hashlib.sha256(
+        text.encode("utf-8").replace(b"\r\n", b"\n")
+    ).hexdigest()
+    if recorded != measured:
         raise ValueError(
-            "the tracked compose override no longer matches the override_sha256 the "
-            f"measurement recorded ({current} != {recorded}); the baseline's "
-            "behavioral_digest cannot be computed from the working tree"
+            f"the compose override at {measured_at_commit} does not match the "
+            f"override_sha256 the measurement recorded ({measured} != {recorded}); "
+            "the baseline's behavioral_digest cannot be computed"
         )
     return behavioral_digest(
         model=configuration["agent"]["model"],
         judge_model=configuration["judge"]["model"],
         reasoning_effort=configuration["reasoning_effort"],
-        override_file=override_file,
+        override_text=text,
     )
 
 

@@ -11,6 +11,8 @@ import os
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -27,6 +29,13 @@ load_dotenv(_BACKEND_DIR / ".env", override=False)
 # Live-verified tool-capable as of 2026-07-13; replaces meta-llama/llama-3.3-70b-instruct:free, which started returning upstream 429 rate-limit errors.
 _OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
 _ANTHROPIC_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+_LOGFIRE_DEFAULT_BASE_URL = "https://logfire-us.pydantic.dev"
+
+# The one authorized trace-content diagnostic mode (addendum §6, Story 5.9).
+# Defined once here and imported everywhere else: the F1 architecture guard
+# allows this literal in exactly this file and the live-eval compose override.
+TRACE_CONTENT_SYNTHETIC_EVAL = "synthetic-eval"
+TraceContentMode = Literal["off", "synthetic-eval"]
 
 # FR12 / NFR16 closed vocabulary. Keeping the application-owned ceilings named
 # in one place makes omission detectable when the contract changes.
@@ -160,6 +169,13 @@ class Settings:
     approval_expiry_seconds: int = 3600
     scheduling_baseline_enabled: bool = True
     demonstration_enabled: bool = False
+    # Trace export (Story 5.9, AD-12). No token -> no exporter is constructed.
+    # Same repr=False treatment as the other credentials (T-04-01).
+    logfire_token: str | None = field(repr=False, default=None)
+    logfire_base_url: str = _LOGFIRE_DEFAULT_BASE_URL
+    # `off` everywhere except the disposable live-evaluation stack; the
+    # export-boundary sanitizer is authoritative whatever this says.
+    agent_trace_content_mode: TraceContentMode = "off"
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
@@ -253,6 +269,35 @@ def _nonempty(name: str, raw: str | None, fallback: str) -> str:
     if not value:
         raise InvalidFlagError(f"{name} must not be empty")
     return value
+
+
+def _logfire_base_url(raw: str | None) -> str:
+    """An origin only: `http(s)://host[:port]`; the exporter appends `/v1/traces`."""
+    value = (raw or "").strip() or _LOGFIRE_DEFAULT_BASE_URL
+    parts = urlsplit(value.rstrip("/"))
+    if (
+        parts.scheme not in ("http", "https")
+        or not parts.netloc
+        or parts.path
+        or parts.query
+        or parts.fragment
+    ):
+        raise InvalidFlagError(
+            "LOGFIRE_BASE_URL must be an http(s) origin with no path, query or fragment"
+        )
+    return value.rstrip("/")
+
+
+def _trace_content_mode(raw: str | None) -> TraceContentMode:
+    """Fail closed: an unrecognized mode stops the process at start."""
+    value = "off" if raw is None else raw.strip()
+    if value == "off":
+        return "off"
+    if value == TRACE_CONTENT_SYNTHETIC_EVAL:
+        return TRACE_CONTENT_SYNTHETIC_EVAL
+    raise InvalidFlagError(
+        f"AGENT_TRACE_CONTENT_MODE must be off or {TRACE_CONTENT_SYNTHETIC_EVAL}"
+    )
 
 
 def default_settings() -> Settings:
@@ -446,6 +491,11 @@ def default_settings() -> Settings:
     demonstration_enabled = _flag(
         "DEMONSTRATION_ENABLED", os.environ.get("DEMONSTRATION_ENABLED"), False
     )
+    logfire_token = (os.environ.get("LOGFIRE_TOKEN") or "").strip() or None
+    logfire_base_url = _logfire_base_url(os.environ.get("LOGFIRE_BASE_URL"))
+    agent_trace_content_mode = _trace_content_mode(
+        os.environ.get("AGENT_TRACE_CONTENT_MODE")
+    )
     return Settings(
         db_path=db_path,
         data_dir=data_dir,
@@ -503,4 +553,7 @@ def default_settings() -> Settings:
         approval_expiry_seconds=approval_expiry_seconds,
         scheduling_baseline_enabled=scheduling_baseline_enabled,
         demonstration_enabled=demonstration_enabled,
+        logfire_token=logfire_token,
+        logfire_base_url=logfire_base_url,
+        agent_trace_content_mode=agent_trace_content_mode,
     )

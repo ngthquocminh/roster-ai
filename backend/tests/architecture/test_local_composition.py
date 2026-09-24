@@ -43,9 +43,9 @@ def test_container_builds_use_frozen_dependency_paths() -> None:
     backend = (BACKEND_ROOT.parent / "Dockerfile").read_text(encoding="utf-8")
     web = (BACKEND_ROOT.parent / "frontend/Dockerfile").read_text(encoding="utf-8")
     assert "uv sync --project backend --frozen --no-dev --no-install-project" in backend
-    # `--all-groups` would install the dev group, whose own comment in
-    # backend/pyproject.toml says `opentelemetry-sdk` "is not shipped at
-    # runtime". An unfrozen install would satisfy AC2's words and defeat it.
+    # `--all-groups` would install the dev group (pytest, pyyaml), which is
+    # never shipped at runtime. An unfrozen install would satisfy AC2's words
+    # and defeat it.
     assert "--all-groups" not in backend
     assert "uv sync" in backend and "--frozen" in backend
     assert "npm ci" in web

@@ -32,20 +32,28 @@ dependencies = [
     # The extras mirror the providers already shipped: anthropic -> AgentRuntime,
     # google -> llm/gemini.py, openrouter -> llm/openrouter.py.
     "pydantic-ai-slim[anthropic,google,openrouter]==2.27.0",
+    # Trace export (Story 5.9, AR27: locked at this implementation gate). Exact
+    # pins, not floors: `adapters/telemetry/spans.py` constructs the
+    # instrumentation package's module-level `EngineTracer` directly, and an
+    # unpinned upgrade could change its constructor. Story 2.1 carried the SDK
+    # as TEST-ONLY so the suite could assert on OBSERVED spans; Story 5.9 ships
+    # it because the API and worker now export through it. None of these is
+    # the Logfire SDK -- `logfire` is never a runtime dependency (spine Stack).
+    # Every span passes `SanitizingSpanExporter` before it leaves the process.
+    "opentelemetry-sdk==1.44.0",
+    "opentelemetry-exporter-otlp-proto-http==1.44.0",
+    "opentelemetry-instrumentation-fastapi==0.65b0",
+    "opentelemetry-instrumentation-sqlalchemy==0.65b0",
+    "opentelemetry-instrumentation-httpx==0.65b0",
+    # Required by fastapi.testclient.TestClient, and since Story 5.9 a
+    # runtime-instrumented library (pydantic-ai's provider clients use it), so
+    # it is declared here rather than arriving only transitively.
+    "httpx==0.28.1",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
-    "httpx",  # required by fastapi.testclient.TestClient
-    # TEST-ONLY (Story 2.1). `opentelemetry-api` arrives transitively under
-    # pydantic-ai-slim, but it is a no-op: without the SDK nothing is recorded,
-    # so the AD-12/AD-15 guard could only inspect the settings object — which
-    # proves nothing about what is actually emitted. The SDK supplies the
-    # in-memory span exporter that lets the suite assert on OBSERVED span
-    # attributes. Deliberately in the dev group, never [project].dependencies:
-    # it is not shipped at runtime, and it is not the Logfire SDK (Story 5.1).
-    "opentelemetry-sdk",
     # TEST-ONLY (Story 5.8). `behavioral_digest` parses the tracked compose
     # override's `environment` maps so the price keys can be excluded from the
     # digest the live-conversation drop check compares on. Deliberately in the

@@ -4,7 +4,7 @@ baseline_commit: 67584d5
 
 # Story 5.9: Trace the Full Request Path to Logfire Behind One Export Boundary
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -772,102 +772,102 @@ of the override) — deliberately left as the measured value; Decision 13 is wha
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Start from a clean, re-verified baseline (all ACs)**
-  - [ ] If the 2026-09-24 planning edits (proposal, `epics.md`, spine, addendum, `deferred-work.md`,
+- [x] **Task 1 — Start from a clean, re-verified baseline (all ACs)**
+  - [x] If the 2026-09-24 planning edits (proposal, `epics.md`, spine, addendum, `deferred-work.md`,
         `sprint-status.yaml`) and this story are uncommitted, commit them as `docs(story-5.9): …`
         first — the evidence steps need a clean tree.
-  - [ ] Re-run the *Measured at creation* suites; record drift. Re-confirm the three facts most
+  - [x] Re-run the *Measured at creation* suites; record drift. Re-confirm the three facts most
         likely to move with a version bump: the old-semconv HTTP/DB keys (fact 5), the status
         description leaks (facts 1–2), and `instruction_parts` in `model_request_parameters` (fact 3).
 
-- [ ] **Task 2 — Dependencies (AC1) — per Decision 2**
-  - [ ] Edit `backend/pyproject.toml`; `uv lock`; confirm the 12-added/0-changed delta; `uv sync --frozen`.
+- [x] **Task 2 — Dependencies (AC1) — per Decision 2**
+  - [x] Edit `backend/pyproject.toml`; `uv lock`; confirm the 12-added/0-changed delta; `uv sync --frozen`.
 
-- [ ] **Task 3 — Settings and a keyless test process (AC1) — per Decision 3**
-  - [ ] `settings.py` fields, parsing and `TRACE_CONTENT_SYNTHETIC_EVAL`; tests in `test_settings.py`
+- [x] **Task 3 — Settings and a keyless test process (AC1) — per Decision 3**
+  - [x] `settings.py` fields, parsing and `TRACE_CONTENT_SYNTHETIC_EVAL`; tests in `test_settings.py`
         for defaults, empty token → `None`, invalid base URL / mode → `InvalidFlagError`.
-  - [ ] `conftest.py` pops the three variables; add `LOGFIRE_TOKEN` to `CREDENTIAL_CANARIES`.
+  - [x] `conftest.py` pops the three variables; add `LOGFIRE_TOKEN` to `CREDENTIAL_CANARIES`.
 
-- [ ] **Task 4 — `adapters/telemetry/span_policy.py` (AC3, AC4) — per Decision 4 and the allow-list tables**
-  - [ ] Constants per category (`ALLOW`, `TRANSFORM`, `CONTENT_MODE`, `KNOWN_DROPPED`,
+- [x] **Task 4 — `adapters/telemetry/span_policy.py` (AC3, AC4) — per Decision 4 and the allow-list tables**
+  - [x] Constants per category (`ALLOW`, `TRANSFORM`, `CONTENT_MODE`, `KNOWN_DROPPED`,
         `RESOURCE_ALLOW`, numeric/UUID key families) and pure functions (`categorize`,
         `sanitize_attributes`, `sanitize_event`, `sanitize_resource`, the four transforms).
-  - [ ] Unit tests in `tests/test_trace_export_boundary.py` built from the measured samples in the
+  - [x] Unit tests in `tests/test_trace_export_boundary.py` built from the measured samples in the
         tables — one per transform, per event rule, per category's drop set.
 
-- [ ] **Task 5 — `adapters/telemetry/spans.py` (AC1, AC3, AC5) — per Decisions 3, 4, 6, 7, 8, 10, 12**
-  - [ ] `ProcessTracing`, `build_process_tracing`, `SanitizingSpanExporter`, `ShiftMindSampler`,
+- [x] **Task 5 — `adapters/telemetry/spans.py` (AC1, AC3, AC5) — per Decisions 3, 4, 6, 7, 8, 10, 12**
+  - [x] `ProcessTracing`, `build_process_tracing`, `SanitizingSpanExporter`, `ShiftMindSampler`,
         extract-only propagator, explicit `Resource`, BSP bounds, `trace_engine`,
         `annotate_enqueued_schedule_run`, the worker job scope, `traced_scheduler`.
 
-- [ ] **Task 6 — API wiring (AC1, AC2) — per Decisions 6, 7, 8, 9, 11**
-  - [ ] `api/tracing.py` (`install_api_tracing` with undo, `TraceContextBoundary`).
-  - [ ] `api/main.py` import-time install + lifespan shutdown flush.
-  - [ ] `api/deps.py`: `get_process_tracing`, `set_process_tracing`, the factory partial, and
+- [x] **Task 6 — API wiring (AC1, AC2) — per Decisions 6, 7, 8, 9, 11**
+  - [x] `api/tracing.py` (`install_api_tracing` with undo, `TraceContextBoundary`).
+  - [x] `api/main.py` import-time install + lifespan shutdown flush.
+  - [x] `api/deps.py`: `get_process_tracing`, `set_process_tracing`, the factory partial, and
         `trace_engine` at `_site_context_engine` and at `_identity_store` (engine built and injected
         there; `adapters/postgres/identity.py` untouched — Decision 8).
-  - [ ] `api/routers/schedule_runs.py`: `annotate_enqueued_schedule_run` after `enqueue_compute`.
+  - [x] `api/routers/schedule_runs.py`: `annotate_enqueued_schedule_run` after `enqueue_compute`.
 
-- [ ] **Task 7 — Agent runtime (AC2, AC4) — per Decisions 5, 9, 11**
-  - [ ] `trace_content` keyword and the correlation capability (added only with a provider);
+- [x] **Task 7 — Agent runtime (AC2, AC4) — per Decisions 5, 9, 11**
+  - [x] `trace_content` keyword and the correlation capability (added only with a provider);
         `create_agent_runtime(tracer_provider=…)`. Update the comment at `agent/runtime.py:331-339`
         — it still says content export is "a deliberate future decision" and names Story 5.1.
 
-- [ ] **Task 8 — Worker (AC1, AC2, AC5) — per Decisions 8, 10, 11**
-  - [ ] `worker/composition.py`, `worker/main.py` (`WorkerRuntimeV1.tracing`, pass-through, flush in
+- [x] **Task 8 — Worker (AC1, AC2, AC5) — per Decisions 8, 10, 11**
+  - [x] `worker/composition.py`, `worker/main.py` (`WorkerRuntimeV1.tracing`, pass-through, flush in
         `finally`), `worker/lease_worker.py::run_once(…, tracing=None)`.
 
-- [ ] **Task 9 — Content mode config and Story 5.8 compatibility (AC4) — per Decisions 5 and 13**
-  - [ ] `compose.override.yml` (both services), `docker-compose.yml` passthrough, `.env.example`
+- [x] **Task 9 — Content mode config and Story 5.8 compatibility (AC4) — per Decisions 5 and 13**
+  - [x] `compose.override.yml` (both services), `docker-compose.yml` passthrough, `.env.example`
         (commented `# LOGFIRE_TOKEN=` and `# LOGFIRE_BASE_URL=…`; content mode absent).
-  - [ ] `configuration.py` exclusion, `derive_live_conversation_baseline.py` blob read, the drop-check
+  - [x] `configuration.py` exclusion, `derive_live_conversation_baseline.py` blob read, the drop-check
         test edits, `suite.py`/`stack.py` token passthrough. Run `tests/test_live_conversation_*`.
 
-- [ ] **Task 10 — Architecture guards (AC1, AC3, AC4) — per Decisions 1, 4, 5**
-  - [ ] New `tests/architecture/test_trace_export_boundaries.py`: one-boundary import guard, `logfire`
+- [x] **Task 10 — Architecture guards (AC1, AC3, AC4) — per Decisions 1, 4, 5**
+  - [x] New `tests/architecture/test_trace_export_boundaries.py`: one-boundary import guard, `logfire`
         runtime ban plus a `pyproject.toml` check that `logfire` is not a runtime dependency and the
         five OTel pins are exact, the F1 content-mode guard, the SQL-literal guard — each with its
         synthetic violating cases.
-  - [ ] `test_agent_runtime_boundaries.py`: the three entries and the prefix-aware matcher (Decision 1).
-  - [ ] `test_telemetry_boundaries.py::test_telemetry_adapter_imports_no_framework`: the `spans.py`
+  - [x] `test_agent_runtime_boundaries.py`: the three entries and the prefix-aware matcher (Decision 1).
+  - [x] `test_telemetry_boundaries.py::test_telemetry_adapter_imports_no_framework`: the `spans.py`
         exemption, `opentelemetry` root only.
 
-- [ ] **Task 11 — Proof suites (AC2, AC3, AC4, AC5) — per Decisions 4, 6, 7, 9, 10, 12, 14**
-  - [ ] `tests/test_content_minimization.py`: import the allow-list; re-point C4 through the real
+- [x] **Task 11 — Proof suites (AC2, AC3, AC4, AC5) — per Decisions 4, 6, 7, 9, 10, 12, 14**
+  - [x] `tests/test_content_minimization.py`: import the allow-list; re-point C4 through the real
         exporter capture, including an off-mode case with a canary in `AgentRuntimeConfig.instructions`
         (proves `instruction_parts` never leaves); delete the C4 residual block and its stale comment;
         add C5–C8 × 3 cells. C5 may use dependency-overridden fakes; C6 a local stub server, and its
         cells also assert the stub received no `traceparent`/`baggage`; C7 a real engine (`postgres`
         marker); C8 fake repository/scheduler through the real job scope.
-  - [ ] The four surface nodes live in the same file — the machinery test requires every proof node to
+  - [x] The four surface nodes live in the same file — the machinery test requires every proof node to
         be a test declared there: `export_content_mode_key_set` (AC4: the content keys present, the
         credential canaries and exception text absent, `deployment.environment=live-eval`),
         `export_keyless_constructs_no_exporter` (AC1: no token → `build_process_tracing` returns `None`,
         `OTLPSpanExporter.__init__` is never called, `get_agent_runtime_factory()` is plain
         `create_agent_runtime`, `create_runtime().tracing is None`), `export_client_trace_context_discarded`
         (fake-backed app), `export_agent_raw_key_drift`.
-  - [ ] `tests/test_trace_request_path.py` (`postgres`): AC2 end to end — conversation trace ID on
+  - [x] `tests/test_trace_request_path.py` (`postgres`): AC2 end to end — conversation trace ID on
         messages/execute/agent/SSE; hostile `traceparent` discarded on three route kinds;
         `invoke_agent` carries the three correlation keys; enqueue span and the worker job's spans
         share `shiftmind.schedule_run.id`; the SSE connection exports exactly one span; `/health`
         exports none; an idle `run_once` exports none.
-  - [ ] `tests/test_trace_export_failure_independence.py` and the extended approval-audit test (AC5).
+  - [x] `tests/test_trace_export_failure_independence.py` and the extended approval-audit test (AC5).
 
-- [ ] **Task 12 — Evidence generator (AC6) — per Decision 14**
-  - [ ] `content_minimization_report.py` and `test_content_minimization_report.py` (24 cells,
+- [x] **Task 12 — Evidence generator (AC6) — per Decision 14**
+  - [x] `content_minimization_report.py` and `test_content_minimization_report.py` (24 cells,
         distinctness, existence, derived `fixtures.secrets`).
 
-- [ ] **Task 13 — Docs (AC1, AC4) — per Decisions 2, 3, 5, 13, 15**
-  - [ ] `docs/CONFIGURATION.md`: three rows, the region note, F1's residual verbatim in spirit.
-  - [ ] `docs/CI-SECRETS-CHECKLIST.md`: `LOGFIRE_TOKEN` under "must NOT be added"; a checklist line.
-  - [ ] `docs/TESTING.md`: live-suite trace export (token in `backend/.env`; what content mode
+- [x] **Task 13 — Docs (AC1, AC4) — per Decisions 2, 3, 5, 13, 15**
+  - [x] `docs/CONFIGURATION.md`: three rows, the region note, F1's residual verbatim in spirit.
+  - [x] `docs/CI-SECRETS-CHECKLIST.md`: `LOGFIRE_TOKEN` under "must NOT be added"; a checklist line.
+  - [x] `docs/TESTING.md`: live-suite trace export (token in `backend/.env`; what content mode
         exports) and where the new proof suites live.
-  - [ ] Spine Stack row: "pinned at Story 5.9" → the exact versions.
+  - [x] Spine Stack row: "pinned at Story 5.9" → the exact versions.
 
-- [ ] **Task 14 — Ledger and status — per Decision 15**
-  - [ ] Two closes, four new entries; this story's row in `sprint-status.yaml` only.
+- [x] **Task 14 — Ledger and status — per Decision 15**
+  - [x] Two closes, four new entries; this story's row in `sprint-status.yaml` only.
 
-- [ ] **Task 15 — Demonstrated-red mutation table (retro A1)** — minimum rows in *Dev Notes → Mutation
+- [x] **Task 15 — Demonstrated-red mutation table (retro A1)** — minimum rows in *Dev Notes → Mutation
       table minimum*. Every new canary test must be shown red by removing the sanitizer rule it relies on.
 
 - [ ] **Task 16 — Commit, measure, generate, commit — in this order (AC6) — per Decision 14**
@@ -1025,13 +1025,67 @@ put OpenTelemetry there and does so in one module (`spans.py`), keeping `json_lo
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`claude-opus-5-5`), Claude Code, 2026-09-24.
+
 ### Debug Log References
+
+- **Task 1 baseline, re-verified on 2960de0** (planning edits already committed): backend `2240 passed, 2 skipped, 10 deselected` with only the story/sprint-status status edits dirty (the second skip is the clean-tree realism test, as the story predicts). No drift. Facts 1-3 and 5 (status-description leaks, `instruction_parts`, old-semconv `http.url`/`http.target`) re-confirmed by demonstrated red: removing each sanitizer rule turns its canary cell red (mutations m01, m03, m04 below).
+- **Task 2:** `uv lock` added exactly the 12 measured packages and changed 0 existing versions; `uv sync --frozen` clean.
+- **Stop 1, resolved by Minh (option 1):** `tests/architecture/test_model_outage_boundaries.py::test_manual_solver_path_imports_no_telemetry_at_all` (Story 3.9, outside the file table) went red. The worker and the enqueue route necessarily reach `adapters/telemetry/spans.py` (AC1, Decisions 8-10). Amended to exempt that ONE module for the `opentelemetry` root only (never `logfire`), extracted `telemetry_imports_outside_boundary` with synthetic cases, and added a non-vacuity assertion that the boundary is reached. The "export cannot affect the path" property is now proven behaviourally by the AC5 suite.
+- **Stop 2, resolved by Minh (option 1):** Decision 14's report records `content_modes: ["off", "synthetic-eval"]`, which the F1 guard (Decision 5) would flag once the evidence is committed. `evidence/**` added to F1's exclusions with its reason (generated measurement records, never configuration); the generator imports `TRACE_CONTENT_SYNTHETIC_EVAL` rather than spelling the literal.
+- **Two bugs found by the new unit tests, fixed:** (1) the SDK builds a span's attributes FROM the `SamplingResult`, so a custom sampler returning `None` attributes silently dropped every start-time attribute -- `ShiftMindSampler` now hands them back; (2) content mode skipped the transforms of every category -- now only the agent's four, as specified.
+- **Live-provider calls in my own tests, found and fixed before commit:** `backend/.env` selects a live `AGENT_RUNTIME_MODEL`, conftest does not pop it, and the two PostgreSQL end-to-end tests lift `ALLOW_MODEL_REQUESTS` for the deterministic model. Their first runs therefore made a handful of real OpenRouter calls. Both tests now pin `AGENT_RUNTIME_MODEL=deterministic`, drop `AGENT_RUNTIME_API_KEY`, and assert the setting before any request.
+- **Regression outside the file table, fixed in product code:** `tests/test_worker_composition.py` builds the worker from a narrow `SimpleNamespace` settings stub; `build_process_tracing` reads the token with `getattr(..., None)` (the worker's existing narrow-stub convention, cf. `default_lease_seconds`). That test file is unchanged.
+- **Measurement differs from the story in one place:** on a failing statement the SQLAlchemy engine tracer records the failure as a STATUS (description echoing the bound value) with no `exception` event. The C7 adversarial cell asserts the status is exported empty and that any event is type-only; m02 (keep `exception.message`) leaves C7 green for that reason, and m03 (keep the status description) turns it red.
+- **Suite duration:** backend default suite 204 s -> about 424 s. Most of the added time is AC5's bounded-shutdown and slow-server cases (each waits up to the 5 s flush plus 5 s export deadline, by design) and three bootstrapped PostgreSQL end-to-end runs.
 
 ### Demonstrated-red mutation table
 
+Each row mutated already-green code through a harness that ran the named guard before and after, then restored the original bytes. The tree's `git diff` hash was `515a2f9a...c6af` before and after the whole run: the tree was left exactly as found.
+
+| # | Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|---|
+| m01 | `strip_target_query` returns the value uncut; `http.url` added to the server allow-list | C5 prompt-injection + C5 adversarial | 2 passed | 2 failed |
+| m02 | `sanitize_event` keeps every exception attribute | C4, C7 and C8 adversarial | 3 passed | 2 failed, 1 passed (C7: DB spans carry the failure in the status, not an event -- see m03) |
+| m03 | exported status keeps its description (`status=span.status`) | C4 adversarial + C7 secrets | 2 passed | 2 failed |
+| m04 | `remove_instruction_parts` no longer pops `instruction_parts` | `test_c4_off_mode_never_exports_the_runtime_instructions` | 1 passed | 1 failed |
+| m05 | message projection returns the raw value AND `include_content=True` forced in off mode | C4 prompt-injection | 1 passed | 1 failed |
+| m06 | extract-only propagator not installed (default W3C + baggage) | C6 secrets (stub must receive no `traceparent`/`baggage`) | 1 passed | 1 failed |
+| m07 | boundary added with `app.add_middleware(TraceContextBoundary)` | `test_export_client_trace_context_discarded` + `test_trace_request_path.py` | 2 passed | 2 failed |
+| m08 | SSE quiet-parent sampler rule disabled | `test_trace_request_path.py` (SSE exports one span) | 1 passed | 1 failed |
+| m09 | sampler root rule removed (`sampled = True`) | `test_trace_request_path.py` (idle `run_once` exports nothing) | 1 passed | 1 failed |
+| m10 | `SimpleSpanProcessor` instead of `BatchSpanProcessor` | `test_requests_never_wait_for_the_exporter[slow]` | 1 passed | 1 failed |
+| m11 | run-correlation capability removed | `test_trace_request_path.py` (`shiftmind.agent_run.id`) | 1 passed | 1 failed |
+| m12 | enqueue annotation removed | `test_trace_request_path.py` (schedule-run join) | 1 passed | 1 failed |
+| m13 | exporter constructed without a token | `test_export_keyless_constructs_no_exporter` + `test_keyless_settings_construct_nothing` | 2 passed | 2 failed |
+| m14 | AD-1 matcher reverted to root-only | `test_import_guard_actually_fails_on_a_violating_import` (synthetic `import opentelemetry.sdk.trace`) | 1 passed | 1 failed |
+| m15 | `TELEMETRY_ONLY_KEYS = frozenset()` | drop-check digest-compatibility test (+ baseline derivation) | 2 passed | 1 failed, 1 passed (derivation reads the committed blob, which never had the key -- by design) |
+| m16 | conftest's three pops removed, run with `LOGFIRE_TOKEN` set (base URL a closed local port, so nothing left the machine) | `test_the_test_process_has_no_process_tracing` | 1 passed | 1 failed |
+| m17 | `text(f"...")` in `worker/lease_worker.py` | `test_sql_passed_to_sqlalchemy_is_always_a_literal` | 1 passed | 1 failed |
+| m18 | two matrix cells pointed at one test | `test_proof_matrix_is_attributable_to_channel_and_fixture_class` | 1 passed | 1 failed |
+| m19 | `from opentelemetry import trace` in `worker/lease_worker.py` | one-boundary guard + amended Story 3.9 manual-path guard | 2 passed | 2 failed |
+| m20 | `AGENT_TRACE_CONTENT_MODE: synthetic-eval` added to `docker-compose.yml` | F1 content-mode guard | 1 passed | 1 failed |
+| m21 | `logfire.msg` removed from the agent table | `test_export_agent_raw_key_drift` | 1 passed | 1 failed |
+| m22 | OpenTelemetry imported by `adapters/telemetry/json_logs.py` | `test_telemetry_adapter_imports_no_framework` (exemption is `spans.py` only) | 1 passed | 1 failed |
+
 ### Completion Notes List
 
+- One export boundary: the policy is production data in `adapters/telemetry/span_policy.py` (stdlib only, default-deny, per-category tables as measured), applied by `SanitizingSpanExporter` in `adapters/telemetry/spans.py`, the only SDK/exporter importer besides `api/tracing.py`. Events keep `exception.type` only; status descriptions, links and scope attributes never leave; the resource is rebuilt from its allow-list. A sanitization error fails the batch; it never raises or exports unsanitized.
+- Keyless is literal: no token -> `build_process_tracing` returns `None` and constructs nothing; the global tracer provider is never set; the test process pops all three variables.
+- API: instrumented at import (not in the lifespan) with `exclude_spans=["receive","send"]` and `/health` excluded; `TraceContextBoundary` wraps the instrumented stack, drops client `traceparent`/`tracestate`/`baggage` on every route and synthesizes the conversation-derived parent; extract-only propagator, so nothing is injected into provider requests. Engines are traced per instance at the three runtime sites; `adapters/postgres/identity.py` is untouched.
+- Agent: `trace_content` feeds `include_content`; the `_RunCorrelation` capability (only with a provider) stamps `shiftmind.agent_run.id`/`site.id`/`conversation.id` on `invoke_agent`.
+- Worker: one trace per leased job (`shiftmind.worker.execute` -> retroactive `lease`, `solve`); idle polls export nothing; flush in `main()`'s `finally` before `dispose()`.
+- Story 5.8 kept comparable: `TELEMETRY_ONLY_KEYS`, blob-based baseline digest (the blob at `db0a5dd0` reproduces the recorded `override_sha256`), monotone retargeted test; the live suite passes the token into the disposable stack only when given.
+- Proofs: a 24-cell matrix (C1-C8 x 3), four export surface nodes, the AC2 end-to-end test on bootstrapped PostgreSQL, the AC5 suite against unreachable/slow/401 exporters (plus the approval-audit test now on the real pipeline), and new architecture guards with synthetic cases. Backend default suite before commit: **2339 passed, 2 skipped, 10 deselected**. Zero frontend diff, so Vitest was not re-run.
+- Ledger: `:696` and `:717` closed; four entries added (route_template prefix defect, heartbeat untraced, per-run `gen_ai.conversation.id`, stable-semconv opt-in).
+
 ### File List
+
+New: `backend/adapters/telemetry/span_policy.py`, `backend/adapters/telemetry/spans.py`, `backend/api/tracing.py`, `backend/tests/trace_capture.py`, `backend/tests/test_trace_export_boundary.py`, `backend/tests/test_trace_request_path.py`, `backend/tests/test_trace_export_failure_independence.py`, `backend/tests/architecture/test_trace_export_boundaries.py`.
+
+Modified: `backend/pyproject.toml`, `backend/uv.lock`, `backend/settings.py`, `backend/conftest.py`, `backend/.env.example`, `backend/agent/runtime.py`, `backend/api/main.py`, `backend/api/deps.py`, `backend/api/routers/schedule_runs.py`, `backend/worker/composition.py`, `backend/worker/main.py`, `backend/worker/lease_worker.py`, `backend/evals/content_minimization_report.py`, `backend/evals/live_conversations/compose.override.yml`, `backend/evals/live_conversations/configuration.py`, `backend/evals/live_conversations/stack.py`, `backend/evals/live_conversations/suite.py`, `backend/scripts/derive_live_conversation_baseline.py`, `backend/tests/test_content_minimization.py`, `backend/tests/test_content_minimization_report.py`, `backend/tests/test_settings.py`, `backend/tests/test_live_conversation_drop_check.py`, `backend/tests/test_live_conversation_stack.py`, `backend/tests/test_approval_governance_postgres.py`, `backend/tests/test_agent_runtime_adapter.py` (comment), `backend/tests/architecture/test_agent_runtime_boundaries.py`, `backend/tests/architecture/test_telemetry_boundaries.py`, `backend/tests/architecture/test_model_outage_boundaries.py` (Stop 1), `backend/tests/architecture/test_local_composition.py` (comment), `docker-compose.yml`, `docs/CONFIGURATION.md`, `docs/CI-SECRETS-CHECKLIST.md`, `docs/TESTING.md`, `_bmad-output/planning-artifacts/architecture/architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md`, `_bmad-output/implementation-artifacts/deferred-work.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file.
+
+Evidence (separate commits, Task 16): `evidence/story-5.2/content-minimization-report.json`, `evidence/story-1.11/gate-a-readiness-report.json`.
 
 ---
 
@@ -1040,3 +1094,4 @@ put OpenTelemetry there and does so in one module (`spans.py`), keeping `json_lo
 | Date | Change |
 |---|---|
 | 2026-09-24 | Story created at `67584d5`. Allow-list measured, not written from docs: a throwaway harness drove eight channels against the real app and Docker PostgreSQL with the exact pins. Eleven measured facts shaped fifteen decisions, including three leak channels Story 5.2 never read (status descriptions on agent and DB spans; `instruction_parts` in default mode; outbound `baggage`), four placements that silently fail (lifespan instrumentation, `add_middleware`, `context.attach`, the global SQLAlchemy instrumentor), and a collision with Story 5.8's baseline that the AC4 file choice causes. Baseline: backend 2240 passed / 2 skipped / 10 deselected; Vitest 648 / 85 files. |
+| 2026-09-24 | Implemented (dev-story). Two stops resolved with Minh: Story 3.9 manual-path telemetry guard exempts only the export boundary; F1 excludes evidence/. 22-row demonstrated-red mutation table; backend 2339 passed / 2 skipped pre-commit. |

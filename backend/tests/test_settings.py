@@ -167,3 +167,62 @@ def test_every_ac2_ceiling_rejects_a_non_positive_override(monkeypatch) -> None:
         with pytest.raises(InvalidFlagError, match=name.upper()):
             default_settings()
         monkeypatch.delenv(name.upper())
+
+
+def test_trace_export_settings_default_to_keyless_and_content_off(monkeypatch) -> None:
+    for name in ("LOGFIRE_TOKEN", "LOGFIRE_BASE_URL", "AGENT_TRACE_CONTENT_MODE"):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = default_settings()
+
+    assert settings.logfire_token is None
+    assert settings.logfire_base_url == "https://logfire-us.pydantic.dev"
+    assert settings.agent_trace_content_mode == "off"
+
+
+@pytest.mark.parametrize("raw", ["", "   "])
+def test_an_empty_logfire_token_means_no_token(monkeypatch, raw) -> None:
+    monkeypatch.setenv("LOGFIRE_TOKEN", raw)
+    assert default_settings().logfire_token is None
+
+
+def test_logfire_token_is_kept_out_of_the_settings_repr(monkeypatch) -> None:
+    monkeypatch.setenv("LOGFIRE_TOKEN", "CANARY-LOGFIRE-5-9")
+    settings = default_settings()
+    assert settings.logfire_token == "CANARY-LOGFIRE-5-9"
+    assert "CANARY-LOGFIRE-5-9" not in repr(settings)
+
+
+def test_logfire_base_url_accepts_the_eu_region_and_strips_a_trailing_slash(monkeypatch) -> None:
+    monkeypatch.setenv("LOGFIRE_BASE_URL", "https://logfire-eu.pydantic.dev/")
+    assert default_settings().logfire_base_url == "https://logfire-eu.pydantic.dev"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "logfire-eu.pydantic.dev",
+        "ftp://logfire-eu.pydantic.dev",
+        "https://logfire-eu.pydantic.dev/v1/traces",
+        "https://logfire-eu.pydantic.dev?x=1",
+        "https://logfire-eu.pydantic.dev#frag",
+    ],
+)
+def test_an_invalid_logfire_base_url_fails_at_startup(monkeypatch, raw) -> None:
+    monkeypatch.setenv("LOGFIRE_BASE_URL", raw)
+    with pytest.raises(InvalidFlagError, match="LOGFIRE_BASE_URL"):
+        default_settings()
+
+
+def test_synthetic_eval_is_the_only_other_content_mode(monkeypatch) -> None:
+    from settings import TRACE_CONTENT_SYNTHETIC_EVAL
+
+    monkeypatch.setenv("AGENT_TRACE_CONTENT_MODE", TRACE_CONTENT_SYNTHETIC_EVAL)
+    assert default_settings().agent_trace_content_mode == TRACE_CONTENT_SYNTHETIC_EVAL
+
+
+@pytest.mark.parametrize("raw", ["on", "true", "content", "SYNTHETIC-EVAL", ""])
+def test_an_unknown_trace_content_mode_fails_closed_at_startup(monkeypatch, raw) -> None:
+    monkeypatch.setenv("AGENT_TRACE_CONTENT_MODE", raw)
+    with pytest.raises(InvalidFlagError, match="AGENT_TRACE_CONTENT_MODE"):
+        default_settings()

@@ -279,7 +279,7 @@ Versions are the 2026-07-22 seed; existing rows are repository locks, while plan
 | SQLAlchemy | 2.0.51 | planned seed |
 | Psycopg | 3.3.4 | planned seed |
 | Alembic | 1.18.5 | planned seed |
-| OpenTelemetry SDK + OTLP/HTTP exporter + FastAPI/SQLAlchemy/httpx instrumentation → hosted Logfire | pinned at Story 5.9 | runtime trace export behind the ShiftMind sanitizer (replaces the `Logfire SDK 4.38.0` seed, sprint-change-proposal-2026-09-24) |
+| OpenTelemetry SDK + OTLP/HTTP exporter + FastAPI/SQLAlchemy/httpx instrumentation → hosted Logfire | `opentelemetry-sdk==1.44.0`, `opentelemetry-exporter-otlp-proto-http==1.44.0`, `opentelemetry-instrumentation-{fastapi,sqlalchemy,httpx}==0.65b0` (Story 5.9) | runtime trace export behind the ShiftMind sanitizer (replaces the `Logfire SDK 4.38.0` seed, sprint-change-proposal-2026-09-24) |
 | Logfire SDK + pydantic-evals | pinned at Story 5.10 | dev/eval tooling only; never imported by api, worker, agent, application or domain |
 | Node.js | 24.18.0 LTS | planned, unverified upgrade target; repository and CI remain pinned to measured-green Node 22 until a dedicated upgrade pass |
 | React | 19.2.7 | repository lock |

@@ -46,6 +46,12 @@ import settings as _settings  # noqa: E402,F401  (imported for its load_dotenv s
 
 os.environ.pop("LLM_PROVIDER", None)
 os.environ.pop("LLM_MODEL", None)
+# Story 5.9: the suite is keyless for trace export by construction. Without
+# these pops a real LOGFIRE_TOKEN in a developer's backend/.env would configure
+# live export at `api.main` import and ship test spans to Logfire.
+os.environ.pop("LOGFIRE_TOKEN", None)
+os.environ.pop("LOGFIRE_BASE_URL", None)
+os.environ.pop("AGENT_TRACE_CONTENT_MODE", None)
 
 
 @contextmanager

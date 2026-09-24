@@ -19,6 +19,11 @@ This is a property of the design, not an accident:
 `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, and `ANTHROPIC_API_KEY` must not be configured as repository
 secrets or exposed to any job in this workflow.
 
+`LOGFIRE_TOKEN` must not be added either (Story 5.9). The test suite is keyless
+for trace export by construction -- `backend/conftest.py` pops the token -- and
+a token in CI would ship pull-request test spans, including fork builds, to
+the Logfire project.
+
 **NFR26** keeps live-provider calls out of normal CI. The seven
 `@pytest.mark.live` tests are excluded by `addopts = "-m \"not live\""` in
 `backend/pyproject.toml`, and the `backend` job asserts that exclusion is still
@@ -52,4 +57,5 @@ Before merging a change to `.github/workflows/ci.yml`:
       environment dumps
 - [ ] Story 5.2 minimization canaries remain synthetic placeholders and have
       not been replaced with real provider, database, OIDC, or runtime secrets
+- [ ] No `LOGFIRE_TOKEN` (or `LOGFIRE_BASE_URL`) is set on any job
 - [ ] Artifact `retention-days` is set (30) rather than left to the default

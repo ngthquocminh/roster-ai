@@ -3,6 +3,9 @@ import ast
 from pathlib import Path
 
 from evals.content_minimization_report import (
+    CHANNELS,
+    CREDENTIAL_ENV_VARS,
+    EXPORT_BOUNDARY,
     MATRIX_NODES,
     PROOF_NODES,
     SURFACE_NODES,
@@ -43,7 +46,7 @@ def test_report_requires_every_channel_fixture_proof_node(tmp_path: Path) -> Non
 
 
 def test_proof_matrix_is_attributable_to_channel_and_fixture_class() -> None:
-    """Twelve cells must be twelve DIFFERENT tests that actually exist.
+    """Twenty-four cells must be twenty-four DIFFERENT tests that actually exist.
 
     The previous version asserted only that each name existed and started with
     the module prefix, so it passed unchanged with all twelve cells pointing at
@@ -53,14 +56,19 @@ def test_proof_matrix_is_attributable_to_channel_and_fixture_class() -> None:
     """
     declared = _declared_test_names()
 
-    assert len(MATRIX_NODES) == 12
-    for channel in ("c1_telemetry", "c2_logs", "c3_worker_stderr", "c4_spans"):
+    assert len(MATRIX_NODES) == 24
+    for channel in (
+        "c1_telemetry", "c2_logs", "c3_worker_stderr", "c4_spans",
+        "c5_http_server_spans", "c6_http_client_spans", "c7_database_spans",
+        "c8_worker_spans",
+    ):
         for fixture in ("secrets", "prompt_injection", "adversarial"):
             node = MATRIX_NODES[f"{channel}_{fixture}"]
             assert node.startswith("tests/test_content_minimization.py::")
 
-    # Distinct: twelve cells, twelve different node ids.
-    assert len(set(MATRIX_NODES.values())) == 12, "matrix cells share a test"
+    # Distinct: every cell a different node id.
+    assert len(set(MATRIX_NODES.values())) == 24, "matrix cells share a test"
+    assert len(CHANNELS) == 8
 
     # Real: every node names a test function that exists in the suite, so a
     # rename or deletion reddens here instead of silently measuring nothing.
@@ -80,3 +88,25 @@ def test_failure_details_never_carry_child_process_output() -> None:
     ).read_text(encoding="utf-8")
     assert "completed.stdout" not in rendered
     assert "completed.stderr" not in rendered
+
+
+def test_secret_fixture_names_are_the_suites_canary_variables() -> None:
+    """Declared in the generator (it never imports a test module), pinned here."""
+    from tests.test_content_minimization import CREDENTIAL_CANARIES
+
+    assert set(CREDENTIAL_ENV_VARS) == set(CREDENTIAL_CANARIES)
+    assert len(CREDENTIAL_ENV_VARS) == 9 and "LOGFIRE_TOKEN" in CREDENTIAL_ENV_VARS
+
+
+def test_report_records_the_export_boundary(tmp_path: Path, monkeypatch) -> None:
+    import evals.content_minimization_report as generator
+
+    # Binding resolution refuses a dirty tree; the shape under test is not it.
+    monkeypatch.setattr(generator, "resolve_bindings", lambda *_a, **_k: {})
+    report = write_report(tmp_path / "report.json", verdicts=dict.fromkeys(PROOF_NODES, True))
+    assert report["export_boundary"] == EXPORT_BOUNDARY
+    assert report["channels"] == list(CHANNELS)
+    assert report["fixtures"]["secrets"]["environment_variables"] == list(CREDENTIAL_ENV_VARS)
+    versions = report["artifact_versions"]
+    assert versions["span_export_policy"]["module"] == "backend/adapters/telemetry/span_policy.py"
+    assert versions["span_export_boundary"]["module"] == "backend/adapters/telemetry/spans.py"

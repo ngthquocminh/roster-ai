@@ -342,7 +342,19 @@ FORBIDDEN_ADAPTER_ROOT_MODULES = (
 )
 
 
-def forbidden_framework_imports_in_telemetry_adapter(source: str) -> set[str]:
+#: Story 5.9: `spans.py` is THE export boundary and the one telemetry-adapter
+#: module allowed the `opentelemetry` root. FastAPI, SQLAlchemy, PydanticAI and
+#: Logfire stay forbidden there too.
+OPENTELEMETRY_BOUNDARY_FILE = "spans.py"
+
+
+def forbidden_framework_imports_in_telemetry_adapter(
+    source: str, *, opentelemetry_allowed: bool = False
+) -> set[str]:
+    forbidden = tuple(
+        root for root in FORBIDDEN_ADAPTER_ROOT_MODULES
+        if not (opentelemetry_allowed and root == "opentelemetry")
+    )
     found: set[str] = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
@@ -351,7 +363,7 @@ def forbidden_framework_imports_in_telemetry_adapter(source: str) -> set[str]:
             modules = [node.module]
         else:
             continue
-        found.update(module for module in modules if module.split(".")[0] in FORBIDDEN_ADAPTER_ROOT_MODULES)
+        found.update(module for module in modules if module.split(".")[0] in forbidden)
     return found
 
 
@@ -549,11 +561,14 @@ def test_application_and_domain_do_not_import_logging_or_telemetry_adapters() ->
 
 def test_telemetry_adapter_imports_no_framework() -> None:
     violations = {
-        str(path.relative_to(BACKEND_ROOT)): forbidden_framework_imports_in_telemetry_adapter(
-            path.read_text(encoding="utf-8")
-        )
+        str(path.relative_to(BACKEND_ROOT)): found
         for path in _python_files("adapters/telemetry")
-        if forbidden_framework_imports_in_telemetry_adapter(path.read_text(encoding="utf-8"))
+        if (
+            found := forbidden_framework_imports_in_telemetry_adapter(
+                path.read_text(encoding="utf-8"),
+                opentelemetry_allowed=path.name == OPENTELEMETRY_BOUNDARY_FILE,
+            )
+        )
     }
     assert not violations
 
@@ -631,6 +646,15 @@ def test_each_guard_detects_synthetic_violating_source() -> None:
     assert forbidden_framework_imports_in_telemetry_adapter(
         "import fastapi\nfrom sqlalchemy import text\nimport pydantic_ai"
     ) == {"fastapi", "sqlalchemy", "pydantic_ai"}
+    assert forbidden_framework_imports_in_telemetry_adapter(
+        "from opentelemetry import trace"
+    ) == {"opentelemetry"}
+    # The exemption covers the `opentelemetry` root only.
+    assert forbidden_framework_imports_in_telemetry_adapter(
+        "from opentelemetry import trace\nimport fastapi\nimport logfire\n"
+        "from sqlalchemy import text\nimport pydantic_graph",
+        opentelemetry_allowed=True,
+    ) == {"fastapi", "logfire", "sqlalchemy", "pydantic_graph"}
     assert nonliteral_logger_messages(
         'import logging\nlogger = logging.getLogger(__name__)\nlogger.error(f"secret {value}")'
     )

@@ -1,11 +1,15 @@
-"""Release-blocking checks for the four content-minimization channels.
+"""Release-blocking checks for the eight content-minimization channels.
 
-The matrix is four channels x three fixture classes (Decision 10), one distinct
+C1-C3 are Story 5.2's log channels; C4-C8 are the exported span channels
+(agent, HTTP server, HTTP client, database, worker), asserted since Story 5.9 on
+what the real OTLP exporter receives -- attributes, events and status.
+
+The matrix is eight channels x three fixture classes (Decision 10), one distinct
 test per cell so a regression is attributable to a channel and a fixture class
 rather than to "the suite". `backend/evals/content_minimization_report.py` binds
 each cell to the test below that proves it; the machinery test in
-`test_content_minimization_report.py` enforces that the twelve cells name twelve
-*different*, existing tests.
+`test_content_minimization_report.py` enforces that the twenty-four cells name
+twenty-four *different*, existing tests.
 
 Fixture classes, exactly as Decision 10 defines them:
 
@@ -27,34 +31,42 @@ import ast
 import io
 import json
 import logging
+import threading
 from contextlib import contextmanager, redirect_stderr
+from dataclasses import replace
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import unquote_plus
+from uuid import UUID, uuid4
 
+import pytest
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import StatementError
 from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from adapters.telemetry import span_policy
 from adapters.telemetry.json_logs import JsonLogFormatter, JsonLogTelemetrySink
 from application.contracts.telemetry import TelemetryRecordV1
 from worker.main import _report_error
-from settings import default_settings
+from settings import TRACE_CONTENT_SYNTHETIC_EVAL, default_settings
 from application.contracts.agent_runtime import AgentTurnRequestV1
 from tests.test_agent_runtime_adapter import _call_demo, _runtime
+from tests.trace_capture import (
+    TOKEN_CANARY,
+    capture_tracing,
+    exported_spans,
+    flush,
+    payload_text,
+)
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
-SPAN_ATTRIBUTE_ALLOW_LIST = frozenset({
-    "agent_name", "gen_ai.agent.call.id", "gen_ai.agent.name",
-    "gen_ai.aggregated_usage.input_tokens", "gen_ai.aggregated_usage.output_tokens",
-    "gen_ai.conversation.id", "gen_ai.input.messages", "gen_ai.operation.name",
-    "gen_ai.output.messages", "gen_ai.provider.name", "gen_ai.request.model",
-    "gen_ai.response.model", "gen_ai.system", "gen_ai.tool.call.id",
-    "gen_ai.tool.definitions", "gen_ai.tool.name", "gen_ai.usage.input_tokens",
-    "gen_ai.usage.output_tokens", "logfire.json_schema", "logfire.msg", "model_name",
-    "model_request_parameters", "pydantic_ai.all_messages",
-    "pydantic_ai.tool.deferral.name",
-})
-
+#: Story 5.9: the allow-list moved INTO production. The agent category's
+#: default-mode key set is imported, never re-declared here.
+SPAN_ATTRIBUTE_ALLOW_LIST = span_policy.AGENT_DEFAULT_ALLOW_LIST
 #: Decision 10 class 1. Synthetic only -- never a real credential.
 CREDENTIAL_CANARIES = {
     "GEMINI_API_KEY": "CANARY-GEMINI-5-2",
@@ -67,6 +79,7 @@ CREDENTIAL_CANARIES = {
     "ROSTERAI_PROVISIONING_DATABASE_URL": (
         "postgresql://CANARY-PROVISIONING-5-2@localhost/db"
     ),
+    "LOGFIRE_TOKEN": "CANARY-LOGFIRE-5-9",
 }
 SECRET_CANARY = "CANARY-DB-5-2"
 
@@ -197,8 +210,55 @@ def _emitted_telemetry_payload(record: TelemetryRecordV1) -> dict | None:
     return getattr(records[0], "shiftmind_telemetry")
 
 
-def _spans_for(prompt: str, tool_label: str):
-    """Drive one full tool-calling turn and return its finished spans."""
+def _exported_turn(
+    prompt: str,
+    *,
+    model=None,
+    tool_label: str = "alpha",
+    content_mode: str = "off",
+    **runtime_kwargs,
+):
+    """Drive one turn and return what the REAL exporter was handed (Story 5.9).
+
+    The spans travel the production path -- sampler, batch processor,
+    `SanitizingSpanExporter`, OTLP protobuf -- into a capturing session, so
+    the assertions read the bytes that would have reached Logfire. The turn
+    runs under a `shiftmind.` root because the sampler drops a root agent
+    span (in production it is always under a request's server span).
+    """
+    def scripted(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(message, ModelResponse) for message in messages):
+            return _call_demo(label=tool_label)
+        return ModelResponse(parts=[TextPart(content="done")])
+
+    tracing, session = capture_tracing(content_mode=content_mode)
+    try:
+        with tracing.tracer("shiftmind.proof").start_as_current_span("shiftmind.proof"):
+            try:
+                _runtime(
+                    model=model or FunctionModel(scripted),
+                    tracer_provider=tracing.provider,
+                    trace_content=content_mode == TRACE_CONTENT_SYNTHETIC_EVAL,
+                    **runtime_kwargs,
+                ).run_turn(AgentTurnRequestV1(prompt=prompt))
+            except Exception:  # noqa: BLE001 - a failing turn is a fixture here
+                pass
+        flush(tracing)
+    finally:
+        tracing.shutdown()
+    return session
+
+
+def _agent_spans(session):
+    return [span for span in exported_spans(session) if span.scope == "pydantic-ai"]
+
+
+def _span_keys(spans) -> set[str]:
+    return {key for span in spans for key in span.attributes}
+
+
+def _raw_agent_keys(**turn) -> set[str]:
+    """PRE-sanitizer keys (in-memory), for the drift check only."""
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -206,40 +266,12 @@ def _spans_for(prompt: str, tool_label: str):
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-
-    def scripted(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-        if not any(isinstance(message, ModelResponse) for message in messages):
-            return _call_demo(label=tool_label)
-        return ModelResponse(parts=[TextPart(content="done")])
-
-    _runtime(model=FunctionModel(scripted), tracer_provider=provider).run_turn(
-        AgentTurnRequestV1(prompt=prompt)
-    )
-    return exporter.get_finished_spans()
-
-
-def _span_blob(spans) -> str:
-    """Every exported surface of a span -- attributes AND events.
-
-    Events matter: OpenTelemetry's `record_exception` writes
-    `exception.message` and `exception.stacktrace` as event attributes, which
-    an OTLP exporter ships alongside ordinary attributes. Asserting only on
-    `span.attributes` would leave that channel unchecked (code review of
-    story-5.2).
-    """
-    payload = []
-    for span in spans:
-        payload.append({key: str(value) for key, value in (span.attributes or {}).items()})
-        for event in (span.events or []):
-            payload.append(
-                {"event": event.name}
-                | {key: str(value) for key, value in (event.attributes or {}).items()}
-            )
-    return json.dumps(payload)
-
-
-def _span_keys(spans) -> set[str]:
-    return {key for span in spans for key in (span.attributes or {})}
+    prompt = turn.pop("prompt", "hello")
+    try:
+        _runtime(tracer_provider=provider, **turn).run_turn(AgentTurnRequestV1(prompt=prompt))
+    except Exception:  # noqa: BLE001
+        pass
+    return {key for span in exporter.get_finished_spans() for key in (span.attributes or {})}
 
 
 # ---------------------------------------------------------------- C1 telemetry
@@ -381,83 +413,596 @@ def test_c3_worker_stderr_withholds_adversarial_exception_text() -> None:
 
 
 # -------------------------------------------------------------------- C4 spans
+#
+# Story 5.9: C4 is now "exported agent spans". Every cell asserts on what the
+# real `OTLPSpanExporter` received -- attributes, events AND status messages --
+# so Story 5.2's residual (exception text in `exception.message`) is gone and
+# the canary must be absent from the WHOLE payload.
+
 
 def test_c4_spans_withhold_secret_prompt_and_tool_content() -> None:
-    spans = _spans_for(f"deploy using {SECRET_CANARY}", tool_label=SECRET_CANARY)
+    session = _exported_turn(f"deploy using {SECRET_CANARY}", tool_label=SECRET_CANARY)
 
-    assert spans
+    spans = _agent_spans(session)
+    assert {span.name.split(" ")[0] for span in spans} >= {"invoke_agent", "chat", "execute_tool"}
     assert _span_keys(spans) <= SPAN_ATTRIBUTE_ALLOW_LIST
-    assert SECRET_CANARY not in _span_blob(spans)
+    payload = payload_text(session)
+    assert SECRET_CANARY not in payload
+    assert TOKEN_CANARY not in payload
 
 
 def test_c4_spans_withhold_pinned_prompt_injection_text() -> None:
     injection = INJECTION_PROMPTS["scheduling-inspect-injection-chat-text"]
-    spans = _spans_for(
+    session = _exported_turn(
         injection, tool_label=INJECTION_PROMPTS["scheduling-inspect-injection-tool-output"]
     )
 
+    spans = _agent_spans(session)
     assert spans
     assert _span_keys(spans) <= SPAN_ATTRIBUTE_ALLOW_LIST
-    blob = _span_blob(spans)
+    # Non-vacuity: the structure-only messages really were exported.
+    assert any("gen_ai.input.messages" in span.attributes for span in spans)
+    payload = payload_text(session)
     for prompt in INJECTION_PROMPTS.values():
-        assert prompt not in blob
+        assert prompt not in payload
 
 
 def test_c4_spans_withhold_exception_content_on_the_provider_error_path() -> None:
-    """The failing path exports span EVENTS, not just attributes."""
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-
+    """The failing path exports span EVENTS and a STATUS, not just attributes."""
     def failing(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
         raise RuntimeError(f"upstream rejected {ADVERSARIAL_TEXT} {SECRET_CANARY}")
 
-    try:
-        _runtime(model=FunctionModel(failing), tracer_provider=provider).run_turn(
-            AgentTurnRequestV1(prompt=INJECTION_TEXT)
-        )
-    except Exception:  # noqa: BLE001 - the failure is the fixture
-        pass
+    session = _exported_turn(INJECTION_TEXT, model=FunctionModel(failing))
 
-    spans = exporter.get_finished_spans()
+    spans = _agent_spans(session)
     assert spans
-    assert any(span.events for span in spans), "provider-error path exported no span event"
-    blob = _span_blob(spans)
     assert _span_keys(spans) <= SPAN_ATTRIBUTE_ALLOW_LIST
-
-    # The blob must actually span BOTH exported surfaces. Without this the
-    # canary assertions below hold vacuously if `_span_blob` ever stops
-    # walking `span.events` -- which is exactly how the original suite missed
-    # this channel (verified: dropping events from the blob left every other
-    # assertion here green).
-    assert '"event": "exception"' in blob, "_span_blob no longer covers span events"
-
-    # What this story guarantees on the failing path: no prompt text and no
-    # tool payload reaches EITHER attributes or events.
+    events = [event for span in spans for event in span.events]
+    assert ("exception", {"exception.type": "RuntimeError"}) in events
+    assert any(span.status_code == 2 for span in spans), "no span recorded the failure"
+    assert all(span.status_message == "" for span in spans)
+    payload = payload_text(session)
+    for forbidden in (SECRET_CANARY, "ADVERSARIAL-NEWLINE", "ADVERSARIAL-100", "upstream rejected"):
+        assert forbidden not in payload
     for prompt in INJECTION_PROMPTS.values():
-        assert prompt not in blob
+        assert prompt not in payload
 
-    # What it does NOT guarantee, asserted here so the boundary is executable
-    # rather than a comment: OpenTelemetry's `record_exception` writes the
-    # raised exception's own `str()` into `exception.message`, and neither
-    # `include_content=False` nor any other InstrumentationSettings option
-    # suppresses it. Suppressing it needs a sanitizing TracerProvider wrapper,
-    # which is Epic 6's exporter work (deferred-work.md, code review of
-    # story-5.2). Latent today: no exporter is wired, so these spans go
-    # nowhere. If this assertion ever fails, the wrapper landed -- delete it
-    # and tighten the check above to the whole blob.
-    exception_events = [
-        event for span in spans for event in (span.events or []) if event.name == "exception"
-    ]
-    assert exception_events
-    assert any(
-        SECRET_CANARY in str((event.attributes or {}).get("exception.message", ""))
-        for event in exception_events
-    ), "exception.message no longer carries raised text -- see the note above"
+
+def test_c4_off_mode_never_exports_the_runtime_instructions() -> None:
+    """Measured fact 3: `instruction_parts` carried the system prompt in default mode."""
+    from agent.runtime import AgentRuntimeConfig
+
+    canary = "CANARY-INSTRUCTIONS-5-9"
+    session = _exported_turn(
+        "hello", config=AgentRuntimeConfig(instructions=f"You are a planner. {canary}")
+    )
+
+    spans = _agent_spans(session)
+    assert any("model_request_parameters" in span.attributes for span in spans)
+    assert canary not in payload_text(session)
+
+
+# ----------------------------------------------------- C5 HTTP server spans
+#
+# The real app, instrumented exactly as production installs it, with the
+# identity store dependency-overridden (no database). What leaves is decoded
+# from the real exporter's OTLP body.
+
+SERVER_KIND = 2
+
+
+class _NoSessions:
+    def resolve_session(self, _token_hash):
+        return None
+
+
+@contextmanager
+def _instrumented_app(**overrides):
+    from fastapi.testclient import TestClient
+
+    from api.deps import get_identity_store
+    from api.main import _SSE_ROUTE_TEMPLATES, app
+    from api.tracing import install_api_tracing, quiet_parent_span_names
+
+    tracing, session = capture_tracing(
+        service_name="shiftmind-api",
+        quiet_parent_span_names=quiet_parent_span_names(_SSE_ROUTE_TEMPLATES),
+    )
+    undo = install_api_tracing(app, tracing)
+    previous = dict(app.dependency_overrides)
+    app.dependency_overrides[get_identity_store] = overrides.get(
+        "identity_store", lambda: _NoSessions()
+    )
+    try:
+        with TestClient(
+            app, base_url="http://shiftmind.test", raise_server_exceptions=False
+        ) as client:
+            yield client, tracing, session
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
+        undo()
+        tracing.shutdown()
+
+
+def _server_spans(session):
+    return [span for span in exported_spans(session) if span.kind == SERVER_KIND]
+
+
+def _decoded_payload(session) -> str:
+    """The payload as sent AND percent-decoded, so an encoded canary is found too."""
+    payload = payload_text(session)
+    return payload + unquote_plus(payload)
+
+
+def _no_query_or_url(spans) -> None:
+    for span in spans:
+        assert "http.url" not in span.attributes
+        assert "?" not in str(span.attributes.get("http.target", ""))
+
+
+def test_c5_http_server_spans_withhold_secret_headers_and_query() -> None:
+    with _instrumented_app() as (client, tracing, session):
+        response = client.get(
+            f"/api/v1/scenarios?token={SECRET_CANARY}",
+            headers={
+                "Cookie": f"__Host-shiftmind_session={SECRET_CANARY}",
+                "X-CSRF-Token": SECRET_CANARY,
+                "Authorization": f"Bearer {SECRET_CANARY}",
+                "User-Agent": SECRET_CANARY,
+            },
+        )
+        assert response.status_code == 401
+        flush(tracing)
+    spans = _server_spans(session)
+    assert [span.attributes.get("http.target") for span in spans] == ["/api/v1/scenarios"]
+    _no_query_or_url(spans)
+    payload = _decoded_payload(session)
+    assert SECRET_CANARY not in payload and TOKEN_CANARY not in payload
+
+
+def test_c5_http_server_spans_withhold_prompt_injection_text() -> None:
+    injection = INJECTION_PROMPTS["scheduling-inspect-injection-chat-text"]
+    with _instrumented_app() as (client, tracing, session):
+        client.post(
+            f"/api/v1/conversations/{uuid4()}/messages",
+            params={"probe": injection},
+            json={"text": injection},
+        )
+        client.get("/" + injection.replace("/", " ")[:80])  # an unmatched route
+        flush(tracing)
+    spans = _server_spans(session)
+    assert len(spans) == 2
+    _no_query_or_url(spans)
+    payload = _decoded_payload(session)
+    for prompt in INJECTION_PROMPTS.values():
+        assert prompt not in payload
+        assert prompt[:60] not in payload
+
+
+def test_c5_http_server_spans_withhold_adversarial_paths_and_exception_text() -> None:
+    def exploding_store():
+        raise RuntimeError(f"route exploded {ADVERSARIAL_TEXT} {SECRET_CANARY}")
+
+    with _instrumented_app(identity_store=exploding_store) as (client, tracing, session):
+        failed = client.get("/api/v1/scenarios", params={"q": ADVERSARIAL_TEXT})
+        assert failed.status_code == 500
+        client.get("/ADVERSARIAL-PATH-100%25s-DIRECTIVE")
+        flush(tracing)
+    spans = _server_spans(session)
+    _no_query_or_url(spans)
+    events = [event for span in spans for event in span.events]
+    assert ("exception", {"exception.type": "RuntimeError"}) in events
+    assert all(span.status_message == "" for span in spans)
+    payload = _decoded_payload(session)
+    for forbidden in (SECRET_CANARY, "ADVERSARIAL", "route exploded"):
+        assert forbidden not in payload
+
+
+# ----------------------------------------------------- C6 HTTP client spans
+#
+# Outbound model traffic through pydantic-ai's OpenAI client to a local,
+# OpenAI-shaped stub. The stub also records what it RECEIVED: no trace or
+# conversation identifiers may reach a provider (measured fact 4, NFR30).
+
+
+@contextmanager
+def _provider_stub(*, status: int = 200, content: str = "done"):
+    received: list[dict[str, str]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            received.append({key.lower(): value for key, value in self.headers.items()})
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            if status == 200:
+                body = json.dumps({
+                    "id": "chatcmpl-1", "object": "chat.completion", "created": 0,
+                    "model": "stub-model",
+                    "choices": [{
+                        "index": 0, "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": content},
+                    }],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 1, "total_tokens": 4},
+                }).encode("utf-8")
+            else:
+                body = json.dumps({"error": {"message": content}}).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server.server_address[1], received
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _outbound_turn(prompt: str, *, base_url: str, api_key: str):
+    from openai import AsyncOpenAI
+    from pydantic_ai import models
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    from api.main import app
+    from api.tracing import install_api_tracing
+
+    tracing, session = capture_tracing()
+    undo = install_api_tracing(app, tracing)  # the production httpx wiring
+    try:
+        model = OpenAIChatModel(
+            "stub-model",
+            provider=OpenAIProvider(
+                openai_client=AsyncOpenAI(base_url=base_url, api_key=api_key, max_retries=0)
+            ),
+        )
+        with models.override_allow_model_requests(True):
+            with tracing.tracer("shiftmind.proof").start_as_current_span("shiftmind.proof"):
+                try:
+                    _runtime(model=model, tracer_provider=tracing.provider).run_turn(
+                        AgentTurnRequestV1(prompt=prompt)
+                    )
+                except Exception:  # noqa: BLE001 - a failing turn is a fixture here
+                    pass
+        flush(tracing)
+    finally:
+        undo()
+        tracing.shutdown()
+    return session
+
+
+def _client_spans(session):
+    return [span for span in exported_spans(session) if span.scope.endswith(".httpx")]
+
+
+def _assert_no_context_sent(received) -> None:
+    assert received, "the provider stub was never called"
+    for headers in received:
+        assert not {"traceparent", "tracestate", "baggage"} & set(headers)
+
+
+def test_c6_http_client_spans_withhold_the_key_and_query() -> None:
+    with _provider_stub() as (port, received):
+        session = _outbound_turn(
+            "hello",
+            base_url=f"http://127.0.0.1:{port}/v1?probe={SECRET_CANARY}",
+            api_key=SECRET_CANARY,
+        )
+    _assert_no_context_sent(received)
+    spans = _client_spans(session)
+    assert spans
+    assert all(
+        span.attributes["http.url"].startswith(f"http://127.0.0.1:{port}/") for span in spans
+    )
+    assert SECRET_CANARY not in _decoded_payload(session)
+
+
+def test_c6_http_client_spans_withhold_prompt_injection_text() -> None:
+    injection = INJECTION_PROMPTS["scheduling-inspect-injection-chat-text"]
+    reply = INJECTION_PROMPTS["scheduling-inspect-injection-tool-output"]
+    with _provider_stub(content=reply) as (port, received):
+        session = _outbound_turn(injection, base_url=f"http://127.0.0.1:{port}/v1", api_key="k")
+    _assert_no_context_sent(received)
+    assert _client_spans(session)
+    payload = _decoded_payload(session)
+    for prompt in INJECTION_PROMPTS.values():
+        assert prompt not in payload
+
+
+def test_c6_http_client_spans_withhold_adversarial_url_parts_and_errors() -> None:
+    error_text = f"{ADVERSARIAL_TEXT} {SECRET_CANARY}"
+    with _provider_stub(status=500, content=error_text) as (port, received):
+        session = _outbound_turn(
+            "hello",
+            base_url=(
+                "http://ADVERSARIAL-USER:ADVERSARIAL-PASS@"
+                f"127.0.0.1:{port}/v1#ADVERSARIAL-FRAG"
+            ),
+            api_key="k",
+        )
+    _assert_no_context_sent(received)
+    spans = exported_spans(session)
+    assert _client_spans(session)
+    assert any(span.status_code == 2 for span in spans)
+    assert all(span.status_message == "" for span in spans)
+    payload = _decoded_payload(session)
+    for forbidden in (SECRET_CANARY, "ADVERSARIAL"):
+        assert forbidden not in payload
+
+
+# -------------------------------------------------------- C7 database spans
+#
+# A real engine traced per instance, as the API and worker trace theirs.
+# Measured fact 2: a failing statement's status description echoes the bound
+# value even with `hide_parameters=True` -- psycopg's own error text.
+
+
+def _database_payload(engine_url, value: str):
+    from adapters.telemetry.spans import trace_engine
+
+    tracing, session = capture_tracing()
+    engine = trace_engine(create_engine(engine_url, hide_parameters=True), tracing)
+    try:
+        with tracing.tracer("shiftmind.proof").start_as_current_span("shiftmind.proof"):
+            with engine.connect() as connection:
+                connection.execute(text("SELECT CAST(:value AS text)"), {"value": value})
+            try:
+                with engine.connect() as connection:
+                    connection.execute(text("SELECT CAST(:value AS uuid)"), {"value": value})
+            except StatementError:
+                pass
+        flush(tracing)
+    finally:
+        engine.dispose()
+        tracing.shutdown()
+    spans = [span for span in exported_spans(session) if span.scope.endswith(".sqlalchemy")]
+    assert len(spans) >= 2
+    assert any(span.status_code == 2 for span in spans), "the failing statement was not traced"
+    assert all(span.status_message == "" for span in spans)
+    assert {span.attributes["db.statement"] for span in spans} == {
+        "SELECT CAST(%(value)s AS text)", "SELECT CAST(%(value)s AS uuid)",
+    }
+    assert not {"db.user", "net.peer.name", "net.peer.port"} & _span_keys(spans)
+    return session
+
+
+@pytest.mark.postgres
+def test_c7_database_spans_withhold_bound_secret_values(governed_postgres_engine) -> None:
+    session = _database_payload(governed_postgres_engine.url, SECRET_CANARY)
+    assert SECRET_CANARY not in payload_text(session)
+
+
+@pytest.mark.postgres
+def test_c7_database_spans_withhold_bound_prompt_injection_text(governed_postgres_engine) -> None:
+    injection = INJECTION_PROMPTS["scheduling-inspect-injection-fixture-field"]
+    session = _database_payload(governed_postgres_engine.url, injection)
+    payload = payload_text(session)
+    for prompt in INJECTION_PROMPTS.values():
+        assert prompt not in payload
+
+
+@pytest.mark.postgres
+def test_c7_database_spans_withhold_bound_adversarial_values_and_errors(
+    governed_postgres_engine,
+) -> None:
+    session = _database_payload(governed_postgres_engine.url, ADVERSARIAL_TEXT)
+    # The engine tracer records the failure as a STATUS, whose description
+    # echoed the bound value (measured fact 2); `_database_payload` asserts it
+    # is exported empty. Any event that does appear keeps its type only.
+    events = [event for span in exported_spans(session) for event in span.events]
+    assert all(set(attributes) <= {"exception.type"} for _, attributes in events)
+    assert "ADVERSARIAL" not in payload_text(session)
+
+
+# ---------------------------------------------------------- C8 worker spans
+#
+# The real job scope and scheduler wrapper, with a fake repository and
+# scheduler, so a failing or content-bearing solve is a fixture.
+
+
+class _LeaseOnce:
+    def lease_next_job(self, *_args, **_kwargs):
+        from application.contracts.job_lease import JobLeaseV1
+
+        now = datetime.now(timezone.utc)
+        return JobLeaseV1(
+            job_id=UUID(int=11), job_type="schedule_run_execute", status="leased",
+            site_id=UUID(int=12), actor_id=UUID(int=13), attempt_id=UUID(int=14),
+            contract_version="1", schedule_run_id=UUID(int=15), idempotency_key="k",
+            lease_owner="w", lease_expires_at=now, heartbeat_at=now, fencing_epoch=1,
+            created_at=now,
+        )
+
+
+def _worker_payload(
+    *, raises: str | None = None, reason: str | None = None, status: str = "solver_completed"
+):
+    from adapters.telemetry.spans import traced_scheduler, traced_worker_job
+    from application.contracts.schedule_version import SolverOutcomeV1
+
+    class Scheduler:
+        def solve(self, _snapshot):
+            if raises is not None:
+                raise RuntimeError(raises)
+            return SolverOutcomeV1(
+                solver_status="FEASIBLE", reason=reason, warnings=(reason or "",),
+                wall_time_seconds=0.1,
+            )
+
+    tracing, session = capture_tracing(service_name="shiftmind-worker")
+    try:
+        try:
+            with traced_worker_job(_LeaseOnce(), tracing) as job:
+                job.repository.lease_next_job()
+                scheduler = traced_scheduler(lambda _connection: Scheduler(), tracing)
+                scheduler(None).solve(SimpleNamespace(schedule_run_id=UUID(int=15)))
+                job.finish(SimpleNamespace(status=status))
+        except RuntimeError:
+            pass
+        flush(tracing)
+    finally:
+        tracing.shutdown()
+    spans = exported_spans(session)
+    assert {span.name for span in spans} == {
+        "shiftmind.worker.execute", "shiftmind.worker.lease", "shiftmind.worker.solve",
+    }
+    return session, spans
+
+
+def test_c8_worker_spans_withhold_secret_exception_text() -> None:
+    session, spans = _worker_payload(raises=f"solver input {SECRET_CANARY}")
+    events = [event for span in spans for event in span.events]
+    assert ("exception", {"exception.type": "RuntimeError"}) in events
+    assert SECRET_CANARY not in payload_text(session)
+
+
+def test_c8_worker_spans_withhold_prompt_injection_text() -> None:
+    reason = INJECTION_PROMPTS["scheduling-inspect-injection-tool-output"]
+    session, spans = _worker_payload(reason=reason)
+    solve = next(span for span in spans if span.name == "shiftmind.worker.solve")
+    assert solve.attributes["shiftmind.solver.status"] == "FEASIBLE"
+    payload = payload_text(session)
+    for prompt in INJECTION_PROMPTS.values():
+        assert prompt not in payload
+
+
+def test_c8_worker_spans_withhold_adversarial_exception_and_status_text() -> None:
+    session, spans = _worker_payload(raises=ADVERSARIAL_TEXT, status=ADVERSARIAL_TEXT)
+    execute = next(span for span in spans if span.name == "shiftmind.worker.execute")
+    assert "shiftmind.schedule_run.status" not in execute.attributes
+    assert all(span.status_message == "" for span in spans)
+    assert any(span.events for span in spans)
+    assert "ADVERSARIAL" not in payload_text(session)
+
+
+# ------------------------------------------ export boundary surface nodes
+
+
+def test_export_content_mode_key_set(monkeypatch) -> None:
+    """AC4: synthetic-eval exports content keys, never credentials or exception text."""
+    from agent.runtime import create_agent_runtime
+    from tests.test_agent_runtime_adapter import demonstration_module
+
+    for name, value in CREDENTIAL_CANARIES.items():
+        monkeypatch.setenv(name, value)
+    settings = replace(default_settings(), agent_trace_content_mode=TRACE_CONTENT_SYNTHETIC_EVAL)
+    deps = _runtime()._deps
+
+    def scripted(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(message, ModelResponse) for message in messages):
+            return _call_demo(label="synthetic")
+        raise RuntimeError(f"late failure {SECRET_CANARY}")
+
+    tracing, session = capture_tracing(content_mode=TRACE_CONTENT_SYNTHETIC_EVAL)
+    try:
+        with tracing.tracer("shiftmind.proof").start_as_current_span("shiftmind.proof"):
+            try:
+                create_agent_runtime(
+                    settings=settings, model=FunctionModel(scripted),
+                    capabilities=(demonstration_module(),), deps=deps,
+                    tracer_provider=tracing.provider,
+                ).run_turn(AgentTurnRequestV1(prompt="synthetic planner question"))
+            except Exception:  # noqa: BLE001
+                pass
+        flush(tracing)
+    finally:
+        tracing.shutdown()
+    spans = _agent_spans(session)
+    keys = _span_keys(spans)
+    # The demonstration tool is approval-gated, so it defers rather than
+    # returning a result; its arguments and the instructions are the content.
+    assert {"gen_ai.tool.call.arguments", "gen_ai.system_instructions"} <= keys
+    assert keys <= SPAN_ATTRIBUTE_ALLOW_LIST | span_policy.AGENT_CONTENT_MODE_KEYS
+    payload = payload_text(session)
+    assert "synthetic planner question" in payload
+    assert {span.resource.get("deployment.environment") for span in spans} == {"live-eval"}
+    for value in CREDENTIAL_CANARIES.values():
+        assert value not in payload
+    assert SECRET_CANARY not in payload and "late failure" not in payload
+
+
+def test_export_keyless_constructs_no_exporter(monkeypatch) -> None:
+    """AC1: no token -> nothing is constructed and behaviour is today's."""
+    import adapters.telemetry.spans as spans
+    import api.main
+    from agent.runtime import create_agent_runtime
+    from api.deps import get_agent_runtime_factory
+    from worker.composition import create_runtime
+
+    constructed: list[object] = []
+    monkeypatch.setattr(
+        spans.OTLPSpanExporter, "__init__", lambda *_a, **_k: constructed.append(1)
+    )
+    monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
+    assert spans.build_process_tracing(default_settings(), service_name="shiftmind-api") is None
+    assert get_agent_runtime_factory() is create_agent_runtime
+    assert api.main._process_tracing is None
+    runtime = create_runtime()
+    try:
+        assert runtime.tracing is None
+    finally:
+        runtime.engine.dispose()
+    assert constructed == []
+
+
+def test_export_client_trace_context_discarded() -> None:
+    """AC2's last clause, fake-backed: no route adopts a client's trace context."""
+    hostile_trace = "4bf92f3577b34da6a3ce929d0e0e4736"
+    headers = {
+        "traceparent": f"00-{hostile_trace}-00f067aa0ba902b7-01",
+        "tracestate": "canary=CANARY-TRACESTATE-5-9",
+        "baggage": "canary=CANARY-BAGGAGE-5-9",
+    }
+    conversation_id = uuid4()
+    with _instrumented_app() as (client, tracing, session):
+        client.get("/api/v1/scenarios", headers=headers)
+        client.post(f"/api/v1/conversations/{conversation_id}/messages", headers=headers, json={})
+        client.get("/api/v1/auth/session", headers=headers)
+        flush(tracing)
+    spans = _server_spans(session)
+    assert len(spans) == 3
+    assert hostile_trace not in {span.trace_id for span in spans}
+    by_name = {span.name: span for span in spans}
+    assert by_name[
+        "POST /api/v1/conversations/{conversation_id}/messages"
+    ].trace_id == conversation_id.hex
+    assert by_name["GET /api/v1/scenarios"].parent_span_id == ""
+    assert "CANARY-TRACESTATE" not in payload_text(session)
+    assert "CANARY-BAGGAGE" not in payload_text(session)
+
+
+def test_export_agent_raw_key_drift() -> None:
+    """Story 5.2's "a new key names itself", kept at the export boundary.
+
+    Every key pydantic-ai emits BEFORE sanitization, on a tool turn, a failing
+    turn and a content-mode turn, must be decided by the agent table. An
+    unclassified key reddens here naming itself, while the runtime
+    independently drops it.
+    """
+    def failing(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        raise RuntimeError("boom")
+
+    def scripted(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(message, ModelResponse) for message in messages):
+            return _call_demo(label="drift")
+        return ModelResponse(parts=[TextPart(content="done")])
+
+    observed = (
+        _raw_agent_keys(model=FunctionModel(scripted))
+        | _raw_agent_keys(model=FunctionModel(scripted), trace_content=True)
+        | _raw_agent_keys(model=FunctionModel(failing))
+    )
+    assert {
+        "gen_ai.input.messages", "model_request_parameters", "gen_ai.tool.call.arguments",
+    } <= observed
+    assert span_policy.unclassified_keys(span_policy.AGENT, observed) == set()
 
 
 # ------------------------------------------------------- configuration surfaces
@@ -471,7 +1016,7 @@ def test_every_credential_environment_value_is_absent_from_settings_repr(monkeyp
     canaries = (
         "CANARY-GEMINI-5-2", "CANARY-OPENROUTER-5-2", "CANARY-ANTHROPIC-5-2", "CANARY-OIDC-5-2",
         "CANARY-CSRF-5-2", "CANARY-AGENT-5-2", "CANARY-DB-5-2",
-        "CANARY-PROVISIONING-5-2",
+        "CANARY-PROVISIONING-5-2", "CANARY-LOGFIRE-5-9",
     )
     assert all(canary not in rendered for canary in canaries)
 
