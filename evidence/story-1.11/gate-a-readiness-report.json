@@ -5,7 +5,7 @@
     "NFR27",
     "NFR29"
   ],
-  "measurement_date": "2026-09-06",
+  "measurement_date": "2026-09-24",
   "accountable_owner": "Product/QA",
   "fixtures": [
     {
@@ -944,15 +944,15 @@
         "cases": {
           "backend/tests/test_evidence_binding.py": {
             "status": "passed",
-            "total": 40,
-            "passed": 40,
+            "total": 47,
+            "passed": 47,
             "skipped": 0,
             "failed": 0
           },
           "backend/tests/test_evidence_convention.py": {
             "status": "passed",
-            "total": 93,
-            "passed": 93,
+            "total": 105,
+            "passed": 105,
             "skipped": 0,
             "failed": 0
           },
@@ -1226,8 +1226,8 @@
         "cases": {
           "backend/tests/test_content_minimization_report.py": {
             "status": "passed",
-            "total": 4,
-            "passed": 4,
+            "total": 6,
+            "passed": 6,
             "skipped": 0,
             "failed": 0
           }
@@ -1369,21 +1369,21 @@
   "test_evidence": {
     "pytest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/pytest.xml",
-      "cases": 1616,
-      "run_started": "2026-09-06T16:09:21.322109+07:00",
-      "sha256": "31b771a5caaebf670e60f69952cd5a216f7e40f9dc27a59f654f807f5cc32006"
+      "cases": 2341,
+      "run_started": "2026-09-24T18:19:55.587415+07:00",
+      "sha256": "fc6fd30fb24f0a709b05b9e91d962a409b093b9be54544f559692fe97689d6f6"
     },
     "vitest": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/vitest.xml",
       "cases": 648,
-      "run_started": "2026-09-06T09:16:06.015Z",
-      "sha256": "ac0456cc64f38a4300437b01c352af6fd23bc012ca294c4f0a3a763c56d10c9f"
+      "run_started": "2026-09-24T11:28:42.500Z",
+      "sha256": "d6429771e6deaab61302766207eae57ae3051ccfef56ca20f743bf898442c9d2"
     },
     "playwright": {
       "junit_xml": "_bmad-output/test-artifacts/gate-a/playwright.xml",
       "cases": 80,
-      "run_started": "2026-09-06T09:16:26.644Z",
-      "sha256": "1247a76271333bc8c83fb530dd777d7daf3356cbb0579a1cfb90272596b9f2f8"
+      "run_started": "2026-09-24T11:28:53.397Z",
+      "sha256": "0e0d25ee80ea9290ad933513e27ccf5b5995c358870c2b26dd8bca1f842650de"
     }
   },
   "version_bindings": {
@@ -1397,12 +1397,12 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run at Gate A",
     "code": {
-      "git_commit": "fd55130c9d0e7baf5a576d10667b1b9123b986e4",
+      "git_commit": "085360dbf681ae89f3c22127b51054b9af97516c",
       "working_tree_dirty": false
     },
     "image": {
-      "api": "sha256:25b1919b40e7f1449a148cb240e9a746fa9b2a27ab7c2754d3f641fb8199751c",
-      "web": "sha256:904450f7e3878fafa1ec16dc6fa450bf121701674307fb81f25a971f16b7d9fc",
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959",
       "database": "postgres:18"
     },
     "schema_version": "e5f6a7b8c9d0"
