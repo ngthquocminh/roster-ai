@@ -45,6 +45,8 @@ class WorkerRuntimeV1:
     scheduler: Any
     settings: Any
     telemetry: TelemetrySink | None = None
+    #: `adapters.telemetry.spans.ProcessTracing`, or `None` keyless (Story 5.9).
+    tracing: Any = None
 
 
 def install_shutdown_handlers(stop_event: Event) -> None:
@@ -78,6 +80,7 @@ def run_worker_loop(
     sleep: Callable[[float], object] | None = None,
     on_error: Callable[[BaseException, float], object] | None = None,
     telemetry: TelemetrySink | None = None,
+    tracing: Any = None,
 ) -> None:
     """Poll until stopped, allowing an in-flight ``run_once`` to finish.
 
@@ -105,6 +108,7 @@ def run_worker_loop(
                 lease_owner=lease_owner,
                 lease_seconds=default_lease_seconds(settings),
                 telemetry=telemetry,
+                tracing=tracing,
             )
         except Exception as error:  # noqa: BLE001 — a poll loop owns every failure
             backoff_seconds = min(
@@ -181,8 +185,17 @@ def main(argv: list[str] | None = None) -> int:
             poll_interval_seconds=args.poll_interval_seconds,
             stop_event=stop_event,
             telemetry=runtime.telemetry or JsonLogTelemetrySink(),
+            tracing=runtime.tracing,
         )
     finally:
+        tracing = getattr(runtime, "tracing", None)
+        if tracing is not None:
+            # Bounded flush before the engine goes away (Decision 12); compose's
+            # 60 s stop grace period exceeds it.
+            try:
+                tracing.shutdown()
+            except Exception:  # noqa: BLE001 - export never blocks shutdown
+                pass
         dispose = getattr(runtime.engine, "dispose", None)
         if callable(dispose):
             dispose()

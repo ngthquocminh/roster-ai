@@ -330,7 +330,7 @@ The complete planner journey runs reproducibly on any developer machine from one
 
 **FRs covered:** none new (makes the FR1–FR24 outcomes reproducible and legible outside the author's machine)
 
-**Implementation notes:** This is the portfolio milestone and completes Gate B. It delivers run instrumentation (tokens, cost, latency, budget outcomes, run-ID correlation), content and secret minimization with adversarial fixtures, a one-command reproducible environment whose locally built image digest satisfies every evaluation report's image binding, and the walkthrough that makes the system judgeable by a reader. NFR10's telemetry independence is already proven by Story 3.9; NFR35's thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and measured on CI per AD-26.
+**Implementation notes:** This is the portfolio milestone and completes Gate B. It delivers run instrumentation (tokens, cost, latency, budget outcomes, run-ID correlation), content and secret minimization with adversarial fixtures, a one-command reproducible environment whose locally built image digest satisfies every evaluation report's image binding, and the walkthrough that makes the system judgeable by a reader. NFR10's telemetry independence is already proven by Story 3.9; NFR35's thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and measured on CI per AD-26. Stories 5.9–5.10 (added 2026-09-24, sprint-change-proposal-2026-09-24) export sanitized full-request-path traces and live-evaluation results to Logfire; neither is a Gate B criterion.
 
 ### Epic 6: Reliable Hosted Planner Workspace
 
@@ -1567,6 +1567,67 @@ As a planner, I want natural conversations to remain useful through investigatio
 
 **Sequence:** after 5.6, before the next Gate B assessment. Existing 5.5/5.6 completion records retain their original limited scope. Story 5.7 owns product fixes discovered by these live conversations and a required `live_conversation_journeys` gate verdict; the suite and its evidence command exist (`docs/TESTING.md`), and the gate stays unproven until version-bound evidence from a measurement of the final code is committed.
 
+### Story 5.9: Trace the Full Request Path to Logfire Behind One Export Boundary
+
+*(Added 2026-09-24, [sprint-change-proposal-2026-09-24](sprint-change-proposal-2026-09-24.md). Not a Gate B criterion. Findings F1–F5 in that proposal are binding context.)*
+
+As a portfolio operator,
+I want each conversation's HTTP, agent, model, tool, and database work — and each solver job — traced in Logfire behind an enforced export boundary,
+So that I can see where a request spent its time and tokens without widening what leaves the application.
+
+**Acceptance Criteria:**
+
+**Given** `LOGFIRE_TOKEN` (and region base URL) is configured
+**When** the API and worker run
+**Then** FastAPI request, SQLAlchemy, outbound httpx, PydanticAI agent/model/tool spans, and worker lease/execute/solve spans are exported over OTLP to Logfire under `service.name` `shiftmind-api`/`shiftmind-worker`
+**And** with the token absent no exporter is constructed and behavior is identical to today. (NFR15, AR27)
+
+**Given** requests under `/conversations/{conversation_id}/…`
+**When** they are traced
+**Then** every turn's request, agent, and database spans share one trace whose ID is derived from the conversation UUID, the agent root span carries `shiftmind.agent_run.id`, and worker spans carry `shiftmind.schedule_run.id` shared with the enqueueing request
+**And** client-supplied trace context is discarded on every route. (NFR22)
+
+**Given** the default content mode
+**When** any span leaves the process
+**Then** an export-boundary sanitizer forwards only allow-listed keys for every span type, strips URL query strings, never exports SQL parameter values, and records exception events by type only
+**And** Story 5.2's secret, prompt-injection, and adversarial fixtures are absent from what the real exporter receives, including span events, HTTP, and database spans. (NFR3, NFR4, NFR30, AD-12)
+
+**Given** `AGENT_TRACE_CONTENT_MODE=synthetic-eval`
+**When** the live-evaluation stack runs
+**Then** prompts, completions, and tool arguments/results are exported with `deployment.environment=live-eval`, while credentials and exception text are still withheld
+**And** an architecture test proves the only tracked file setting a non-`off` mode is `evals/live_conversations/compose.override.yml`. (NFR30)
+
+**Given** Logfire is unreachable, slow, or rejects the token
+**When** agent runs, approvals, and solver work proceed
+**Then** product state, authoritative audit, and eval verdicts are unchanged and export never blocks a request or a job. (AD-12, NFR10)
+
+**Given** the proof suite changes
+**When** evidence is regenerated per `docs/EVIDENCE-CONVENTION.md`
+**Then** `evidence/story-5.2/content-minimization-report.json` records the export boundary and the new span channels as tested. (NFR27)
+
+**Out of scope, deliberately.** One continuous API→worker trace (needs a `job_queue` migration and an application port; see the deferred-work ledger), browser/frontend tracing, OTel metrics or log export, the Logfire SDK in any runtime process, and prompt management.
+
+### Story 5.10: Publish Live-Evaluation Results to Logfire
+
+*(Added 2026-09-24, [sprint-change-proposal-2026-09-24](sprint-change-proposal-2026-09-24.md). Not a Gate B criterion. Depends on Story 5.9's conversation-derived trace ID.)*
+
+As an AI engineer comparing models and runs,
+I want live-conversation verdicts shown inside each conversation's trace and each suite run shown as a Logfire experiment,
+So that I can open a failing turn's trace from its verdict and compare runs side by side.
+
+**Acceptance Criteria:**
+
+**Given** a finished live-suite report (the Story 5.7 format) and `LOGFIRE_TOKEN`
+**When** the publisher runs
+**Then** one `live_eval.verdict` span per turn is written into that conversation's trace (trace ID derived from `conversation_id`), carrying turn index, verdict, agent model, `configuration_digest`, and report identity
+**And** the report is replayed into a pydantic-evals `Dataset` — the task returns recorded output and evaluators return recorded verdicts, nothing is re-executed — so the run appears on Logfire's Experiments page named by report identity and model.
+
+**Given** Logfire is unavailable or the token is absent
+**When** the publisher runs
+**Then** it exits non-zero with a closed-vocabulary reason, and the report file, committed baseline, Story 5.8 drop check, and all evidence remain untouched and are never read back from Logfire. (AD-12)
+
+**Out of scope, deliberately.** Publishing from inside the suite run, rewriting the live suite on pydantic-evals, Logfire live evaluations or LLM judges, and publishing deterministic golden-case results.
+
 ## Epic 6: Reliable Hosted Planner Workspace
 
 The planner can sign in to the hosted ShiftMind workspace and trust it: it is reproducibly deployed from reviewed infrastructure code, diagnosable without privacy leaks, and its invariants hold through the real edge, load-balancer, and database topology.
@@ -1638,6 +1699,7 @@ So that the hosted planner workflow is reproducible and diagnosable.
 **When** environment limitations are documented
 **Then** one API task, one worker task, small RDS capacity, networking/availability limitations, and non-customer status are explicit
 **And** no enterprise latency, availability, recovery, concurrency, or cost promise is made. (NFR17)
+**And** the hosted runtime exports traces to Logfire only in the default content-free mode; `AGENT_TRACE_CONTENT_MODE` is absent from all IaC and task definitions, and `LOGFIRE_TOKEN` comes from Secrets Manager. (NFR30, AD-12; added by sprint-change-proposal-2026-09-24)
 
 ### Story 6.4: Prove Hosted Invariants, Parity, and Mutation Denial
 
@@ -1712,7 +1774,7 @@ Release evaluation is not an epic or story. Each epic proves its own slice throu
 | 2 - Grounded Conversational Investigation | 2.1 AgentRuntime boundary [TE] - 2.2 Evaluation harness [TE] - 2.3 Durable conversations - 2.4 Live event replay - 2.5 Governed inspect capability - 2.6 Governed capability module [TE] - 2.7 Evidence grounding - 2.8 Evidence jump/return - 2.9 Clarify/refuse/fail safely |
 | 3 - Governed and Recoverable Schedule Repair | 3.1 Reversible draft - 3.2 Deterministic candidate [TE] - 3.3 Job leasing/fencing [TE] - 3.4 Cancellation command [TE] - 3.5 Literal run state/replay [TE] - 3.6 Explicit bounded optimization - 3.7 Monitor/cancel/reopen runs - 3.8 Candidate/baseline comparison - 3.9 Model-outage continuity - 3.10 Repair correctness - 3.11 Recovery and idempotency - 3.12 Repair browser journey |
 | 4 - Exact Baseline Decision and Decision Record | 4.1 Request approval - 4.2 Review and decide - 4.3 Atomic promotion with audit - 4.4 Decision provenance - 4.5 Approval and audit invariants - 4.6 State semantics and automated accessibility |
-| 5 - Demonstrable Local Planner Workspace | 5.0 Real baseline comparison - 5.1 Run instrumentation - 5.2 Content/secret leak prevention - 5.3 One-command reproducible run [TE] - 5.3a Real solve to candidate [TE] - 5.4 Portfolio walkthrough - 5.5 Live golden routing (corrective story artifact) - 5.6 Multi-turn history evaluation - 5.7 Natural live conversations through baseline promotion |
+| 5 - Demonstrable Local Planner Workspace | 5.0 Real baseline comparison - 5.1 Run instrumentation - 5.2 Content/secret leak prevention - 5.3 One-command reproducible run [TE] - 5.3a Real solve to candidate [TE] - 5.4 Portfolio walkthrough - 5.5 Live golden routing (corrective story artifact) - 5.6 Multi-turn history evaluation - 5.7 Natural live conversations through baseline promotion - 5.9 Full-stack Logfire tracing - 5.10 Live-eval results in Logfire |
 | 6 - Reliable Hosted Planner Workspace | 6.1 AWS edge/identity/network [TE] - 6.2 AWS data/runtime [TE] - 6.3 Immutable deploys [TE] - 6.4 Hosted invariants/parity/mutation denial - 6.5 Backups and rollback |
 
 47 stories across 6 epics. Blocking dependencies are backward-only: 1 -> 2 -> 3 -> 4 -> 5 -> 6. Epic 5 is the portfolio milestone (Gate B) and is complete without Epic 6; Epic 6 adds the hosted proof (Gate C).

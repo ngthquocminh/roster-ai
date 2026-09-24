@@ -848,8 +848,8 @@ def test_instrumentation_emits_no_prompt_or_tool_content() -> None:
     Asserted on OBSERVED span attributes. Reading the settings object would prove
     nothing about what is actually emitted.
     """
-    # A hard import, never importorskip: opentelemetry-sdk is a declared dev
-    # dependency, and Story 1.11 established that a skipped test is not a passed
+    # A hard import, never importorskip: opentelemetry-sdk is a declared runtime
+    # dependency (Story 5.9), and Story 1.11 established that a skipped test is not a passed
     # test. If the SDK is missing, this guard must go red, not quiet.
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor

@@ -91,6 +91,10 @@ API client at the module boundary. A small number of backend tests are tagged
 the default run and require a real API key.
 
 
+### Trace export during a live run (Story 5.9)
+
+With `LOGFIRE_TOKEN` (and `LOGFIRE_BASE_URL` for an EU project) in `backend/.env`, `suite.py` passes both into the disposable stack and its API and worker export traces to Logfire. The stack's override sets the one diagnostic content mode, so those traces carry prompts, completions and tool arguments/results, tagged `deployment.environment=live-eval`; credentials and exception text are still withheld. The token never enters a run report or `measured_configuration`, and the content-mode key is excluded from `behavioral_digest`, so the drop check still compares with the committed baseline.
+
 ## Backend (pytest)
 
 **Runner:** `pytest`, configured in `backend/pyproject.toml`.
@@ -104,6 +108,16 @@ uv run pytest -v              # verbose output
 uv run pytest tests/test_api.py            # single file
 uv run pytest tests/test_api.py -k health  # single test by name
 ```
+
+### Trace export proof suites (Story 5.9)
+
+The default suite is keyless for trace export (`conftest.py` pops `LOGFIRE_TOKEN`). The proofs capture what the real `OTLPSpanExporter` posts through a test `requests.Session` (`tests/trace_capture.py`) and decode the OTLP payload:
+
+- `tests/test_trace_export_boundary.py`: the allow-list policy, sanitizer, sampler and propagator.
+- `tests/test_content_minimization.py`: channels C4-C8, exported agent, HTTP server, HTTP client, database and worker spans, against Story 5.2's fixtures.
+- `tests/test_trace_request_path.py` (`postgres`): one conversation is one trace; runs join by ID.
+- `tests/test_trace_export_failure_independence.py`: an unreachable, slow or rejecting Logfire changes no outcome and blocks nothing.
+- `tests/architecture/test_trace_export_boundaries.py`: one export boundary, no `logfire`, the content-mode config guard, placeholder-only SQL.
 
 ### Live provider tests
 

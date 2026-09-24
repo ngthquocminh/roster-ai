@@ -148,3 +148,42 @@ def test_an_image_whose_content_id_cannot_be_read_is_an_incomplete_run(monkeypat
 
 def test_the_database_image_recorded_is_the_one_docker_compose_pins():
     assert f'image: {DATABASE_IMAGE}' in (ROOT / 'docker-compose.yml').read_text(encoding='utf-8')
+
+
+# --- Story 5.9: trace export into the disposable stack ----------------------
+
+
+def _captured_env(monkeypatch):
+    seen = []
+    monkeypatch.setattr(stack_module.subprocess, 'run',
+                        lambda command, **kwargs: seen.append(kwargs.get('env')) or SimpleNamespace(returncode=0))
+    monkeypatch.setattr(stack_module.httpx, 'get', lambda *_a, **_k: SimpleNamespace(status_code=200))
+    return seen
+
+
+def test_trace_export_reaches_the_stack_only_when_given(monkeypatch):
+    monkeypatch.delenv('LOGFIRE_TOKEN', raising=False)
+    monkeypatch.delenv('LOGFIRE_BASE_URL', raising=False)
+    seen = _captured_env(monkeypatch)
+    with _stack():
+        pass
+    assert all('LOGFIRE_TOKEN' not in env for env in seen)
+
+    seen = _captured_env(monkeypatch)
+    with _stack(trace_export={'LOGFIRE_TOKEN': 'CANARY-LOGFIRE-5-9', 'LOGFIRE_BASE_URL': None}):
+        pass
+    assert all(env['LOGFIRE_TOKEN'] == 'CANARY-LOGFIRE-5-9' for env in seen)
+    assert all('LOGFIRE_BASE_URL' not in env for env in seen)
+
+
+def test_the_logfire_token_never_enters_the_measured_configuration(monkeypatch):
+    import json
+
+    from evals.live_conversations.configuration import DEFAULT_OVERRIDE_FILE, measured_configuration
+
+    monkeypatch.setenv('LOGFIRE_TOKEN', 'CANARY-LOGFIRE-5-9')
+    report = measured_configuration(
+        model='openrouter:openai/gpt-5.6-luna', judge_model='openrouter:google/gemini-2.5-flash',
+        reasoning_effort='low', override_file=DEFAULT_OVERRIDE_FILE)
+    assert 'CANARY-LOGFIRE-5-9' not in json.dumps(report)
+    assert 'LOGFIRE' not in json.dumps(report)

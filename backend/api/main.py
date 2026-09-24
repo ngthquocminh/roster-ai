@@ -26,11 +26,18 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import compile_path
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
-from api.deps import get_identity_store, get_settings, get_telemetry_sink
+from api.deps import (
+    get_identity_store,
+    get_settings,
+    get_telemetry_sink,
+    set_process_tracing,
+)
+from api.tracing import install_api_tracing, quiet_parent_span_names
 from api.problems import problem_response
 from application.app_version import APP_VERSION
 from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
 from adapters.telemetry.json_logs import configure_json_logging
+from adapters.telemetry.spans import ProcessTracing, build_process_tracing
 from application.ports.conversation import AgentRunNotQueuedError
 from application.use_cases.decide_approval import PostWriteApprovalNotPendingError
 from application.use_cases.promote_baseline import ApprovalPayloadUnreadableError, BaselineConcurrentlyMovedError
@@ -59,10 +66,18 @@ async def lifespan(app: FastAPI):
     configure_json_logging()
     db.init_db(get_settings().db_path)
     yield
-    run_service.shutdown()
+    try:
+        run_service.shutdown()
+    finally:
+        if _process_tracing is not None:
+            # Bounded and never raises (Decision 12): whatever the collector
+            # does, it returns within `spans.SHUTDOWN_DEADLINE_SECONDS`.
+            _process_tracing.shutdown()
 
 
 app = FastAPI(title="ShiftMind API", version=APP_VERSION, lifespan=lifespan)
+#: Set at the end of this module; `None` keyless (Story 5.9).
+_process_tracing: ProcessTracing | None = None
 
 
 @app.exception_handler(PostWriteApprovalNotPendingError)
@@ -415,3 +430,17 @@ app.include_router(schedule_runs.router, prefix="/api/v1")
 app.include_router(approvals.router, prefix="/api/v1")
 if get_settings().oidc_provider == "fake":
     app.include_router(fake_oidc.router)
+
+# Trace export (Story 5.9, Decision 11). At IMPORT, not in the lifespan:
+# Starlette builds the middleware stack on the lifespan's own first ASGI
+# message, and instrumenting inside it was measured to record zero server
+# spans. Keyless, `build_process_tracing` constructs nothing and the app is
+# exactly as it was.
+_process_tracing = build_process_tracing(
+    get_settings(),
+    service_name="shiftmind-api",
+    quiet_parent_span_names=quiet_parent_span_names(_SSE_ROUTE_TEMPLATES),
+)
+if _process_tracing is not None:
+    install_api_tracing(app, _process_tracing)
+    set_process_tracing(_process_tracing)

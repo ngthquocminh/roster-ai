@@ -80,6 +80,7 @@ from application.use_cases.enqueue_compute import (
     StaleProposalResourceVersionError,
     enqueue_compute,
 )
+from adapters.telemetry.spans import annotate_enqueued_schedule_run
 from settings import Settings
 
 
@@ -412,6 +413,9 @@ def start_schedule_run(
         )
     except (EnqueueComputeError, SnapshotCreationError, SchedulingOptimizeError) as exc:
         return _start_problem(exc)
+    # F3's join key: the worker's trace carries the same run ID. Create and
+    # idempotent-replay paths alike; a no-op when tracing is off.
+    annotate_enqueued_schedule_run(result.schedule_run_id)
     # Read the run's live state rather than asserting the state it had at
     # creation. On the create path this is still `solver_queued` at version 1;
     # on the idempotent replay path the run may already have advanced, and AC3

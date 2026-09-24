@@ -23,6 +23,11 @@
 # $0.02/M cache read (checked 2026-09-18 against /api/v1/models).
 # z-ai/glm-5.2 was tried 2026-09-18 and rejected: it contradicted its own
 # verified claims and failed to persist drafts (live-suite-glm52-r1.json).
+# AGENT_TRACE_CONTENT_MODE (Story 5.9): the one authorized trace-content
+# diagnostic mode, set ONLY here -- an architecture test proves no other
+# tracked file sets it. It changes what the Logfire exporter receives (tagged
+# deployment.environment=live-eval), never what the model sees, so it is
+# excluded from behavioral_digest (configuration.TELEMETRY_ONLY_KEYS).
 services:
   api:
     environment:
@@ -35,6 +40,7 @@ services:
       AGENT_RUNTIME_REQUEST_LIMIT: '12'
       AGENT_RUNTIME_TOOL_CALLS_LIMIT: '12'
       DEMONSTRATION_ENABLED: ${DEMONSTRATION_ENABLED:-false}
+      AGENT_TRACE_CONTENT_MODE: synthetic-eval
   worker:
     environment:
       AGENT_RUNTIME_REASONING_EFFORT: ${AGENT_RUNTIME_REASONING_EFFORT:-low}
@@ -46,3 +52,4 @@ services:
       AGENT_RUNTIME_REQUEST_LIMIT: '12'
       AGENT_RUNTIME_TOOL_CALLS_LIMIT: '12'
       DEMONSTRATION_ENABLED: ${DEMONSTRATION_ENABLED:-false}
+      AGENT_TRACE_CONTENT_MODE: synthetic-eval

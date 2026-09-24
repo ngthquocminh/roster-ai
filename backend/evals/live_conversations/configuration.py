@@ -36,6 +36,20 @@ DEFAULT_OVERRIDE_FILE = ROOT / 'backend/evals/live_conversations/compose.overrid
 #: the spend limiter's accounting, not the agent's behaviour.
 PRICE_KEY_SUFFIX = '_USD_PER_MTOK'
 
+#: Environment keys excluded from `behavioral_digest` because they change only
+#: what the trace EXPORTER receives, never what the model receives or what the
+#: application does (AD-12: no telemetry system authorizes or blocks product
+#: work). Story 5.9 added `AGENT_TRACE_CONTENT_MODE` to the override; excluding
+#: it keeps the current override's `behavioral_digest` equal to the committed
+#: baseline's by construction, so every future live run still compares. A
+#: DECLARED exclusion, not a widened rule: any other new key is still included
+#: by default and fails closed.
+TELEMETRY_ONLY_KEYS = frozenset({'AGENT_TRACE_CONTENT_MODE'})
+
+
+def _excluded_from_behaviour(key: str) -> bool:
+    return key.endswith(PRICE_KEY_SUFFIX) or key in TELEMETRY_ONLY_KEYS
+
 
 def _file_digest(path: Path) -> str:
     # Line endings normalised, so the digest does not move with `core.autocrlf`.
@@ -43,7 +57,8 @@ def _file_digest(path: Path) -> str:
 
 
 def behavioral_environment(override_file: Path) -> dict:
-    """The override's `environment` maps, per service, minus the price keys.
+    """The override's `environment` maps, per service, minus the price keys
+    and `TELEMETRY_ONLY_KEYS`.
 
     Both the `api` and `worker` service blocks are kept SEPARATELY: they are
     expected to agree, and silently merging them would hide a configuration
@@ -60,14 +75,19 @@ def behavioral_environment(override_file: Path) -> dict:
     because it does not affect this suite's authored conversation paths
     today -- revisit if a future scenario becomes sensitive to it.
     """
+    return behavioral_environment_from_text(Path(override_file).read_text(encoding='utf-8'))
+
+
+def behavioral_environment_from_text(override_text: str) -> dict:
+    """`behavioral_environment` over the override's text (e.g. a committed blob)."""
     import yaml  # dev-group, test-only -- see backend/pyproject.toml
 
-    document = yaml.safe_load(Path(override_file).read_text(encoding='utf-8')) or {}
+    document = yaml.safe_load(override_text) or {}
     services = document.get('services') or {}
     return {
         name: {key: str(value)
                for key, value in (services.get(name, {}).get('environment') or {}).items()
-               if not key.endswith(PRICE_KEY_SUFFIX)}
+               if not _excluded_from_behaviour(key)}
         for name in sorted(services)
     }
 
@@ -99,16 +119,25 @@ def measured_configuration(*, model: str, judge_model: str, reasoning_effort: st
 
 
 def behavioral_digest(*, model: str, judge_model: str, reasoning_effort: str,
-                      override_file: Path) -> str:
+                      override_file: Path | None = None,
+                      override_text: str | None = None) -> str:
     """The digest a regression comparison is refused on when it differs.
 
     Serialised exactly as `configuration_digest` is: `json.dumps(sort_keys=True)`
-    over the body, sha256 of its UTF-8 bytes.
+    over the body, sha256 of its UTF-8 bytes. Exactly one of `override_file`
+    and `override_text` is given.
     """
+    if (override_file is None) == (override_text is None):
+        raise ValueError('give exactly one of override_file and override_text')
+    environment = (
+        behavioral_environment(Path(override_file))
+        if override_file is not None
+        else behavioral_environment_from_text(override_text or '')
+    )
     body = {
         'agent_model': model,
         'judge_model': judge_model,
         'reasoning_effort': reasoning_effort,
-        'environment': behavioral_environment(Path(override_file)),
+        'environment': environment,
     }
     return hashlib.sha256(json.dumps(body, sort_keys=True).encode('utf-8')).hexdigest()

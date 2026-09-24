@@ -46,6 +46,10 @@ services:
       # runtime, while AGENT_RUNTIME_API_KEY remains the explicit generic
       # override for any provider.
       AGENT_RUNTIME_API_KEY: ${AGENT_RUNTIME_API_KEY:-${ANTHROPIC_API_KEY:-}}
+      # Trace export to Logfire (Story 5.9). Unset on the host, the token is
+      # empty and no exporter is constructed.
+      LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}
+      LOGFIRE_BASE_URL: ${LOGFIRE_BASE_URL:-https://logfire-us.pydantic.dev}
     depends_on:
       bootstrap:
         condition: service_completed_successfully

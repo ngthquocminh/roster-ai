@@ -1,4 +1,9 @@
-"""Generate Story 5.2's deterministic content-minimization evidence."""
+"""Generate Story 5.2's deterministic content-minimization evidence.
+
+Story 5.9 extended it: C4 now asserts on what the real OTLP exporter receives,
+four exported span channels (C5-C8) join the matrix, and the report records
+the export boundary itself.
+"""
 from __future__ import annotations
 
 import argparse
@@ -13,12 +18,60 @@ from typing import Mapping
 from xml.etree import ElementTree
 
 from scripts.evidence_binding import REPO_ROOT, resolve_bindings
+from settings import TRACE_CONTENT_SYNTHETIC_EVAL
 
 ARTIFACT_CONTRACT_MODULES = {
     "telemetry_record": "backend/application/contracts/telemetry.py",
     "json_log_boundary": "backend/adapters/telemetry/json_logs.py",
+    "span_export_policy": "backend/adapters/telemetry/span_policy.py",
+    "span_export_boundary": "backend/adapters/telemetry/spans.py",
 }
-ARTIFACT_DECLARED_VERSIONS = {"telemetry_record": "1", "json_log_boundary": "1"}
+ARTIFACT_DECLARED_VERSIONS = {
+    "telemetry_record": "1",
+    "json_log_boundary": "1",
+    "span_export_policy": "1",
+    "span_export_boundary": "1",
+}
+
+#: Every credential-bearing environment variable the secrets class seeds with a
+#: synthetic canary. Declared here so the generator never imports a test
+#: module; `test_content_minimization_report.py` pins it equal to the suite's
+#: `CREDENTIAL_CANARIES`, so the two cannot drift.
+CREDENTIAL_ENV_VARS = (
+    "GEMINI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OIDC_CLIENT_SECRET",
+    "CSRF_SECRET",
+    "AGENT_RUNTIME_API_KEY",
+    "ROSTERAI_DATABASE_URL",
+    "ROSTERAI_PROVISIONING_DATABASE_URL",
+    "LOGFIRE_TOKEN",
+)
+
+CHANNELS = (
+    "C1 telemetry JSON",
+    "C2 fallback JSON logs",
+    "C3 worker stderr",
+    "C4 exported agent spans",
+    "C5 exported HTTP server spans",
+    "C6 exported HTTP client spans",
+    "C7 exported database spans",
+    "C8 exported worker spans",
+)
+
+EXPORT_BOUNDARY = {
+    "policy_module": "backend/adapters/telemetry/span_policy.py",
+    "boundary_module": "backend/adapters/telemetry/spans.py",
+    "content_modes": ["off", TRACE_CONTENT_SYNTHETIC_EVAL],
+    "default_content_mode": "off",
+    "exception_events": "exception.type only",
+    "status_description": "never exported",
+    "url_query": "stripped",
+    "sql_parameters": "placeholders only; status description dropped",
+    "client_trace_context": "discarded on every route",
+    "observed_at": "OTLP protobuf payload captured at the real OTLPSpanExporter",
+}
 
 _TEST = "tests/test_content_minimization.py::"
 #: One DISTINCT test per channel x fixture class, so a red cell is attributable
@@ -40,6 +93,18 @@ MATRIX_NODES = {
     "c4_spans_secrets": _TEST + "test_c4_spans_withhold_secret_prompt_and_tool_content",
     "c4_spans_prompt_injection": _TEST + "test_c4_spans_withhold_pinned_prompt_injection_text",
     "c4_spans_adversarial": _TEST + "test_c4_spans_withhold_exception_content_on_the_provider_error_path",
+    "c5_http_server_spans_secrets": _TEST + "test_c5_http_server_spans_withhold_secret_headers_and_query",
+    "c5_http_server_spans_prompt_injection": _TEST + "test_c5_http_server_spans_withhold_prompt_injection_text",
+    "c5_http_server_spans_adversarial": _TEST + "test_c5_http_server_spans_withhold_adversarial_paths_and_exception_text",
+    "c6_http_client_spans_secrets": _TEST + "test_c6_http_client_spans_withhold_the_key_and_query",
+    "c6_http_client_spans_prompt_injection": _TEST + "test_c6_http_client_spans_withhold_prompt_injection_text",
+    "c6_http_client_spans_adversarial": _TEST + "test_c6_http_client_spans_withhold_adversarial_url_parts_and_errors",
+    "c7_database_spans_secrets": _TEST + "test_c7_database_spans_withhold_bound_secret_values",
+    "c7_database_spans_prompt_injection": _TEST + "test_c7_database_spans_withhold_bound_prompt_injection_text",
+    "c7_database_spans_adversarial": _TEST + "test_c7_database_spans_withhold_bound_adversarial_values_and_errors",
+    "c8_worker_spans_secrets": _TEST + "test_c8_worker_spans_withhold_secret_exception_text",
+    "c8_worker_spans_prompt_injection": _TEST + "test_c8_worker_spans_withhold_prompt_injection_text",
+    "c8_worker_spans_adversarial": _TEST + "test_c8_worker_spans_withhold_adversarial_exception_and_status_text",
 }
 #: Configuration surfaces that are not per-channel but are release-blocking.
 #: `settings_repr_credentials` is Decision 10's class-1 sweep, which the first
@@ -49,6 +114,11 @@ SURFACE_NODES = {
     "instrumentation_binary_capture": _TEST + "test_both_instrumentation_constructors_disable_binary_capture",
     "telemetry_label_type_safety": _TEST + "test_c1_telemetry_survives_a_non_string_label_value",
     "worker_process_logger_ownership": _TEST + "test_worker_run_as_a_process_still_renders_an_owned_event",
+    # Story 5.9's export boundary.
+    "export_content_mode_key_set": _TEST + "test_export_content_mode_key_set",
+    "export_keyless_constructs_no_exporter": _TEST + "test_export_keyless_constructs_no_exporter",
+    "export_client_trace_context_discarded": _TEST + "test_export_client_trace_context_discarded",
+    "export_agent_raw_key_drift": _TEST + "test_export_agent_raw_key_drift",
 }
 PROOF_NODES = MATRIX_NODES | SURFACE_NODES
 PINNED_INJECTION_CASE_IDS = (
@@ -67,9 +137,9 @@ DECLARED_BINDINGS = {
     "evaluator": "pytest Story 5.2 content-minimization suite",
     "model": "deterministic FunctionModel; no external provider",
     "prompt": "synthetic canaries and four pinned prompt-injection cases",
-    "tool": "demonstration tool double and JSON logging boundary",
-    "policy": "Story 5.2 AC1/AC2; NFR3/NFR4/NFR5/NFR27/NFR29/NFR30",
-    "application": "ShiftMind Story 5.2 telemetry boundaries",
+    "tool": "demonstration tool double, JSON logging boundary and span export boundary",
+    "policy": "Story 5.2 AC1/AC2, Story 5.9 AC3/AC4/AC6; NFR3/NFR4/NFR5/NFR27/NFR29/NFR30",
+    "application": "ShiftMind Story 5.2 telemetry boundaries and Story 5.9 export boundary",
     "solver": "not applicable — no scheduling solve",
 }
 
@@ -150,14 +220,17 @@ def write_report(output_path: Path, *, verdicts: Mapping[str, bool], failures: M
     report: dict[str, object] = {
         "story": "5.2", "generated_at": datetime.now(timezone.utc).isoformat(),
         "passed": passed, "result": "passed" if passed else "failed", "release_blocking": not passed,
-        "channels": ["C1 telemetry JSON", "C2 fallback JSON logs", "C3 worker stderr", "C4 OpenTelemetry spans"],
+        "channels": list(CHANNELS),
         # Every fixture named here is DRIVEN by a proof node above. The pinned
         # injection cases are read off disk by the suite's `_injection_prompts`
-        # and pushed through all four channels; they were previously only
+        # and pushed through every channel; they were previously only
         # hashed as `dataset_files`, i.e. cited rather than reused (code review
         # of story-5.2).
         "fixtures": {
-            "secrets": "seven synthetic configuration canaries",
+            "secrets": {
+                "description": "synthetic canaries in every credential-bearing environment variable",
+                "environment_variables": list(CREDENTIAL_ENV_VARS),
+            },
             "prompt_injection": list(PINNED_INJECTION_CASE_IDS),
             "adversarial": [
                 "control character", "newline", "oversized label",
@@ -165,6 +238,7 @@ def write_report(output_path: Path, *, verdicts: Mapping[str, bool], failures: M
                 "computed label key", "non-string label value",
             ],
         },
+        "export_boundary": dict(EXPORT_BOUNDARY),
         "artifact_versions": artifact_versions(repo_root),
         "proof_nodes": {name: {"node": PROOF_NODES[name], "passed": bool(value)} for name, value in verdicts.items()},
         "version_bindings": dict(bindings),

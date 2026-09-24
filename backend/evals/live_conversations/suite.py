@@ -73,6 +73,12 @@ def main(argv=None) -> int:
     judge_model = (args.judge_model or values.get('LIVE_CONVERSATION_JUDGE_MODEL')
                    or os.environ.get('LIVE_CONVERSATION_JUDGE_MODEL'))
     judge_key = values.get('LIVE_CONVERSATION_JUDGE_API_KEY') or key
+    # Story 5.9: the disposable stack exports its traces when a Logfire token is
+    # configured. Passed to the stack only; never recorded anywhere.
+    trace_export = {
+        name: values.get(name) or os.environ.get(name)
+        for name in ('LOGFIRE_TOKEN', 'LOGFIRE_BASE_URL')
+    }
     if not all(isinstance(value, str) and value.strip() for value in (model, key, judge_model, judge_key)):
         raise SystemExit('agent and separate judge model/key configuration is required')
     try:
@@ -146,7 +152,8 @@ def main(argv=None) -> int:
                     save()
                     with isolated_stack(model=model, api_key=key, override_file=args.override_file,
                                         reasoning_effort=args.reasoning_effort,
-                                        demonstration_enabled=case.demonstration_enabled) as stack:
+                                        demonstration_enabled=case.demonstration_enabled,
+                                        trace_export=trace_export) as stack:
                         app = ApplicationConversation(stack['origin'])
                         try:
                             try:

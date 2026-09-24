@@ -18,6 +18,7 @@ import pytest
 
 from evals.live_conversations.configuration import (
     DEFAULT_OVERRIDE_FILE,
+    TELEMETRY_ONLY_KEYS,
     behavioral_digest,
     behavioral_environment,
     measured_configuration,
@@ -593,10 +594,13 @@ def test_a_drifted_baseline_makes_the_drop_check_exit_non_zero(
 
 
 def test_behavioral_digest_excludes_only_the_price_keys():
+    """Price keys and the declared `TELEMETRY_ONLY_KEYS` -- nothing else."""
+    assert TELEMETRY_ONLY_KEYS == {"AGENT_TRACE_CONTENT_MODE"}
     environment = behavioral_environment(DEFAULT_OVERRIDE_FILE)
     assert set(environment) == {"api", "worker"}
     for service in environment.values():
         assert not [key for key in service if key.endswith("_USD_PER_MTOK")]
+        assert not set(service) & TELEMETRY_ONLY_KEYS
         assert "AGENT_RUNTIME_REASONING_EFFORT" in service
         assert "AGENT_RUNTIME_TOOL_CALLS_LIMIT" in service
 
@@ -660,21 +664,66 @@ def test_a_newly_added_environment_key_is_included_by_default(tmp_path: Path):
     )
 
 
+def test_adding_or_removing_the_content_mode_key_does_not_move_the_digest(tmp_path: Path):
+    """Story 5.9 Decision 13: a telemetry-only key never breaks comparability."""
+    original = DEFAULT_OVERRIDE_FILE.read_text(encoding="utf-8")
+    assert "AGENT_TRACE_CONTENT_MODE: synthetic-eval" in original
+    removed = tmp_path / "removed.yml"
+    removed.write_text(
+        original.replace("      AGENT_TRACE_CONTENT_MODE: synthetic-eval\n", ""),
+        encoding="utf-8",
+    )
+    assert "AGENT_TRACE_CONTENT_MODE" not in removed.read_text(encoding="utf-8").split(
+        "services:"
+    )[1]
+    kwargs = dict(
+        model="openrouter:openai/gpt-5.6-luna",
+        judge_model="openrouter:google/gemini-2.5-flash",
+        reasoning_effort="low",
+    )
+    assert behavioral_digest(override_file=removed, **kwargs) == behavioral_digest(
+        override_file=DEFAULT_OVERRIDE_FILE, **kwargs
+    )
+
+
 def test_adding_behavioral_digest_left_configuration_digest_untouched(
-    committed_evidence: dict,
+    committed_evidence: dict, baseline: dict,
 ):
-    """AC7: `configuration_digest` and every committed evidence file keep values."""
+    """AC7, in its MONOTONE form (Story 5.9 Decision 13).
+
+    The earlier form compared a fresh digest of the WORKING-TREE override with
+    the recorded one -- an equality against a moving file. What stays true
+    forever: the override blob at `measured_at_commit` reproduces the recorded
+    `override_sha256` and `configuration_digest`, and the current override's
+    `behavioral_digest` still equals the baseline's.
+    """
+    import hashlib
+    import json
+    import subprocess
+
     recorded = committed_evidence["measured_configuration"]
-    fresh = measured_configuration(
+    blob = subprocess.run(
+        [
+            "git", "show",
+            f"{committed_evidence['measured_at_commit']}:{recorded['override_file']}",
+        ],
+        cwd=REPO_ROOT, check=True, capture_output=True,
+    ).stdout.replace(b"\r\n", b"\n")
+    assert hashlib.sha256(blob).hexdigest() == recorded["override_sha256"]
+    body = {
+        key: recorded[key]
+        for key in ("agent", "judge", "reasoning_effort", "override_file", "override_sha256")
+    }
+    assert hashlib.sha256(
+        json.dumps(body, sort_keys=True).encode("utf-8")
+    ).hexdigest() == recorded["configuration_digest"]
+    assert "behavioral_digest" not in recorded
+    assert behavioral_digest(
         model=recorded["agent"]["model"],
         judge_model=recorded["judge"]["model"],
         reasoning_effort=recorded["reasoning_effort"],
         override_file=DEFAULT_OVERRIDE_FILE,
-    )
-    assert fresh["configuration_digest"] == recorded["configuration_digest"]
-    assert fresh["override_sha256"] == recorded["override_sha256"]
-    assert "behavioral_digest" not in recorded
-    assert fresh["behavioral_digest"]
+    ) == baseline["configuration"]["behavioral_digest"]
 
 
 def _check(result: dict, check_id: str) -> dict:

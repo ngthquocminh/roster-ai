@@ -37,7 +37,8 @@ from pydantic_ai import (
     UsageLimits,
 )
 from pydantic_ai import capture_run_messages
-from pydantic_ai.capabilities import Instrumentation
+from opentelemetry import trace as otel_trace
+from pydantic_ai.capabilities import AbstractCapability, Instrumentation
 from pydantic_ai.exceptions import FallbackExceptionGroup
 from pydantic_ai.messages import (
     ModelRequest,
@@ -53,6 +54,7 @@ from pydantic_ai.usage import RunUsage
 
 from agent.translate import summarize, to_framework_messages, to_owned_turn
 from agent.scheduling_instructions import SCHEDULING_ASSISTANT_INSTRUCTIONS
+from settings import TRACE_CONTENT_SYNTHETIC_EVAL
 from application.contracts.agent_runtime import (
     AgentApprovalPendingV1,
     AgentBudgetV1,
@@ -297,6 +299,30 @@ class AgentRuntimeConfig:
     instructions: str = SCHEDULING_ASSISTANT_INSTRUCTIONS
 
 
+@dataclass
+class _RunCorrelation(AbstractCapability[AgentDepsV1 | None]):
+    """Stamps ShiftMind's run identifiers on the `invoke_agent` span (NFR22).
+
+    `gen_ai.agent.call.id`/`gen_ai.conversation.id` are pydantic-ai's own
+    per-run UUID7s, not ShiftMind's (Story 5.9 Decision 9), so traces could not
+    be joined to product records or audit. The attribute is set on the current
+    span before `handler()` runs -- the pattern pydantic-ai's `Instrumentation`
+    documents -- and lands on `invoke_agent` whatever the list order. Only the
+    API opentelemetry facade is imported; nothing here exports.
+    """
+
+    deps: AgentDepsV1 | None = None
+
+    async def wrap_run(self, ctx, *, handler):  # type: ignore[override]
+        deps = ctx.deps if isinstance(ctx.deps, AgentDepsV1) else self.deps
+        if deps is not None:
+            span = otel_trace.get_current_span()
+            span.set_attribute("shiftmind.agent_run.id", str(deps.agent_run_id))
+            span.set_attribute("shiftmind.site.id", str(deps.site_id))
+            span.set_attribute("shiftmind.conversation.id", str(deps.conversation_id))
+        return await handler()
+
+
 class PydanticAIAgentRuntime:
     """Implements `application.ports.agent_runtime.AgentRuntime`."""
 
@@ -309,10 +335,12 @@ class PydanticAIAgentRuntime:
         capabilities: tuple[CapabilityModuleV1, ...] = (),
         deps: AgentDepsV1 | None = None,
         answer_type: type | None = None,
+        trace_content: bool = False,
     ) -> None:
         """`model` is an injected framework model (a deterministic double in
-        tests). `tracer_provider` lets a caller observe emitted spans; it does not
-        change what is emitted.
+        tests). `tracer_provider` is where spans go (the process provider, or a
+        test's); it does not change what is emitted. `trace_content` is True
+        only in the live-eval content mode (`settings.TRACE_CONTENT_SYNTHETIC_EVAL`).
         """
         self._config = config or AgentRuntimeConfig()
         # Name of the last in-loop rule that asked the model to retry. A closed
@@ -329,17 +357,19 @@ class PydanticAIAgentRuntime:
         self._answer_type = answer_type
 
         # AD-12/AD-15: external telemetry excludes prompt, tool, workforce, and
-        # schedule content BY DEFAULT. This is constructed content-disabled and
-        # there is no parameter to turn it on — enabling content export is a
-        # deliberate future decision, not an adapter option. Binary capture is
-        # also explicitly disabled because the framework default is True.
+        # schedule content BY DEFAULT. `trace_content` is True only in the
+        # `TRACE_CONTENT_SYNTHETIC_EVAL` content mode -- the one authorized
+        # diagnostic mode, set only by the disposable live-evaluation stack
+        # (Story 5.9, addendum §6). Either way the export-boundary sanitizer in
+        # `adapters/telemetry/spans.py` is authoritative: with the mode `off`
+        # it drops the content keys whatever this constructor was told. Binary
+        # capture is disabled in both arms because the framework default is True.
         #
-        # Deliberately NOT the Logfire SDK: Story 5.1 owns telemetry export.
-        # `opentelemetry-api` arriving transitively under pydantic-ai-slim is all
-        # this story needs.
+        # Deliberately NOT the Logfire SDK: spans leave through the OTLP
+        # exporter behind the sanitizer, never through `logfire`.
         instrumentation_settings = (
             InstrumentationSettings(
-                include_content=False,
+                include_content=trace_content,
                 include_binary_content=False,
                 tracer_provider=tracer_provider,
             )
@@ -375,7 +405,12 @@ class PydanticAIAgentRuntime:
             deps_type=AgentDepsV1 | None,
             output_type=output_type,
             instructions=self._config.instructions,
-            capabilities=[Instrumentation(settings=instrumentation_settings)],
+            capabilities=[
+                Instrumentation(settings=instrumentation_settings),
+                # Correlation keys ride the span only when spans go somewhere;
+                # the keyless agent is unchanged.
+                *((_RunCorrelation(deps=deps),) if tracer_provider is not None else ()),
+            ],
             retries={
                 "tools": self._config.retries_limit,
                 "output": self._config.retries_limit,
@@ -1011,6 +1046,7 @@ def create_agent_runtime(
     capabilities: tuple[CapabilityModuleV1, ...] = (),
     deps: AgentDepsV1 | None = None,
     answer_type: type | None = None,
+    tracer_provider: object | None = None,
 ) -> PydanticAIAgentRuntime:
     """Factory mirroring `llm/base.py:create_provider`'s shape.
 
@@ -1032,10 +1068,16 @@ def create_agent_runtime(
             retries_limit=settings.agent_runtime_retries_limit,
             reasoning_effort=getattr(settings, 'agent_runtime_reasoning_effort', None),
         )
+    trace_content = (
+        tracer_provider is not None
+        and getattr(settings, "agent_trace_content_mode", "off") == TRACE_CONTENT_SYNTHETIC_EVAL
+    )
     return PydanticAIAgentRuntime(
         config=config,
         model=model,
+        tracer_provider=tracer_provider,
         capabilities=capabilities,
         deps=deps,
         answer_type=answer_type,
+        trace_content=trace_content,
     )

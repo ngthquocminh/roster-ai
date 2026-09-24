@@ -1358,8 +1358,9 @@ def test_not_found_and_policy_precheck_write_no_denial_audit_without_telemetry(
     assert after == before
 
 
+@pytest.mark.parametrize("kind", ("unreachable", "slow", "rejected"))
 def test_authoritative_audit_survives_a_failing_span_exporter(
-    governed_postgres_engine, site_ids, decision_http_client
+    kind, governed_postgres_engine, site_ids, decision_http_client, request
 ) -> None:
     """AC4: observability being disabled or broken cannot remove the record.
 
@@ -1370,25 +1371,26 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
     already does it: with an exporter that really raises in-process, and with
     `calls` asserted so the case cannot pass vacuously.
     """
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter
+    # Story 5.9: the REAL export pipeline -- sampler, batch processor,
+    # sanitizer, OTLP exporter -- installed on the app exactly as production
+    # installs it, pointed at each broken Logfire of Decision 12 (unreachable,
+    # slow, rejecting the token). A counting session keeps the case from
+    # passing because nothing was ever exported.
+    from api.tracing import install_api_tracing
+    from tests.test_trace_export_failure_independence import failing_tracing
 
-    class _RaisingExporter(SpanExporter):
-        def __init__(self) -> None:
-            self.calls = 0
+    pipeline = failing_tracing(kind, service_name="shiftmind-api")
+    tracing, exports = pipeline.__enter__()
+    undo = install_api_tracing(app, tracing)
+    uninstalled = False
 
-        def export(self, _spans):
-            self.calls += 1
-            raise RuntimeError("simulated exporter failure")
+    def cleanup() -> None:
+        # Always restore the shared app, even when an assertion fails midway.
+        if not uninstalled:
+            undo()
+            pipeline.__exit__(None, None, None)
 
-        def shutdown(self) -> None:
-            return None
-
-    exporter = _RaisingExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    tracer = provider.get_tracer(__name__)
+    request.addfinalizer(cleanup)
 
     client, settings = decision_http_client
     engine = governed_postgres_engine
@@ -1411,17 +1413,13 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
     url = f"/api/v1/approvals/{binding.approval_id}/decision"
     app.dependency_overrides[get_clock] = lambda: NOW
 
-    # A span ends -- and the exporter raises -- on both sides of each command.
-    with tracer.start_as_current_span("before-denial"):
-        pass
     denial = client.post(
-        url, headers=_governance_headers(settings, key="otel-denial"),
+        url, headers=_governance_headers(settings, key=f"otel-denial-{kind}"),
         json={"decision": "approve", "expected_resource_version": 99},
     )
-    with tracer.start_as_current_span("between"):
-        pass
+    tracing.provider.force_flush(10_000)  # an export really fails in between
     success = client.post(
-        url, headers=_governance_headers(settings, key="otel-success"),
+        url, headers=_governance_headers(settings, key=f"otel-success-{kind}"),
         json={"decision": "approve", "expected_resource_version": 1},
     )
     additional: list[tuple[object, str]] = []
@@ -1448,22 +1446,22 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
         elif expected_outcome == "stale":
             with engine.begin() as c:
                 c.execute(update(schedule_run).where(schedule_run.c.id == extra["schedule_run"]).values(resource_version=3))
-        with tracer.start_as_current_span(f"before-{expected_outcome}"):
-            pass
         extra_response = client.post(
             f"/api/v1/approvals/{extra_binding.approval_id}/decision",
-            headers=_governance_headers(settings, key=f"otel-{expected_outcome}"),
+            headers=_governance_headers(settings, key=f"otel-{expected_outcome}-{kind}"),
             json={"decision": "reject" if expected_outcome == "rejected" else "approve", "expected_resource_version": 1},
         )
         additional.append((extra_binding.approval_id, expected_outcome))
         assert extra_response.status_code == (200 if expected_outcome == "rejected" else 409)
-    with tracer.start_as_current_span("after-success"):
-        pass
+    tracing.provider.force_flush(10_000)
+    undo()
+    pipeline.__exit__(None, None, None)
+    uninstalled = True
 
     assert denial.status_code == 409 and denial.json()["code"] == "stale_resource_version"
     assert success.status_code == 200 and success.json()["state"] == "consumed"
     # The exporter really ran and really failed; without this the case is vacuous.
-    assert exporter.calls >= 6
+    assert exports.posts >= 2
     with governed_postgres_engine.connect() as c:
         rows = c.execute(
             select(audit_event.c.outcome, audit_event.c.success).where(
@@ -1483,7 +1481,6 @@ def test_authoritative_audit_survives_a_failing_span_exporter(
                 audit_event.c.approval_id == approval_id,
                 audit_event.c.outcome == f"approval_{expected_outcome}",
             )).scalar_one() == f"approval_{expected_outcome}"
-    provider.shutdown()
 
 
 def test_lost_promotion_cas_escapes_route_and_rolls_back_the_real_transaction(

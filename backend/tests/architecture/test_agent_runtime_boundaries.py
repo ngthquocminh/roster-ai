@@ -50,7 +50,17 @@ GUARDED_LAYERS = ("domain", "application")
 # The one package allowed to import PydanticAI.
 ADAPTER_PACKAGE = "agent"
 
-FORBIDDEN_ROOT_MODULES = ("pydantic_ai", "pydantic_graph", "logfire")
+FORBIDDEN_ROOT_MODULES = (
+    "pydantic_ai",
+    "pydantic_graph",
+    "logfire",
+    # Story 5.9: the OpenTelemetry SDK, exporter and instrumentation packages.
+    # Dotted entries, so the matcher below is prefix-aware -- comparing only
+    # the first segment would make these three entries unmatchable.
+    "opentelemetry.sdk",
+    "opentelemetry.exporter",
+    "opentelemetry.instrumentation",
+)
 
 # Framework type names that must not appear as identifiers in guarded layers.
 # Grouped by the category AC2 enumerates.
@@ -153,7 +163,10 @@ def find_forbidden_imports(source: str) -> set[str]:
     return {
         module
         for module in _imported_modules(tree)
-        if _root_of(module) in FORBIDDEN_ROOT_MODULES
+        if any(
+            module == entry or module.startswith(f"{entry}.")
+            for entry in FORBIDDEN_ROOT_MODULES
+        )
     }
 
 
@@ -336,6 +349,18 @@ def test_import_guard_actually_fails_on_a_violating_import() -> None:
     assert find_forbidden_imports(VIOLATING_IMPORT) == {"pydantic_ai.messages"}
     assert find_forbidden_imports("import pydantic_ai") == {"pydantic_ai"}
     assert find_forbidden_imports("import logfire") == {"logfire"}
+    # Story 5.9: dotted entries match by prefix; the API facade does not.
+    assert find_forbidden_imports("import opentelemetry.sdk.trace") == {
+        "opentelemetry.sdk.trace"
+    }
+    assert find_forbidden_imports(
+        "from opentelemetry.exporter.otlp.proto.http.trace_exporter import X"
+    ) == {"opentelemetry.exporter.otlp.proto.http.trace_exporter"}
+    assert find_forbidden_imports(
+        "from opentelemetry.instrumentation.fastapi import Y"
+    ) == {"opentelemetry.instrumentation.fastapi"}
+    assert find_forbidden_imports("from opentelemetry import trace") == set()
+    assert find_forbidden_imports("import opentelemetry_sdk_lookalike") == set()
     # and stays quiet on the real, clean tree shape
     assert find_forbidden_imports("from application.contracts import x") == set()
 
