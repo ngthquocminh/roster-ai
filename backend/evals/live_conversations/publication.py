@@ -47,10 +47,14 @@ PLAN_REASONS = frozenset({
     "report_unfinished",
     "report_malformed",
     "report_contains_credential",
+    "report_nothing_to_publish",
 })
 
 _GIT_COMMIT = re.compile(r"[0-9a-f]{40}")
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+#: `datetime.max` in UTC (9999-12-31T23:59:59Z) -- past this, a unix-seconds
+#: value cannot be a real timestamp and would overflow `timedelta`.
+_MAX_UNIX_SECONDS = 253402300799
 
 
 class PublicationRefused(Exception):
@@ -81,7 +85,9 @@ class PublicationPlan:
     report_run_id: str
     report_sha256: str
     agent_model: str
-    experiment_name: str
+    #: `None` when `--verdicts-only` drops the experiment: nothing is published
+    #: under this name, so nothing should claim to be.
+    experiment_name: str | None
     experiment_metadata: dict[str, Any]
     verdict_spans: tuple[VerdictSpan, ...]
     cases: tuple[PlannedCase, ...]
@@ -105,6 +111,13 @@ def _positive_int(value: Any) -> int:
 
 def _int(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
+        raise _malformed()
+    return value
+
+
+def _unix_seconds(value: Any) -> int:
+    value = _int(value)
+    if not (0 <= value <= _MAX_UNIX_SECONDS):
         raise _malformed()
     return value
 
@@ -146,7 +159,9 @@ def _judge_scores(judgment: Any) -> dict[str, dict[str, Any]]:
         if not isinstance(entry, dict):
             raise _malformed()
         score, reason = entry.get("score"), entry.get("reason")
-        if score is not None and (isinstance(score, bool) or score not in (0, 1, 2)):
+        if score is not None and (
+            isinstance(score, bool) or not isinstance(score, int) or score not in (0, 1, 2)
+        ):
             raise _malformed()
         if reason is not None and not isinstance(reason, str):
             raise _malformed()
@@ -183,7 +198,7 @@ def _reply(row: dict[str, Any]) -> Any:
     try:
         reply = visible_activity(activity)
         json.dumps(reply)
-    except (KeyError, TypeError, ValueError, AttributeError):
+    except (KeyError, TypeError, ValueError, AttributeError, IndexError):
         raise _malformed() from None
     return reply
 
@@ -208,6 +223,8 @@ def plan_publication(
     finished_unix = report.get("finished_unix")
     if isinstance(finished_unix, bool) or not isinstance(finished_unix, int):
         raise PublicationRefused("report_unfinished")
+    if not (0 <= finished_unix <= _MAX_UNIX_SECONDS):
+        raise _malformed()
 
     report_sha256 = hashlib.sha256(report_bytes).hexdigest()
     run_id = _require(report.get("run_id"), span_policy.validate_uuid)
@@ -230,7 +247,7 @@ def plan_publication(
     code_commit = code.get("git_commit")
     if not isinstance(code_commit, str) or not _GIT_COMMIT.fullmatch(code_commit):
         raise _malformed()
-    started_unix = _int(report.get("started_unix"))
+    started_unix = _unix_seconds(report.get("started_unix"))
 
     scenario_ids = {scenario.id for scenario in load_scenarios()}
     executions = report.get("prefixes")
@@ -238,8 +255,12 @@ def plan_publication(
         raise _malformed()
 
     # Validate every execution; remember the last per (repetition, scenario).
+    # "Last" means highest `attempt`, never mere list position: the group's
+    # attempts must already be strictly increasing (suite.py's own retry
+    # order), or the report is malformed rather than silently trusted.
     seen_conversations: set[UUID] = set()
     final_index: dict[tuple[int, str], int] = {}
+    last_attempt: dict[tuple[int, str], int] = {}
     parsed: list[tuple[dict[str, Any], UUID | None, list[dict[str, Any]]]] = []
     for position, execution in enumerate(executions):
         if not isinstance(execution, dict):
@@ -248,7 +269,7 @@ def plan_publication(
         if scenario not in scenario_ids or span_policy.validate_scenario_id(scenario) is None:
             raise _malformed()
         repetition = _positive_int(execution.get("repetition"))
-        _positive_int(execution.get("attempt"))
+        attempt = _positive_int(execution.get("attempt"))
         turns = execution.get("turns")
         if not isinstance(turns, list):
             raise _malformed()
@@ -265,7 +286,11 @@ def plan_publication(
                 raise _malformed()
             seen_conversations.add(conversation_id)
         parsed.append((execution, conversation_id, turns))
-        final_index[(repetition, scenario)] = position
+        group = (repetition, scenario)
+        if attempt <= last_attempt.get(group, 0):
+            raise _malformed()
+        last_attempt[group] = attempt
+        final_index[group] = position
 
     finals = set(final_index.values())
     verdict_spans: list[VerdictSpan] = []
@@ -361,6 +386,9 @@ def plan_publication(
                 },
                 usage=usage,
             ))
+
+    if not verdict_spans and not cases:
+        raise PublicationRefused("report_nothing_to_publish")
 
     experiment_metadata: dict[str, Any] = {
         "report_run_id": run_id,

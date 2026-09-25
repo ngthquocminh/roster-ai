@@ -4,7 +4,7 @@ baseline_commit: 3bf0fb1
 
 # Story 5.10: Publish Live-Evaluation Results to Logfire
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -220,7 +220,7 @@ Each states its mechanism **and what it does not cover**.
 | `backend/adapters/telemetry/span_policy.py` | changed | stdlib only | two categories and their validators (Decision 4) |
 | `backend/adapters/telemetry/spans.py` | changed | as today | `build_live_eval_publication_export(...)` and the shared OTLP-exporter construction (Decision 8) |
 | `backend/evals/live_conversations/publication.py` | new | stdlib, `evals.live_conversations.cases`, `evals.live_conversations.runner.visible_activity` (the judge's projection, reused, never copied; importing it loads pydantic-ai, measured 3.3 s, never `logfire`), `adapters.telemetry.conversation_trace`, `adapters.telemetry.span_policy` (stdlib; its vocabularies and validators, so the planner and the sanitizer share one copy) | the pure report→`PublicationPlan` planner and its refusal reasons (Decisions 6, 7). **No** `logfire`, `pydantic_evals` or `opentelemetry` import |
-| `backend/evals/live_conversations/logfire_publish.py` | new | `logfire`, `pydantic_evals`, `opentelemetry.trace` (**API facade only**), `settings`, `adapters.telemetry.spans`, `publication` | the CLI: settings → token → plan → configure → verdict spans → experiment → bounded finish → exit code (Decisions 3, 5, 8, 9) |
+| `backend/evals/live_conversations/logfire_publish.py` | new | `logfire`, `pydantic_evals`, `opentelemetry.trace` (**API facade only**), `settings`, `adapters.telemetry.spans`, `adapters.telemetry.span_policy` (the `LIVE_EVAL_SCOPE` tracer name), `adapters.telemetry.conversation_trace` (the verdict span's parent header), `application.app_version` (`service_version`, Decision 3), `evals.content_minimization_report` (`CREDENTIAL_ENV_VARS`, Decision 6), `publication` | the CLI: settings → token → plan → configure → verdict spans → experiment → bounded finish → exit code (Decisions 3, 5, 8, 9) |
 
 Guards (Task 7), each with synthetic violating source:
 
@@ -335,6 +335,7 @@ publisher's tracer):
 | `shiftmind.live_eval.agent_model` | `^[a-z0-9][a-z0-9_-]*:[A-Za-z0-9._/:-]{1,128}$` |
 | `shiftmind.live_eval.configuration_digest`, `.report.sha256` | 64 lowercase hex |
 | `shiftmind.live_eval.report.run_id`, `shiftmind.conversation.id`, `shiftmind.agent_run.id` | UUID |
+| `shiftmind.live_eval.occurred_at` | microsecond UTC ISO-8601 (added by the Task 11 fix to Decision 5: the turn's time, carried as an attribute since the span itself is stamped at publication) |
 | `logfire.msg`, `logfire.span_type` | allow (Logfire adds them; measured `live_eval.verdict` / `span`) |
 
 **`EVALS = "evals"`, scope `pydantic-evals`:** allow exactly the measured non-`code` keys in the table
@@ -380,14 +381,20 @@ the publisher writes one span:
   conversation_traceparent_header(conversation_id)}):`. This is the same trace ID and parent as 5.9's
   boundary (fact 9). A test asserts the header equals `api.tracing.conversation_traceparent(
   f"/api/v1/conversations/{id}/messages")` for UUIDs including one whose low 64 bits are zero;
-* **time** `start_time = end_time = ` the turn's `activity.occurred_at` in ns; for a turn with no
-  activity (it stopped before a reply), the report's `finished_unix`. Zero duration;
+* **time** — **amended by Task 11 (2026-09-25):** stamped at publication time (no explicit
+  `start_time`/`end_time`; whenever `tracer.start_span(...).end()` runs), never backdated. The first
+  real publication (exit 0, 541 spans accepted with HTTP 200) stored the experiment but silently
+  dropped all 90 verdict spans: Logfire accepts, then drops, spans backdated to the turn's time
+  (measured six days back). The turn's own time instead travels as the new
+  `shiftmind.live_eval.occurred_at` attribute (microsecond UTC ISO-8601; the turn's
+  `activity.occurred_at`, or the report's `finished_unix` for a turn with no activity). See the Dev
+  Agent Record's Task 11 entry and the 2026-09-25 Change Log rows for the full account;
 * **attributes** exactly the `live_eval` table's keys: `turn_index` (1-based, the row's `turn-N`),
   `verdict`, `agent_model` (report `model`), `configuration_digest` (report
   `configuration.configuration_digest`), `report.run_id`, `report.sha256` (AC1's four named fields
-  plus identity), and the join keys `shiftmind.conversation.id`, `shiftmind.agent_run.id` (when
-  recorded), `scenario`, `repetition`, `attempt`, `final_attempt`, `agent_run_status` (when recorded),
-  and `factual_failures` (only when non-empty).
+  plus identity), `occurred_at` (above), and the join keys `shiftmind.conversation.id`,
+  `shiftmind.agent_run.id` (when recorded), `scenario`, `repetition`, `attempt`, `final_attempt`,
+  `agent_run_status` (when recorded), and `factual_failures` (only when non-empty).
 
 The joins this makes: a verdict opens its conversation's trace, which since 5.9 holds that turn's
 request, agent, model, tool and database spans. `shiftmind.agent_run.id` is the same key 5.9 stamps on
@@ -651,6 +658,18 @@ Task 11's observation, which is not evidence.
         tagged `deployment.environment=live-eval`; no `host.name`, no `code.filepath`, and no
         `verified`/tool-observation content anywhere. Record the observations in the Dev Agent
         Record; they are not evidence.
+
+### Review Findings
+
+- [x] [Review][Patch] Refuse a report with nothing to publish instead of reporting it as an export failure [backend/evals/live_conversations/publication.py; backend/evals/live_conversations/logfire_publish.py] — decided 2026-09-25: add a new closed-vocabulary reason (`report_nothing_to_publish`) to `PLAN_REASONS` and raise it from `plan_publication` when both `verdict_spans` and `cases` are empty, before `logfire_publish.main()` ever attempts export. Today `PublicationDelivery.delivered` (`backend/adapters/telemetry/spans.py:433-440`) requires `ended > 0`, so a report where every execution has no `conversation_id` is indistinguishable from a real Logfire outage (`outcome: "failed", reason: "logfire_export_failed"`), and would additionally have called `_run_experiment`'s `Dataset(cases=[]).evaluate_sync(...)` with zero cases when `--verdicts-only` was not set.
+- [x] [Review][Patch] `main()` has no top-level exception guard [backend/evals/live_conversations/logfire_publish.py:213-221] — any exception type not explicitly handled downstream (e.g. from `_run_experiment`/`_write_verdict_spans`) propagates as a bare Python traceback, silently breaking the documented "one JSON line on stdout says which" exit-code contract.
+- [x] [Review][Patch] "Final attempt" is picked by list position, not by `attempt` value [backend/evals/live_conversations/publication.py:242-268] — `final_index[(repetition, scenario)] = position` trusts that `prefixes` is already in ascending-attempt order per group. Currently safe only because `suite.py` always appends attempts in order and breaks on success; `plan_publication` validates almost every other field strictly but never checks `attempt` monotonicity itself.
+- [x] [Review][Patch] `finished_unix`/`started_unix` have no bounds check [backend/evals/live_conversations/publication.py:130-133,208-210,300-302] — an out-of-range `finished_unix` (validated only as `isinstance(int)`) reaches `_iso_utc`'s `timedelta(microseconds=...)` and raises an unhandled `OverflowError` instead of the documented `report_malformed` refusal (verified reproducible with `finished_unix = 99999999999999999`).
+- [x] [Review][Patch] `_reply()`'s exception net is narrower than the module's malformed-input pattern [backend/evals/live_conversations/publication.py:177-188] — only `(KeyError, TypeError, ValueError, AttributeError)` are caught around `visible_activity()`. Not currently reachable given `visible_activity`'s implementation (`runner.py:134-145`), but worth widening for defense-in-depth consistent with the rest of the parser.
+- [x] [Review][Patch] `_emit()` reports a misleading `experiment` field under `--verdicts-only` [backend/evals/live_conversations/logfire_publish.py:144-156] — `"experiment": plan.experiment_name` is always populated when a plan exists, even though `_run_experiment` never runs in `--verdicts-only` mode, implying an experiment identity that was never sent to Logfire.
+- [x] [Review][Patch] `_judge_scores` accepts a float into a closed int vocabulary [backend/evals/live_conversations/publication.py:136-154] — `score not in (0, 1, 2)` has no `isinstance(score, int)` guard, so a JSON float like `2.0` (Python: `2.0 in (0, 1, 2)` is `True`) silently passes validation and is recorded as a float.
+- [x] [Review][Patch] Decision 4 and Decision 5's frozen text contradicts the shipped, Minh-approved Task 11 fix [story lines 327-338, 383-384] — Decision 5 still says verdict spans get `start_time = end_time = ` the turn's `activity.occurred_at` ("Zero duration"), but the shipped code stamps spans at publication time and carries the turn's time as the new `shiftmind.live_eval.occurred_at` attribute instead (documented correctly in the Dev Agent Record and Change Log, lines 838, 897, but never folded back into the frozen Decision 4/5 sections the way Decisions 3/6/7/9 were amended). A reader trusting only the frozen Decisions section will be misled about actual span timestamps.
+- [x] [Review][Patch] Decision 1's import allow-list for `logfire_publish.py` is stale and unenforced [story line 223; backend/tests/architecture/test_trace_export_boundaries.py:170-196] — the table omits `adapters.telemetry.span_policy`, `adapters.telemetry.conversation_trace`, `evals.content_minimization_report`, and `application.app_version`, all of which the shipped file imports (needed for Decisions 3 and 6). No architecture test asserts the *complete* allow-list, only that `logfire`/`pydantic_evals` stay confined to one file.
 
 ---
 

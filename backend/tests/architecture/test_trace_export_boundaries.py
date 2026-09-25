@@ -55,6 +55,12 @@ LOGFIRE_PUBLISHER = "evals/live_conversations/logfire_publish.py"
 FACADE_ALLOWED = SDK_ALLOWED | {"agent/runtime.py", LOGFIRE_PUBLISHER}
 #: Story 5.10 Decision 1: the Logfire SDK and pydantic-evals, in one file.
 EVAL_TOOLING_PACKAGES = ("logfire", "pydantic_evals")
+#: Decision 1's table for `logfire_publish.py`, top-level package names only.
+LOGFIRE_PUBLISHER_ALLOWED_TOP_LEVEL = frozenset({
+    "__future__", "argparse", "dataclasses", "json", "os", "sys", "pathlib", "typing",
+    "logfire", "opentelemetry", "pydantic_evals",
+    "adapters", "application", "evals", "settings",
+})
 #: Story 5.10 Decision 2: dev group only, exact.
 EVAL_TOOLING_DEV_PINS = {"logfire": "5.1.0", "pydantic-evals": "2.27.0"}
 
@@ -181,6 +187,13 @@ def test_logfire_and_pydantic_evals_are_imported_by_the_publisher_only() -> None
         (BACKEND_ROOT / LOGFIRE_PUBLISHER).read_text(encoding="utf-8")
     )
     assert {module.split(".")[0] for module in publisher} == set(EVAL_TOOLING_PACKAGES)
+
+
+def test_logfire_publisher_imports_exactly_decision_1s_allow_list() -> None:
+    """Decision 1's table is a promise about the whole file, not just logfire/pydantic_evals."""
+    source = (BACKEND_ROOT / LOGFIRE_PUBLISHER).read_text(encoding="utf-8")
+    top_level = {module.split(".")[0] for module in _imported_modules(source)}
+    assert top_level <= LOGFIRE_PUBLISHER_ALLOWED_TOP_LEVEL
 
 
 def runtime_dependencies(pyproject: str) -> list[str]:

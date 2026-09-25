@@ -20,8 +20,9 @@ from Logfire), and every span leaves through 5.9's `SanitizingSpanExporter`
 `force_flush()`, which returns `True` after a 401. The report is read once,
 read-only; nothing is ever read back from Logfire.
 
-Exit codes: 0 published; 1 `logfire_export_failed`; 2 any refusal. One JSON
-line on stdout says which.
+Exit codes: 0 published; 1 `logfire_export_failed`; 2 any refusal, including an
+unexpected internal error (`publisher_internal_error`) while writing spans or
+running the experiment. One JSON line on stdout says which.
 """
 from __future__ import annotations
 
@@ -55,7 +56,10 @@ from settings import InvalidFlagError, default_settings
 
 #: The closed vocabulary of reasons this publisher can print.
 PUBLISH_REASONS = frozenset(
-    PLAN_REASONS | {"configuration_invalid", "logfire_token_absent", "logfire_export_failed"}
+    PLAN_REASONS | {
+        "configuration_invalid", "logfire_token_absent", "logfire_export_failed",
+        "publisher_internal_error",
+    }
 )
 EXIT_PUBLISHED, EXIT_EXPORT_FAILED, EXIT_REFUSED = 0, 1, 2
 SERVICE_NAME = "shiftmind-live-eval-publisher"
@@ -192,7 +196,8 @@ def main(argv: list[str] | None = None) -> int:
         return _refuse(refused.reason)
 
     if args.verdicts_only:
-        plan = dataclasses.replace(plan, cases=())  # nothing reports cases it did not write
+        # Nothing reports cases or an experiment it did not write.
+        plan = dataclasses.replace(plan, cases=(), experiment_name=None)
     export = build_live_eval_publication_export(settings)
     assert export is not None  # the token was checked above
     logfire.configure(
@@ -211,11 +216,14 @@ def main(argv: list[str] | None = None) -> int:
         add_baggage_to_attributes=False,
     )
     try:
-        _write_verdict_spans(plan)
-        if not args.verdicts_only:
-            _run_experiment(plan)
-    finally:
-        delivery = export.finish()
+        try:
+            _write_verdict_spans(plan)
+            if not args.verdicts_only:
+                _run_experiment(plan)
+        finally:
+            delivery = export.finish()
+    except Exception:  # noqa: BLE001 - the exit-code contract covers this, not a traceback
+        return _refuse("publisher_internal_error", plan)
     if not delivery.delivered:
         _emit("failed", "logfire_export_failed", plan, delivery.accepted)
         return EXIT_EXPORT_FAILED

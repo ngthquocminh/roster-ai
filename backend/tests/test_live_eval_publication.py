@@ -489,6 +489,7 @@ def test_verdicts_only_writes_the_verdict_spans_and_no_experiment(tmp_path) -> N
     assert {span.scope for span in run.spans()} == {"shiftmind.live_eval"}
     assert len(_verdicts(run)) == 5
     assert run.result["cases"] == 0
+    assert run.result["experiment"] is None  # no experiment was sent in this mode
 
 
 def test_a_failed_publication_touches_nothing_either(tmp_path) -> None:
@@ -598,10 +599,26 @@ REFUSALS = {
         lambda: _mutated(_set(("prefixes", 1, "turns", 0, "judgment", "relevance", "score"), 3)),
         "report_malformed",
     ),
+    "score not int": (
+        lambda: _mutated(_set(("prefixes", 1, "turns", 0, "judgment", "relevance", "score"), 2.0)),
+        "report_malformed",
+    ),
     "oversized text": (
         lambda: _mutated(_set(
             ("prefixes", 1, "turns", 0, "user"), "x" * (MAX_CASE_TEXT_BYTES + 1)
         )),
+        "report_malformed",
+    ),
+    "attempt not increasing": (
+        lambda: _mutated(_set(("prefixes", 1, "attempt"), 1)),  # same group as prefixes[0]
+        "report_malformed",
+    ),
+    "finished_unix out of range": (
+        lambda: _mutated(_set(("finished_unix",), 99_999_999_999_999_999)),
+        "report_malformed",
+    ),
+    "started_unix negative": (
+        lambda: _mutated(_set(("started_unix",), -1)),
         "report_malformed",
     ),
 }
@@ -613,6 +630,19 @@ def test_the_planner_refuses_with_a_closed_reason(case) -> None:
     with pytest.raises(PublicationRefused) as refused:
         plan_publication(build())
     assert refused.value.reason == reason
+
+
+def test_a_report_with_nothing_to_publish_refuses_cleanly() -> None:
+    # Every execution ended without ever creating a conversation (e.g. every
+    # attempt failed at the infrastructure level): nothing to export, not the
+    # same thing as a Logfire export failure.
+    report = copy.deepcopy(synthetic_report())
+    for prefix in report["prefixes"]:
+        prefix["conversation_id"] = None
+        prefix["turns"] = []
+    with pytest.raises(PublicationRefused) as refused:
+        plan_publication(_bytes(report))
+    assert refused.value.reason == "report_nothing_to_publish"
 
 
 def test_the_credential_check_matches_exact_values_of_eight_or_more_characters() -> None:
@@ -650,7 +680,7 @@ def _reason_literals(path: Path) -> set[str]:
     return {
         node.value for node in ast.walk(tree)
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
-        and node.value.startswith(("report_", "logfire_", "configuration_"))
+        and node.value.startswith(("report_", "logfire_", "configuration_", "publisher_"))
         and node.value.replace("_", "").isalpha() and node.value.islower()
     }
 
