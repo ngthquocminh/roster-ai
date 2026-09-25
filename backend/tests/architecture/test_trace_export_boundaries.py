@@ -46,9 +46,11 @@ LOGFIRE_BANNED_ROOTS = (
 )
 SDK_PREFIXES = ("opentelemetry.sdk", "opentelemetry.exporter", "opentelemetry.instrumentation")
 SDK_ALLOWED = frozenset({"adapters/telemetry/spans.py", "api/tracing.py"})
-#: Story 5.10: the publisher writes verdict spans through the API facade
-#: because only `Tracer.start_span` takes an explicit `start_time` (Logfire's
-#: `span()` does not). Its SDK imports stay forbidden: `SDK_ALLOWED` is unchanged.
+#: Story 5.10: the publisher writes verdict spans through the API facade so they
+#: carry their own instrumentation scope (`shiftmind.live_eval`), which the
+#: sanitizer categorizes; Logfire's `span()` would emit them under scope
+#: `logfire`, exported with no attributes. Its SDK imports stay forbidden:
+#: `SDK_ALLOWED` is unchanged.
 LOGFIRE_PUBLISHER = "evals/live_conversations/logfire_publish.py"
 FACADE_ALLOWED = SDK_ALLOWED | {"agent/runtime.py", LOGFIRE_PUBLISHER}
 #: Story 5.10 Decision 1: the Logfire SDK and pydantic-evals, in one file.

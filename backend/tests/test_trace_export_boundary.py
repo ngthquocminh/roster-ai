@@ -652,6 +652,7 @@ LIVE_EVAL_SAMPLE = {
     "shiftmind.live_eval.configuration_digest": "8c" * 32,
     "shiftmind.live_eval.report.sha256": "c2" * 32,
     "shiftmind.live_eval.report.run_id": "64ca2862-a81c-45f7-adcb-56586f62d57f",
+    "shiftmind.live_eval.occurred_at": "2026-09-19T06:32:09.631032Z",
     "shiftmind.conversation.id": "5bbccde3-a4f9-48cd-b61f-58a67aec1b20",
     "shiftmind.agent_run.id": "c7a1c1a0-8d1c-4c4d-b9fa-717550482462",
     "logfire.msg": "live_eval.verdict",
@@ -702,6 +703,8 @@ def test_a_canary_in_any_string_valued_live_eval_key_drops_it(key) -> None:
     ("shiftmind.live_eval.scenario", "A B"),
     ("shiftmind.live_eval.agent_model", "gpt-5"),
     ("shiftmind.live_eval.configuration_digest", "8C" * 32),
+    ("shiftmind.live_eval.occurred_at", "2026-09-19T06:32:09Z"),
+    ("shiftmind.live_eval.occurred_at", 1789799529),
 ])
 def test_live_eval_validators_reject_off_shape_values(key, value) -> None:
     assert key not in _live_eval({key: value})

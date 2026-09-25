@@ -4,7 +4,7 @@ baseline_commit: 3bf0fb1
 
 # Story 5.10: Publish Live-Evaluation Results to Logfire
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -641,8 +641,8 @@ Task 11's observation, which is not evidence.
   - [x] Demonstrated-red mutation table (*Dev Notes → Mutation table minimum*), recorded before
         review.
 
-- [ ] **Task 11 — One real publication, at the end, with Minh's go-ahead (AC1)**
-  - [ ] Ask Minh before publishing. Then, with the token in `backend/.env`, publish
+- [x] **Task 11 — One real publication, at the end, with Minh's go-ahead (AC1)**
+  - [x] Ask Minh before publishing. Then, with the token in `backend/.env`, publish
         `_bmad-output/test-artifacts/live-matrix-5-7-final3.json` once. Confirm in Logfire (MCP SQL
         on `records` is enough): 90 `live_eval.verdict` spans, each `trace_id` equal to its
         conversation UUID hex; the experiment `openrouter:openai/gpt-5.6-luna 64ca2862-…` under
@@ -834,7 +834,11 @@ Claude Opus 5.5 (`claude-opus-5-5`), Claude Code, 2026-09-25.
 
 ### Completion Notes List
 
-- Tasks 1–10 complete; **Task 11 (the one hosted-Logfire publication) waits for Minh's go-ahead**, per Decision 10.
+- All tasks complete. Task 11 ran with Minh's go-ahead (2026-09-25).
+- **Task 11 found a defect in Decision 5, fixed with Minh's approval (option A).** The first publication (exit 0, 541 spans accepted with HTTP 200) stored the experiment but **not one of the 90 verdict spans**: Logfire accepted, then silently dropped, spans backdated to the turns' time (2026-09-19, six days earlier). The project held no record dated before 2026-09-24. No OTLP response can reveal this, so the exit code could not catch it. Fix: verdict spans are now stamped at publication time, and the turn's time is carried as `shiftmind.live_eval.occurred_at` (a new `live_eval` key, validated as a microsecond UTC timestamp). Trace ID, synthesized parent and `shiftmind.agent_run.id` are unchanged, so "open a verdict's trace" still holds; the verdict sits at the end of the conversation's timeline instead of beside its turn. For this report, the conversation traces themselves were never exported (measured before 5.9), so backdating would have bought nothing. Added `--verdicts-only` so the verdict spans could be published without duplicating the experiment. The facade exemption's reason is restated: the verdict needs its own instrumentation scope, not a start time.
+- **Task 11 observations (not evidence), Logfire MCP SQL on `records`:**
+  - Experiment: 1 `evaluate {name}` span, 90 `case: {case_name}`, 90 `execute {task}`, 270 `evaluator:` spans. Case `A:1:rep1` shows the user message, reply `Hi Minh! How can I help with your schedule?`, verdict, and each judge score with its reason. No `verified` and no `actor_id` text. All 451 experiment spans tagged `deployment.environment=live-eval`, 0 with `host.name`, 0 with `code.filepath`.
+  - Verdict spans (second run, `--verdicts-only`, 90 exported): 90 stored, 9 traces = 9 conversations, `trace_id` equal to the conversation UUID hex for 90/90, 90 tagged `live-eval`, 0 `host.name`, `occurred_at` 06:32:09 to 07:01:20 on 2026-09-19, 87/90 `pass` (the same total as the 5.7 evidence).
 - AC1: verdict spans land in the conversation's trace with the synthesized parent and the turn's time. The experiment is named `{model} {run_id}` under `live-conversations`, with final attempts only, and replays the recording.
 - AC2: the publisher refuses with a closed vocabulary, exits 1 on an unavailable Logfire within the bound, and never touches the report, baseline or `evidence/**` (sha256 before/after). It sends only `POST /v1/traces`.
 - No evidence regenerated, no live run, zero frontend diff.
@@ -863,6 +867,8 @@ Claude Opus 5.5 (`claude-opus-5-5`), Claude Code, 2026-09-25.
 | 18 | `import logfire` in `evidence.py` | one-file guard | green | RED |
 | 19 | `logfire==5.1.0` added to runtime deps | dependency guard | green | RED |
 | 20 | env helper stops setting `LOGFIRE_TOKEN` | env-helper test | green | RED |
+| 21 | verdict span backdated to the turn's time again (post-Task 11) | AC1 verdict-span test | green | RED |
+| 22 | `--verdicts-only` ignored (experiment always run) | verdicts-only test | green | RED |
 
 ### File List
 
@@ -888,3 +894,4 @@ Claude Opus 5.5 (`claude-opus-5-5`), Claude Code, 2026-09-25.
 | 2026-09-24 | Story created at `3bf0fb1` (clean). Design measured, not written from docs: an overlay env with the exact pins drove the real Story 5.7 report through three export pipelines and three failure endpoints, all local. Ten facts shaped ten decisions. The main ones: the Logfire SDK exporter leaks host, OS, git HEAD and absolute paths and reads back from Logfire, so the publisher exports through 5.9's sanitizer instead; Logfire scrubbing corrupts closed-vocabulary codes; `force_flush()` reports success on a 401; and a test subprocess would load the real token. Ultimate context engine analysis completed - comprehensive developer guide created. |
 | 2026-09-25 | Minh approved publishing conversation text. Addendum §6 amended to name two synthetic-only content channels, the stack and this publisher (recorded as *Amendment 2026-09-25* in sprint-change-proposal-2026-09-24). Decisions 3, 4, 6, 7 and 9, the proof table, mutation table, Tasks 4/9/11 and trap 13 updated. Cases now carry the user message and obligation (`inputs`), the visible reply (`output.reply`, via `runner.visible_activity`) and the judge's reasons (per-score `EvaluationReason`, measured to export). Verdict spans stay text-free. New `live_eval_channel` resource tag. New refusals `report_contains_credential` (exact-value credential check) and a 16 KiB per-case text bound (measured maximum 3 KB). Scrubbing stays off. |
 | 2026-09-25 | Implemented Tasks 1–10 on `story/5-10-publish-live-evaluation-results-to-logfire`. Mutation table: 20/20 red. Full regression 2432 passed, 1 load-dependent 5.9 failure (Debug Log). Task 11 awaits Minh. |
+| 2026-09-25 | Task 11: first publication dropped the backdated verdict spans server-side (HTTP 200, nothing stored). With Minh's approval, verdict spans are stamped at publication with the turn time as `shiftmind.live_eval.occurred_at`; added `--verdicts-only`; republished the verdict spans only. 90/90 stored and verified. Status → review. |

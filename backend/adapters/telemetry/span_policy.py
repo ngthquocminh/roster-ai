@@ -118,6 +118,7 @@ FAILURE_CODE_PATTERN: Final = r"[a-z][a-z0-9_]{0,63}"
 SCENARIO_ID_PATTERN: Final = r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}"
 MODEL_ID_PATTERN: Final = r"[a-z0-9][a-z0-9_-]*:[A-Za-z0-9._/:-]{1,128}"
 SHA256_PATTERN: Final = r"[0-9a-f]{64}"
+UTC_TIMESTAMP_PATTERN: Final = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z"
 
 #: Shared with the publisher's planner so both validate with one copy.
 validate_failure_code = _matching(FAILURE_CODE_PATTERN)
@@ -421,6 +422,7 @@ POLICIES: Final[Mapping[str, CategoryPolicy]] = {
             "shiftmind.live_eval.agent_model": validate_model_id,
             "shiftmind.live_eval.configuration_digest": validate_sha256,
             "shiftmind.live_eval.report.sha256": validate_sha256,
+            "shiftmind.live_eval.occurred_at": _matching(UTC_TIMESTAMP_PATTERN),
             "shiftmind.live_eval.report.run_id": _uuid,
             "shiftmind.conversation.id": _uuid,
             "shiftmind.agent_run.id": _uuid,

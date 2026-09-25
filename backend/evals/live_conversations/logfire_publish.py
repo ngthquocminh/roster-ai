@@ -26,6 +26,7 @@ line on stdout says which.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
@@ -122,8 +123,10 @@ def _run_experiment(plan: PublicationPlan) -> None:
 
 
 def _write_verdict_spans(plan: PublicationPlan) -> None:
-    # After `logfire.configure`, the global provider is Logfire's. The
-    # OpenTelemetry API is used because only `start_span` takes a start time.
+    # After `logfire.configure`, the global provider is Logfire's. Stamped at
+    # publication, never backdated: Logfire answered 200 and then dropped
+    # spans dated six days back (Task 11). The turn's time rides
+    # `shiftmind.live_eval.occurred_at`.
     tracer = trace.get_tracer(span_policy.LIVE_EVAL_SCOPE)
     for verdict in plan.verdict_spans:
         carrier = {"traceparent": conversation_traceparent_header(verdict.conversation_id)}
@@ -132,8 +135,7 @@ def _write_verdict_spans(plan: PublicationPlan) -> None:
                 VERDICT_SPAN_NAME,
                 kind=trace.SpanKind.INTERNAL,
                 attributes=verdict.attributes,
-                start_time=verdict.time_unix_nano,
-            ).end(end_time=verdict.time_unix_nano)
+            ).end()
 
 
 # --- the command ------------------------------------------------------------
@@ -167,6 +169,11 @@ def _credential_values() -> frozenset[str]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="publish_live_eval", description=__doc__.split("\n")[0])
     parser.add_argument("report", type=Path, help="a finished raw live-suite run report")
+    parser.add_argument(
+        "--verdicts-only", action="store_true",
+        help="write the verdict spans only, not the experiment (a report whose "
+             "experiment is already published)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -184,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
     except PublicationRefused as refused:
         return _refuse(refused.reason)
 
+    if args.verdicts_only:
+        plan = dataclasses.replace(plan, cases=())  # nothing reports cases it did not write
     export = build_live_eval_publication_export(settings)
     assert export is not None  # the token was checked above
     logfire.configure(
@@ -203,7 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         _write_verdict_spans(plan)
-        _run_experiment(plan)
+        if not args.verdicts_only:
+            _run_experiment(plan)
     finally:
         delivery = export.finish()
     if not delivery.delivered:

@@ -63,7 +63,6 @@ class PublicationRefused(Exception):
 @dataclass(frozen=True)
 class VerdictSpan:
     conversation_id: UUID
-    time_unix_nano: int
     attributes: dict[str, Any]
 
 
@@ -126,6 +125,12 @@ def _unix_nano(value: Any) -> int:
     if moment.tzinfo is None:
         raise _malformed()
     return ((moment - _EPOCH) // timedelta(microseconds=1)) * 1000
+
+
+def _iso_utc(unix_nano: int) -> str:
+    """Microsecond ISO-8601 UTC, the `shiftmind.live_eval.occurred_at` shape."""
+    moment = _EPOCH + timedelta(microseconds=unix_nano // 1000)
+    return moment.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def _judge_scores(judgment: Any) -> dict[str, dict[str, Any]]:
@@ -314,6 +319,10 @@ def plan_publication(
                 "shiftmind.live_eval.repetition": repetition,
                 "shiftmind.live_eval.attempt": attempt,
                 "shiftmind.live_eval.final_attempt": final_attempt,
+                # When the turn ran. The span itself is stamped at publication:
+                # Logfire accepted, then silently dropped, spans backdated six
+                # days (Story 5.10 Task 11, 2026-09-25).
+                "shiftmind.live_eval.occurred_at": _iso_utc(time_unix_nano),
             }
             if agent_run_id is not None:
                 attributes["shiftmind.agent_run.id"] = agent_run_id
@@ -321,7 +330,7 @@ def plan_publication(
                 attributes["shiftmind.live_eval.agent_run_status"] = agent_run_status
             if failures:
                 attributes["shiftmind.live_eval.factual_failures"] = tuple(failures)
-            verdict_spans.append(VerdictSpan(conversation_id, time_unix_nano, attributes))
+            verdict_spans.append(VerdictSpan(conversation_id, attributes))
 
             if not final_attempt:
                 continue

@@ -25,6 +25,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -35,7 +36,6 @@ from adapters.telemetry import span_policy
 from adapters.telemetry.conversation_trace import conversation_traceparent_header
 from api.tracing import conversation_traceparent
 from evals.content_minimization_report import CREDENTIAL_ENV_VARS
-from evals.live_conversations import publication
 from evals.live_conversations.publication import (
     MAX_CASE_TEXT_BYTES,
     PublicationRefused,
@@ -255,10 +255,11 @@ class Run:
         )
 
 
-def _publish(report_path: Path, env: dict[str, str], seen: list[ServerRequest]) -> Run:
+def _publish(report_path: Path, env: dict[str, str], seen: list[ServerRequest],
+             args: tuple[str, ...] = ()) -> Run:
     started = time.monotonic()
     completed = subprocess.run(
-        [sys.executable, "-m", "evals.live_conversations.logfire_publish", str(report_path)],
+        [sys.executable, "-m", "evals.live_conversations.logfire_publish", str(report_path), *args],
         cwd=BACKEND_ROOT, env=env, capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT,
     )
     lines = completed.stdout.strip().splitlines()
@@ -270,7 +271,7 @@ def _publish(report_path: Path, env: dict[str, str], seen: list[ServerRequest]) 
 
 
 def publish(report_path: Path, behaviour: str = "ok", *, token: str = TOKEN_CANARY,
-            **extra_env: str) -> Run:
+            args: tuple[str, ...] = (), **extra_env: str) -> Run:
     seen: list[ServerRequest] = []
     if behaviour == "unreachable":
         return _publish(
@@ -279,7 +280,7 @@ def publish(report_path: Path, behaviour: str = "ok", *, token: str = TOKEN_CANA
             seen,
         )
     with fixture_server(behaviour, seen) as url:
-        return _publish(report_path, publisher_env(token, url, **extra_env), seen)
+        return _publish(report_path, publisher_env(token, url, **extra_env), seen, args)
 
 
 def _digests() -> dict[str, str]:
@@ -344,11 +345,16 @@ def test_one_verdict_span_per_turn_of_every_attempt_in_its_conversation_trace(pu
         low = (conversation.int & ((1 << 64) - 1)) or 1
         assert span.trace_id == conversation.hex
         assert span.parent_span_id == f"{low:016x}"
+        # Stamped at publication, never backdated (Task 11: Logfire dropped
+        # spans dated six days back); the turn's time is an attribute.
+        assert abs(span.start_time_unix_nano - time.time_ns()) < 3600 * 10**9
+        assert span.end_time_unix_nano >= span.start_time_unix_nano
         occurred = (row.get("activity") or {}).get("occurred_at")
-        expected_ns = (
-            publication._unix_nano(occurred) if occurred else FINISHED * 10**9
+        moment = (
+            datetime.fromisoformat(occurred.replace("Z", "+00:00"))
+            if occurred else datetime.fromtimestamp(FINISHED, timezone.utc)
         )
-        assert span.start_time_unix_nano == span.end_time_unix_nano == expected_ns
+        expected_occurred = moment.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         attributes = {
             "shiftmind.live_eval.turn_index": index,
             "shiftmind.live_eval.verdict": row["verdict"],
@@ -361,6 +367,7 @@ def test_one_verdict_span_per_turn_of_every_attempt_in_its_conversation_trace(pu
             "shiftmind.live_eval.repetition": 1,
             "shiftmind.live_eval.attempt": execution["attempt"],
             "shiftmind.live_eval.final_attempt": conversation != RETRIED,
+            "shiftmind.live_eval.occurred_at": expected_occurred,
             "logfire.msg": "live_eval.verdict",
             "logfire.span_type": "span",
         }
@@ -472,6 +479,16 @@ def test_only_otlp_posts_are_sent_and_report_baseline_evidence_are_untouched(pub
     run, _path, before, after = published
     assert run.requests and {(r.method, r.path) for r in run.requests} == {("POST", "/v1/traces")}
     assert before == after
+
+
+def test_verdicts_only_writes_the_verdict_spans_and_no_experiment(tmp_path) -> None:
+    report_path = tmp_path / "report.json"
+    report_path.write_bytes(_bytes(synthetic_report()))
+    run = publish(report_path, args=("--verdicts-only",))
+    assert run.returncode == 0, (run.stdout, run.stderr)
+    assert {span.scope for span in run.spans()} == {"shiftmind.live_eval"}
+    assert len(_verdicts(run)) == 5
+    assert run.result["cases"] == 0
 
 
 def test_a_failed_publication_touches_nothing_either(tmp_path) -> None:
