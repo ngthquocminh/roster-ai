@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-24
+last_updated: 2026-09-25
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2697,7 +2697,24 @@ development_status:
   # baggage carrying the conversation UUID. Adding the content-mode key to compose.override.yml
   # reddens two 5.8 tests -- Decision 13 of the story keeps the committed baseline comparable.
   5-9-trace-the-full-request-path-to-logfire-behind-one-export-boundary: done
-  5-10-publish-live-evaluation-results-to-logfire: backlog
+  # 5.10 CREATED 2026-09-24 at 3bf0fb1 (clean): backend default 2367 passed, 1 skipped, 10 deselected.
+  # Measured with logfire==5.1.0 + pydantic-evals==2.27.0 in an overlay env over the real 5.7 report,
+  # local capture servers only (nothing reached hosted Logfire). Dev group only: 6 packages added,
+  # 0 changed; pydantic-evals must equal pydantic-ai-slim. The Logfire SDK exporter leaks host/OS/
+  # git HEAD/absolute paths and GETs /v1/info, so the publisher uses Logfire as the in-process
+  # provider only (send_to_logfire=False) and exports through 5.9's SanitizingSpanExporter (AD-12:
+  # every exported span passes the sanitizer). logfire.force_flush() returns True on a 401, so
+  # delivery is judged from recorded export results. Subprocess tests must set LOGFIRE_TOKEN
+  # explicitly or settings' load_dotenv(override=False) loads the real token. No evidence, no paid
+  # run, no Gate A regeneration; the one hosted publish (Task 11) waits for Minh's go-ahead.
+  # 2026-09-25: Minh approved publishing conversation text. Addendum §6 now names two synthetic-only
+  # content channels (the live-eval stack + this publisher), recorded as Amendment 2026-09-25 in
+  # sprint-change-proposal-2026-09-24. Cases carry user message, obligation, visible reply and judge
+  # reasons; verdict spans stay text-free; exact-value credential refusal; live-eval resource tag.
+  # 2026-09-25 code review: 9 patch findings applied (empty-report refusal, attempt-order and
+  # timestamp-bounds validation, top-level exception guard, float-score rejection, verdicts-only's
+  # null experiment field, Decision 1/4/5 doc drift fixed). Full regression green.
+  5-10-publish-live-evaluation-results-to-logfire: done
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog

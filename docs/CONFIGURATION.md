@@ -50,13 +50,17 @@ local backend.
 | `CORS_ORIGINS` | Optional | `http://localhost:5173,http://localhost:4173` | Comma-separated list of browser origins allowed to call the API. |
 | `APPROVAL_EXPIRY_SECONDS` | Optional | `3600` | Positive lifetime, in seconds, snapshotted into a newly requested approval. |
 | `SCHEDULING_BASELINE_ENABLED` | Optional | `true` | Enables the consequential baseline-approval capability. |
-| `LOGFIRE_TOKEN` | Optional | *(none)* | Logfire write token. Unset or empty: no exporter is constructed and nothing leaves the process. Set: API (`shiftmind-api`) and worker (`shiftmind-worker`) export traces over OTLP/HTTP, every span through the export-boundary sanitizer (`backend/adapters/telemetry/span_policy.py`). A credential: keep it in `backend/.env` or deployment secret storage, never in source control or CI. |
+| `LOGFIRE_TOKEN` | Optional | *(none)* | Logfire write token. Unset or empty: no exporter is constructed and nothing leaves the process. Set: API (`shiftmind-api`) and worker (`shiftmind-worker`) export traces over OTLP/HTTP, every span through the export-boundary sanitizer (`backend/adapters/telemetry/span_policy.py`). Also read by the live-evaluation publisher (`python -m evals.live_conversations.logfire_publish`, Story 5.10), which exports through the same sanitizer and refuses to run without it. A credential: keep it in `backend/.env` or deployment secret storage, never in source control or CI. |
 | `LOGFIRE_BASE_URL` | Optional | `https://logfire-us.pydantic.dev` | Logfire region origin (`http(s)://host[:port]`, no path). EU projects use `https://logfire-eu.pydantic.dev`. Anything else fails at startup. |
 | `AGENT_TRACE_CONTENT_MODE` | Never set by hand | `off` | `off` exports no prompt, completion or tool content. The only other value is the live-evaluation diagnostic mode, set **only** by `backend/evals/live_conversations/compose.override.yml`; it exports prompts, completions and tool arguments/results tagged `deployment.environment=live-eval`, and still withholds credentials and exception text. Any other value fails at startup. |
 
 ### Trace content mode — what the guard does not cover
 
 An architecture test (`backend/tests/architecture/test_trace_export_boundaries.py`) proves that the only tracked file setting a non-`off` content mode is the live-evaluation override. It is a configuration guard, not a runtime lock: a person who sets `AGENT_TRACE_CONTENT_MODE` by hand on a real deployment (a shell export, `docker run -e`, an untracked `backend/.env`, a console-edited task definition) gets content export. That is acceptable only because every ShiftMind environment runs seeded synthetic fixtures; the hosted runtime is content-free by Story 6.3.
+
+### The Logfire SDK in local dev processes (Story 5.10)
+
+`logfire` and `pydantic-evals` are dev-group dependencies (never in the `--no-dev` image). Installed, they turn `logfire_api` into the real Logfire SDK in every local process that imports pydantic-ai (`uv run uvicorn …`, `uv run pytest`). It is inert unless something configures it: pydantic-ai passes `auto_instrument=False`, and only the publisher calls `logfire.configure`. One path is not guarded: Logfire's own pydantic plugin records when `LOGFIRE_PYDANTIC_PLUGIN_RECORD` is set by hand, and an unconfigured Logfire would then configure itself from `LOGFIRE_TOKEN` and export through the Logfire SDK, **bypassing the export-boundary sanitizer**. Never set a `LOGFIRE_*` variable other than `LOGFIRE_TOKEN`/`LOGFIRE_BASE_URL` on a local dev process.
 
 ### Required vs optional settings
 

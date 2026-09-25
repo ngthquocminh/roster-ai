@@ -25,12 +25,12 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from adapters.telemetry.conversation_trace import conversation_traceparent_header
 from adapters.telemetry.spans import ProcessTracing
 
 #: Client trace context is never trusted, on any route (AD-12).
 _DISCARDED_HEADERS = frozenset({b"traceparent", b"tracestate", b"baggage"})
 _CONVERSATION_PATH = re.compile(r"^/api/v1/conversations/([^/]{36})(?:/|$)")
-_LOW_64_BITS = (1 << 64) - 1
 
 
 def conversation_traceparent(path: str) -> bytes | None:
@@ -47,8 +47,7 @@ def conversation_traceparent(path: str) -> bytes | None:
         conversation_id = UUID(match.group(1))
     except ValueError:
         return None
-    parent = (conversation_id.int & _LOW_64_BITS) or 1
-    return f"00-{conversation_id.hex}-{parent:016x}-01".encode("ascii")
+    return conversation_traceparent_header(conversation_id).encode("ascii")
 
 
 class TraceContextBoundary:

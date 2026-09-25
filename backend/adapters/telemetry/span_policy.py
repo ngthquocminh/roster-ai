@@ -35,7 +35,11 @@ DATABASE: Final = "database"
 AGENT: Final = "agent"
 WORKER: Final = "worker"
 OTHER: Final = "other"
-CATEGORIES: Final = (HTTP_SERVER, HTTP_CLIENT, DATABASE, AGENT, WORKER, OTHER)
+#: Story 5.10: the live-evaluation publisher's verdict spans and its
+#: pydantic-evals experiment spans. No API or worker code emits these scopes.
+LIVE_EVAL: Final = "live_eval"
+EVALS: Final = "evals"
+CATEGORIES: Final = (HTTP_SERVER, HTTP_CLIENT, DATABASE, AGENT, WORKER, LIVE_EVAL, EVALS, OTHER)
 
 #: Duplicated from `settings.TRACE_CONTENT_SYNTHETIC_EVAL` would break the F1
 #: guard's "one literal" rule, so the boundary receives the mode as a value and
@@ -51,10 +55,14 @@ SCOPE_CATEGORIES: Final[Mapping[str, str]] = {
     "opentelemetry.instrumentation.sqlalchemy": DATABASE,
     "pydantic-ai": AGENT,
     "shiftmind.worker": WORKER,
+    "shiftmind.live_eval": LIVE_EVAL,
+    "pydantic-evals": EVALS,
 }
 
 #: Worker span scope name, shared with `spans.py`.
 WORKER_SCOPE: Final = "shiftmind.worker"
+#: The publisher's verdict-span scope (Story 5.10 Decision 4).
+LIVE_EVAL_SCOPE: Final = "shiftmind.live_eval"
 
 
 def categorize(scope_name: str | None) -> str:
@@ -85,6 +93,48 @@ def _closed(vocabulary: frozenset[str]) -> Callable[[object], object | None]:
         return value if isinstance(value, str) and value in vocabulary else None
 
     return validate
+
+
+def _positive_int(value: object) -> object | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return None
+    return value
+
+
+def _flag(value: object) -> object | None:
+    return value if isinstance(value, bool) else None
+
+
+def _matching(pattern: str) -> Callable[[object], object | None]:
+    compiled = re.compile(pattern)
+
+    def validate(value: object) -> object | None:
+        return value if isinstance(value, str) and compiled.fullmatch(value) else None
+
+    return validate
+
+
+FAILURE_CODE_PATTERN: Final = r"[a-z][a-z0-9_]{0,63}"
+SCENARIO_ID_PATTERN: Final = r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}"
+MODEL_ID_PATTERN: Final = r"[a-z0-9][a-z0-9_-]*:[A-Za-z0-9._/:-]{1,128}"
+SHA256_PATTERN: Final = r"[0-9a-f]{64}"
+UTC_TIMESTAMP_PATTERN: Final = r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z"
+
+#: Shared with the publisher's planner so both validate with one copy.
+validate_failure_code = _matching(FAILURE_CODE_PATTERN)
+validate_scenario_id = _matching(SCENARIO_ID_PATTERN)
+validate_model_id = _matching(MODEL_ID_PATTERN)
+validate_sha256 = _matching(SHA256_PATTERN)
+validate_uuid = _uuid
+
+
+def _failure_codes(value: object) -> object | None:
+    """A non-empty sequence of codes; one bad element drops the whole key."""
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)) or not value:
+        return None
+    if any(validate_failure_code(code) is None for code in value):
+        return None
+    return tuple(value)
 
 
 # --- transforms (value, all raw attributes) -> value | None ----------------
@@ -262,6 +312,13 @@ SCHEDULE_RUN_STATUSES: Final = frozenset({
 })
 SOLVER_STATUSES: Final = frozenset({"OPTIMAL", "FEASIBLE", "INFEASIBLE", "MODEL_INVALID", "UNKNOWN"})
 JOB_TYPES: Final = frozenset({"schedule_run_execute"})
+#: `protocol.turn_verdict`'s outcomes plus `runner.py`'s `incomplete`; and
+#: `ck_agent_run_status`. A test pins both to their sources.
+TURN_VERDICTS: Final = frozenset({"pass", "fail", "incomplete", "needs_review"})
+AGENT_RUN_STATUSES: Final = frozenset({
+    "agent_queued", "agent_running", "approval_required", "agent_completed",
+    "agent_timed_out", "agent_cancelled", "agent_failed",
+})
 
 POLICIES: Final[Mapping[str, CategoryPolicy]] = {
     HTTP_SERVER: CategoryPolicy(
@@ -350,6 +407,42 @@ POLICIES: Final[Mapping[str, CategoryPolicy]] = {
             "shiftmind.solver.wall_time_s": _number,
         },
     ),
+    LIVE_EVAL: CategoryPolicy(
+        # Text-free by construction: no key here carries free text.
+        allow=frozenset({"logfire.msg", "logfire.span_type"}),
+        validated={
+            "shiftmind.live_eval.turn_index": _positive_int,
+            "shiftmind.live_eval.repetition": _positive_int,
+            "shiftmind.live_eval.attempt": _positive_int,
+            "shiftmind.live_eval.final_attempt": _flag,
+            "shiftmind.live_eval.verdict": _closed(TURN_VERDICTS),
+            "shiftmind.live_eval.agent_run_status": _closed(AGENT_RUN_STATUSES),
+            "shiftmind.live_eval.factual_failures": _failure_codes,
+            "shiftmind.live_eval.scenario": validate_scenario_id,
+            "shiftmind.live_eval.agent_model": validate_model_id,
+            "shiftmind.live_eval.configuration_digest": validate_sha256,
+            "shiftmind.live_eval.report.sha256": validate_sha256,
+            "shiftmind.live_eval.occurred_at": _matching(UTC_TIMESTAMP_PATTERN),
+            "shiftmind.live_eval.report.run_id": _uuid,
+            "shiftmind.conversation.id": _uuid,
+            "shiftmind.agent_run.id": _uuid,
+        },
+    ),
+    EVALS: CategoryPolicy(
+        # Measured pydantic-evals 2.27.0 keys. Values of the free-form keys are
+        # bounded by the publisher's planner, not here (Decision 3's residual).
+        allow=frozenset({
+            "name", "task_name", "dataset_name", "n_cases", "gen_ai.operation.name",
+            "metadata", "assertion_pass_rate", "logfire.experiment.metadata",
+            "case_name", "inputs", "expected_output", "output", "task_duration",
+            "metrics", "attributes", "assertions", "scores", "labels",
+            "evaluator_name", "task",
+            "logfire.msg", "logfire.msg_template", "logfire.json_schema", "logfire.span_type",
+        }),
+        # The publisher's absolute source path, line and function (the username
+        # included). `code.function` was observed by the 5.10 drift check.
+        known_dropped=frozenset({"code.filepath", "code.lineno", "code.function"}),
+    ),
     OTHER: CategoryPolicy(),
 }
 
@@ -431,10 +524,21 @@ LIVE_EVAL_ENVIRONMENT: Final = "live-eval"
 
 
 def sanitize_resource(
-    attributes: Mapping[str, object], *, content_mode: str, content_mode_on: str
+    attributes: Mapping[str, object],
+    *,
+    content_mode: str,
+    content_mode_on: str,
+    live_eval_channel: bool = False,
 ) -> dict[str, object]:
+    """The resource rebuilt from its allow-list.
+
+    `live_eval_channel` (Story 5.10) is addendum section 6's channel 2, the
+    live-evaluation publisher: its traces carry synthetic conversation text,
+    so the tag is set whatever the raw resource says. Otherwise the tag
+    survives only in content mode and only if the raw resource carries it.
+    """
     kept = {key: value for key, value in attributes.items() if key in RESOURCE_ALLOW}
-    if (
+    if live_eval_channel or (
         content_mode == content_mode_on
         and attributes.get(DEPLOYMENT_ENVIRONMENT_KEY) == LIVE_EVAL_ENVIRONMENT
     ):
@@ -455,8 +559,11 @@ __all__ = [
     "CATEGORIES",
     "CONTENT_MODE_OFF",
     "DATABASE",
+    "EVALS",
     "HTTP_CLIENT",
     "HTTP_SERVER",
+    "LIVE_EVAL",
+    "LIVE_EVAL_SCOPE",
     "OTHER",
     "POLICIES",
     "RESOURCE_ALLOW",

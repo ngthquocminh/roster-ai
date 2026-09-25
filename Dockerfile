@@ -5,11 +5,11 @@ COPY --from=uv /uv /uvx /bin/
 WORKDIR /app
 COPY backend/pyproject.toml backend/uv.lock backend/
 # `--frozen` is what AC2 requires: install exactly what uv.lock pins, never
-# re-resolve. `--no-dev` is what backend/pyproject.toml requires: its dev group
-# carries `opentelemetry-sdk`, annotated "Deliberately in the dev group, never
-# [project].dependencies: it is not shipped at runtime", plus pytest and httpx.
-# Nothing runs tests inside a container — the compose proof drives from the
-# host — so the dev group has no runtime consumer here.
+# re-resolve. `--no-dev` keeps backend/pyproject.toml's dev group out of the
+# image: pytest, pyyaml, and the Logfire SDK and pydantic-evals (Story 5.10).
+# Installed, the Logfire SDK would turn `logfire_api` into the real SDK inside
+# the runtime. Nothing runs tests inside a container — the compose proof drives
+# from the host — so the dev group has no runtime consumer here.
 RUN uv sync --project backend --frozen --no-dev --no-install-project
 COPY alembic.ini ./
 COPY data/ data/

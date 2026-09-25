@@ -180,9 +180,12 @@ class SanitizingSpanExporter(SpanExporter):
     whole batch -- it never raises and never exports an unsanitized span.
     """
 
-    def __init__(self, inner: SpanExporter, *, content_mode: str) -> None:
+    def __init__(
+        self, inner: SpanExporter, *, content_mode: str, live_eval_channel: bool = False
+    ) -> None:
         self._inner = inner
         self._content_mode = content_mode
+        self._live_eval_channel = live_eval_channel
 
     def sanitize(self, span: ReadableSpan) -> ReadableSpan:
         scope = span.instrumentation_scope
@@ -203,6 +206,7 @@ class SanitizingSpanExporter(SpanExporter):
                 dict(span.resource.attributes) if span.resource else {},
                 content_mode=self._content_mode,
                 content_mode_on=TRACE_CONTENT_SYNTHETIC_EVAL,
+                live_eval_channel=self._live_eval_channel,
             )
         )
         return ReadableSpan(
@@ -302,6 +306,23 @@ def _resource(service_name: str, content_mode: str) -> Resource:
     return Resource(attributes)
 
 
+def _otlp_exporter(settings: Settings, token: str, session: Any) -> OTLPSpanExporter:
+    """The one OTLP exporter construction, shared so its callers cannot diverge."""
+    return OTLPSpanExporter(
+        endpoint=f"{settings.logfire_base_url}/v1/traces",
+        headers={"Authorization": token},
+        timeout=EXPORT_TIMEOUT_SECONDS,
+        compression=Compression.Gzip,
+        # Both explicit so the environment cannot choose them: an
+        # `OTEL_EXPORTER_OTLP_CERTIFICATE` CA would decide whom the token is
+        # sent to, and with `session=None` the exporter loads a session from
+        # the OTLP credential-provider variable -- which sees every payload
+        # and the token (code review 2026-09-24).
+        certificate_file=True,  # type: ignore[arg-type]  # requests' default trust
+        session=session if session is not None else requests.Session(),
+    )
+
+
 def build_process_tracing(
     settings: Settings,
     *,
@@ -319,19 +340,7 @@ def build_process_tracing(
     if not token:
         return None
     content_mode = settings.agent_trace_content_mode
-    exporter = OTLPSpanExporter(
-        endpoint=f"{settings.logfire_base_url}/v1/traces",
-        headers={"Authorization": token},
-        timeout=EXPORT_TIMEOUT_SECONDS,
-        compression=Compression.Gzip,
-        # Both explicit so the environment cannot choose them: an
-        # `OTEL_EXPORTER_OTLP_CERTIFICATE` CA would decide whom the token is
-        # sent to, and with `session=None` the exporter loads a session from
-        # the OTLP credential-provider variable -- which sees every payload
-        # and the token (code review 2026-09-24).
-        certificate_file=True,  # type: ignore[arg-type]  # requests' default trust
-        session=session if session is not None else requests.Session(),
-    )
+    exporter = _otlp_exporter(settings, token, session)
     provider = TracerProvider(
         resource=_resource(service_name, content_mode),
         sampler=ShiftMindSampler(quiet_parent_span_names),
@@ -356,6 +365,134 @@ def build_process_tracing(
         service_name=service_name,
         _previous_textmap=previous,
     )
+
+
+# --- live-evaluation publication (Story 5.10, Decision 8) -------------------
+
+#: A full report is ~400 spans; the queue must never drop one silently.
+PUBLICATION_MAX_QUEUE_SIZE = 16384
+
+
+class _RecordingExporter(SpanExporter):
+    """Counts what the sanitizing exporter really delivered.
+
+    `force_flush()` returns `True` after a 401 dropped everything (Story 5.10
+    fact 8), so delivery is proven by these counts and nothing else.
+    """
+
+    def __init__(self, inner: SpanExporter) -> None:
+        self._inner = inner
+        self._lock = threading.Lock()
+        self.accepted = 0
+        self.failed_batches = 0
+
+    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
+        try:
+            result = self._inner.export(spans)
+        except Exception:  # noqa: BLE001 - a raising exporter is a failed batch
+            result = SpanExportResult.FAILURE
+        with self._lock:
+            if result == SpanExportResult.SUCCESS:
+                self.accepted += len(spans)
+            else:
+                self.failed_batches += 1
+        return result
+
+    def shutdown(self) -> None:
+        self._inner.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return self._inner.force_flush(timeout_millis)
+
+
+class _CountingBatchProcessor(BatchSpanProcessor):
+    def __init__(self, exporter: SpanExporter) -> None:
+        super().__init__(
+            exporter,
+            max_queue_size=PUBLICATION_MAX_QUEUE_SIZE,
+            schedule_delay_millis=SCHEDULE_DELAY_MILLIS,
+            max_export_batch_size=MAX_EXPORT_BATCH_SIZE,
+            export_timeout_millis=EXPORT_TIMEOUT_MILLIS,
+        )
+        self._ended_lock = threading.Lock()
+        self.ended = 0
+
+    def on_end(self, span: ReadableSpan) -> None:
+        with self._ended_lock:
+            self.ended += 1
+        super().on_end(span)
+
+
+@dataclass(frozen=True)
+class PublicationDelivery:
+    ended: int
+    accepted: int
+    failed_batches: int
+    within_deadline: bool
+
+    @property
+    def delivered(self) -> bool:
+        return (
+            self.within_deadline
+            and self.failed_batches == 0
+            and self.accepted == self.ended
+            and self.ended > 0
+        )
+
+
+@dataclass
+class LiveEvalPublicationExport:
+    """The publisher's export: 5.9's sanitizer -> OTLP, with delivery counts."""
+
+    processor: _CountingBatchProcessor
+    _recorder: _RecordingExporter
+
+    def finish(self) -> PublicationDelivery:
+        """Flush and shut down within `SHUTDOWN_DEADLINE_SECONDS` + the exporter's
+        own deadline, never raising; the counts, never the flush result, decide."""
+
+        def flush_then_shut_down() -> None:
+            try:
+                self.processor.force_flush(FORCE_FLUSH_TIMEOUT_MILLIS)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                self.processor.shutdown()
+            except Exception:  # noqa: BLE001
+                pass
+
+        worker = threading.Thread(
+            target=flush_then_shut_down, name="shiftmind-live-eval-publish", daemon=True
+        )
+        worker.start()
+        worker.join(SHUTDOWN_DEADLINE_SECONDS + EXPORT_TIMEOUT_SECONDS)
+        return PublicationDelivery(
+            ended=self.processor.ended,
+            accepted=self._recorder.accepted,
+            failed_batches=self._recorder.failed_batches,
+            within_deadline=not worker.is_alive(),
+        )
+
+
+def build_live_eval_publication_export(
+    settings: Settings, *, session: Any = None
+) -> LiveEvalPublicationExport | None:
+    """`None` -- constructing nothing -- without a token.
+
+    The agent content mode is hard-coded `off`: the publisher emits no agent
+    spans, and its channel-2 tag comes from `live_eval_channel`, not the mode.
+    """
+    token = getattr(settings, "logfire_token", None)
+    if not token:
+        return None
+    recorder = _RecordingExporter(
+        SanitizingSpanExporter(
+            _otlp_exporter(settings, token, session),
+            content_mode=span_policy.CONTENT_MODE_OFF,
+            live_eval_channel=True,
+        )
+    )
+    return LiveEvalPublicationExport(processor=_CountingBatchProcessor(recorder), _recorder=recorder)
 
 
 _TRACED_ENGINES: "weakref.WeakSet[Any]" = weakref.WeakSet()
@@ -563,10 +700,13 @@ def traced_scheduler(scheduler: Any, tracing: ProcessTracing | None) -> Any:
 
 __all__ = [
     "ExtractOnlyTraceContext",
+    "LiveEvalPublicationExport",
     "ProcessTracing",
+    "PublicationDelivery",
     "SanitizingSpanExporter",
     "ShiftMindSampler",
     "annotate_enqueued_schedule_run",
+    "build_live_eval_publication_export",
     "build_process_tracing",
     "trace_engine",
     "traced_scheduler",

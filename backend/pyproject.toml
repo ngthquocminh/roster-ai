@@ -65,6 +65,17 @@ dev = [
     # transitive pull-in from `api`/`worker` code would be fragile if that
     # extra ever changed.
     "pyyaml",
+    # EVAL TOOLING ONLY (Story 5.10, AR27: locked at this implementation gate).
+    # Dev group, never runtime: the image is built `--no-dev` (spine Stack row:
+    # "never imported by api, worker, agent, application or domain"). Once
+    # installed, `logfire_api` delegates to the real SDK in every process that
+    # imports pydantic-ai; it stays inert unless configured (Story 5.10 fact 3).
+    # `logfire 5.x` caps `opentelemetry-sdk<1.45`, so the next OTel bump moves
+    # this pin too. Only `evals/live_conversations/logfire_publish.py` imports it.
+    "logfire==5.1.0",
+    # Must equal `pydantic-ai-slim` exactly: pydantic-evals pins it, so bumping
+    # this alone fails `uv lock` and bumping both moves the agent runtime.
+    "pydantic-evals==2.27.0",
 ]
 
 [tool.pytest.ini_options]
@@ -74,4 +85,4 @@ markers = [
     "postgres: exercises the local PostgreSQL integration service",
     "compose: exercises the built local stack; invoked through its explicitly named proof file",
 ]
-addopts = "-m \"not live\""
+addopts = "-m \"not live\" -p no:logfire -p no:pytest_logfire"
