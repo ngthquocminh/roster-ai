@@ -11,7 +11,12 @@ from __future__ import annotations
 
 import gzip
 import json
+import socket
+import threading
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import requests
@@ -52,13 +57,7 @@ class CapturingSession(requests.Session):
         return response
 
     def requests(self) -> list[ExportTraceServiceRequest]:
-        decoded = []
-        for body in self.bodies:
-            raw = gzip.decompress(body) if body[:2] == b"\x1f\x8b" else body
-            message = ExportTraceServiceRequest()
-            message.ParseFromString(raw)
-            decoded.append(message)
-        return decoded
+        return decode_bodies(self.bodies)
 
     def raw_bytes(self) -> bytes:
         return b"".join(
@@ -99,11 +98,17 @@ class ExportedSpan:
     resource: dict[str, Any]
     links: int = 0
     scope_attributes: dict[str, Any] = field(default_factory=dict)
+    start_time_unix_nano: int = 0
+    end_time_unix_nano: int = 0
 
 
 def exported_spans(session: CapturingSession) -> list[ExportedSpan]:
+    return spans_from_requests(session.requests())
+
+
+def spans_from_requests(requests_: list[ExportTraceServiceRequest]) -> list[ExportedSpan]:
     spans: list[ExportedSpan] = []
-    for request in session.requests():
+    for request in requests_:
         for resource_spans in request.resource_spans:
             resource = _attributes(resource_spans.resource.attributes)
             for scope_spans in resource_spans.scope_spans:
@@ -122,6 +127,8 @@ def exported_spans(session: CapturingSession) -> list[ExportedSpan]:
                         resource=resource,
                         links=len(span.links),
                         scope_attributes=_attributes(scope_spans.scope.attributes),
+                        start_time_unix_nano=span.start_time_unix_nano,
+                        end_time_unix_nano=span.end_time_unix_nano,
                     ))
     return spans
 
@@ -189,3 +196,75 @@ def assert_raw_keys_classified(session: CapturingSession, category: str) -> None
 
 def flush(tracing: ProcessTracing) -> None:
     assert tracing.provider.force_flush(10_000)
+
+
+# --- local Logfire stand-ins (moved from Story 5.9's failure suite) ---------
+
+SLOW_SECONDS = 30
+
+
+def closed_port() -> int:
+    """A port that was bound and closed: connecting to it is refused."""
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+@dataclass
+class ServerRequest:
+    method: str
+    path: str
+    body: bytes
+
+
+@contextmanager
+def fixture_server(behaviour: str, seen: list[ServerRequest] | None = None):
+    """A local HTTP server: `slow` holds each POST, `rejected` answers 401,
+    anything else 200. Every request (any method) is appended to `seen`."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def _record(self, method: str) -> bytes:
+            body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            if seen is not None:
+                seen.append(ServerRequest(method, self.path, body))
+            return body
+
+        def do_POST(self) -> None:  # noqa: N802
+            self._record("POST")
+            if behaviour == "slow":
+                time.sleep(SLOW_SECONDS)
+            try:
+                self.send_response(401 if behaviour == "rejected" else 200)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+            except OSError:
+                pass
+
+        def do_GET(self) -> None:  # noqa: N802
+            self._record("GET")
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *_args) -> None:
+            return None
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def decode_bodies(bodies: list[bytes]) -> list[ExportTraceServiceRequest]:
+    decoded = []
+    for body in bodies:
+        raw = gzip.decompress(body) if body[:2] == b"\x1f\x8b" else body
+        message = ExportTraceServiceRequest()
+        message.ParseFromString(raw)
+        decoded.append(message)
+    return decoded

@@ -14,13 +14,11 @@ cannot pass because nothing was ever exported.
 from __future__ import annotations
 
 import json
-import socket
 import threading
 import time
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -44,10 +42,13 @@ from tests.test_content_minimization import (
     PINNED_INJECTION_CASES,
     _sanitized_stream,
 )
-from tests.trace_capture import TOKEN_CANARY, exported_spans, flush
-
-SLOW_SECONDS = 30
-
+from tests.trace_capture import (
+    TOKEN_CANARY,
+    exported_spans,
+    flush,
+)
+from tests.trace_capture import closed_port as _closed_port
+from tests.trace_capture import fixture_server as _server
 
 class CountingSession(requests.Session):
     """Forwards to the real network; counts every export attempt."""
@@ -59,40 +60,6 @@ class CountingSession(requests.Session):
     def post(self, *args, **kwargs):  # type: ignore[override]
         self.posts += 1
         return super().post(*args, **kwargs)
-
-
-def _closed_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return probe.getsockname()[1]
-
-
-@contextmanager
-def _server(behaviour: str):
-    class Handler(BaseHTTPRequestHandler):
-        def do_POST(self) -> None:  # noqa: N802
-            self.rfile.read(int(self.headers.get("Content-Length") or 0))
-            if behaviour == "slow":
-                time.sleep(SLOW_SECONDS)
-            try:
-                self.send_response(401 if behaviour == "rejected" else 200)
-                self.send_header("Content-Length", "0")
-                self.end_headers()
-            except OSError:
-                pass
-
-        def log_message(self, *_args) -> None:
-            return None
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    server.daemon_threads = True
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_address[1]}"
-    finally:
-        server.shutdown()
-        server.server_close()
 
 
 @contextmanager

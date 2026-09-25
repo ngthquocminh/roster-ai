@@ -95,6 +95,26 @@ the default run and require a real API key.
 
 With `LOGFIRE_TOKEN` (and `LOGFIRE_BASE_URL` for an EU project) in `backend/.env`, `suite.py` passes both into the disposable stack and its API and worker export traces to Logfire. The stack's override sets the one diagnostic content mode, so those traces carry prompts, completions and tool arguments/results, tagged `deployment.environment=live-eval`; credentials and exception text are still withheld. The token never enters a run report or `measured_configuration`, and the content-mode key is excluded from `behavioral_digest`, so the drop check still compares with the committed baseline.
 
+### Publish a finished live run to Logfire (Story 5.10)
+
+```bash
+cd backend
+uv run python -m evals.live_conversations.logfire_publish ../_bmad-output/test-artifacts/<run>.json
+```
+
+The input is the **raw run report** `suite.py --output` wrote, never the `evidence/story-5.7/…` document (it has no conversation IDs). It needs `LOGFIRE_TOKEN` (and `LOGFIRE_BASE_URL` for an EU project) in `backend/.env`. It writes:
+
+- one `live_eval.verdict` span per turn of every attempt, **inside that conversation's trace** (trace ID = the conversation UUID), at the turn's recorded time. It carries the turn index, verdict, agent model, `configuration_digest`, the report's `run_id` and sha256, and join keys (`shiftmind.agent_run.id`, scenario, repetition, attempt, `final_attempt`, run status, failure codes). No text;
+- one **experiment** under dataset `live-conversations`, named `{model} {run_id}`, one case per final-attempt turn (`A:1:rep1`, …). The case shows the user message and obligation (`inputs`), the visible reply (`output.reply`), the recorded verdict, the judge's score **and reason** per dimension, and token/cost metrics. Nothing is re-executed: the task returns the recording.
+
+Exit codes: **0** published; **1** `logfire_export_failed` (unreachable, slow or rejecting Logfire — decided by what the export really delivered, never by `force_flush()`); **2** a refusal: `configuration_invalid`, `logfire_token_absent`, `report_unreadable`, `report_schema_unsupported`, `report_unfinished`, `report_malformed`, `report_contains_credential`. One JSON line on stdout says which.
+
+**Publish each report once.** There is no idempotency key and the publisher never reads Logfire back, so a second publication duplicates the verdict spans and adds a second experiment of the same name; a failed publication may have left a partial one.
+
+What leaves (addendum §6, channel 2): only those four text fields plus identifiers, closed-vocabulary values and numbers, through the same export-boundary sanitizer as the API and worker, with every resource tagged `deployment.environment=live-eval`. What never leaves: `verified` facts, tool and command observations, fixture setup, usage correlation (`actor_id`), judge usage, failure-reason strings, the raw activity, the host/OS/paths the Logfire SDK's own exporter would send (it is off), and any configured credential (an exact-value match refuses the whole report). The report, the baseline, the drop check and `evidence/**` are never written.
+
+Tests: `tests/test_live_eval_publication.py` (publisher subprocess against a local OTLP server), the `live_eval`/`evals` policy units in `tests/test_trace_export_boundary.py`, and the one-file/dev-pin guards in `tests/architecture/test_trace_export_boundaries.py`.
+
 ## Backend (pytest)
 
 **Runner:** `pytest`, configured in `backend/pyproject.toml`.
@@ -117,7 +137,10 @@ The default suite is keyless for trace export (`conftest.py` pops `LOGFIRE_TOKEN
 - `tests/test_content_minimization.py`: channels C4-C8, exported agent, HTTP server, HTTP client, database and worker spans, against Story 5.2's fixtures.
 - `tests/test_trace_request_path.py` (`postgres`): one conversation is one trace; runs join by ID.
 - `tests/test_trace_export_failure_independence.py`: an unreachable, slow or rejecting Logfire changes no outcome and blocks nothing.
-- `tests/architecture/test_trace_export_boundaries.py`: one export boundary, no `logfire`, the content-mode config guard, placeholder-only SQL.
+- `tests/architecture/test_trace_export_boundaries.py`: one export boundary, no `logfire`, the content-mode config guard, placeholder-only SQL; since Story 5.10, `logfire`/`pydantic_evals` in the publisher only and pinned exactly in the dev group.
+- `tests/test_live_eval_publication.py`: the Story 5.10 publisher (see *Publish a finished live run to Logfire*).
+
+`addopts` disables Logfire's two pytest plugins (`-p no:logfire -p no:pytest_logfire`): one would configure Logfire itself, unsanitized, if `CI` and a token were ever both set.
 
 ### Live provider tests
 

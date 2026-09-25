@@ -4,7 +4,7 @@ baseline_commit: 3bf0fb1
 
 # Story 5.10: Publish Live-Evaluation Results to Logfire
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -580,65 +580,65 @@ Task 11's observation, which is not evidence.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Start from a clean, re-verified baseline (all ACs)**
-  - [ ] Create `story/5-10-publish-live-evaluation-results-to-logfire` from `main` (5.9's branch
+- [x] **Task 1 — Start from a clean, re-verified baseline (all ACs)**
+  - [x] Create `story/5-10-publish-live-evaluation-results-to-logfire` from `main` (5.9's branch
         naming). Commit the planning edits first if they are still uncommitted, as
         `docs(story-5.10): …`: this story file, its `sprint-status.yaml` row, the addendum §6
         amendment and the proposal's *Amendment 2026-09-25* section.
-  - [ ] Re-run *Measured at creation*'s suites and record drift. Re-confirm facts 1 and 8 (`uv lock`
+  - [x] Re-run *Measured at creation*'s suites and record drift. Re-confirm facts 1 and 8 (`uv lock`
         delta; `force_flush` returning `True` on 401) before relying on them.
 
-- [ ] **Task 2 — Dependencies and test-process plugins (AC1) — per Decision 2**
-  - [ ] `pyproject.toml` dev group + `addopts`; `uv lock` (confirm 6 added / 0 changed);
+- [x] **Task 2 — Dependencies and test-process plugins (AC1) — per Decision 2**
+  - [x] `pyproject.toml` dev group + `addopts`; `uv lock` (confirm 6 added / 0 changed);
         `uv sync --frozen`. `Dockerfile` comment.
-  - [ ] Test: neither Logfire pytest plugin is registered in the test process.
+  - [x] Test: neither Logfire pytest plugin is registered in the test process.
 
-- [ ] **Task 3 — Shared trace-ID derivation (AC1) — per Decisions 1, 5**
-  - [ ] `adapters/telemetry/conversation_trace.py`; `api/tracing.py` delegates. 5.9's
+- [x] **Task 3 — Shared trace-ID derivation (AC1) — per Decisions 1, 5**
+  - [x] `adapters/telemetry/conversation_trace.py`; `api/tracing.py` delegates. 5.9's
         `conversation_traceparent` tests stay green unmodified. Add the parity test, including a UUID
         whose low 64 bits are zero.
 
-- [ ] **Task 4 — Policy categories (AC1) — per Decision 4**
-  - [ ] Constants, validators, the two `CategoryPolicy` entries, `SCOPE_CATEGORIES` entries, and
+- [x] **Task 4 — Policy categories (AC1) — per Decision 4**
+  - [x] Constants, validators, the two `CategoryPolicy` entries, `SCOPE_CATEGORIES` entries, and
         the `live_eval_channel` keyword on `sanitize_resource` and `SanitizingSpanExporter`.
-  - [ ] Unit tests in `tests/test_trace_export_boundary.py` from the measured samples: each validator
+  - [x] Unit tests in `tests/test_trace_export_boundary.py` from the measured samples: each validator
         (accept + reject, including a canary string in every string-valued `live_eval` key), the
         vocabulary pins, the resource tag both ways, and the drift check (`unclassified_keys`) run on
         keys observed from a real `Dataset.evaluate` span (captured by Task 8's subprocess, not
         hand-typed).
 
-- [ ] **Task 5 — Export builder (AC1, AC2) — per Decision 8**
-  - [ ] `build_live_eval_publication_export` and the shared exporter helper in `spans.py`. 5.9's
+- [x] **Task 5 — Export builder (AC1, AC2) — per Decision 8**
+  - [x] `build_live_eval_publication_export` and the shared exporter helper in `spans.py`. 5.9's
         exporter-construction tests stay green unmodified.
 
-- [ ] **Task 6 — Planner and publisher (AC1, AC2) — per Decisions 5–9**
-  - [ ] `evals/live_conversations/publication.py` (pure) and `logfire_publish.py` (CLI,
+- [x] **Task 6 — Planner and publisher (AC1, AC2) — per Decisions 5–9**
+  - [x] `evals/live_conversations/publication.py` (pure) and `logfire_publish.py` (CLI,
         `python -m evals.live_conversations.logfire_publish`).
 
-- [ ] **Task 7 — Architecture guards (AC1) — per Decisions 1, 2**
-  - [ ] In `tests/architecture/test_trace_export_boundaries.py`: the one-file Logfire/pydantic-evals
+- [x] **Task 7 — Architecture guards (AC1) — per Decisions 1, 2**
+  - [x] In `tests/architecture/test_trace_export_boundaries.py`: the one-file Logfire/pydantic-evals
         rule, the facade exemption, the dev-group pins, each with synthetic violating source.
 
-- [ ] **Task 8 — Proof suite (AC1, AC2) — per Decisions 3, 5–9**
-  - [ ] New `tests/test_live_eval_publication.py`. Reuse `tests/trace_capture.py`'s OTLP decoding
+- [x] **Task 8 — Proof suite (AC1, AC2) — per Decisions 3, 5–9**
+  - [x] New `tests/test_live_eval_publication.py`. Reuse `tests/trace_capture.py`'s OTLP decoding
         and `test_trace_export_failure_independence.py::_server`, moving the latter into
         `trace_capture.py` rather than copying it. The minimum proofs are in *Dev Notes → Proof
         suite minimum*.
 
-- [ ] **Task 9 — Docs (AC1, AC2) — per Decisions 2, 6, 8, 9**
-  - [ ] `docs/TESTING.md`: a "Publish a finished live run to Logfire (Story 5.10)" subsection after
+- [x] **Task 9 — Docs (AC1, AC2) — per Decisions 2, 6, 8, 9**
+  - [x] `docs/TESTING.md`: a "Publish a finished live run to Logfire (Story 5.10)" subsection after
         5.9's trace-export one: the command, the raw-report input (not the evidence), exit codes and
         reasons, publish once, what is published (the four text fields of addendum §6 channel 2,
         tagged `live-eval`) and what never is, and where the new tests live.
-  - [ ] `docs/CONFIGURATION.md`: the `LOGFIRE_TOKEN` row also names the publisher; Decision 2's
+  - [x] `docs/CONFIGURATION.md`: the `LOGFIRE_TOKEN` row also names the publisher; Decision 2's
         pydantic-plugin residual.
-  - [ ] Spine Stack row `pinned at Story 5.10` → the two exact versions.
+  - [x] Spine Stack row `pinned at Story 5.10` → the two exact versions.
 
-- [ ] **Task 10 — Ledger, status, mutation table — per Decisions 2, 4, 8 and retro A1**
-  - [ ] `deferred-work.md`: new entries for Decision 2's local-dev residual and Decision 8's
+- [x] **Task 10 — Ledger, status, mutation table — per Decisions 2, 4, 8 and retro A1**
+  - [x] `deferred-work.md`: new entries for Decision 2's local-dev residual and Decision 8's
         duplicate-on-republish. Append Decision 4's digest note to the existing
         artifact-digest entry. This story's `sprint-status.yaml` row only.
-  - [ ] Demonstrated-red mutation table (*Dev Notes → Mutation table minimum*), recorded before
+  - [x] Demonstrated-red mutation table (*Dev Notes → Mutation table minimum*), recorded before
         review.
 
 - [ ] **Task 11 — One real publication, at the end, with Minh's go-ahead (AC1)**
@@ -821,11 +821,63 @@ exporter helper.
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`claude-opus-5-5`), Claude Code, 2026-09-25.
+
 ### Debug Log References
+
+- **Task 1 re-verification.** `uv lock` delta confirmed: `executing 2.2.1`, `logfire 5.1.0`, `markdown-it-py 4.2.0`, `mdurl 0.1.2`, `pydantic-evals 2.27.0`, `rich 15.0.0` added, 0 changed. Fact 8 re-confirmed through mutation row 1: with exit status taken from `logfire.force_flush()`, the 401 case exits 0.
+- **Smoke run on the real report** (`live-matrix-5-7-final3.json`, local capture server only, canary token): exit 0, 90 verdict spans, 90 cases, **541** spans exported. Creation measured 361 with fewer evaluators; the three recorded evaluators add 270 `evaluator:` spans. Only `POST /v1/traces` was seen. Resource keys were exactly `RESOURCE_ALLOW ∪ {deployment.environment}`.
+- **Drift check caught an unmeasured key.** pydantic-evals 2.27.0 also emits `code.function` on its spans; creation's table listed only `code.filepath`/`code.lineno`. Added to the `evals` category's `KNOWN_DROPPED`.
+- **Shape validators bound shape, not content.** `CANARY-DB-5-2` is a valid `scenario` shape. The `live_eval` canary unit therefore uses free-text canaries. The planner additionally admits only `load_scenarios()` IDs.
+- **Full regression:** `uv run --frozen pytest -q` → **2432 passed, 2 skipped, 10 deselected, 1 failed** (399 s). The failure is Story 5.9's `test_turn_and_solver_outcomes_are_unchanged_by_a_failing_exporter`: `[slow]` in one full run, `[unreachable]` in the next. In both, the tracing-off and tracing-on runs reached different solver terminals (`solver_timed_out` vs `solver_failed`) under the test's 5 s solver budget. Run alone: 3/3 passed, twice. It is load-dependent: CPU contention in the full suite pushes the 5 s solve over its budget. This story does not change the worker or solver path; it only extracts `_otlp_exporter`, which constructs the same exporter. Not fixed here; flagged for review.
+- **Four mutation rows first stayed green and were fixed before review.** (1) Deciding with `logfire.force_flush()` *after* `finish()` was equivalent, so the mutation now replaces `finish()` itself. (13) The parity test compared the shared function with itself, so it now asserts an independently written derivation. (17) pytest's `-p no:logfire` also blocks `pytest_logfire`, so removing only the second flag was equivalent; the row removes both. (20) The env-helper test used an empty token, which the credential-blanking loop also produces; it now uses a canary.
 
 ### Completion Notes List
 
+- Tasks 1–10 complete; **Task 11 (the one hosted-Logfire publication) waits for Minh's go-ahead**, per Decision 10.
+- AC1: verdict spans land in the conversation's trace with the synthesized parent and the turn's time. The experiment is named `{model} {run_id}` under `live-conversations`, with final attempts only, and replays the recording.
+- AC2: the publisher refuses with a closed vocabulary, exits 1 on an unavailable Logfire within the bound, and never touches the report, baseline or `evidence/**` (sha256 before/after). It sends only `POST /v1/traces`.
+- No evidence regenerated, no live run, zero frontend diff.
+
+#### Mutation table (demonstrated red; every mutation reverted, tree left as before)
+
+| # | Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|---|
+| 1 | `finish()` replaced by `logfire.force_flush()` as the delivery verdict | `test_an_unavailable_logfire_exits_1_within_a_bound` | green 3/3 | RED `[rejected]` (401 → exit 0); `[unreachable]`,`[slow]` stayed exit 1 because the flush itself returned `False` there |
+| 2 | `send_to_logfire=True` | read-nothing-back + resource tests | green | RED 2/2 |
+| 3 | `additional_span_processors=[]` | AC1 verdict-span test | green | RED (fixture: exit 1) |
+| 4 | `scrubbing=False` removed | scrubbing-off test | green | RED |
+| 5 | planner copies `turn["verified"]` into output | excluded-fields test | green | RED |
+| 6 | planner passes raw `activity` as reply | excluded-fields test (raw-activity canary) | green | RED |
+| 7 | `user` dropped from `inputs` | included-text test | green | RED |
+| 8 | credential check removed | both credential tests | green | RED 2/2 |
+| 9 | `live_eval_channel=True` removed from the builder | resource test | green | RED |
+| 10 | verdict validator → identity | canary unit `[verdict]` | green | RED |
+| 11 | `code.filepath` added to `evals` allow-list | excluded-fields (`code.*`) test | green | RED |
+| 12 | random UUID for the verdict traceparent | AC1 verdict-span test | green | RED |
+| 13 | parent from the high 64 bits in `conversation_trace_ids` | parity + AC1 tests | green | RED 3/5 |
+| 14 | non-final attempts become cases | experiment test | green | RED |
+| 15 | token check removed | token-absent test | green | RED |
+| 16 | `report_unfinished` raise → `finished_unix = 0` | refusal subprocess + planner case | green | RED 2 |
+| 17 | both `-p no:` flags removed from `addopts` | plugin-registration test | green | RED |
+| 18 | `import logfire` in `evidence.py` | one-file guard | green | RED |
+| 19 | `logfire==5.1.0` added to runtime deps | dependency guard | green | RED |
+| 20 | env helper stops setting `LOGFIRE_TOKEN` | env-helper test | green | RED |
+
 ### File List
+
+- `Dockerfile` (comment only)
+- `backend/pyproject.toml`, `backend/uv.lock`
+- `backend/adapters/telemetry/conversation_trace.py` (new)
+- `backend/adapters/telemetry/span_policy.py`, `backend/adapters/telemetry/spans.py`
+- `backend/api/tracing.py`
+- `backend/evals/live_conversations/publication.py` (new), `backend/evals/live_conversations/logfire_publish.py` (new)
+- `backend/tests/test_live_eval_publication.py` (new)
+- `backend/tests/test_trace_export_boundary.py`, `backend/tests/architecture/test_trace_export_boundaries.py`
+- `backend/tests/trace_capture.py`, `backend/tests/test_trace_export_failure_independence.py`
+- `docs/TESTING.md`, `docs/CONFIGURATION.md`
+- `_bmad-output/planning-artifacts/architecture/architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md` (Stack row)
+- `_bmad-output/implementation-artifacts/deferred-work.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file
 
 ---
 
@@ -835,3 +887,4 @@ exporter helper.
 |---|---|
 | 2026-09-24 | Story created at `3bf0fb1` (clean). Design measured, not written from docs: an overlay env with the exact pins drove the real Story 5.7 report through three export pipelines and three failure endpoints, all local. Ten facts shaped ten decisions. The main ones: the Logfire SDK exporter leaks host, OS, git HEAD and absolute paths and reads back from Logfire, so the publisher exports through 5.9's sanitizer instead; Logfire scrubbing corrupts closed-vocabulary codes; `force_flush()` reports success on a 401; and a test subprocess would load the real token. Ultimate context engine analysis completed - comprehensive developer guide created. |
 | 2026-09-25 | Minh approved publishing conversation text. Addendum §6 amended to name two synthetic-only content channels, the stack and this publisher (recorded as *Amendment 2026-09-25* in sprint-change-proposal-2026-09-24). Decisions 3, 4, 6, 7 and 9, the proof table, mutation table, Tasks 4/9/11 and trap 13 updated. Cases now carry the user message and obligation (`inputs`), the visible reply (`output.reply`, via `runner.visible_activity`) and the judge's reasons (per-score `EvaluationReason`, measured to export). Verdict spans stay text-free. New `live_eval_channel` resource tag. New refusals `report_contains_credential` (exact-value credential check) and a 16 KiB per-case text bound (measured maximum 3 KB). Scrubbing stays off. |
+| 2026-09-25 | Implemented Tasks 1–10 on `story/5-10-publish-live-evaluation-results-to-logfire`. Mutation table: 20/20 red. Full regression 2432 passed, 1 load-dependent 5.9 failure (Debug Log). Task 11 awaits Minh. |

@@ -635,3 +635,123 @@ def test_the_boundary_passes_lifespan_scopes_through_untouched() -> None:
     scope = {"type": "lifespan"}
     asyncio.run(TraceContextBoundary(inner)(scope, None, None))
     assert seen == [scope] and seen[0] is scope
+
+
+# --- Story 5.10: the live-evaluation publisher's categories (Decision 4) -----
+
+LIVE_EVAL_SAMPLE = {
+    "shiftmind.live_eval.turn_index": 1,
+    "shiftmind.live_eval.repetition": 2,
+    "shiftmind.live_eval.attempt": 1,
+    "shiftmind.live_eval.final_attempt": True,
+    "shiftmind.live_eval.verdict": "needs_review",
+    "shiftmind.live_eval.agent_run_status": "agent_completed",
+    "shiftmind.live_eval.factual_failures": ("unauthorized_effect",),
+    "shiftmind.live_eval.scenario": "A",
+    "shiftmind.live_eval.agent_model": "openrouter:openai/gpt-5.6-luna",
+    "shiftmind.live_eval.configuration_digest": "8c" * 32,
+    "shiftmind.live_eval.report.sha256": "c2" * 32,
+    "shiftmind.live_eval.report.run_id": "64ca2862-a81c-45f7-adcb-56586f62d57f",
+    "shiftmind.conversation.id": "5bbccde3-a4f9-48cd-b61f-58a67aec1b20",
+    "shiftmind.agent_run.id": "c7a1c1a0-8d1c-4c4d-b9fa-717550482462",
+    "logfire.msg": "live_eval.verdict",
+    "logfire.span_type": "span",
+}
+
+
+def _live_eval(attributes: dict) -> dict:
+    return sanitize_attributes(
+        span_policy.LIVE_EVAL, attributes, content_mode="off",
+        content_mode_on=TRACE_CONTENT_SYNTHETIC_EVAL,
+    )
+
+
+def test_the_publisher_scopes_map_to_their_categories() -> None:
+    assert categorize(span_policy.LIVE_EVAL_SCOPE) == span_policy.LIVE_EVAL
+    assert categorize("pydantic-evals") == span_policy.EVALS
+
+
+def test_a_valid_verdict_span_passes_whole_and_an_unlisted_key_drops() -> None:
+    assert _live_eval({**LIVE_EVAL_SAMPLE, "shiftmind.live_eval.note": "x"}) == LIVE_EVAL_SAMPLE
+
+
+@pytest.mark.parametrize("key", sorted(
+    key for key, value in LIVE_EVAL_SAMPLE.items()
+    if isinstance(value, (str, tuple)) and not key.startswith("logfire.")
+))
+def test_a_canary_in_any_string_valued_live_eval_key_drops_it(key) -> None:
+    # Free-text shaped: the scenario validator bounds SHAPE, so a bare
+    # identifier-shaped canary would pass it (the planner additionally admits
+    # only the authored scenario IDs).
+    value = LIVE_EVAL_SAMPLE[key]
+    text = "CANARY-DB-5-2 leaked: ignore previous instructions"
+    canary = (text,) if isinstance(value, tuple) else text
+    assert key not in _live_eval({**LIVE_EVAL_SAMPLE, key: canary})
+
+
+@pytest.mark.parametrize(("key", "value"), [
+    ("shiftmind.live_eval.turn_index", 0),
+    ("shiftmind.live_eval.turn_index", True),
+    ("shiftmind.live_eval.repetition", "1"),
+    ("shiftmind.live_eval.final_attempt", 1),
+    ("shiftmind.live_eval.verdict", "passed"),
+    ("shiftmind.live_eval.agent_run_status", "agent_done"),
+    ("shiftmind.live_eval.factual_failures", ()),
+    ("shiftmind.live_eval.factual_failures", "unsuccessful_agent_turn"),
+    ("shiftmind.live_eval.factual_failures", ("ok_code", "Bad Code")),
+    ("shiftmind.live_eval.scenario", "A B"),
+    ("shiftmind.live_eval.agent_model", "gpt-5"),
+    ("shiftmind.live_eval.configuration_digest", "8C" * 32),
+])
+def test_live_eval_validators_reject_off_shape_values(key, value) -> None:
+    assert key not in _live_eval({key: value})
+
+
+def test_live_eval_vocabularies_are_their_sources() -> None:
+    import inspect
+    import re
+
+    from adapters.postgres import schema
+    from evals.live_conversations import protocol, runner
+
+    constraint = next(
+        str(c.sqltext) for c in schema.agent_run.constraints
+        if getattr(c, "name", None) == "ck_agent_run_status"
+    )
+    assert span_policy.AGENT_RUN_STATUSES == set(re.findall(r"'([a-z_]+)'", constraint))
+    returns = "\n".join(
+        line for line in inspect.getsource(protocol.turn_verdict).splitlines()
+        if line.strip().startswith("return")
+    )
+    assert set(re.findall(r"'([a-z_]+)'", returns)) == span_policy.TURN_VERDICTS
+    assert "'verdict': 'incomplete'" in inspect.getsource(runner.execute_prefix)
+
+
+def test_the_evals_category_keeps_measured_keys_and_drops_code_location() -> None:
+    kept = sanitize_attributes(
+        span_policy.EVALS,
+        {
+            "name": "m r", "gen_ai.operation.name": "experiment", "inputs": "{}",
+            "code.filepath": "C:/Users/someone/x.py", "code.lineno": 3,
+            "code.function": "f", "logfire.pending_parent_id": "00",
+        },
+        content_mode="off", content_mode_on=TRACE_CONTENT_SYNTHETIC_EVAL,
+    )
+    assert kept == {"name": "m r", "gen_ai.operation.name": "experiment", "inputs": "{}"}
+    assert span_policy.unclassified_keys(span_policy.EVALS, {"logfire.pending_parent_id"}) == {
+        "logfire.pending_parent_id"
+    }
+
+
+def test_the_live_eval_channel_tags_the_resource_whatever_it_carried() -> None:
+    raw = {"service.name": "p", "host.name": "ThunderPie", "deployment.environment": "prod"}
+    tagged = sanitize_resource(
+        raw, content_mode="off", content_mode_on=TRACE_CONTENT_SYNTHETIC_EVAL,
+        live_eval_channel=True,
+    )
+    assert tagged == {"service.name": "p", "deployment.environment": "live-eval"}
+    # Off the channel, 5.9's rule is unchanged: no tag outside content mode.
+    assert sanitize_resource(
+        {**raw, "deployment.environment": "live-eval"}, content_mode="off",
+        content_mode_on=TRACE_CONTENT_SYNTHETIC_EVAL,
+    ) == {"service.name": "p"}

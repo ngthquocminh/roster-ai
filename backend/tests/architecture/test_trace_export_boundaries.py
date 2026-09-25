@@ -46,7 +46,15 @@ LOGFIRE_BANNED_ROOTS = (
 )
 SDK_PREFIXES = ("opentelemetry.sdk", "opentelemetry.exporter", "opentelemetry.instrumentation")
 SDK_ALLOWED = frozenset({"adapters/telemetry/spans.py", "api/tracing.py"})
-FACADE_ALLOWED = SDK_ALLOWED | {"agent/runtime.py"}
+#: Story 5.10: the publisher writes verdict spans through the API facade
+#: because only `Tracer.start_span` takes an explicit `start_time` (Logfire's
+#: `span()` does not). Its SDK imports stay forbidden: `SDK_ALLOWED` is unchanged.
+LOGFIRE_PUBLISHER = "evals/live_conversations/logfire_publish.py"
+FACADE_ALLOWED = SDK_ALLOWED | {"agent/runtime.py", LOGFIRE_PUBLISHER}
+#: Story 5.10 Decision 1: the Logfire SDK and pydantic-evals, in one file.
+EVAL_TOOLING_PACKAGES = ("logfire", "pydantic_evals")
+#: Story 5.10 Decision 2: dev group only, exact.
+EVAL_TOOLING_DEV_PINS = {"logfire": "5.1.0", "pydantic-evals": "2.27.0"}
 
 OTEL_PINS = {
     "opentelemetry-sdk": "1.44.0",
@@ -124,6 +132,14 @@ def logfire_imports(source: str) -> set[str]:
     return {module for module in _imported_modules(source) if _under(module, "logfire")}
 
 
+def eval_tooling_imports(source: str) -> set[str]:
+    return {
+        module
+        for module in _imported_modules(source)
+        if any(_under(module, package) for package in EVAL_TOOLING_PACKAGES)
+    }
+
+
 def test_opentelemetry_is_imported_only_at_the_export_boundary() -> None:
     files = _python_files(*NON_TEST_BACKEND_ROOTS) + _backend_root_modules()
     violations = {
@@ -149,6 +165,22 @@ def test_no_runtime_root_imports_logfire() -> None:
     assert not violations
 
 
+def test_logfire_and_pydantic_evals_are_imported_by_the_publisher_only() -> None:
+    """Stricter than the runtime-root ban above: `evals/` and `scripts/` too."""
+    files = _python_files(*NON_TEST_BACKEND_ROOTS) + _backend_root_modules()
+    importers = {
+        _relative(path)
+        for path in files
+        if eval_tooling_imports(path.read_text(encoding="utf-8"))
+    }
+    assert importers == {LOGFIRE_PUBLISHER}
+    # Non-vacuity: the publisher really imports both.
+    publisher = eval_tooling_imports(
+        (BACKEND_ROOT / LOGFIRE_PUBLISHER).read_text(encoding="utf-8")
+    )
+    assert {module.split(".")[0] for module in publisher} == set(EVAL_TOOLING_PACKAGES)
+
+
 def runtime_dependencies(pyproject: str) -> list[str]:
     """The quoted requirement strings of `[project].dependencies`."""
     block = re.search(r"(?ms)^\[project\].*?^dependencies\s*=\s*\[(.*?)^\]", pyproject)
@@ -161,11 +193,34 @@ def dependency_pin_violations(pyproject: str) -> list[str]:
     problems = [
         requirement for requirement in requirements
         if re.match(r"logfire\b(?!-api)", requirement)
+        or re.match(r"pydantic-evals\b", requirement)
     ]
     for name, version in OTEL_PINS.items():
         if f"{name}=={version}" not in requirements:
             problems.append(f"{name} is not pinned exactly to {version}")
     return problems
+
+
+def dev_dependencies(pyproject: str) -> list[str]:
+    """The quoted requirement strings of `[dependency-groups].dev`."""
+    block = re.search(r"(?ms)^\[dependency-groups\].*?^dev\s*=\s*\[(.*?)^\]", pyproject)
+    assert block is not None, "no [dependency-groups].dev block"
+    return re.findall(r'^\s*"([^"]+)"', block.group(1), flags=re.M)
+
+
+def dev_pin_violations(pyproject: str) -> list[str]:
+    requirements = dev_dependencies(pyproject)
+    return [
+        f"{name} is not pinned exactly to {version} in the dev group"
+        for name, version in EVAL_TOOLING_DEV_PINS.items()
+        if f"{name}=={version}" not in requirements
+    ]
+
+
+def test_eval_tooling_is_pinned_exactly_in_the_dev_group() -> None:
+    assert dev_pin_violations(
+        (BACKEND_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    ) == []
 
 
 def test_logfire_is_not_a_runtime_dependency_and_otel_pins_are_exact() -> None:
@@ -326,6 +381,19 @@ def test_each_guard_detects_synthetic_violating_source() -> None:
         "adapters/telemetry/spans.py", "from opentelemetry.sdk.trace import TracerProvider"
     ) == set()
     assert logfire_imports("import logfire\nimport logfire_api") == {"logfire"}
+    assert eval_tooling_imports(
+        "import logfire_api\nfrom pydantic_evals import Dataset\nimport logfire"
+    ) == {"pydantic_evals", "pydantic_evals.Dataset", "logfire"}
+    assert boundary_violations(LOGFIRE_PUBLISHER, "from opentelemetry import trace") == set()
+    assert boundary_violations(
+        LOGFIRE_PUBLISHER, "from opentelemetry.sdk.trace import TracerProvider"
+    )
+    assert dependency_pin_violations(
+        '[project]\ndependencies = [\n    "pydantic-evals==2.27.0",\n]\n'
+    )
+    assert dev_pin_violations(
+        '[dependency-groups]\ndev = [\n    "logfire>=5.1.0",\n    "pydantic-evals==2.27.0",\n]\n'
+    ) == ["logfire is not pinned exactly to 5.1.0 in the dev group"]
     assert dependency_pin_violations(
         '[project]\ndependencies = [\n    "logfire>=4",\n'
         '    "opentelemetry-sdk>=1.44.0",\n]\n'
