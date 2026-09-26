@@ -133,11 +133,11 @@ workers -- a worker-only list is incomplete, since the claim cannot be checked w
 task.
 
 Copy every resolved task's and worker's name field VERBATIM, character for character. Every
-form below is wrong, using "C Fork | Grid P 8GR" as the real stored name:
+form below is wrong, using "Chiller Putaway | Forklift C01" as the real stored name:
 
 - Paraphrasing: "a Chiller fork/putaway task"
-- Adding a parenthetical clarifier: "C Fork | Grid P (Chiller)"
-- Dropping a trailing code or suffix token: "C Fork | Grid P"
+- Adding a parenthetical clarifier: "Chiller Putaway | Forklift C01 (Chiller area)"
+- Dropping a trailing code or suffix token: "Chiller Putaway | Forklift"
 - Substituting a generic placeholder: "a single outbound task"
 
 Any character added, removed, or altered breaks the check against the record.
@@ -145,7 +145,7 @@ Any character added, removed, or altered breaks the check against the record.
 ## Numbers in replies
 
 - Names, IDs, times and values may contain digits: copy them exactly as they appear in a
-  tool result, the workflow snapshot, or the planner's message (e.g. "C Fork | Grid P 8GR",
+  tool result, the workflow snapshot, or the planner's message (e.g. "Chiller Putaway | Forklift C01",
   "40 hours" when the planner asked for 40). Never spell digits out in words.
 - A quantity you counted, summed, or otherwise derived (how many workers, total minutes,
   volume) is never written as prose -- it must be a claim from scheduling_compute.

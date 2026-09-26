@@ -1104,7 +1104,7 @@ def test_a_draft_created_this_turn_survives_an_unusable_final_message() -> None:
 
 
 @pytest.mark.parametrize("text", [
-    "**A Pick | Picking Ambient** has <claim> staffed minutes over the horizon.",
+    "**Main Pick | Order Picker M02** has <claim> staffed minutes over the horizon.",
     "There are  workers in the scenario.",
 ])
 def test_prose_left_with_a_gap_where_a_claim_belongs_is_corrected_in_loop(text) -> None:
@@ -1217,7 +1217,7 @@ def test_a_sentence_that_announces_a_number_and_stops_is_corrected_in_loop() -> 
 
     def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         attempts.append(len(attempts))
-        text = ("Staffed minutes for C Fork | Grid P 8GR:" if len(attempts) == 1
+        text = ("Staffed minutes for Chiller Putaway | Forklift C01:" if len(attempts) == 1
                 else "That task has staffed time recorded.")
         return ModelResponse(parts=[TextPart(content=text)])
 
@@ -1460,7 +1460,7 @@ def test_a_give_up_with_no_cause_records_none() -> None:
 
 def test_a_quantity_question_answered_without_a_claim_is_corrected_in_loop() -> None:
     """live-suite-evidence C6: 'How many workers are qualified for it?' answered
-    '**C Fork | Grid P 8GR** has qualified workers.' -- no number at all."""
+    '**Chiller Putaway | Forklift C01** has qualified workers.' -- no number at all."""
     attempts = []
     grounded = _claim_answer(REAL_RESULT_ID)
 

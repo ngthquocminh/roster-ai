@@ -23,7 +23,7 @@
       {
         "record_id": "1E5596F1-C9AD-43F1-8DC4-7CF8013C9D0B",
         "task_id": "1E5596F1-C9AD-43F1-8DC4-7CF8013C9D0B",
-        "name": "C Fork | Grid P 8GR",
+        "name": "Chiller Putaway | Forklift C01",
         "function": "Putaways",
         "area_id": "587561A7-9E3C-487F-A8E6-0DE9268481C1",
         "area_name": "Chiller",
@@ -32,7 +32,7 @@
       {
         "record_id": "99260066-B32A-423D-97A1-8A649BABBAAD",
         "task_id": "99260066-B32A-423D-97A1-8A649BABBAAD",
-        "name": "C Pick | Picking chill 080",
+        "name": "Chiller Pick | Order Picker C02",
         "function": "Pick",
         "area_id": "587561A7-9E3C-487F-A8E6-0DE9268481C1",
         "area_name": "Chiller",
@@ -41,16 +41,16 @@
       {
         "record_id": "4B4D604A-6EFE-48B3-9E8B-83EC5E19CA46",
         "task_id": "4B4D604A-6EFE-48B3-9E8B-83EC5E19CA46",
-        "name": "Amb Rec | Unloader",
+        "name": "Main Receive | Unloader M01",
         "function": "Receiving",
         "area_id": "DB02EC2E-FC8D-4FC6-ACAA-6F5119D8C4E2",
-        "area_name": "AMB Main",
+        "area_name": "Main",
         "unit_type_id": "B74DFB5C-104A-40FE-8B2C-8A2F3430F665"
       },
       {
         "record_id": "AF0CEE8C-514B-44F9-9899-C547DD013292",
         "task_id": "AF0CEE8C-514B-44F9-9899-C547DD013292",
-        "name": "F Pick | Picking FZ 000",
+        "name": "Freezer Pick | Order Picker F01",
         "function": "Pick",
         "area_id": "99AD3050-7864-4456-8848-680BD6488EC3",
         "area_name": "Freezer",
@@ -59,19 +59,19 @@
       {
         "record_id": "31DFD696-06C5-490D-8E09-6E7715EFE3A0",
         "task_id": "31DFD696-06C5-490D-8E09-6E7715EFE3A0",
-        "name": "A Pick | Picking Ambient",
+        "name": "Main Pick | Order Picker M02",
         "function": "Pick",
         "area_id": "DB02EC2E-FC8D-4FC6-ACAA-6F5119D8C4E2",
-        "area_name": "AMB Main",
+        "area_name": "Main",
         "unit_type_id": "0BE4E923-F687-4C37-B3CA-9808A8502113"
       },
       {
         "record_id": "3C1950FE-0C75-48AB-95B7-5C58909A0CCE",
         "task_id": "3C1950FE-0C75-48AB-95B7-5C58909A0CCE",
-        "name": "Amb Desp | Loader",
+        "name": "Main Despatch | Loader M03",
         "function": "Despatch",
         "area_id": "DB02EC2E-FC8D-4FC6-ACAA-6F5119D8C4E2",
-        "area_name": "AMB Main",
+        "area_name": "Main",
         "unit_type_id": "B74DFB5C-104A-40FE-8B2C-8A2F3430F665"
       }
     ],
@@ -79,10 +79,10 @@
       {
         "record_id": "DF47249E-8864-41B6-93CB-004100655A58",
         "contact_id": "DF47249E-8864-41B6-93CB-004100655A58",
-        "name": "Jae Rerekura",
+        "name": "Mika Tane",
         "employment_type": "Part Time",
         "grade": "Grade 3",
-        "eba": "EA2018-2022 Agency",
+        "eba": "Agency Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -118,10 +118,10 @@
       {
         "record_id": "B51E9C83-4170-4DB4-9379-004C44B6B8EA",
         "contact_id": "B51E9C83-4170-4DB4-9379-004C44B6B8EA",
-        "name": "Bhargav Khokhariya",
+        "name": "Arjun Patel",
         "employment_type": "Full Time",
         "grade": "Grade 2",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -172,10 +172,10 @@
       {
         "record_id": "4AD69619-A5AA-4B5D-ABB7-006EC5FBA52F",
         "contact_id": "4AD69619-A5AA-4B5D-ABB7-006EC5FBA52F",
-        "name": "Rally Masula",
+        "name": "Lena Ortiz",
         "employment_type": "Full Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -272,10 +272,10 @@
       {
         "record_id": "13F773FB-4F67-4954-805F-00B20E9D1120",
         "contact_id": "13F773FB-4F67-4954-805F-00B20E9D1120",
-        "name": "Gary Lau",
+        "name": "Owen Hale",
         "employment_type": "Part Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -312,10 +312,10 @@
       {
         "record_id": "13270C88-FC92-4927-9651-01ED72F79203",
         "contact_id": "13270C88-FC92-4927-9651-01ED72F79203",
-        "name": "Rhiannon Hansen",
+        "name": "Priya Nair",
         "employment_type": "Part Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -362,10 +362,10 @@
       {
         "record_id": "736C7CF0-305A-41E0-8D10-021185DD5BC8",
         "contact_id": "736C7CF0-305A-41E0-8D10-021185DD5BC8",
-        "name": "Sonam Sonam",
+        "name": "Nina Brooks",
         "employment_type": "Part Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -416,10 +416,10 @@
       {
         "record_id": "B1DF4C6E-9855-4088-AA3E-07617302E332",
         "contact_id": "B1DF4C6E-9855-4088-AA3E-07617302E332",
-        "name": "Raz Richards-Wiari",
+        "name": "Theo Marsh-Walker",
         "employment_type": "Full Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -461,10 +461,10 @@
       {
         "record_id": "E1D315B5-713A-400F-8B78-0990B51CD7C3",
         "contact_id": "E1D315B5-713A-400F-8B78-0990B51CD7C3",
-        "name": "Robert Van Den Hoff",
+        "name": "Felix Van Dijk",
         "employment_type": "Full Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -560,10 +560,10 @@
       {
         "record_id": "25AA5553-9A0B-47C1-ABA4-2DB03C360371",
         "contact_id": "25AA5553-9A0B-47C1-ABA4-2DB03C360371",
-        "name": "Toshi Fujiki",
+        "name": "Hana Sato",
         "employment_type": "Part Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 38.0,
         "qualifications": [
           {
@@ -591,10 +591,10 @@
       {
         "record_id": "B26ACD8E-46A0-4E1B-BEC0-39518515C645",
         "contact_id": "B26ACD8E-46A0-4E1B-BEC0-39518515C645",
-        "name": "John Tauhara",
+        "name": "Ravi Kumar",
         "employment_type": "Part Time",
         "grade": "Grade 3",
-        "eba": "EA2020-2023",
+        "eba": "Site Agreement",
         "contracted_hours": 32.0,
         "qualifications": [
           {

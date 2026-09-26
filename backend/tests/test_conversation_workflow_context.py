@@ -85,7 +85,7 @@ def test_baseline_snapshot_joins_assignment_to_worker_and_task_labels():
         scenario_version_id=claimed.scenario_version_id, assignments=(assignment,))
     baselines.get = lambda *a: SimpleNamespace(schedule_version_id=schedule.schedule_version_id)
     runs.get_version = lambda *a, **k: schedule
-    worker = WorkerV1('w1', 'w1', 'Jae', 'FT', 'G1', 'E1', 38, (), ())
+    worker = WorkerV1('w1', 'w1', 'Mika', 'FT', 'G1', 'E1', 38, (), ())
     task = TaskV1('t1', 't1', 'Packing', 'Outbound', 'area', 'Area', None)
     projection = SimpleNamespace(
         get_workers=lambda *a: WorkerPageV1(claimed.scenario_id, claimed.scenario_version_id,
@@ -94,7 +94,7 @@ def test_baseline_snapshot_joins_assignment_to_worker_and_task_labels():
             claimed.site_id, (task,), None, 1, 1))
     text = load_workflow_context(None, claimed=claimed, proposals=proposals, runs=runs,
         baselines=baselines, projection=projection).parts[0].text
-    assert '"worker_name": "Jae"' in text
+    assert '"worker_name": "Mika"' in text
     assert '"task_name": "Packing"' in text
     assert '"task_function": "Outbound"' in text
 
@@ -108,7 +108,7 @@ def test_baseline_snapshot_is_limited_to_ten_assignments_and_marks_truncation():
         scenario_version_id=claimed.scenario_version_id, assignments=assignments)
     baselines.get = lambda *a: SimpleNamespace(schedule_version_id=schedule.schedule_version_id)
     runs.get_version = lambda *a, **k: schedule
-    worker = WorkerV1('w1', 'w1', 'Jae', 'FT', 'G1', 'E1', 38, (), ())
+    worker = WorkerV1('w1', 'w1', 'Mika', 'FT', 'G1', 'E1', 38, (), ())
     task = TaskV1('t1', 't1', 'Packing', 'Outbound', 'area', 'Area', None)
     projection = SimpleNamespace(
         get_workers=lambda *a: WorkerPageV1(claimed.scenario_id, claimed.scenario_version_id,
@@ -147,7 +147,7 @@ def _with_baseline(claimed, runs, baselines, *, assignment_count=1, schedule_sce
         scenario_version_id=claimed.scenario_version_id, assignments=assignments)
     baselines.get = lambda *a: SimpleNamespace(schedule_version_id=schedule.schedule_version_id)
     runs.get_version = lambda *a, **k: schedule
-    worker = WorkerV1('w1', 'w1', 'Jae', 'FT', 'G1', 'E1', 38, (), ())
+    worker = WorkerV1('w1', 'w1', 'Mika', 'FT', 'G1', 'E1', 38, (), ())
     task = TaskV1('t1', 't1', 'Packing', 'Outbound', 'area', 'Area', None)
     return SimpleNamespace(
         get_workers=lambda *a: (WorkerPageV1(claimed.scenario_id, claimed.scenario_version_id,
