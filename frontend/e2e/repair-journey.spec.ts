@@ -74,10 +74,16 @@ test("completes draft, run, reconnect, comparison, and exact evidence targeting"
   // app happened to fetch (Decision 4a).
   journey.completeRun();
   await page.getByRole("button", { name: "Refresh" }).click();
-  await expect(page.getByRole("heading", { name: "Candidate comparison" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Comparison with baseline" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Metric deltas" })).toBeVisible();
   await expect(page.getByText("Coverage served delta").locator("..")).toContainText("120.00");
-  await expect(page.getByRole("heading", { name: "Candidate schedule" }).locator("..")).toContainText("worker:0 · pick · minutes 2880–3360");
+  // The candidate schedule is a table now; the stub's worker and task are not in
+  // the projection, so the row shows their raw IDs. 2880–3360 is 480 minutes.
+  const candidateRow = page.getByRole("region", { name: "Candidate schedule" }).getByRole("row").filter({ hasText: "worker:0" });
+  await expect(candidateRow).toContainText("pick");
+  await expect(candidateRow).toContainText("8.0 h");
+  // Evidence moved into the collapsed Debug details panel (overview-first redesign).
+  await page.getByRole("button", { name: /Debug details/ }).click();
   await expect(page.getByRole("heading", { name: "Evidence" }).locator("..")).toContainText(`demand: ${EVIDENCE_RECORD_ID}`);
 
   // AC1 lists "terminal outcome" and "comparison" as separate states, and
@@ -92,5 +98,5 @@ test("completes draft, run, reconnect, comparison, and exact evidence targeting"
   await expect(outcome.getByRole("heading", { name: "Run outcome" })).toBeVisible();
   await expect(outcome).toContainText("Solver ceiling reached");
   await expect(outcome).toContainText("No candidate evidence was produced");
-  await expect(page.getByRole("heading", { name: "Candidate comparison" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Comparison with baseline" })).toBeHidden();
 });
