@@ -284,8 +284,8 @@ def test_the_timeout_bounds_the_whole_turn_not_each_batch() -> None:
 # -- bare-value facts and the live-eval report ------------------------------
 
 @pytest.mark.parametrize(("text", "value", "bare"), [
-    ("C Fork | Grid P 8GR", "C Fork | Grid P 8GR", True),
-    ("**C Fork | Grid P 8GR**", "C Fork | Grid P 8GR", True),
+    ("Chiller Putaway | Forklift C01", "Chiller Putaway | Forklift C01", True),
+    ("**Chiller Putaway | Forklift C01**", "Chiller Putaway | Forklift C01", True),
     ("pick.", "Pick", True),
     ("'Pick'", "Pick", True),
     ("-3", "3", False),           # a sign is wording, not noise

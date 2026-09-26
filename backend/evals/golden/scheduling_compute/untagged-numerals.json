@@ -24,7 +24,7 @@
     {
       "response_data": {
         "schema_version": "2",
-        "text": "1. Wednesday outbound for Grid P 8GR from 06:00: {{r1}}"
+        "text": "1. Wednesday outbound for Forklift C01 from 06:00: {{r1}}"
       }
     }
   ],
@@ -51,7 +51,7 @@
     "00000000-0000-0000-0000-000000000001|demand|d-outbound-1|amount:3600-4320"
   ],
   "expected_visible_state": "completed",
-  "expected_visible_text": "1. Wednesday outbound for Grid P 8GR from 06:00: 2160 minutes",
+  "expected_visible_text": "1. Wednesday outbound for Forklift C01 from 06:00: 2160 minutes",
   "expected_grounding_outcome": "supported",
   "live_eligible": false,
   "scenario_fixtures": [

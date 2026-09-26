@@ -106,7 +106,7 @@ def test_value_placeholder_becomes_prose_claim_prose() -> None:
 
 
 def test_numbered_lists_times_and_names_are_one_plain_prose_segment() -> None:
-    text = "1. Draft\n2. Run at 06:00 for Grid P 8GR"
+    text = "1. Draft\n2. Run at 06:00 for Forklift C01"
     response = ground_answer(GroundedAnswerV2(text=text), _deps(ReaderStub()), {})
     assert response.segments == (GroundedProseSegmentV1(text=text),)
 

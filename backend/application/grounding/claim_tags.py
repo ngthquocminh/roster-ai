@@ -98,7 +98,7 @@ _SPACE = re.compile(r"\s+")
 def restates_value_only(text: str, value: str) -> bool:
     """True when a fact's wording says nothing beyond its checked value.
 
-    `<claim ... value='C Fork | Grid P 8GR'>C Fork | Grid P 8GR</claim>` asserts
+    `<claim ... value='Chiller Putaway | Forklift C01'>Chiller Putaway | Forklift C01</claim>` asserts
     no relation, so tier 0 has already proven all of it and a wording check
     has nothing to judge (G' phase 3: a bare name scored 0.17-0.43 while
     correct). Only markdown emphasis, outer quotes, trailing sentence

@@ -21,7 +21,7 @@ def test_text_is_split_into_ordered_prose_and_placeholder_parts() -> None:
 
 
 def test_plain_text_with_numerals_is_one_prose_part() -> None:
-    text = "1. Draft\n2. Run at 06:00 for Grid P 8GR"
+    text = "1. Draft\n2. Run at 06:00 for Forklift C01"
     assert parse_answer_text(text) == (ProsePart(text),)
     assert placeholder_handles(text) == ()
     assert malformed_placeholders(text) == ()

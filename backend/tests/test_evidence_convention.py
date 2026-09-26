@@ -14,6 +14,7 @@ choices:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -24,7 +25,6 @@ from scripts.evidence_binding import (
     NFR27_BINDING_KEYS,
     audit_evidence_drift,
     audit_evidence_file,
-    contract_digests,
     resolve_alembic_chain,
 )
 
@@ -179,14 +179,24 @@ EVIDENCE_FILES_WITH_DIGESTS = [p for p in EVIDENCE_FILES if _records_contract_di
     EVIDENCE_FILES_WITH_DIGESTS,
     ids=[_relative(p) for p in EVIDENCE_FILES_WITH_DIGESTS],
 )
-def test_recorded_contract_digests_match_the_real_files(evidence_path):
-    document = json.loads(evidence_path.read_text(encoding="utf-8"))
-    recorded = document["contract_digests"]
-    actual = contract_digests(REPO_ROOT / "data" / "contract")
-    assert recorded == actual, (
-        f"{_relative(evidence_path)} records contract digests that do not "
-        "match the files on disk"
-    )
+def test_recorded_contract_digests_are_well_formed(evidence_path):
+    """The block was recorded in the shape `contract_digests()` produces.
+
+    Deliberately NOT "equal to the files on disk": the contracts are
+    regenerated whenever a fixture changes, and equality would turn every
+    historical evidence file red at once -- the non-monotone rule
+    EVIDENCE-CONVENTION.md forbids. A mismatch with disk is drift, reported by
+    `audit_evidence_drift` and covered by
+    `test_contract_drift_is_reported_but_does_not_unbind`.
+    """
+    recorded = json.loads(evidence_path.read_text(encoding="utf-8"))["contract_digests"]
+    assert recorded.get("algorithm") == "sha256", _relative(evidence_path)
+    pinned = {key: value for key, value in recorded.items() if key != "algorithm"}
+    assert pinned, f"{_relative(evidence_path)} pins no contract artifact"
+    for key, value in pinned.items():
+        assert re.fullmatch(r"[0-9a-f]{64}", value), (
+            f"{_relative(evidence_path)} records a malformed digest for {key!r}"
+        )
 
 
 @requires_git

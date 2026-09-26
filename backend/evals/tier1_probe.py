@@ -40,11 +40,11 @@ THRESHOLD = 0.5
 
 WORKER = verbalize_record("workers", {
     "record_id": "w1", "contact_id": "w1", "name": "Ana Lee", "employment_type": "Casual",
-    "grade": "3", "eba": "EBA2020-2023", "contracted_hours": 38.0,
+    "grade": "3", "eba": "Site Agreement", "contracted_hours": 38.0,
     "qualifications": [{"task_id": "T1", "rate": 1.0}], "availability_windows": [],
 })
 TASK = verbalize_record("tasks", {
-    "record_id": "T1", "task_id": "T1", "name": "C Fork | Grid P 8GR", "function": "Putaways",
+    "record_id": "T1", "task_id": "T1", "name": "Chiller Putaway | Forklift C01", "function": "Putaways",
     "area_id": "A2", "area_name": "Chiller", "unit_type_id": None,
 })
 CONSTRAINT = verbalize_record("constraints", {
@@ -61,9 +61,9 @@ CASES: tuple[tuple[str, str, str, bool], ...] = (
     ("employment-wrong", "Ana Lee is a full-time worker", WORKER, False),
     ("hours", "Ana Lee is contracted for 38 hours", WORKER, True),
     ("hours-wrong", "Ana Lee is contracted for 40 hours", WORKER, False),
-    ("task", "C Fork | Grid P 8GR is a putaway task in the Chiller area", TASK, True),
-    ("task-wrong-function", "C Fork | Grid P 8GR is a picking task", TASK, False),
-    ("task-wrong-area", "C Fork | Grid P 8GR is in the Ambient area", TASK, False),
+    ("task", "Chiller Putaway | Forklift C01 is a putaway task in the Chiller area", TASK, True),
+    ("task-wrong-function", "Chiller Putaway | Forklift C01 is a picking task", TASK, False),
+    ("task-wrong-area", "Chiller Putaway | Forklift C01 is in the Freezer area", TASK, False),
     ("constraint", "Agency workers may work at most 6 shifts per week", CONSTRAINT, True),
     ("constraint-inverted", "Agency workers must work at least 6 shifts per week", CONSTRAINT,
      False),
