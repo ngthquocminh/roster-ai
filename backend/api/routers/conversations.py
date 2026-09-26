@@ -179,6 +179,16 @@ def list_conversations(scenario_id: UUID, limit: int = Query(100, ge=1, le=100),
     return ConversationListOut(items=[_conversation(v) for v in page.items], limit=page.limit, has_more=page.has_more)
 
 
+@router.post("/{conversation_id}/archive", status_code=status.HTTP_204_NO_CONTENT, responses=_PROBLEM_RESPONSES)
+def archive_conversation(conversation_id: UUID, connection: Connection = Depends(get_site_context), repository: ConversationRepository = Depends(get_conversation_repository)) -> None:
+    # Idempotent soft-archive; no hard delete. An unknown or cross-site id is
+    # indistinguishable from "not visible" (AD-3), same shape as every other
+    # conversation lookup in this router.
+    archived = repository.archive(connection, conversation_id=conversation_id)
+    if not archived:
+        raise HTTPException(status_code=404)
+
+
 @router.post("/{conversation_id}/messages", status_code=status.HTTP_201_CREATED, response_model=AcceptedTurnOut, responses=_PROBLEM_RESPONSES)
 def send_message(conversation_id: UUID, body: MessageCreateIn, connection: Connection = Depends(get_site_context), session: ResolvedSession = Depends(get_session), repository: ConversationRepository = Depends(get_conversation_repository)) -> AcceptedTurnOut:
     value = accept_turn(repository, connection, conversation_id=conversation_id, site_id=session.site_id, actor_id=session.app_user_id, text=body.text)

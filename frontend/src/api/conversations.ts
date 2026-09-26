@@ -28,6 +28,10 @@ export async function getConversationTimeline(conversationId: string): Promise<T
   if (error) throw { ...error, status: response.status };
   return data;
 }
+export async function archiveConversation(conversationId: string): Promise<void> {
+  const { error, response } = await client.POST("/api/v1/conversations/{conversation_id}/archive", { params: { path: { conversation_id: conversationId } } });
+  if (error) throw { ...error, status: response.status };
+}
 export async function sendMessage(conversationId: string, body: MessageCreate): Promise<AcceptedTurn> {
   const { data, error, response } = await client.POST("/api/v1/conversations/{conversation_id}/messages", { params: { path: { conversation_id: conversationId } }, body });
   if (error) throw { ...error, status: response.status };

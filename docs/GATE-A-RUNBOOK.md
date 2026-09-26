@@ -43,6 +43,7 @@ Approved write paths, each with the reason it does not touch governed data:
 | `POST /api/v1/approvals` | Creates one exact pending approval binding plus append-only audit and conversation activity records; it never moves the baseline pointer. |
 | `POST /api/v1/approvals/{approval_id}/decision` | Reject/stale/expired terminalize the exact approval and may cancel its paused agent run. Approve atomically consumes the binding, moves the site baseline pointer, and records the authoritative `approval_consumed` audit row and conversation event in the same transaction. |
 | `POST /api/v1/conversations` | Story 2.3 conversation aggregate. |
+| `POST /api/v1/conversations/{id}/archive` | Soft-hides one conversation (`conversation.archived_at`) from that conversation's own list read. Governed scenario rows, the baseline pointer, and every other aggregate are untouched; no row is ever deleted. |
 | `POST /api/v1/conversations/{id}/messages` | Appends a turn. The turn *reads* the pinned projection and never writes it. |
 | `POST /api/v1/conversations/{id}/agent-runs/{id}/execute` | Advances an agent run; writes run state and, through `finalize_agent_run`, the proposal aggregate. |
 | `POST /api/v1/proposals/{id}/revisions` | Appends a new proposal version. Governed scenario rows untouched; the cited `scenario_version_id` is a foreign key, not a target. |

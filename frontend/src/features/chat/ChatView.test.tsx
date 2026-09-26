@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { act } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -19,9 +20,14 @@ vi.mock("@/hooks/useProposal", () => ({ useProposal: vi.fn() }));
 vi.mock("@/hooks/useReviseProposal", () => ({ useReviseProposal: vi.fn() }));
 vi.mock("@/hooks/useRejectProposal", () => ({ useRejectProposal: vi.fn() }));
 vi.mock("@/hooks/useStartScheduleRun", () => ({ useStartScheduleRun: vi.fn() }));
-vi.mock("@/api/conversations", () => ({ createConversation: vi.fn(), executeTurn: vi.fn(), sendMessage: vi.fn() }));
+vi.mock("@/api/conversations", () => ({
+  archiveConversation: vi.fn(),
+  createConversation: vi.fn(),
+  executeTurn: vi.fn(),
+  sendMessage: vi.fn(),
+}));
 
-import { createConversation, executeTurn, sendMessage } from "@/api/conversations";
+import { archiveConversation, createConversation, executeTurn, sendMessage } from "@/api/conversations";
 import { originElementId, rememberOrigin } from "@/features/evidence/origin";
 import { useConversations } from "@/hooks/useConversations";
 import { useConversationTimeline } from "@/hooks/useConversationTimeline";
@@ -44,6 +50,7 @@ const mockRevise = useReviseProposal as unknown as ReturnType<typeof vi.fn>;
 const mockReject = useRejectProposal as unknown as ReturnType<typeof vi.fn>;
 const mockStartRun = useStartScheduleRun as unknown as ReturnType<typeof vi.fn>;
 const mockCreate = createConversation as unknown as ReturnType<typeof vi.fn>;
+const mockArchive = archiveConversation as unknown as ReturnType<typeof vi.fn>;
 const mockExecute = executeTurn as unknown as ReturnType<typeof vi.fn>;
 const mockSendMessage = sendMessage as unknown as ReturnType<typeof vi.fn>;
 // The send mutation ChatView can actually reach. `sendMessage`/`executeTurn` are
@@ -126,6 +133,8 @@ beforeEach(() => {
   mockCreate.mockReset();
   mockExecute.mockReset();
   mockSendMessage.mockReset();
+  mockArchive.mockReset();
+  mockArchive.mockResolvedValue(undefined);
   mockContext.mockReturnValue({ data: { scenario_version_id: VERSION } });
   mockAvailability.mockReturnValue({
     data: { available: true, reason: null, observed_at: null },
@@ -374,6 +383,108 @@ describe("ChatView", () => {
     await waitFor(() =>
       expect(router.state.location.search).toContain(`conversation=${OLDER}`),
     );
+  });
+
+  it("archives a conversation only after the confirm dialog is accepted", async () => {
+    renderChat(`/scenarios/${SCENARIO}?conversation=${OLDER}`);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Archive conversation ${OLDER.slice(0, 8)}` }),
+    );
+    expect(mockArchive).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Archive" }));
+
+    await waitFor(() => expect(mockArchive).toHaveBeenCalledWith(OLDER));
+  });
+
+  it("surfaces a failed archive with a retry action, rather than failing silently", async () => {
+    mockArchive.mockRejectedValueOnce(new Error("network error"));
+    renderChat(`/scenarios/${SCENARIO}?conversation=${OLDER}`);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Archive conversation ${OLDER.slice(0, 8)}` }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(await screen.findByText("Archive failed")).toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Try again" });
+
+    mockArchive.mockResolvedValueOnce(undefined);
+    await userEvent.click(retry);
+
+    await waitFor(() => expect(screen.queryByText("Archive failed")).not.toBeInTheDocument());
+  });
+
+  it("keeps one conversation's archiving state from leaking onto another archived concurrently", async () => {
+    // Guards the bug a single shared mutation's `isPending`/`variables` had:
+    // archiving NEWER while OLDER's request is still in flight must not
+    // re-enable OLDER's control.
+    let resolveOlder: (() => void) | undefined;
+    let resolveNewer: (() => void) | undefined;
+    mockArchive
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveOlder = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveNewer = resolve; }));
+    renderChat(`/scenarios/${SCENARIO}?conversation=${OLDER}`);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Archive conversation ${OLDER.slice(0, 8)}` }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Archive" }));
+    expect(
+      screen.getByRole("button", { name: `Archive conversation ${OLDER.slice(0, 8)}` }),
+    ).toBeDisabled();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: `Archive conversation ${NEWER.slice(0, 8)}` }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Archive" }));
+
+    expect(
+      screen.getByRole("button", { name: `Archive conversation ${OLDER.slice(0, 8)}` }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: `Archive conversation ${NEWER.slice(0, 8)}` }),
+    ).toBeDisabled();
+
+    await act(async () => resolveOlder?.());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: `Archive conversation ${OLDER.slice(0, 8)}` }),
+      ).not.toBeDisabled(),
+    );
+    expect(
+      screen.getByRole("button", { name: `Archive conversation ${NEWER.slice(0, 8)}` }),
+    ).toBeDisabled();
+
+    await act(async () => resolveNewer?.());
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: `Archive conversation ${NEWER.slice(0, 8)}` }),
+      ).not.toBeDisabled(),
+    );
+  });
+
+  it("returns to its unselected state once the selected conversation no longer appears in the list", () => {
+    // Stands in for the post-archive list: `useConversations` is mocked, so
+    // this reproduces what the real query returns once archiving invalidates
+    // and refetches it (Design Notes: no new selection-clearing code needed —
+    // this is the existing `items.some(...)` derivation in `ChatView`).
+    mockConversations.mockReturnValue({
+      data: { items: [conversation(OLDER)], limit: 100, has_more: false },
+      error: null,
+      isError: false,
+      isPending: false,
+      refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.queryByRole("button", { current: "page" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Start a new conversation about this scenario/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Pinned scenario version/)).not.toBeInTheDocument();
   });
 
   it("shows a restore skeleton instead of the empty prompt while the timeline loads", () => {

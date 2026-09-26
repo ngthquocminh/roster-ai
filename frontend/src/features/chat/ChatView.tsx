@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { createConversation } from "@/api/conversations";
@@ -7,7 +7,7 @@ import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { ReconnectBanner } from "@/components/primitives/ReconnectBanner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { conversationsKey, useConversations } from "@/hooks/useConversations";
+import { conversationsKey, useArchiveConversation, useConversations } from "@/hooks/useConversations";
 import { forgetOrigin, originElementId, peekOrigin, type EvidenceOrigin } from "@/features/evidence/origin";
 import { useConversationStream } from "@/hooks/useConversationStream";
 import { useAgentAvailability } from "@/hooks/useAgentAvailability";
@@ -159,6 +159,39 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   });
 
   const mutation = useSendMessage(selectedId, scenarioId);
+  const archive = useArchiveConversation(scenarioId);
+  // Per-id, not `archive.isPending`/`archive.variables`: a shared mutation's
+  // aggregate state reflects only the LATEST call, so archiving conversation B
+  // while A's request is still in flight would otherwise report A as no
+  // longer archiving and re-enable its control mid-request.
+  const [archivingIds, setArchivingIds] = useState<ReadonlySet<string>>(new Set());
+  const [archiveFailure, setArchiveFailure] = useState<{ id: string; error: unknown } | null>(null);
+  const newConversationRef = useRef<HTMLButtonElement | null>(null);
+
+  const archiveConversationById = async (id: string) => {
+    setArchivingIds((prev) => new Set(prev).add(id));
+    setArchiveFailure((prev) => (prev?.id === id ? null : prev));
+    try {
+      // `mutateAsync`, not `mutate(id, { onSettled })`: a shared `useMutation`
+      // stores per-call callback options on ONE observer, so a second
+      // concurrent `.mutate()` call overwrites which callbacks fire when
+      // either promise settles — archiving B while A is pending could resolve
+      // A's request into B's `onSettled`, leaving A stuck disabled forever.
+      // Awaiting this call's own promise keeps each id's outcome bound to its
+      // own closure.
+      await archive.mutateAsync(id);
+      setArchiveFailure((prev) => (prev?.id === id ? null : prev));
+    } catch (error) {
+      setArchiveFailure({ id, error });
+    } finally {
+      setArchivingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
   const pinned = items.find((c) => c.id === selectedId);
   // A failed availability read is an API/service error, not evidence of a
   // model outage. Fail open so one broken read cannot disable a working agent.
@@ -175,6 +208,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
           className="min-h-11"
           disabled={start.isPending || !context.data}
           onClick={() => start.mutate()}
+          ref={newConversationRef}
           type="button"
           variant="outline"
         >
@@ -184,6 +218,25 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
 
       {start.isError ? (
         <ErrorState error={start.error} onRetry={() => start.reset()} scenarioId={scenarioId} />
+      ) : null}
+
+      {archiveFailure ? (
+        <InlineAlert
+          action={
+            <Button
+              className="min-h-11"
+              onClick={() => archiveConversationById(archiveFailure.id)}
+              type="button"
+              variant="outline"
+            >
+              Try again
+            </Button>
+          }
+          description={`Conversation ${archiveFailure.id.slice(0, 8)} could not be archived. It is still shown in the list.`}
+          live="polite"
+          title="Archive failed"
+          variant="destructive"
+        />
       ) : null}
 
       {agentUnavailable ? (
@@ -225,7 +278,10 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
         <ErrorState error={conversations.error} onRetry={() => void conversations.refetch()} scenarioId={scenarioId} />
       ) : (
         <ConversationList
+          archivingIds={archivingIds}
           conversations={items}
+          onArchive={archiveConversationById}
+          onFocusFallback={() => newConversationRef.current?.focus()}
           onSelect={select}
           selectedId={selectedId}
         />
