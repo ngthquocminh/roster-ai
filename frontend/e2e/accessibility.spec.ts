@@ -108,6 +108,8 @@ for (const zoom of [100, 200] as const) {
     await page.goto(`/scenarios/${SCENARIO_ID}/runs/${SCHEDULE_RUN_ID}`);
     if (zoom === 200) await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
 
+    // Provenance is lazily loaded inside the collapsed Debug details panel.
+    await page.getByRole("button", { name: /Debug details/ }).click();
     const provenance = page.getByRole("region", { name: "Decision provenance" });
     await expect(provenance).toBeVisible();
     await expect(provenance.getByRole("list", { name: "Decision provenance" })).toBeVisible();

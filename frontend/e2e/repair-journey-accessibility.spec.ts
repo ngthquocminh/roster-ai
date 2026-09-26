@@ -96,7 +96,13 @@ test("keeps repair Chat, Runs, and Results axe-clean, keyboard-operable, and sem
   await tabTo(page, refresh);
   await expectKeyboardFocus(refresh);
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Candidate comparison" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Comparison with baseline" })).toBeVisible();
+  // Evidence lives in the collapsed Debug details panel; open it by keyboard.
+  const debugDetails = page.getByRole("button", { name: /Debug details/ });
+  await tabTo(page, debugDetails);
+  await expectKeyboardFocus(debugDetails);
+  await page.keyboard.press("Enter");
+  await expect(debugDetails).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByText("demand: outbound:0", { exact: true })).toBeVisible();
   await expectAxeClean(page);
 
