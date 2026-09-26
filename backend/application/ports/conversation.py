@@ -121,6 +121,22 @@ class ConversationRepository(Protocol):
         limit: int = 100,
     ) -> ConversationPageV1: ...
 
+    def archive(
+        self,
+        connection: Any,
+        *,
+        conversation_id: UUID,
+    ) -> bool:
+        """Soft-archive one conversation; idempotent.
+
+        Returns ``True`` once the conversation is archived (whether this call
+        set ``archived_at`` or it was already set), ``False`` when the id is
+        unknown or belongs to another site -- the caller's RLS-scoped
+        connection makes those two cases indistinguishable, same as
+        :meth:`timeline`'s ``None`` (AD-3 non-disclosure).
+        """
+        ...
+
     def timeline(
         self,
         connection: Any,

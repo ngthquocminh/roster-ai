@@ -279,6 +279,7 @@ conversation = Table(
     Column("created_by_actor_id", UUID(as_uuid=True), ForeignKey("app_user.id", ondelete="RESTRICT"), nullable=False),
     Column("resource_version", BigInteger, nullable=False, server_default=text("1")),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    Column("archived_at", DateTime(timezone=True), nullable=True),
     ForeignKeyConstraint(["scenario_id", "site_id"], ["scenario.id", "scenario.site_id"], name="fk_conversation_scenario_site", ondelete="RESTRICT"),
     ForeignKeyConstraint(["scenario_version_id", "site_id"], ["scenario_version.id", "scenario_version.site_id"], name="fk_conversation_version_site", ondelete="RESTRICT"),
     UniqueConstraint("id", "site_id", name="uq_conversation_id_site"),

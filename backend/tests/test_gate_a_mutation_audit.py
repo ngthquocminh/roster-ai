@@ -269,6 +269,7 @@ def test_gate_a_write_surface_is_exactly_the_approved_paths() -> None:
             "/api/v1/conversations/{conversation_id}"
             "/agent-runs/{agent_run_id}/execute",
         ),
+        ("POST", "/api/v1/conversations/{conversation_id}/archive"),
         ("POST", "/api/v1/conversations/{conversation_id}/messages"),
         ("POST", "/api/v1/proposals/{proposal_id}/rejection"),
         ("POST", "/api/v1/proposals/{proposal_id}/revisions"),

@@ -1182,3 +1182,92 @@ def test_latest_terminal_outcome_for_site_reads_the_newest_typed_agent_failure(
         assert repo.latest_terminal_outcome_for_site(
             connection, site_id=other_site
         ) is None
+
+
+def test_archive_hides_a_conversation_from_the_scenario_list(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+
+    with _site_context(engine, ids["site"]) as c:
+        visible_ids = [row.id for row in repo.list_for_scenario(c, scenario_id=ids["scenario"]).items]
+    assert created.id in visible_ids
+
+    with _site_context(engine, ids["site"]) as c:
+        assert repo.archive(c, conversation_id=created.id) is True
+
+    with _site_context(engine, ids["site"]) as c:
+        remaining_ids = [row.id for row in repo.list_for_scenario(c, scenario_id=ids["scenario"]).items]
+    assert created.id not in remaining_ids
+
+
+def test_archiving_an_already_archived_conversation_is_idempotent(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+
+    with _site_context(engine, ids["site"]) as c:
+        assert repo.archive(c, conversation_id=created.id) is True
+        first_stamp = c.execute(
+            select(conversation.c.archived_at).where(conversation.c.id == created.id)
+        ).scalar_one()
+
+    with _site_context(engine, ids["site"]) as c:
+        # Re-archiving must not move the stamp -- `COALESCE` keeps the original
+        # `archived_at` rather than overwriting it with a fresh `now()`.
+        assert repo.archive(c, conversation_id=created.id) is True
+        second_stamp = c.execute(
+            select(conversation.c.archived_at).where(conversation.c.id == created.id)
+        ).scalar_one()
+
+    assert second_stamp == first_stamp
+
+
+def test_archiving_an_unknown_or_foreign_site_conversation_is_denied(
+    governed_postgres_engine, ids
+) -> None:
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+    repo = PostgresConversationRepository()
+
+    with _site_context(engine, ids["site"]) as c:
+        assert repo.archive(c, conversation_id=uuid4()) is False
+
+    # RLS confines the UPDATE to the caller's site -- a real conversation on
+    # another site matches no row for this session, same as `timeline`'s None.
+    with _site_context(engine, ids["other_site"]) as c:
+        assert repo.archive(c, conversation_id=created.id) is False
+
+    with _site_context(engine, ids["site"]) as c:
+        visible_ids = [row.id for row in repo.list_for_scenario(c, scenario_id=ids["scenario"]).items]
+    assert created.id in visible_ids
+
+
+def test_the_runtime_role_can_only_update_the_archived_at_column(
+    governed_postgres_engine, ids
+) -> None:
+    """`a4f92d7c8e31` revoked blanket UPDATE on `conversation`; the archive
+    migration grants back exactly one additional column (`archived_at`,
+    alongside the pre-existing `resource_version` grant). A grant broader than
+    that would let this write through undetected by every other test here,
+    which all use the repository's own narrow `archive()` statement. Targets
+    `created_at` rather than `resource_version`, since `resource_version` was
+    already grantable before this story."""
+    engine = governed_postgres_engine
+    created = _create(engine, ids)
+    assert created is not None
+
+    with pytest.raises(DBAPIError):
+        with _site_context(engine, ids["site"]) as c:
+            c.execute(
+                conversation.update()
+                .where(conversation.c.id == created.id)
+                .values(created_at=func.now())
+            )

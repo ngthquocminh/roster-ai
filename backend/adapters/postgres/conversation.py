@@ -224,7 +224,10 @@ class PostgresConversationRepository:
         # dropped before returning.
         rows = connection.execute(
             select(conversation)
-            .where(conversation.c.scenario_id == scenario_id)
+            .where(
+                conversation.c.scenario_id == scenario_id,
+                conversation.c.archived_at.is_(None),
+            )
             .order_by(conversation.c.created_at.desc(), conversation.c.id.desc())
             .limit(limit + 1)
         ).all()
@@ -239,6 +242,19 @@ class PostgresConversationRepository:
             limit,
             has_more,
         )
+
+    def archive(self, connection: Connection, *, conversation_id: UUID) -> bool:
+        # `COALESCE` makes re-archiving a no-op rather than stamping a fresh
+        # `archived_at` on every call -- the endpoint is idempotent, not
+        # merely repeatable. RLS confines the match to the caller's site, so
+        # an unknown or foreign-site id simply matches no row.
+        row = connection.execute(
+            update(conversation)
+            .where(conversation.c.id == conversation_id)
+            .values(archived_at=func.coalesce(conversation.c.archived_at, func.now()))
+            .returning(conversation.c.id)
+        ).one_or_none()
+        return row is not None
 
     def timeline(
         self, connection: Connection, *, conversation_id: UUID, limit: int = 200

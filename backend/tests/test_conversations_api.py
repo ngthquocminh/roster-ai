@@ -118,6 +118,7 @@ class _Repository:
         self.claimed_statuses: list[str] = []
         self.finished_events: list[PersistedEventV1] = []
         self.raise_not_queued_on_claim = False
+        self.archived: list[UUID] = []
 
     def _conversation(self) -> ConversationV1:
         return ConversationV1(self.conversation_id, self.scenario_id, self.version_id, 2)
@@ -130,7 +131,16 @@ class _Repository:
     def list_for_scenario(self, _connection, *, scenario_id, limit=100):
         if scenario_id != self.scenario_id:
             return ConversationPageV1((), limit, False)
+        if self.conversation_id in self.archived:
+            return ConversationPageV1((), limit, False)
         return ConversationPageV1((self._conversation(),), limit, False)
+
+    def archive(self, _connection, *, conversation_id):
+        if conversation_id != self.conversation_id:
+            return False
+        if conversation_id not in self.archived:
+            self.archived.append(conversation_id)
+        return True
 
     def timeline(self, _connection, *, conversation_id, limit=200):
         if conversation_id != self.conversation_id:
@@ -935,3 +945,51 @@ def test_conversation_list_reports_truncation(conversation_client) -> None:
     assert body["has_more"] is False
     assert body["limit"] == 100
     assert [item["id"] for item in body["items"]] == [str(repository.conversation_id)]
+
+
+def test_archiving_a_conversation_removes_it_from_the_list(conversation_client) -> None:
+    client, repository, settings = conversation_client
+
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/archive",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 204
+    assert response.content == b""
+
+    listed = client.get(
+        f"/api/v1/conversations?scenario_id={repository.scenario_id}",
+        headers=_headers(settings),
+    )
+    assert [item["id"] for item in listed.json()["items"]] == []
+
+
+def test_archiving_an_already_archived_conversation_stays_204(conversation_client) -> None:
+    client, repository, settings = conversation_client
+
+    first = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/archive",
+        headers=_headers(settings),
+    )
+    second = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/archive",
+        headers=_headers(settings),
+    )
+
+    assert first.status_code == 204
+    assert second.status_code == 204
+
+
+def test_archiving_an_unknown_conversation_is_the_standard_non_disclosing_404(
+    conversation_client,
+) -> None:
+    client, _, settings = conversation_client
+
+    response = client.post(
+        f"/api/v1/conversations/{uuid4()}/archive",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 404
+    assert response.json() == _NOT_FOUND_BODY
