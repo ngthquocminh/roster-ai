@@ -16,7 +16,7 @@ vi.mock("@/hooks/useScenarioContext", () => ({
 vi.mock("@/hooks/useScenarioProjection", () => ({
   useScenarioOverview: vi.fn(), useWorkAreasAndTasks: vi.fn(), useWorkers: vi.fn(),
   useDemand: vi.fn(), useBaselineAssignments: vi.fn(), useLocks: vi.fn(),
-  useConstraintsAndObjectives: vi.fn(),
+  useConstraintsAndObjectives: vi.fn(), useWorkerNameMap: vi.fn(), useTaskNameMap: vi.fn(),
 }));
 
 import { routes } from "@/App";
@@ -87,6 +87,9 @@ beforeEach(() => {
   vi.mocked(projectionHooks.useBaselineAssignments).mockReturnValue(empty as never);
   vi.mocked(projectionHooks.useLocks).mockReturnValue(empty as never);
   vi.mocked(projectionHooks.useConstraintsAndObjectives).mockReturnValue(empty as never);
+  const emptyMap = { data: undefined, error: null, isError: false, isPending: false, refetch: vi.fn() };
+  vi.mocked(projectionHooks.useWorkerNameMap).mockReturnValue(emptyMap as never);
+  vi.mocked(projectionHooks.useTaskNameMap).mockReturnValue(emptyMap as never);
 });
 
 function renderAt(path: string) {

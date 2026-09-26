@@ -45,4 +45,16 @@ describe("IdentifierCopyButton", () => {
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Copy unavailable. Select the identifier to copy it manually."));
   });
+
+  it("displays a resolved label instead of the ID while still copying the ID", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+    render(<IdentifierCopyButton identifierType="Worker ID" label="Alex Kim" value="worker-1" />);
+
+    expect(screen.getByText("Alex Kim")).toBeInTheDocument();
+    expect(screen.queryByText("worker-1")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy Worker ID worker-1" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("worker-1"));
+  });
 });

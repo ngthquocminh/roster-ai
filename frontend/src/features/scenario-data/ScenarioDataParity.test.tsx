@@ -13,6 +13,8 @@ vi.mock("@/hooks/useScenarioProjection", () => ({
   useBaselineAssignments: vi.fn(),
   useLocks: vi.fn(),
   useConstraintsAndObjectives: vi.fn(),
+  useWorkerNameMap: vi.fn(),
+  useTaskNameMap: vi.fn(),
 }));
 
 import * as hooks from "@/hooks/useScenarioProjection";
@@ -88,6 +90,12 @@ function installContract(contract: ContractFixture) {
   vi.mocked(hooks.useBaselineAssignments).mockImplementation(pageImplementation(contract.groups["baseline-assignments"]));
   vi.mocked(hooks.useLocks).mockImplementation(pageImplementation(contract.groups.locks));
   vi.mocked(hooks.useConstraintsAndObjectives).mockImplementation(pageImplementation(contract.groups["constraints-and-objectives"]));
+  vi.mocked(hooks.useWorkerNameMap).mockReturnValue(
+    queryState(new Map(contract.groups.workers.map((worker) => [String(worker.contact_id), String(worker.name)]))) as never,
+  );
+  vi.mocked(hooks.useTaskNameMap).mockReturnValue(
+    queryState(new Map(contract.groups["work-areas-and-tasks"].map((task) => [String(task.task_id), String(task.name)]))) as never,
+  );
 }
 
 function text(value: unknown): string {
@@ -99,7 +107,7 @@ function nestedList(value: unknown, format: (item: JsonRecord) => string): strin
   return items.length ? items.map(format).join(", ") : "—";
 }
 
-function expectedCells(group: typeof LIST_GROUPS[number], item: JsonRecord): string[] {
+function expectedCells(group: typeof LIST_GROUPS[number], item: JsonRecord, contract: ContractFixture): string[] {
   switch (group) {
     case "work-areas-and-tasks":
       return ["task_id", "name", "function", "area_id", "area_name", "unit_type_id"].map((key) => text(item[key]));
@@ -128,14 +136,17 @@ function expectedCells(group: typeof LIST_GROUPS[number], item: JsonRecord): str
         text(item.amount),
         text(item.unit),
       ];
-    case "baseline-assignments":
+    case "baseline-assignments": {
+      const workerName = contract.groups.workers.find((worker) => worker.contact_id === item.worker_id)?.name;
+      const taskName = contract.groups["work-areas-and-tasks"].find((task) => task.task_id === item.task_id)?.name;
       return [
         text(item.record_id),
-        text(item.worker_id),
-        text(item.task_id),
+        text(workerName ?? item.worker_id),
+        text(taskName ?? item.task_id),
         text(item.shift_id),
         formatMinuteWindow(Number(item.start_minute), Number(item.end_minute)),
       ];
+    }
     case "locks":
       return ["record_id", "target_type", "target_ref", "scope", "source"].map((key) => text(item[key]));
     case "constraints-and-objectives":
@@ -210,7 +221,7 @@ for (const fixtureId of FIXTURES) {
         observed.push(...renderedRows(group === "constraints-and-objectives" ? "Constraints and objectives" : group.split("-").map((part, index) => index === 0 ? `${part[0].toUpperCase()}${part.slice(1)}` : part).join(" ")));
         view.unmount();
       }
-      expect(observed).toEqual(items.map((item) => expectedCells(group, item)));
+      expect(observed).toEqual(items.map((item) => expectedCells(group, item, contract)));
     }, 60_000);
   }
 }

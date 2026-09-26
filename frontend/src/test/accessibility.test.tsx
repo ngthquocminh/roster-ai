@@ -16,6 +16,8 @@ vi.mock("@/hooks/useScenarioProjection", () => ({
   useBaselineAssignments: vi.fn(),
   useLocks: vi.fn(),
   useConstraintsAndObjectives: vi.fn(),
+  useWorkerNameMap: vi.fn(),
+  useTaskNameMap: vi.fn(),
 }));
 vi.mock("@/hooks/useScenarioContext", () => ({ useScenarioContext: vi.fn() }));
 
@@ -71,6 +73,8 @@ describe("accessibility axe sweep", () => {
   beforeEach(() => {
     sessionStorage.clear();
     vi.clearAllMocks();
+    vi.mocked(projectionHooks.useWorkerNameMap).mockReturnValue({ ...queryBase, data: undefined } as never);
+    vi.mocked(projectionHooks.useTaskNameMap).mockReturnValue({ ...queryBase, data: undefined } as never);
   });
 
   const catalogueEntry = {

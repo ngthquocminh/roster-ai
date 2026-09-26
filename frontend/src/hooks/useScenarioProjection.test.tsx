@@ -21,7 +21,9 @@ import {
   useDemand,
   useLocks,
   useScenarioOverview,
+  useTaskNameMap,
   useWorkAreasAndTasks,
+  useWorkerNameMap,
   useWorkers,
 } from "./useScenarioProjection";
 
@@ -96,5 +98,27 @@ describe("scenario projection hooks", () => {
     const { result } = renderHook(() => hook("scenario-a"), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(getter).toHaveBeenCalledOnce();
+  });
+});
+
+describe("name map hooks", () => {
+  it("useWorkerNameMap pages through every worker and keys by contact_id", async () => {
+    vi.mocked(api.getWorkers)
+      .mockResolvedValueOnce({ items: [{ contact_id: "w1", name: "Alex Kim" }], next_cursor: 200 } as never)
+      .mockResolvedValueOnce({ items: [{ contact_id: "w2", name: "Sam Lee" }], next_cursor: null } as never);
+    const { result } = renderHook(() => useWorkerNameMap("scenario-a"), { wrapper });
+    await waitFor(() => expect(result.current.data?.get("w2")).toBe("Sam Lee"));
+    expect(result.current.data?.get("w1")).toBe("Alex Kim");
+    expect(api.getWorkers).toHaveBeenNthCalledWith(1, "scenario-a", { cursor: 0, limit: 200 });
+    expect(api.getWorkers).toHaveBeenNthCalledWith(2, "scenario-a", { cursor: 200, limit: 200 });
+  });
+
+  it("useTaskNameMap pages through every task and keys by task_id", async () => {
+    vi.mocked(api.getWorkAreasAndTasks)
+      .mockResolvedValueOnce({ items: [{ task_id: "t1", name: "Pick" }], next_cursor: 200 } as never)
+      .mockResolvedValueOnce({ items: [{ task_id: "t2", name: "Pack" }], next_cursor: null } as never);
+    const { result } = renderHook(() => useTaskNameMap("scenario-a"), { wrapper });
+    await waitFor(() => expect(result.current.data?.get("t2")).toBe("Pack"));
+    expect(result.current.data?.get("t1")).toBe("Pick");
   });
 });

@@ -9,8 +9,9 @@ const ANNOUNCEMENT_DURATION_MS = 2_000;
 
 export function IdentifierCopyButton({
   identifierType,
+  label,
   value,
-}: Readonly<{ value: string; identifierType: string }>) {
+}: Readonly<{ value: string; identifierType: string; label?: string }>) {
   const [announcement, setAnnouncement] = useState("");
   const clearTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -39,7 +40,7 @@ export function IdentifierCopyButton({
 
   return (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
-      <span className="min-w-0 break-all font-mono text-xs" title={value}>{value}</span>
+      <span className={`min-w-0 break-all text-xs ${label ? "" : "font-mono"}`} title={value}>{label ?? value}</span>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>

@@ -15,6 +15,8 @@ vi.mock("@/hooks/useScenarioProjection", () => ({
   useBaselineAssignments: vi.fn(),
   useLocks: vi.fn(),
   useConstraintsAndObjectives: vi.fn(),
+  useWorkerNameMap: vi.fn(),
+  useTaskNameMap: vi.fn(),
 }));
 vi.mock("@/hooks/useProposal");
 vi.mock("@/hooks/useReviseProposal");
@@ -95,6 +97,14 @@ beforeEach(() => {
   for (const [group, hook] of Object.entries(hookByGroup)) {
     vi.mocked(hook).mockReturnValue({ ...queryBase, data: page(group as keyof typeof hookByGroup) } as never);
   }
+  vi.mocked(hooks.useWorkerNameMap).mockReturnValue({
+    ...queryBase,
+    data: new Map(contract.groups.workers.map((worker) => [String(worker.contact_id), String(worker.name)])),
+  } as never);
+  vi.mocked(hooks.useTaskNameMap).mockReturnValue({
+    ...queryBase,
+    data: new Map(contract.groups["work-areas-and-tasks"].map((task) => [String(task.task_id), String(task.name)])),
+  } as never);
   vi.mocked(hooks.useScenarioOverview).mockReturnValue({
     ...queryBase,
     data: {

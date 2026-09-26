@@ -68,6 +68,45 @@ export function useWorkers(scenarioId: string, params: WorkerQuery = {}) {
   );
 }
 
+// Assignments carry only worker/task IDs (per docs/DOMAIN-MODEL.md); the UI resolves display
+// names by paging through every worker/task once and keying the result by the same business
+// ID assignments reference (contact_id, task_id) — not the projection record_id.
+const NAME_PAGE_LIMIT = 200;
+
+export function useWorkerNameMap(scenarioId: string) {
+  return useProjectionQuery(
+    ["scenario-projection", scenarioId, "workers", "name-map"],
+    async () => {
+      const map = new Map<string, string>();
+      let cursor: number | undefined = 0;
+      while (cursor !== undefined) {
+        const page = await getWorkers(scenarioId, { cursor, limit: NAME_PAGE_LIMIT });
+        for (const item of page.items) map.set(item.contact_id, item.name);
+        cursor = page.next_cursor ?? undefined;
+      }
+      return map;
+    },
+    scenarioId,
+  );
+}
+
+export function useTaskNameMap(scenarioId: string) {
+  return useProjectionQuery(
+    ["scenario-projection", scenarioId, "work-areas-and-tasks", "name-map"],
+    async () => {
+      const map = new Map<string, string>();
+      let cursor: number | undefined = 0;
+      while (cursor !== undefined) {
+        const page = await getWorkAreasAndTasks(scenarioId, { cursor, limit: NAME_PAGE_LIMIT });
+        for (const item of page.items) map.set(item.task_id, item.name);
+        cursor = page.next_cursor ?? undefined;
+      }
+      return map;
+    },
+    scenarioId,
+  );
+}
+
 export function useDemand(scenarioId: string, params: DemandQuery = {}) {
   return useProjectionQuery(
     ["scenario-projection", scenarioId, "demand", params],

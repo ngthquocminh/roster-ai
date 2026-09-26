@@ -1,7 +1,7 @@
 import { TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { IdentifierCopyButton } from "@/components/primitives/IdentifierCopyButton";
 import type { AssignmentQuery } from "@/api/scenarioProjection";
-import { useBaselineAssignments } from "@/hooks/useScenarioProjection";
+import { useBaselineAssignments, useTaskNameMap, useWorkerNameMap } from "@/hooks/useScenarioProjection";
 import { getErrorStatus } from "@/lib/errors";
 import { formatMinuteWindow } from "@/lib/formatShiftWindow";
 import { ScenarioDataGroupState } from "../ScenarioDataGroupState";
@@ -14,6 +14,8 @@ const columns = COLUMNS_BY_GROUP["baseline-assignments"];
 
 export function BaselineAssignmentsPanel({ controls, scenarioId, visibleColumns }: Readonly<{ scenarioId: string; controls?: GroupControls; visibleColumns?: ReadonlySet<string> }>) {
   const query = useBaselineAssignments(scenarioId, (controls?.queryParams ?? {}) as AssignmentQuery);
+  const workerNames = useWorkerNameMap(scenarioId);
+  const taskNames = useTaskNameMap(scenarioId);
   const items = query.data?.items ?? [];
   const hasFilters = Object.keys(controls?.activeFilters ?? {}).length > 0;
   const matchingCount = query.data?.matching_count ?? items.length;
@@ -39,8 +41,8 @@ export function BaselineAssignmentsPanel({ controls, scenarioId, visibleColumns 
           {items.map((item) => (
             <TableRow key={item.record_id}>
               {visible.has("record_id") ? <TableCell><IdentifierCopyButton identifierType="Record ID" value={item.record_id} /></TableCell> : null}
-              {visible.has("worker_id") ? <TableCell><IdentifierCopyButton identifierType="Worker ID" value={item.worker_id} /></TableCell> : null}
-              {visible.has("task_id") ? <TableCell><IdentifierCopyButton identifierType="Task ID" value={item.task_id} /></TableCell> : null}
+              {visible.has("worker_id") ? <TableCell><IdentifierCopyButton identifierType="Worker ID" label={workerNames.data?.get(item.worker_id)} value={item.worker_id} /></TableCell> : null}
+              {visible.has("task_id") ? <TableCell><IdentifierCopyButton identifierType="Task ID" label={taskNames.data?.get(item.task_id)} value={item.task_id} /></TableCell> : null}
               {visible.has("shift_id") ? <TableCell>{item.shift_id ? <IdentifierCopyButton identifierType="Shift ID" value={item.shift_id} /> : "—"}</TableCell> : null}
               {visible.has("window") ? <TableCell>{formatMinuteWindow(item.start_minute, item.end_minute)}</TableCell> : null}
             </TableRow>

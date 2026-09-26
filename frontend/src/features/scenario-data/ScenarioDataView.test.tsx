@@ -5,7 +5,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/hooks/useScenarioProjection", () => ({
   useScenarioOverview: vi.fn(), useWorkAreasAndTasks: vi.fn(), useWorkers: vi.fn(),
   useDemand: vi.fn(), useBaselineAssignments: vi.fn(), useLocks: vi.fn(),
-  useConstraintsAndObjectives: vi.fn(),
+  useConstraintsAndObjectives: vi.fn(), useWorkerNameMap: vi.fn(), useTaskNameMap: vi.fn(),
 }));
 vi.mock("@/hooks/useEvidenceRecord", () => ({ useEvidenceRecord: vi.fn() }));
 
@@ -30,6 +30,8 @@ beforeEach(() => {
   vi.mocked(hooks.useBaselineAssignments).mockReturnValue(state as never);
   vi.mocked(hooks.useLocks).mockReturnValue(state as never);
   vi.mocked(hooks.useConstraintsAndObjectives).mockReturnValue(state as never);
+  vi.mocked(hooks.useWorkerNameMap).mockReturnValue(state as never);
+  vi.mocked(hooks.useTaskNameMap).mockReturnValue(state as never);
   vi.mocked(useEvidenceRecord).mockReturnValue({ ...state, isSuccess: false } as never);
 });
 
