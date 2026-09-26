@@ -7,6 +7,10 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/hooks/useScenarioContext", () => ({ useScenarioContext: vi.fn() }));
 vi.mock("@/api/scheduleRuns");
 vi.mock("@/api/provenance");
+vi.mock("@/hooks/useScenarioProjection", () => ({
+  useWorkerNameMap: () => ({ data: new Map([["W1", "Alice"]]) }),
+  useTaskNameMap: () => ({ data: new Map([["T1", "Picking"]]) }),
+}));
 
 import { getScheduleRunResult } from "@/api/scheduleRuns";
 import { getRunProvenance } from "@/api/provenance";
@@ -46,6 +50,7 @@ it("keeps the workspace shell and peer tabs available when Results fetch fails",
   expect(screen.getByRole("link", { name: "Scenario Data" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Runs" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Fixture A" })).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole("button", { name: /Debug details/ }));
   expect(await screen.findByRole("heading", { name: "Decision provenance" })).toBeInTheDocument();
   expect(screen.getByRole("list", { name: "Decision provenance" })).toBeInTheDocument();
 });
@@ -64,6 +69,7 @@ it("keeps results available when only decision provenance fails", async () => {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>);
 
   expect(await screen.findByText("In progress")).toBeInTheDocument();
+  await userEvent.click(await screen.findByRole("button", { name: /Debug details/ }));
   expect(await screen.findByText("Decision provenance unavailable")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Retry provenance" })).toBeInTheDocument();
   expect(screen.queryByText("Couldn't load this content.")).not.toBeInTheDocument();
@@ -87,7 +93,12 @@ it("keeps the run usable when only the baseline comparison is unavailable", asyn
     },
     candidate: {
       schedule_version_id: "cand-1", schedule_run_id: runId,
-      assignments: [{ record_id: "a1", worker_id: "W1", task_id: "T1", start_minute: 0, end_minute: 60 }],
+      assignments: [{ record_id: "a1", worker_id: "W1", task_id: "T1", shift_id: null, start_minute: 0, end_minute: 60 }],
+      metrics: {
+        interval_coverage_required_minutes: [["demand-1", 60]], interval_coverage_served_minutes: [["demand-1", 45]],
+        function_coverage_required_minutes: [["Picking", 60]], function_coverage_served_minutes: [["Picking", 45]],
+        overtime_minutes: 0, total_cost: 10, objective_components: [], assignment_count: 1, member_count: 1, schema_version: "1",
+      },
     },
     comparison: null,
     comparison_unavailable_reason:
@@ -105,6 +116,10 @@ it("keeps the run usable when only the baseline comparison is unavailable", asyn
   // The candidate survives, and the loop stays closed.
   expect(screen.getByRole("heading", { name: "Candidate schedule" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Request approval" })).toBeInTheDocument();
+  expect(screen.getByRole("table")).toBeInTheDocument();
+  expect(screen.getByText("Alice")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Schedule overview" })).toBeInTheDocument();
+  expect(screen.getByText((_, el) => el?.tagName === "P" && /1 of 1 demand intervals/.test(el.textContent ?? ""))).toBeInTheDocument();
   // UX-DR13: no action that cannot succeed. This is not a transport failure, so
   // the connection alert and its Retry must not appear.
   expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();

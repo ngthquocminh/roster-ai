@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useParams } from "react-router";
+import { CandidateScheduleTable } from "@/components/run-results/CandidateScheduleTable";
 import { ComparisonSummary } from "@/components/run-results/ComparisonSummary";
+import { RunOverview } from "@/components/run-results/RunOverview";
 import { TerminalOutcomeCard } from "@/components/run-results/TerminalOutcomeCard";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { ProgressCard } from "@/components/runs/ProgressCard";
@@ -10,8 +12,7 @@ import { useScheduleRunResult } from "@/hooks/useScheduleRunResult";
 import { useRequestApproval } from "@/hooks/useRequestApproval";
 import { useRunApprovals } from "@/hooks/useRunApprovals";
 import { ApprovalDecisionPanel } from "@/features/approvals/ApprovalDecisionPanel";
-import { ProvenanceTimeline } from "@/features/provenance/ProvenanceTimeline";
-import { useRunProvenance } from "@/hooks/useRunProvenance";
+import { DebugDetailsPanel } from "@/features/provenance/DebugDetailsPanel";
 import { USER_ERROR_COPY } from "@/lib/errors";
 
 const NON_TERMINAL = new Set(["solver_queued", "solver_running", "cancellation_requested"]);
@@ -23,7 +24,6 @@ export function ScenarioResults() {
   const query = useScheduleRunResult(runId);
   const requestApproval = useRequestApproval();
   const approvals = useRunApprovals(runId);
-  const provenance = useRunProvenance(runId);
   const headingRef = useRef<HTMLHeadingElement>(null);
   // An unavailable baseline comparison is no longer an ERROR: the server returns
   // 200 with `comparison: null` and a literal reason, so the schedule, evidence,
@@ -56,17 +56,23 @@ export function ScenarioResults() {
       {!query.isError && query.data && NON_TERMINAL.has(query.data.run.status) ? <ProgressCard run={query.data.run} /> : null}
       {!query.isError && query.data && NON_PROMOTABLE.has(query.data.run.status) ? <TerminalOutcomeCard run={query.data.run} /> : null}
       {!query.isError ? approvals.data?.items.map((approval) => <ApprovalDecisionPanel approvalId={approval.approval_id} key={approval.approval_id} />) : null}
-      {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && query.data.comparison ? (
+      {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && (query.data.comparison || comparisonUnavailable) ? (
         <>
-          <ComparisonSummary
-            comparison={query.data.comparison}
+          <RunOverview
+            approvalsUnavailable={approvals.isError}
+            baselineVersion={query.data.comparison?.expected_baseline_schedule_version ?? query.data.current_baseline_schedule_version ?? null}
+            candidate={query.data.candidate}
+            candidateVersionId={query.data.candidate.schedule_version_id}
             onRequestApproval={() => requestApproval.mutate({
               schedule_run_id: runId,
               expected_resource_version: query.data.run.resource_version,
-              expected_baseline_schedule_version: query.data.comparison.current_baseline_schedule_version,
+              // The comparison can be exactly what is missing (refused), and the
+              // approval request is parameterised on this value, so fall back to
+              // the RESULT's baseline version.
+              expected_baseline_schedule_version: query.data.comparison?.current_baseline_schedule_version ?? query.data.current_baseline_schedule_version ?? null,
             })}
-            requestPending={requestApproval.isPending}
             requestError={requestApproval.isError}
+            requestPending={requestApproval.isPending}
             // FAIL CLOSED. `approvals.data` is `undefined` while the query is
             // loading and after it errors, so deriving this from `.some(...)`
             // alone left the control ENABLED whenever pending-state was
@@ -75,52 +81,15 @@ export function ScenarioResults() {
             // (`approval_already_pending` + `uq_approval_request_pending_run`)
             // is the real one, and this must not invite the 409.
             pendingApproval={!approvals.isSuccess || approvals.data.items.some((item) => item.state === "pending")}
-            approvalsUnavailable={approvals.isError}
+            stale={query.data.comparison?.stale ?? false}
           />
-          <section aria-labelledby="candidate-schedule-heading" className="rounded-xl border p-4">
-            <h3 className="font-semibold" id="candidate-schedule-heading">Candidate schedule</h3>
-            {query.data.candidate.assignments.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{query.data.candidate.assignments.map((assignment) => <li key={assignment.record_id}>{assignment.worker_id} · {assignment.task_id} · minutes {assignment.start_minute}–{assignment.end_minute}</li>)}</ul> : <p className="mt-2 text-sm">No assignments</p>}
-          </section>
-          <section aria-labelledby="result-evidence-heading" className="rounded-xl border p-4">
-            <h3 className="font-semibold" id="result-evidence-heading">Evidence</h3>
-            {query.data.comparison.evidence_refs.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{query.data.comparison.evidence_refs.map((ref) => <li key={`${ref.group}:${ref.record_id}`}>{ref.group}: {ref.record_id}</li>)}</ul> : <p className="mt-2 text-sm">No evidence references</p>}
-          </section>
+          <CandidateScheduleTable assignments={query.data.candidate.assignments} scenarioId={scenarioId} />
+          {query.data.comparison ? <ComparisonSummary comparison={query.data.comparison} /> : null}
         </>
-      ) : null}
-      {/* The candidate schedule is independent of the comparison, so it renders
-          whenever a refused comparison is the ONLY thing missing. Without this
-          branch a promoted site showed nothing at all for every later run. */}
-      {!query.isError && query.data?.run.status === "solver_completed" && query.data.candidate && comparisonUnavailable ? (
-        <section aria-labelledby="candidate-only-heading" className="rounded-xl border p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-semibold" id="candidate-only-heading">Candidate schedule</h3>
-            <Button
-              className="min-h-11"
-              disabled={requestApproval.isPending || !approvals.isSuccess || approvals.data.items.some((item) => item.state === "pending")}
-              onClick={() => requestApproval.mutate({
-                schedule_run_id: runId,
-                expected_resource_version: query.data.run.resource_version,
-                // Sourced from the RESULT, not the comparison: the comparison is
-                // exactly what is missing here, and the approval request is
-                // parameterised on this value.
-                expected_baseline_schedule_version: query.data.current_baseline_schedule_version ?? null,
-              })}
-              type="button"
-            >
-              Request approval
-            </Button>
-          </div>
-          {query.data.candidate.assignments.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{query.data.candidate.assignments.map((assignment) => <li key={assignment.record_id}>{assignment.worker_id} · {assignment.task_id} · minutes {assignment.start_minute}–{assignment.end_minute}</li>)}</ul> : <p className="mt-2 text-sm">No assignments</p>}
-        </section>
       ) : null}
       {!query.isError && query.data?.run.status === "solver_completed" && !comparisonUnavailable && (!query.data.candidate || !query.data.comparison) ? <InlineAlert description="The completed run did not return verifiable candidate evidence." title="Result unavailable" variant="destructive" /> : null}
       {!query.isError && query.data && !KNOWN_RUN_STATUSES.has(query.data.run.status) ? <InlineAlert description="This run reported a status this page does not recognize yet." title="Unrecognized run status" variant="destructive" /> : null}
-      <section aria-labelledby="decision-provenance-heading" className="rounded-xl border p-4">
-        <h3 className="font-semibold" id="decision-provenance-heading">Decision provenance</h3>
-        {provenance.isPending ? <div aria-label="Loading decision provenance" className="mt-3"><Skeleton className="h-28 w-full" /></div> : null}
-        {provenance.isError ? <div className="mt-3"><InlineAlert action={<Button onClick={() => { void provenance.refetch(); }} type="button" variant="outline">Retry provenance</Button>} description="The decision record could not be loaded. Results remain available." title="Decision provenance unavailable" variant="destructive" /></div> : null}
-        {provenance.data ? <div className="mt-3"><ProvenanceTimeline provenance={provenance.data} scenarioId={scenarioId} /></div> : null}
-      </section>
+      <DebugDetailsPanel evidenceRefs={query.data?.comparison?.evidence_refs ?? query.data?.candidate?.evidence_refs ?? null} runId={runId} scenarioId={scenarioId} />
     </section>
   );
 }

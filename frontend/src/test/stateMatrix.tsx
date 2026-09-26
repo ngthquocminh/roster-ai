@@ -251,7 +251,7 @@ const customStates: readonly StateFixture[] = [
 
   {
     family: "comparison", state: "populated",
-    render: () => <ComparisonSummary approvalsUnavailable={false} comparison={comparison() as never} onRequestApproval={() => {}} pendingApproval={false} requestError={false} requestPending={false} />,
+    render: () => <ComparisonSummary comparison={comparison() as never} />,
   },
   {
     // Task 3's "'Not computed' for an absent metric". `delta()` returns that
@@ -259,11 +259,11 @@ const customStates: readonly StateFixture[] = [
     // hits its time limit before proving cost-optimality — a real absent metric,
     // not a zero. Rendered through the component so the copy is the component's.
     family: "comparison", state: "not computed",
-    render: () => <ComparisonSummary approvalsUnavailable={false} comparison={comparison({ baseline_metrics: { ...metrics, total_cost: null, overtime_minutes: null } }) as never} onRequestApproval={() => {}} pendingApproval={false} requestError={false} requestPending={false} />,
+    render: () => <ComparisonSummary comparison={comparison({ baseline_metrics: { ...metrics, total_cost: null, overtime_minutes: null } }) as never} />,
   },
   {
     family: "comparison", state: "stale binding",
-    render: () => <ComparisonSummary approvalsUnavailable={false} comparison={comparison({ stale: true, current_baseline_schedule_version: "baseline-v2" }) as never} onRequestApproval={() => {}} pendingApproval={false} requestError={false} requestPending={false} />,
+    render: () => <ComparisonSummary comparison={comparison({ stale: true, current_baseline_schedule_version: "baseline-v2" }) as never} />,
   },
 
   { family: "approval", state: "pending", render: () => seeded([[approvalKey(APPROVAL_ID), approval("pending")]], <ApprovalDecisionPanel approvalId={APPROVAL_ID} />) },
