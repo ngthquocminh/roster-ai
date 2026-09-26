@@ -19,8 +19,12 @@ export function DebugDetailsPanel({ runId, scenarioId, evidenceRefs }: Readonly<
   return (
     <Collapsible className="rounded-xl border p-4" onOpenChange={setOpen} open={open}>
       <CollapsibleTrigger asChild>
-        <Button className="min-h-11 w-full justify-between" type="button" variant="ghost">
-          <span>Debug details <span className="font-normal text-muted-foreground">— evidence and decision provenance, for troubleshooting</span></span>
+        {/* `whitespace-normal`/`h-auto` override the button's nowrap: at 200% zoom
+            the one-line label pushed the chevron past the viewport (WCAG 1.4.10).
+            The subtitle is not `text-muted-foreground`: an open ghost trigger sits
+            on `bg-muted`, where muted text measures 4.34:1 (WCAG 1.4.3). */}
+        <Button className="h-auto min-h-11 w-full justify-between gap-3 whitespace-normal text-left" type="button" variant="ghost">
+          <span>Debug details <span className="font-normal">— evidence and decision provenance, for troubleshooting</span></span>
           <ChevronDown aria-hidden="true" className={`size-4 transition-transform ${open ? "rotate-180" : ""}`} />
         </Button>
       </CollapsibleTrigger>
