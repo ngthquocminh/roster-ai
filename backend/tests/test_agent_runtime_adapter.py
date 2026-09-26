@@ -1192,17 +1192,6 @@ def _compute_then(answers):
     return model
 
 
-def test_a_mistyped_result_id_is_corrected_in_loop() -> None:
-    """live-suite-v2-acceptance-f: the model copied a 64-character hash as 63
-    and as 68 characters, and the gate could only report missing_evidence."""
-    runtime = _runtime(
-        model=FunctionModel(_compute_then([_claim_answer(REAL_RESULT_ID[:-1]),
-                                           _claim_answer(REAL_RESULT_ID)])),
-        capabilities=(_compute_stub_module(),), answer_type=GroundedAnswerV1)
-    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="how many workers?"))
-    assert outcome.answer == _claim_answer(REAL_RESULT_ID)
-
-
 def test_an_unrelated_result_id_still_reaches_the_gate_as_missing_evidence() -> None:
     """golden case grounding-missing-evidence depends on this path staying open."""
     invented = _claim_answer("f" * 64)

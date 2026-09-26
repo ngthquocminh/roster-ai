@@ -1,12 +1,13 @@
 """Trusted, server-owned dependencies supplied to an agent run."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
 from uuid import UUID
 
 from application.contracts.agent_runtime import AgentBudgetV1
+from application.grounding.evidence_registry import EvidenceRegistry
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.telemetry import TelemetrySink
 
@@ -47,6 +48,12 @@ class AgentDepsV1:
     # The model sees only the separately rendered representation.
     tool_result_sink: Callable[[object], None] | None = None
     telemetry: TelemetrySink | None = None
+    # Issues the short citation handles (`r1`, ...) the model sees for this
+    # turn's calculation results. Built fresh with every deps, so per-turn by
+    # construction.
+    evidence_registry: EvidenceRegistry = field(
+        default_factory=EvidenceRegistry, compare=False, repr=False
+    )
     schema_version: str = SCHEMA_VERSION
 
 

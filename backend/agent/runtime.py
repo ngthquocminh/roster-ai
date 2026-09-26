@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import re
 import threading
-from difflib import SequenceMatcher
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import perf_counter
@@ -187,20 +186,6 @@ def _result_ids_this_run(messages: list, citable_tools: frozenset[str]) -> set[s
                 if isinstance(value, str) and value:
                     found.add(value)
     return found
-
-
-def _mistyped_result_id(cited: str, returned: set[str]) -> str | None:
-    """The id this citation was evidently copied from, if it is a near-miss.
-
-    Deliberately strict: an unrelated or invented id must NOT be treated as a
-    typo, or the gate's `missing_evidence` state becomes unreachable.
-    """
-    if cited in returned:
-        return None
-    for candidate in sorted(returned):
-        if SequenceMatcher(None, cited, candidate).ratio() >= .9:
-            return candidate
-    return None
 
 
 _QUANTITY_QUESTION = re.compile(r"\bhow (?:many|much)\b", re.IGNORECASE)
@@ -503,20 +488,9 @@ class PydanticAIAgentRuntime:
                             "remove the claim and answer in prose alone." + _COMPLETE_ANSWER
                         )
                     if result_id:
-                        # A citation the model MIS-TRANSCRIBED from a result it
-                        # really received (observed: a 63- and a 68-character
-                        # copy of a 64-character hash) is a slip it can fix. An
-                        # unrelated id stays the gate's business, rendering an
-                        # inspectable `missing_evidence` claim -- golden case
-                        # grounding-missing-evidence pins that path.
-                        intended = _mistyped_result_id(result_id, returned)
-                        if intended is not None:
-                            self._last_retry_rule = "result_id_mistyped"
-                            raise ModelRetry(
-                                f"The claim cites result_id {result_id!r}, which differs from "
-                                f"the id the calculation returned in this turn: {intended!r}. "
-                                "Copy the returned result_id exactly, character for character." + _COMPLETE_ANSWER
-                            )
+                        # A wrong id among real results is the gate's business,
+                        # rendering an inspectable `missing_evidence` claim --
+                        # golden case grounding-missing-evidence pins that path.
                         continue
                     self._last_retry_rule = "uncited_claim"
                     raise ModelRetry(

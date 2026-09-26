@@ -801,22 +801,40 @@ def test_grounding_cases_have_literal_result_ids_authored_refs_and_oracles() -> 
         if outcome != "supported"
     )
 
-    # Ids are the real content hash, not merely 64 characters long: this is what
-    # makes a `derive_result_id` regression turn the cases red instead of
-    # letting them keep passing against a stale literal.
-    expected_id = derive_result_id(
+    # A real citation is the turn's short handle (G' phase 1); the invented one
+    # is a 64-hex id no call produced. `derive_result_id` regressions are caught
+    # by the persisted canonical id (test_a_supported_golden_claim_persists_the_content_hash).
+    for outcome, case in by_outcome.items():
+        final = case.scripted_turns[-1].response_data
+        claim = next(segment for segment in final["segments"] if segment["kind"] == "claim")
+        if outcome == "missing_evidence":
+            assert len(claim["result_id"]) == 64
+        else:
+            assert claim["result_id"] == "r1", outcome
+
+
+def test_a_supported_golden_claim_persists_the_content_hash() -> None:
+    """The model cites `r1`; the stored claim carries the canonical id, so a
+    `derive_result_id` regression turns this red."""
+    case = next(
+        case for case in load_cases(GOLDEN_DIR)
+        if case.capability == "scheduling_compute"
+        and case.expected_grounding_outcome == "supported"
+    )
+    results: list[object] = []
+    runtime = _runtime_for_case(case, installed_modules(), results)
+    outcome = ground_case_outcome(
+        case, _run_runtime_case(runtime, case), runtime._deps, tuple(results)
+    )
+    claim = outcome.grounded_response.claims[0]
+    assert claim.verdict == "supported"
+    assert claim.result_id == derive_result_id(
         "required_headcount_minutes",
         ClaimArgumentsV1(
             task_id="pick", family="outbound", start_minute=2880, end_minute=4320
         ),
         FIXTURE_IDENTITY,
     )
-    for outcome, case in by_outcome.items():
-        final = case.scripted_turns[-1].response_data
-        claim = next(segment for segment in final["segments"] if segment["kind"] == "claim")
-        assert len(claim["result_id"]) == 64
-        if outcome != "missing_evidence":
-            assert claim["result_id"] == expected_id, outcome
 
 
 def test_grounding_evaluator_distinguishes_argument_mismatch_from_missing_result() -> None:

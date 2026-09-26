@@ -21,6 +21,7 @@ from agent.runtime import PydanticAIAgentRuntime
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import installed_modules
 from application.capabilities.module import CapabilityModuleV1
+from application.grounding.evidence_registry import trusted_results_by_citation
 from application.contracts.activity import (
     ActivityItemV1,
     AgentResponseActivityV1,
@@ -394,11 +395,7 @@ def _evaluate_case(
     if outcome.draft is not None:
         outcome = resolve_draft_citation(
             outcome,
-            {
-                value.result_id: value
-                for value in results
-                if isinstance(getattr(value, "result_id", None), str)
-            },
+            trusted_results_by_citation(results, runtime._deps.evidence_registry),
         )
     if case.expected_grounding_outcome:
         outcome = ground_case_outcome(

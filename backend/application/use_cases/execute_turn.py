@@ -24,6 +24,7 @@ from application.contracts.activity import (
 )
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.grounding import GroundedClaimV1, GroundedProseSegmentV1, GroundedResponseV1
+from application.grounding.evidence_registry import trusted_results_by_citation
 from application.grounding.gate import (
     UncitedNumericProseError,
     ground_answer,
@@ -106,11 +107,7 @@ def execute_turn(
             outcome,
             resolved_clarification=resolve_clarification(outcome.clarification, deps),
         )
-    by_id = {
-        value.result_id: value
-        for value in calculation_results
-        if isinstance(getattr(value, "result_id", None), str)
-    }
+    by_id = trusted_results_by_citation(calculation_results, deps.evidence_registry)
     if outcome.draft is not None:
         return resolve_draft_citation(outcome, by_id)
     if outcome.answer is None:

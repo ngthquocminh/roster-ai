@@ -177,8 +177,10 @@ def _ground_claim(
 ) -> GroundedClaimV1:
     if not proposal.result_id:
         return _failed(proposal, "uncited_claim")
+    # Keyed by canonical id and by this turn's short handle (see
+    # `evidence_registry.trusted_results_by_citation`).
     result = results.get(proposal.result_id)
-    if result is None or result.result_id != proposal.result_id:
+    if result is None:
         return _failed(proposal, "missing_evidence")
     if result.metric != proposal.metric or result.arguments != proposal.arguments:
         return _failed(proposal, "missing_evidence")
@@ -201,7 +203,7 @@ def _ground_claim(
         return GroundedClaimV1(
             metric=proposal.metric,
             arguments=proposal.arguments,
-            result_id=proposal.result_id,
+            result_id=result.result_id,
             value=result.value,
             unit=result.unit,
             evidence_refs=(),
@@ -215,7 +217,7 @@ def _ground_claim(
     return GroundedClaimV1(
         metric=proposal.metric,
         arguments=proposal.arguments,
-        result_id=proposal.result_id,
+        result_id=result.result_id,
         value=result.value,
         unit=result.unit,
         evidence_refs=result.evidence_refs,

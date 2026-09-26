@@ -1,6 +1,6 @@
 {
   "case_id": "grounding-version-mismatch",
-  "case_version": "4",
+  "case_version": "5",
   "capability": "scheduling_compute",
   "risk_class": "inspect",
   "prompt": "Call scheduling_compute exactly once with metric required_headcount_minutes and arguments schema_version '1', task_id 'pick', family 'outbound', start_minute 2880, and end_minute 4320. All required inputs are provided; do not ask a clarification.",
@@ -41,7 +41,7 @@
               "start_minute": 2880,
               "end_minute": 4320
             },
-            "result_id": "6507fea5c74f5e6b02752316814527ef085118ec5259c139a4c9bb46acef8db1"
+            "result_id": "r1"
           }
         ]
       }

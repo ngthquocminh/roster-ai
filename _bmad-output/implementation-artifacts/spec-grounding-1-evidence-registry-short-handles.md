@@ -2,7 +2,8 @@
 title: 'Per-turn evidence registry with short citation handles'
 type: 'feature'
 created: '2026-09-27'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '6b6c81cc6f615ec173b6ec2ee4417a8c733b104d'
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/planning-artifacts/research/technical-grounded-answers-claim-evidence-attribution-research-2026-09-26.md'
@@ -52,15 +53,15 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/application/grounding/evidence_registry.py` -- new, import-free: `EvidenceRegistry` (`handle_for(result_id)` idempotent minting, `result_id_for(handle)`), plus `trusted_results_by_citation(results, registry)` returning full-id and handle keys -- one issuer/resolver for all call sites
-- [ ] `backend/application/capabilities/deps.py` -- `evidence_registry` field, `default_factory`, excluded from compare/repr -- per-turn by construction, no route wiring
-- [ ] `backend/application/capabilities/scheduling_compute.py` -- handler records the handle on the trusted result (new defaulted field); `_model_view` shows it as `result_id` -- the capability, not the adapter, decides what the model sees
-- [ ] `backend/application/use_cases/execute_turn.py`, `backend/evals/grounding.py`, `backend/evals/report.py` -- use `trusted_results_by_citation` instead of the three hand-built maps -- removes duplicated resolution
-- [ ] `backend/application/grounding/gate.py` -- a claim resolved to a result carries `result.result_id`; unresolved keeps the cited value -- persisted ids stay canonical
-- [ ] `backend/agent/runtime.py` -- remove `_mistyped_result_id` and the `result_id_mistyped` rule; `backend/tests/test_agent_runtime_adapter.py` -- delete its test -- unreachable with handles
-- [ ] `backend/agent/scheduling_instructions.py` -- describe the id as a short handle such as `r1`, copied exactly
-- [ ] `backend/evals/golden/scheduling_compute/{supported,argument-mismatch,version-mismatch}.json` -- cite `r1`, bump `case_version`
-- [ ] `backend/tests/` -- tests for every I/O matrix row (registry unit tests; compute view; `execute_turn` resolution and persisted id)
+- [x] `backend/application/grounding/evidence_registry.py` -- new, import-free: `EvidenceRegistry` (`handle_for(result_id)` idempotent minting, `result_id_for(handle)`), plus `trusted_results_by_citation(results, registry)` returning full-id and handle keys -- one issuer/resolver for all call sites
+- [x] `backend/application/capabilities/deps.py` -- `evidence_registry` field, `default_factory`, excluded from compare/repr -- per-turn by construction, no route wiring
+- [x] `backend/application/capabilities/scheduling_compute.py` -- handler records the handle on the trusted result (new defaulted field); `_model_view` shows it as `result_id` -- the capability, not the adapter, decides what the model sees
+- [x] `backend/application/use_cases/execute_turn.py`, `backend/evals/grounding.py`, `backend/evals/report.py` -- use `trusted_results_by_citation` instead of the three hand-built maps -- removes duplicated resolution
+- [x] `backend/application/grounding/gate.py` -- a claim resolved to a result carries `result.result_id`; unresolved keeps the cited value -- persisted ids stay canonical
+- [x] `backend/agent/runtime.py` -- remove `_mistyped_result_id` and the `result_id_mistyped` rule; `backend/tests/test_agent_runtime_adapter.py` -- delete its test -- unreachable with handles
+- [x] `backend/agent/scheduling_instructions.py` -- describe the id as a short handle such as `r1`, copied exactly
+- [x] `backend/evals/golden/scheduling_compute/{supported,argument-mismatch,version-mismatch}.json` -- cite `r1`, bump `case_version`
+- [x] `backend/tests/` -- tests for every I/O matrix row (registry unit tests; compute view; `execute_turn` resolution and persisted id)
 
 **Acceptance Criteria:**
 - Given the golden suite, when it runs with the deterministic doubles, then every case passes with the scripted claims citing `r1`.
@@ -70,3 +71,35 @@ context:
 
 **Commands:**
 - `cd backend && uv run pytest -q` -- expected: all pass
+
+## Suggested Review Order
+
+**Issuing and resolving handles**
+
+- Entry point: one per-turn issuer; double-keyed map for all call sites.
+  [`evidence_registry.py:27`](../../backend/application/grounding/evidence_registry.py#L27)
+- Registry lives on deps, so it is per-turn by construction.
+  [`deps.py:54`](../../backend/application/capabilities/deps.py#L54)
+- Capability mints the handle and shows it in the model view.
+  [`scheduling_compute.py:328`](../../backend/application/capabilities/scheduling_compute.py#L328)
+
+**Gate keeps persisted ids canonical**
+
+- Lookup by citation; resolved claims carry the trusted result_id.
+  [`gate.py:180`](../../backend/application/grounding/gate.py#L180)
+- Request path uses the shared map.
+  [`execute_turn.py:110`](../../backend/application/use_cases/execute_turn.py#L110)
+
+**Model-facing cleanup**
+
+- Near-miss hash retry removed; unrelated ids still reach the gate.
+  [`runtime.py:481`](../../backend/agent/runtime.py#L481)
+- Prompt now describes a short handle.
+  [`scheduling_instructions.py:179`](../../backend/agent/scheduling_instructions.py#L179)
+
+**Tests and goldens**
+
+- I/O matrix coverage.
+  [`test_evidence_registry.py:1`](../../backend/tests/test_evidence_registry.py#L1)
+- AC2: supported golden persists the content hash.
+  [`test_evaluation_harness.py:816`](../../backend/tests/test_evaluation_harness.py#L816)
