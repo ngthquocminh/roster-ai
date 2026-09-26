@@ -1150,3 +1150,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-conversation-tabs-archive.md`
   summary: Sending a message and archiving the same conversation have no mutual guard, so a send can race an archive on the same conversation with no defined ordering.
   evidence: Edge Case Hunter review found `ChatView` disables neither control against the other's in-flight state; a message can be accepted into a conversation the UI just hid, or an archive can be confirmed while a send is still resolving. No data loss (the message still lands; archive is still reversible only by direct DB access), but the desired behavior (block one while the other is in flight? let both proceed?) is a product decision, not a mechanical fix.
+
+## Deferred from: planning of the G′ grounding plan (2026-09-27)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-4-untagged-prose-scan.md`
+  summary: Flag-only tier-1 scan of untagged prose (phase 4 of G′) is deferred; its spec stays a draft and is not approved.
+  evidence: Minh decided on 2026-09-27 to implement phases 1-3 only and revisit phase 4 later; until then untagged prose is unchecked, as accepted in decision D2.

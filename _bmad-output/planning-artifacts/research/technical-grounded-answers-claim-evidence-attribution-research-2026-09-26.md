@@ -79,9 +79,10 @@ for the full summary and recommendation.
   neither — a lexical numeral rule guards one kind of fact while invented names pass, so it is not
   kept. Every fact the planner should trust goes in `<claim>` or `{{r}}`. Untagged prose is
   unchecked in phase 2 (option a) and gets a **flag-only** semantic scan against the turn's evidence
-  once the tier-1 checker exists (option b); it never blocks a turn. **AR11 is reworded** from "no
-  number reaches the planner unverified" to "no number reaches the planner *presented as verified*
-  unless it was verified". Accepted risk: a model ignoring instructions can show a plain-text number
+  once the tier-1 checker exists (option b); it never blocks a turn. **FR7 and NFR12 are reworded** (corrected
+  2026-09-27 — AR11, which requires locators and calculators, is unaffected): "unsupported numbers
+  must fail grounding" / "100% of numerical claims must pass" now apply to numbers *presented as
+  verified* (`{{r}}` and tagged claims); untagged text is presented as unverified. Accepted risk: a model ignoring instructions can show a plain-text number
   or name that some planners read as fact until the flag-only scan ships.
 - **D3 (2026-09-27, Minh): phase 0 (ordered-list-marker fix to the numeral rule) is dropped.** Under
   D2 the numeral rule is removed in phase 2, so a patch to it would be deleted code.
@@ -453,7 +454,7 @@ https://github.com/pabloirracional/jev-evaluation · https://mlflow.org/blog/jev
    lookup can decide adds error and cost.
 3. **Fail narrowly.** A failed claim degrades *that claim* (strip or flag), not the answer. Under D2
    nothing blocks the turn: a number or fact is either verified inside a tag, or shown as plain
-   (later flagged) text — never presented as verified when it was not (AR11 as reworded).
+   (later flagged) text — never presented as verified when it was not (FR7/NFR12 as reworded).
 4. **The application owns identifiers and rendering.** Model references handles; application mints,
    resolves and renders — the vendor consensus and ShiftMind's existing `result_id` rule.
 5. **Policies monotone toward caution.** Claim-locked reporting only allows "monotone strength
@@ -763,7 +764,7 @@ delivers most of the value with no new dependencies; the calibrated wording chec
 the remaining gap once measured on ShiftMind's own data.
 
 **Next steps**: turn phase 1 (registry + short handles) and phase 2 (inline markup, tier 0, numeral
-rule removal, AR11 rewording) into specs via `bmad-quick-dev` or stories; plan the phase-3 shadow
+rule removal, FR7/NFR12 rewording) into specs via `bmad-quick-dev` or stories; plan the phase-3 shadow
 experiment in the live-eval suite.
 
 ---
