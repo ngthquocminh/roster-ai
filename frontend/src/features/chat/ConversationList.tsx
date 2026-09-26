@@ -75,12 +75,23 @@ export function ConversationList({
     setConfirming(null);
   };
 
+  // A vertical wheel gesture over a horizontally-scrolling row does nothing
+  // by default (the row has no vertical overflow, so the page scrolls
+  // instead). Redirect the delta onto scrollLeft so the mouse wheel scrolls
+  // the tab strip the way a trackpad's horizontal swipe already does.
+  const handleWheel = (event: React.WheelEvent<HTMLUListElement>) => {
+    if (event.deltaY === 0) return;
+    event.currentTarget.scrollLeft += event.deltaY;
+    event.preventDefault();
+  };
+
   return (
     <nav aria-label="Conversations">
       {/* Single row, no wrap: overflow scrolls horizontally instead of
           growing the list downward. */}
       <ul
-        className="flex flex-nowrap gap-2 overflow-x-auto"
+        className="scrollbar-thin flex flex-nowrap gap-2 overflow-x-auto"
+        onWheel={handleWheel}
         ref={listRef}
         tabIndex={-1}
       >
