@@ -232,7 +232,7 @@ export function RunsTable({
   }
   return (
     <div aria-label="Runs" className="overflow-x-auto rounded-md border" role="region" tabIndex={0}>
-      <Table className="min-w-max">
+      <Table className="min-w-[48rem] [&_td]:whitespace-normal [&_th]:whitespace-normal">
         <TableCaption className="sr-only">Runs for this scenario, newest first</TableCaption>
         <TableHeader>
           <TableRow>
