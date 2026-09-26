@@ -54,7 +54,7 @@ SCOPE_CONTROLS: Mapping[str, str] = {
         "carrying one is allowed ONLY when that exact word appears in trusted text for "
         "the turn: the planner's own messages, persisted gate-passed conversation text, "
         "the application workflow snapshot, and this turn's tool results. So an entity "
-        "name such as 'Grid P 8GR' or a planner-given '40' hours can be copied, while a "
+        "name such as 'Forklift C01' or a planner-given '40' hours can be copied, while a "
         "quantity the model counted or summed cannot -- that still needs a cited claim. "
         "UUIDs and long hex strings are removed from trusted text first, because their "
         "digit runs would otherwise vouch for almost any short number. Enforced TWICE: as "

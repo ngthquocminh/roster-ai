@@ -61,7 +61,7 @@ def test_overrides(client, scenario_id):
     """POST a valid constraint, then GET overrides -> 200 + matching entry (D-01)."""
     post = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert post.status_code == 200
     applied = post.json()["applied"][0]
@@ -156,7 +156,7 @@ def test_overrides_empty(client, scenario_id):
 
 def test_overrides_idempotent(client, scenario_id):
     """Re-submitting the same constraint text twice overwrites the same id in place."""
-    text = "at least 2 on C Pick"
+    text = "at least 2 on Chiller Pick"
     r1 = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
     r2 = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
     assert r1.status_code == 200

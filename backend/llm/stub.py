@@ -47,8 +47,8 @@ _DAY_MAP: dict[str, int] = {
 
 # ---- Tool 1: set_min_workers_per_task ----
 # Matches phrasings like:
-#   "at least 2 on Pick" / "minimum 3 on the Pack area" / "require at least 2 workers on C Pick"
-# The task token group captures 1-3 words to handle multi-word task names like "C Pick".
+#   "at least 2 on Pick" / "minimum 3 on the Pack area" / "require at least 2 workers on Chiller Pick"
+# The task token group captures 1-3 words to handle multi-word task names like "Chiller Pick".
 _MIN_WORKERS_RE = re.compile(
     r"(?:at\s+least|minimum|min(?:imum)?|need\s+at\s+least|require\s+at\s+least)"
     r"\s+(\d+)\s+(?:workers?\s+)?on\s+(?:the\s+)?(\w+(?:\s+\w+){0,2})",
@@ -57,7 +57,7 @@ _MIN_WORKERS_RE = re.compile(
 
 # ---- Tool 2: scale_demand ----
 # Matches phrasings like:
-#   "scale C Pick demand by 1.5x" / "increase Pick volume by 2x" / "boost Amb Rec workload by 3x"
+#   "scale Chiller Pick demand by 1.5x" / "increase Pick volume by 2x" / "boost Main Receive workload by 3x"
 # The task token is greedy {0,2} but regex backtracks before demand/volume/workload keyword.
 _SCALE_DEMAND_RE = re.compile(
     r"(?:increase|scale|boost)\s+(\w+(?:\s+\w+){0,2})\s+(?:demand|volume|workload)\s+by\s+(\d+(?:\.\d+)?)x?",
@@ -66,7 +66,7 @@ _SCALE_DEMAND_RE = re.compile(
 
 # ---- Tool 3: lock_worker_shift ----
 # Matches phrasings like:
-#   "keep Alice on Tuesday" / "lock Bob on Monday" / "assign Gary on 0"
+#   "keep Alice on Tuesday" / "lock Bob on Monday" / "assign Owen on 0"
 # Day captured as a day-name or numeric integer.
 _LOCK_SHIFT_RE = re.compile(
     r"(?:keep|lock|assign)\s+(\w+(?:\s+\w+)?)\s+on\s+"
@@ -76,7 +76,7 @@ _LOCK_SHIFT_RE = re.compile(
 
 # ---- Tool 4: exclude_worker_from_task ----
 # Matches phrasings like:
-#   "exclude Alice from Pick" / "remove Bob from C Pick" / "don't assign Gary to Receiving"
+#   "exclude Alice from Pick" / "remove Bob from Chiller Pick" / "don't assign Owen to Receiving"
 _EXCLUDE_RE = re.compile(
     r"(?:exclude|remove|don'?t\s+assign)\s+(\w+(?:\s+\w+)?)\s+(?:from|to)\s+(\w+(?:\s+\w+){0,2})",
     re.IGNORECASE,
@@ -84,7 +84,7 @@ _EXCLUDE_RE = re.compile(
 
 # ---- Tool 5: set_max_hours ----
 # Matches phrasings like:
-#   "cap Alice at 40 hours" / "limit Bob to 35 hours" / "maximum Gary 48 hours"
+#   "cap Alice at 40 hours" / "limit Bob to 35 hours" / "maximum Owen 48 hours"
 _MAX_HOURS_RE = re.compile(
     r"(?:cap|limit|max(?:imum)?)\s+(\w+(?:\s+\w+)?)\s+(?:at|to)\s+(\d+(?:\.\d+)?)\s+hours?",
     re.IGNORECASE,

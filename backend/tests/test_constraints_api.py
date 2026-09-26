@@ -117,7 +117,7 @@ def scenario_id(client):
 def test_post_constraints_returns_200(client, scenario_id):
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r.status_code == 200
 
@@ -126,7 +126,7 @@ def test_post_constraints_response_has_structured_body(client, scenario_id):
     """Response body must have the four Phase-2 top-level fields (D-01)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     body = r.json()
     assert "applied" in body
@@ -139,7 +139,7 @@ def test_post_constraints_applied_has_required_fields(client, scenario_id):
     """applied[0] must carry id, tool, args, parsed_constraint (NLC-04)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     body = r.json()
     assert len(body["applied"]) == 1
@@ -153,7 +153,7 @@ def test_post_constraints_applied_has_required_fields(client, scenario_id):
 def test_post_constraints_echoes_correct_tool(client, scenario_id):
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r.json()["applied"][0]["tool"] == "set_min_workers_per_task"
 
@@ -162,21 +162,21 @@ def test_post_constraints_args_has_resolved_task_id(client, scenario_id):
     """args.task_id should be the real GUID, not the human token."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     args = r.json()["applied"][0]["args"]
     assert args["n"] == 2
-    # The resolved task_id must be a GUID-like string (not the human token "C Pick")
+    # The resolved task_id must be a GUID-like string (not the human token "Chiller Pick")
     task_id = args["task_id"]
-    assert task_id != "C Pick"
-    # Should be the UUID for "C Pick | Picking chill 080"
+    assert task_id != "Chiller Pick"
+    # Should be the UUID for "Chiller Pick | Order Picker C02"
     assert task_id == "99260066-B32A-423D-97A1-8A649BABBAAD"
 
 
 def test_post_constraints_id_starts_with_ov(client, scenario_id):
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r.json()["applied"][0]["id"].startswith("ov_")
 
@@ -184,7 +184,7 @@ def test_post_constraints_id_starts_with_ov(client, scenario_id):
 def test_post_constraints_parsed_constraint_is_string(client, scenario_id):
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     pc = r.json()["applied"][0]["parsed_constraint"]
     assert isinstance(pc, str)
@@ -195,7 +195,7 @@ def test_post_constraints_persists_override_to_scenario(client, scenario_id):
     """Override dict must be written to the scenario's overrides column."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r.status_code == 200
     applied = r.json()["applied"][0]
@@ -204,7 +204,7 @@ def test_post_constraints_persists_override_to_scenario(client, scenario_id):
     # Direct verification: re-submit same constraint, should return same id.
     r2 = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r2.status_code == 200
     assert r2.json()["applied"][0]["id"] == override_id  # idempotent (D-04/D-05)
@@ -231,9 +231,9 @@ def test_post_constraints_persists_override_to_scenario(client, scenario_id):
 def test_post_constraints_idempotent_same_id(client, scenario_id):
     """Re-submitting the same constraint is idempotent: same id, no duplicate."""
     r1 = client.post("/constraints", json={
-        "scenario_id": scenario_id, "text": "at least 3 on C Pick"})
+        "scenario_id": scenario_id, "text": "at least 3 on Chiller Pick"})
     r2 = client.post("/constraints", json={
-        "scenario_id": scenario_id, "text": "at least 3 on C Pick"})
+        "scenario_id": scenario_id, "text": "at least 3 on Chiller Pick"})
     assert r1.status_code == 200
     assert r2.status_code == 200
     assert r1.json()["applied"][0]["id"] == r2.json()["applied"][0]["id"]
@@ -246,7 +246,7 @@ def test_post_constraints_idempotent_same_id(client, scenario_id):
 def test_post_constraints_unknown_scenario_returns_404(client):
     r = client.post("/constraints", json={
         "scenario_id": "nonexistent-scenario-id",
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r.status_code == 404
 
@@ -289,7 +289,7 @@ def test_post_constraints_rejects_tampered_path_traversal_fixture(tmp_path, monk
 
         r2 = c.post("/constraints", json={
             "scenario_id": scenario_id,
-            "text": "at least 2 on C Pick",
+            "text": "at least 2 on Chiller Pick",
         })
         assert r2.status_code == 404, (
             f"A tampered/escaping fixture path must map to 404, got {r2.status_code}: {r2.text}"
@@ -328,7 +328,7 @@ def test_post_constraints_provider_failure_returns_503(tmp_path, monkeypatch):
 
         r2 = c.post("/constraints", json={
             "scenario_id": scenario_id,
-            "text": "at least 2 on C Pick",
+            "text": "at least 2 on Chiller Pick",
         })
         assert r2.status_code == 503
         assert r2.json()["detail"] == (
@@ -358,22 +358,22 @@ def test_malformed_llm_tool_args_rejected_not_500(tmp_path, monkeypatch):
 
         def parse_constraints(self, text: str):
             return [
-                # Missing required numeric key entirely. "C Pick" resolves
+                # Missing required numeric key entirely. "Chiller Pick" resolves
                 # uniquely (unlike bare "Pick", which is ambiguous across
                 # three tasks) so this exercises the numeric-arg guard, not
                 # the clarification path.
                 OverrideCall(id="c1", tool="set_min_workers_per_task",
-                             args={"task_id": "C Pick"}),
+                             args={"task_id": "Chiller Pick"}),
                 # Non-numeric value the LLM might emit for a free-text slot.
                 OverrideCall(id="c2", tool="scale_demand",
-                             args={"task_id": "C Pick", "factor": "a lot"}),
+                             args={"task_id": "Chiller Pick", "factor": "a lot"}),
                 # Missing member_id entirely.
                 OverrideCall(id="c3", tool="lock_worker_shift", args={"day": 0}),
                 # Non-string member_id (e.g. a stray null from the LLM).
                 OverrideCall(id="c4", tool="exclude_worker_from_task",
-                             args={"member_id": None, "task_id": "C Pick"}),
+                             args={"member_id": None, "task_id": "Chiller Pick"}),
                 OverrideCall(id="c5", tool="set_max_hours",
-                             args={"member_id": "Gary", "max_hours": "forty"}),
+                             args={"member_id": "Owen", "max_hours": "forty"}),
             ]
 
         def generate_insights(self, summary: dict) -> str:
@@ -419,7 +419,7 @@ def test_no_constraint_found_in_text_returns_200_with_flag(client, scenario_id):
 
 
 def test_ambiguous_task_token_returns_clarification_needed(client, scenario_id):
-    """'Pick' alone matches C Pick, F Pick, A Pick -> clarification_needed not None (NLC-05/D-04)."""
+    """'Pick' alone matches Chiller Pick, Freezer Pick, Main Pick -> clarification_needed not None (NLC-05/D-04)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
         "text": "at least 2 on Pick",
@@ -448,13 +448,13 @@ def test_post_constraints_nothing_persisted_on_404(client):
     """On 404 path nothing should be stored — calling again still 404."""
     r = client.post("/constraints", json={
         "scenario_id": "nonexistent",
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r.status_code == 404
     # A second call should also 404 (not 200 from a ghost persist)
     r2 = client.post("/constraints", json={
         "scenario_id": "nonexistent",
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r2.status_code == 404
 
@@ -470,7 +470,7 @@ def test_post_constraints_empty_text_returns_422(client, scenario_id):
 
 def test_post_constraints_missing_scenario_id_returns_422(client):
     """Missing required field returns Pydantic 422."""
-    r = client.post("/constraints", json={"text": "at least 2 on C Pick"})
+    r = client.post("/constraints", json={"text": "at least 2 on Chiller Pick"})
     assert r.status_code == 422
 
 
@@ -482,20 +482,20 @@ def test_partial_phrasing_clarification(client, scenario_id):
     """'more people on <task>' (no number) -> 200 with clarification_needed (NLC-05)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "more people on C Pick",
+        "text": "more people on Chiller Pick",
     })
     assert r.status_code == 200
     body = r.json()
     assert body["clarification_needed"] is not None
-    assert "C Pick" in body["clarification_needed"]
+    assert "Chiller Pick" in body["clarification_needed"]
     assert body["no_constraint_found"] is False
 
 
 def test_mixed_applied_and_clarification(client, scenario_id):
-    """'at least 2 on C Pick and more people on packing' -> one applied + clarification_needed (D-02)."""
+    """'at least 2 on Chiller Pick and more people on packing' -> one applied + clarification_needed (D-02)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick and more people on packing",
+        "text": "at least 2 on Chiller Pick and more people on packing",
     })
     assert r.status_code == 200
     body = r.json()
@@ -520,13 +520,13 @@ def test_rejected_entries_not_persisted(client, scenario_id):
     # Now post a valid constraint and check its id in applied[]
     r2 = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 3 on C Pick",
+        "text": "at least 3 on Chiller Pick",
     })
     assert r2.status_code == 200
     # Only the valid one should be persisted (idempotency shows it was stored)
     r3 = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 3 on C Pick",
+        "text": "at least 3 on Chiller Pick",
     })
     assert r3.json()["applied"][0]["id"] == r2.json()["applied"][0]["id"]
 
@@ -618,7 +618,7 @@ def test_override_is_threaded_into_solver_config(_capture_pair):
 
     r = c.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick",
+        "text": "at least 2 on Chiller Pick",
     })
     assert r.status_code == 200
     posted_id = r.json()["applied"][0]["id"]
@@ -677,10 +677,10 @@ def test_no_constraint_yields_empty_overrides_in_config(_capture_pair):
 # ---------------------------------------------------------------------------
 
 def test_scale_demand_applied(client, scenario_id):
-    """'scale C Pick demand by 1.5x' -> applied[] with tool='scale_demand' (NLC-02)."""
+    """'scale Chiller Pick demand by 1.5x' -> applied[] with tool='scale_demand' (NLC-02)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "scale C Pick demand by 1.5x",
+        "text": "scale Chiller Pick demand by 1.5x",
     })
     assert r.status_code == 200
     body = r.json()
@@ -691,10 +691,10 @@ def test_scale_demand_applied(client, scenario_id):
 
 
 def test_lock_worker_shift_applied(client, scenario_id):
-    """'keep Gary on Monday' -> applied[] with tool='lock_worker_shift' (NLC-02)."""
+    """'keep Owen on Monday' -> applied[] with tool='lock_worker_shift' (NLC-02)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "keep Gary on Monday",
+        "text": "keep Owen on Monday",
     })
     assert r.status_code == 200
     body = r.json()
@@ -705,10 +705,10 @@ def test_lock_worker_shift_applied(client, scenario_id):
 
 
 def test_exclude_worker_from_task_applied(client, scenario_id):
-    """'exclude Gary from C Pick' -> applied[] with tool='exclude_worker_from_task' (NLC-02)."""
+    """'exclude Owen from Chiller Pick' -> applied[] with tool='exclude_worker_from_task' (NLC-02)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "exclude Gary from C Pick",
+        "text": "exclude Owen from Chiller Pick",
     })
     assert r.status_code == 200
     body = r.json()
@@ -719,10 +719,10 @@ def test_exclude_worker_from_task_applied(client, scenario_id):
 
 
 def test_set_max_hours_applied(client, scenario_id):
-    """'cap Gary at 40 hours' -> applied[] with tool='set_max_hours' (NLC-02)."""
+    """'cap Owen at 40 hours' -> applied[] with tool='set_max_hours' (NLC-02)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "cap Gary at 40 hours",
+        "text": "cap Owen at 40 hours",
     })
     assert r.status_code == 200
     body = r.json()
@@ -740,7 +740,7 @@ def test_scale_demand_bad_factor_rejected(client, scenario_id):
     """factor=0 is invalid -> rejected[] entry naming the arg (VAL-01/D-12)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "scale C Pick demand by 0x",
+        "text": "scale Chiller Pick demand by 0x",
     })
     assert r.status_code == 200
     body = r.json()
@@ -754,7 +754,7 @@ def test_max_hours_zero_rejected(client, scenario_id):
     """max_hours=0 is invalid -> rejected[] entry naming the arg (VAL-01/D-12)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "cap Gary at 0 hours",
+        "text": "cap Owen at 0 hours",
     })
     assert r.status_code == 200
     body = r.json()
@@ -782,7 +782,7 @@ def test_lock_out_of_horizon_day_rejected(client, scenario_id):
     """day=7 is outside a 7-day horizon (valid days 0..6) -> rejected[] (VAL-01/D-12)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "lock Gary on 7",
+        "text": "lock Owen on 7",
     })
     assert r.status_code == 200
     body = r.json()
@@ -794,19 +794,19 @@ def test_lock_out_of_horizon_day_rejected(client, scenario_id):
 # ---------------------------------------------------------------------------
 
 def test_multi_row_same_person_resolves_without_clarification(client, scenario_id):
-    """'Jae' matches two Member rows sharing one contact_id -> resolves cleanly, no
+    """'Mika' matches two Member rows sharing one contact_id -> resolves cleanly, no
     clarification (CR-01 regression test).
 
-    The fixture has two roster entries for Jae Rerekura (same contact_id but two
+    The fixture has two roster entries for Mika Tane (same contact_id but two
     Member objects from two windows). Before CR-01, `_resolve_member` counted these
     as two distinct candidates and always asked an unanswerable clarification
-    question ("'Jae Rerekura' matches multiple members: 'Jae Rerekura', 'Jae
-    Rerekura'"). Deduping by contact_id means a single real person triggers a
+    question ("'Mika Tane' matches multiple members: 'Mika Tane', 'Mika
+    Tane'"). Deduping by contact_id means a single real person triggers a
     normal apply, not a clarification.
     """
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "cap Jae at 40 hours",
+        "text": "cap Mika at 40 hours",
     })
     assert r.status_code == 200
     body = r.json()
@@ -814,7 +814,7 @@ def test_multi_row_same_person_resolves_without_clarification(client, scenario_i
         "A single real person spanning multiple roster rows must not trigger "
         "clarification (CR-01)"
     )
-    assert len(body["applied"]) == 1, "The constraint must apply once dedup resolves 'Jae' uniquely"
+    assert len(body["applied"]) == 1, "The constraint must apply once dedup resolves 'Mika' uniquely"
     assert body["applied"][0]["args"]["member_id"] == "DF47249E-8864-41B6-93CB-004100655A58"
 
 
@@ -826,7 +826,7 @@ def test_multi_tool_applied(client, scenario_id):
     """Two-constraint text yields two applied[] entries (NLC-02/D-02)."""
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "at least 2 on C Pick and cap Gary at 40 hours",
+        "text": "at least 2 on Chiller Pick and cap Owen at 40 hours",
     })
     assert r.status_code == 200
     body = r.json()
@@ -882,7 +882,7 @@ def test_scale_demand_bad_factor(client, scenario_id):
     """
     r = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "boost C Pick volume by 0x",
+        "text": "boost Chiller Pick volume by 0x",
     })
     assert r.status_code == 200
     body = r.json()
@@ -895,7 +895,7 @@ def test_scale_demand_bad_factor(client, scenario_id):
     # Rejected item must not be persisted: re-submit still rejects
     r2 = client.post("/constraints", json={
         "scenario_id": scenario_id,
-        "text": "boost C Pick volume by 0x",
+        "text": "boost Chiller Pick volume by 0x",
     })
     assert r2.status_code == 200
     assert r2.json()["applied"] == [], "OOB factor must never appear in applied[] after re-submit"
@@ -952,7 +952,7 @@ def test_mixed_valid_invalid_multi_tool(client, scenario_id):
     and one unknown-member reference yields both applied[] and rejected[] in the same 200
     response. Only the valid fragment is persisted to scenario.overrides (T-02-11/TEST-03).
     """
-    text = "at least 2 on C Pick and exclude XYZ_NONEXISTENT_MEMBER from C Pick"
+    text = "at least 2 on Chiller Pick and exclude XYZ_NONEXISTENT_MEMBER from Chiller Pick"
     r = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
     assert r.status_code == 200
     body = r.json()
@@ -987,7 +987,7 @@ def test_mixed_valid_oob_multi_tool(client, scenario_id):
     and one out-of-bounds arg yields both applied[] and rejected[] in the same 200
     response. Only the valid fragment is persisted to scenario.overrides (T-02-11/TEST-03).
     """
-    text = "at least 3 on C Pick and boost C Pick volume by 0x"
+    text = "at least 3 on Chiller Pick and boost Chiller Pick volume by 0x"
     r = client.post("/constraints", json={"scenario_id": scenario_id, "text": text})
     assert r.status_code == 200
     body = r.json()

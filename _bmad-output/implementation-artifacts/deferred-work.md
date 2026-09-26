@@ -1150,3 +1150,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-conversation-tabs-archive.md`
   summary: Sending a message and archiving the same conversation have no mutual guard, so a send can race an archive on the same conversation with no defined ordering.
   evidence: Edge Case Hunter review found `ChatView` disables neither control against the other's in-flight state; a message can be accepted into a conversation the UI just hid, or an archive can be confirmed while a send is still resolving. No data loss (the message still lands; archive is still reversible only by direct DB access), but the desired behavior (block one while the other is in flight? let both proceed?) is a product decision, not a mechanical fix.
+
+## Deferred from: code review of spec-anonymise-fixture-names (2026-09-26)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-anonymise-fixture-names.md`
+  summary: The promoted live-conversation baseline (`backend/evals/baselines/live-conversations.json`, 87/90) was measured on the pre-anonymisation fixture names and prompt examples, and neither `configuration_digest` nor `behavioral_digest` covers the fixture or the instructions, so the next regression comparison silently compares two different setups.
+  evidence: Blind Hunter review; the anonymisation rewrote every task and member name the live scenarios resolve, and the `scheduling_instructions.py` verbatim-copy examples. Re-baselining needs a paid live-provider run, out of scope for a data-only change. Revisit trigger: the next live-conversation run -- treat it as a new baseline, not a regression comparison.

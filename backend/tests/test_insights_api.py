@@ -429,10 +429,10 @@ def test_insights_succeeds_when_scenario_has_overrides(client):
     scenario_id = r.json()["id"]
 
     # Apply a constraint with a numeric arg — this populates scenario.overrides with n=4.
-    # "Amb Rec" uniquely matches "Amb Rec | Unloader" in the tiny fixture (avoids the
+    # "Main Receive" uniquely matches "Main Receive | Unloader M01" in the tiny fixture (avoids the
     # multi-match clarification that generic tokens like "Pick" trigger).
     r = client.post("/constraints", json={
-        "scenario_id": scenario_id, "text": "at least 4 on Amb Rec"})
+        "scenario_id": scenario_id, "text": "at least 4 on Main Receive"})
     assert r.status_code == 200, r.text
     assert r.json()["applied"], (
         f"Constraint must be applied (not rejected/clarification): {r.json()}"

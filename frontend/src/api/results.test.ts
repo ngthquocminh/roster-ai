@@ -46,7 +46,7 @@ describe("getRunResult", () => {
       schedule: [
         {
           contact_id: "AC0D87",
-          member_name: "Rhiannon Hansen",
+          member_name: "Priya Nair",
           task_id: "T123",
           function: "Pick",
           shift_id: "24_AC0D87_55",

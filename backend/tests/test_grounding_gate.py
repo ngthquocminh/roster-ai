@@ -312,12 +312,12 @@ def test_numerals_copied_from_trusted_text_are_allowed() -> None:
     from application.grounding.gate import trusted_numeric_words
 
     trusted = trusted_numeric_words([
-        '{"task_id": "T1", "name": "C Fork | Grid P 8GR", "max_hours": 40.0}',
+        '{"task_id": "T1", "name": "Chiller Putaway | Forklift C01", "max_hours": 40.0}',
         "Revise the draft to cap that worker at 40 hours as well.",
     ])
-    text = "Capped Rhiannon Hansen at 40 hours; the task is C Fork | Grid P 8GR."
+    text = "Capped Priya Nair at 40 hours; the task is Chiller Putaway | Forklift C01."
     # 40.0 in the tool payload vouches for `40`; the task name's own token is copied.
-    assert {"40", "8GR"} <= trusted
+    assert {"40", "C01"} <= trusted
     response = ground_answer(_prose(text), _deps(ReaderStub()), {}, trusted)
     assert response.segments[0].text == text
     # The very same text is a violation when nothing vouches for its numerals, so the
@@ -343,13 +343,13 @@ def test_a_serialized_float_vouches_for_its_integer_form_and_nothing_else() -> N
     "There are 24 workers.",           # a count: needs a cited claim
     "There are 8634 shifts.",          # only present inside a UUID
     "The digest starts 685.",          # only present inside a long hex string
-    "Grid P 8.",                        # part of a word is not the word
+    "Forklift C0.",                    # part of a word is not the word
 ])
 def test_numerals_not_traceable_to_trusted_text_are_rejected(text) -> None:
     from application.grounding.gate import trusted_numeric_words
 
     trusted = trusted_numeric_words([
-        '{"id": "685a2608-8634-4c1b-9f11-1bf63934caae", "task": "Grid P 8GR", "year": "2024"}',
+        '{"id": "685a2608-8634-4c1b-9f11-1bf63934caae", "task": "Forklift C01", "year": "2024"}',
         "checksum 685a26088634a17330e77510f921b1bf63934caae0eaa5f09f9b99dad883a9fe",
     ])
     with pytest.raises(UncitedNumericProseError):
@@ -370,13 +370,13 @@ def test_execute_turn_trusts_history_and_tool_results_but_not_tool_call_argument
             return AgentRunOutcomeV1(status="completed", answer=_prose(self.text))
 
     history = AgentTurnV1(messages=(
-        AgentMessageV1(role="system", parts=(AgentPartV1(text='{"task": "Grid P 8GR", "window_hours": 55}'),)),
+        AgentMessageV1(role="system", parts=(AgentPartV1(text='{"task": "Forklift C01", "window_hours": 55}'),)),
         AgentMessageV1(role="assistant", parts=(
             AgentPartV1(kind="tool_call", tool_name="x", tool_call_id="c", tool_args_json='{"n": 77}'),)),
     ))
     deps = _deps(ReaderStub())
     # Each source is isolated: a numeral is allowed by exactly the trusted text it came from.
-    for reply in ("Grid P 8GR.",        # history: the persisted system text
+    for reply in ("Forklift C01.",        # history: the persisted system text
                   "55 hours.",          # history: a bare numeral
                   "40 hours.",          # the planner's own prompt
                   "60 minutes."):       # a tool RESULT (the calculation's value)
