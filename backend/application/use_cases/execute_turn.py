@@ -1,7 +1,10 @@
 """Execute and ground one already-claimed planner turn."""
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass, replace
+from dataclasses import replace
+from datetime import datetime, timezone
+import math
+from time import perf_counter
 import json
 
 from application.contracts.agent_runtime import (
@@ -23,13 +26,24 @@ from application.contracts.activity import (
     TerminalOutcomeActivityV1,
 )
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
-from application.contracts.grounding import GroundedClaimV1, GroundedProseSegmentV1, GroundedResponseV1
-from application.grounding.gate import (
-    UncitedNumericProseError,
-    ground_answer,
-    trusted_numeric_words,
+from application.contracts.grounding import (
+    GroundedClaimV1,
+    GroundedFactV1,
+    GroundedProseSegmentV1,
+    GroundedResponseV1,
 )
+from application.grounding.evidence_groups import evidence_group_for_scenario_fact_group
+from application.grounding.evidence_registry import (
+    TrustedRecordV1,
+    trusted_records_by_handle,
+    trusted_results_by_citation,
+)
+from application.grounding.claim_tags import restates_value_only
+from application.grounding.verbalize import verbalize_record
+from application.ports.claim_support import ClaimSupportChecker, ClaimSupportItemV1
+from application.grounding.gate import ground_answer
 from application.clarification.resolve import resolve_clarification
+from application.contracts.telemetry import CorrelationV1, TelemetryRecordV1
 from application.ports.agent_runtime import AgentRuntime
 from application.ports.agent_runtime import AgentProviderError, AgentRuntimeError
 from application.capabilities.deps import AgentDepsV1
@@ -79,6 +93,8 @@ def execute_turn(
     history: tuple[ActivityItemV1, ...] | AgentTurnV1 = (),
     approvals: tuple[AgentApprovalDecisionV1, ...] = (),
     workflow_context: AgentMessageV1 | None = None,
+    claim_checker: ClaimSupportChecker | None = None,
+    flag_threshold: float | None = None,
 ) -> AgentRunOutcomeV1:
     """Run outside a database transaction, then bind claims to raw tool results."""
     owned_history = history if isinstance(history, AgentTurnV1) else rehydrate_history(history)
@@ -106,49 +122,116 @@ def execute_turn(
             outcome,
             resolved_clarification=resolve_clarification(outcome.clarification, deps),
         )
-    by_id = {
-        value.result_id: value
-        for value in calculation_results
-        if isinstance(getattr(value, "result_id", None), str)
-    }
+    by_id = trusted_results_by_citation(calculation_results, deps.evidence_registry)
     if outcome.draft is not None:
         return resolve_draft_citation(outcome, by_id)
     if outcome.answer is None:
         return outcome
-    return replace(
-        outcome,
-        grounded_response=ground_answer(
-            outcome.answer, deps, by_id,
-            trusted_numeric_words(_trusted_texts(prompt, owned_history, calculation_results)),
-        ),
-    )
+    records = trusted_records_by_handle(calculation_results)
+    grounded = ground_answer(outcome.answer, deps, by_id, records)
+    if claim_checker is not None:
+        grounded = shadow_check_facts(
+            grounded, records, claim_checker, deps, flag_threshold=flag_threshold)
+    return replace(outcome, grounded_response=grounded)
 
 
-def _trusted_texts(prompt: str, history: AgentTurnV1, results: list[object]) -> list[str]:
-    """What a prose numeral may be copied from (see gate `prose:no_untraceable_numerals`).
+def _record_for(
+    records: dict[str, TrustedRecordV1], reference: object
+) -> TrustedRecordV1 | None:
+    record_id = getattr(reference, "record_id", None)
+    group = getattr(reference, "group", None)
+    if record_id is None or group is None:
+        return None
+    for trusted in records.values():
+        if (evidence_group_for_scenario_fact_group(trusted.scenario_group)  # type: ignore[arg-type]
+                == group and trusted.record.get("record_id") == record_id):
+            return trusted
+    return None
 
-    A superset of what the adapter's in-loop validator trusts: the planner's
-    prompt, every owned history text part (planner messages, persisted gate-passed
-    replies, the workflow snapshot), and this turn's trusted capability results --
-    whole records, of which the model saw only a projection. Model-authored tool
-    call arguments are excluded.
-    """
-    texts = [prompt]
-    texts.extend(
-        part.text
-        for message in history.messages
-        for part in message.parts
-        if part.kind != "tool_call" and part.text
-    )
-    for value in results:
-        try:
-            texts.append(json.dumps(
-                asdict(value) if is_dataclass(value) and not isinstance(value, type) else value,
-                default=str, ensure_ascii=False,
+
+def shadow_check_facts(
+    response: GroundedResponseV1,
+    records: dict[str, TrustedRecordV1],
+    checker: ClaimSupportChecker,
+    deps: AgentDepsV1,
+    *,
+    flag_threshold: float | None = None,
+) -> GroundedResponseV1:
+    """G' phase 3: attach a tier-1 support probability to each fact that passed
+    tier 0. With `flag_threshold` (flag mode) a fact scoring below it is marked
+    `wording_flagged`; without it (shadow) nothing a planner sees changes.
+    Never raises, and fails open: a checker failure flags nothing."""
+    items: list[ClaimSupportItemV1] = []
+    unresolved = bare = 0
+    try:
+        for index, segment in enumerate(response.segments):
+            if not (isinstance(segment, GroundedFactV1) and segment.verdict == "supported"
+                    and segment.evidence_refs):
+                continue
+            if restates_value_only(segment.text, segment.value):
+                # Tier 0 already proved everything this text says.
+                bare += 1
+                continue
+            # A tier-0 fact carries exactly one locator: its own record.
+            trusted = _record_for(records, segment.evidence_refs[0])
+            if trusted is None:
+                unresolved += 1
+                continue
+            items.append(ClaimSupportItemV1(
+                item_id=f"s{index}", claim_text=segment.text,
+                evidence_text=verbalize_record(trusted.scenario_group, trusted.record),
             ))
-        except (TypeError, ValueError):
-            texts.append(str(value))
-    return texts
+    except Exception:  # noqa: BLE001 - shadow must never affect the turn
+        return response
+    if not items:
+        return response
+    started = perf_counter()
+    try:
+        result = checker.check(tuple(items))
+        probabilities, skipped, error = (
+            dict(result.probabilities), result.skipped + unresolved, result.error)
+    except Exception:  # noqa: BLE001 - shadow must never affect the turn
+        probabilities, skipped, error = {}, unresolved, "checker_exception"
+    segments = tuple(
+        replace(
+            segment, support_probability=probabilities[f"s{index}"],
+            # A non-finite score is not a pass: flag it rather than skip it.
+            wording_flagged=(flag_threshold is not None
+                             and not (math.isfinite(probabilities[f"s{index}"])
+                                      and probabilities[f"s{index}"] >= flag_threshold)),
+        )
+        if f"s{index}" in probabilities else segment
+        for index, segment in enumerate(response.segments)
+    )
+    flagged = sum(1 for segment in segments
+                  if isinstance(segment, GroundedFactV1) and segment.wording_flagged)
+    values = list(probabilities.values())
+    if deps.telemetry is not None:
+        try:
+            deps.telemetry.emit(TelemetryRecordV1(
+                event="grounding.tier1.completed",
+                occurred_at=datetime.now(timezone.utc),
+                correlation=CorrelationV1(
+                    request_id=deps.request_id, site_id=deps.site_id, actor_id=deps.actor_id,
+                    conversation_id=deps.conversation_id, agent_run_id=deps.agent_run_id,
+                ),
+                labels={
+                    "tier1_outcome": error or "ok",
+                    "tier1_provider": str(getattr(checker, "provider", "unknown")),
+                    "tier1_checked": str(len(probabilities)),
+                    "tier1_skipped": str(skipped),
+                    # Probability buckets, never the fact or its record.
+                    "tier1_low": str(sum(1 for p in values if p < 0.5)),
+                    "tier1_mid": str(sum(1 for p in values if 0.5 <= p < 0.9)),
+                    "tier1_high": str(sum(1 for p in values if p >= 0.9)),
+                    "tier1_flagged": str(flagged),
+                    "tier1_bare": str(bare),
+                },
+                duration_ms=(perf_counter() - started) * 1_000,
+            ))
+        except Exception:  # noqa: BLE001 - product work wins
+            pass
+    return replace(response, segments=segments)
 
 
 def terminal_status(outcome: AgentRunOutcomeV1) -> str:
@@ -292,10 +375,8 @@ def failed_outcome_for_exception(exc: Exception) -> AgentRunOutcomeV1:
             status="failed", failure_reason="provider_error", failure_source="agent",
             usage=getattr(exc, "usage", None),
         )
-    # `UncitedNumericProseError` is a `ValueError` subclass, and an unclassified
-    # exception is no better understood than a malformed output, so both land on
-    # the same honest reason rather than on separate branches that pretend to
-    # distinguish them.
+    # An unclassified exception is no better understood than a malformed
+    # output, so both land on the same honest reason.
     return AgentRunOutcomeV1(
         status="failed", failure_reason="invalid_output", failure_source="agent",
         retry_rule=getattr(exc, "retry_rule", None),
@@ -332,6 +413,10 @@ def _response_visible_text(response: GroundedResponseV1) -> str:
             parts.append(f"{segment.value} {segment.unit}")
         elif isinstance(segment, GroundedClaimV1):
             parts.append(f"Claim unavailable: {segment.failure}")
+        elif isinstance(segment, GroundedFactV1) and segment.verdict == "supported":
+            parts.append(segment.text)
+        elif isinstance(segment, GroundedFactV1):
+            parts.append(f"{segment.text} (unverified: {segment.failure})")
     return " ".join(part.strip() for part in parts if part.strip())
 
 

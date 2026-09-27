@@ -34,7 +34,7 @@ EVALUATION_FIXTURES = (
     "evals/golden/scheduling_compute/supported.json",
     "evals/golden/scheduling_compute/version-mismatch.json",
     "evals/golden/scheduling_compute/missing-evidence.json",
-    "evals/golden/scheduling_compute/argument-mismatch.json",
+    "evals/golden/scheduling_compute/untagged-numerals.json",
 )
 
 SCOPE_CONTROLS: Mapping[str, str] = {
@@ -166,6 +166,9 @@ class SchedulingComputeResultV1:
     scenario_version_id: UUID
     result_id: str
     consumed_row_count: int = 0
+    # The short handle the model cites for this result in this turn (see
+    # `application.grounding.evidence_registry`); `result_id` stays canonical.
+    citation_handle: str = ""
     schema_version: str = SCHEMA_VERSION
 
 
@@ -197,7 +200,7 @@ class SchedulingComputeModelViewV1:
 
 def _model_view(result: SchedulingComputeResultV1) -> SchedulingComputeModelViewV1:
     return SchedulingComputeModelViewV1(
-        result_id=result.result_id,
+        result_id=result.citation_handle or result.result_id,
         metric=result.metric,
         unit=result.unit,
         matched="some" if result.consumed_row_count else "none",
@@ -310,6 +313,9 @@ def scheduling_compute(
         raise CalculationFailedError(
             f"calculation exceeded the {resolved.timeout_seconds}s budget ({elapsed:.2f}s)"
         )
+    result_id = derive_result_id(
+        calculated.metric, calculated.arguments, calculated.scenario_version_id
+    )
     return SchedulingComputeResultV1(
         metric=calculated.metric,
         arguments=calculated.arguments,
@@ -317,10 +323,9 @@ def scheduling_compute(
         unit=calculated.unit,
         evidence_refs=calculated.evidence_refs,
         scenario_version_id=calculated.scenario_version_id,
-        result_id=derive_result_id(
-            calculated.metric, calculated.arguments, calculated.scenario_version_id
-        ),
+        result_id=result_id,
         consumed_row_count=calculated.consumed_row_count,
+        citation_handle=deps.evidence_registry.handle_for(result_id),
     )
 
 

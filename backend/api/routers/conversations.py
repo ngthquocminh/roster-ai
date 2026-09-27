@@ -60,6 +60,8 @@ from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
 from application.use_cases.conversation_workflow_context import load_workflow_context
+from adapters.grounding.factory import create_claim_support_checker
+from settings import tier1_flag_threshold
 from application.use_cases.execute_turn import (
     activity_payload,
     execute_turn,
@@ -70,7 +72,7 @@ from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import enabled_feature_policy
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
 from application.contracts.agent_runtime import AgentBudgetV1
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV2
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.proposal import ProposalRepository
 from application.ports.approval import ApprovalRepository, AuditWriter
@@ -376,7 +378,7 @@ async def execute_agent_turn(
             settings=settings,
             capabilities=granted,
             deps=deps,
-            answer_type=GroundedAnswerV1,
+            answer_type=GroundedAnswerV2,
         )
         outcome = await run_in_threadpool(
             execute_turn,
@@ -386,6 +388,8 @@ async def execute_agent_turn(
             calculation_results=raw_results,
             history=claimed.history,
             workflow_context=workflow_context,
+            claim_checker=create_claim_support_checker(settings),
+            flag_threshold=tier1_flag_threshold(settings),
         )
     except Exception as exc:  # noqa: BLE001
         # Reaching a terminal status is what keeps the accepted conversation

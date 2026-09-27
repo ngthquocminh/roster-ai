@@ -11,16 +11,11 @@ from application.contracts.agent_runtime import AgentBudgetV1
 from application.contracts.evidence_ref import DemandIntervalResolutionV1, EvidenceRefV1
 from application.contracts.grounding import (
     ClaimArgumentsV1,
-    ClaimProposalV1,
-    GroundedAnswerV1,
+    GroundedAnswerV2,
     GroundedProseSegmentV1,
 )
 from application.contracts.scenario_projection import DemandIntervalV1
-from application.grounding.gate import (
-    SCOPE_CONTROLS,
-    UncitedNumericProseError,
-    ground_answer,
-)
+from application.grounding.gate import SCOPE_CONTROLS, ground_answer
 
 SITE = UUID(int=1)
 SCENARIO = UUID(int=2)
@@ -84,15 +79,8 @@ def _deps(reader: ReaderStub) -> AgentDepsV1:
     )
 
 
-def _answer(*result_ids: str) -> GroundedAnswerV1:
-    return GroundedAnswerV1(
-        segments=tuple(
-            ClaimProposalV1(
-                metric="required_headcount_minutes", arguments=ARGS, result_id=result_id
-            )
-            for result_id in result_ids
-        )
-    )
+def _answer(*handles: str) -> GroundedAnswerV2:
+    return GroundedAnswerV2(text=" ".join("{{" + handle + "}}" for handle in handles))
 
 
 def test_supported_citation_attaches_trusted_value_and_exact_locator() -> None:
@@ -104,40 +92,47 @@ def test_supported_citation_attaches_trusted_value_and_exact_locator() -> None:
     assert reader.requested == [(VERSION, "d1")]
 
 
+def test_value_placeholder_becomes_prose_claim_prose() -> None:
+    response = ground_answer(
+        GroundedAnswerV2(text="Wednesday outbound needs {{r1}}."),
+        _deps(ReaderStub()), {"r1": _result("r1")},
+    )
+    prose, claim, tail = response.segments
+    assert prose == GroundedProseSegmentV1(text="Wednesday outbound needs ")
+    assert (claim.verdict, claim.value, claim.unit) == ("supported", 60, "minutes")
+    # metric and arguments come from the trusted result, not the model.
+    assert (claim.metric, claim.arguments) == ("required_headcount_minutes", ARGS)
+    assert tail == GroundedProseSegmentV1(text=".")
+
+
+def test_numbered_lists_times_and_names_are_one_plain_prose_segment() -> None:
+    text = "1. Draft\n2. Run at 06:00 for Grid P 8GR"
+    response = ground_answer(GroundedAnswerV2(text=text), _deps(ReaderStub()), {})
+    assert response.segments == (GroundedProseSegmentV1(text=text),)
+
+
 @pytest.mark.parametrize(
-    ("proposal", "results", "failure"),
+    ("handle", "results", "failure"),
     [
-        (ClaimProposalV1(metric="required_headcount_minutes", arguments=ARGS, result_id=""), {}, "uncited_claim"),
-        (ClaimProposalV1(metric="required_headcount_minutes", arguments=ARGS, result_id="fake"), {}, "missing_evidence"),
-        (
-            ClaimProposalV1(metric="required_headcount_minutes", arguments=ARGS, result_id="r1"),
-            {"r1": _result("r1", arguments=ClaimArgumentsV1(task_id="pick", start_minute=60, end_minute=120))},
-            "missing_evidence",
-        ),
-        (
-            ClaimProposalV1(metric="required_headcount_minutes", arguments=ARGS, result_id="r1"),
-            {"r1": _result("r1", version=OTHER_VERSION)},
-            "version_mismatch",
-        ),
+        ("r9", {"r1": _result("r1")}, "missing_evidence"),
+        ("r1", {}, "missing_evidence"),
+        ("r1", {"r1": _result("r1", version=OTHER_VERSION)}, "version_mismatch"),
     ],
 )
-def test_gate_falsifies_uncited_fabricated_argument_and_version_mismatch(
-    proposal, results, failure
+def test_an_unresolvable_placeholder_is_an_inspectable_failed_claim(
+    handle, results, failure
 ) -> None:
-    response = ground_answer(GroundedAnswerV1(segments=(proposal,)), _deps(ReaderStub()), results)
+    response = ground_answer(_answer(handle), _deps(ReaderStub()), results)
     claim = response.claims[0]
     assert claim.verdict == "failed"
     assert claim.failure == failure
     assert claim.value is None and claim.evidence_refs == ()
 
 
-def test_bare_unicode_decimal_digit_fails_the_whole_answer() -> None:
-    with pytest.raises(UncitedNumericProseError):
-        ground_answer(
-            GroundedAnswerV1(segments=(GroundedProseSegmentV1(text="short by ٢ hours"),)),
-            _deps(ReaderStub()),
-            {},
-        )
+@pytest.mark.parametrize("text", ["a {{}} b", "a {{ value }} b"])
+def test_a_malformed_placeholder_is_kept_as_literal_prose(text) -> None:
+    response = ground_answer(GroundedAnswerV2(text=text), _deps(ReaderStub()), {})
+    assert response.segments == (GroundedProseSegmentV1(text=text),)
 
 
 @pytest.mark.parametrize(
@@ -216,19 +211,6 @@ def test_a_nonzero_value_with_no_locator_can_never_render() -> None:
     assert (claim.verdict, claim.failure) == ("failed", "calculation_failed")
 
 
-@pytest.mark.parametrize("text", ["about 5 hours", "roughly ⑥ shifts", "½ a shift"])
-def test_prose_carrying_any_numeric_character_is_rejected(text) -> None:
-    """`isdecimal()` is False for superscripts, circled digits and vulgar
-    fractions, so the declared control over-claimed. isnumeric covers them.
-    """
-    with pytest.raises(UncitedNumericProseError):
-        ground_answer(
-            GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text),)),
-            _deps(ReaderStub()),
-            {},
-        )
-
-
 def test_scope_controls_state_coverage_and_non_coverage() -> None:
     assert SCOPE_CONTROLS
     assert all("NOT COVER" in description for description in SCOPE_CONTROLS.values())
@@ -276,18 +258,14 @@ def test_a_real_calculator_result_grounds_end_to_end_through_the_gate() -> None:
             metric="required_headcount_minutes", arguments=arguments
         ),
     )
-    proposal = ClaimProposalV1(
-        metric="required_headcount_minutes",
-        arguments=arguments,
-        result_id=result.result_id,
-    )
     response = ground_answer(
-        GroundedAnswerV1(segments=(proposal,)), deps, {result.result_id: result}
+        GroundedAnswerV2(text="{{" + result.citation_handle + "}}"), deps,
+        {result.citation_handle: result},
     )
     claim = response.claims[0]
 
-    # The id the model cites is derivable, which is what makes a scripted
-    # golden case able to name it literally.
+    # The persisted id is the canonical content hash.
+    assert claim.result_id == result.result_id
     assert result.result_id == derive_result_id(
         "required_headcount_minutes", arguments, FIXTURE_IDENTITY
     )
@@ -300,93 +278,3 @@ def test_a_real_calculator_result_grounds_end_to_end_through_the_gate() -> None:
         "d-outbound-0", "d-outbound-1",
     ]
     assert claim.evidence_refs == result.evidence_refs
-
-
-# Story 5.7: the prose rule narrowed from "no numerals" to "no untraceable numerals".
-
-def _prose(text: str) -> GroundedAnswerV1:
-    return GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text),))
-
-
-def test_numerals_copied_from_trusted_text_are_allowed() -> None:
-    from application.grounding.gate import trusted_numeric_words
-
-    trusted = trusted_numeric_words([
-        '{"task_id": "T1", "name": "C Fork | Grid P 8GR", "max_hours": 40.0}',
-        "Revise the draft to cap that worker at 40 hours as well.",
-    ])
-    text = "Capped Rhiannon Hansen at 40 hours; the task is C Fork | Grid P 8GR."
-    # 40.0 in the tool payload vouches for `40`; the task name's own token is copied.
-    assert {"40", "8GR"} <= trusted
-    response = ground_answer(_prose(text), _deps(ReaderStub()), {}, trusted)
-    assert response.segments[0].text == text
-    # The very same text is a violation when nothing vouches for its numerals, so the
-    # pass above is the trusted set's doing and not a leniency of the rule.
-    from application.grounding.gate import numeric_prose_violation
-
-    assert numeric_prose_violation(text) is not None
-    assert numeric_prose_violation(text, trusted) is None
-
-
-def test_a_serialized_float_vouches_for_its_integer_form_and_nothing_else() -> None:
-    from application.grounding.gate import trusted_numeric_words
-
-    # `40.0` is how a JSON-serialized max_hours arrives; the model may say "40".
-    assert "40" in trusted_numeric_words(['{"max_hours": 40.0}'])
-    assert "40" in trusted_numeric_words(["hours: 40.00"])
-    # ... but a different number, or a real fraction, is not vouched for.
-    assert "41" not in trusted_numeric_words(['{"max_hours": 40.0}'])
-    assert "3" not in trusted_numeric_words(["ratio 3.5"])
-
-
-@pytest.mark.parametrize("text", [
-    "There are 24 workers.",           # a count: needs a cited claim
-    "There are 8634 shifts.",          # only present inside a UUID
-    "The digest starts 685.",          # only present inside a long hex string
-    "Grid P 8.",                        # part of a word is not the word
-])
-def test_numerals_not_traceable_to_trusted_text_are_rejected(text) -> None:
-    from application.grounding.gate import trusted_numeric_words
-
-    trusted = trusted_numeric_words([
-        '{"id": "685a2608-8634-4c1b-9f11-1bf63934caae", "task": "Grid P 8GR", "year": "2024"}',
-        "checksum 685a26088634a17330e77510f921b1bf63934caae0eaa5f09f9b99dad883a9fe",
-    ])
-    with pytest.raises(UncitedNumericProseError):
-        ground_answer(_prose(text), _deps(ReaderStub()), {}, trusted)
-
-
-def test_execute_turn_trusts_history_and_tool_results_but_not_tool_call_arguments() -> None:
-    from application.contracts.agent_runtime import (
-        AgentMessageV1, AgentPartV1, AgentRunOutcomeV1, AgentTurnV1,
-    )
-    from application.use_cases.execute_turn import execute_turn
-
-    class Runtime:
-        def __init__(self, text):
-            self.text = text
-
-        def run_turn(self, _request):
-            return AgentRunOutcomeV1(status="completed", answer=_prose(self.text))
-
-    history = AgentTurnV1(messages=(
-        AgentMessageV1(role="system", parts=(AgentPartV1(text='{"task": "Grid P 8GR", "window_hours": 55}'),)),
-        AgentMessageV1(role="assistant", parts=(
-            AgentPartV1(kind="tool_call", tool_name="x", tool_call_id="c", tool_args_json='{"n": 77}'),)),
-    ))
-    deps = _deps(ReaderStub())
-    # Each source is isolated: a numeral is allowed by exactly the trusted text it came from.
-    for reply in ("Grid P 8GR.",        # history: the persisted system text
-                  "55 hours.",          # history: a bare numeral
-                  "40 hours.",          # the planner's own prompt
-                  "60 minutes."):       # a tool RESULT (the calculation's value)
-        ok = execute_turn(Runtime(reply), deps, prompt="cap at 40 hours",
-                          calculation_results=[_result("r1")], history=history)
-        assert ok.grounded_response is not None, reply
-    # And the history numeral is trusted only BECAUSE it is in history:
-    with pytest.raises(UncitedNumericProseError):
-        execute_turn(Runtime("55 hours."), deps, prompt="cap at 40 hours",
-                     calculation_results=[_result("r1")], history=AgentTurnV1(messages=()))
-    with pytest.raises(UncitedNumericProseError):
-        execute_turn(Runtime("About 77 shifts."), deps, prompt="cap at 40 hours",
-                     calculation_results=[], history=history)

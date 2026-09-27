@@ -1,0 +1,42 @@
+{
+  "case_id": "grounding-fact-value-mismatch",
+  "case_version": "1",
+  "capability": "scheduling_inspect",
+  "risk_class": "inspect",
+  "prompt": "Inspect the workers group and say which task worker w1 is qualified for.",
+  "scripted_turns": [
+    {
+      "tool_name": "scheduling_inspect",
+      "arguments": {
+        "request": {
+          "group": "workers"
+        }
+      },
+      "tool_call_id": "inspect-workers"
+    },
+    {
+      "response_data": {
+        "schema_version": "2",
+        "text": "<claim ev='w1' field='qualifications' value='pack'>Worker A is qualified for pack</claim>."
+      }
+    }
+  ],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [
+    {
+      "tool_name": "scheduling_inspect",
+      "arguments": {
+        "request": {
+          "group": "workers"
+        }
+      }
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "Worker A is qualified for pack (unverified: value_mismatch) .",
+  "expected_grounding_outcome": "value_mismatch",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ]
+}

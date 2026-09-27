@@ -21,6 +21,7 @@ from agent.runtime import PydanticAIAgentRuntime
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import installed_modules
 from application.capabilities.module import CapabilityModuleV1
+from application.grounding.evidence_registry import trusted_results_by_citation
 from application.contracts.activity import (
     ActivityItemV1,
     AgentResponseActivityV1,
@@ -36,7 +37,7 @@ from application.contracts.agent_runtime import (
     AgentTurnV1,
     AgentUsageV1,
 )
-from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1, GroundedResponseV1
+from application.contracts.grounding import GroundedAnswerV2, GroundedProseSegmentV1, GroundedResponseV1
 from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 
 # Golden cases tag themselves with an evaluation `capability` label, which is not
@@ -208,8 +209,6 @@ _REASON_CLASSIFICATIONS: tuple[tuple[str, str], ...] = (
     ("tool arguments differed", "tool_arguments_mismatch"),
     ("grounded response or oracle is missing", "grounding_response_missing"),
     ("expected supported, got", "grounding_supported_mismatch"),
-    ("grounding input relation is unverifiable", "grounding_relation_unverifiable"),
-    ("grounding input relation differed", "grounding_relation_mismatch"),
     ("oracle differed", "grounding_oracle_mismatch"),
     ("evidence differed", "grounding_evidence_mismatch"),
     ("policy outcome differed", "policy_outcome_mismatch"),
@@ -394,11 +393,7 @@ def _evaluate_case(
     if outcome.draft is not None:
         outcome = resolve_draft_citation(
             outcome,
-            {
-                value.result_id: value
-                for value in results
-                if isinstance(getattr(value, "result_id", None), str)
-            },
+            trusted_results_by_citation(results, runtime._deps.evidence_registry),
         )
     if case.expected_grounding_outcome:
         outcome = ground_case_outcome(
@@ -464,7 +459,7 @@ def runtime_for_modules(
     return PydanticAIAgentRuntime(
         model=model if model is not None else build_model_double(case),
         capabilities=modules, deps=_report_deps(sink),
-        answer_type=GroundedAnswerV1 if _needs_named_output_tools(case) else None,
+        answer_type=GroundedAnswerV2 if _needs_named_output_tools(case) else None,
     )
 
 
@@ -1061,7 +1056,7 @@ def _iter_turn_evaluations(
             # `expected_outcome: "clarify"/"refuse"` and a scripted
             # `response_data` turn unreachable through this runner.
             answer_type=(
-                GroundedAnswerV1 if _needs_named_output_tools_for_turn(turn) else None
+                GroundedAnswerV2 if _needs_named_output_tools_for_turn(turn) else None
             ),
         )
         failure_code: str | None = None

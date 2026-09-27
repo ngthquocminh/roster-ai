@@ -34,7 +34,7 @@ FR5: Let the agent inspect the selected scenario, current schedule, demand, qual
 
 FR6: Request clarification for materially ambiguous entity, intent, consequence, or version information and refuse unsupported, unauthorized, out-of-scope, injection-driven, or over-budget requests without widening tools or authority.
 
-FR7: Bind every numerical or schedule-specific claim to saved facts or computed values for the selected scenario and schedule/run version; every displayed KPI must be recomputable and unsupported numbers must fail grounding.
+FR7: Bind every number presented as verified to saved facts or computed values for the selected scenario and schedule/run version; every displayed KPI must be recomputable and a verified number that cannot be supported must fail grounding. Untagged answer text is presented as unverified (decision D2, grounding redesign 2026-09-26).
 
 FR8: When the conversational model is unavailable, identify agent features as unavailable while preserving authenticated access to Scenario Data, saved results, provenance, and the manual deterministic solver workflow.
 
@@ -94,7 +94,7 @@ NFR10: Model-provider or Logfire failure must cause zero product-state corruptio
 
 NFR11: One hundred percent of completed feasible schedules must satisfy deterministic hard constraints.
 
-NFR12: One hundred percent of numerical agent claims must pass the grounding evaluator before release.
+NFR12: One hundred percent of numbers the agent presents as verified must pass the grounding evaluator before release; untagged text is presented as unverified (D2).
 
 NFR13: Infeasible, timed-out, cancelled, failed, and successful outcomes must never be represented as equivalent.
 

@@ -77,7 +77,11 @@ def main(argv=None) -> int:
     # configured. Passed to the stack only; never recorded anywhere.
     trace_export = {
         name: values.get(name) or os.environ.get(name)
-        for name in ('LOGFIRE_TOKEN', 'LOGFIRE_BASE_URL')
+        # G' phase 3: the tier-1 checker's key/provider ride the same stack-only
+        # path (compose.override.yml passes them to the API, which runs in flag
+        # mode).
+        for name in ('LOGFIRE_TOKEN', 'LOGFIRE_BASE_URL',
+                     'TYPESAFE_API_KEY', 'GROUNDING_TIER1_PROVIDER')
     }
     if not all(isinstance(value, str) and value.strip() for value in (model, key, judge_model, judge_key)):
         raise SystemExit('agent and separate judge model/key configuration is required')

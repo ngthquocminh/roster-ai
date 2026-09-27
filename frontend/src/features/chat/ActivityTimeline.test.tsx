@@ -281,6 +281,77 @@ describe("ActivityTimeline", () => {
     expect(document.body.innerHTML).not.toMatch(/gradient|animate-pulse|ai-glow/i);
   });
 
+  it("shows a verified fact with the checked field and its record, and a failed one flagged", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const facts = {
+      ...agentResponse,
+      activity_id: "99999999-9999-9999-9999-999999999999",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            schema_version: "1", kind: "fact" as const, text: "Ana is qualified for pick",
+            field: "qualifications", value: "pick", verdict: "supported" as const, failure: null,
+            support_probability: null, wording_flagged: false,
+            evidence_refs: [{ ...ref, group: "workers" as const, record_id: "w1", field: "qualifications",
+                              start_minute: null, end_minute: null }],
+          },
+          { schema_version: "1", kind: "prose" as const, text: "and" },
+          {
+            schema_version: "1", kind: "fact" as const, text: "Ben is on grade 9",
+            field: "grade", value: "9", verdict: "failed" as const,
+            failure: "value_mismatch" as const, evidence_refs: [],
+            support_probability: null, wording_flagged: false,
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[facts]} />);
+
+    const verified = screen.getByText("Ana is qualified for pick").closest("[data-fact-state]");
+    expect(verified).toHaveAttribute("data-fact-state", "supported");
+    expect(verified).toHaveTextContent("Verified: qualifications: pick");
+    expect(verified).toContainElement(
+      screen.getByRole("button", { name: /Evidence: workers w1, qualifications/ }),
+    );
+    const failed = screen.getByText("Ben is on grade 9").closest("[data-fact-state]");
+    expect(failed).toHaveAttribute("data-fact-state", "failed");
+    expect(failed).toHaveTextContent("Unverified: value mismatch");
+    expect(failed?.querySelector("button")).toBeNull();
+    // The rest of the answer is unaffected.
+    expect(screen.getByText("and")).toBeInTheDocument();
+  });
+
+  it("marks a fact whose wording the record does not support, keeping its text and record link", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const flagged = {
+      ...agentResponse,
+      activity_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            schema_version: "1", kind: "fact" as const, text: "Ana is not qualified for pick",
+            field: "qualifications", value: "pick", verdict: "supported" as const, failure: null,
+            support_probability: 0.04, wording_flagged: true,
+            evidence_refs: [{ ...ref, group: "workers" as const, record_id: "w1", field: "qualifications",
+                              start_minute: null, end_minute: null }],
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[flagged]} />);
+
+    const fact = screen.getByText("Ana is not qualified for pick").closest("[data-fact-state]");
+    expect(fact).toHaveAttribute("data-fact-state", "wording-flagged");
+    expect(fact).toHaveTextContent("Wording not supported by the record · qualifications: pick");
+    expect(fact).not.toHaveTextContent("Verified");
+    expect(fact).not.toHaveTextContent("0.04");
+    expect(fact).toContainElement(
+      screen.getByRole("button", { name: /Evidence: workers w1, qualifications/ }),
+    );
+  });
+
   it("deduplicates an agent response delivered by SSE and timeline refetch", () => {
     render(<ActivityTimeline navigate={vi.fn()} items={[agentResponse, agentResponse]} />);
     expect(screen.getAllByLabelText("ShiftMind response")).toHaveLength(1);

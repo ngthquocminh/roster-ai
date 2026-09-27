@@ -38,7 +38,7 @@ from application.capabilities.scheduling_compute import (
 )
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
 from application.capabilities.scheduling_optimize import scheduling_optimize_module
-from application.contracts.grounding import ClaimArgumentsV1, GroundedAnswerV1
+from application.contracts.grounding import ClaimArgumentsV1, GroundedAnswerV2
 from application.ports.scenario_projection import GroupQueryKeysV1, GroupQueryV1
 from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 from evals.cases import (
@@ -255,7 +255,7 @@ def _run_case(case: GoldenCase) -> AgentRunOutcomeV1:
     }
     runtime = PydanticAIAgentRuntime(
         model=build_model_double(case),
-        answer_type=(GroundedAnswerV1 if case.expected_grounding_outcome else None),
+        answer_type=(GroundedAnswerV2 if case.expected_grounding_outcome else None),
         **kwargs,
     )
     return runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
@@ -788,58 +788,51 @@ def test_grounding_cases_have_literal_result_ids_authored_refs_and_oracles() -> 
     cases = [case for case in load_cases(GOLDEN_DIR) if case.capability == "scheduling_compute"]
     assert len(cases) == 4
     assert {case.expected_grounding_outcome for case in cases} == {
-        "supported", "version_mismatch", "missing_evidence", "argument_mismatch"
+        "supported", "version_mismatch", "missing_evidence"
     }
-    by_outcome = {case.expected_grounding_outcome: case for case in cases}
+    by_outcome = {case.case_id: case for case in cases}
     # The supported case names the locators the calculator must emit; a failure
     # case names none, and asserting that emptiness is what proves AR11's
     # non-retargeting rule rather than leaving the field decorative.
-    assert by_outcome["supported"].expected_evidence_refs
     assert all(
-        not case.expected_evidence_refs
-        for outcome, case in by_outcome.items()
-        if outcome != "supported"
+        bool(case.expected_evidence_refs) == (case.expected_grounding_outcome == "supported")
+        for case in cases
     )
 
-    # Ids are the real content hash, not merely 64 characters long: this is what
-    # makes a `derive_result_id` regression turn the cases red instead of
-    # letting them keep passing against a stale literal.
-    expected_id = derive_result_id(
+    # A real citation is the turn's short handle (G' phase 1) as a `{{r1}}`
+    # placeholder (phase 2a); the invented one is a 64-hex id no call produced.
+    # `derive_result_id` regressions are caught by the persisted canonical id
+    # (test_a_supported_golden_claim_persists_the_content_hash).
+    for case in cases:
+        text = case.scripted_turns[-1].response_data["text"]
+        if case.expected_grounding_outcome == "missing_evidence":
+            assert "{{" + "f" * 64 + "}}" in text
+        else:
+            assert "{{r1}}" in text, case.case_id
+
+
+def test_a_supported_golden_claim_persists_the_content_hash() -> None:
+    """The model cites `r1`; the stored claim carries the canonical id, so a
+    `derive_result_id` regression turns this red."""
+    case = next(
+        case for case in load_cases(GOLDEN_DIR)
+        if case.capability == "scheduling_compute"
+        and case.expected_grounding_outcome == "supported"
+    )
+    results: list[object] = []
+    runtime = _runtime_for_case(case, installed_modules(), results)
+    outcome = ground_case_outcome(
+        case, _run_runtime_case(runtime, case), runtime._deps, tuple(results)
+    )
+    claim = outcome.grounded_response.claims[0]
+    assert claim.verdict == "supported"
+    assert claim.result_id == derive_result_id(
         "required_headcount_minutes",
         ClaimArgumentsV1(
             task_id="pick", family="outbound", start_minute=2880, end_minute=4320
         ),
         FIXTURE_IDENTITY,
     )
-    for outcome, case in by_outcome.items():
-        final = case.scripted_turns[-1].response_data
-        claim = next(segment for segment in final["segments"] if segment["kind"] == "claim")
-        assert len(claim["result_id"]) == 64
-        if outcome != "missing_evidence":
-            assert claim["result_id"] == expected_id, outcome
-
-
-def test_grounding_evaluator_distinguishes_argument_mismatch_from_missing_result() -> None:
-    cases = {
-        case.expected_grounding_outcome: case
-        for case in load_cases(GOLDEN_DIR)
-        if case.capability == "scheduling_compute"
-    }
-
-    def grounded(case: GoldenCase) -> AgentRunOutcomeV1:
-        results: list[object] = []
-        runtime = _runtime_for_case(case, installed_modules(), results)
-        outcome = _run_runtime_case(runtime, case)
-        return ground_case_outcome(case, outcome, runtime._deps, tuple(results))
-
-    mismatch = grounded(cases["argument_mismatch"])
-    missing = grounded(cases["missing_evidence"])
-    evaluator = GroundingEvaluator()
-
-    assert evaluator.evaluate(cases["argument_mismatch"], mismatch).passed is True
-    assert evaluator.evaluate(cases["missing_evidence"], missing).passed is True
-    assert evaluator.evaluate(cases["argument_mismatch"], missing).passed is False
-    assert evaluator.evaluate(cases["missing_evidence"], mismatch).passed is False
 
 
 def test_live_grounding_expectation_can_preserve_a_double_only_failure_oracle() -> None:
@@ -2065,20 +2058,6 @@ class TestLiveDiagnosticsRedaction:
         assert (
             _classify_reason("expected supported, got ('missing_evidence',)", passed=False)
             == "grounding_supported_mismatch"
-        )
-        assert (
-            _classify_reason(
-                "grounding input relation is unverifiable: the response carried no claims",
-                passed=False,
-            )
-            == "grounding_relation_unverifiable"
-        )
-        assert (
-            _classify_reason(
-                "grounding input relation differed: expected argument_mismatch=True, actual=False",
-                passed=False,
-            )
-            == "grounding_relation_mismatch"
         )
 
     def test_history_window_not_checked_does_not_collide_with_a_real_failure(self) -> None:

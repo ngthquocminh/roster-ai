@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from application.grounding.claim_tags import restates_value_only
 from evals.live_conversations.cases import load_scenarios, prefix_executions
 from evals.live_conversations.inventory import require_complete_coverage
 from evals.report import _readiness_verdict
@@ -27,6 +28,87 @@ RELIABILITY_FAILURES = frozenset({'unsuccessful_agent_turn'})
 #: a number). Blocking unless the owner accepts that exact turn explicitly;
 #: a wrong rendered value can never be accepted.
 ACCEPTABLE_CLAIM_FAILURES = frozenset({'unsupported_claim'})
+
+
+#: Below this tier-1 support probability a fact is listed for human review.
+TIER1_REVIEW_THRESHOLD = 0.5
+
+
+def tier1_fact_rows(activity: dict) -> list[dict]:
+    """G' phase 3: every fact segment of one reply, with its shadow probability.
+
+    `tier0_only` marks a fact whose text only restates its checked value: tier 0
+    proved all of it, so tier 1 deliberately skips it.
+    """
+    return [
+        {**{key: segment.get(key)
+            for key in ('text', 'field', 'value', 'verdict', 'failure', 'support_probability',
+                        'wording_flagged')},
+         'tier0_only': restates_value_only(str(segment.get('text') or ''),
+                                           str(segment.get('value') or ''))}
+        for segment in ((activity.get('response') or {}).get('segments') or [])
+        if segment.get('kind') == 'fact'
+    ]
+
+
+def _percentile(values: list[float], fraction: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(round(fraction * (len(ordered) - 1))))]
+
+
+def summarize_tier1(runs) -> dict:
+    """Shadow-mode tier-1 results across a report. Informational only: it never
+    enters readiness or blocking reasons."""
+    facts = [
+        {'run_id': run.get('run_id'), 'scenario': execution.get('scenario'),
+         'repetition': execution.get('repetition'), 'turn': index, **fact}
+        for run in runs
+        for execution in run.get('prefixes') or []
+        for index, turn in enumerate(execution.get('turns') or [], 1)
+        for fact in turn.get('tier1_facts') or []
+    ]
+    checked = [fact for fact in facts if fact.get('support_probability') is not None]
+    calls = [
+        call
+        for run in runs
+        for execution in run.get('prefixes') or []
+        for turn in execution.get('turns') or []
+        # A list since a run can emit several; a lone dict is an older report.
+        for call in (turn.get('tier1') if isinstance(turn.get('tier1'), list)
+                     else [turn['tier1']] if isinstance(turn.get('tier1'), dict) else [])
+        if isinstance(call, dict)
+    ]
+    latencies = [call['duration_ms'] for call in calls
+                 if isinstance(call.get('duration_ms'), (int, float))
+                 and not isinstance(call.get('duration_ms'), bool)]
+    outcomes: dict = {}
+    providers: dict = {}
+    for call in calls:
+        labels = call.get('labels') or {}
+        outcome = labels.get('tier1_outcome') or 'unknown'
+        provider = labels.get('tier1_provider') or 'unknown'
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        providers[provider] = providers.get(provider, 0) + 1
+    return {
+        'facts': facts,
+        'checked': len(checked),
+        'tier0_only': sum(1 for fact in facts if fact.get('tier0_only')),
+        'wording_flagged': sum(1 for fact in facts if fact.get('wording_flagged')),
+        'supported_unchecked': sum(1 for fact in facts if fact.get('verdict') == 'supported'
+                                   and not fact.get('tier0_only')
+                                   and fact.get('support_probability') is None),
+        'checker_calls': len(calls),
+        'checker_outcomes': outcomes,
+        'checker_providers': providers,
+        'checker_latency_ms': {'median': _percentile(latencies, .5),
+                               'p95': _percentile(latencies, .95),
+                               'max': max(latencies) if latencies else None},
+        'review_threshold': TIER1_REVIEW_THRESHOLD,
+        'low_probability': [fact for fact in checked
+                            if fact['support_probability'] < TIER1_REVIEW_THRESHOLD],
+    }
 
 
 def summarize_runs(runs, *, coverage, observation_ids, version_bindings, accepted_findings=()):
@@ -131,4 +213,5 @@ def summarize_runs(runs, *, coverage, observation_ids, version_bindings, accepte
         'accepted_findings': sorted(f'{s}:{t}' for s, t in accepted),
         'required_scenarios_per_run': len(expected),
         'required_user_turns_per_run': sum(len(turns) for turns in expected.values()),
+        'tier1_shadow': summarize_tier1(runs),
     }

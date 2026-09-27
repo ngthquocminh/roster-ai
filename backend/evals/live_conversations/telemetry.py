@@ -54,16 +54,25 @@ class ContainerTelemetry:
                 continue
             if not isinstance(record, dict) or record.get('correlation', {}).get('agent_run_id') != agent_run_id:
                 continue
-            if record.get('event') not in {'agent.run.completed', 'agent.tool.call.completed'}:
+            if record.get('event') not in {'agent.run.completed', 'agent.tool.call.completed',
+                                           'grounding.tier1.completed'}:
                 continue
             # Explicit selection discards exception messages, provider payloads,
             # and any future logging fields that are not part of this protocol.
             records.append({key: record.get(key) for key in (
-                'event', 'correlation', 'labels', 'usage', 'estimated_cost_usd', 'budget_outcome')})
+                'event', 'correlation', 'labels', 'usage', 'estimated_cost_usd', 'budget_outcome',
+                'duration_ms')})
         terminal = [r for r in records if r['event'] == 'agent.run.completed']
         if len(terminal) != 1:
             raise IncompleteConversationRun('application_usage_or_cost_unavailable')
         tools = [r for r in records if r['event'] == 'agent.tool.call.completed']
+        # G' phase 3: every tier-1 checker record of the run, kept whole (a
+        # resumed turn can emit more than one). Labels are counts, outcome and
+        # provider only -- never fact text.
+        terminal[0]['tier1'] = [
+            {'labels': r.get('labels'), 'duration_ms': r.get('duration_ms')}
+            for r in records if r['event'] == 'grounding.tier1.completed'
+        ]
         # Captured for ANY failed turn, not only one whose usage went missing:
         # B5 failed with usage present, so its cause stayed invisible.
         if (terminal[0].get('labels') or {}).get('failure_reason'):

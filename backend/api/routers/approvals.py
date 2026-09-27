@@ -50,9 +50,11 @@ from application.contracts.decision_provenance import (
     SolverRunProvenanceV1, ToolProposalProvenanceV1,
 )
 from application.queries.decision_provenance import query_decision_provenance
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV2
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
+from adapters.grounding.factory import create_claim_support_checker
+from settings import tier1_flag_threshold
 from application.use_cases.execute_turn import activity_payload, execute_turn, failed_outcome_for_exception, terminal_status
 from application.use_cases.finalize_agent_run import finalize_agent_run
 from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
@@ -263,12 +265,14 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
         ))
         runtime = runtime_factory(
             settings=settings, capabilities=granted, deps=deps,
-            answer_type=GroundedAnswerV1,
+            answer_type=GroundedAnswerV2,
         )
         outcome = execute_turn(
             runtime, deps, prompt="", calculation_results=raw_results,
             history=resume.history,
             approvals=(AgentApprovalDecisionV1(tool_call_id=resume.tool_call_id, approved=True),),
+            claim_checker=create_claim_support_checker(settings),
+            flag_threshold=tier1_flag_threshold(settings),
         )
         if outcome.status == "suspended":
             raise ResumedTurnSuspendedError(

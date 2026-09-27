@@ -2261,6 +2261,63 @@ export interface components {
             failure?: ("missing_evidence" | "unauthorized_evidence" | "version_mismatch" | "calculation_failed" | "uncited_claim") | null;
         };
         /**
+         * GroundedFactV1
+         * @description A record fact the model tagged `<claim ev=... field=... value=...>`.
+         *
+         *     `field`/`value` are what was CHECKED against the trusted record (tier 0,
+         *     decision D1); `text` is the model's wording, which tier 0 does not check.
+         *     The UI therefore shows `field: value` on the verified marker. A failed fact
+         *     keeps its text and is shown flagged as unverified -- never stripped.
+         */
+        GroundedFactV1: {
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: string;
+            /**
+             * Kind
+             * @default fact
+             * @constant
+             */
+            kind: "fact";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /**
+             * Field
+             * @default
+             */
+            field: string;
+            /**
+             * Value
+             * @default
+             */
+            value: string;
+            /**
+             * Evidence Refs
+             * @default []
+             */
+            evidence_refs: components["schemas"]["EvidenceRefV1"][];
+            /**
+             * Verdict
+             * @default failed
+             * @enum {string}
+             */
+            verdict: "supported" | "failed";
+            /** Failure */
+            failure?: ("missing_evidence" | "unknown_field" | "value_mismatch" | "version_mismatch" | "unauthorized_evidence") | null;
+            /** Support Probability */
+            support_probability?: number | null;
+            /**
+             * Wording Flagged
+             * @default false
+             */
+            wording_flagged: boolean;
+        };
+        /**
          * GroundedProseSegmentV1
          * @description Non-numeric prose in its original answer position.
          */
@@ -2298,7 +2355,7 @@ export interface components {
              * Segments
              * @default []
              */
-            segments: (components["schemas"]["GroundedProseSegmentV1"] | components["schemas"]["GroundedClaimV1"])[];
+            segments: (components["schemas"]["GroundedProseSegmentV1"] | components["schemas"]["GroundedClaimV1"] | components["schemas"]["GroundedFactV1"])[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {

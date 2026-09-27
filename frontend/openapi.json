@@ -8365,6 +8365,90 @@
         "title": "GroundedClaimV1",
         "description": "A supported computed value or one inspectable per-claim failure."
       },
+      "GroundedFactV1": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "title": "Schema Version",
+            "default": "1"
+          },
+          "kind": {
+            "type": "string",
+            "const": "fact",
+            "title": "Kind",
+            "default": "fact"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "default": ""
+          },
+          "field": {
+            "type": "string",
+            "title": "Field",
+            "default": ""
+          },
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "default": ""
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRefV1"
+            },
+            "type": "array",
+            "title": "Evidence Refs",
+            "default": []
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "failed"
+            ],
+            "title": "Verdict",
+            "default": "failed"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "missing_evidence",
+                  "unknown_field",
+                  "value_mismatch",
+                  "version_mismatch",
+                  "unauthorized_evidence"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure"
+          },
+          "support_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support Probability"
+          },
+          "wording_flagged": {
+            "type": "boolean",
+            "title": "Wording Flagged",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "GroundedFactV1",
+        "description": "A record fact the model tagged `<claim ev=... field=... value=...>`.\n\n`field`/`value` are what was CHECKED against the trusted record (tier 0,\ndecision D1); `text` is the model's wording, which tier 0 does not check.\nThe UI therefore shows `field: value` on the verified marker. A failed fact\nkeeps its text and is shown flagged as unverified -- never stripped."
+      },
       "GroundedProseSegmentV1": {
         "properties": {
           "schema_version": {
@@ -8415,6 +8499,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/GroundedClaimV1"
+                },
+                {
+                  "$ref": "#/components/schemas/GroundedFactV1"
                 }
               ]
             },

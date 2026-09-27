@@ -38,7 +38,7 @@ from application.contracts.activity import (
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.agent_runtime import AgentRunOutcomeV1
-from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1, GroundedResponseV1
+from application.contracts.grounding import GroundedAnswerV2, GroundedProseSegmentV1, GroundedResponseV1
 from application.contracts.persisted_event import PersistedEventV1
 from application.ports.conversation import (
     AcceptedTurnV1,
@@ -232,9 +232,7 @@ class _Runtime:
     def run_turn(self, request):
         return AgentRunOutcomeV1(
             status="completed",
-            answer=GroundedAnswerV1(
-                segments=(GroundedProseSegmentV1(text="Coverage checked."),)
-            ),
+            answer=GroundedAnswerV2(text="Coverage checked."),
         )
 
 
@@ -267,18 +265,13 @@ class _FailingRuntime:
         raise AgentRuntimeError("provider unavailable")
 
 
-class _NumericProseRuntime:
-    """Answers with a bare numeral in prose, which the gate refuses."""
+class _ValueErrorRuntime:
+    """Raises a plain ValueError -- not an AgentRuntimeError -- from the turn."""
 
     name = "test"
 
     def run_turn(self, request):
-        return AgentRunOutcomeV1(
-            status="completed",
-            answer=GroundedAnswerV1(
-                segments=(GroundedProseSegmentV1(text="You are short by 2 hours."),)
-            ),
-        )
+        raise ValueError("unclassified fault")
 
 
 @contextmanager
@@ -613,9 +606,7 @@ def test_telemetry_export_failure_and_disabled_export_preserve_owned_activity(
     from agent.runtime import PydanticAIAgentRuntime
 
     client, repository, settings = conversation_client
-    answer = GroundedAnswerV1(
-        segments=(GroundedProseSegmentV1(text="Coverage remains available."),)
-    )
+    answer = GroundedAnswerV2(text="Coverage remains available.")
 
     def scripted(_messages, info: AgentInfo) -> ModelResponse:
         output_tool = info.output_tools[0]
@@ -730,13 +721,12 @@ def test_a_run_that_is_not_queued_is_refused_with_a_stable_problem(
 def test_a_gate_failure_still_reaches_a_terminal_status(conversation_client) -> None:
     """The claim already committed `agent_running`, and only `agent_queued` can
     be claimed -- so an exception escaping the turn leaves a run no request can
-    ever execute again. `UncitedNumericProseError` is the likeliest source
-    because it is the gate's own fail-closed rule, and it is a ValueError, not
-    an AgentRuntimeError.
+    ever execute again. A plain ValueError (not an AgentRuntimeError) must still
+    land on a terminal status.
     """
     client, repository, settings = conversation_client
     app.dependency_overrides[get_agent_runtime_factory] = lambda: (
-        lambda **_kwargs: _NumericProseRuntime()
+        lambda **_kwargs: _ValueErrorRuntime()
     )
 
     response = client.post(
@@ -751,7 +741,6 @@ def test_a_gate_failure_still_reaches_a_terminal_status(conversation_client) -> 
 def test_actual_exception_classes_map_to_stable_owned_failure_reasons() -> None:
     from application.use_cases.execute_turn import failed_outcome_for_exception
     from application.contracts.capability_manifest import IncompleteManifestError
-    from application.grounding.gate import UncitedNumericProseError
     from application.ports.agent_runtime import (
         AgentInvalidOutputError,
         AgentProviderError,
@@ -762,7 +751,6 @@ def test_actual_exception_classes_map_to_stable_owned_failure_reasons() -> None:
         (AgentProviderError("anything at all"), "provider_error", "agent"),
         (AgentInvalidOutputError("anything at all"), "invalid_output", "agent"),
         (AgentRuntimeError("framework catch-all"), "invalid_output", "agent"),
-        (UncitedNumericProseError("uncited"), "invalid_output", "agent"),
         (IncompleteManifestError("missing feature policy"), "capability_error", "capability"),
         (ValueError("invalid runtime model"), "invalid_output", "agent"),
     )

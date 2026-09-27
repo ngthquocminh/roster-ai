@@ -28,7 +28,7 @@ from application.contracts.agent_runtime import (
     AgentTurnV1,
 )
 from application.contracts.grounding import (
-    GroundedAnswerV1,
+    GroundedAnswerV2,
     GroundedClaimV1,
     GroundedProseSegmentV1,
     GroundedResponseV1,
@@ -129,9 +129,7 @@ class _Runtime:
         self.request = request
         return AgentRunOutcomeV1(
             status="completed",
-            answer=GroundedAnswerV1(
-                segments=(GroundedProseSegmentV1(text="Current answer."),)
-            ),
+            answer=GroundedAnswerV2(text="Current answer."),
         )
 
 

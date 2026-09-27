@@ -22,6 +22,7 @@ def test_telemetry_contract_has_exact_closed_vocabularies() -> None:
         "job.leased",
         "run.first_event.persisted",
         "approval.decided",
+        "grounding.tier1.completed",
     }
     assert TELEMETRY_LABEL_KEYS == frozenset(
         {
@@ -47,6 +48,15 @@ def test_telemetry_contract_has_exact_closed_vocabularies() -> None:
             "approval_outcome",
             "model",
             "cost_basis",
+            "tier1_outcome",
+            "tier1_provider",
+            "tier1_checked",
+            "tier1_skipped",
+            "tier1_low",
+            "tier1_mid",
+            "tier1_high",
+            "tier1_flagged",
+            "tier1_bare",
         }
     )
     assert set(get_args(BudgetOutcomeV1)) == {

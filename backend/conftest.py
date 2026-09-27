@@ -52,6 +52,12 @@ os.environ.pop("LLM_MODEL", None)
 os.environ.pop("LOGFIRE_TOKEN", None)
 os.environ.pop("LOGFIRE_BASE_URL", None)
 os.environ.pop("AGENT_TRACE_CONTENT_MODE", None)
+# G' phase 3: the tier-1 checker defaults to `flag` for deployments, but a local
+# backend/.env can hold a real TYPESAFE_API_KEY (and OPENROUTER_API_KEY is
+# surfaced above), so the keyless suite pins it OFF. Checker tests opt in with
+# explicit settings and a stub or mock transport; none reaches the network.
+os.environ.pop("TYPESAFE_API_KEY", None)
+os.environ["GROUNDING_TIER1_MODE"] = "off"
 
 
 @contextmanager

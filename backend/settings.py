@@ -176,6 +176,37 @@ class Settings:
     # `off` everywhere except the disposable live-evaluation stack; the
     # export-boundary sanitizer is authoritative whatever this says.
     agent_trace_content_mode: TraceContentMode = "off"
+    # G' phase 3: tier-1 claim-support checker (TypeSafe Jev). `off` makes no
+    # request; `shadow` records a probability per verified fact and changes
+    # nothing the planner sees; `flag` (the default, Minh 2026-09-27) also marks
+    # a fact whose wording scores below the threshold. Nothing is ever stripped
+    # or retried. Keys: TYPESAFE_API_KEY, else OPENROUTER_API_KEY, else the
+    # agent's own key when the agent runs on OpenRouter -- so an OpenRouter
+    # deployment calls Jev (paid) by default. With none, the checker is
+    # disabled with one warning (fail-open).
+    grounding_tier1_mode: Literal["off", "shadow", "flag"] = "flag"
+    grounding_tier1_flag_threshold: float = 0.5
+    # `auto`: TypeSafe directly when TYPESAFE_API_KEY is set, else OpenRouter's
+    # Decisions API with OPENROUTER_API_KEY, else the checker is disabled.
+    grounding_tier1_provider: Literal["auto", "typesafe", "openrouter"] = "auto"
+    typesafe_api_key: str | None = field(repr=False, default=None)
+    # None -> the provider's default model (see adapters/grounding/factory.py).
+    grounding_tier1_model: str | None = None
+    grounding_tier1_timeout_seconds: float = 5.0
+    # Estimated input tokens per request; larger batches are split, and a
+    # single fact over it is skipped and counted.
+    grounding_tier1_token_budget: int = 4000
+
+
+def tier1_flag_threshold(settings: "Settings") -> float | None:
+    """The threshold a turn flags against, or None outside `flag` mode. The one
+    place the mode -> threshold rule lives, for every route that runs a turn."""
+    if settings.grounding_tier1_mode != "flag":
+        return None
+    threshold = settings.grounding_tier1_flag_threshold
+    if not (math.isfinite(threshold) and 0.0 < threshold < 1.0):
+        raise InvalidFlagError("grounding_tier1_flag_threshold must be between 0 and 1")
+    return threshold
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
@@ -308,6 +339,24 @@ def _trace_content_mode(raw: str | None) -> TraceContentMode:
     raise InvalidFlagError(
         f"AGENT_TRACE_CONTENT_MODE must be off or {TRACE_CONTENT_SYNTHETIC_EVAL}"
     )
+
+
+def _probability(name: str, raw: str | None, fallback: float) -> float:
+    try:
+        value = fallback if raw is None or not raw.strip() else float(raw)
+    except ValueError as exc:
+        raise InvalidFlagError(f"{name} must be a number between 0 and 1") from exc
+    if not math.isfinite(value) or not 0.0 < value < 1.0:
+        raise InvalidFlagError(f"{name} must be a number between 0 and 1")
+    return value
+
+
+def _choice(name: str, raw: str | None, allowed: tuple[str, ...], fallback: str) -> str:
+    """Fail closed: an unrecognized value stops the process at start."""
+    value = fallback if raw is None or not raw.strip() else raw.strip()
+    if value not in allowed:
+        raise InvalidFlagError(f"{name} must be one of {', '.join(allowed)}")
+    return value
 
 
 def default_settings() -> Settings:
@@ -566,4 +615,26 @@ def default_settings() -> Settings:
         logfire_token=logfire_token,
         logfire_base_url=logfire_base_url,
         agent_trace_content_mode=agent_trace_content_mode,
+        grounding_tier1_mode=_choice(  # type: ignore[arg-type]
+            "GROUNDING_TIER1_MODE", os.environ.get("GROUNDING_TIER1_MODE"),
+            ("off", "shadow", "flag"), "flag",
+        ),
+        grounding_tier1_flag_threshold=_probability(
+            "GROUNDING_TIER1_FLAG_THRESHOLD",
+            os.environ.get("GROUNDING_TIER1_FLAG_THRESHOLD"), 0.5,
+        ),
+        grounding_tier1_provider=_choice(  # type: ignore[arg-type]
+            "GROUNDING_TIER1_PROVIDER", os.environ.get("GROUNDING_TIER1_PROVIDER"),
+            ("auto", "typesafe", "openrouter"), "auto",
+        ),
+        typesafe_api_key=(os.environ.get("TYPESAFE_API_KEY") or "").strip() or None,
+        grounding_tier1_model=os.environ.get("GROUNDING_TIER1_MODEL") or None,
+        grounding_tier1_timeout_seconds=_positive_float(
+            "GROUNDING_TIER1_TIMEOUT_SECONDS",
+            os.environ.get("GROUNDING_TIER1_TIMEOUT_SECONDS"), 5.0,
+        ),
+        grounding_tier1_token_budget=_positive_int(
+            "GROUNDING_TIER1_TOKEN_BUDGET",
+            os.environ.get("GROUNDING_TIER1_TOKEN_BUDGET"), 4000,
+        ),
     )

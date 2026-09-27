@@ -16,8 +16,10 @@ from application.capabilities.vocabulary import RiskClassV1
 RiskClass = RiskClassV1
 ExpectedOutcome = Literal["allow", "refuse", "clarify"]
 VisibleState = Literal["completed", "suspended", "timed_out", "failed"]
+# `argument_mismatch` was retired in G' phase 2a: the model no longer supplies
+# a claim's metric or arguments, so a claim cannot disagree with its result.
 GroundingOracle = Literal[
-    "supported", "version_mismatch", "missing_evidence", "argument_mismatch"
+    "supported", "version_mismatch", "missing_evidence", "value_mismatch"
 ]
 
 RISK_CLASSES: tuple[RiskClass, ...] = cast(
@@ -31,7 +33,7 @@ VISIBLE_STATES: tuple[VisibleState, ...] = (
     "failed",
 )
 GROUNDING_ORACLES: tuple[GroundingOracle, ...] = (
-    "supported", "version_mismatch", "missing_evidence", "argument_mismatch"
+    "supported", "version_mismatch", "missing_evidence", "value_mismatch"
 )
 
 

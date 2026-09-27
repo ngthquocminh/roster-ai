@@ -10,10 +10,8 @@ through `agent/translate.py` before it is returned.
 """
 from __future__ import annotations
 
-import json
 import re
 import threading
-from difflib import SequenceMatcher
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import perf_counter
@@ -43,8 +41,6 @@ from pydantic_ai.exceptions import FallbackExceptionGroup
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
-    SystemPromptPart,
-    TextPart,
     ToolReturnPart,
     UserPromptPart,
 )
@@ -78,11 +74,12 @@ from application.ports.agent_runtime import (
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
-from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
+from application.contracts.grounding import GroundedAnswerV2
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.proposal import DraftProposalV1
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
-from application.grounding.gate import numeric_prose_violation, trusted_numeric_words
+from application.grounding.claim_tags import fact_handles
+from application.grounding.placeholders import malformed_placeholders, placeholder_handles
 from agent.capability_tools import render_capabilities
 
 # The four named structured-output tools, declared ONCE here where the
@@ -115,40 +112,11 @@ OUTPUT_TOOL_NAMES = frozenset(
 )
 
 
-def _trusted_texts(messages: list) -> list[str]:
-    """Text a prose numeral may be copied from: never the model's own output.
-
-    Planner prompts, system messages (the workflow snapshot), and tool results
-    are application data. Assistant text is trusted only BEFORE the current
-    user prompt, where it is rehydrated from persisted, gate-passed activities;
-    text the model produced in this run is exactly what is being checked.
-    """
-    last_prompt = 0
-    for index, message in enumerate(messages):
-        if isinstance(message, ModelRequest) and any(
-            isinstance(part, UserPromptPart) for part in message.parts
-        ):
-            last_prompt = index
-    texts: list[str] = []
-    for index, message in enumerate(messages):
-        for part in message.parts:
-            if isinstance(part, (UserPromptPart, SystemPromptPart)) and isinstance(part.content, str):
-                texts.append(part.content)
-            elif isinstance(part, ToolReturnPart):
-                texts.append(
-                    part.content if isinstance(part.content, str)
-                    else json.dumps(part.content, default=str, ensure_ascii=False)
-                )
-            elif isinstance(part, TextPart) and index < last_prompt:
-                texts.append(part.content)
-    return texts
-
-
 _WORD_GAP = re.compile(r"\w {2,}\w")
-_CLAIM_PLACEHOLDERS = ("<claim", "[claim", "{claim", "[computed", "[value", "[count", "[number")
+_CLAIM_PLACEHOLDERS = ("[claim", "{claim", "[computed", "[value", "[count", "[number")
 
 
-def _claim_placeholder(text: str, *, is_last: bool = True) -> str | None:
+def _claim_placeholder(text: str) -> str | None:
     """A stand-in the model left where a claim's number should be rendered."""
     lowered = text.casefold()
     for marker in _CLAIM_PLACEHOLDERS:
@@ -161,7 +129,7 @@ def _claim_placeholder(text: str, *, is_last: bool = True) -> str | None:
         return "a gap between words"
     # "Staffed minutes for C Fork | Grid P 8GR:" -- the sentence announces a
     # number and then stops (live-suite-v2-measurement-final, C5).
-    if is_last and text.rstrip().endswith((':', '=', '-', '—')):
+    if text.rstrip().endswith((':', '=', '-', '—')):
         return "a dangling lead-in"
     return None
 
@@ -189,18 +157,19 @@ def _result_ids_this_run(messages: list, citable_tools: frozenset[str]) -> set[s
     return found
 
 
-def _mistyped_result_id(cited: str, returned: set[str]) -> str | None:
-    """The id this citation was evidently copied from, if it is a near-miss.
-
-    Deliberately strict: an unrelated or invented id must NOT be treated as a
-    typo, or the gate's `missing_evidence` state becomes unreachable.
-    """
-    if cited in returned:
-        return None
-    for candidate in sorted(returned):
-        if SequenceMatcher(None, cited, candidate).ratio() >= .9:
-            return candidate
-    return None
+def _record_handles_this_run(messages: list) -> set[str]:
+    """Record handles (`ev`) on rows a tool returned after the current prompt."""
+    found: set[str] = set()
+    for message in _messages_this_run(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if not (isinstance(part, ToolReturnPart) and isinstance(part.content, dict)):
+                continue
+            for item in part.content.get("items") or ():
+                if isinstance(item, dict) and isinstance(item.get("ev"), str):
+                    found.add(item["ev"])
+    return found
 
 
 _QUANTITY_QUESTION = re.compile(r"\bhow (?:many|much)\b", re.IGNORECASE)
@@ -275,9 +244,9 @@ def _bounded_name(name: str) -> str | None:
     return name if name.isidentifier() and len(name) <= 64 else None
 
 
-def _prose_answer(text: str) -> GroundedAnswerV1:
-    """A plain-text model reply as one prose segment of a grounded answer."""
-    return GroundedAnswerV1(segments=(GroundedProseSegmentV1(text=text.strip()),))
+def _prose_answer(text: str) -> GroundedAnswerV2:
+    """A plain-text model reply, parsed exactly like the output-tool answer."""
+    return GroundedAnswerV2(text=text.strip())
 
 
 @dataclass(frozen=True)
@@ -395,10 +364,10 @@ class PydanticAIAgentRuntime:
                 # text under "required", repeated it until the upstream stream
                 # broke (502 -> invalid_output). Accepting text lets the provider
                 # send tool_choice="auto" and the reply terminate normally.
-                # Nothing is trusted more: the numeric-prose validator below and
-                # the grounding gate apply to this answer exactly as to a tool
-                # answer, so a number still needs a cited claim.
-                *((TextOutput(_prose_answer),) if answer_type is GroundedAnswerV1 else ()),
+                # Nothing is trusted more: the validators below and the
+                # grounding gate apply to this answer exactly as to a tool
+                # answer, so a rendered number still needs a placeholder.
+                *((TextOutput(_prose_answer),) if answer_type is GroundedAnswerV2 else ()),
             ]
         )
         self._agent: Agent = Agent(
@@ -423,143 +392,85 @@ class PydanticAIAgentRuntime:
         )
 
         if answer_type is not None:
-            # The grounding gate forbids numerals in prose segments, and it runs
-            # AFTER the turn completes -- so a violation used to kill the whole
-            # turn and persist an empty response. Registering the same rule as an
-            # output validator turns it into one corrective retry inside the run,
-            # which is the framework's own mechanism for "the model produced
-            # something unusable" and is already how a non-structured answer is
-            # handled.
-            #
-            # The rule itself stays in `application/grounding/gate.py`; this is
-            # wiring only. `ground_answer` still enforces it as the backstop, so
-            # bypassing the validator cannot bypass the invariant.
-            @self._agent.output_validator
-            def _reject_numeric_prose(
-                ctx: RunContext[AgentDepsV1 | None], output: object
-            ) -> object:
-                # Clarification and refusal are distinct structured outputs. A
-                # numeral in bounded refusal copy is operational context, not
-                # an uncited grounded claim.
-                if not isinstance(output, GroundedAnswerV1):
-                    return output
-                trusted = trusted_numeric_words(_trusted_texts(ctx.messages))
-                for segment in getattr(output, "segments", ()) or ():
-                    text = getattr(segment, "text", None)
-                    if text is None:
-                        continue
-                    offending = numeric_prose_violation(text, trusted)
-                    if offending is not None:
-                        self._last_retry_rule = "numeric_prose"
-                        raise ModelRetry(
-                            f"The prose segment {text!r} contains {offending!r}, which does "
-                            "not appear in any tool result, the workflow snapshot, or the "
-                            "planner's messages. Names, IDs and values may be copied exactly "
-                            "as they appear there. A quantity you counted, summed or "
-                            "otherwise derived must instead be a claim citing a result_id "
-                            "returned by a calculation tool. Never spell a number out in "
-                            "words to avoid this rule." + _COMPLETE_ANSWER
-                        )
-                return output
-
+            # Corrective retries for placeholder slips. A handle with nothing to
+            # fill it and a malformed placeholder are NOT turn failures: on the
+            # last attempt the answer is delivered and the gate renders a failed
+            # claim or literal prose (G' phase 2a). The remaining rules keep
+            # their earlier, fatal behaviour.
             @self._agent.output_validator
             def _reject_uncited_claim(
                 ctx: RunContext[AgentDepsV1 | None], output: object
             ) -> object:
-                # A claim with no result_id reaches the gate as a rendered
-                # "failed claim" beside otherwise correct prose (observed twice
-                # in live-suite-v2-acceptance-b B5: a worker_count claim appended
-                # to a draft description that needed no number at all).
-                if not isinstance(output, GroundedAnswerV1):
+                if not isinstance(output, GroundedAnswerV2):
                     return output
-                if not getattr(output, "segments", ()):
-                    # A structured-output answer with zero segments carries no
-                    # text and no claim -- an empty reply the planner would see
-                    # as nothing happening. Every other branch below assumes at
-                    # least one segment.
+                text = output.text
+                if not text.strip():
+                    # An empty reply the planner would see as nothing happening.
                     self._last_retry_rule = "empty_answer"
                     raise ModelRetry(
-                        "This answer carries no content -- no prose and no claim. "
-                        "Answer the planner's request, clarify, or refuse; do not "
-                        "return an empty response." + _COMPLETE_ANSWER
+                        "This answer carries no content. Answer the planner's request, "
+                        "clarify, or refuse; do not return an empty response." + _COMPLETE_ANSWER
                     )
+                handles = placeholder_handles(text)
                 returned = _result_ids_this_run(ctx.messages, self._citable_result_tools)
-                for segment in getattr(output, "segments", ()) or ():
-                    result_id = getattr(segment, "result_id", None)
-                    if result_id is None:
-                        continue
-                    if result_id and not returned:
-                        # No calculation ran in this turn, so NOTHING could have
-                        # produced a citation: the id is invented outright
-                        # (live-suite-B-diagnose B5 rep3 appended a worker_count
-                        # claim after zero tool calls). Distinct from citing a
-                        # wrong id among real results, which stays the gate's
-                        # inspectable missing_evidence state.
-                        self._last_retry_rule = "claim_without_calculation"
-                        raise ModelRetry(
-                            "A claim segment cites a result_id, but no calculation tool "
-                            "returned a result in this turn, so nothing can support it. "
-                            "Call the calculation tool and cite the result_id it returns, or "
-                            "remove the claim and answer in prose alone." + _COMPLETE_ANSWER
-                        )
-                    if result_id:
-                        # A citation the model MIS-TRANSCRIBED from a result it
-                        # really received (observed: a 63- and a 68-character
-                        # copy of a 64-character hash) is a slip it can fix. An
-                        # unrelated id stays the gate's business, rendering an
-                        # inspectable `missing_evidence` claim -- golden case
-                        # grounding-missing-evidence pins that path.
-                        intended = _mistyped_result_id(result_id, returned)
-                        if intended is not None:
-                            self._last_retry_rule = "result_id_mistyped"
-                            raise ModelRetry(
-                                f"The claim cites result_id {result_id!r}, which differs from "
-                                f"the id the calculation returned in this turn: {intended!r}. "
-                                "Copy the returned result_id exactly, character for character." + _COMPLETE_ANSWER
-                            )
-                        continue
-                    self._last_retry_rule = "uncited_claim"
+                last_attempt = ctx.max_retries is not None and ctx.retry >= ctx.max_retries
+                if handles and not returned and not last_attempt:
+                    # No calculation ran in this turn, so NOTHING could have
+                    # produced a handle: it is invented outright
+                    # (live-suite-B-diagnose B5 rep3). Distinct from citing a
+                    # wrong handle among real results, which stays the gate's
+                    # inspectable missing_evidence state.
+                    self._last_retry_rule = "claim_without_calculation"
                     raise ModelRetry(
-                        "A claim segment carries an empty result_id, so it can cite no "
-                        "evidence at all. Either call the calculation tool and cite the "
-                        "result_id it returns, or remove the claim and answer in prose "
-                        "alone -- describing a draft or a stored record needs no claim." + _COMPLETE_ANSWER
+                        "The answer contains a {{handle}} placeholder, but no calculation "
+                        "tool returned a result in this turn, so nothing can fill it. Call "
+                        "the calculation tool and use the handle it returns, or answer "
+                        "without the value." + _COMPLETE_ANSWER
                     )
-                segments = list(getattr(output, "segments", ()) or ())
-                has_claim = any(getattr(segment, "result_id", None) is not None
-                                for segment in segments)
-                if not has_claim and _asks_for_a_quantity(ctx.messages):
+                if (fact_handles(text) and not _record_handles_this_run(ctx.messages)
+                        and not last_attempt):
+                    # A fact tag cites a record, but nothing was read in this
+                    # turn, so no handle can be real. After the retries the
+                    # fact renders as unverified (G' phase 2b).
+                    self._last_retry_rule = "fact_without_inspection"
+                    raise ModelRetry(
+                        "The answer tags a record fact with <claim ev=...>, but no tool "
+                        "returned records in this turn, so the handle cannot be checked. "
+                        "Read the record and use the ev handle on its row, or state the "
+                        "fact without the tag." + _COMPLETE_ANSWER
+                    )
+                malformed = malformed_placeholders(text)
+                if malformed and not last_attempt:
+                    self._last_retry_rule = "claim_gap"
+                    raise ModelRetry(
+                        f"The answer contains {malformed[0]!r}, which is not a valid "
+                        "placeholder. Write a calculated value exactly as {{r1}} -- two "
+                        "braces around the handle the calculation returned, no spaces." + _COMPLETE_ANSWER
+                    )
+                if not handles and _asks_for_a_quantity(ctx.messages):
                     # "How many workers are qualified for it?" answered with
-                    # "has qualified workers" (live-suite-evidence C6): a
-                    # quantity question needs a claim, not a qualitative reply.
+                    # "has qualified workers" (live-suite-evidence C6).
                     self._last_retry_rule = "quantity_without_claim"
                     raise ModelRetry(
-                        "The planner asked for a quantity, but this answer carries no claim "
-                        "segment, so it shows no number. Call the calculation tool and cite "
-                        "the result_id it returns. If the quantity genuinely cannot be "
-                        "computed, say so plainly instead of implying one." + _COMPLETE_ANSWER
+                        "The planner asked for a quantity, but this answer contains no "
+                        "{{handle}} placeholder, so it shows no calculated number. Call the "
+                        "calculation tool and place its handle where the number belongs. If "
+                        "the quantity genuinely cannot be computed, say so plainly instead "
+                        "of implying one." + _COMPLETE_ANSWER
                     )
-                if not has_claim:
-                    for position, segment in enumerate(segments):
-                        text = getattr(segment, "text", "") or ""
-                        # A lead-in ending in ':' is only a dropped claim when
-                        # NOTHING follows it. Flagging every segment rejected a
-                        # correct multi-segment answer until its retries ran out
-                        # (live-suite-final-measurement, C7).
-                        marker = _claim_placeholder(
-                            text, is_last=position == len(segments) - 1)
-                        if marker is not None:
-                            # The model wrote prose AROUND a claim it never
-                            # emitted, leaving the planner a gap where the number
-                            # belongs (live-suite-v2-acceptance-c: "has <claim>
-                            # staffed minutes", "There are  workers").
-                            self._last_retry_rule = "claim_gap"
-                            raise ModelRetry(
-                                f"The prose segment {text!r} contains {marker!r} where a "
-                                "number belongs, but the answer carries no claim segment. "
-                                "Add the claim segment citing a result_id from a calculation "
-                                "in this turn, or rewrite the sentence without the quantity." + _COMPLETE_ANSWER
-                            )
+                if not handles:
+                    marker = _claim_placeholder(text)
+                    if marker is not None:
+                        # The model wrote prose AROUND a value it never placed,
+                        # leaving the planner a gap where the number belongs
+                        # (live-suite-v2-acceptance-c: "There are  workers").
+                        self._last_retry_rule = "claim_gap"
+                        raise ModelRetry(
+                            f"The answer contains {marker!r} where a number belongs, but no "
+                            "{{handle}} placeholder. Place the handle from a calculation in "
+                            "this turn, e.g. {{r1}}, or rewrite the sentence without the "
+                            "quantity." + _COMPLETE_ANSWER
+                        )
                 return output
 
             @self._agent.output_validator
@@ -812,7 +723,7 @@ class PydanticAIAgentRuntime:
 
         if self._answer_type is not None and not isinstance(
             result.output,
-            (GroundedAnswerV1, ClarificationV1, RefusalV1, DraftProposalV1),
+            (GroundedAnswerV2, ClarificationV1, RefusalV1, DraftProposalV1),
         ):
             raise AgentRuntimeError(
                 f"unrecognized structured output {type(result.output).__name__}"
@@ -823,7 +734,7 @@ class PydanticAIAgentRuntime:
             output_text=(str(result.output) if self._answer_type is None else None),
             answer=(
                 result.output
-                if isinstance(result.output, GroundedAnswerV1)
+                if isinstance(result.output, GroundedAnswerV2)
                 else None
             ),
             clarification=(

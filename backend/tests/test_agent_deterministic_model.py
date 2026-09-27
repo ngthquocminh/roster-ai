@@ -10,7 +10,7 @@ from agent.runtime import AgentRuntimeConfig, PydanticAIAgentRuntime
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.scheduling_inspect import scheduling_inspect_module
 from application.contracts.agent_runtime import AgentBudgetV1, AgentTurnRequestV1
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV2
 from application.contracts.scenario_projection import ScenarioOverviewV1
 from settings import default_settings
 
@@ -60,15 +60,14 @@ def test_configured_deterministic_model_executes_a_real_tool_then_answers(monkey
         config=AgentRuntimeConfig(model="deterministic"),
         capabilities=(scheduling_inspect_module(),),
         deps=deps,
-        answer_type=GroundedAnswerV1,
+        answer_type=GroundedAnswerV2,
     )
 
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Inspect this scenario"))
 
     assert outcome.status == "completed"
     assert outcome.answer is not None
-    assert outcome.answer.segments
-    assert all(not char.isnumeric() for segment in outcome.answer.segments for char in segment.text)
+    assert outcome.answer.text == "Scenario facts are available for review."
     assert [result.tool_name for result in outcome.tool_results] == ["scheduling_inspect"]
 
 

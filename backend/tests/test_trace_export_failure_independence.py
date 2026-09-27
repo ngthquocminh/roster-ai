@@ -36,7 +36,7 @@ from adapters.telemetry.spans import (
     traced_scheduler,
 )
 from agent.runtime import PydanticAIAgentRuntime
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV2
 from settings import default_settings
 from tests.test_content_minimization import (
     PINNED_INJECTION_CASES,
@@ -222,7 +222,7 @@ def _verdicts(provider) -> list[tuple[str, bool, str]]:
                     if module.manifest.capability_name == wanted
                 ),
                 deps=report._report_deps(results),
-                answer_type=GroundedAnswerV1 if report._needs_named_output_tools(case) else None,
+                answer_type=GroundedAnswerV2 if report._needs_named_output_tools(case) else None,
                 tracer_provider=provider,
             )
         with runtime_root(provider):

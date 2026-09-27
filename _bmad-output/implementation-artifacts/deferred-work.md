@@ -1150,3 +1150,30 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-conversation-tabs-archive.md`
   summary: Sending a message and archiving the same conversation have no mutual guard, so a send can race an archive on the same conversation with no defined ordering.
   evidence: Edge Case Hunter review found `ChatView` disables neither control against the other's in-flight state; a message can be accepted into a conversation the UI just hid, or an archive can be confirmed while a send is still resolving. No data loss (the message still lands; archive is still reversible only by direct DB access), but the desired behavior (block one while the other is in flight? let both proceed?) is a product decision, not a mechanical fix.
+
+## Deferred from: planning of the G′ grounding plan (2026-09-27)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-4-untagged-prose-scan.md`
+  summary: Flag-only tier-1 scan of untagged prose (phase 4 of G′) is deferred; its spec stays a draft and is not approved.
+  evidence: Minh decided on 2026-09-27 to implement phases 1-3 only and revisit phase 4 later; until then untagged prose is unchecked, as accepted in decision D2.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-2a-value-placeholders.md`
+  summary: A unit typed after a placeholder ("{{r1}} minutes") renders twice ("2160 minutes minutes"); nothing detects it.
+  evidence: The gate renders value plus unit and the prompt only asks the model not to repeat the unit (phase 2a review, Blind Hunter).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: Online evaluation of whole answers (asynchronous, sampled; Jev as the always-on tier, an LLM judge only for uncertain cases) is deferred together with phase 4.
+  evidence: Minh's decision 2026-09-27 after the live shadow run -- about 88% of answer text (by characters) is untagged and unchecked; an inline LLM judge would add seconds and roughly double model cost per turn, so any whole-answer check must be off the reply path.
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: Moving the tier-1 check off the reply path (background worker) is shelved until measured latency justifies it.
+  evidence: The probe measured one batched Jev call at 579 ms (TypeSafe direct, 12 facts); decide from the per-turn checker latency the live report now records.
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-2b-fact-claim-tags.md`
+  summary: Raise the tagged share of answers -- guidance and goldens that make the model tag attributes and counts it reads (hours, grade, record counts), not only names.
+  evidence: Live shadow run 2026-09-27: facts were about 12% of answer text; untagged prose held checkable values such as contracted hours, grades and "76 assignments".
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: Two backend tests fail intermittently only under full-suite load -- `test_gate_a_readiness.py::test_report_carries_every_shape_element_ac2_names` and `test_trace_export_failure_independence.py::test_turn_and_solver_outcomes_are_unchanged_by_a_failing_exporter[rejected]` (solver_failed vs solver_timed_out).
+  evidence: Each failed once in a full run on 2026-09-27 and passes in isolation both with and without the grounding changes (44/44, 21/21); a capture run with --tb=long did not reproduce. Timing- or load-dependent; not touched by G'.
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: The live-eval judge was never called on three turns of the 2026-09-27 widening run (B8, C1, C2 -> incomplete, judge_usage.attempts empty).
+  evidence: Answers were correct on inspection; no judge attempt or error was recorded, so the cause is in the harness, not the model.

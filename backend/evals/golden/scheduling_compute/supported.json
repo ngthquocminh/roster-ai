@@ -1,6 +1,6 @@
 {
   "case_id": "grounding-supported",
-  "case_version": "2",
+  "case_version": "4",
   "capability": "scheduling_compute",
   "risk_class": "inspect",
   "prompt": "Call scheduling_compute exactly once with metric required_headcount_minutes and arguments schema_version '1', task_id 'pick', family 'outbound', start_minute 2880, and end_minute 4320. All required inputs are provided; do not ask a clarification.",
@@ -23,27 +23,8 @@
     },
     {
       "response_data": {
-        "schema_version": "1",
-        "segments": [
-          {
-            "schema_version": "1",
-            "kind": "prose",
-            "text": "Wednesday outbound requirement"
-          },
-          {
-            "schema_version": "1",
-            "kind": "claim",
-            "metric": "required_headcount_minutes",
-            "arguments": {
-              "schema_version": "1",
-              "task_id": "pick",
-              "family": "outbound",
-              "start_minute": 2880,
-              "end_minute": 4320
-            },
-            "result_id": "6507fea5c74f5e6b02752316814527ef085118ec5259c139a4c9bb46acef8db1"
-          }
-        ]
+        "schema_version": "2",
+        "text": "Wednesday outbound requirement: {{r1}}"
       }
     }
   ],
@@ -70,7 +51,7 @@
     "00000000-0000-0000-0000-000000000001|demand|d-outbound-1|amount:3600-4320"
   ],
   "expected_visible_state": "completed",
-  "expected_visible_text": "Wednesday outbound requirement 2160 minutes",
+  "expected_visible_text": "Wednesday outbound requirement: 2160 minutes",
   "expected_grounding_outcome": "supported",
   "scenario_fixtures": [
     "eval-fixture:v1"

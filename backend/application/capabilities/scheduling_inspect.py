@@ -16,6 +16,7 @@ from typing import Literal, Mapping
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError, CapabilityManifestV1
+from application.grounding.evidence_groups import evidence_group_for_scenario_fact_group
 from application.ports.scenario_projection import GroupQueryV1
 from application.use_cases.read_scenario_facts import (
     ScenarioFactGroupV1,
@@ -36,6 +37,9 @@ EVALUATION_FIXTURES = (
     "evals/golden/scheduling_inspect/wednesday-workers.json",
     "evals/golden/scheduling_inspect/wednesday-constraints.json",
     "evals/golden/scheduling_inspect/wednesday-locks.json",
+    "evals/golden/scheduling_inspect/fact-supported.json",
+    "evals/golden/scheduling_inspect/fact-value-mismatch.json",
+    "evals/golden/scheduling_inspect/fact-unknown-handle.json",
 )
 
 # What each scope control does and does NOT cover. Scope as data (the
@@ -260,7 +264,15 @@ def scheduling_inspect(
             next_cursor=None,
             truncated=False,
         )
-    items = tuple(asdict(item) for item in value.items)
+    # Every row carries its record handle (`ev`), which a `<claim ev=...>` fact
+    # tag cites; the gate checks the tag against this trusted row.
+    evidence_group = evidence_group_for_scenario_fact_group(request.group)
+    items = tuple(
+        {**asdict(item),
+         "ev": deps.evidence_registry.handle_for_record(evidence_group, item.record_id)}
+        if evidence_group is not None else asdict(item)
+        for item in value.items
+    )
     return SchedulingInspectResultV1(
         group=request.group,
         scenario_id=str(value.scenario_id),
