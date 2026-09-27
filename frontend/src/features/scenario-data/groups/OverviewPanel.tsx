@@ -1,7 +1,7 @@
 import { TableBody, TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { useScenarioOverview } from "@/hooks/useScenarioProjection";
 import { getErrorStatus } from "@/lib/errors";
-import { formatTimestamp } from "@/lib/formatTimestamp";
+import { formatHorizon, formatTimestamp } from "@/lib/formatTimestamp";
 import { ScenarioDataGroupState } from "../ScenarioDataGroupState";
 import { ScenarioDataTable } from "../ScenarioDataTable";
 
@@ -18,7 +18,7 @@ export function OverviewPanel({ scenarioId }: Readonly<{ scenarioId: string }>) 
         ["Scenario ID", data.scenario_id, true],
         ["Fixture version", data.fixture_version, true],
         ["Baseline version", data.baseline_schedule_version ?? "Not established", true],
-        ["Time horizon", `starts ${formatTimestamp(data.horizon_start)}, ${data.horizon_minutes} minutes`],
+        ["Time horizon", formatHorizon(data.horizon_start, data.horizon_minutes)],
         ["Site timezone", data.site_timezone],
         ["Last verified", formatTimestamp(data.projection_generated_at)],
         ["Work areas", data.work_area_count],

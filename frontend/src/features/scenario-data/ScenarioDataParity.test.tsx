@@ -19,7 +19,7 @@ vi.mock("@/hooks/useScenarioProjection", () => ({
 
 import * as hooks from "@/hooks/useScenarioProjection";
 import { formatMinuteWindow } from "@/lib/formatShiftWindow";
-import { formatTimestamp } from "@/lib/formatTimestamp";
+import { formatHorizon } from "@/lib/formatTimestamp";
 import { ScenarioDataView } from "./ScenarioDataView";
 
 type JsonRecord = Record<string, unknown>;
@@ -183,7 +183,7 @@ for (const fixtureId of FIXTURES) {
       ["Scenario ID", contract.fixture.fixture_id],
       ["Fixture version", contract.fixture.version],
       ["Baseline version", "Not established"],
-      ["Time horizon", `starts ${formatTimestamp(String(overview.horizon_start))}, ${overview.horizon_minutes} minutes`],
+      ["Time horizon", formatHorizon(String(overview.horizon_start), Number(overview.horizon_minutes))],
       ["Site timezone", text(overview.site_timezone)],
       ["Last verified", "2026-08-06 00:00"],
       ["Work areas", text(overview.work_area_count)],

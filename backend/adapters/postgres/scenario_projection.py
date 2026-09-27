@@ -44,7 +44,7 @@ from domain.types import DemandFamily, WindowKind
 from ingest.scenario_time import parse_dt, parse_time_of_day
 
 
-SITE_TIMEZONE = "Australia/Sydney"
+SITE_TIMEZONE = "Asia/Ho_Chi_Minh"
 _SITE_ZONE = ZoneInfo(SITE_TIMEZONE)
 T = TypeVar("T")
 SortTable = Mapping[str, Callable[[Any], Any]]

@@ -28,3 +28,62 @@ export function formatTimestamp(value: string): string {
   const [, date, hhmm] = match;
   return `${date} ${hhmm}`;
 }
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+// `Date`'s UTC-* accessors (unlike `toLocaleString`/`Intl`) read the instant
+// itself, never the host machine's timezone, so this stays deterministic in
+// jsdom the same way formatTimestamp's regex slice does.
+function formatUtc(date: Date): string {
+  return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())} ${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}`;
+}
+
+const ISO_TIMESTAMP = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):?(\d{2})?/;
+
+// `new Date(string)` is NOT safe here: a zone-naive ISO string (no `Z`/offset)
+// parses as HOST-LOCAL time, not UTC, which is exactly the host-dependence
+// formatTimestamp's own doc comment warns against. Regex-extracting the
+// components and building the instant via `Date.UTC` (which never consults
+// host timezone) keeps this deterministic regardless of whether the caller's
+// string carries an explicit UTC designator.
+function parseUtcEpoch(value: string): number | undefined {
+  const match = ISO_TIMESTAMP.exec(value);
+  if (!match) {
+    return undefined;
+  }
+  const [, year, month, day, hour, minute, second] = match;
+  return Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second ?? "0"));
+}
+
+function formatDuration(totalMinutes: number): string {
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+  if (hours > 0) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
+  if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
+  return parts.length ? parts.join(" ") : "0 minutes";
+}
+
+/**
+ * Renders a scenario's time horizon as "start → end (duration)", e.g.
+ * "2026-05-31 14:00 → 2026-06-07 14:00 (7 days)", instead of the raw
+ * "starts <timestamp>, <N> minutes" shape the API's fields suggest.
+ *
+ * Falls back to the raw shape (never throws) for an unparseable `start` or a
+ * non-finite/negative `minutes`, mirroring formatTimestamp's
+ * defensive-fallback convention -- a malformed duration (e.g. a negative one)
+ * is worse than a plain fallback, not more informative.
+ */
+export function formatHorizon(start: string, minutes: number): string {
+  const startEpoch = parseUtcEpoch(start);
+  if (startEpoch === undefined || !Number.isFinite(minutes) || minutes < 0) {
+    return `starts ${start}, ${minutes} minutes`;
+  }
+  const wholeMinutes = Math.round(minutes);
+  const endEpoch = startEpoch + wholeMinutes * 60_000;
+  return `${formatUtc(new Date(startEpoch))} → ${formatUtc(new Date(endEpoch))} (${formatDuration(wholeMinutes)})`;
+}

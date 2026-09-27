@@ -295,7 +295,7 @@ it("gives a grounded response an author label and a keyboard-operable evidence c
 
   // Self-describing accessible name naming group, record, field/range, version.
   const evidence = screen.getByRole("button", {
-    name: `Evidence: demand d-outbound-0, amount, 2880–3600 minutes, fixture ${versionId}`,
+    name: `Verified Evidence: demand d-outbound-0, amount, 2880–3600 minutes, fixture ${versionId}`,
   });
 
   // Keyboard-reachable and focusable, asserted by driving the keyboard rather
