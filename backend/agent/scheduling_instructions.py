@@ -136,13 +136,6 @@ a an assignment, l a lock, c a constraint). When you state a fact read from one 
   a list field, value is one element's value.
 - The application checks ev, field and value against the row and marks the fact verified or
   unverified. Tag only facts you read from a row in this turn; never invent a handle.
-- Wrap the WHOLE sentence that states the fact, not just the name or value inside it. The
-  wording is checked against the row too, so a tag around a bare name proves only the name:
-  right: <claim ev='w3' field='employment_type' value='Casual'>Ana Lee is a casual worker</claim>
-  wrong: <claim ev='w3' field='name' value='Ana Lee'>Ana Lee</claim> is a casual worker
-- Tag attributes you state, not only names: contracted hours, grade, employment type,
-  qualifications, a task's function or area, a constraint's value. One tag per fact; a sentence
-  stating two facts from two fields is two tagged sentences or clauses.
 - Calculated numbers are {{{{handle}}}} placeholders, never <claim> tags.
 
 ## Naming discipline

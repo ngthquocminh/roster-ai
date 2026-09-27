@@ -325,7 +325,6 @@ def test_the_report_summarises_checker_latency_provider_and_tier0_only_facts() -
     summary = summarize_tier1([{"run_id": "r", "prefixes": [
         {"scenario": "A", "turns": [turn, {"tier1_facts": None, "tier1": None}]}]}])
     assert (summary["checked"], summary["tier0_only"], summary["supported_unchecked"]) == (1, 1, 0)
-    assert summary["statement_share"] == 0.5
     assert summary["checker_providers"] == {"typesafe": 1}
     assert summary["checker_outcomes"] == {"ok": 1}
     assert summary["checker_latency_ms"] == {"median": 310.0, "p95": 310.0, "max": 310.0}

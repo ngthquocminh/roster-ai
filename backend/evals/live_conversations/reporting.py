@@ -50,10 +50,6 @@ def tier1_fact_rows(activity: dict) -> list[dict]:
     ]
 
 
-def _share(part: int, whole: int) -> float | None:
-    return round(part / whole, 3) if whole else None
-
-
 def _percentile(values: list[float], fraction: float) -> float | None:
     if not values:
         return None
@@ -93,12 +89,6 @@ def summarize_tier1(runs) -> dict:
         'checked': len(checked),
         'tier0_only': sum(1 for fact in facts if fact.get('tier0_only')),
         'wording_flagged': sum(1 for fact in facts if fact.get('wording_flagged')),
-        # How much of what the model tags carries wording tier 1 can judge: a
-        # bare name or value is fully proved by tier 0 and gives it nothing.
-        'statement_share': _share(
-            sum(1 for fact in facts if fact.get('verdict') == 'supported'
-                and not fact.get('tier0_only')),
-            sum(1 for fact in facts if fact.get('verdict') == 'supported')),
         'supported_unchecked': sum(1 for fact in facts if fact.get('verdict') == 'supported'
                                    and not fact.get('tier0_only')
                                    and fact.get('support_probability') is None),
