@@ -66,7 +66,11 @@ deterministic projection double; the `scenario_fixtures` tag records which
 governed fixture each question is *about*, not a fixture the harness loads.
 
 Story 2.7 contributes exactly four scheduling_compute cases: supported,
-version-mismatch, missing-evidence, and argument-mismatch. ToolRoutingEvaluator
+version-mismatch, missing-evidence, and untagged-numerals. The original
+argument-mismatch case was retired in G' phase 2a: answers now cite a result by
+a `{{handle}}` placeholder and carry no metric or arguments, so a claim cannot
+disagree with its result. untagged-numerals replaces it, pinning that numerals
+typed in prose (list numbers, times, names) no longer block a turn. ToolRoutingEvaluator
 continues to judge routing while the second GroundingEvaluator independently
 judges exact evidence IDs and the authored grounding oracle; these four cases
 meet, but do not pad beyond, NFR28's per-capability floor.

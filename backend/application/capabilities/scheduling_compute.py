@@ -34,7 +34,7 @@ EVALUATION_FIXTURES = (
     "evals/golden/scheduling_compute/supported.json",
     "evals/golden/scheduling_compute/version-mismatch.json",
     "evals/golden/scheduling_compute/missing-evidence.json",
-    "evals/golden/scheduling_compute/argument-mismatch.json",
+    "evals/golden/scheduling_compute/untagged-numerals.json",
 )
 
 SCOPE_CONTROLS: Mapping[str, str] = {

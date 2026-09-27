@@ -8,8 +8,7 @@ import pytest
 
 from application.contracts.grounding import (
     ClaimArgumentsV1,
-    ClaimProposalV1,
-    GroundedAnswerV1,
+    GroundedAnswerV2,
     GroundedClaimV1,
     GroundedProseSegmentV1,
     GroundedResponseV1,
@@ -48,28 +47,21 @@ def test_grounding_contracts_are_closed_versioned_and_frozen() -> None:
         "uncited_claim",
     }
 
-    arguments = ClaimArgumentsV1(task_id="pick", start_minute=0, end_minute=60)
-    proposal = ClaimProposalV1(
-        metric="staffed_minutes", arguments=arguments, result_id="result-1"
-    )
-    assert "value" not in {field.name for field in fields(proposal)}
-    assert proposal.schema_version == "1"
+    # The model's answer is one text: no value, metric or arguments of its own.
+    answer = GroundedAnswerV2(text="Staffing is {{r1}}.")
+    assert {field.name for field in fields(answer)} == {"text", "schema_version"}
+    assert answer.schema_version == "2"
     with pytest.raises(FrozenInstanceError):
-        proposal.result_id = "changed"  # type: ignore[misc]
+        answer.text = "changed"  # type: ignore[misc]
 
 
-def test_grounded_answer_preserves_segment_order_and_response_keeps_claim_state() -> None:
+def test_grounded_response_keeps_segment_order_and_claim_state() -> None:
     arguments = ClaimArgumentsV1(task_id="pick", start_minute=0, end_minute=60)
-    proposal = ClaimProposalV1(
-        metric="staffed_minutes", arguments=arguments, result_id="result-1"
-    )
-    answer = GroundedAnswerV1(
-        segments=(GroundedProseSegmentV1(text="Staffing is"), proposal)
-    )
+    prose = GroundedProseSegmentV1(text="Staffing is")
     claim = GroundedClaimV1(
-        metric=proposal.metric,
+        metric="staffed_minutes",
         arguments=arguments,
-        result_id=proposal.result_id,
+        result_id="result-1",
         value=60,
         unit="minutes",
         evidence_refs=(),
@@ -77,16 +69,16 @@ def test_grounded_answer_preserves_segment_order_and_response_keeps_claim_state(
     )
     response = GroundedResponseV1(
         scenario_version_id=uuid4(),
-        segments=(answer.segments[0], claim),
+        segments=(prose, claim),
     )
 
-    assert response.segments == (answer.segments[0], claim)
+    assert response.segments == (prose, claim)
     assert response.claims == (claim,)
     assert response.schema_version == "1"
 
 
 def test_grounding_contract_module_is_transport_and_framework_free() -> None:
-    module = __import__(GroundedAnswerV1.__module__, fromlist=["*"])
+    module = __import__(GroundedAnswerV2.__module__, fromlist=["*"])
     source_names = set(vars(module))
     assert "fastapi" not in source_names
     assert "pydantic_ai" not in source_names

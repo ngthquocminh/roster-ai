@@ -1,6 +1,6 @@
 {
-  "case_id": "grounding-argument-mismatch",
-  "case_version": "5",
+  "case_id": "grounding-untagged-numerals",
+  "case_version": "1",
   "capability": "scheduling_compute",
   "risk_class": "inspect",
   "prompt": "Call scheduling_compute exactly once with metric required_headcount_minutes and arguments schema_version '1', task_id 'pick', family 'outbound', start_minute 2880, and end_minute 4320. All required inputs are provided; do not ask a clarification.",
@@ -23,27 +23,8 @@
     },
     {
       "response_data": {
-        "schema_version": "1",
-        "segments": [
-          {
-            "schema_version": "1",
-            "kind": "prose",
-            "text": "Wednesday outbound requirement"
-          },
-          {
-            "schema_version": "1",
-            "kind": "claim",
-            "metric": "required_headcount_minutes",
-            "arguments": {
-              "schema_version": "1",
-              "task_id": "pick",
-              "family": "outbound",
-              "start_minute": 4320,
-              "end_minute": 5760
-            },
-            "result_id": "r1"
-          }
-        ]
+        "schema_version": "2",
+        "text": "1. Wednesday outbound for Grid P 8GR from 06:00: {{r1}}"
       }
     }
   ],
@@ -65,10 +46,13 @@
       }
     }
   ],
-  "expected_evidence_refs": [],
+  "expected_evidence_refs": [
+    "00000000-0000-0000-0000-000000000001|demand|d-outbound-0|amount:2880-3600",
+    "00000000-0000-0000-0000-000000000001|demand|d-outbound-1|amount:3600-4320"
+  ],
   "expected_visible_state": "completed",
-  "expected_visible_text": "Wednesday outbound requirement Claim unavailable: missing_evidence",
-  "expected_grounding_outcome": "argument_mismatch",
+  "expected_visible_text": "1. Wednesday outbound for Grid P 8GR from 06:00: 2160 minutes",
+  "expected_grounding_outcome": "supported",
   "live_eligible": false,
   "scenario_fixtures": [
     "eval-fixture:v1"

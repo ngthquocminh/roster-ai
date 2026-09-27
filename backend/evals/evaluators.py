@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
-from typing import Literal, Mapping, Protocol
+from dataclasses import dataclass
+from typing import Literal, Protocol
 
 from agent.runtime import OUTPUT_TOOL_NAMES
 from application.contracts.agent_runtime import AgentRunOutcomeV1
@@ -140,27 +140,6 @@ def stable_evidence_ref(reference: EvidenceRefV1) -> str:
     )
 
 
-def _matches_originating_compute_call(case: GoldenCase, claim: object) -> bool:
-    """Discriminate an unknown result id from a claim that changed its inputs."""
-    metric = getattr(claim, "metric", None)
-    arguments = getattr(claim, "arguments", None)
-    if arguments is None:
-        return False
-    actual_arguments = asdict(arguments)
-    # Match on the SHAPE of the originating call (a `request` carrying a
-    # `metric`), not on a hardcoded capability name. Filtering to
-    # `scheduling_compute` left the loop with no candidate for any other
-    # capability, so `has_argument_mismatch` became True for every claim and a
-    # correct `missing_evidence` case failed with "input relation differed".
-    for expected in case.expected_tool_calls:
-        request = expected.arguments.get("request")
-        if not isinstance(request, Mapping) or "metric" not in request:
-            continue
-        if request.get("metric") == metric and request.get("arguments") == actual_arguments:
-            return True
-    return False
-
-
 @dataclass(frozen=True)
 class GroundingEvaluator:
     """Judge exact evidence IDs and the authored per-case grounding oracle."""
@@ -195,7 +174,6 @@ class GroundingEvaluator:
             "supported": None,
             "version_mismatch": "version_mismatch",
             "missing_evidence": "missing_evidence",
-            "argument_mismatch": "missing_evidence",
         }[expected_oracle]
         actual_failures = tuple(claim.failure for claim in response.claims if claim.failure)
         if expected_failure is None:
@@ -207,37 +185,6 @@ class GroundingEvaluator:
                 f"oracle differed: expected {expected_failure}, actual {actual_failures}",
                 self.run_source,
             )
-        # AR11 deliberately exposes only `missing_evidence` for both an unknown
-        # result id and a claim that changed the originating metric/arguments.
-        # Keep that persisted vocabulary closed, but make the evaluation oracle
-        # observe the input relation so its two golden cases are not duplicates.
-        if expected_oracle in {"missing_evidence", "argument_mismatch"}:
-            # `any()` over an empty tuple is False, so a response carrying no
-            # claims at all would silently read as "no argument mismatch" and
-            # pass a `missing_evidence` case without exercising the relation.
-            if not response.claims:
-                return EvalVerdict(
-                    False,
-                    "grounding input relation is unverifiable: the response "
-                f"carried no claims, but {expected_oracle} "
-                    "is a claim-level oracle",
-                    self.run_source,
-                )
-            has_argument_mismatch = any(
-                not _matches_originating_compute_call(case, claim)
-                for claim in response.claims
-            )
-            expected_argument_mismatch = (
-                expected_oracle == "argument_mismatch"
-            )
-            if has_argument_mismatch != expected_argument_mismatch:
-                return EvalVerdict(
-                    False,
-                    "grounding input relation differed: expected "
-                    f"argument_mismatch={expected_argument_mismatch}, "
-                    f"actual={has_argument_mismatch}",
-                    self.run_source,
-                )
         # Compared on EVERY branch, not only the supported one. On a failure
         # branch the expectation is empty, and asserting that emptiness is what
         # proves AR11's non-retargeting rule: a failed claim must not emit a

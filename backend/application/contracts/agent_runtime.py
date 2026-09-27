@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV2
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.agent_status import AgentRunStatusV1
 from application.contracts.proposal import DraftProposalV1, ProposalV1
@@ -233,7 +233,7 @@ class AgentRunOutcomeV1:
     retry_rule: str | None = None
     #: Why the framework gave up, from the exception's structure only: the
     #: cause's class, plus a `ValidationError`'s schema name and first error
-    #: code (e.g. `ValidationError:GroundedAnswerV1:tuple_type`). Never message
+    #: code (e.g. `ValidationError:GroundedAnswerV2:tuple_type`). Never message
     #: text. Set only on an invalid-output failure that has a cause.
     retry_cause: str | None = None
     # Planner-visible final content. None unless status == "completed".
@@ -256,7 +256,7 @@ class AgentRunOutcomeV1:
     # The second was added during Phase B without being recorded against Task 5,
     # which declared the adapter's one field; it is the USE CASE's field, which
     # is why it fell outside that task's wording rather than contradicting it.
-    answer: GroundedAnswerV1 | None = None
+    answer: GroundedAnswerV2 | None = None
     grounded_response: GroundedResponseV1 | None = None
     clarification: ClarificationV1 | None = None
     resolved_clarification: ResolvedClarificationV1 | None = None

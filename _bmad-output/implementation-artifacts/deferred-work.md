@@ -1156,3 +1156,7 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-grounding-4-untagged-prose-scan.md`
   summary: Flag-only tier-1 scan of untagged prose (phase 4 of G′) is deferred; its spec stays a draft and is not approved.
   evidence: Minh decided on 2026-09-27 to implement phases 1-3 only and revisit phase 4 later; until then untagged prose is unchecked, as accepted in decision D2.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-2a-value-placeholders.md`
+  summary: A unit typed after a placeholder ("{{r1}} minutes") renders twice ("2160 minutes minutes"); nothing detects it.
+  evidence: The gate renders value plus unit and the prompt only asks the model not to repeat the unit (phase 2a review, Blind Hunter).

@@ -14,7 +14,7 @@ from application.grounding.evidence_registry import (
     trusted_results_by_citation,
 )
 from application.use_cases.execute_turn import execute_turn
-from tests.test_grounding_gate import ARGS, ReaderStub, _answer, _deps, _result
+from tests.test_grounding_gate import ReaderStub, _answer, _deps, _result
 from tests.test_scheduling_compute import ProjectionStub
 from tests.test_scheduling_compute import _deps as _compute_deps
 
@@ -95,4 +95,3 @@ def test_a_full_id_returned_this_turn_still_resolves() -> None:
 def test_an_unknown_handle_is_missing_evidence_and_keeps_the_cited_value() -> None:
     claim = _turn("r9").grounded_response.claims[0]
     assert (claim.verdict, claim.failure, claim.result_id) == ("failed", "missing_evidence", "r9")
-    assert claim.arguments == ARGS

@@ -935,7 +935,7 @@ def test_export_content_mode_key_set(monkeypatch) -> None:
     "completions and tool results" (code review 2026-09-24).
     """
     from agent.runtime import create_agent_runtime
-    from application.contracts.grounding import GroundedAnswerV1
+    from application.contracts.grounding import GroundedAnswerV2
     from tests.test_agent_runtime_adapter import (
         REAL_RESULT_ID,
         _claim_answer,
@@ -969,7 +969,7 @@ def test_export_content_mode_key_set(monkeypatch) -> None:
                 settings=settings,
                 model=FunctionModel(_compute_then([_claim_answer(REAL_RESULT_ID)])),
                 capabilities=(_compute_stub_module(),), deps=deps,
-                answer_type=GroundedAnswerV1, tracer_provider=tracing.provider,
+                answer_type=GroundedAnswerV2, tracer_provider=tracing.provider,
             ).run_turn(AgentTurnRequestV1(prompt="synthetic worker count"))
             assert completed.answer == _claim_answer(REAL_RESULT_ID)
         flush(tracing)

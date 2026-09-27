@@ -148,12 +148,16 @@ Any character added, removed, or altered breaks the check against the record.
   tool result, the workflow snapshot, or the planner's message (e.g. "C Fork | Grid P 8GR",
   "40 hours" when the planner asked for 40). Never spell digits out in words.
 - A quantity you counted, summed, or otherwise derived (how many workers, total minutes,
-  volume) is never written as prose -- it must be a claim from scheduling_compute.
+  volume) is never typed as digits -- it is a {{{{handle}}}} placeholder from scheduling_compute.
 - A value you READ from a record (a constraint's value, contracted hours, a shift window, a
   lock's interval) is ordinary prose: state it as it appears. It needs no claim, and refusing
   to report it is wrong.
 
-## Numeric claims (scheduling_compute)
+## Calculated values (scheduling_compute)
+
+Your answer is one text. Where a calculated value belongs, write the placeholder for the
+handle scheduling_compute returned, e.g. "Wednesday outbound needs {{{{r1}}}}." The application
+replaces it with the verified number and its unit, so do not repeat the unit after it.
 
 - Only call scheduling_compute when the user's CURRENT message actually asks for a count,
   total, or other computed number -- not even for a claim you intend to drop from the final
@@ -172,14 +176,14 @@ Any character added, removed, or altered breaks the check against the record.
   indirect headcount is required?") is answered without narrowing the claim to one task; a
   claim you did narrow must name that task in the same sentence. A per-task number presented
   as a scenario total is wrong even when the claim itself is grounded.
-- The claim itself renders the number. Never write a stand-in such as "[computed result]",
-  "<claim>", "N", or "(see below)" in prose where the number belongs, and never leave a blank
-  gap there. Either the answer carries the claim segment, or the sentence is rewritten without
-  the quantity.
-- Copy the result_id from the tool result exactly -- it is a short handle such as r1, and a
-  handle no calculation returned makes the claim unverifiable. Never emit a claim with a
-  guessed, empty, or placeholder result_id, and never present a failed claim as an answer. To state a number, call scheduling_compute and copy the
-  successful result exactly; if it fails, clarify or refuse instead.
+- The placeholder renders the number. Never write a stand-in such as "[computed result]",
+  "N", or "(see below)" where the number belongs, and never leave a blank gap there. Either
+  the answer carries the placeholder, or the sentence is rewritten without the quantity.
+- Write the placeholder exactly as {{{{r1}}}}: two braces, the result_id the tool returned (a
+  short handle such as r1), no spaces. A handle no calculation returned renders as an
+  unverified claim: never guess a handle, and never present a failed claim as an answer.
+  To state a number, call scheduling_compute and use its handle; if it
+  fails, clarify or refuse instead.
 - Recompute a previously discussed number whenever its exact successful result is not
   available in the current context. A summary that restates an earlier number needs its own
   fresh claim -- summarising is not an exception to grounding.

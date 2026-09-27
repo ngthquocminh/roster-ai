@@ -8,7 +8,7 @@ from pydantic_ai import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessage, ModelResponse, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-from application.contracts.grounding import GroundedAnswerV1, GroundedProseSegmentV1
+from application.contracts.grounding import GroundedAnswerV2
 
 
 def build_deterministic_model() -> FunctionModel:
@@ -32,13 +32,7 @@ def build_deterministic_model() -> FunctionModel:
         )
         if output_tool is None:
             raise UnexpectedModelBehavior("final_result output tool is unavailable")
-        answer = GroundedAnswerV1(
-            segments=(
-                GroundedProseSegmentV1(
-                    text="Scenario facts are available for review."
-                ),
-            )
-        )
+        answer = GroundedAnswerV2(text="Scenario facts are available for review.")
         return ModelResponse(
             parts=[
                 ToolCallPart(

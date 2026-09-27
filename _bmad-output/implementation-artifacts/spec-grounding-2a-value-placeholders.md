@@ -2,7 +2,8 @@
 title: 'Grounding 2a: text answers with {{handle}} value placeholders; numeral rule removed'
 type: 'feature'
 created: '2026-09-27'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '4afaeee447fb5ae278a92e6a84853ae732493898'
 review_loop_iteration: 0
 depends_on: 'spec-grounding-1-evidence-registry-short-handles.md'
 context:
@@ -53,15 +54,15 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/application/contracts/grounding.py` -- add `GroundedAnswerV2(text: str)`; remove `GroundedAnswerV1`/`ClaimProposalV1` once unused -- one answer shape
-- [ ] `backend/application/grounding/placeholders.py` -- pure parser: text → ordered prose/placeholder parts; handle syntax `[A-Za-z0-9_-]+`
-- [ ] `backend/application/grounding/gate.py` -- ground a `GroundedAnswerV2`: placeholder → claim built from the resolved result (metric, arguments, value, unit, refs) with existing version/locator/empty-set checks; unresolved → failed claim; delete the numeral rule and its `SCOPE_CONTROLS` entry, add one for placeholders
-- [ ] `backend/agent/runtime.py` -- answer type V2 for both output tool and plain text; delete `_reject_numeric_prose` and `_trusted_texts`; adapt `_reject_uncited_claim` rules to placeholders per the matrix; drop `<claim` from `_CLAIM_PLACEHOLDERS`
-- [ ] `backend/application/use_cases/execute_turn.py` -- drop trusted-text collection
-- [ ] `backend/agent/scheduling_instructions.py` -- rewrite the numbers/claims guidance for `{{handle}}`; values read from records are ordinary prose
-- [ ] `backend/evals/**` golden answers -- convert to V2 text; retire `argument-mismatch` (impossible by construction) with a note in the case index
-- [ ] `_bmad-output/planning-artifacts/epics.md` -- FR7/NFR12 apply to numbers presented as verified; untagged text is presented as unverified (D2)
-- [ ] `backend/tests/**` -- matrix rows; delete tests of the removed numeral rule
+- [x] `backend/application/contracts/grounding.py` -- add `GroundedAnswerV2(text: str)`; remove `GroundedAnswerV1`/`ClaimProposalV1` once unused -- one answer shape
+- [x] `backend/application/grounding/placeholders.py` -- pure parser: text → ordered prose/placeholder parts; handle syntax `[A-Za-z0-9_-]+`
+- [x] `backend/application/grounding/gate.py` -- ground a `GroundedAnswerV2`: placeholder → claim built from the resolved result (metric, arguments, value, unit, refs) with existing version/locator/empty-set checks; unresolved → failed claim; delete the numeral rule and its `SCOPE_CONTROLS` entry, add one for placeholders
+- [x] `backend/agent/runtime.py` -- answer type V2 for both output tool and plain text; delete `_reject_numeric_prose` and `_trusted_texts`; adapt `_reject_uncited_claim` rules to placeholders per the matrix; drop `<claim` from `_CLAIM_PLACEHOLDERS`
+- [x] `backend/application/use_cases/execute_turn.py` -- drop trusted-text collection
+- [x] `backend/agent/scheduling_instructions.py` -- rewrite the numbers/claims guidance for `{{handle}}`; values read from records are ordinary prose
+- [x] `backend/evals/**` golden answers -- convert to V2 text; retire `argument-mismatch` (impossible by construction) with a note in the case index
+- [x] `_bmad-output/planning-artifacts/epics.md` -- FR7/NFR12 apply to numbers presented as verified; untagged text is presented as unverified (D2)
+- [x] `backend/tests/**` -- matrix rows; delete tests of the removed numeral rule
 
 **Acceptance Criteria:**
 - Given the reported incident answer (four numbered stages, no tools), when the turn runs, then it completes on the first attempt with one prose segment.
@@ -73,3 +74,41 @@ context:
 **Commands:**
 - `cd backend && uv run pytest -q` -- expected: all pass
 - `cd frontend && npm test` -- expected: all pass (no frontend change intended)
+
+## Suggested Review Order
+
+**Answer contract and parsing**
+
+- Entry point: the model answers with one text; values are `{{handle}}` placeholders.
+  [`grounding.py:87`](../../backend/application/contracts/grounding.py#L87)
+- Pure parser; malformed syntax (incl. stray braces) stays literal prose.
+  [`placeholders.py:33`](../../backend/application/grounding/placeholders.py#L33)
+
+**Gate: claims from trusted results only**
+
+- Placeholder becomes a claim whose metric, arguments, value come from the result.
+  [`gate.py:176`](../../backend/application/grounding/gate.py#L176)
+- Unresolved handle is a failed claim with contract-default metric.
+  [`gate.py:75`](../../backend/application/grounding/gate.py#L75)
+- Numeral rule deleted; new scope control states what text is unverified.
+  [`gate.py:52`](../../backend/application/grounding/gate.py#L52)
+
+**Runtime retries**
+
+- Placeholder slips retry, but the last attempt delivers the answer (matrix).
+  [`runtime.py:400`](../../backend/agent/runtime.py#L400)
+- Prompt: f-string, so braces are doubled in source.
+  [`scheduling_instructions.py:156`](../../backend/agent/scheduling_instructions.py#L156)
+
+**Evals and requirements**
+
+- argument_mismatch retired; untagged-numerals keeps the four-case floor.
+  [`cases.py:19`](../../backend/evals/cases.py#L19)
+- FR7/NFR12 reworded for D2.
+  [`epics.md:37`](../planning-artifacts/epics.md#L37)
+
+**Tests**
+
+- Parser, gate matrix, first-attempt incident answer, delivered-after-retries.
+  [`test_placeholders.py:1`](../../backend/tests/test_placeholders.py#L1)
+  [`test_agent_runtime_adapter.py:899`](../../backend/tests/test_agent_runtime_adapter.py#L899)

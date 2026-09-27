@@ -50,7 +50,7 @@ from application.contracts.decision_provenance import (
     SolverRunProvenanceV1, ToolProposalProvenanceV1,
 )
 from application.queries.decision_provenance import query_decision_provenance
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV2
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
 from application.use_cases.execute_turn import activity_payload, execute_turn, failed_outcome_for_exception, terminal_status
@@ -263,7 +263,7 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
         ))
         runtime = runtime_factory(
             settings=settings, capabilities=granted, deps=deps,
-            answer_type=GroundedAnswerV1,
+            answer_type=GroundedAnswerV2,
         )
         outcome = execute_turn(
             runtime, deps, prompt="", calculation_results=raw_results,

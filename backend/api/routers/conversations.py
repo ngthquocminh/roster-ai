@@ -70,7 +70,7 @@ from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import enabled_feature_policy
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
 from application.contracts.agent_runtime import AgentBudgetV1
-from application.contracts.grounding import GroundedAnswerV1
+from application.contracts.grounding import GroundedAnswerV2
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.proposal import ProposalRepository
 from application.ports.approval import ApprovalRepository, AuditWriter
@@ -376,7 +376,7 @@ async def execute_agent_turn(
             settings=settings,
             capabilities=granted,
             deps=deps,
-            answer_type=GroundedAnswerV1,
+            answer_type=GroundedAnswerV2,
         )
         outcome = await run_in_threadpool(
             execute_turn,

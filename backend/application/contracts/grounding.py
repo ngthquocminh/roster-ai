@@ -1,9 +1,10 @@
 """Owned contracts for computed claims and exact evidence (AD-11, AD-20).
 
-Model-produced proposals are deliberately value-free: they cite a trusted
-application calculation by ``result_id``.  The grounding gate turns those
-untrusted citations into persisted claims whose values and evidence locators
-come only from the governed calculator result.
+The model's answer is deliberately value-free: every calculated value in its
+text is a ``{{handle}}`` placeholder naming a trusted application calculation.
+The grounding gate turns those untrusted placeholders into persisted claims
+whose values and evidence locators come only from the governed calculator
+result.
 """
 from __future__ import annotations
 
@@ -83,29 +84,18 @@ class GroundedProseSegmentV1:
 
 
 @dataclass(frozen=True)
-class ClaimProposalV1:
-    """UNTRUSTED model output: a citation claim, never evidence or authority.
+class GroundedAnswerV2:
+    """UNTRUSTED model output: one answer text.
 
-    ``result_id`` is model-supplied provenance only. The gate must match it to
-    this turn's trusted results and verify these arguments before display.
+    Every calculated value is a ``{{handle}}`` placeholder citing a result the
+    application returned in this turn (``application.grounding.placeholders``).
+    The model never supplies the number, the metric, or its arguments; the gate
+    takes all three from the resolved trusted result. Other text is plain,
+    unverified prose (decision D2).
     """
 
-    schema_version: str = SCHEMA_VERSION
-    kind: Literal["claim"] = "claim"
-    metric: MetricV1 = "required_headcount_minutes"
-    arguments: ClaimArgumentsV1 = ClaimArgumentsV1()
-    result_id: str = ""
-
-
-GroundedAnswerSegmentV1 = GroundedProseSegmentV1 | ClaimProposalV1
-
-
-@dataclass(frozen=True)
-class GroundedAnswerV1:
-    """Strict ordered answer emitted by the model adapter."""
-
-    schema_version: str = SCHEMA_VERSION
-    segments: tuple[GroundedAnswerSegmentV1, ...] = ()
+    text: str = ""
+    schema_version: str = "2"
 
 
 @dataclass(frozen=True)
@@ -146,10 +136,8 @@ __all__ = [
     "FAMILY_AWARE_METRICS",
     "SCHEMA_VERSION",
     "ClaimArgumentsV1",
-    "ClaimProposalV1",
     "DemandFamilyV1",
-    "GroundedAnswerSegmentV1",
-    "GroundedAnswerV1",
+    "GroundedAnswerV2",
     "GroundedClaimV1",
     "GroundedProseSegmentV1",
     "GroundedResponseSegmentV1",
