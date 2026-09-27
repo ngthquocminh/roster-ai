@@ -40,6 +40,7 @@ EVALUATION_FIXTURES = (
     "evals/golden/scheduling_inspect/fact-supported.json",
     "evals/golden/scheduling_inspect/fact-value-mismatch.json",
     "evals/golden/scheduling_inspect/fact-unknown-handle.json",
+    "evals/golden/scheduling_inspect/fact-statement.json",
 )
 
 # What each scope control does and does NOT cover. Scope as data (the
