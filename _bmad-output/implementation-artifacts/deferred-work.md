@@ -1170,3 +1170,10 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-grounding-2b-fact-claim-tags.md`
   summary: Raise the tagged share of answers -- guidance and goldens that make the model tag attributes and counts it reads (hours, grade, record counts), not only names.
   evidence: Live shadow run 2026-09-27: facts were about 12% of answer text; untagged prose held checkable values such as contracted hours, grades and "76 assignments".
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: Two backend tests fail intermittently only under full-suite load -- `test_gate_a_readiness.py::test_report_carries_every_shape_element_ac2_names` and `test_trace_export_failure_independence.py::test_turn_and_solver_outcomes_are_unchanged_by_a_failing_exporter[rejected]` (solver_failed vs solver_timed_out).
+  evidence: Each failed once in a full run on 2026-09-27 and passes in isolation both with and without the grounding changes (44/44, 21/21); a capture run with --tb=long did not reproduce. Timing- or load-dependent; not touched by G'.
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: The live-eval judge was never called on three turns of the 2026-09-27 widening run (B8, C1, C2 -> incomplete, judge_usage.attempts empty).
+  evidence: Answers were correct on inspection; no judge attempt or error was recorded, so the cause is in the harness, not the model.

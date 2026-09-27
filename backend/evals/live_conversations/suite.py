@@ -78,7 +78,8 @@ def main(argv=None) -> int:
     trace_export = {
         name: values.get(name) or os.environ.get(name)
         # G' phase 3: the tier-1 checker's key/provider ride the same stack-only
-        # path (compose.override.yml passes them to the API in shadow mode).
+        # path (compose.override.yml passes them to the API, which runs in flag
+        # mode).
         for name in ('LOGFIRE_TOKEN', 'LOGFIRE_BASE_URL',
                      'TYPESAFE_API_KEY', 'GROUNDING_TIER1_PROVIDER')
     }

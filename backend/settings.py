@@ -180,7 +180,10 @@ class Settings:
     # request; `shadow` records a probability per verified fact and changes
     # nothing the planner sees; `flag` (the default, Minh 2026-09-27) also marks
     # a fact whose wording scores below the threshold. Nothing is ever stripped
-    # or retried, and with no API key the checker is disabled (fail-open).
+    # or retried. Keys: TYPESAFE_API_KEY, else OPENROUTER_API_KEY, else the
+    # agent's own key when the agent runs on OpenRouter -- so an OpenRouter
+    # deployment calls Jev (paid) by default. With none, the checker is
+    # disabled with one warning (fail-open).
     grounding_tier1_mode: Literal["off", "shadow", "flag"] = "flag"
     grounding_tier1_flag_threshold: float = 0.5
     # `auto`: TypeSafe directly when TYPESAFE_API_KEY is set, else OpenRouter's
@@ -193,6 +196,17 @@ class Settings:
     # Estimated input tokens per request; larger batches are split, and a
     # single fact over it is skipped and counted.
     grounding_tier1_token_budget: int = 4000
+
+
+def tier1_flag_threshold(settings: "Settings") -> float | None:
+    """The threshold a turn flags against, or None outside `flag` mode. The one
+    place the mode -> threshold rule lives, for every route that runs a turn."""
+    if settings.grounding_tier1_mode != "flag":
+        return None
+    threshold = settings.grounding_tier1_flag_threshold
+    if not (math.isfinite(threshold) and 0.0 < threshold < 1.0):
+        raise InvalidFlagError("grounding_tier1_flag_threshold must be between 0 and 1")
+    return threshold
 
 
 def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+import math
 from time import perf_counter
 import json
 
@@ -161,7 +162,7 @@ def shadow_check_facts(
     `wording_flagged`; without it (shadow) nothing a planner sees changes.
     Never raises, and fails open: a checker failure flags nothing."""
     items: list[ClaimSupportItemV1] = []
-    unresolved = 0
+    unresolved = bare = 0
     try:
         for index, segment in enumerate(response.segments):
             if not (isinstance(segment, GroundedFactV1) and segment.verdict == "supported"
@@ -169,6 +170,7 @@ def shadow_check_facts(
                 continue
             if restates_value_only(segment.text, segment.value):
                 # Tier 0 already proved everything this text says.
+                bare += 1
                 continue
             # A tier-0 fact carries exactly one locator: its own record.
             trusted = _record_for(records, segment.evidence_refs[0])
@@ -193,8 +195,10 @@ def shadow_check_facts(
     segments = tuple(
         replace(
             segment, support_probability=probabilities[f"s{index}"],
+            # A non-finite score is not a pass: flag it rather than skip it.
             wording_flagged=(flag_threshold is not None
-                             and probabilities[f"s{index}"] < flag_threshold),
+                             and not (math.isfinite(probabilities[f"s{index}"])
+                                      and probabilities[f"s{index}"] >= flag_threshold)),
         )
         if f"s{index}" in probabilities else segment
         for index, segment in enumerate(response.segments)
@@ -221,6 +225,7 @@ def shadow_check_facts(
                     "tier1_mid": str(sum(1 for p in values if 0.5 <= p < 0.9)),
                     "tier1_high": str(sum(1 for p in values if p >= 0.9)),
                     "tier1_flagged": str(flagged),
+                    "tier1_bare": str(bare),
                 },
                 duration_ms=(perf_counter() - started) * 1_000,
             ))

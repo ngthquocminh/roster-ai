@@ -54,6 +54,7 @@ from application.contracts.grounding import GroundedAnswerV2
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
 from adapters.grounding.factory import create_claim_support_checker
+from settings import tier1_flag_threshold
 from application.use_cases.execute_turn import activity_payload, execute_turn, failed_outcome_for_exception, terminal_status
 from application.use_cases.finalize_agent_run import finalize_agent_run
 from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
@@ -271,8 +272,7 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
             history=resume.history,
             approvals=(AgentApprovalDecisionV1(tool_call_id=resume.tool_call_id, approved=True),),
             claim_checker=create_claim_support_checker(settings),
-            flag_threshold=(settings.grounding_tier1_flag_threshold
-                            if settings.grounding_tier1_mode == "flag" else None),
+            flag_threshold=tier1_flag_threshold(settings),
         )
         if outcome.status == "suspended":
             raise ResumedTurnSuspendedError(

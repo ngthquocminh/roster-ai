@@ -66,12 +66,13 @@ class ContainerTelemetry:
         if len(terminal) != 1:
             raise IncompleteConversationRun('application_usage_or_cost_unavailable')
         tools = [r for r in records if r['event'] == 'agent.tool.call.completed']
-        # G' phase 3: at most one tier-1 checker record per run (labels are
-        # counts, outcome and provider only -- never fact text).
-        tier1 = [r for r in records if r['event'] == 'grounding.tier1.completed']
-        terminal[0]['tier1'] = (
-            {'labels': tier1[-1].get('labels'), 'duration_ms': tier1[-1].get('duration_ms')}
-            if tier1 else None)
+        # G' phase 3: every tier-1 checker record of the run, kept whole (a
+        # resumed turn can emit more than one). Labels are counts, outcome and
+        # provider only -- never fact text.
+        terminal[0]['tier1'] = [
+            {'labels': r.get('labels'), 'duration_ms': r.get('duration_ms')}
+            for r in records if r['event'] == 'grounding.tier1.completed'
+        ]
         # Captured for ANY failed turn, not only one whose usage went missing:
         # B5 failed with usage present, so its cause stayed invisible.
         if (terminal[0].get('labels') or {}).get('failure_reason'):

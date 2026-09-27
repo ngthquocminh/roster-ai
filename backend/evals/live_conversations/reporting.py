@@ -44,7 +44,8 @@ def tier1_fact_rows(activity: dict) -> list[dict]:
         {**{key: segment.get(key)
             for key in ('text', 'field', 'value', 'verdict', 'failure', 'support_probability',
                         'wording_flagged')},
-         'tier0_only': restates_value_only(segment.get('text') or '', segment.get('value') or '')}
+         'tier0_only': restates_value_only(str(segment.get('text') or ''),
+                                           str(segment.get('value') or ''))}
         for segment in ((activity.get('response') or {}).get('segments') or [])
         if segment.get('kind') == 'fact'
     ]
@@ -70,20 +71,26 @@ def summarize_tier1(runs) -> dict:
     ]
     checked = [fact for fact in facts if fact.get('support_probability') is not None]
     calls = [
-        turn['tier1']
+        call
         for run in runs
         for execution in run.get('prefixes') or []
         for turn in execution.get('turns') or []
-        if turn.get('tier1')
+        # A list since a run can emit several; a lone dict is an older report.
+        for call in (turn.get('tier1') if isinstance(turn.get('tier1'), list)
+                     else [turn['tier1']] if isinstance(turn.get('tier1'), dict) else [])
+        if isinstance(call, dict)
     ]
     latencies = [call['duration_ms'] for call in calls
-                 if isinstance(call.get('duration_ms'), (int, float))]
+                 if isinstance(call.get('duration_ms'), (int, float))
+                 and not isinstance(call.get('duration_ms'), bool)]
     outcomes: dict = {}
     providers: dict = {}
     for call in calls:
         labels = call.get('labels') or {}
-        outcomes[labels.get('tier1_outcome')] = outcomes.get(labels.get('tier1_outcome'), 0) + 1
-        providers[labels.get('tier1_provider')] = providers.get(labels.get('tier1_provider'), 0) + 1
+        outcome = labels.get('tier1_outcome') or 'unknown'
+        provider = labels.get('tier1_provider') or 'unknown'
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        providers[provider] = providers.get(provider, 0) + 1
     return {
         'facts': facts,
         'checked': len(checked),

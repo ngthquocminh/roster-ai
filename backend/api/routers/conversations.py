@@ -61,6 +61,7 @@ from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
 from application.use_cases.conversation_workflow_context import load_workflow_context
 from adapters.grounding.factory import create_claim_support_checker
+from settings import tier1_flag_threshold
 from application.use_cases.execute_turn import (
     activity_payload,
     execute_turn,
@@ -388,8 +389,7 @@ async def execute_agent_turn(
             history=claimed.history,
             workflow_context=workflow_context,
             claim_checker=create_claim_support_checker(settings),
-            flag_threshold=(settings.grounding_tier1_flag_threshold
-                            if settings.grounding_tier1_mode == "flag" else None),
+            flag_threshold=tier1_flag_threshold(settings),
         )
     except Exception as exc:  # noqa: BLE001
         # Reaching a terminal status is what keeps the accepted conversation

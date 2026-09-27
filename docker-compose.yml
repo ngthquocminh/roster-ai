@@ -50,6 +50,8 @@ services:
       # with no key it disables itself and answers are unchanged (fail-open).
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       GROUNDING_TIER1_PROVIDER: ${GROUNDING_TIER1_PROVIDER:-auto}
+      GROUNDING_TIER1_MODE: ${GROUNDING_TIER1_MODE:-flag}
+      GROUNDING_TIER1_FLAG_THRESHOLD: ${GROUNDING_TIER1_FLAG_THRESHOLD:-0.5}
       # Trace export to Logfire (Story 5.9). Unset on the host, the token is
       # empty and no exporter is constructed.
       LOGFIRE_TOKEN: ${LOGFIRE_TOKEN:-}

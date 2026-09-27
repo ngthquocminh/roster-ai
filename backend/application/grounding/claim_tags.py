@@ -91,7 +91,8 @@ def parse_claim_tags(text: str) -> tuple[TagPart, ...]:
     return tuple(parts)
 
 
-_NOISE = re.compile(r"[\s*_`'\".,;:!?()\[\]-]+")
+_EMPHASIS = re.compile(r"[*_`]+")
+_SPACE = re.compile(r"\s+")
 
 
 def restates_value_only(text: str, value: str) -> bool:
@@ -100,10 +101,12 @@ def restates_value_only(text: str, value: str) -> bool:
     `<claim ... value='C Fork | Grid P 8GR'>C Fork | Grid P 8GR</claim>` asserts
     no relation, so tier 0 has already proven all of it and a wording check
     has nothing to judge (G' phase 3: a bare name scored 0.17-0.43 while
-    correct). Markdown emphasis, punctuation, spacing and case are ignored.
+    correct). Only markdown emphasis, outer quotes, trailing sentence
+    punctuation, spacing and case are ignored: `-3` or `(3)` is not `3`.
     """
-    def normalized(raw: str) -> str:
-        return _NOISE.sub(" ", raw).strip().casefold()
+    def normalized(raw: object) -> str:
+        cleaned = _SPACE.sub(" ", _EMPHASIS.sub("", str(raw or ""))).strip()
+        return cleaned.strip("'\"").rstrip(".,;:!?").strip().casefold()
 
     return bool(normalized(value)) and normalized(text) == normalized(value)
 

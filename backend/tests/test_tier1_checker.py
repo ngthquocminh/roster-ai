@@ -213,7 +213,7 @@ def test_shadow_two_supported_facts_make_one_call_and_record_probabilities() -> 
     assert record.labels == {"tier1_outcome": "ok", "tier1_provider": "stub",
                              "tier1_checked": "2", "tier1_skipped": "0",
                              "tier1_low": "0", "tier1_mid": "2", "tier1_high": "0",
-                             "tier1_flagged": "0"}
+                             "tier1_flagged": "0", "tier1_bare": "0"}
     assert "worker A" not in repr(record)
 
 
@@ -287,6 +287,11 @@ def test_the_timeout_bounds_the_whole_turn_not_each_batch() -> None:
     ("C Fork | Grid P 8GR", "C Fork | Grid P 8GR", True),
     ("**C Fork | Grid P 8GR**", "C Fork | Grid P 8GR", True),
     ("pick.", "Pick", True),
+    ("'Pick'", "Pick", True),
+    ("-3", "3", False),           # a sign is wording, not noise
+    ("(3)", "3", False),
+    ("6.5", "6 5", False),
+    ("x", None, False),
     ("A is qualified for pick", "pick", False),
     ("Maximum Agency Shifts: 6 weekly", "6", False),
     ("", "", False),
@@ -362,3 +367,48 @@ def test_flag_mode_fails_open_when_the_checker_fails() -> None:
     response = _turn(TWO_FACTS, StubClaimSupportChecker(error="http_529"),
                      flag_threshold=0.5).grounded_response
     assert [fact.wording_flagged for fact in response.facts] == [False, False]
+
+
+def test_a_mixed_reply_flags_only_the_low_fact() -> None:
+    class PerItem:
+        name, provider = "per-item", "stub"
+
+        def check(self, items):
+            from application.ports.claim_support import ClaimSupportResultV1
+
+            return ClaimSupportResultV1(probabilities={
+                items[0].item_id: 0.9, items[1].item_id: float("nan")})
+
+    response = _turn(TWO_FACTS, PerItem(), flag_threshold=0.5).grounded_response
+    # a non-finite score is flagged, never silently passed
+    assert [fact.wording_flagged for fact in response.facts] == [False, True]
+
+
+def test_the_threshold_rule_lives_in_one_place() -> None:
+    from settings import tier1_flag_threshold
+
+    assert tier1_flag_threshold(_settings(grounding_tier1_mode="flag")) == 0.5
+    assert tier1_flag_threshold(_settings(grounding_tier1_mode="shadow")) is None
+    for bad in (0.0, 1.0, float("nan")):
+        with pytest.raises(InvalidFlagError):
+            tier1_flag_threshold(_settings(grounding_tier1_mode="flag",
+                                           grounding_tier1_flag_threshold=bad))
+
+
+def test_bare_facts_are_counted_in_telemetry() -> None:
+    sink = _Sink()
+    _turn(_tag("w1", "name", "A", "A") + " and "
+          + _tag("w1", "qualifications", "pick", "A is qualified for pick"),
+          StubClaimSupportChecker(), telemetry=sink)
+    assert sink.records[0].labels["tier1_bare"] == "1"
+
+
+def test_several_checker_records_per_run_are_all_reported() -> None:
+    from evals.live_conversations.reporting import summarize_tier1
+
+    calls = [{"labels": {"tier1_outcome": "ok", "tier1_provider": "typesafe"}, "duration_ms": 100},
+             {"labels": {}, "duration_ms": True}]
+    summary = summarize_tier1([{"prefixes": [{"turns": [{"tier1": calls}]}]}])
+    assert summary["checker_calls"] == 2
+    assert summary["checker_outcomes"] == {"ok": 1, "unknown": 1}
+    assert summary["checker_latency_ms"]["max"] == 100  # a bool is not a latency
