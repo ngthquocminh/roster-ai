@@ -21,6 +21,7 @@ type AgentResponse = Extract<Activity, { activity_type: "agent_response" }>;
 type Clarification = Extract<Activity, { activity_type: "clarification" }>;
 type TerminalOutcome = Extract<Activity, { activity_type: "terminal_outcome" }>;
 type Claim = Extract<AgentResponse["response"]["segments"][number], { kind: "claim" }>;
+type Fact = Extract<AgentResponse["response"]["segments"][number], { kind: "fact" }>;
 
 // UX-DR8 asks the link to name the exact field AND range. Returning the field
 // first meant the range branch was unreachable in production: every locator the
@@ -57,6 +58,94 @@ function claimSubject(claim: Claim): string | undefined {
 function formatClaimValue(value: number): string {
   if (Number.isInteger(value)) return String(value);
   return String(Number(value.toPrecision(12)));
+}
+
+function EvidenceRefLinks({
+  item,
+  navigate,
+  references,
+  segmentIndex,
+}: Readonly<{
+  item: AgentResponse;
+  navigate: NavigateFunction;
+  references: Claim["evidence_refs"];
+  segmentIndex: number;
+}>) {
+  return (
+    <>
+      {references.map((reference, refIndex) => {
+        const origin: EvidenceOrigin = {
+          conversationId: item.conversation_id,
+          activityId: item.activity_id,
+          segmentIndex,
+          refIndex,
+        };
+        const activate = () => {
+          rememberOrigin(origin);
+          navigate(
+            `/scenarios/${item.scenario_id}/data?${toSearchParams(reference)}`,
+            { state: { evidenceOrigin: origin } },
+          );
+        };
+        // Keyed by ref POSITION, not by locator content: two refs can cite the
+        // same group/record/field for different windows, and a colliding key
+        // made React reconcile the very elements focus restoration targets.
+        return (
+          <span className="inline-flex flex-wrap items-center gap-2" key={`ref-${refIndex}`}>
+          <EvidenceLink
+            fieldOrRange={fieldOrRange(reference)}
+            group={reference.group}
+            id={originElementId(origin)}
+            onActivate={activate}
+            record={reference.record_id}
+            version={reference.scenario_version_id}
+          />
+          {isEvidenceUnavailable(origin) ? <span className="text-destructive">Evidence unavailable</span> : null}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+// G' phase 2b. Tier 0 checks the tag's field and value, not its wording (the
+// model may name what the record stores by ID), so the verified marker shows
+// exactly what was checked. A failed fact keeps its text, flagged unverified.
+function FactSegment({
+  fact,
+  item,
+  navigate,
+  segmentIndex,
+}: Readonly<{
+  fact: Fact;
+  item: AgentResponse;
+  navigate: NavigateFunction;
+  segmentIndex: number;
+}>) {
+  if (fact.verdict === "failed") {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2" data-fact-state="failed">
+        <span>{fact.text}</span>
+        <span className="text-xs text-destructive">
+          Unverified: {fact.failure?.replaceAll("_", " ") ?? "not checked"}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2" data-fact-state="supported">
+      <span>{fact.text}</span>
+      <span className="text-xs text-muted-foreground">
+        Verified: {fact.field}: {fact.value}
+      </span>
+      <EvidenceRefLinks
+        item={item}
+        navigate={navigate}
+        references={fact.evidence_refs}
+        segmentIndex={segmentIndex}
+      />
+    </span>
+  );
 }
 
 function ClaimSegment({
@@ -99,37 +188,12 @@ function ClaimSegment({
         {formatClaimValue(Number(claim.value))} {claim.unit}
         {subject ? <span className="text-muted-foreground"> ({subject})</span> : null}
       </span>
-      {claim.evidence_refs.map((reference, refIndex) => {
-        const origin: EvidenceOrigin = {
-          conversationId: item.conversation_id,
-          activityId: item.activity_id,
-          segmentIndex,
-          refIndex,
-        };
-        const activate = () => {
-          rememberOrigin(origin);
-          navigate(
-            `/scenarios/${item.scenario_id}/data?${toSearchParams(reference)}`,
-            { state: { evidenceOrigin: origin } },
-          );
-        };
-        // Keyed by ref POSITION, not by locator content: two refs can cite the
-        // same group/record/field for different windows, and a colliding key
-        // made React reconcile the very elements focus restoration targets.
-        return (
-          <span className="inline-flex flex-wrap items-center gap-2" key={`ref-${refIndex}`}>
-          <EvidenceLink
-            fieldOrRange={fieldOrRange(reference)}
-            group={reference.group}
-            id={originElementId(origin)}
-            onActivate={activate}
-            record={reference.record_id}
-            version={reference.scenario_version_id}
-          />
-          {isEvidenceUnavailable(origin) ? <span className="text-destructive">Evidence unavailable</span> : null}
-          </span>
-        );
-      })}
+      <EvidenceRefLinks
+        item={item}
+        navigate={navigate}
+        references={claim.evidence_refs}
+        segmentIndex={segmentIndex}
+      />
     </span>
   );
 }
@@ -160,6 +224,8 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
         {item.response.segments.map((segment, index) =>
           segment.kind === "prose" ? (
             <span key={`prose-${index}`}>{segment.text}</span>
+          ) : segment.kind === "fact" ? (
+            <FactSegment fact={segment} item={item} key={`fact-${index}`} navigate={navigate} segmentIndex={index} />
           ) : (
             <ClaimSegment claim={segment} item={item} key={`claim-${segment.result_id}-${index}`} navigate={navigate} segmentIndex={index} />
           ),

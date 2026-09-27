@@ -126,6 +126,18 @@ If the distinct task_ids exceed what the remaining tool-call budget allows, repo
 ones you covered and say the coverage is partial. Never exhaust the budget silently by
 inspecting tasks or assignments unfiltered while searching for a family.
 
+## Record facts (<claim> tags)
+
+Every row scheduling_inspect returns carries an `ev` handle (w3 a worker, t12 a task, d demand,
+a an assignment, l a lock, c a constraint). When you state a fact read from one row, wrap it:
+<claim ev='w3' field='qualifications' value='T1'>Ana is qualified for T1</claim>
+- ev is the row's handle exactly as returned in this turn; field is that row's own field name;
+  value is the field's content exactly as the row shows it (an ID such as T1, not a name). For
+  a list field, value is one element's value.
+- The application checks ev, field and value against the row and marks the fact verified or
+  unverified. Tag only facts you read from a row in this turn; never invent a handle.
+- Calculated numbers are {{{{handle}}}} placeholders, never <claim> tags.
+
 ## Naming discipline
 
 Always name the specific task(s) a family question or claim resolved to, alongside the

@@ -114,7 +114,36 @@ class GroundedClaimV1:
     failure: GroundingFailureV1 | None = None
 
 
-GroundedResponseSegmentV1 = GroundedProseSegmentV1 | GroundedClaimV1
+FactFailureV1 = Literal[
+    "missing_evidence",
+    "unknown_field",
+    "value_mismatch",
+    "version_mismatch",
+    "unauthorized_evidence",
+]
+
+
+@dataclass(frozen=True)
+class GroundedFactV1:
+    """A record fact the model tagged `<claim ev=... field=... value=...>`.
+
+    `field`/`value` are what was CHECKED against the trusted record (tier 0,
+    decision D1); `text` is the model's wording, which tier 0 does not check.
+    The UI therefore shows `field: value` on the verified marker. A failed fact
+    keeps its text and is shown flagged as unverified -- never stripped.
+    """
+
+    schema_version: str = SCHEMA_VERSION
+    kind: Literal["fact"] = "fact"
+    text: str = ""
+    field: str = ""
+    value: str = ""
+    evidence_refs: tuple[EvidenceRefV1, ...] = ()
+    verdict: GroundingVerdictV1 = "failed"
+    failure: FactFailureV1 | None = None
+
+
+GroundedResponseSegmentV1 = GroundedProseSegmentV1 | GroundedClaimV1 | GroundedFactV1
 
 
 @dataclass(frozen=True)
@@ -131,14 +160,22 @@ class GroundedResponseV1:
             segment for segment in self.segments if isinstance(segment, GroundedClaimV1)
         )
 
+    @property
+    def facts(self) -> tuple[GroundedFactV1, ...]:
+        return tuple(
+            segment for segment in self.segments if isinstance(segment, GroundedFactV1)
+        )
+
 
 __all__ = [
     "FAMILY_AWARE_METRICS",
     "SCHEMA_VERSION",
     "ClaimArgumentsV1",
     "DemandFamilyV1",
+    "FactFailureV1",
     "GroundedAnswerV2",
     "GroundedClaimV1",
+    "GroundedFactV1",
     "GroundedProseSegmentV1",
     "GroundedResponseSegmentV1",
     "GroundedResponseV1",

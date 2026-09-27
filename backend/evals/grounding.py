@@ -20,7 +20,10 @@ from uuid import UUID
 
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.agent_runtime import AgentRunOutcomeV1
-from application.grounding.evidence_registry import trusted_results_by_citation
+from application.grounding.evidence_registry import (
+    trusted_records_by_handle,
+    trusted_results_by_citation,
+)
 from application.grounding.gate import ground_answer
 from evals.cases import GoldenCase
 
@@ -52,7 +55,10 @@ def ground_case_outcome(
     if run_source == "double" and case.expected_grounding_outcome == "version_mismatch":
         deps = replace(deps, scenario_version_id=ROTATED_VERSION)
     return replace(
-        outcome, grounded_response=ground_answer(outcome.answer, deps, trusted)
+        outcome,
+        grounded_response=ground_answer(
+            outcome.answer, deps, trusted, trusted_records_by_handle(results)
+        ),
     )
 
 

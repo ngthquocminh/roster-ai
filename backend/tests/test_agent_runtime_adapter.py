@@ -1427,3 +1427,51 @@ def test_a_placeholder_slip_that_survives_every_retry_is_still_delivered(text) -
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me the draft"))
     assert outcome.status == "completed"
     assert outcome.answer == GroundedAnswerV2(text=text)
+
+
+def test_a_fact_tag_with_no_inspection_this_turn_is_corrected_then_delivered() -> None:
+    """G' phase 2b matrix: one corrective retry, then the fact renders unverified."""
+    tagged = GroundedAnswerV2(text="<claim ev='w1' field='name' value='A'>A</claim> is rostered.")
+    clean = GroundedAnswerV2(text="That worker is rostered.")
+    attempts = []
+
+    def corrects(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(1)
+        answer = tagged if len(attempts) == 1 else clean
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(corrects), answer_type=GroundedAnswerV2)
+    assert runtime.run_turn(AgentTurnRequestV1(prompt="who is rostered?")).answer == clean
+    assert len(attempts) == 2
+
+    stubborn = _runtime(
+        model=FunctionModel(lambda messages, info: ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(tagged), tool_call_id=f"o{len(messages)}")])),
+        answer_type=GroundedAnswerV2)
+    outcome = stubborn.run_turn(AgentTurnRequestV1(prompt="who is rostered?"))
+    assert (outcome.status, outcome.answer) == ("completed", tagged)
+
+
+def test_a_fact_tag_after_a_real_inspection_is_not_retried() -> None:
+    """The positive path: rows read this turn carry `ev`, so the no-inspection
+    rule must see them in the rendered tool return."""
+    from application.capabilities.scheduling_inspect import scheduling_inspect_module
+    from tests.test_fact_tags import _deps as _fixture_deps
+
+    tagged = GroundedAnswerV2(text="<claim ev='w1' field='name' value='A'>A</claim> is rostered.")
+    attempts = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(m, ModelResponse) for m in messages):
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="scheduling_inspect",
+                args=json.dumps({"request": {"group": "workers"}}), tool_call_id="i1")])
+        attempts.append(1)
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(tagged), tool_call_id="o1")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(scheduling_inspect_module(),),
+                       deps=_fixture_deps(), answer_type=GroundedAnswerV2)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="who is rostered?"))
+    assert (outcome.answer, len(attempts), runtime._last_retry_rule) == (tagged, 1, None)

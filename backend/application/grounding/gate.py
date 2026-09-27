@@ -10,6 +10,8 @@ from application.contracts.grounding import (
     ClaimArgumentsV1,
     GroundedAnswerV2,
     GroundedClaimV1,
+    GroundedFactV1,
+    FactFailureV1,
     GroundedProseSegmentV1,
     GroundedResponseSegmentV1,
     GroundedResponseV1,
@@ -17,6 +19,9 @@ from application.contracts.grounding import (
     GroundingUnitV1,
     MetricV1,
 )
+from application.grounding.claim_tags import FactTagPart, parse_claim_tags
+from application.grounding.evidence_groups import evidence_group_for_scenario_fact_group
+from application.grounding.evidence_registry import TrustedRecordV1
 from application.grounding.placeholders import PlaceholderPart, parse_answer_text
 from application.grounding.resolvers import resolver_name_for_evidence_group
 
@@ -48,6 +53,18 @@ SCOPE_CONTROLS: Mapping[str, str] = {
     "version:scenario_only": (
         "COVERS the immutable scenario version and available baseline schedule binding. "
         "NOT COVERED: producing run and schedule-version aggregates, which Epic 3 creates."
+    ),
+    "fact:record_content_tier0": (
+        "AUTHORITATIVE. A <claim ev field value> fact is verified only when ev is a record "
+        "handle issued by a scheduling_inspect call in this turn, field is a field of that "
+        "trusted row, and value equals the row's field content (numbers by numeric "
+        "equality; lists and nested objects by any element's scalar). The row checked is the "
+        "handler's trusted return, never model-visible text, and its locator is resolved "
+        "like a calculation's. A failed or malformed fact is shown unverified, never "
+        "stripped or blocking. "
+        "NOT COVERED: the tag's wording -- the model may name what the record calls by ID -- "
+        "which is why the verified marker displays the checked field and value (tier 1, "
+        "phase 3, checks wording)."
     ),
     "placeholder:value_from_trusted_result": (
         "AUTHORITATIVE. A number is rendered only where the answer text carries a "
@@ -173,23 +190,97 @@ def _ground_claim(
     )
 
 
+def _matches(recorded: object, claimed: str) -> bool:
+    """Tier-0 value equality: text exactly (IDs are case-sensitive), numbers by
+    numeric equality, a list or nested object by any element's scalar."""
+    if recorded is None:
+        return claimed.strip().casefold() in {"", "none", "null"}
+    if isinstance(recorded, bool):
+        return claimed.strip().casefold() == str(recorded).casefold()
+    if isinstance(recorded, (int, float)):
+        try:
+            return float(claimed) == float(recorded)
+        except ValueError:
+            return False
+    if isinstance(recorded, str):
+        return recorded.strip() == claimed.strip()
+    if isinstance(recorded, Mapping):
+        return any(_matches(item, claimed) for item in recorded.values())
+    if isinstance(recorded, (list, tuple)):
+        return any(_matches(item, claimed) for item in recorded)
+    return False
+
+
+def _fact(
+    tag: FactTagPart, failure: FactFailureV1 | None,
+    evidence_refs: tuple[EvidenceRefV1, ...] = (),
+) -> GroundedFactV1:
+    return GroundedFactV1(
+        text=tag.text, field=tag.field, value=tag.value, evidence_refs=evidence_refs,
+        verdict="supported" if failure is None else "failed", failure=failure,
+    )
+
+
+def _ground_fact(
+    tag: FactTagPart, deps: AgentDepsV1, records: Mapping[str, TrustedRecordV1]
+) -> GroundedFactV1:
+    trusted = records.get(tag.ev)
+    if trusted is None:
+        return _fact(tag, "missing_evidence")
+    if trusted.scenario_version_id != str(deps.scenario_version_id):
+        return _fact(tag, "version_mismatch")
+    if tag.field == "ev" or tag.field not in trusted.record:
+        return _fact(tag, "unknown_field")
+    if not _matches(trusted.record[tag.field], tag.value):
+        return _fact(tag, "value_mismatch")
+    evidence_group = evidence_group_for_scenario_fact_group(trusted.scenario_group)  # type: ignore[arg-type]
+    overview = deps.projection_reader.get_overview(deps.connection, deps.scenario_id)
+    record_id = trusted.record.get("record_id")
+    if evidence_group is None or overview is None or not isinstance(record_id, str):
+        return _fact(tag, "missing_evidence")
+    reference = EvidenceRefV1(
+        scenario_version_id=overview.scenario_version_id,
+        checksum_algorithm=overview.checksum_algorithm,
+        checksum_schema_version=overview.checksum_schema_version,
+        checksum_digest=overview.checksum_digest,
+        producing_run_version=None,
+        baseline_schedule_version=overview.baseline_schedule_version,
+        group=evidence_group,
+        record_id=record_id,
+        field=tag.field,
+    )
+    failure = _locator_failure(deps, reference)
+    if failure is not None:
+        # The record came from this turn's trusted read, so a locator that no
+        # longer resolves means the evidence is gone, not that the model erred.
+        return _fact(tag, failure if failure in ("version_mismatch", "unauthorized_evidence")
+                     else "missing_evidence")
+    return _fact(tag, None, (reference,))
+
+
 def ground_answer(
     answer: GroundedAnswerV2,
     deps: AgentDepsV1,
     results: Mapping[str, TrustedCalculationResultV1],
+    records: Mapping[str, TrustedRecordV1] | None = None,
 ) -> GroundedResponseV1:
-    """Replace each `{{handle}}` with a claim built from its trusted result.
+    """Replace each `{{handle}}` with a claim built from its trusted result, and
+    check each `<claim>` fact tag against its trusted record.
 
     Performs no metric computation and never fails the turn: a placeholder that
     cannot be grounded becomes an inspectable failed claim, and every other part
     of the text is kept as prose.
     """
     grounded: list[GroundedResponseSegmentV1] = []
-    for part in parse_answer_text(answer.text):
-        if isinstance(part, PlaceholderPart):
-            grounded.append(_ground_claim(part.handle, deps, results))
-        else:
-            grounded.append(GroundedProseSegmentV1(text=part.text))
+    for tagged in parse_claim_tags(answer.text):
+        if isinstance(tagged, FactTagPart):
+            grounded.append(_ground_fact(tagged, deps, records or {}))
+            continue
+        for part in parse_answer_text(tagged.text):
+            if isinstance(part, PlaceholderPart):
+                grounded.append(_ground_claim(part.handle, deps, results))
+            else:
+                grounded.append(GroundedProseSegmentV1(text=part.text))
     return GroundedResponseV1(
         scenario_version_id=deps.scenario_version_id,
         segments=tuple(grounded),

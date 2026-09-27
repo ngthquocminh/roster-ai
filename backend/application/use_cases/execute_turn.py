@@ -23,8 +23,16 @@ from application.contracts.activity import (
     TerminalOutcomeActivityV1,
 )
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
-from application.contracts.grounding import GroundedClaimV1, GroundedProseSegmentV1, GroundedResponseV1
-from application.grounding.evidence_registry import trusted_results_by_citation
+from application.contracts.grounding import (
+    GroundedClaimV1,
+    GroundedFactV1,
+    GroundedProseSegmentV1,
+    GroundedResponseV1,
+)
+from application.grounding.evidence_registry import (
+    trusted_records_by_handle,
+    trusted_results_by_citation,
+)
 from application.grounding.gate import ground_answer
 from application.clarification.resolve import resolve_clarification
 from application.ports.agent_runtime import AgentRuntime
@@ -110,7 +118,9 @@ def execute_turn(
         return outcome
     return replace(
         outcome,
-        grounded_response=ground_answer(outcome.answer, deps, by_id),
+        grounded_response=ground_answer(
+            outcome.answer, deps, by_id, trusted_records_by_handle(calculation_results),
+        ),
     )
 
 
@@ -293,6 +303,10 @@ def _response_visible_text(response: GroundedResponseV1) -> str:
             parts.append(f"{segment.value} {segment.unit}")
         elif isinstance(segment, GroundedClaimV1):
             parts.append(f"Claim unavailable: {segment.failure}")
+        elif isinstance(segment, GroundedFactV1) and segment.verdict == "supported":
+            parts.append(segment.text)
+        elif isinstance(segment, GroundedFactV1):
+            parts.append(f"{segment.text} (unverified: {segment.failure})")
     return " ".join(part.strip() for part in parts if part.strip())
 
 

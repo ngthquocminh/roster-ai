@@ -78,6 +78,7 @@ from application.contracts.grounding import GroundedAnswerV2
 from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.contracts.proposal import DraftProposalV1
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
+from application.grounding.claim_tags import fact_handles
 from application.grounding.placeholders import malformed_placeholders, placeholder_handles
 from agent.capability_tools import render_capabilities
 
@@ -153,6 +154,21 @@ def _result_ids_this_run(messages: list, citable_tools: frozenset[str]) -> set[s
                 value = part.content.get("result_id")
                 if isinstance(value, str) and value:
                     found.add(value)
+    return found
+
+
+def _record_handles_this_run(messages: list) -> set[str]:
+    """Record handles (`ev`) on rows a tool returned after the current prompt."""
+    found: set[str] = set()
+    for message in _messages_this_run(messages):
+        if not isinstance(message, ModelRequest):
+            continue
+        for part in message.parts:
+            if not (isinstance(part, ToolReturnPart) and isinstance(part.content, dict)):
+                continue
+            for item in part.content.get("items") or ():
+                if isinstance(item, dict) and isinstance(item.get("ev"), str):
+                    found.add(item["ev"])
     return found
 
 
@@ -410,6 +426,18 @@ class PydanticAIAgentRuntime:
                         "tool returned a result in this turn, so nothing can fill it. Call "
                         "the calculation tool and use the handle it returns, or answer "
                         "without the value." + _COMPLETE_ANSWER
+                    )
+                if (fact_handles(text) and not _record_handles_this_run(ctx.messages)
+                        and not last_attempt):
+                    # A fact tag cites a record, but nothing was read in this
+                    # turn, so no handle can be real. After the retries the
+                    # fact renders as unverified (G' phase 2b).
+                    self._last_retry_rule = "fact_without_inspection"
+                    raise ModelRetry(
+                        "The answer tags a record fact with <claim ev=...>, but no tool "
+                        "returned records in this turn, so the handle cannot be checked. "
+                        "Read the record and use the ev handle on its row, or state the "
+                        "fact without the tag." + _COMPLETE_ANSWER
                     )
                 malformed = malformed_placeholders(text)
                 if malformed and not last_attempt:

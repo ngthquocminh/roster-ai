@@ -167,15 +167,21 @@ class GroundingEvaluator:
             return EvalVerdict(False, "grounded response or oracle is missing", self.run_source)
         actual_refs = tuple(
             stable_evidence_ref(reference)
-            for claim in response.claims
-            for reference in claim.evidence_refs
+            for segment in (*response.claims, *response.facts)
+            for reference in segment.evidence_refs
         )
         expected_failure = {
             "supported": None,
             "version_mismatch": "version_mismatch",
             "missing_evidence": "missing_evidence",
+            # G' phase 2b: a record fact whose value disagrees with its row.
+            "value_mismatch": "value_mismatch",
         }[expected_oracle]
-        actual_failures = tuple(claim.failure for claim in response.claims if claim.failure)
+        actual_failures = tuple(
+            segment.failure
+            for segment in (*response.claims, *response.facts)
+            if segment.failure
+        )
         if expected_failure is None:
             if actual_failures:
                 return EvalVerdict(False, f"expected supported, got {actual_failures}", self.run_source)

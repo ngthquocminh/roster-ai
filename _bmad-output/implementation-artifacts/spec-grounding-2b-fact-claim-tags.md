@@ -2,7 +2,8 @@
 title: 'Grounding 2b: record handles and <claim> fact tags with deterministic ID + content checks'
 type: 'feature'
 created: '2026-09-27'
-status: 'ready-for-dev'
+status: 'done'
+baseline_commit: '83b09ca89d134e6624ffd8c4492200e7ca24effd'
 review_loop_iteration: 0
 depends_on: 'spec-grounding-2a-value-placeholders.md'
 context:
@@ -54,16 +55,16 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/application/grounding/evidence_registry.py` -- `handle_for_record(group, record_id)`, resolve handle → (group, record_id)
-- [ ] `backend/application/capabilities/scheduling_inspect.py` -- each trusted row gains an `ev` handle; model sees it
-- [ ] `backend/application/grounding/claim_tags.py` -- pure parser over the prose parts from 2a: fact tags, malformed handling
-- [ ] `backend/application/contracts/grounding.py` -- `GroundedFactV1(text, field, value, evidence_refs, verdict, failure)`; failures `missing_evidence | unknown_field | value_mismatch | version_mismatch | unauthorized_evidence`
-- [ ] `backend/application/grounding/gate.py` -- fact check per the matrix; build and resolve the fact's `EvidenceRefV1` with the existing locator path
-- [ ] `backend/agent/runtime.py` -- one corrective retry when a fact cites a record handle and no inspect ran this turn
-- [ ] `backend/agent/scheduling_instructions.py` -- when and how to tag record facts; attributes use record field names and model-visible values
-- [ ] `frontend/src/features/chat/ActivityTimeline.tsx` (+ regenerated `schema.d.ts`) -- render fact text with a verified marker and evidence link, or an "unverified" marker when failed
-- [ ] `backend/evals/golden/scheduling_inspect/` -- cases: supported fact, value mismatch, unknown handle
-- [ ] tests -- every matrix row (backend) and both fact states (frontend)
+- [x] `backend/application/grounding/evidence_registry.py` -- `handle_for_record(group, record_id)`, resolve handle → (group, record_id)
+- [x] `backend/application/capabilities/scheduling_inspect.py` -- each trusted row gains an `ev` handle; model sees it
+- [x] `backend/application/grounding/claim_tags.py` -- pure parser over the prose parts from 2a: fact tags, malformed handling
+- [x] `backend/application/contracts/grounding.py` -- `GroundedFactV1(text, field, value, evidence_refs, verdict, failure)`; failures `missing_evidence | unknown_field | value_mismatch | version_mismatch | unauthorized_evidence`
+- [x] `backend/application/grounding/gate.py` -- fact check per the matrix; build and resolve the fact's `EvidenceRefV1` with the existing locator path
+- [x] `backend/agent/runtime.py` -- one corrective retry when a fact cites a record handle and no inspect ran this turn
+- [x] `backend/agent/scheduling_instructions.py` -- when and how to tag record facts; attributes use record field names and model-visible values
+- [x] `frontend/src/features/chat/ActivityTimeline.tsx` (+ regenerated `schema.d.ts`) -- render fact text with a verified marker and evidence link, or an "unverified" marker when failed
+- [x] `backend/evals/golden/scheduling_inspect/` -- cases: supported fact, value mismatch, unknown handle
+- [x] tests -- every matrix row (backend) and both fact states (frontend)
 
 **Acceptance Criteria:**
 - Given a supported fact, when the planner views the reply, then the fact shows as verified with a link to its record.
@@ -74,3 +75,36 @@ context:
 **Commands:**
 - `cd backend && uv run pytest -q` -- expected: all pass
 - `cd frontend && npm run typecheck && npm test` -- expected: all pass
+
+## Suggested Review Order
+
+**Fact check (the core)**
+
+- Entry point: tier-0 check of ev, field, value against this turn's trusted row.
+  [`gate.py:224`](../../backend/application/grounding/gate.py#L224)
+- Value equality: exact text, numeric equality, any nested scalar (per spec).
+  [`gate.py:193`](../../backend/application/grounding/gate.py#L193)
+- Tags parsed before placeholders; malformed tags degrade to prose.
+  [`claim_tags.py:44`](../../backend/application/grounding/claim_tags.py#L44)
+
+**Handles**
+
+- Group-prefixed record handles on the per-turn registry.
+  [`evidence_registry.py:54`](../../backend/application/grounding/evidence_registry.py#L54)
+- Inspect rows carry `ev`; trusted rows read back by handle.
+  [`scheduling_inspect.py:272`](../../backend/application/capabilities/scheduling_inspect.py#L272)
+
+**Contract, runtime, UI**
+
+- New persisted segment kind.
+  [`grounding.py:127`](../../backend/application/contracts/grounding.py#L127)
+- One retry when a fact cites a record and nothing was read.
+  [`runtime.py:435`](../../backend/agent/runtime.py#L435)
+- Verified marker shows the checked field: value; failed shows Unverified.
+  [`ActivityTimeline.tsx:114`](../../frontend/src/features/chat/ActivityTimeline.tsx#L114)
+
+**Tests and evals**
+
+- Matrix rows; three inspect goldens.
+  [`test_fact_tags.py:1`](../../backend/tests/test_fact_tags.py#L1)
+  [`fact-supported.json:1`](../../backend/evals/golden/scheduling_inspect/fact-supported.json#L1)
