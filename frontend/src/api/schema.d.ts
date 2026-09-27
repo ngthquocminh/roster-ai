@@ -2311,6 +2311,11 @@ export interface components {
             failure?: ("missing_evidence" | "unknown_field" | "value_mismatch" | "version_mismatch" | "unauthorized_evidence") | null;
             /** Support Probability */
             support_probability?: number | null;
+            /**
+             * Wording Flagged
+             * @default false
+             */
+            wording_flagged: boolean;
         };
         /**
          * GroundedProseSegmentV1

@@ -271,6 +271,8 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
             history=resume.history,
             approvals=(AgentApprovalDecisionV1(tool_call_id=resume.tool_call_id, approved=True),),
             claim_checker=create_claim_support_checker(settings),
+            flag_threshold=(settings.grounding_tier1_flag_threshold
+                            if settings.grounding_tier1_mode == "flag" else None),
         )
         if outcome.status == "suspended":
             raise ResumedTurnSuspendedError(

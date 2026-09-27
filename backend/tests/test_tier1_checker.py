@@ -34,17 +34,31 @@ def _settings(**overrides) -> Settings:
     return replace(base, **overrides)
 
 
-def test_mode_defaults_to_off_and_off_builds_nothing(monkeypatch) -> None:
+def test_mode_defaults_to_flag_and_off_builds_nothing(monkeypatch) -> None:
     monkeypatch.delenv("GROUNDING_TIER1_MODE", raising=False)
-    assert default_settings().grounding_tier1_mode == "off"
+    assert default_settings().grounding_tier1_mode == "flag"
+    assert default_settings().grounding_tier1_flag_threshold == 0.5
     assert create_claim_support_checker(
         _settings(grounding_tier1_mode="off", typesafe_api_key="k")) is None
 
 
-def test_an_unknown_mode_fails_closed_at_start(monkeypatch) -> None:
+def test_an_unknown_mode_or_threshold_fails_closed_at_start(monkeypatch) -> None:
     monkeypatch.setenv("GROUNDING_TIER1_MODE", "strip")
     with pytest.raises(InvalidFlagError):
         default_settings()
+    monkeypatch.setenv("GROUNDING_TIER1_MODE", "flag")
+    for bad in ("1.5", "0", "x"):
+        monkeypatch.setenv("GROUNDING_TIER1_FLAG_THRESHOLD", bad)
+        with pytest.raises(InvalidFlagError):
+            default_settings()
+
+
+def test_the_keyless_suite_pins_the_checker_off() -> None:
+    """conftest: a real backend/.env key must never reach the network in tests."""
+    import os
+
+    assert os.environ.get("GROUNDING_TIER1_MODE") == "off"
+    assert "TYPESAFE_API_KEY" not in os.environ
 
 
 @pytest.mark.parametrize(("overrides", "endpoint", "model"), [
@@ -167,7 +181,7 @@ class _Sink:
         self.records.append(record)
 
 
-def _turn(text: str, checker, *, telemetry=None):
+def _turn(text: str, checker, *, telemetry=None, flag_threshold=None):
     deps = replace(_deps(), telemetry=telemetry)
 
     class Runtime:
@@ -175,7 +189,7 @@ def _turn(text: str, checker, *, telemetry=None):
             return AgentRunOutcomeV1(answer=GroundedAnswerV2(text=text))
 
     return execute_turn(Runtime(), deps, prompt="q", calculation_results=[_workers(deps)],
-                        claim_checker=checker)
+                        claim_checker=checker, flag_threshold=flag_threshold)
 
 
 TWO_FACTS = (_tag("w1", "name", "A", "It is worker A") + " and "
@@ -198,7 +212,8 @@ def test_shadow_two_supported_facts_make_one_call_and_record_probabilities() -> 
     assert record.event == "grounding.tier1.completed"
     assert record.labels == {"tier1_outcome": "ok", "tier1_provider": "stub",
                              "tier1_checked": "2", "tier1_skipped": "0",
-                             "tier1_low": "0", "tier1_mid": "2", "tier1_high": "0"}
+                             "tier1_low": "0", "tier1_mid": "2", "tier1_high": "0",
+                             "tier1_flagged": "0"}
     assert "worker A" not in repr(record)
 
 
@@ -322,3 +337,28 @@ def test_the_live_wording_probe_is_balanced_and_keyless_importable() -> None:
     assert len({case for case, *_ in CASES}) == len(CASES)
     expected = [supported for *_, supported in CASES]
     assert expected.count(False) >= expected.count(True) >= 4
+
+
+# -- flag mode -----------------------------------------------------------------
+
+@pytest.mark.parametrize(("probability", "flagged"), [(0.2, True), (0.5, False), (0.9, False)])
+def test_flag_mode_marks_a_fact_below_the_threshold_and_keeps_it(probability, flagged) -> None:
+    sink = _Sink()
+    response = _turn(TWO_FACTS, StubClaimSupportChecker(probability), telemetry=sink,
+                     flag_threshold=0.5).grounded_response
+    assert [fact.wording_flagged for fact in response.facts] == [flagged, flagged]
+    # never hidden, never demoted: text, verdict and record link are unchanged
+    assert [fact.verdict for fact in response.facts] == ["supported", "supported"]
+    assert all(fact.evidence_refs and fact.text for fact in response.facts)
+    assert sink.records[0].labels["tier1_flagged"] == ("2" if flagged else "0")
+
+
+def test_shadow_never_flags_even_a_low_score() -> None:
+    response = _turn(TWO_FACTS, StubClaimSupportChecker(0.01)).grounded_response
+    assert [fact.wording_flagged for fact in response.facts] == [False, False]
+
+
+def test_flag_mode_fails_open_when_the_checker_fails() -> None:
+    response = _turn(TWO_FACTS, StubClaimSupportChecker(error="http_529"),
+                     flag_threshold=0.5).grounded_response
+    assert [fact.wording_flagged for fact in response.facts] == [False, False]

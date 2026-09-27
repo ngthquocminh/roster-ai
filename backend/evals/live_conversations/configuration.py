@@ -44,9 +44,9 @@ PRICE_KEY_SUFFIX = '_USD_PER_MTOK'
 #: baseline's by construction, so every future live run still compares. A
 #: DECLARED exclusion, not a widened rule: any other new key is still included
 #: by default and fails closed.
-# The G' phase 3 tier-1 keys run the checker in SHADOW: it records a
-# probability per fact and never changes a reply (see settings.py), so they
-# are excluded the same way.
+# The G' phase 3 tier-1 keys only add a probability, and in flag mode a marker,
+# to a fact the reply already contains; they never change what the agent says
+# or does (see settings.py), so they are excluded the same way.
 TELEMETRY_ONLY_KEYS = frozenset({
     'AGENT_TRACE_CONTENT_MODE', 'GROUNDING_TIER1_MODE', 'GROUNDING_TIER1_PROVIDER',
     'TYPESAFE_API_KEY',

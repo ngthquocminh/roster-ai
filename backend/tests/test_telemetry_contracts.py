@@ -55,6 +55,7 @@ def test_telemetry_contract_has_exact_closed_vocabularies() -> None:
             "tier1_low",
             "tier1_mid",
             "tier1_high",
+            "tier1_flagged",
         }
     )
     assert set(get_args(BudgetOutcomeV1)) == {

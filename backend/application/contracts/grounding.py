@@ -145,6 +145,9 @@ class GroundedFactV1:
     # supported by the record. Recorded, never shown or enforced; None when no
     # check ran.
     support_probability: float | None = None
+    # Flag mode only: tier 0 passed but the wording scored below the threshold.
+    # The fact stays visible with an "unsupported wording" marker; never hidden.
+    wording_flagged: bool = False
 
 
 GroundedResponseSegmentV1 = GroundedProseSegmentV1 | GroundedClaimV1 | GroundedFactV1

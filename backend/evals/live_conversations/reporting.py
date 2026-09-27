@@ -42,7 +42,8 @@ def tier1_fact_rows(activity: dict) -> list[dict]:
     """
     return [
         {**{key: segment.get(key)
-            for key in ('text', 'field', 'value', 'verdict', 'failure', 'support_probability')},
+            for key in ('text', 'field', 'value', 'verdict', 'failure', 'support_probability',
+                        'wording_flagged')},
          'tier0_only': restates_value_only(segment.get('text') or '', segment.get('value') or '')}
         for segment in ((activity.get('response') or {}).get('segments') or [])
         if segment.get('kind') == 'fact'
@@ -87,6 +88,7 @@ def summarize_tier1(runs) -> dict:
         'facts': facts,
         'checked': len(checked),
         'tier0_only': sum(1 for fact in facts if fact.get('tier0_only')),
+        'wording_flagged': sum(1 for fact in facts if fact.get('wording_flagged')),
         'supported_unchecked': sum(1 for fact in facts if fact.get('verdict') == 'supported'
                                    and not fact.get('tier0_only')
                                    and fact.get('support_probability') is None),

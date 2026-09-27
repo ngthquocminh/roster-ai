@@ -63,6 +63,7 @@ TELEMETRY_LABEL_KEYS = frozenset(
         "tier1_low",
         "tier1_mid",
         "tier1_high",
+        "tier1_flagged",
     }
 )
 

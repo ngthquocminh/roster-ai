@@ -132,6 +132,24 @@ function FactSegment({
       </span>
     );
   }
+  // Flag mode: the record matched (tier 0) but a wording check found the
+  // sentence unsupported by it. The text stays; the planner opens the record.
+  if (fact.wording_flagged) {
+    return (
+      <span className="inline-flex flex-wrap items-center gap-2" data-fact-state="wording-flagged">
+        <span>{fact.text}</span>
+        <span className="text-xs text-amber-700 dark:text-amber-400">
+          Wording not supported by the record · {fact.field}: {fact.value}
+        </span>
+        <EvidenceRefLinks
+          item={item}
+          navigate={navigate}
+          references={fact.evidence_refs}
+          segmentIndex={segmentIndex}
+        />
+      </span>
+    );
+  }
   return (
     <span className="inline-flex flex-wrap items-center gap-2" data-fact-state="supported">
       <span>{fact.text}</span>

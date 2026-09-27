@@ -292,6 +292,7 @@ describe("ActivityTimeline", () => {
           {
             schema_version: "1", kind: "fact" as const, text: "Ana is qualified for pick",
             field: "qualifications", value: "pick", verdict: "supported" as const, failure: null,
+            support_probability: null, wording_flagged: false,
             evidence_refs: [{ ...ref, group: "workers" as const, record_id: "w1", field: "qualifications",
                               start_minute: null, end_minute: null }],
           },
@@ -300,6 +301,7 @@ describe("ActivityTimeline", () => {
             schema_version: "1", kind: "fact" as const, text: "Ben is on grade 9",
             field: "grade", value: "9", verdict: "failed" as const,
             failure: "value_mismatch" as const, evidence_refs: [],
+            support_probability: null, wording_flagged: false,
           },
         ],
       },
@@ -318,6 +320,36 @@ describe("ActivityTimeline", () => {
     expect(failed?.querySelector("button")).toBeNull();
     // The rest of the answer is unaffected.
     expect(screen.getByText("and")).toBeInTheDocument();
+  });
+
+  it("marks a fact whose wording the record does not support, keeping its text and record link", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const flagged = {
+      ...agentResponse,
+      activity_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            schema_version: "1", kind: "fact" as const, text: "Ana is not qualified for pick",
+            field: "qualifications", value: "pick", verdict: "supported" as const, failure: null,
+            support_probability: 0.04, wording_flagged: true,
+            evidence_refs: [{ ...ref, group: "workers" as const, record_id: "w1", field: "qualifications",
+                              start_minute: null, end_minute: null }],
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[flagged]} />);
+
+    const fact = screen.getByText("Ana is not qualified for pick").closest("[data-fact-state]");
+    expect(fact).toHaveAttribute("data-fact-state", "wording-flagged");
+    expect(fact).toHaveTextContent("Wording not supported by the record · qualifications: pick");
+    expect(fact).not.toHaveTextContent("Verified");
+    expect(fact).not.toHaveTextContent("0.04");
+    expect(fact).toContainElement(
+      screen.getByRole("button", { name: /Evidence: workers w1, qualifications/ }),
+    );
   });
 
   it("deduplicates an agent response delivered by SSE and timeline refetch", () => {

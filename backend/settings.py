@@ -177,9 +177,12 @@ class Settings:
     # export-boundary sanitizer is authoritative whatever this says.
     agent_trace_content_mode: TraceContentMode = "off"
     # G' phase 3: tier-1 claim-support checker (TypeSafe Jev). `off` makes no
-    # request at all; `shadow` records a probability per verified fact and
-    # never changes what the planner sees. No enforcing mode exists yet.
-    grounding_tier1_mode: Literal["off", "shadow"] = "off"
+    # request; `shadow` records a probability per verified fact and changes
+    # nothing the planner sees; `flag` (the default, Minh 2026-09-27) also marks
+    # a fact whose wording scores below the threshold. Nothing is ever stripped
+    # or retried, and with no API key the checker is disabled (fail-open).
+    grounding_tier1_mode: Literal["off", "shadow", "flag"] = "flag"
+    grounding_tier1_flag_threshold: float = 0.5
     # `auto`: TypeSafe directly when TYPESAFE_API_KEY is set, else OpenRouter's
     # Decisions API with OPENROUTER_API_KEY, else the checker is disabled.
     grounding_tier1_provider: Literal["auto", "typesafe", "openrouter"] = "auto"
@@ -322,6 +325,16 @@ def _trace_content_mode(raw: str | None) -> TraceContentMode:
     raise InvalidFlagError(
         f"AGENT_TRACE_CONTENT_MODE must be off or {TRACE_CONTENT_SYNTHETIC_EVAL}"
     )
+
+
+def _probability(name: str, raw: str | None, fallback: float) -> float:
+    try:
+        value = fallback if raw is None or not raw.strip() else float(raw)
+    except ValueError as exc:
+        raise InvalidFlagError(f"{name} must be a number between 0 and 1") from exc
+    if not math.isfinite(value) or not 0.0 < value < 1.0:
+        raise InvalidFlagError(f"{name} must be a number between 0 and 1")
+    return value
 
 
 def _choice(name: str, raw: str | None, allowed: tuple[str, ...], fallback: str) -> str:
@@ -590,7 +603,11 @@ def default_settings() -> Settings:
         agent_trace_content_mode=agent_trace_content_mode,
         grounding_tier1_mode=_choice(  # type: ignore[arg-type]
             "GROUNDING_TIER1_MODE", os.environ.get("GROUNDING_TIER1_MODE"),
-            ("off", "shadow"), "off",
+            ("off", "shadow", "flag"), "flag",
+        ),
+        grounding_tier1_flag_threshold=_probability(
+            "GROUNDING_TIER1_FLAG_THRESHOLD",
+            os.environ.get("GROUNDING_TIER1_FLAG_THRESHOLD"), 0.5,
         ),
         grounding_tier1_provider=_choice(  # type: ignore[arg-type]
             "GROUNDING_TIER1_PROVIDER", os.environ.get("GROUNDING_TIER1_PROVIDER"),

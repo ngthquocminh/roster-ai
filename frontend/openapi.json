@@ -8438,6 +8438,11 @@
               }
             ],
             "title": "Support Probability"
+          },
+          "wording_flagged": {
+            "type": "boolean",
+            "title": "Wording Flagged",
+            "default": false
           }
         },
         "type": "object",

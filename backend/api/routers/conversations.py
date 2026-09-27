@@ -388,6 +388,8 @@ async def execute_agent_turn(
             history=claimed.history,
             workflow_context=workflow_context,
             claim_checker=create_claim_support_checker(settings),
+            flag_threshold=(settings.grounding_tier1_flag_threshold
+                            if settings.grounding_tier1_mode == "flag" else None),
         )
     except Exception as exc:  # noqa: BLE001
         # Reaching a terminal status is what keeps the accepted conversation

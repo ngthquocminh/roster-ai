@@ -93,6 +93,7 @@ def execute_turn(
     approvals: tuple[AgentApprovalDecisionV1, ...] = (),
     workflow_context: AgentMessageV1 | None = None,
     claim_checker: ClaimSupportChecker | None = None,
+    flag_threshold: float | None = None,
 ) -> AgentRunOutcomeV1:
     """Run outside a database transaction, then bind claims to raw tool results."""
     owned_history = history if isinstance(history, AgentTurnV1) else rehydrate_history(history)
@@ -128,7 +129,8 @@ def execute_turn(
     records = trusted_records_by_handle(calculation_results)
     grounded = ground_answer(outcome.answer, deps, by_id, records)
     if claim_checker is not None:
-        grounded = shadow_check_facts(grounded, records, claim_checker, deps)
+        grounded = shadow_check_facts(
+            grounded, records, claim_checker, deps, flag_threshold=flag_threshold)
     return replace(outcome, grounded_response=grounded)
 
 
@@ -151,11 +153,13 @@ def shadow_check_facts(
     records: dict[str, TrustedRecordV1],
     checker: ClaimSupportChecker,
     deps: AgentDepsV1,
+    *,
+    flag_threshold: float | None = None,
 ) -> GroundedResponseV1:
-    """G' phase 3, SHADOW: attach a tier-1 support probability to each fact
-    that passed tier 0. Changes nothing a planner sees, and never raises: a
-    checker failure leaves the response as it was, apart from the probabilities
-    that did come back."""
+    """G' phase 3: attach a tier-1 support probability to each fact that passed
+    tier 0. With `flag_threshold` (flag mode) a fact scoring below it is marked
+    `wording_flagged`; without it (shadow) nothing a planner sees changes.
+    Never raises, and fails open: a checker failure flags nothing."""
     items: list[ClaimSupportItemV1] = []
     unresolved = 0
     try:
@@ -187,10 +191,16 @@ def shadow_check_facts(
     except Exception:  # noqa: BLE001 - shadow must never affect the turn
         probabilities, skipped, error = {}, unresolved, "checker_exception"
     segments = tuple(
-        replace(segment, support_probability=probabilities[f"s{index}"])
+        replace(
+            segment, support_probability=probabilities[f"s{index}"],
+            wording_flagged=(flag_threshold is not None
+                             and probabilities[f"s{index}"] < flag_threshold),
+        )
         if f"s{index}" in probabilities else segment
         for index, segment in enumerate(response.segments)
     )
+    flagged = sum(1 for segment in segments
+                  if isinstance(segment, GroundedFactV1) and segment.wording_flagged)
     values = list(probabilities.values())
     if deps.telemetry is not None:
         try:
@@ -210,6 +220,7 @@ def shadow_check_facts(
                     "tier1_low": str(sum(1 for p in values if p < 0.5)),
                     "tier1_mid": str(sum(1 for p in values if 0.5 <= p < 0.9)),
                     "tier1_high": str(sum(1 for p in values if p >= 0.9)),
+                    "tier1_flagged": str(flagged),
                 },
                 duration_ms=(perf_counter() - started) * 1_000,
             ))

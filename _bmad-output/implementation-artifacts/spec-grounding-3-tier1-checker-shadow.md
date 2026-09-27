@@ -111,3 +111,12 @@ live report records them per turn. Wording probe `evals/tier1_probe.py` (TypeSaf
 `jev-latest`): 12/12 cases on the right side of 0.5 -- supported 0.84-0.98; negated, wrong
 task/hours/function/area and inverted constraint 0.02-0.08; one batched call, 579 ms. Next gate
 decision: flag mode (never strip/retry) once more live runs confirm no false alarms remain.
+
+**Flag mode (2026-09-27, Minh's explicit decision -- the spec's Ask-First on enforcing modes):**
+second live shadow run first: 30/30 turns, 77 facts (68 bare values skipped as tier-0-only,
+9 checked at 0.87-0.94, none below 0.5), one TypeSafe call in 1,023 ms. Then
+`GROUNDING_TIER1_MODE=off|shadow|flag` with **`flag` as the default** and
+`GROUNDING_TIER1_FLAG_THRESHOLD` (default 0.5): a tier-0-supported fact scoring below it gets
+`wording_flagged` and the UI marker "Wording not supported by the record · field: value" beside
+its evidence link. Never stripped, retried or blocked; no key or a checker failure flags nothing.
+The keyless test suite pins the mode `off` (conftest) so a local key never reaches the network.
