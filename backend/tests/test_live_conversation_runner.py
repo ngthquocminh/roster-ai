@@ -82,10 +82,10 @@ def test_assignment_comparison_orders_rows_whose_shift_is_none_on_one_side_only(
 
 def test_judge_receives_only_entities_named_in_visible_reply():
     activity = {'activity_type': 'agent_response', 'response': {'segments': [
-        {'kind': 'prose', 'text': 'Jae is assigned to Packing.'},
+        {'kind': 'prose', 'text': 'Mika is assigned to Packing.'},
     ]}}
     workers = [
-        {'record_id': 'w1', 'name': 'Jae', 'employment_type': 'Full Time',
+        {'record_id': 'w1', 'name': 'Mika', 'employment_type': 'Full Time',
          'grade': 'G3', 'eba': 'E1', 'contracted_hours': 40,
          'qualifications': [{'task_id': 't1', 'rate': 2}],
          'availability_windows': [{'kind': 'roster'}, {'kind': 'availability'}]},
@@ -98,14 +98,14 @@ def test_judge_receives_only_entities_named_in_visible_reply():
     assignments = [{'record_id': 'a1', 'worker_id': 'w1', 'task_id': 't1'}]
     demand = [{'task_id': 't1', 'family': 'outbound'}, {'task_id': 't1', 'family': 'outbound'}]
     assert relevant_entities(activity, workers, tasks, assignments, demand) == {
-        'named_workers': [{'record_id': 'w1', 'name': 'Jae',
+        'named_workers': [{'record_id': 'w1', 'name': 'Mika',
                            'employment_type': 'Full Time', 'grade': 'G3', 'eba': 'E1',
                            'contracted_hours': 40, 'qualified_task_ids': ['t1'],
                            'roster_window_count': 1,
                            'extra_availability_window_count': 1}],
         'named_tasks': [{'record_id': 't1', 'task_id': 't1', 'name': 'Packing',
                          'function': 'Outbound', 'demand_families': ['outbound']}],
-        'named_assignments': [{'record_id': 'a1', 'worker_id': 'w1', 'worker_name': 'Jae',
+        'named_assignments': [{'record_id': 'a1', 'worker_id': 'w1', 'worker_name': 'Mika',
                                'task_id': 't1', 'task_name': 'Packing'}],
     }
 

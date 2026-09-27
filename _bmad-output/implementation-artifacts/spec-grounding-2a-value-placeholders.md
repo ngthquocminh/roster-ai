@@ -32,7 +32,7 @@ context:
 | Scenario | Input / State | Expected Output / Behavior | Error Handling |
 |----------|--------------|---------------------------|----------------|
 | Value placeholder | `"Wednesday outbound needs {{r1}}."`, r1 returned | prose + supported claim (value 2160 minutes) + prose | N/A |
-| Numbered list, times, names | `"1. Draft\n2. Run at 06:00 for Grid P 8GR"` | One prose segment, no retry | N/A |
+| Numbered list, times, names | `"1. Draft\n2. Run at 06:00 for Forklift C01"` | One prose segment, no retry | N/A |
 | Unknown handle, calculation ran | `{{r9}}` | Failed claim `missing_evidence`, answer still delivered | Not a turn failure |
 | Placeholder, no calculation this turn | `{{r1}}` | One corrective retry (`claim_without_calculation`) | After retries: failed claim, answer delivered |
 | Malformed placeholder | `{{}}`, `{{ value }}` | One corrective retry (`claim_gap`) | After retries: literal text shown as prose |

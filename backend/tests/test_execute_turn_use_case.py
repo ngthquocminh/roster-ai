@@ -59,9 +59,9 @@ def test_history_retains_ordered_visible_clarification_choices():
         scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
         occurred_at=NOW, clarification=ResolvedClarificationV1(
             question='Which worker?', candidates=(
-                EntityCandidateV1(group='workers', record_id='worker-b', label='Jae',
+                EntityCandidateV1(group='workers', record_id='worker-b', label='Mika',
                                   scenario_version_id=deps.scenario_version_id),
-                EntityCandidateV1(group='workers', record_id='worker-a', label='Bhargav',
+                EntityCandidateV1(group='workers', record_id='worker-a', label='Arjun',
                                   scenario_version_id=deps.scenario_version_id),
             ), dropped_candidate_count=6,
         ),
@@ -69,7 +69,7 @@ def test_history_retains_ordered_visible_clarification_choices():
     history = rehydrate_history((activity,))
     text = history.messages[0].parts[0].text
     assert text.startswith('Which worker?')
-    assert text.index('Jae') < text.index('Bhargav')
+    assert text.index('Mika') < text.index('Arjun')
     assert 'worker-b' in text and 'worker-a' in text
     assert '6 additional candidates were not displayed' in text
 

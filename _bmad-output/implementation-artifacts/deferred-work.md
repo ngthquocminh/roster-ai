@@ -1177,3 +1177,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
   summary: The live-eval judge was never called on three turns of the 2026-09-27 widening run (B8, C1, C2 -> incomplete, judge_usage.attempts empty).
   evidence: Answers were correct on inspection; no judge attempt or error was recorded, so the cause is in the harness, not the model.
+
+## Deferred from: code review of spec-anonymise-fixture-names (2026-09-26)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-anonymise-fixture-names.md`
+  summary: The promoted live-conversation baseline (`backend/evals/baselines/live-conversations.json`, 87/90) was measured on the pre-anonymisation fixture names and prompt examples, and neither `configuration_digest` nor `behavioral_digest` covers the fixture or the instructions, so the next regression comparison silently compares two different setups.
+  evidence: Blind Hunter review; the anonymisation rewrote every task and member name the live scenarios resolve, and the `scheduling_instructions.py` verbatim-copy examples. Re-baselining needs a paid live-provider run, out of scope for a data-only change. Revisit trigger: the next live-conversation run -- treat it as a new baseline, not a regression comparison.

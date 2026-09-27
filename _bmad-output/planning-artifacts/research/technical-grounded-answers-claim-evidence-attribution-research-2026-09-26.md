@@ -281,7 +281,7 @@ specification: IDs are **stable** ("the same source should keep the same ID acro
 - Only *calculation* tools mint a citable ID today (`result_id`, a 64-character hash). Inspect tools
   return records (workers, tasks, qualifications, locks) that carry `record_id`s and resolve to
   `EvidenceRefV1(group, record_id, field)` — already field-addressable — but **prose cannot cite
-  them**, so "Worker W-12 is qualified for Grid P 8GR" is ungated.
+  them**, so "Worker W-12 is qualified for Forklift C01" is ungated.
 - The runtime has a dedicated retry rule, `result_id_mistyped`, because live models transcribed the
   64-character hash as 63 and 68 characters. Short, turn-scoped handles (`r1`, `w3`, `t12`) mapped to
   the long ID in the registry remove that failure class — this is what "right-sized, inspectable"
@@ -293,8 +293,8 @@ _Source: https://developers.openai.com/api/docs/guides/citation-formatting_
 | Format | Example | Fits structured output? | Model reliability | Streaming | Notes |
 |---|---|---|---|---|---|
 | **F1 Segment array** (current) | `[{"kind":"prose",…},{"kind":"claim",…}]` | Native | High for shape; awkward for prose flow — sentences are split around every claim | Buffered | A claim segment renders *no text of its own*, so the sentence around it must avoid the number |
-| **F2 Inline tags in a string field** (R6, your idea) | `"text": "<claim ev='w3'>Ana</claim> can cover Grid P 8GR"` | Yes — tags live inside one JSON string | XML-style tags are well followed by Claude-family models (Anthropic guidance); attribute quotes need JSON escaping — prefer single quotes or a bare `ev=w3` | Tag boundaries are detectable mid-stream | One field keeps prose natural and removes most "split the sentence" contortions |
-| **F3 Reserved-token markers** (R3) | `…can cover Grid P 8GRcitew3` | Yes | Vendor-tuned for OpenAI models; "custom or unfamiliar formats increase cognitive load" | Buffer to close marker | **Point** citation — marks *where*, not *which words*; OpenAI warns not to place markers inside bold/italic/code |
+| **F2 Inline tags in a string field** (R6, your idea) | `"text": "<claim ev='w3'>Ana</claim> can cover Forklift C01"` | Yes — tags live inside one JSON string | XML-style tags are well followed by Claude-family models (Anthropic guidance); attribute quotes need JSON escaping — prefer single quotes or a bare `ev=w3` | Tag boundaries are detectable mid-stream | One field keeps prose natural and removes most "split the sentence" contortions |
+| **F3 Reserved-token markers** (R3) | `…can cover Forklift C01citew3` | Yes | Vendor-tuned for OpenAI models; "custom or unfamiliar formats increase cognitive load" | Buffer to close marker | **Point** citation — marks *where*, not *which words*; OpenAI warns not to place markers inside bold/italic/code |
 | **F4 Plain text + post-hoc alignment** (R4) | model writes prose; a second pass extracts claims and links evidence | N/A | Moves the burden to an extractor (LLM or NLI) | Post-answer | Cohere `accurate` mode, RAGAS, Claimify; adds a model call per turn |
 | **F5 Value references** (R5) | `"text": "Required minutes: {{r1}}"` → app renders `1,240 minutes` | Yes | Very high: the model copies a handle, never a number | Placeholder is atomic | Generalises today's claim segment into an inline placeholder; the rendered value cannot be wrong |
 
@@ -364,7 +364,7 @@ https://github.com/vibrantlabsai/ragas/blob/main/docs/concepts/metrics/available
 
 ## Architectural Patterns and Design
 
-> Running example for every option: *"Ana is qualified for Grid P 8GR, and 12 workers are available
+> Running example for every option: *"Ana is qualified for Forklift C01, and 12 workers are available
 > on Monday."* — one **record fact** (qualification) and one **derived quantity** (a count).
 > Requirement D1 applies throughout: verify the evidence ID **and** the content it wraps.
 
@@ -375,15 +375,15 @@ positives (ordered-list markers, `06:00` vs `06:00:00`). Numbers only; "Ana is q
 unchecked. Satisfies D1 only for calculator claims.
 
 **B. Claim-locked rendering (application verbalises claims).** The model emits typed claims only —
-`<claim ev='w3' type='qualified' task='Grid P 8GR'/>` and `{{r1}}` — and the application renders
+`<claim ev='w3' type='qualified' task='Forklift C01'/>` and `{{r1}}` — and the application renders
 the claim sentence from a template and the value from the calculator result. The model writes only
 connective prose. "Provenance Before Prose" (2026) reports 98.5–100% reproducibility vs 61.1–79.5%
 for templates whose slots the LLM still fills, and zero direction inversions. Content check holds
 **by construction**; cost is one template per claim type and stiffer prose.
 
 **C. Model-worded claims with typed attributes (deterministic content check).**
-`<claim ev='w3' field='qualifications' value='Grid P 8GR'>Ana is qualified for Grid P 8GR</claim>`.
-The gate checks (1) `w3` issued this turn, (2) record `w3`'s `qualifications` contains `Grid P 8GR`,
+`<claim ev='w3' field='qualifications' value='Forklift C01'>Ana is qualified for Forklift C01</claim>`.
+The gate checks (1) `w3` issued this turn, (2) record `w3`'s `qualifications` contains `Forklift C01`,
 (3) the `value` appears in the wrapped text. Residual gap: wording that contradicts the attributes
 ("Ana is **not** qualified…") passes a lexical check.
 
@@ -638,7 +638,7 @@ exact token appears in trusted text, and any derived quantity must be a calculat
 `result_id`. It protects numbers, but it is brittle and narrow. Ordered-list markers and time formats
 trip it; whether an answer passes depends on which tokens happen to sit in context; every false
 positive costs a full main-model retry and, after `retries_limit`, the whole turn; and it says
-nothing about non-numeric facts such as "Ana is qualified for Grid P 8GR".
+nothing about non-numeric facts such as "Ana is qualified for Forklift C01".
 
 The field has moved to **claim-level attribution**: the application owns evidence identifiers, the
 model only references them, and each claim is verified on its own — what recent work on research

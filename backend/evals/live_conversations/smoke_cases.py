@@ -23,7 +23,7 @@ CONVERSATION_TOOL_SMOKES = (
         second_turn='How many workers are in this scenario?', expected_activity='agent_response'),
     ConversationToolSmokeCase(
         id='draft-max-hours', capability='scheduling_draft', precondition='baseline',
-        second_turn='Create a draft capping Jae Rerekura at 40 hours.', expected_activity='draft'),
+        second_turn='Create a draft capping Mika Tane at 40 hours.', expected_activity='draft'),
     ConversationToolSmokeCase(
         id='baseline-proposal', capability='scheduling_baseline', precondition='candidate',
         second_turn='Propose the completed candidate as the new baseline for my approval.',

@@ -435,18 +435,43 @@ def test_contract_digests_match_raw_file_sha256():
         assert digests[key] == expected
 
 
-def test_contract_digests_reproduce_the_already_recorded_values():
-    """Locks the algorithm against the value Story 1.9 committed."""
-    digests = contract_digests(REPO_ROOT / "data" / "contract")
-    recorded = json.loads(
+def test_contract_digests_reproduce_the_already_recorded_values(tmp_path):
+    """Locks the algorithm against the value Story 1.9 committed.
+
+    Recomputed over the contract bytes *as they were at Story 1.9's own
+    recorded commit*, read from git, not over today's files: the contracts are
+    regenerated whenever a fixture changes (the 2026-09-26 anonymisation did),
+    and a lock that compares against the moving files would break on every
+    regeneration -- the non-monotone shape EVIDENCE-CONVENTION.md forbids.
+    """
+    recorded_document = json.loads(
         (
             REPO_ROOT
             / "evidence"
             / "story-1.9"
             / "gate-a-viewer-parity-and-mutation-denial.json"
         ).read_text(encoding="utf-8")
-    )["contract_digests"]
-    assert digests == recorded
+    )
+    commit = recorded_document["version_bindings"]["code"]["git_commit"]
+    try:
+        reachable = subprocess.run(
+            ["git", "cat-file", "-e", f"{commit}^{{commit}}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+        ).returncode == 0
+    except FileNotFoundError:
+        reachable = False
+    if not reachable:
+        pytest.skip(f"Story 1.9's commit {commit[:12]} is not in this clone")
+    for name in _git("ls-tree", "--name-only", commit, "data/contract/").splitlines():
+        blob = subprocess.run(
+            ["git", "show", f"{commit}:{name}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=True,
+        ).stdout
+        (tmp_path / Path(name).name).write_bytes(blob)
+    assert contract_digests(tmp_path) == recorded_document["contract_digests"]
 
 
 def test_image_binding_falls_back_honestly_when_build_manifest_is_absent(tmp_path):

@@ -100,7 +100,7 @@ context:
 `openrouter:openai/gpt-5.6-luna`, judge `openrouter:google/gemini-2.5-flash`. 30/30 turns passed;
 38 facts reached tier 0 `supported` and all 38 got a tier-1 probability (0 unchecked, no checker
 errors); no grounded response changed. Below 0.5: three facts, all the same bare task name
-`C Fork | Grid P 8GR` (0.43, 0.37, 0.17) whose text equals the record's `name` exactly -- a
+`Chiller Putaway | Forklift C01` (0.43, 0.37, 0.17) whose text equals the record's `name` exactly -- a
 checker false negative on a name-only "claim", not a wrong fact. Evidence for any later
 flag/strip decision: bare-name facts need a different question (or exclusion) before tier 1
 can enforce.

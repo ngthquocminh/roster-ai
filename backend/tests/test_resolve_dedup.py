@@ -44,11 +44,11 @@ def test_resolve_member_dedupes_multiple_rows_for_same_person():
     """Two Member rows sharing one contact_id (e.g. two roster windows) must
     resolve as a single candidate, not trigger clarification (CR-01)."""
     problem = _FakeProblem(members=[
-        _member("c1", "Jae Rerekura"),
-        _member("c1", "Jae Rerekura"),
+        _member("c1", "Mika Tane"),
+        _member("c1", "Mika Tane"),
     ])
 
-    result = _resolve_member(problem, "Jae")
+    result = _resolve_member(problem, "Mika")
 
     assert result.resolved_id == "c1"
     assert result.clarification is None
@@ -59,47 +59,47 @@ def test_resolve_member_still_clarifies_for_genuinely_different_people():
     """Two DIFFERENT people whose names share a substring must still trigger
     clarification, with each name listed exactly once (not per-row)."""
     problem = _FakeProblem(members=[
-        _member("c1", "Jae Rerekura"),
-        _member("c1", "Jae Rerekura"),   # extra row for the same person
-        _member("c2", "Jae Smith"),
+        _member("c1", "Mika Tane"),
+        _member("c1", "Mika Tane"),   # extra row for the same person
+        _member("c2", "Mika Smith"),
     ])
 
-    result = _resolve_member(problem, "Jae")
+    result = _resolve_member(problem, "Mika")
 
     assert result.resolved_id is None
     assert result.clarification is not None
-    assert result.clarification.count("Jae Rerekura") == 1, (
+    assert result.clarification.count("Mika Tane") == 1, (
         "A person with multiple rows must appear once in the clarification list"
     )
-    assert "Jae Smith" in result.clarification
+    assert "Mika Smith" in result.clarification
 
 
 def test_resolve_member_zero_match_lists_each_person_once():
     """The zero-match 'Valid members' listing must not repeat a multi-row person."""
     problem = _FakeProblem(members=[
-        _member("c1", "Jae Rerekura"),
-        _member("c1", "Jae Rerekura"),
-        _member("c2", "Gary Lau"),
+        _member("c1", "Mika Tane"),
+        _member("c1", "Mika Tane"),
+        _member("c2", "Owen Hale"),
     ])
 
     result = _resolve_member(problem, "NoSuchPerson")
 
     assert result.error is not None
-    assert result.error.count("Jae Rerekura") == 1
-    assert result.error.count("Gary Lau") == 1
+    assert result.error.count("Mika Tane") == 1
+    assert result.error.count("Owen Hale") == 1
 
 
 def test_resolve_task_zero_match_lists_each_task_once():
     """WR-04: the 'Valid tasks' listing must not repeat a task_id that appears
     more than once in problem.tasks."""
     problem = _FakeProblem(tasks=[
-        _task("t1", "C Pick"),
-        _task("t1", "C Pick"),
-        _task("t2", "F Pick"),
+        _task("t1", "Chiller Pick"),
+        _task("t1", "Chiller Pick"),
+        _task("t2", "Freezer Pick"),
     ])
 
     result = _resolve_task(problem, "NoSuchTask")
 
     assert result.error is not None
-    assert result.error.count("'C Pick'") == 1
-    assert result.error.count("'F Pick'") == 1
+    assert result.error.count("'Chiller Pick'") == 1
+    assert result.error.count("'Freezer Pick'") == 1
