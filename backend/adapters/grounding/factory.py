@@ -62,6 +62,7 @@ def create_claim_support_checker(settings: Settings) -> ClaimSupportChecker | No
         endpoint=endpoint, api_key=key, model=settings.grounding_tier1_model or model,
         timeout_seconds=settings.grounding_tier1_timeout_seconds,
         token_budget=settings.grounding_tier1_token_budget,
+        provider=provider,
     )
 
 

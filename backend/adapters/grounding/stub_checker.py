@@ -8,6 +8,7 @@ class StubClaimSupportChecker:
     """Returns a fixed probability per item, or a fixed error; records calls."""
 
     name = "stub"
+    provider = "stub"
 
     def __init__(self, probability: float = 0.95, *, error: str | None = None) -> None:
         self._probability = probability

@@ -49,6 +49,7 @@ def test_telemetry_contract_has_exact_closed_vocabularies() -> None:
             "model",
             "cost_basis",
             "tier1_outcome",
+            "tier1_provider",
             "tier1_checked",
             "tier1_skipped",
             "tier1_low",

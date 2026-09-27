@@ -1160,3 +1160,13 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-grounding-2a-value-placeholders.md`
   summary: A unit typed after a placeholder ("{{r1}} minutes") renders twice ("2160 minutes minutes"); nothing detects it.
   evidence: The gate renders value plus unit and the prompt only asks the model not to repeat the unit (phase 2a review, Blind Hunter).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: Online evaluation of whole answers (asynchronous, sampled; Jev as the always-on tier, an LLM judge only for uncertain cases) is deferred together with phase 4.
+  evidence: Minh's decision 2026-09-27 after the live shadow run -- about 88% of answer text (by characters) is untagged and unchecked; an inline LLM judge would add seconds and roughly double model cost per turn, so any whole-answer check must be off the reply path.
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-3-tier1-checker-shadow.md`
+  summary: Moving the tier-1 check off the reply path (background worker) is shelved until measured latency justifies it.
+  evidence: The probe measured one batched Jev call at 579 ms (TypeSafe direct, 12 facts); decide from the per-turn checker latency the live report now records.
+- source_spec: `_bmad-output/implementation-artifacts/spec-grounding-2b-fact-claim-tags.md`
+  summary: Raise the tagged share of answers -- guidance and goldens that make the model tag attributes and counts it reads (hours, grade, record counts), not only names.
+  evidence: Live shadow run 2026-09-27: facts were about 12% of answer text; untagged prose held checkable values such as contracted hours, grades and "76 assignments".

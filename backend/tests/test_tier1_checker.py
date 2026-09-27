@@ -65,6 +65,7 @@ def test_provider_selection(overrides, endpoint, model) -> None:
     checker = create_claim_support_checker(_settings(**overrides))
     assert isinstance(checker, JevClaimSupportChecker)
     assert (checker._endpoint, checker._model) == (endpoint, model)
+    assert checker.provider == ("typesafe" if endpoint == TYPESAFE_ENDPOINT else "openrouter")
 
 
 def test_a_missing_key_disables_the_checker_with_one_warning(caplog) -> None:
@@ -177,7 +178,7 @@ def _turn(text: str, checker, *, telemetry=None):
                         claim_checker=checker)
 
 
-TWO_FACTS = (_tag("w1", "name", "A", "Worker A") + " and "
+TWO_FACTS = (_tag("w1", "name", "A", "It is worker A") + " and "
              + _tag("w1", "qualifications", "pick", "A is qualified for pick"))
 
 
@@ -186,7 +187,7 @@ def test_shadow_two_supported_facts_make_one_call_and_record_probabilities() -> 
     plain = _turn(TWO_FACTS, None).grounded_response
     shadow = _turn(TWO_FACTS, checker, telemetry=sink).grounded_response
     (items,) = checker.calls
-    assert [item.claim_text for item in items] == ["Worker A", "A is qualified for pick"]
+    assert [item.claim_text for item in items] == ["It is worker A", "A is qualified for pick"]
     assert "name: A" in items[0].evidence_text and "ev" not in items[0].evidence_text.split()
     assert [fact.support_probability for fact in shadow.facts] == [0.8, 0.8]
     # nothing else about the response changes
@@ -195,9 +196,10 @@ def test_shadow_two_supported_facts_make_one_call_and_record_probabilities() -> 
         for s in shadow.segments)) == plain
     (record,) = sink.records
     assert record.event == "grounding.tier1.completed"
-    assert record.labels == {"tier1_outcome": "ok", "tier1_checked": "2", "tier1_skipped": "0",
+    assert record.labels == {"tier1_outcome": "ok", "tier1_provider": "stub",
+                             "tier1_checked": "2", "tier1_skipped": "0",
                              "tier1_low": "0", "tier1_mid": "2", "tier1_high": "0"}
-    assert "Worker A" not in repr(record)
+    assert "worker A" not in repr(record)
 
 
 def test_mode_off_makes_no_request_and_leaves_the_field_null() -> None:
@@ -262,3 +264,61 @@ def test_the_timeout_bounds_the_whole_turn_not_each_batch() -> None:
     checker._timeout = 0.0  # already spent before the first batch
     result = checker.check(ITEMS)
     assert (result.probabilities, result.skipped, result.error) == ({}, 2, "timeout")
+
+
+# -- bare-value facts and the live-eval report ------------------------------
+
+@pytest.mark.parametrize(("text", "value", "bare"), [
+    ("C Fork | Grid P 8GR", "C Fork | Grid P 8GR", True),
+    ("**C Fork | Grid P 8GR**", "C Fork | Grid P 8GR", True),
+    ("pick.", "Pick", True),
+    ("A is qualified for pick", "pick", False),
+    ("Maximum Agency Shifts: 6 weekly", "6", False),
+    ("", "", False),
+])
+def test_restates_value_only(text, value, bare) -> None:
+    from application.grounding.claim_tags import restates_value_only
+
+    assert restates_value_only(text, value) is bare
+
+
+def test_a_fact_that_only_restates_its_value_is_not_sent_to_tier1() -> None:
+    checker = StubClaimSupportChecker()
+    response = _turn(_tag("w1", "name", "A", "**A**") + " and "
+                     + _tag("w1", "qualifications", "pick", "A is qualified for pick"),
+                     checker).grounded_response
+    (items,) = checker.calls
+    assert [item.claim_text for item in items] == ["A is qualified for pick"]
+    assert [fact.support_probability for fact in response.facts] == [None, 0.95]
+    # only bare facts: no request at all
+    bare = StubClaimSupportChecker()
+    _turn(_tag("w1", "name", "A", "A"), bare)
+    assert bare.calls == []
+
+
+def test_the_report_summarises_checker_latency_provider_and_tier0_only_facts() -> None:
+    from evals.live_conversations.reporting import summarize_tier1, tier1_fact_rows
+
+    activity = {"response": {"segments": [
+        {"kind": "fact", "text": "A", "field": "name", "value": "A",
+         "verdict": "supported", "support_probability": None},
+        {"kind": "fact", "text": "A is qualified for pick", "field": "qualifications",
+         "value": "pick", "verdict": "supported", "support_probability": 0.2},
+    ]}}
+    turn = {"tier1_facts": tier1_fact_rows(activity), "tier1": {
+        "labels": {"tier1_outcome": "ok", "tier1_provider": "typesafe"}, "duration_ms": 310.0}}
+    summary = summarize_tier1([{"run_id": "r", "prefixes": [
+        {"scenario": "A", "turns": [turn, {"tier1_facts": None, "tier1": None}]}]}])
+    assert (summary["checked"], summary["tier0_only"], summary["supported_unchecked"]) == (1, 1, 0)
+    assert summary["checker_providers"] == {"typesafe": 1}
+    assert summary["checker_outcomes"] == {"ok": 1}
+    assert summary["checker_latency_ms"] == {"median": 310.0, "p95": 310.0, "max": 310.0}
+    assert [fact["text"] for fact in summary["low_probability"]] == ["A is qualified for pick"]
+
+
+def test_the_live_wording_probe_is_balanced_and_keyless_importable() -> None:
+    from evals.tier1_probe import CASES
+
+    assert len({case for case, *_ in CASES}) == len(CASES)
+    expected = [supported for *_, supported in CASES]
+    assert expected.count(False) >= expected.count(True) >= 4

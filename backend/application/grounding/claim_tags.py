@@ -91,11 +91,28 @@ def parse_claim_tags(text: str) -> tuple[TagPart, ...]:
     return tuple(parts)
 
 
+_NOISE = re.compile(r"[\s*_`'\".,;:!?()\[\]-]+")
+
+
+def restates_value_only(text: str, value: str) -> bool:
+    """True when a fact's wording says nothing beyond its checked value.
+
+    `<claim ... value='C Fork | Grid P 8GR'>C Fork | Grid P 8GR</claim>` asserts
+    no relation, so tier 0 has already proven all of it and a wording check
+    has nothing to judge (G' phase 3: a bare name scored 0.17-0.43 while
+    correct). Markdown emphasis, punctuation, spacing and case are ignored.
+    """
+    def normalized(raw: str) -> str:
+        return _NOISE.sub(" ", raw).strip().casefold()
+
+    return bool(normalized(value)) and normalized(text) == normalized(value)
+
+
 def fact_handles(text: str) -> tuple[str, ...]:
     return tuple(part.ev for part in parse_claim_tags(text) if isinstance(part, FactTagPart))
 
 
 __all__ = [
     "FactTagPart", "REQUIRED_ATTRIBUTES", "TagPart", "PlainTextPart",
-    "fact_handles", "parse_claim_tags",
+    "fact_handles", "parse_claim_tags", "restates_value_only",
 ]

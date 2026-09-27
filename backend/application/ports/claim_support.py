@@ -30,6 +30,8 @@ class ClaimSupportChecker(Protocol):
     """Implementations must not raise; failures are returned as `error`."""
 
     name: str
+    #: Closed label for telemetry: "typesafe", "openrouter" or "stub".
+    provider: str
 
     def check(self, items: tuple[ClaimSupportItemV1, ...]) -> ClaimSupportResultV1: ...
 

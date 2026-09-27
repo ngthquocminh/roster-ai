@@ -74,9 +74,10 @@ def _payload(model: str, batch: list[ClaimSupportItemV1]) -> dict:
 class JevClaimSupportChecker:
     def __init__(
         self, *, endpoint: str, api_key: str, model: str, timeout_seconds: float,
-        token_budget: int, client: httpx.Client | None = None,
+        token_budget: int, provider: str = "typesafe", client: httpx.Client | None = None,
     ) -> None:
         self.name = f"jev:{model}"
+        self.provider = provider
         self._endpoint = endpoint
         self._api_key = api_key
         self._model = model

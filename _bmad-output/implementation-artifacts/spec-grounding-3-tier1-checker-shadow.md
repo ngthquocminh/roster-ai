@@ -104,3 +104,10 @@ errors); no grounded response changed. Below 0.5: three facts, all the same bare
 checker false negative on a name-only "claim", not a wrong fact. Evidence for any later
 flag/strip decision: bare-name facts need a different question (or exclusion) before tier 1
 can enforce.
+
+**Follow-up (2026-09-27, agreed with Minh):** facts whose text only restates the checked value
+skip tier 1 (tier 0 proved them); the checker's provider and latency are now telemetry and the
+live report records them per turn. Wording probe `evals/tier1_probe.py` (TypeSafe direct,
+`jev-latest`): 12/12 cases on the right side of 0.5 -- supported 0.84-0.98; negated, wrong
+task/hours/function/area and inverted constraint 0.02-0.08; one batched call, 579 ms. Next gate
+decision: flag mode (never strip/retry) once more live runs confirm no false alarms remain.

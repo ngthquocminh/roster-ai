@@ -37,6 +37,7 @@ from application.grounding.evidence_registry import (
     trusted_records_by_handle,
     trusted_results_by_citation,
 )
+from application.grounding.claim_tags import restates_value_only
 from application.grounding.verbalize import verbalize_record
 from application.ports.claim_support import ClaimSupportChecker, ClaimSupportItemV1
 from application.grounding.gate import ground_answer
@@ -162,6 +163,9 @@ def shadow_check_facts(
             if not (isinstance(segment, GroundedFactV1) and segment.verdict == "supported"
                     and segment.evidence_refs):
                 continue
+            if restates_value_only(segment.text, segment.value):
+                # Tier 0 already proved everything this text says.
+                continue
             # A tier-0 fact carries exactly one locator: its own record.
             trusted = _record_for(records, segment.evidence_refs[0])
             if trusted is None:
@@ -199,6 +203,7 @@ def shadow_check_facts(
                 ),
                 labels={
                     "tier1_outcome": error or "ok",
+                    "tier1_provider": str(getattr(checker, "provider", "unknown")),
                     "tier1_checked": str(len(probabilities)),
                     "tier1_skipped": str(skipped),
                     # Probability buckets, never the fact or its record.

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from application.grounding.claim_tags import restates_value_only
 from evals.live_conversations.cases import load_scenarios, prefix_executions
 from evals.live_conversations.inventory import require_complete_coverage
 from evals.report import _readiness_verdict
@@ -34,13 +35,25 @@ TIER1_REVIEW_THRESHOLD = 0.5
 
 
 def tier1_fact_rows(activity: dict) -> list[dict]:
-    """G' phase 3: every fact segment of one reply, with its shadow probability."""
+    """G' phase 3: every fact segment of one reply, with its shadow probability.
+
+    `tier0_only` marks a fact whose text only restates its checked value: tier 0
+    proved all of it, so tier 1 deliberately skips it.
+    """
     return [
-        {key: segment.get(key)
-         for key in ('text', 'field', 'value', 'verdict', 'failure', 'support_probability')}
+        {**{key: segment.get(key)
+            for key in ('text', 'field', 'value', 'verdict', 'failure', 'support_probability')},
+         'tier0_only': restates_value_only(segment.get('text') or '', segment.get('value') or '')}
         for segment in ((activity.get('response') or {}).get('segments') or [])
         if segment.get('kind') == 'fact'
     ]
+
+
+def _percentile(values: list[float], fraction: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[min(len(ordered) - 1, int(round(fraction * (len(ordered) - 1))))]
 
 
 def summarize_tier1(runs) -> dict:
@@ -55,11 +68,34 @@ def summarize_tier1(runs) -> dict:
         for fact in turn.get('tier1_facts') or []
     ]
     checked = [fact for fact in facts if fact.get('support_probability') is not None]
+    calls = [
+        turn['tier1']
+        for run in runs
+        for execution in run.get('prefixes') or []
+        for turn in execution.get('turns') or []
+        if turn.get('tier1')
+    ]
+    latencies = [call['duration_ms'] for call in calls
+                 if isinstance(call.get('duration_ms'), (int, float))]
+    outcomes: dict = {}
+    providers: dict = {}
+    for call in calls:
+        labels = call.get('labels') or {}
+        outcomes[labels.get('tier1_outcome')] = outcomes.get(labels.get('tier1_outcome'), 0) + 1
+        providers[labels.get('tier1_provider')] = providers.get(labels.get('tier1_provider'), 0) + 1
     return {
         'facts': facts,
         'checked': len(checked),
+        'tier0_only': sum(1 for fact in facts if fact.get('tier0_only')),
         'supported_unchecked': sum(1 for fact in facts if fact.get('verdict') == 'supported'
+                                   and not fact.get('tier0_only')
                                    and fact.get('support_probability') is None),
+        'checker_calls': len(calls),
+        'checker_outcomes': outcomes,
+        'checker_providers': providers,
+        'checker_latency_ms': {'median': _percentile(latencies, .5),
+                               'p95': _percentile(latencies, .95),
+                               'max': max(latencies) if latencies else None},
         'review_threshold': TIER1_REVIEW_THRESHOLD,
         'low_probability': [fact for fact in checked
                             if fact['support_probability'] < TIER1_REVIEW_THRESHOLD],

@@ -203,6 +203,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             assignments = read_group(app, 'baseline-assignments')
             claims = [s for s in activity.get('response', {}).get('segments', []) if s['kind'] == 'claim']
             row['tier1_facts'] = tier1_fact_rows(activity)
+            row['tier1'] = usage.pop('tier1', None)
             for claim in claims:
                 failures.extend(verify_claim(claim, workers=workers, assignments=assignments, demand=demand))
             verified = {'id': row['id'] + ':facts', 'worker_count': len(workers),

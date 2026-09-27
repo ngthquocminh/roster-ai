@@ -57,6 +57,7 @@ TELEMETRY_LABEL_KEYS = frozenset(
         "model",
         "cost_basis",
         "tier1_outcome",
+        "tier1_provider",
         "tier1_checked",
         "tier1_skipped",
         "tier1_low",
