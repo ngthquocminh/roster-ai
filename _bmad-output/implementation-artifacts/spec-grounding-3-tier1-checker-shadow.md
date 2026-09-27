@@ -2,7 +2,7 @@
 title: 'Grounding 3: tier-1 claim-support checker port with Jev adapter, shadow mode'
 type: 'feature'
 created: '2026-09-27'
-status: 'in-review'
+status: 'done'
 baseline_commit: '023661c6f94ee9b97fdbcfb36f74e0b6dd838c71'
 review_loop_iteration: 0
 depends_on: 'spec-grounding-2b-fact-claim-tags.md'
@@ -96,5 +96,11 @@ context:
   [`reporting.py`](../../backend/evals/live_conversations/reporting.py)
 - Tests: [`test_tier1_checker.py`](../../backend/tests/test_tier1_checker.py)
 
-**Open:** acceptance criterion 2 (a live-eval run in shadow) is NOT yet run -- it waits for
-Minh's explicit permission and key. Status stays `in-review` until then.
+**Live shadow run (2026-09-27, with Minh's permission):** one repetition of A/B/C, agent
+`openrouter:openai/gpt-5.6-luna`, judge `openrouter:google/gemini-2.5-flash`. 30/30 turns passed;
+38 facts reached tier 0 `supported` and all 38 got a tier-1 probability (0 unchecked, no checker
+errors); no grounded response changed. Below 0.5: three facts, all the same bare task name
+`C Fork | Grid P 8GR` (0.43, 0.37, 0.17) whose text equals the record's `name` exactly -- a
+checker false negative on a name-only "claim", not a wrong fact. Evidence for any later
+flag/strip decision: bare-name facts need a different question (or exclusion) before tier 1
+can enforce.
