@@ -141,6 +141,10 @@ class GroundedFactV1:
     evidence_refs: tuple[EvidenceRefV1, ...] = ()
     verdict: GroundingVerdictV1 = "failed"
     failure: FactFailureV1 | None = None
+    # G' phase 3, shadow only: the tier-1 checker's probability that `text` is
+    # supported by the record. Recorded, never shown or enforced; None when no
+    # check ran.
+    support_probability: float | None = None
 
 
 GroundedResponseSegmentV1 = GroundedProseSegmentV1 | GroundedClaimV1 | GroundedFactV1

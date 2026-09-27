@@ -34,6 +34,9 @@ TelemetryEventV1 = Literal[
     "job.leased",
     "run.first_event.persisted",
     "approval.decided",
+    # G' phase 3: one per turn whose supported facts went to the tier-1
+    # checker. Counts and probability buckets only, never fact or record text.
+    "grounding.tier1.completed",
 ]
 
 TELEMETRY_LABEL_KEYS = frozenset(
@@ -53,6 +56,12 @@ TELEMETRY_LABEL_KEYS = frozenset(
         "approval_outcome",
         "model",
         "cost_basis",
+        "tier1_outcome",
+        "tier1_checked",
+        "tier1_skipped",
+        "tier1_low",
+        "tier1_mid",
+        "tier1_high",
     }
 )
 

@@ -60,6 +60,7 @@ from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
 from application.use_cases.conversation_workflow_context import load_workflow_context
+from adapters.grounding.factory import create_claim_support_checker
 from application.use_cases.execute_turn import (
     activity_payload,
     execute_turn,
@@ -386,6 +387,7 @@ async def execute_agent_turn(
             calculation_results=raw_results,
             history=claimed.history,
             workflow_context=workflow_context,
+            claim_checker=create_claim_support_checker(settings),
         )
     except Exception as exc:  # noqa: BLE001
         # Reaching a terminal status is what keeps the accepted conversation

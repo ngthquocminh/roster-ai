@@ -39,6 +39,7 @@ RUN_SCOPED_EVENTS = {
     "job.leased",
     "run.first_event.persisted",
     "approval.decided",
+    "grounding.tier1.completed",
 }
 RUN_ATTRIBUTION_EXEMPT_EVENTS = {"api.request.completed"}
 FORBIDDEN_TEXT_FIELDS = {

@@ -53,6 +53,7 @@ from application.queries.decision_provenance import query_decision_provenance
 from application.contracts.grounding import GroundedAnswerV2
 from application.capabilities.deps import AgentDepsV1
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
+from adapters.grounding.factory import create_claim_support_checker
 from application.use_cases.execute_turn import activity_payload, execute_turn, failed_outcome_for_exception, terminal_status
 from application.use_cases.finalize_agent_run import finalize_agent_run
 from adapters.postgres.short_transaction_projection import ShortTransactionScenarioProjectionReader
@@ -269,6 +270,7 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
             runtime, deps, prompt="", calculation_results=raw_results,
             history=resume.history,
             approvals=(AgentApprovalDecisionV1(tool_call_id=resume.tool_call_id, approved=True),),
+            claim_checker=create_claim_support_checker(settings),
         )
         if outcome.status == "suspended":
             raise ResumedTurnSuspendedError(

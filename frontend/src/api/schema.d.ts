@@ -2309,6 +2309,8 @@ export interface components {
             verdict: "supported" | "failed";
             /** Failure */
             failure?: ("missing_evidence" | "unknown_field" | "value_mismatch" | "version_mismatch" | "unauthorized_evidence") | null;
+            /** Support Probability */
+            support_probability?: number | null;
         };
         /**
          * GroundedProseSegmentV1

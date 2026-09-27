@@ -8427,6 +8427,17 @@
               }
             ],
             "title": "Failure"
+          },
+          "support_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support Probability"
           }
         },
         "type": "object",

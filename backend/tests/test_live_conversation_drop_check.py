@@ -595,7 +595,11 @@ def test_a_drifted_baseline_makes_the_drop_check_exit_non_zero(
 
 def test_behavioral_digest_excludes_only_the_price_keys():
     """Price keys and the declared `TELEMETRY_ONLY_KEYS` -- nothing else."""
-    assert TELEMETRY_ONLY_KEYS == {"AGENT_TRACE_CONTENT_MODE"}
+    assert TELEMETRY_ONLY_KEYS == {
+        "AGENT_TRACE_CONTENT_MODE",
+        # G' phase 3: the tier-1 checker in shadow never changes a reply.
+        "GROUNDING_TIER1_MODE", "GROUNDING_TIER1_PROVIDER", "TYPESAFE_API_KEY",
+    }
     environment = behavioral_environment(DEFAULT_OVERRIDE_FILE)
     assert set(environment) == {"api", "worker"}
     for service in environment.values():

@@ -2,7 +2,8 @@
 title: 'Grounding 3: tier-1 claim-support checker port with Jev adapter, shadow mode'
 type: 'feature'
 created: '2026-09-27'
-status: 'ready-for-dev'
+status: 'in-review'
+baseline_commit: '023661c6f94ee9b97fdbcfb36f74e0b6dd838c71'
 review_loop_iteration: 0
 depends_on: 'spec-grounding-2b-fact-claim-tags.md'
 context:
@@ -51,14 +52,14 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/application/ports/claim_support.py` -- `ClaimSupportChecker` Protocol: batch of (id, claim text, evidence text) → per-id probability or error
-- [ ] `backend/application/grounding/verbalize.py` -- deterministic record → text per evidence group
-- [ ] `backend/adapters/grounding/jev_checker.py` -- `POST https://openrouter.ai/api/alpha/decisions`, model `typesafe/jev-1.13` (configurable), `noul` question per fact, timeout
-- [ ] `backend/adapters/grounding/stub_checker.py` -- deterministic double
-- [ ] `backend/settings.py` + factory -- `GROUNDING_TIER1_MODE`, model, timeout, token budget; reuse the OpenRouter key
-- [ ] `backend/application/use_cases/execute_turn.py` -- in shadow, check supported facts and attach `support_probability`
-- [ ] `backend/evals/live_conversations/` -- run the live stack in shadow; report per-fact probabilities and the low-probability list for review
-- [ ] tests -- every matrix row with the double; adapter request/response mapping against a recorded Jev response
+- [x] `backend/application/ports/claim_support.py` -- `ClaimSupportChecker` Protocol: batch of (id, claim text, evidence text) → per-id probability or error
+- [x] `backend/application/grounding/verbalize.py` -- deterministic record → text per evidence group
+- [x] `backend/adapters/grounding/jev_checker.py` -- `POST https://openrouter.ai/api/alpha/decisions`, model `typesafe/jev-1.13` (configurable), `noul` question per fact, timeout
+- [x] `backend/adapters/grounding/stub_checker.py` -- deterministic double
+- [x] `backend/settings.py` + factory -- `GROUNDING_TIER1_MODE`, model, timeout, token budget; reuse the OpenRouter key
+- [x] `backend/application/use_cases/execute_turn.py` -- in shadow, check supported facts and attach `support_probability`
+- [x] `backend/evals/live_conversations/` -- run the live stack in shadow; report per-fact probabilities and the low-probability list for review
+- [x] tests -- every matrix row with the double; adapter request/response mapping against a recorded Jev response
 
 **Acceptance Criteria:**
 - Given the keyless CI suite, when it runs, then no network call is made and all tests pass.
@@ -69,3 +70,31 @@ context:
 **Commands:**
 - `cd backend && uv run pytest -q` -- expected: all pass
 - Live check: STOP before running `live_conversations` and wait for Minh's explicit permission (and key). Then one live-eval run in shadow -- expected: report contains tier-1 probabilities
+
+## Spec Change Log
+
+- 2026-09-27 -- Human-renegotiated (Minh): the Jev adapter may call TypeSafe DIRECTLY
+  (`POST https://api.typesafe.ai/v1/systemone`, own `TYPESAFE_API_KEY`) as well as through
+  OpenRouter's Decisions API. Both take the same body (`model`, `state`, `questions`) and return
+  `answers[id].noul`, so one adapter serves both. Selection is configuration:
+  `GROUNDING_TIER1_PROVIDER = auto | typesafe | openrouter` (default `auto`: TypeSafe when its key
+  is set, else OpenRouter with the existing OpenRouter key, else disabled with one warning).
+  Supersedes the frozen "Jev through OpenRouter" / "reuse the OpenRouter key" wording; the
+  "provider other than Jev via OpenRouter" Ask-First item is answered for TypeSafe-direct only.
+
+## Suggested Review Order
+
+- Entry point: shadow hook after the gate; never raises, never changes a reply.
+  [`execute_turn.py`](../../backend/application/use_cases/execute_turn.py) -- `shadow_check_facts`
+- One Jev adapter for TypeSafe-direct and OpenRouter; per-turn deadline, atomic batches.
+  [`jev_checker.py`](../../backend/adapters/grounding/jev_checker.py)
+- Provider selection (`auto | typesafe | openrouter`) and key fallback.
+  [`factory.py`](../../backend/adapters/grounding/factory.py)
+- Port, verbaliser, settings, telemetry event, live-eval report section.
+  [`claim_support.py`](../../backend/application/ports/claim_support.py) ·
+  [`verbalize.py`](../../backend/application/grounding/verbalize.py) ·
+  [`reporting.py`](../../backend/evals/live_conversations/reporting.py)
+- Tests: [`test_tier1_checker.py`](../../backend/tests/test_tier1_checker.py)
+
+**Open:** acceptance criterion 2 (a live-eval run in shadow) is NOT yet run -- it waits for
+Minh's explicit permission and key. Status stays `in-review` until then.

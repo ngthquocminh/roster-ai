@@ -29,6 +29,43 @@ RELIABILITY_FAILURES = frozenset({'unsuccessful_agent_turn'})
 ACCEPTABLE_CLAIM_FAILURES = frozenset({'unsupported_claim'})
 
 
+#: Below this tier-1 support probability a fact is listed for human review.
+TIER1_REVIEW_THRESHOLD = 0.5
+
+
+def tier1_fact_rows(activity: dict) -> list[dict]:
+    """G' phase 3: every fact segment of one reply, with its shadow probability."""
+    return [
+        {key: segment.get(key)
+         for key in ('text', 'field', 'value', 'verdict', 'failure', 'support_probability')}
+        for segment in ((activity.get('response') or {}).get('segments') or [])
+        if segment.get('kind') == 'fact'
+    ]
+
+
+def summarize_tier1(runs) -> dict:
+    """Shadow-mode tier-1 results across a report. Informational only: it never
+    enters readiness or blocking reasons."""
+    facts = [
+        {'run_id': run.get('run_id'), 'scenario': execution.get('scenario'),
+         'repetition': execution.get('repetition'), 'turn': index, **fact}
+        for run in runs
+        for execution in run.get('prefixes') or []
+        for index, turn in enumerate(execution.get('turns') or [], 1)
+        for fact in turn.get('tier1_facts') or []
+    ]
+    checked = [fact for fact in facts if fact.get('support_probability') is not None]
+    return {
+        'facts': facts,
+        'checked': len(checked),
+        'supported_unchecked': sum(1 for fact in facts if fact.get('verdict') == 'supported'
+                                   and fact.get('support_probability') is None),
+        'review_threshold': TIER1_REVIEW_THRESHOLD,
+        'low_probability': [fact for fact in checked
+                            if fact['support_probability'] < TIER1_REVIEW_THRESHOLD],
+    }
+
+
 def summarize_runs(runs, *, coverage, observation_ids, version_bindings, accepted_findings=()):
     expected = {case.id: turns for case, _endpoint, turns in prefix_executions(load_scenarios())}
     accepted = {(scenario, int(turn)) for scenario, turn in accepted_findings}
@@ -131,4 +168,5 @@ def summarize_runs(runs, *, coverage, observation_ids, version_bindings, accepte
         'accepted_findings': sorted(f'{s}:{t}' for s, t in accepted),
         'required_scenarios_per_run': len(expected),
         'required_user_turns_per_run': sum(len(turns) for turns in expected.values()),
+        'tier1_shadow': summarize_tier1(runs),
     }

@@ -9,6 +9,7 @@ from evals.live_conversations.facts import read_group, verify_claim
 from evals.live_conversations.http_client import ApplicationConversation
 from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS, judge_turn
 from evals.live_conversations.protocol import IncompleteConversationRun, turn_verdict
+from evals.live_conversations.reporting import tier1_fact_rows
 
 
 _ASSIGNMENT_FIELDS = ('worker_id', 'task_id', 'shift_id', 'start_minute', 'end_minute')
@@ -201,6 +202,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 pending_approval = activity
             assignments = read_group(app, 'baseline-assignments')
             claims = [s for s in activity.get('response', {}).get('segments', []) if s['kind'] == 'claim']
+            row['tier1_facts'] = tier1_fact_rows(activity)
             for claim in claims:
                 failures.extend(verify_claim(claim, workers=workers, assignments=assignments, demand=demand))
             verified = {'id': row['id'] + ':facts', 'worker_count': len(workers),
