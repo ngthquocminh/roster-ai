@@ -1219,3 +1219,20 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: none (B:10 agent fix, 2026-09-29)
   summary: The agent cannot say when, or by whom, the current baseline was approved; the workflow snapshot carries no approval decision.
   evidence: `load_workflow_context` (`backend/application/use_cases/conversation_workflow_context.py`) reads drafts, runs and the baseline version, but no approval record. The agent now points the planner to Runs → the run → Debug details → Decision provenance, which shows the time. Adding the decision (outcome and time) via the approval repository (`list_for_schedule_run`) is a new data path, and a time in prose must pass the grounding gate.
+
+## Deferred from: brainstorming of the draft lifecycle design (2026-09-28)
+
+- **Draft undo / restore.** The planner asks the agent to remove or change a constraint
+  instead. The design is already worked out in
+  `docs/superpowers/specs/2026-09-28-draft-lifecycle-design.md` section 6: each version
+  stores `undo_target_ordinal` and `origin`; an undo copies the current version's target
+  and inherits that target's own target, so repeated undo walks back instead of toggling
+  (a naive "restore previous version" makes the second undo a redo). Always append-only,
+  never move `current_version_id` backwards, because runs pin versions. **Deferred reason:
+  Minh chose to keep undo out of the first cut; removal through chat covers the need.**
+  **Owner: open.**
+
+- **Draft card extras: restore control, re-activating a discarded draft, version diff, and
+  a full editor (add or retarget constraints).** **Deferred reason: the planner reviews the
+  full constraint list on the card, and structural edits go through chat, where the agent
+  resolves names to real IDs.** **Owner: open.**
