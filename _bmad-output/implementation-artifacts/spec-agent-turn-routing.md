@@ -2,7 +2,8 @@
 title: 'Agent turn routing (scheduling / direct / out_of_scope)'
 type: 'feature'
 created: '2026-09-28'
-status: 'draft'
+status: 'in-review'
+baseline_commit: 'f44d122'
 review_loop_iteration: 0
 context:
   - '{project-root}/_bmad-output/specs/spec-agent-turn-routing/SPEC.md'
@@ -52,18 +53,18 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `backend/agent/scheduling_instructions.py` -- split into named section constants in today's order, add `SCOPE`, `DIRECT_RULE` and `REFUSAL_RULE`, and expose `instructions_for(route)` per the routing-paths.md section table. `SCHEDULING_ASSISTANT_INSTRUCTIONS` becomes the full path (Core + Scope + the rest) -- lossless split.
-- [ ] `backend/application/ports/turn_router.py` -- `TurnRoute` literal, `TurnRouteStateV1` (the message texts), `TurnRouteResultV1(probabilities, error)`, `TurnRouter` Protocol (never raises).
-- [ ] `backend/application/use_cases/route_turn.py` -- `decide_route(router, prompt, history, threshold) -> TurnRouteDecisionV1(route, probability, error)`: builds the truncated state from `PlannerMessageActivityV1` and agent-reply activities, applies the threshold, and fails open; a raising router is swallowed.
-- [ ] `backend/adapters/grounding/jev_router.py` -- `JevTurnRouter`: one `choice` question with the three criteria, the same POST/auth/closed error codes as the checker, and probabilities validated.
-- [ ] `backend/adapters/grounding/factory.py` -- extract shared provider/key resolution and add `create_turn_router(settings)`: `None` when off or keyless, with one warning. Tier-1 behaviour and warnings unchanged.
-- [ ] `backend/settings.py` -- `agent_router_mode: Literal["on","off"]="on"`, `agent_router_threshold=0.85`, `agent_router_timeout_seconds=2.0`, parsed via `_choice` / `_probability` / `_positive_float`.
-- [ ] `backend/agent/runtime.py` -- `route` kwarg on `create_agent_runtime` and `PydanticAIAgentRuntime`. `direct`: `instructions_for("direct")` with output limited to the answer tool plus prose text. `out_of_scope`: refusal tool plus a `TextOutput` that converts to a fixed out-of-scope refusal, and a validator forcing `reason="out_of_scope"`. `scheduling` is unchanged.
-- [ ] `backend/api/routers/conversations.py` -- call `decide_route` before `runtime_factory` and annotate the span. For special routes: `capabilities=()`, `route=...`, `workflow_context=None`. For `scheduling`, the factory call is byte-for-byte today's.
-- [ ] `backend/adapters/telemetry/{spans.py,span_policy.py}` -- `annotate_turn_route(...)`. HTTP_SERVER validates `shiftmind.turn.route` (closed), `.route_probability` (number) and `.route_error` (closed).
-- [ ] `backend/conftest.py` -- `AGENT_ROUTER_MODE=off`.
-- [ ] `backend/evals/live_conversations/scenarios.json` + `cases.py` -- author scenario D (the `f0cdeca6` transcript plus one mixed turn). Authored only; not run.
-- [ ] `backend/tests/test_turn_routing.py` -- prompt pin (full minus Scope → sha256 `ac3d83962b98ed01811ac931127cd4be1f78262abf282fca975453a8a58bdd33`), I/O matrix, factory/provider/keyless, adapter via `httpx.MockTransport`, runtime output sets with a scripted model, API test with a scripted router (0 tools; `out_of_scope` → `refused`), mode `off` makes no request.
+- [x] `backend/agent/scheduling_instructions.py` -- split into named section constants in today's order, add `SCOPE`, `DIRECT_RULE` and `REFUSAL_RULE`, and expose `instructions_for(route)` per the routing-paths.md section table. `SCHEDULING_ASSISTANT_INSTRUCTIONS` becomes the full path (Core + Scope + the rest) -- lossless split.
+- [x] `backend/application/ports/turn_router.py` -- `TurnRoute` literal, `TurnRouteStateV1` (the message texts), `TurnRouteResultV1(probabilities, error)`, `TurnRouter` Protocol (never raises).
+- [x] `backend/application/use_cases/route_turn.py` -- `decide_route(router, prompt, history, threshold) -> TurnRouteDecisionV1(route, probability, error)`: builds the truncated state from `PlannerMessageActivityV1` and agent-reply activities, applies the threshold, and fails open; a raising router is swallowed.
+- [x] `backend/adapters/grounding/jev_router.py` -- `JevTurnRouter`: one `choice` question with the three criteria, the same POST/auth/closed error codes as the checker, and probabilities validated.
+- [x] `backend/adapters/grounding/factory.py` -- extract shared provider/key resolution and add `create_turn_router(settings)`: `None` when off or keyless, with one warning. Tier-1 behaviour and warnings unchanged.
+- [x] `backend/settings.py` -- `agent_router_mode: Literal["on","off"]="on"`, `agent_router_threshold=0.85`, `agent_router_timeout_seconds=2.0`, parsed via `_choice` / `_probability` / `_positive_float`.
+- [x] `backend/agent/runtime.py` -- `route` kwarg on `create_agent_runtime` and `PydanticAIAgentRuntime`. `direct`: `instructions_for("direct")` with output limited to the answer tool plus prose text. `out_of_scope`: refusal tool plus a `TextOutput` that converts to a fixed out-of-scope refusal, and a validator forcing `reason="out_of_scope"`. `scheduling` is unchanged.
+- [x] `backend/api/routers/conversations.py` -- call `decide_route` before `runtime_factory` and annotate the span. For special routes: `capabilities=()`, `route=...`, `workflow_context=None`. For `scheduling`, the factory call is byte-for-byte today's.
+- [x] `backend/adapters/telemetry/{spans.py,span_policy.py}` -- `annotate_turn_route(...)`. HTTP_SERVER validates `shiftmind.turn.route` (closed), `.route_probability` (number) and `.route_error` (closed).
+- [x] `backend/conftest.py` -- `AGENT_ROUTER_MODE=off`.
+- [x] ~~`backend/evals/live_conversations/scenarios.json` + `cases.py` -- author scenario D~~ -- DEFERRED to the paid-rerun step: `REQUIRED_SCENARIOS` and `test_catalogue_is_three_full_conversations` pin A/B/C, so adding D edits an existing test (breaking "existing tests pass unchanged"), and D has no baseline until the rerun. `test_turn_routing.py` replays the `f0cdeca6` messages deterministically instead.
+- [x] `backend/tests/test_turn_routing.py` -- prompt pin (full minus Scope → sha256 `ac3d83962b98ed01811ac931127cd4be1f78262abf282fca975453a8a58bdd33`), I/O matrix, factory/provider/keyless, adapter via `httpx.MockTransport`, runtime output sets with a scripted model, API test with a scripted router (0 tools; `out_of_scope` → `refused`), mode `off` makes no request.
 
 **Acceptance Criteria:**
 - Given default test settings, when the existing suite runs, then it passes unchanged and no router request is made.
@@ -76,9 +77,11 @@ The route drives the whole runtime variant (prompt plus output set), so one `rou
 
 Deterministic golden-case harness wiring for a scripted router is deferred; pytest API tests cover the routes.
 
+Also changed: `docker-compose.yml` and `backend/.env.example` expose `AGENT_ROUTER_MODE`, because the operator switch must reach the container. `evals/live_conversations/compose.override.yml` is deliberately untouched: it feeds the committed baseline's `behavioral_digest`, and the live stack inherits the default (`on`).
+
 ## Verification
 
 **Commands:**
 - `cd backend && uv run pytest -q -x` -- expected: all pass.
 - `cd backend && uv run pytest -q tests/test_turn_routing.py` -- expected: all pass.
-- `cd backend && uv run pytest -q tests/test_live_conversation_cases.py` -- expected: pass with scenario D.
+- `cd backend && uv run pytest -q tests/test_live_conversation_cases.py` -- expected: pass, unchanged.

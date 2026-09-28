@@ -196,6 +196,14 @@ class Settings:
     # Estimated input tokens per request; larger batches are split, and a
     # single fact over it is skipped and counted.
     grounding_tier1_token_budget: int = 4000
+    # Agent turn routing: one Jev `choice` call per new planner message picks
+    # `scheduling`, `direct` or `out_of_scope`. Same provider, key and model as
+    # the tier-1 checker; with no key it is disabled with one warning. Any
+    # error, timeout or probability below the threshold -> `scheduling`.
+    # `off` makes no request and every turn takes the scheduling path.
+    agent_router_mode: Literal["on", "off"] = "on"
+    agent_router_threshold: float = 0.85
+    agent_router_timeout_seconds: float = 2.0
 
 
 def tier1_flag_threshold(settings: "Settings") -> float | None:
@@ -636,5 +644,14 @@ def default_settings() -> Settings:
         grounding_tier1_token_budget=_positive_int(
             "GROUNDING_TIER1_TOKEN_BUDGET",
             os.environ.get("GROUNDING_TIER1_TOKEN_BUDGET"), 4000,
+        ),
+        agent_router_mode=_choice(  # type: ignore[arg-type]
+            "AGENT_ROUTER_MODE", os.environ.get("AGENT_ROUTER_MODE"), ("on", "off"), "on",
+        ),
+        agent_router_threshold=_probability(
+            "AGENT_ROUTER_THRESHOLD", os.environ.get("AGENT_ROUTER_THRESHOLD"), 0.85,
+        ),
+        agent_router_timeout_seconds=_positive_float(
+            "AGENT_ROUTER_TIMEOUT_SECONDS", os.environ.get("AGENT_ROUTER_TIMEOUT_SECONDS"), 2.0,
         ),
     )

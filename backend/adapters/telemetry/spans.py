@@ -527,6 +527,19 @@ def annotate_enqueued_schedule_run(schedule_run_id: UUID | str | None) -> None:
         span.set_attribute("shiftmind.schedule_run.id", str(schedule_run_id))
 
 
+def annotate_turn_route(route: str, probability: float | None, error: str | None) -> None:
+    """The turn's route on the execute request's server span; never message
+    text. No-op keyless."""
+    span = trace.get_current_span()
+    if not span.is_recording():
+        return
+    span.set_attribute("shiftmind.turn.route", route)
+    if probability is not None:
+        span.set_attribute("shiftmind.turn.route_probability", probability)
+    if error is not None:
+        span.set_attribute("shiftmind.turn.route_error", error)
+
+
 # --- worker (Decision 10) ---------------------------------------------------
 #
 # Every tracing call below runs INSIDE the product path (after the database
@@ -706,6 +719,7 @@ __all__ = [
     "SanitizingSpanExporter",
     "ShiftMindSampler",
     "annotate_enqueued_schedule_run",
+    "annotate_turn_route",
     "build_live_eval_publication_export",
     "build_process_tracing",
     "trace_engine",
