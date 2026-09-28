@@ -5,6 +5,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/sandbox/install-bmad-skills.sh",
+            "timeout": 300
+          },
+          {
+            "type": "command",
             "command": "uv run --no-project python \"$CLAUDE_PROJECT_DIR\"/.bmad-loop/bmad_loop_hook.py SessionStart"
           }
         ]
