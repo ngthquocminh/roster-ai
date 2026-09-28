@@ -376,6 +376,20 @@ def test_tier_3_passes_exactly_at_the_floor(baseline: dict, green_report: dict):
     assert f"{AGGREGATE_FLOOR}/90" in tier3["detail"]
 
 
+def test_tier_3_ignores_turns_the_baseline_never_measured(
+    baseline: dict, green_report: dict
+):
+    # A scenario added after the baseline must not pad the total past a real drop.
+    for turn in ["A:1", "A:2"]:
+        green_report["turn_pass_rates"][turn] = {"executed": 3, "passed": 1}
+    green_report["turn_pass_rates"]["A:3"] = {"executed": 3, "passed": 2}
+    for index in range(1, 7):
+        green_report["turn_pass_rates"][f"Z:{index}"] = {"executed": 3, "passed": 3}
+    tier3 = _check(compare(baseline, green_report), "tier_3_aggregate")
+    assert tier3["status"] == "failed"
+    assert f"{AGGREGATE_FLOOR - 1}/90" in tier3["detail"]
+
+
 def test_structural_check_fails_when_a_scenario_lost_its_clean_run(
     baseline: dict, green_report: dict
 ):

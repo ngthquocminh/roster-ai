@@ -33,8 +33,8 @@ def test_missing_runs_cannot_become_eligible():
     report = summarize_runs([], coverage={}, observation_ids=set(), version_bindings={})
     assert report['readiness'] == 'blocked'
     assert report['live_conversation_journeys'] == 'blocked'
-    assert report['required_scenarios_per_run'] == 3
-    assert report['required_user_turns_per_run'] == 30
+    assert report['required_scenarios_per_run'] == 4
+    assert report['required_user_turns_per_run'] == 36
 
 
 def test_three_clean_repetitions_meet_every_run_based_requirement():
@@ -42,7 +42,7 @@ def test_three_clean_repetitions_meet_every_run_based_requirement():
     # Only the coverage row (empty here) remains blocking.
     assert report['blocking_reasons'] == ['tool_operation_coverage_incomplete_or_stale']
     assert report['complete_repetitions'] == 3
-    assert report['clean_scenarios'] == ['A', 'B', 'C']
+    assert report['clean_scenarios'] == ['A', 'B', 'C', 'D']
     assert report['turn_pass_rates']['B:9'] == {'passed': 3, 'executed': 3}
 
 
@@ -70,7 +70,7 @@ def test_a_scenario_that_never_ran_clean_blocks():
     runs = [_run(i, verdicts={'B:2': 'fail'}) for i in range(3)]
     report = _summary(runs, accepted_findings=[('B', 2)])
     assert 'clean_run_missing_for_scenario' in report['blocking_reasons']
-    assert report['clean_scenarios'] == ['A', 'C']
+    assert report['clean_scenarios'] == ['A', 'C', 'D']
 
 
 def test_incomplete_or_reused_executions_do_not_count_as_repetitions():
