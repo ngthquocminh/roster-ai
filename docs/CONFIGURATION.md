@@ -53,6 +53,13 @@ local backend.
 | `LOGFIRE_TOKEN` | Optional | *(none)* | Logfire write token. Unset or empty: no exporter is constructed and nothing leaves the process. Set: API (`shiftmind-api`) and worker (`shiftmind-worker`) export traces over OTLP/HTTP, every span through the export-boundary sanitizer (`backend/adapters/telemetry/span_policy.py`). Also read by the live-evaluation publisher (`python -m evals.live_conversations.logfire_publish`, Story 5.10), which exports through the same sanitizer and refuses to run without it. A credential: keep it in `backend/.env` or deployment secret storage, never in source control or CI. |
 | `LOGFIRE_BASE_URL` | Optional | `https://logfire-us.pydantic.dev` | Logfire region origin (`http(s)://host[:port]`, no path). EU projects use `https://logfire-eu.pydantic.dev`. Anything else fails at startup. |
 | `AGENT_TRACE_CONTENT_MODE` | Never set by hand | `off` | `off` exports no prompt, completion or tool content. The only other value is the live-evaluation diagnostic mode, set **only** by `backend/evals/live_conversations/compose.override.yml`; it exports prompts, completions and tool arguments/results tagged `deployment.environment=live-eval`, and still withholds credentials and exception text. Any other value fails at startup. |
+| `GROUNDING_TIER1_MODE` | Optional | `flag` | Tier-1 claim-support checker (G′ phase 3). `off` makes no request. `shadow` records a claim-support probability per verified fact and changes nothing the planner sees. `flag` also marks a fact whose wording scores below `GROUNDING_TIER1_FLAG_THRESHOLD` as `wording_flagged`. No mode ever strips or retries a claim. |
+| `GROUNDING_TIER1_FLAG_THRESHOLD` | Optional | `0.5` | Probability threshold, exclusive (`0 < x < 1`), below which `flag` mode marks a fact. A value outside that range fails the turn (`InvalidFlagError`); ignored outside `flag` mode. |
+| `GROUNDING_TIER1_PROVIDER` | Optional | `auto` | `auto` calls TypeSafe's System One API directly when `TYPESAFE_API_KEY` is set, else OpenRouter's Decisions API when a usable key is available. `typesafe` / `openrouter` force one provider. |
+| `TYPESAFE_API_KEY` | Optional | *(none)* | TypeSafe System One API key for the tier-1 checker (`backend/adapters/grounding/jev_checker.py`). With no key for the resolved provider — including OpenRouter, which falls back to `AGENT_RUNTIME_API_KEY` when the agent itself runs on `openrouter:…` — the checker is disabled with one warning; the turn is never affected (fail-open). |
+| `GROUNDING_TIER1_MODEL` | Optional | provider default (`jev-latest` for TypeSafe, `typesafe/jev-1.13` for OpenRouter) | Model ID passed to the tier-1 checker. |
+| `GROUNDING_TIER1_TIMEOUT_SECONDS` | Optional | `5.0` | Wall-clock budget for a turn's whole set of tier-1 batches, not each request; batches remaining once the deadline passes are counted as skipped rather than sent. |
+| `GROUNDING_TIER1_TOKEN_BUDGET` | Optional | `4000` | Estimated input-token budget per request; facts are greedily batched under it, and a single fact that alone exceeds it is skipped and counted. |
 
 ### Trace content mode — what the guard does not cover
 
@@ -61,6 +68,24 @@ An architecture test (`backend/tests/architecture/test_trace_export_boundaries.p
 ### The Logfire SDK in local dev processes (Story 5.10)
 
 `logfire` and `pydantic-evals` are dev-group dependencies (never in the `--no-dev` image). Installed, they turn `logfire_api` into the real Logfire SDK in every local process that imports pydantic-ai (`uv run uvicorn …`, `uv run pytest`). It is inert unless something configures it: pydantic-ai passes `auto_instrument=False`, and only the publisher calls `logfire.configure`. One path is not guarded: Logfire's own pydantic plugin records when `LOGFIRE_PYDANTIC_PLUGIN_RECORD` is set by hand, and an unconfigured Logfire would then configure itself from `LOGFIRE_TOKEN` and export through the Logfire SDK, **bypassing the export-boundary sanitizer**. Never set a `LOGFIRE_*` variable other than `LOGFIRE_TOKEN`/`LOGFIRE_BASE_URL` on a local dev process.
+
+### Tier-1 grounding: TypeSafe Jev / OpenRouter Decisions (G′ phase 3)
+
+The grounding gate (`backend/application/grounding/gate.py`) already verifies every
+placeholder and `<claim>` fact tag against a trusted, application-produced record —
+that check is tier 0 and always on, needs no key, and is what "grounding gate" means
+elsewhere in this repository. The tier-1 checker described by the variables above is
+a separate, optional layer on top: it sends each *already tier-0-verified* fact's
+wording and its record to an external claim-support model and asks whether the
+wording is fully supported, catching phrasing the record does not actually say (a
+model paraphrasing "3 of 5 workers" as "most workers", say) rather than fabricated
+values. `JevClaimSupportChecker` (`backend/adapters/grounding/jev_checker.py`) speaks
+one request/response shape to two endpoints — TypeSafe's own System One API and
+OpenRouter's Decisions API — and never raises: a timeout, HTTP error, or malformed
+response becomes a closed error code on the result, and the grounded response is left
+alone either way. With `GROUNDING_TIER1_PROVIDER=auto` and no `TYPESAFE_API_KEY` or
+usable `OPENROUTER_API_KEY`, the checker is not constructed at all (one warning,
+logged once) — the turn is unaffected either way (fail-open).
 
 ### Required vs optional settings
 
