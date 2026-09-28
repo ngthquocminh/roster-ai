@@ -100,6 +100,15 @@ Paid run on `openai/gpt-5.6-luna` with the `google/gemini-2.5-flash` judge, run 
 - **Judge outages root-caused and fixed:** they were not random. On long replies the judge listed invented segment IDs (`turn-7:assistant:0..190`) until `max_tokens` cut the JSON off, the same way on both attempts at temperature 0. The rubric now caps citations at 12 per dimension, and the schema shows and enforces the cap, truncating instead of rejecting. Replaying the five failed turns through the fixed judge: all five judged and passed; the two turns that had cited 20 and 26 IDs still passed (USD 0.04). The judge rubric is not in `behavioral_digest`, so the drop check still compares.
 - **`f0cdeca6` replay on a live stack:** the five small-talk messages got short replies with no tools. The song and quadratic-Python requests were refused as `out_of_scope`. The mixed message stayed on scheduling: it answered the worker count and declined the Python.
 
+## Live Eval (2026-09-28, local, evidence-grade)
+
+Paid run `d04a1eb4` on `371964a`, images rebuilt, same models, 3 repetitions of A-D. Scenario D (6 routing turns) was added before the run, so the old A/B/C pins in `cases.py` and the tests now list four scenarios.
+
+- **Smoke run of D alone (1 repetition, USD 0.02):** 5/6. D:1 failed on the authored obligation, not the product: a one-line greeting that named the app's features counted as a "list of capabilities". Relaxed in `371964a`.
+- **Full matrix:** 108/108 turns, 12/12 clean executions, no retries, USD 0.66.
+- **Drop check against the old 87/90 baseline:** every tier passed; Tier 3 counts only the baseline's turns (90/90). Evidence and the re-derived baseline are in `3cc57c2`.
+- **Gate changes (`40c29fb`, `4922165`):** the structural scenario set is read from the baseline, Tier 3 ignores turns the baseline never measured, and the floor moved from 83/90 to 100/108 (same ~1.2% false-alarm rate).
+
 ## Suggested Review Order
 
 **Where the route is decided**

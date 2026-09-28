@@ -106,7 +106,7 @@ Coverage is therefore decided first. An over-broad preference may affect cost or
 
 - **Deterministic:** 30 single-turn and 6 multi-turn golden cases run keylessly through the real execution seams.
 - **Live acceptance:** an opt-in paid suite drives disposable containers through authenticated HTTP. Fact and effect checks are independent of the LLM judge.
-- **Recorded result:** 3 repetitions produced 90 turns; **87 passed**. One repetition each of B:5, B:8, and C:3 failed. No false claim was recorded.
+- **Recorded result:** 4 scenarios × 3 repetitions produced 108 turns; **all 108 passed**, including scenario D's routing turns (small talk, off-topic refusals, a mixed message). No false claim was recorded. The previous three-scenario measurement passed 87/90.
 - **Coverage:** 135 operations—37 live-required and 98 deterministic-only. Ten live-required operations document why a planner cannot reach them and which deterministic test covers them.
 
 This result describes one bound configuration, not general reliability. See [Testing](docs/TESTING.md) and the [evidence](evidence/story-5.7/live-conversation-journeys.json).

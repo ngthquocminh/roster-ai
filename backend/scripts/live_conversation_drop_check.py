@@ -201,7 +201,8 @@ def truncation_refusal(baseline: dict, report: dict) -> dict | None:
 def tier_1(baseline: dict, report: dict) -> dict:
     """Any baseline full-marks turn that now scores zero FAILS, by name.
 
-    Turns not at full marks in the baseline (`B:5`, `B:8`, `C:3` at 2/3) are
+    Turns not at full marks in the baseline (e.g. 2/3; the earlier 87/90
+    baseline had `B:5`, `B:8`, `C:3`, the current 108/108 one has none) are
     EXEMPT from the score-collapse check: a 2/3 turn reaching 0/3 is ~3.6%
     likely by chance, which would make a hard block a false-alarm generator.
     They are watched by Tier 3 only for a SCORE drop.

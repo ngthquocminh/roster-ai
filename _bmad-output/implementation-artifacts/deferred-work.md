@@ -1180,6 +1180,7 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 
 ## Deferred from: code review of spec-anonymise-fixture-names (2026-09-26)
 
+- **CLOSED 2026-09-28 (turn-routing PR):** run `d04a1eb4` on `371964a`, on the anonymised fixtures, became the new baseline (108/108, `3cc57c2`) instead of a regression comparison.
 - source_spec: `_bmad-output/implementation-artifacts/spec-anonymise-fixture-names.md`
   summary: The promoted live-conversation baseline (`backend/evals/baselines/live-conversations.json`, 87/90) was measured on the pre-anonymisation fixture names and prompt examples, and neither `configuration_digest` nor `behavioral_digest` covers the fixture or the instructions, so the next regression comparison silently compares two different setups.
   evidence: Blind Hunter review; the anonymisation rewrote every task and member name the live scenarios resolve, and the `scheduling_instructions.py` verbatim-copy examples. Re-baselining needs a paid live-provider run, out of scope for a data-only change. Revisit trigger: the next live-conversation run -- treat it as a new baseline, not a regression comparison.
