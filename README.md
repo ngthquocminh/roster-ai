@@ -49,7 +49,7 @@ See [Getting Started](docs/GETTING-STARTED.md) for configuration and recovery. T
 
 The difficult part is not connecting chat to an optimizer. It is keeping a probabilistic model useful without allowing it to become a source of record.
 
-- **Invented or stale numbers:** an application calculator produces each number; a grounding gate checks its arguments, version, authorization, and evidence.
+- **Invented or stale numbers:** an application calculator produces each number; a grounding gate checks its arguments, version, authorization, and evidence. An optional tier-1 check sends each fact's wording and its trusted record to an external claim-support model (TypeSafe Jev, or OpenRouter's Decisions API) and flags — never strips or retries — a claim whose phrasing scores below a threshold.
 - **Stale approvals:** approval binds the actor, action, parameters, versions, consequence, policy, and expiry.
 - **Lost worker leases:** a fencing epoch prevents a worker that lost its lease from committing.
 - **Duplicate retries:** commands are idempotent; events have persisted sequence numbers and replay.
@@ -80,6 +80,7 @@ The backend is a hexagonal modular monolith with separate API and worker process
 - Forced PostgreSQL row-level security and least-privilege runtime roles.
 - Immutable versions, a separate baseline pointer, and fenced worker leases.
 - Transactional audit events and a deterministic provenance timeline built from committed records.
+- Every span crosses one export-boundary sanitizer before it can leave the process; a broken exporter never changes or blocks product work. Set `LOGFIRE_TOKEN` to export traces to hosted Logfire — unset, no exporter is built and nothing leaves the process.
 
 The boundary is deliberate rather than total: `agent_run` does not pin the model or instruction hash, and hidden reasoning is discarded. Failures can be localized, but provider wording cannot be reproduced.
 
@@ -132,6 +133,7 @@ The composed end-to-end proof and paid live suite have separate commands and pre
 - **Frontend:** React 19, strict TypeScript, Vite, TanStack Query, Tailwind, Radix/shadcn, Vitest, Playwright.
 - **Runtime:** Docker Compose with PostgreSQL, bootstrap, API, worker, and web services.
 - **API contract:** OpenAPI is exported from the backend and generates the frontend request and response types.
+- **Observability:** OpenTelemetry SDK with an OTLP/HTTP exporter, sanitized at one export boundary, opt-in to hosted Logfire (`LOGFIRE_TOKEN`).
 
 ## Current limitations
 
@@ -141,7 +143,6 @@ Gate A has recorded readiness evidence. **Gate B has not passed:** the determini
 |---|---|
 | The initiating planner may decide their own approval | Add separation of duties and test reassignment, membership revocation, and concurrent decisions |
 | Traceability stops at the model boundary | Record an execution manifest with model, instruction, argument, result, and decision-rationale hashes |
-| Traces are instrumented but not exported | Add a sanitizing tracer provider and OTLP backend while proving audit survives exporter failure |
 | Deployment and performance evidence are local only | Deploy the existing AWS design before making service-level claims |
 
 Also open:
@@ -166,5 +167,5 @@ Also open:
 ## Verification references
 
 - **Decisions:** [architecture spine](_bmad-output/planning-artifacts/architecture/architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md).
-- **Code:** [capability registry](backend/application/capabilities/installed.py), [grounding gate](backend/application/grounding/gate.py), [approval decision](backend/application/use_cases/decide_approval.py), [provenance query](backend/application/queries/decision_provenance.py), [CP-SAT objective](backend/engine/cpsat/objective.py), and [agent tracing](backend/agent/runtime.py).
+- **Code:** [capability registry](backend/application/capabilities/installed.py), [grounding gate](backend/application/grounding/gate.py), [tier-1 claim-support checker](backend/adapters/grounding/jev_checker.py), [approval decision](backend/application/use_cases/decide_approval.py), [provenance query](backend/application/queries/decision_provenance.py), [CP-SAT objective](backend/engine/cpsat/objective.py), and [agent tracing](backend/agent/runtime.py).
 - **Evidence:** [approval and audit invariants](evidence/story-4.5/approval-audit-invariants.json), [live conversations](evidence/story-5.7/live-conversation-journeys.json), and [CI workflow](.github/workflows/ci.yml).
