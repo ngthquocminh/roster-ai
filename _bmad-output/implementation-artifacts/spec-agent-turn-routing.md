@@ -97,6 +97,7 @@ Paid run on `openai/gpt-5.6-luna` with the `google/gemini-2.5-flash` judge, run 
   - B:5 missed once on judge completeness, which predates routing (2/3 in the baseline too).
   - C:10 was a routing miss: the demonstration request went to `out_of_scope`. Fixed in `7781f25` by naming the app's features in the router question (Jev: 0.84-0.95 out_of_scope -> 0.97-0.99 scheduling).
 - **Scenario C rerun after the fix (3 repetitions):** C:10 passed in all 3. The misses were one judge outage and two completeness scores on the scheduling path (C:3, which was 2/3 in the baseline; C:4).
+- **Judge outages root-caused and fixed:** they were not random. On long replies the judge listed invented segment IDs (`turn-7:assistant:0..190`) until `max_tokens` cut the JSON off, the same way on both attempts at temperature 0. The rubric now caps citations at 12 per dimension, and the schema shows and enforces the cap, truncating instead of rejecting. Replaying the five failed turns through the fixed judge: all five judged and passed; the two turns that had cited 20 and 26 IDs still passed (USD 0.04). The judge rubric is not in `behavioral_digest`, so the drop check still compares.
 - **`f0cdeca6` replay on a live stack:** the five small-talk messages got short replies with no tools. The song and quadratic-Python requests were refused as `out_of_scope`. The mixed message stayed on scheduling: it answered the worker count and declined the Python.
 
 ## Suggested Review Order

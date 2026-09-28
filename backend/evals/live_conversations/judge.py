@@ -37,6 +37,8 @@ your evidence. A sub-reference into any of these forms, joined with "." or ":" (
 "verified_facts_and_effects.persisted_draft.constraints", or a turn's own id extended as
 "<turn-id>:assistant:0" to point at that reply's first segment), is also valid. Never invent an
 ID whose root is not one of these four forms.
+Cite at most 12 IDs per dimension: only the ones your reason relies on. To cite a whole reply,
+cite its turn id once; never list a reply's segments one by one.
 For a dimension listed in not_applicable, still return its full object with all three fields
 present -- set ONLY its "score" field to null; "evidence_ids" must still be a list (use `[]`
 if there is nothing to cite) and "reason" must still be a non-empty string (e.g. "Not

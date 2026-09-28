@@ -82,10 +82,25 @@ def _bounded_reason(value):
     return value
 
 
+MAX_EVIDENCE_IDS = 12
+
+
+def _bounded_evidence_ids(value):
+    """Keep the first citations of an over-long list instead of failing the judgment."""
+    if isinstance(value, list) and len(value) > MAX_EVIDENCE_IDS:
+        return value[:MAX_EVIDENCE_IDS]
+    return value
+
+
 class DimensionGrade(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     score: Literal[0, 1, 2] | None
-    evidence_ids: list[str] = Field()
+    # Capped in the schema the judge is shown: uncapped, the judge enumerated
+    # "turn-7:assistant:0..190" until max_tokens cut the JSON off (sandbox run
+    # 2026-09-28, C:7 rep 1, judge_malformed_JSONDecodeError_at_root). Deterministic at
+    # temperature 0, so the retry repeated it.
+    evidence_ids: Annotated[list[str], BeforeValidator(_bounded_evidence_ids)] = Field(
+        max_length=MAX_EVIDENCE_IDS)
     # Truncated, not rejected: an over-long reason is still a usable judgment,
     # and discarding it cost a whole turn (live-suite-v2-final-x3-c, A6 rep1,
     # judge_malformed_string_too_long_at_completeness.reason).
