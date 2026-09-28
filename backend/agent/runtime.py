@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 import threading
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from time import perf_counter
 
@@ -365,11 +365,13 @@ class PydanticAIAgentRuntime:
 
         # Special routes are granted no tools and a narrowed output set: a
         # misroute can weaken an answer, never add capability.
-        if route == "direct" and answer_type is not None:
+        if route != "scheduling" and answer_type is not GroundedAnswerV2:
+            raise ValueError(f"route {route!r} needs answer_type=GroundedAnswerV2")
+        if route == "direct":
             output_type = [
                 ToolOutput(GroundedAnswerV2, name=ANSWER_OUTPUT_TOOL), TextOutput(_prose_answer),
             ]
-        elif route == "out_of_scope" and answer_type is not None:
+        elif route == "out_of_scope":
             output_type = [
                 ToolOutput(RefusalV1, name=REFUSAL_OUTPUT_TOOL), TextOutput(_out_of_scope_text),
             ]
@@ -422,9 +424,9 @@ class PydanticAIAgentRuntime:
             def _force_out_of_scope(
                 ctx: RunContext[AgentDepsV1 | None], output: object
             ) -> object:
-                if isinstance(output, RefusalV1) and output.reason != "out_of_scope":
-                    return replace(output, reason="out_of_scope")
-                return output
+                # The model's own detail/next_step could carry the off-topic
+                # answer itself, so every refusal here is the fixed one.
+                return OUT_OF_SCOPE_REFUSAL if isinstance(output, RefusalV1) else output
 
         if answer_type is not None:
             # Corrective retries for placeholder slips. A handle with nothing to

@@ -19,13 +19,17 @@ _INSTRUCTIONS = (
 _CRITERIA = {
     "scheduling": (
         "asks about, or to change, the schedule, workers, tasks, demand, drafts, runs or "
-        "baseline; or refers back to earlier conversation"
+        "baseline; or refers back to earlier conversation; or mixes any of that with "
+        "something else"
     ),
     "direct": (
         "only a greeting, thanks, small talk, or a question about what the assistant can do "
         "or how the workflow works"
     ),
-    "out_of_scope": "clearly unrelated to workforce scheduling or this app",
+    "out_of_scope": (
+        "clearly unrelated to workforce scheduling or this app, with no scheduling request "
+        "in it"
+    ),
 }
 
 
@@ -47,12 +51,14 @@ def _probabilities(response: dict) -> dict[str, float]:
     raw = response["answers"]["route"]["probabilities"]
     values: dict[str, float] = {}
     for route in TURN_ROUTES:
-        value = raw.get(route, 0.0)
+        value = raw[route]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise TypeError("probability is not a number")
         if not 0.0 <= value <= 1.0:
             raise ValueError("probability out of range")
         values[route] = float(value)
+    if abs(sum(values.values()) - 1.0) > 0.05:
+        raise ValueError("probabilities do not sum to 1")
     return values
 
 

@@ -2,7 +2,7 @@
 title: 'Agent turn routing (scheduling / direct / out_of_scope)'
 type: 'feature'
 created: '2026-09-28'
-status: 'in-review'
+status: 'done'
 baseline_commit: 'f44d122'
 review_loop_iteration: 0
 context:
@@ -79,9 +79,91 @@ Deterministic golden-case harness wiring for a scripted router is deferred; pyte
 
 Also changed: `docker-compose.yml` and `backend/.env.example` expose `AGENT_ROUTER_MODE`, because the operator switch must reach the container. `evals/live_conversations/compose.override.yml` is deliberately untouched: it feeds the committed baseline's `behavioral_digest`, and the live stack inherits the default (`on`).
 
+Review fixes: every `out_of_scope` refusal is the fixed `OUT_OF_SCOPE_REFUSAL`, since the model's own `detail` could carry the off-topic answer (CAP-2). Router state now includes draft and approval summaries as agent replies, and the latest message is truncated at 2,000 characters instead of 500. A response missing a route or not summing to about 1 is `bad_response`. Ties go to `scheduling`. A special route requires `answer_type=GroundedAnswerV2`. The router criteria send mixed messages to `scheduling`. Compose passes the threshold and timeout through.
+
 ## Verification
 
 **Commands:**
 - `cd backend && uv run pytest -q -x` -- expected: all pass.
 - `cd backend && uv run pytest -q tests/test_turn_routing.py` -- expected: all pass.
 - `cd backend && uv run pytest -q tests/test_live_conversation_cases.py` -- expected: pass, unchanged.
+
+## Suggested Review Order
+
+**Where the route is decided**
+
+- Entry point: route before building the runtime; special routes get no tools and no snapshot.
+  [`conversations.py:370`](../../backend/api/routers/conversations.py#L370)
+
+- Scheduling keeps today's exact factory call; special routes add `route=`.
+  [`conversations.py:392`](../../backend/api/routers/conversations.py#L392)
+
+- Fail-open decision: only a confident special route leaves scheduling; ties go to scheduling.
+  [`route_turn.py:57`](../../backend/application/use_cases/route_turn.py#L57)
+
+- Router state: conversation text only, including draft and approval summaries.
+  [`route_turn.py:37`](../../backend/application/use_cases/route_turn.py#L37)
+
+**Prompt split**
+
+- Lossless split along `##` headings; composition per route.
+  [`scheduling_instructions.py:299`](../../backend/agent/scheduling_instructions.py#L299)
+
+- The only full-path change: the new Scope section.
+  [`scheduling_instructions.py:281`](../../backend/agent/scheduling_instructions.py#L281)
+
+- Full path = Core + Scope + today's sections, in order.
+  [`scheduling_instructions.py:318`](../../backend/agent/scheduling_instructions.py#L318)
+
+**Runtime output sets**
+
+- Narrowed output per route; a misroute cannot add capability.
+  [`runtime.py:368`](../../backend/agent/runtime.py#L368)
+
+- Every out-of-scope refusal is the fixed one, so off-topic text never reaches the planner.
+  [`runtime.py:424`](../../backend/agent/runtime.py#L424)
+
+- The fixed refusal text.
+  [`runtime.py:253`](../../backend/agent/runtime.py#L253)
+
+**Jev router and wiring**
+
+- One `choice` question; mixed messages count as scheduling.
+  [`jev_router.py:19`](../../backend/adapters/grounding/jev_router.py#L19)
+
+- Strict parse: all three routes present, summing to about 1, else `bad_response`.
+  [`jev_router.py:50`](../../backend/adapters/grounding/jev_router.py#L50)
+
+- Provider and key resolution shared with the tier-1 checker.
+  [`factory.py:44`](../../backend/adapters/grounding/factory.py#L44)
+
+- Off or keyless means no router, with one warning.
+  [`factory.py:74`](../../backend/adapters/grounding/factory.py#L74)
+
+**Settings and telemetry**
+
+- Mode, threshold and timeout, validated at start.
+  [`settings.py:204`](../../backend/settings.py#L204)
+
+- Route, probability and error on the request span; no message text.
+  [`spans.py:530`](../../backend/adapters/telemetry/spans.py#L530)
+
+- Allow-list entries for the export sanitizer.
+  [`span_policy.py:337`](../../backend/adapters/telemetry/span_policy.py#L337)
+
+**Peripherals**
+
+- Keyless suite pins the router off.
+  [`conftest.py:63`](../../backend/conftest.py#L63)
+
+- Operator switch passed through to the container.
+  [`docker-compose.yml:57`](../../docker-compose.yml#L57)
+
+- Prompt sha256 pin.
+  [`test_turn_routing.py:53`](../../backend/tests/test_turn_routing.py#L53)
+
+- `f0cdeca6` replay through the execute route.
+  [`test_turn_routing.py:369`](../../backend/tests/test_turn_routing.py#L369)
+
+- Router off: no request is made.
+  [`test_turn_routing.py:403`](../../backend/tests/test_turn_routing.py#L403)

@@ -1,8 +1,10 @@
 """Turn router port: which path a new planner message takes.
 
-Only message text crosses this port -- never scenario records, tool results or
-the workflow snapshot. Implementations never raise; a failure is a closed
-`error` code and the caller falls back to `scheduling`.
+Only conversation text crosses this port: planner messages and the agent's
+replies as the planner saw them (which can quote values those replies stated),
+never raw scenario records, tool results or the workflow snapshot.
+Implementations never raise; a failure is a closed `error` code and the
+caller falls back to `scheduling`.
 """
 from __future__ import annotations
 

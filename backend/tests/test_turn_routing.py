@@ -26,14 +26,18 @@ from agent.runtime import (
     ANSWER_OUTPUT_TOOL, OUT_OF_SCOPE_REFUSAL, REFUSAL_OUTPUT_TOOL, PydanticAIAgentRuntime,
     create_agent_runtime,
 )
-from application.contracts.activity import AgentResponseActivityV1, PlannerMessageActivityV1
+from application.contracts.activity import (
+    AgentResponseActivityV1, DraftActivityV1, PlannerMessageActivityV1,
+)
 from application.contracts.agent_runtime import AgentRunOutcomeV1, AgentTurnRequestV1
+from application.contracts.dialogue import RefusalV1
 from application.contracts.grounding import (
     GroundedAnswerV2, GroundedProseSegmentV1, GroundedResponseV1,
 )
 from application.ports.turn_router import TURN_ROUTES, TurnRouteResultV1, TurnRouteStateV1
 from application.use_cases.route_turn import (
-    MESSAGE_CHAR_LIMIT, TurnRouteDecisionV1, decide_route, route_state,
+    LATEST_MESSAGE_CHAR_LIMIT, MESSAGE_CHAR_LIMIT, TurnRouteDecisionV1, decide_route,
+    route_state,
 )
 from settings import InvalidFlagError, default_settings
 from tests.test_conversations_api import (  # noqa: F401  (conversation_client is a fixture)
@@ -92,6 +96,7 @@ def _p(scheduling: float, direct: float, out_of_scope: float) -> TurnRouteResult
     (_p(0.9, 0.05, 0.05), TurnRouteDecisionV1("scheduling", 0.9)),
     (_p(0.3, 0.6, 0.1), TurnRouteDecisionV1("scheduling", 0.3)),
     (_p(0.15, 0.0, 0.85), TurnRouteDecisionV1("out_of_scope", 0.85)),
+    (_p(0.0, 0.5, 0.5), TurnRouteDecisionV1("scheduling", 0.0)),
     (TurnRouteResultV1(error="timeout"), TurnRouteDecisionV1(error="timeout")),
     (TurnRouteResultV1(error="http_503"), TurnRouteDecisionV1(error="http_503")),
     (TurnRouteResultV1(), TurnRouteDecisionV1(error="bad_response")),
@@ -124,12 +129,22 @@ def _reply(text: str) -> AgentResponseActivityV1:
 
 def test_the_router_state_is_the_last_exchange_as_truncated_text() -> None:
     history = (_planner("p1"), _reply("r1"), _planner("p2"), _reply("r2"),
-               _planner("p3"), _reply("r3" * 400))
-    state = route_state("  hi  " + "x" * 1000, history)
-    assert state.message.startswith("hi") and len(state.message) == MESSAGE_CHAR_LIMIT
+               _planner("p3"), _reply("r3" * 400), _planner("   "))
+    state = route_state("  hi  " + "x" * 5000, history)
+    assert state.message.startswith("hi") and len(state.message) == LATEST_MESSAGE_CHAR_LIMIT
     assert state.previous_planner_messages == ("p2", "p3")
     assert state.previous_agent_replies[0] == "r2"
     assert len(state.previous_agent_replies[1]) == MESSAGE_CHAR_LIMIT
+
+
+def test_a_draft_counts_as_the_agents_last_reply() -> None:
+    draft = DraftActivityV1(
+        activity_id=uuid4(), activity_type="draft", conversation_id=uuid4(),
+        conversation_resource_version=1, scenario_id=uuid4(), scenario_version_id=uuid4(),
+        occurred_at=datetime.now(timezone.utc), proposal_id=uuid4(),
+        proposal_version_id=uuid4(), consequence_summary="Caps Ana at 40 hours.")
+    state = route_state("yes, do that", (_planner("cap Ana at 40h"), _reply("ok"), draft))
+    assert state.previous_agent_replies == ("ok", "Caps Ana at 40 hours.")
 
 
 # --- factory -------------------------------------------------------------------
@@ -217,7 +232,11 @@ def test_one_choice_question_over_message_text_only() -> None:
     (lambda r: httpx.Response(200, json={"answers": {}}), "bad_response"),
     (lambda r: httpx.Response(200, text="not json"), "bad_response"),
     (lambda r: httpx.Response(200, json={"answers": {"route": {"probabilities": {
-        "direct": 1.4}}}}), "bad_response"),
+        "scheduling": 0.0, "direct": 1.4, "out_of_scope": 0.0}}}}), "bad_response"),
+    (lambda r: httpx.Response(200, json={"answers": {"route": {"probabilities": {
+        "direct": 0.9}}}}), "bad_response"),
+    (lambda r: httpx.Response(200, json={"answers": {"route": {"probabilities": {
+        "scheduling": 0.86, "direct": 0.0, "out_of_scope": 0.87}}}}), "bad_response"),
 ])
 def test_every_router_failure_is_a_closed_code(handler, code) -> None:
     assert _jev(handler).route(TurnRouteStateV1("hi")) == TurnRouteResultV1(error=code)
@@ -269,15 +288,20 @@ def test_off_topic_text_becomes_the_fixed_refusal() -> None:
     assert offered[0].instructions == prompts.OUT_OF_SCOPE_INSTRUCTIONS.strip()
 
 
-def test_an_off_topic_refusal_always_carries_out_of_scope() -> None:
+def test_an_off_topic_refusal_is_always_the_fixed_one() -> None:
+    """The model's own detail could carry the off-topic answer itself."""
     model, _ = _scripted(_tool(REFUSAL_OUTPUT_TOOL, {
-        "reason": "unsupported_request", "detail": "I only do scheduling.",
+        "reason": "unsupported_request", "detail": "def solve(a, b, c): ...",
         "next_step": "Ask who works Wednesday."}))
     outcome = _runtime("out_of_scope", model).run_turn(
         AgentTurnRequestV1(prompt="write Python for a quadratic"))
-    assert outcome.refusal is not None
-    assert outcome.refusal.reason == "out_of_scope"
-    assert outcome.refusal.detail == "I only do scheduling."
+    assert outcome.refusal == OUT_OF_SCOPE_REFUSAL
+
+
+@pytest.mark.parametrize("answer_type", [None, RefusalV1])
+def test_a_special_route_needs_the_grounded_answer_type(answer_type) -> None:
+    with pytest.raises(ValueError):
+        create_agent_runtime(model=_scripted()[0], answer_type=answer_type, route="direct")
 
 
 def test_a_direct_turn_gets_no_tools_and_answers_only() -> None:

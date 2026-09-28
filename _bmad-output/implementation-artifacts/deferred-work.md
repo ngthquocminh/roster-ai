@@ -1198,3 +1198,7 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-chat-ui-timezone-evidence-polish.md`
   summary: `SITE_TIMEZONE` (`backend/adapters/postgres/scenario_projection.py`) remains a single hardcoded global constant (now `Asia/Ho_Chi_Minh`, previously `Australia/Sydney`) rather than a genuinely per-site configurable value, and this story's two committed contract fixtures anchor on only one calendar date (2026-05-31), so the DST-vs-fixed-offset asymmetry between the old and new zones (Sydney observes DST, Ho Chi Minh does not) is untested across a year boundary.
   evidence: Blind Hunter review. Pre-existing architectural shape (the constant already existed before this story; only its value changed) and out of this story's scope (a display/config-value fix, not a multi-site feature). Revisit trigger: the first story that needs a genuinely per-site-configurable timezone, or that imports a fixture whose horizon crosses an Australian-style DST boundary.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-agent-turn-routing.md`
+  summary: Give the Jev turn router (and the tier-1 checker it copies) a true wall-clock deadline and a pooled HTTP client.
+  evidence: httpx `timeout=2.0` bounds each phase (connect/read/write/pool) separately and DNS not at all, and each call opens a fresh TLS connection, so a slow provider can delay every routed turn by several seconds despite `AGENT_ROUTER_TIMEOUT_SECONDS=2`.
