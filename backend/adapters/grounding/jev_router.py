@@ -13,13 +13,16 @@ from application.ports.turn_router import TURN_ROUTES, TurnRouteResultV1, TurnRo
 
 _INSTRUCTIONS = (
     "Route the planner's latest message (`state.message`) to a workforce scheduling "
-    "assistant. `state.previous_planner_messages` and `state.previous_agent_replies` are "
-    "the earlier conversation, for context only."
+    "assistant. The app's own features are: inspecting scenario records, computing counts, "
+    "drafting schedule changes, optimization runs, baseline approval, and a demonstration "
+    "feature. `state.previous_planner_messages` and `state.previous_agent_replies` are the "
+    "earlier conversation, for context only."
 )
 _CRITERIA = {
     "scheduling": (
         "asks about, or to change, the schedule, workers, tasks, demand, drafts, runs or "
-        "baseline; or refers back to earlier conversation; or mixes any of that with "
+        "baseline; or asks to use one of the app's own features (including the demonstration "
+        "feature); or refers back to earlier conversation; or mixes any of that with "
         "something else"
     ),
     "direct": (
@@ -28,7 +31,7 @@ _CRITERIA = {
     ),
     "out_of_scope": (
         "clearly unrelated to workforce scheduling or this app, with no scheduling request "
-        "in it"
+        "and no request to use one of the app's own features in it"
     ),
 }
 
