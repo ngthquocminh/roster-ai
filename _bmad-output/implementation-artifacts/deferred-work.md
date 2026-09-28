@@ -1180,6 +1180,7 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 
 ## Deferred from: code review of spec-anonymise-fixture-names (2026-09-26)
 
+- **CLOSED 2026-09-28 (turn-routing PR):** run `d04a1eb4` on `371964a`, on the anonymised fixtures, became the new baseline (108/108, `3cc57c2`) instead of a regression comparison.
 - source_spec: `_bmad-output/implementation-artifacts/spec-anonymise-fixture-names.md`
   summary: The promoted live-conversation baseline (`backend/evals/baselines/live-conversations.json`, 87/90) was measured on the pre-anonymisation fixture names and prompt examples, and neither `configuration_digest` nor `behavioral_digest` covers the fixture or the instructions, so the next regression comparison silently compares two different setups.
   evidence: Blind Hunter review; the anonymisation rewrote every task and member name the live scenarios resolve, and the `scheduling_instructions.py` verbatim-copy examples. Re-baselining needs a paid live-provider run, out of scope for a data-only change. Revisit trigger: the next live-conversation run -- treat it as a new baseline, not a regression comparison.
@@ -1198,3 +1199,7 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-chat-ui-timezone-evidence-polish.md`
   summary: `SITE_TIMEZONE` (`backend/adapters/postgres/scenario_projection.py`) remains a single hardcoded global constant (now `Asia/Ho_Chi_Minh`, previously `Australia/Sydney`) rather than a genuinely per-site configurable value, and this story's two committed contract fixtures anchor on only one calendar date (2026-05-31), so the DST-vs-fixed-offset asymmetry between the old and new zones (Sydney observes DST, Ho Chi Minh does not) is untested across a year boundary.
   evidence: Blind Hunter review. Pre-existing architectural shape (the constant already existed before this story; only its value changed) and out of this story's scope (a display/config-value fix, not a multi-site feature). Revisit trigger: the first story that needs a genuinely per-site-configurable timezone, or that imports a fixture whose horizon crosses an Australian-style DST boundary.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-agent-turn-routing.md`
+  summary: Give the Jev turn router (and the tier-1 checker it copies) a true wall-clock deadline and a pooled HTTP client.
+  evidence: httpx `timeout=2.0` bounds each phase (connect/read/write/pool) separately and DNS not at all, and each call opens a fresh TLS connection, so a slow provider can delay every routed turn by several seconds despite `AGENT_ROUTER_TIMEOUT_SECONDS=2`.

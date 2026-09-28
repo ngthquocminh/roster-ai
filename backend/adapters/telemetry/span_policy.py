@@ -315,6 +315,12 @@ JOB_TYPES: Final = frozenset({"schedule_run_execute"})
 #: `protocol.turn_verdict`'s outcomes plus `runner.py`'s `incomplete`; and
 #: `ck_agent_run_status`. A test pins both to their sources.
 TURN_VERDICTS: Final = frozenset({"pass", "fail", "incomplete", "needs_review"})
+#: `application.ports.turn_router.TURN_ROUTES` and `JevTurnRouter`'s closed
+#: error codes. A test pins both to their sources.
+TURN_ROUTES: Final = frozenset({"scheduling", "direct", "out_of_scope"})
+TURN_ROUTE_ERROR_PATTERN: Final = (
+    r"timeout|transport_error|bad_response|router_exception|http_[0-9]{3}"
+)
 AGENT_RUN_STATUSES: Final = frozenset({
     "agent_queued", "agent_running", "approval_required", "agent_completed",
     "agent_timed_out", "agent_cancelled", "agent_failed",
@@ -326,7 +332,12 @@ POLICIES: Final[Mapping[str, CategoryPolicy]] = {
             "http.method", "http.route", "http.status_code", "http.scheme",
             "http.flavor", "net.host.port",
         }),
-        validated={"shiftmind.schedule_run.id": _uuid},
+        validated={
+            "shiftmind.schedule_run.id": _uuid,
+            "shiftmind.turn.route": _closed(TURN_ROUTES),
+            "shiftmind.turn.route_probability": _number,
+            "shiftmind.turn.route_error": _matching(TURN_ROUTE_ERROR_PATTERN),
+        },
         transform={"http.target": strip_target_query},
         known_dropped=frozenset({
             "http.url", "http.host", "http.server_name", "http.user_agent",

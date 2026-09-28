@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DATASET = Path(__file__).parent / 'scenarios.json'
-REQUIRED_SCENARIOS = {'A': 6, 'B': 12, 'C': 12}
+REQUIRED_SCENARIOS = {'A': 6, 'B': 12, 'C': 12, 'D': 6}
 SUPPORTED_ACTIONS = frozenset({
     'run_optimization', 'run_and_cancel', 'verify_baseline_unchanged', 'approve',
     'reject_approval', 'reload', 'reject_draft',

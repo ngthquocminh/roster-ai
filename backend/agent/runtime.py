@@ -49,7 +49,7 @@ from pydantic_ai.output import TextOutput, ToolOutput
 from pydantic_ai.usage import RunUsage
 
 from agent.translate import summarize, to_framework_messages, to_owned_turn
-from agent.scheduling_instructions import SCHEDULING_ASSISTANT_INSTRUCTIONS
+from agent.scheduling_instructions import SCHEDULING_ASSISTANT_INSTRUCTIONS, instructions_for
 from settings import TRACE_CONTENT_SYNTHETIC_EVAL
 from application.contracts.agent_runtime import (
     AgentApprovalPendingV1,
@@ -76,6 +76,7 @@ from application.capabilities.module import CapabilityModuleV1
 from application.contracts.capability_manifest import CapabilityError
 from application.contracts.grounding import GroundedAnswerV2
 from application.contracts.dialogue import ClarificationV1, RefusalV1
+from application.ports.turn_router import TurnRoute
 from application.contracts.proposal import DraftProposalV1
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
 from application.grounding.claim_tags import fact_handles
@@ -249,6 +250,19 @@ def _prose_answer(text: str) -> GroundedAnswerV2:
     return GroundedAnswerV2(text=text.strip())
 
 
+OUT_OF_SCOPE_REFUSAL = RefusalV1(
+    reason="out_of_scope",
+    detail="I can only help with workforce scheduling in this app.",
+    next_step="Try asking who is assigned to a task, or to cap a worker's weekly hours.",
+)
+
+
+def _out_of_scope_text(_text: str) -> RefusalV1:
+    """Plain text on the out-of-scope route may be the off-topic answer itself,
+    so it is replaced by the fixed refusal and never reaches the planner."""
+    return OUT_OF_SCOPE_REFUSAL
+
+
 @dataclass(frozen=True)
 class AgentRuntimeConfig:
     """Application configuration for the adapter.
@@ -305,6 +319,7 @@ class PydanticAIAgentRuntime:
         deps: AgentDepsV1 | None = None,
         answer_type: type | None = None,
         trace_content: bool = False,
+        route: TurnRoute = "scheduling",
     ) -> None:
         """`model` is an injected framework model (a deterministic double in
         tests). `tracer_provider` is where spans go (the process provider, or a
@@ -348,28 +363,41 @@ class PydanticAIAgentRuntime:
             )
         )
 
-        output_type = (
-            [str, DeferredToolRequests]
-            if answer_type is None
-            else [
-                ToolOutput(answer_type, name=ANSWER_OUTPUT_TOOL),
-                ToolOutput(ClarificationV1, name=CLARIFICATION_OUTPUT_TOOL),
-                ToolOutput(RefusalV1, name=REFUSAL_OUTPUT_TOOL),
-                ToolOutput(DraftProposalV1, name=DRAFT_OUTPUT_TOOL),
-                DeferredToolRequests,
-                # Plain text is accepted as a prose-only grounded answer. With
-                # only output tools, the request carries tool_choice="required";
-                # measured 2026-09-17, openai/gpt-5.6-luna still answered a
-                # greeting in text after a tool result and, unable to end that
-                # text under "required", repeated it until the upstream stream
-                # broke (502 -> invalid_output). Accepting text lets the provider
-                # send tool_choice="auto" and the reply terminate normally.
-                # Nothing is trusted more: the validators below and the
-                # grounding gate apply to this answer exactly as to a tool
-                # answer, so a rendered number still needs a placeholder.
-                *((TextOutput(_prose_answer),) if answer_type is GroundedAnswerV2 else ()),
+        # Special routes are granted no tools and a narrowed output set: a
+        # misroute can weaken an answer, never add capability.
+        if route != "scheduling" and answer_type is not GroundedAnswerV2:
+            raise ValueError(f"route {route!r} needs answer_type=GroundedAnswerV2")
+        if route == "direct":
+            output_type = [
+                ToolOutput(GroundedAnswerV2, name=ANSWER_OUTPUT_TOOL), TextOutput(_prose_answer),
             ]
-        )
+        elif route == "out_of_scope":
+            output_type = [
+                ToolOutput(RefusalV1, name=REFUSAL_OUTPUT_TOOL), TextOutput(_out_of_scope_text),
+            ]
+        else:
+            output_type = (
+                [str, DeferredToolRequests]
+                if answer_type is None
+                else [
+                    ToolOutput(answer_type, name=ANSWER_OUTPUT_TOOL),
+                    ToolOutput(ClarificationV1, name=CLARIFICATION_OUTPUT_TOOL),
+                    ToolOutput(RefusalV1, name=REFUSAL_OUTPUT_TOOL),
+                    ToolOutput(DraftProposalV1, name=DRAFT_OUTPUT_TOOL),
+                    DeferredToolRequests,
+                    # Plain text is accepted as a prose-only grounded answer. With
+                    # only output tools, the request carries tool_choice="required";
+                    # measured 2026-09-17, openai/gpt-5.6-luna still answered a
+                    # greeting in text after a tool result and, unable to end that
+                    # text under "required", repeated it until the upstream stream
+                    # broke (502 -> invalid_output). Accepting text lets the provider
+                    # send tool_choice="auto" and the reply terminate normally.
+                    # Nothing is trusted more: the validators below and the
+                    # grounding gate apply to this answer exactly as to a tool
+                    # answer, so a rendered number still needs a placeholder.
+                    *((TextOutput(_prose_answer),) if answer_type is GroundedAnswerV2 else ()),
+                ]
+            )
         self._agent: Agent = Agent(
             deps_type=AgentDepsV1 | None,
             output_type=output_type,
@@ -390,6 +418,15 @@ class PydanticAIAgentRuntime:
             definition.name
             for definition in (() if output_toolset is None else output_toolset._tool_defs)
         )
+
+        if route == "out_of_scope":
+            @self._agent.output_validator
+            def _force_out_of_scope(
+                ctx: RunContext[AgentDepsV1 | None], output: object
+            ) -> object:
+                # The model's own detail/next_step could carry the off-topic
+                # answer itself, so every refusal here is the fixed one.
+                return OUT_OF_SCOPE_REFUSAL if isinstance(output, RefusalV1) else output
 
         if answer_type is not None:
             # Corrective retries for placeholder slips. A handle with nothing to
@@ -958,6 +995,7 @@ def create_agent_runtime(
     deps: AgentDepsV1 | None = None,
     answer_type: type | None = None,
     tracer_provider: object | None = None,
+    route: TurnRoute = "scheduling",
 ) -> PydanticAIAgentRuntime:
     """Factory mirroring `llm/base.py:create_provider`'s shape.
 
@@ -965,7 +1003,7 @@ def create_agent_runtime(
     configurations (AD-19). This one reads `agent_runtime_*` settings fields and
     never `llm_provider`/`llm_model`.
     """
-    config = AgentRuntimeConfig()
+    config = AgentRuntimeConfig(instructions=instructions_for(route))
     if settings is not None:
         config = AgentRuntimeConfig(
             model=settings.agent_runtime_model,
@@ -978,6 +1016,7 @@ def create_agent_runtime(
             ),
             retries_limit=settings.agent_runtime_retries_limit,
             reasoning_effort=getattr(settings, 'agent_runtime_reasoning_effort', None),
+            instructions=instructions_for(route),
         )
     trace_content = (
         tracer_provider is not None
@@ -991,4 +1030,5 @@ def create_agent_runtime(
         deps=deps,
         answer_type=answer_type,
         trace_content=trace_content,
+        route=route,
     )

@@ -155,6 +155,17 @@ def test_judge_reason_is_bounded_but_allows_concise_multi_fact_explanations():
         ConversationJudgment.model_validate(data)
 
 
+def test_judge_citations_are_capped_in_the_schema_and_truncated_not_rejected():
+    schema = ConversationJudgment.model_json_schema()
+    assert schema['$defs']['DimensionGrade']['properties']['evidence_ids']['maxItems'] == 12
+    data = judgment().model_dump()
+    data['completeness']['evidence_ids'] = ['turn-1'] + [f'turn-1:assistant:{i}' for i in range(40)]
+    capped = ConversationJudgment.model_validate(data)
+    assert len(capped.completeness.evidence_ids) == 12
+    assert capped.completeness.evidence_ids[0] == 'turn-1'
+    assert capped.passes(known_ids={'turn-1'})
+
+
 def test_one_garbled_citation_among_real_ones_does_not_fail_a_correct_turn():
     """Observed in live-suite-v2-final-x3: the judge mistyped its own isolation
     prefix, so an all-2s verdict with real citations failed the whole turn."""

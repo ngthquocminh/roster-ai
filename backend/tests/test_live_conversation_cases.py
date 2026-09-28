@@ -6,12 +6,12 @@ import pytest
 from evals.live_conversations.cases import load_scenarios, prefix_executions, validate_scenarios
 
 
-def test_catalogue_is_three_full_conversations():
+def test_catalogue_is_four_full_conversations():
     cases = load_scenarios()
-    assert {case.id: len(case.turns) for case in cases} == {'A': 6, 'B': 12, 'C': 12}
+    assert {case.id: len(case.turns) for case in cases} == {'A': 6, 'B': 12, 'C': 12, 'D': 6}
     executions = tuple(prefix_executions(cases))
-    assert len(executions) == 3
-    assert sum(len(turns) for _, _, turns in executions) == 30
+    assert len(executions) == 4
+    assert sum(len(turns) for _, _, turns in executions) == 36
     for scenario, endpoint, turns in executions:
         assert endpoint == len(scenario.turns) and turns == scenario.turns
     assert [turn.user for turn in cases[0].turns[:3]] == [
@@ -53,7 +53,7 @@ def test_a_partial_conversation_is_rejected():
     cases = load_scenarios()
     changed = replace(cases[1], prefixes=(4,))
     with pytest.raises(ValueError, match='complete conversation'):
-        validate_scenarios((cases[0], changed, cases[2]))
+        validate_scenarios((cases[0], changed, cases[2], cases[3]))
 
 
 def test_a_missing_scenario_is_rejected():
@@ -67,7 +67,7 @@ def test_an_unknown_action_is_rejected():
     turn = replace(cases[1].turns[6], actions_after=('run_optimisation',))
     changed = replace(cases[1], turns=(*cases[1].turns[:6], turn, *cases[1].turns[7:]))
     with pytest.raises(ValueError, match='unsupported authored actions'):
-        validate_scenarios((cases[0], changed, cases[2]))
+        validate_scenarios((cases[0], changed, cases[2], cases[3]))
 
 
 def test_resume_and_retry_are_offered_by_the_runner_cli():
@@ -91,7 +91,7 @@ def _with_turn(**changes):
 def test_duplicate_scenario_ids_are_rejected():
     cases = load_scenarios()
     with pytest.raises(ValueError, match='unique'):
-        validate_scenarios((cases[0], replace(cases[1], id=cases[0].id), cases[2]))
+        validate_scenarios((cases[0], replace(cases[1], id=cases[0].id), cases[2], cases[3]))
 
 
 @pytest.mark.parametrize('field', ['user', 'obligation'])

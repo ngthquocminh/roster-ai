@@ -27,7 +27,7 @@ The measured configuration -- reasoning effort, the per-token prices that drive 
 
 ### Gate the result against the committed baseline
 
-The suite above answers *how good is it right now*. `backend/evals/baselines/live-conversations.json` records what known-good looked like -- the per-turn `{executed, passed}` counts of the Story 5.7 measurement (87/90), its models, effort and behavioural configuration digest. It is a projection of that one measurement, derived by `backend/scripts/derive_live_conversation_baseline.py` and never hand-typed, and it is deliberately tracked config rather than evidence, so it does not live under `evidence/`.
+The suite above answers *how good is it right now*. `backend/evals/baselines/live-conversations.json` records what known-good looked like -- the per-turn `{executed, passed}` counts of the current Story 5.7 measurement (108/108, re-derived 2026-09-28 when scenario D was added), its models, effort and behavioural configuration digest. It is a projection of that one measurement, derived by `backend/scripts/derive_live_conversation_baseline.py` and never hand-typed, and it is deliberately tracked config rather than evidence, so it does not live under `evidence/`.
 
 After a paid run, compare the evidence document it produced against that baseline:
 
@@ -38,14 +38,14 @@ uv run --frozen python scripts/live_conversation_drop_check.py   --report ../evi
 
 Pass the *evidence* document (what `evals.live_conversations.evidence` writes), not the raw `live-matrix.json` run report -- only the former carries `turn_pass_rates`.
 
-The path above is illustrative, not a working example to copy-paste as-is: the committed Story 5.7 evidence predates `behavioral_digest` and can never gain one, so running the command verbatim against it always exits 1 with a `configuration_match` refusal. Point `--report` at the evidence document *your own* paid run just produced.
+The path above is the evidence file your paid run overwrites, so point it at that run's output. Run verbatim against the committed evidence it compares the baseline's own source measurement against itself, which passes and proves nothing new.
 
 The check exits non-zero on any of:
 
-- **Tier 1** -- a turn the baseline recorded at full marks now passes zero executions, named. Turns the baseline never scored full (`B:5`, `B:8`, `C:3` at 2/3) are exempt from this tier and watched by Tier 3 instead.
+- **Tier 1** -- a turn the baseline recorded at full marks now passes zero executions, named. Turns the baseline never scored full (at 2/3) are exempt from this tier and watched by Tier 3 instead; the current 108/108 baseline has none.
 - **Tier 2** -- any never-accept occurrence, on a single instance: a wrong value, unit, entity or version, a missing or unauthorized effect, or a false success claim.
-- **Tier 3** -- fewer than 83 of 90 turns passed.
-- **Structural** -- `clean_scenarios` no longer contains `A`, `B` and `C`.
+- **Tier 3** -- fewer than 100 of the baseline's 108 turns passed. Only turns the baseline measured are counted, so a newly added scenario cannot pad the total. The floor keeps a ~1.2% false-alarm rate per run (historical 3/90 failure rate scaled to 108 turns); it is a hand-set constant in `live_conversation_drop_check.py`, recalculated whenever the baseline's totals change.
+- **Structural** -- `clean_scenarios` no longer contains every scenario the baseline has clean (`A`, `B`, `C`, `D`).
 - **Refusal** -- the run's `behavioral_digest` differs from the baseline's, or either side was truncated (`blocking_reasons`, `complete_repetitions`, `runs[].complete`). A refusal is reported as a distinct outcome from a failure and never yields a tier verdict.
 
 Each verdict is reported separately in the Gate A readiness status vocabulary (`passed` / `failed` / `skipped` / `missing`), so a future Gate B assessment consumes them as rows. It is operator-invoked on the machine that ran the paid suite: the live suite may never run in `ci.yml` (NFR26/AD-16), so no workflow job, secret or cron entry exists for it. The half that needs no credential -- that the committed baseline still matches the committed Story 5.7 evidence -- runs in the default `pytest` suite on every CI run (`backend/tests/test_live_conversation_drop_check.py`). Re-derive the baseline whenever that evidence is regenerated.
@@ -54,27 +54,25 @@ Each verdict is reported separately in the Gate A readiness status vocabulary (`
 
 ### What it covers
 
-- Three authored conversations: **A** introduction, typo and memory (6 turns); **B** draft → real solver run → approval → baseline (12); **C** tool tour (12). 30 user turns per repetition, generated live from fresh state, with a verdict on every turn.
+- Four authored conversations: **A** introduction, typo and memory (6 turns); **B** draft → real solver run → approval → baseline (12); **C** tool tour (12); **D** turn routing: small talk, off-topic refusals, an app-features question and a mixed message (6). 36 user turns per repetition, generated live from fresh state, with a verdict on every turn.
 - The inventory is 135 operations, derived from the installed capabilities. 37 are live-required: every one is exercised live, or carries a named reason a planner turn cannot reach it plus the test that proves it instead (10 do, e.g. draft groups the resolver rejects). The other 98 — query keys, paging, invalid-query paths, manifest error codes and the compute-risk run tool the registry withholds from chat — are deterministic-only. Neither set may vanish from the denominator, and a known product gap (the demonstration approval branch, Story 5.7 Decision 1) is stated as one.
 - Two independent layers per turn: fact/effect checks read the application and fixture directly, and a separately configured LLM judge scores relevance, continuity, completeness and clarification/refusal. A judge pass can never override a fact or effect failure.
 
 ### Measured results
 
-Recorded matrix (the one the committed evidence file describes; refreshed with it), `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, images rebuilt, 9 executions:
+Recorded matrix (the one the committed evidence file describes; refreshed with it), `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, reasoning effort low, images rebuilt, 12 executions:
 
 | | Result |
 |---|---|
-| Turns passed | **87 / 90** |
-| Clean executions | **6 / 9** (three complete repetitions; every scenario clean at least once) |
-| Clean run per scenario | A ✅ B ✅ C ✅ |
+| Turns passed | **108 / 108** |
+| Clean executions | **12 / 12** (three complete repetitions, no retries) |
+| Clean run per scenario | A ✅ B ✅ C ✅ D ✅ |
 | False claims, wrong facts, missing effects | **none** |
-| Tracked spend | USD 0.58 |
+| Tracked spend | USD 0.66 |
 
-Run `64ca2862-a81c-45f7-adcb-56586f62d57f`, measured on a clean tree at `437b63a`, the code commit the evidence binds (the run started at `db0a5dd`, a docs-only commit; no code file differs between the two, which `evidence.generate` checks and records as `measured_at_commit`).
+Run `d04a1eb4-77da-4f83-81f2-bce173fb1ae2`, measured 2026-09-28 on a clean tree at `371964a`, the code commit the evidence binds. Against the previous baseline, every drop-check tier passed (Tier 3: 90/90 on that baseline's turns). `--accept-finding B:5` was still given, but no turn failed, so nothing was accepted in practice. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates, the verdict, and the sha256 of the source report.
 
-Accepted findings (recorded, not hidden), each passed 2 of 3 and none involved a false claim: **B:5** and **C:3** were an agent turn that ended without an answer (`unsuccessful_agent_turn`: an invalid output and a run-budget exhaustion), and **B:8** was a completed answer (feasible candidate, 76 assignments) that the judge scored 1 for completeness. Roughly 1 turn in 30 fails in this matrix, spread across different turns rather than a fixed set of broken ones. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates, the accepted findings' per-execution failure reasons, the verdict, and the sha256 of the source report.
-
-Earlier attempts of the same measurement session, not counted in the evidence (a report's images must match, and each rebuild produced new image ids): two stopped at the image build because Docker was not running (no execution, no spend), and run `33821ef3-03c9-4bf4-9fc9-ec5ca8355c4a` crashed on a Windows `PermissionError` while saving its ninth execution, after 8 executions and 2 turns of the ninth (USD 0.53). Its turn failures were B:5, C:8, C:9 (`unsuccessful_agent_turn`, C:8 and C:9 also `required_persisted_draft_missing`) and A:4 in repetition 2, an `unsupported_claim`: the reply was cut to "This scenario has " because its `worker_count` claim carried no evidence (`missing_evidence`, no value), so no wrong figure was shown. The owner accepted evidence from the complete run only, with this disclosure.
+One run is not general reliability: the previous measurement (run `64ca2862`, `437b63a`, three scenarios) passed 87/90, with B:5, B:8 and C:3 each failing once without a false claim, roughly 1 turn in 30. Before the recorded run, a 1-repetition smoke run of D alone (USD 0.02) failed D:1 on an over-strict authored obligation (a one-line offer of help counted as a capability list); the obligation was relaxed in `371964a`, not the product.
 
 A stricter cross-check with `google/gemini-2.5-pro` as judge (~5x the judging cost) found real defects the cheaper judge passed, including a per-task figure presented as a scenario-wide total (since fixed, with a regression test). Use it when hunting defects; the cheaper judge runs the recorded matrix.
 

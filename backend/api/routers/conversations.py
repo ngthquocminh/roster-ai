@@ -60,7 +60,9 @@ from application.ports.conversation import AgentRunNotQueuedError
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
 from application.use_cases.conversation_workflow_context import load_workflow_context
-from adapters.grounding.factory import create_claim_support_checker
+from application.use_cases.route_turn import decide_route
+from adapters.grounding.factory import create_claim_support_checker, create_turn_router
+from adapters.telemetry.spans import annotate_turn_route
 from settings import tier1_flag_threshold
 from application.use_cases.execute_turn import (
     activity_payload,
@@ -363,7 +365,20 @@ async def execute_agent_turn(
                     )
                     return None
 
-        workflow_context = await run_in_threadpool(_workflow_context)
+        # Fails open: no router, an error, a timeout or a low probability all
+        # route to `scheduling`, whose runtime call below is today's.
+        decision = await run_in_threadpool(
+            decide_route,
+            create_turn_router(settings),
+            prompt=claimed.prompt,
+            history=claimed.history,
+            threshold=settings.agent_router_threshold,
+        )
+        annotate_turn_route(decision.route, decision.probability, decision.error)
+        workflow_context = (
+            await run_in_threadpool(_workflow_context)
+            if decision.route == "scheduling" else None
+        )
         feature_policy = enabled_feature_policy(settings)
         granted = compose_capabilities(
             CapabilityGrantContextV1(
@@ -374,12 +389,22 @@ async def execute_agent_turn(
                 conversation_site_id=claimed.site_id,
             )
         )
-        runtime = runtime_factory(
-            settings=settings,
-            capabilities=granted,
-            deps=deps,
-            answer_type=GroundedAnswerV2,
-        )
+        if decision.route == "scheduling":
+            runtime = runtime_factory(
+                settings=settings,
+                capabilities=granted,
+                deps=deps,
+                answer_type=GroundedAnswerV2,
+            )
+        else:
+            # Special routes get no tools and no workflow snapshot.
+            runtime = runtime_factory(
+                settings=settings,
+                capabilities=(),
+                deps=deps,
+                answer_type=GroundedAnswerV2,
+                route=decision.route,
+            )
         outcome = await run_in_threadpool(
             execute_turn,
             runtime,

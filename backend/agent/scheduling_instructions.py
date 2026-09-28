@@ -1,8 +1,16 @@
-"""Product guidance supplied to the generic agent adapter."""
+"""Product guidance supplied to the generic agent adapter.
 
+The master prompt is split along its `##` headings so each turn route composes
+only the sections it needs (routing-paths.md). The scheduling route is the
+master prompt plus the Scope section; nothing else in it changes.
+"""
+
+import re
+
+from application.ports.turn_router import TurnRoute
 from application.use_cases.conversation_workflow_context import CANDIDATE_ASSIGNMENT_PREVIEW
 
-SCHEDULING_ASSISTANT_INSTRUCTIONS = f"""You are ShiftMind's scheduling assistant. Be concise and factual.
+_MASTER_PROMPT = f"""You are ShiftMind's scheduling assistant. Be concise and factual.
 
 ## Business context
 
@@ -268,3 +276,57 @@ new draft from the full constraint list you send. To add or change a constraint:
 - Starting a run or approving a baseline: planner controls only, no tool.
 - Explicit demonstration requests: shiftmind_demonstration, only.
 """
+
+
+SCOPE = """## Scope
+
+Help only with workforce scheduling in this app -- its scenario, drafts, runs and baseline.
+Anything else (code, songs, general knowledge, other business domains): refuse with reason
+out_of_scope and point back to scheduling. In a message that mixes the two, answer only the
+scheduling part."""
+
+DIRECT_RULE = """## Direct rule
+
+This reply has no schedule data and no tools. Never state schedule facts, counts or numbers,
+and never describe features not listed in Tool routing or the workflow above."""
+
+REFUSAL_RULE = """## Refusal rule
+
+Return only the refusal: reason out_of_scope, a one-sentence detail, and a next_step suggesting
+one or two example scheduling questions. Fulfil no part of the request."""
+
+
+def _sections(prompt: str) -> dict[str, str]:
+    """Heading -> section text, in prompt order; the untitled opening is "Core"."""
+    parts = re.split(r"(?m)^(?=## )", prompt)
+    sections = {"Core": parts[0].strip()}
+    for part in parts[1:]:
+        sections[part.split("\n", 1)[0].removeprefix("## ")] = part.strip()
+    return sections
+
+
+def compose(parts: list[str]) -> str:
+    return "\n\n".join(parts) + "\n"
+
+
+_MASTER = _sections(_MASTER_PROMPT)
+_DIRECT_SECTIONS = (
+    "Business context", "ShiftMind workflow", "Greetings and capability questions",
+    "Tool routing",
+)
+
+SCHEDULING_ASSISTANT_INSTRUCTIONS = compose(
+    [_MASTER["Core"], SCOPE, *(text for name, text in _MASTER.items() if name != "Core")]
+)
+DIRECT_INSTRUCTIONS = compose(
+    [_MASTER["Core"], SCOPE, *(_MASTER[name] for name in _DIRECT_SECTIONS), DIRECT_RULE]
+)
+OUT_OF_SCOPE_INSTRUCTIONS = compose([_MASTER["Core"], SCOPE, REFUSAL_RULE])
+
+
+def instructions_for(route: TurnRoute) -> str:
+    return {
+        "scheduling": SCHEDULING_ASSISTANT_INSTRUCTIONS,
+        "direct": DIRECT_INSTRUCTIONS,
+        "out_of_scope": OUT_OF_SCOPE_INSTRUCTIONS,
+    }[route]

@@ -58,6 +58,9 @@ os.environ.pop("AGENT_TRACE_CONTENT_MODE", None)
 # explicit settings and a stub or mock transport; none reaches the network.
 os.environ.pop("TYPESAFE_API_KEY", None)
 os.environ["GROUNDING_TIER1_MODE"] = "off"
+# The turn router shares that key resolution, so the keyless suite pins it off
+# too; routing tests build explicit settings and a stub or mock transport.
+os.environ["AGENT_ROUTER_MODE"] = "off"
 
 
 @contextmanager

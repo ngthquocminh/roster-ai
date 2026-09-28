@@ -48,17 +48,18 @@ from scripts.derive_live_conversation_baseline import (  # noqa: E402
 )
 from scripts.evidence_binding import REPO_ROOT, dataset_file_digest  # noqa: E402
 
-#: Tier 3's floor, chosen against the measured distribution: Poisson around the
-#: baseline's 3 failures puts a drop to <= 82 at ~1.2% per run, versus ~8.4% at
-#: a floor of 85. It catches BROAD degradation; a single broken turn is Tier 1's.
-#: NOT derived from the baseline file at runtime -- it is a one-time judgement
-#: against the CURRENT 87/90 baseline (Decision 5). If a future re-derivation
-#: changes `total_passed`/`total_executed`, re-run the Poisson comparison by
-#: hand and update this constant; nothing here will flag the staleness.
-AGGREGATE_FLOOR = 83
+#: Tier 3's floor, chosen against the measured distribution. The current
+#: baseline is 108/108, which gives a degenerate Poisson, so the rate is the
+#: historical 3 failures per 90 turns scaled to 108 (lambda 3.6): a drop to
+#: <= 99 happens by chance ~1.2% per run, the same false-alarm rate the earlier
+#: floor of 83 had against the 87/90 baseline. It catches BROAD degradation; a
+#: single broken turn is Tier 1's.
+#: NOT derived from the baseline file at runtime (Decision 5). If a future
+#: re-derivation changes `total_passed`/`total_executed`, re-run the Poisson
+#: comparison by hand and update this constant; nothing here will flag the
+#: staleness.
+AGGREGATE_FLOOR = 100
 
-#: Structural: a run that lost a whole scenario is not comparable on turn counts.
-REQUIRED_CLEAN_SCENARIOS = ("A", "B", "C")
 
 #: Minimum complete repetitions on both sides -- a budget-truncated run has fewer.
 REQUIRED_REPETITIONS = 3
@@ -200,7 +201,8 @@ def truncation_refusal(baseline: dict, report: dict) -> dict | None:
 def tier_1(baseline: dict, report: dict) -> dict:
     """Any baseline full-marks turn that now scores zero FAILS, by name.
 
-    Turns not at full marks in the baseline (`B:5`, `B:8`, `C:3` at 2/3) are
+    Turns not at full marks in the baseline (e.g. 2/3; the earlier 87/90
+    baseline had `B:5`, `B:8`, `C:3`, the current 108/108 one has none) are
     EXEMPT from the score-collapse check: a 2/3 turn reaching 0/3 is ~3.6%
     likely by chance, which would make a hard block a false-alarm generator.
     They are watched by Tier 3 only for a SCORE drop.
@@ -271,9 +273,18 @@ def tier_2(report: dict) -> dict:
     return _passed("tier_2_never_accept", title, "no false claim or effect failure")
 
 
-def tier_3(report: dict) -> dict:
-    """The aggregate FAILS below the floor -- broad degradation, not one turn."""
-    rates = report.get("turn_pass_rates") or {}
+def tier_3(baseline: dict, report: dict) -> dict:
+    """The aggregate FAILS below the floor -- broad degradation, not one turn.
+
+    Only turns the baseline also measured are summed: the floor was judged
+    against the baseline's turn set, so a scenario added since (e.g. D before
+    its first re-derivation) must not pad the total and mask a drop elsewhere.
+    """
+    rates = {
+        turn: counts
+        for turn, counts in (report.get("turn_pass_rates") or {}).items()
+        if turn in baseline["turn_pass_rates"]
+    }
     total_passed = sum(int(counts.get("passed", 0)) for counts in rates.values())
     total_executed = sum(int(counts.get("executed", 0)) for counts in rates.values())
     title = f"Tier 3: aggregate at or above {AGGREGATE_FLOOR} passed turns"
@@ -287,10 +298,14 @@ def tier_3(report: dict) -> dict:
     return _passed("tier_3_aggregate", title, detail)
 
 
-def structural_check(report: dict) -> dict:
-    """`clean_scenarios` must still contain A, B and C."""
+def structural_check(baseline: dict, report: dict) -> dict:
+    """`clean_scenarios` must still contain every scenario the baseline had clean.
+
+    A run that lost a whole scenario is not comparable on turn counts. Read from
+    the baseline, not pinned here, so adding a scenario needs no edit to the gate.
+    """
     clean = set(report.get("clean_scenarios") or ())
-    missing = sorted(set(REQUIRED_CLEAN_SCENARIOS) - clean)
+    missing = sorted(set(baseline["clean_scenarios"]) - clean)
     title = "Structural: every scenario still has a clean run"
     if missing:
         return _failed(
@@ -341,8 +356,8 @@ def compare(baseline: dict, report: dict) -> dict:
         checks = [
             tier_1(baseline, report),
             tier_2(report),
-            tier_3(report),
-            structural_check(report),
+            tier_3(baseline, report),
+            structural_check(baseline, report),
         ]
     return {
         "schema_version": "1",

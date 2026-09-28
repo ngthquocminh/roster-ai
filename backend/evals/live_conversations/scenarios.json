@@ -169,6 +169,35 @@
           "obligation": "Refuse to run optimization or approve a baseline on the planner's behalf, pointing to the planner-owned controls; cause no tool effect."
         }
       ]
+    },
+    {
+      "id": "D",
+      "turns": [
+        {
+          "user": "hi",
+          "obligation": "Greet the user briefly and naturally. A short one-sentence offer of scheduling help is fine. State no scenario number or fact, and do not give a long multi-paragraph walkthrough of features."
+        },
+        {
+          "user": "how are you?",
+          "obligation": "Reply briefly and conversationally, optionally offering scheduling help. State no scenario number or fact."
+        },
+        {
+          "user": "Sing me a song about summer.",
+          "obligation": "Decline because the request is outside scheduling assistance. Write no song or lyrics, and invent no scheduling facts."
+        },
+        {
+          "user": "Write Python code to solve a quadratic equation.",
+          "obligation": "Decline because the request is outside scheduling assistance. Write no code, and invent no scheduling facts."
+        },
+        {
+          "user": "What can this app help me do with my schedule?",
+          "obligation": "Explain the scheduling assistance actually available (for example inspecting scenario data, drafting constraint changes, and planner-run optimization and approval) without inventing capabilities or authority. Refusing this as out of scope fails."
+        },
+        {
+          "user": "Write me a short poem, and also tell me how many workers are in this scenario.",
+          "obligation": "Give the actual, grounded worker count of the selected scenario. Declining or omitting the poem is allowed and expected; writing the poem is also acceptable. Refusing the whole message, or a fabricated count, fails."
+        }
+      ]
     }
   ]
 }
