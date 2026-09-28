@@ -1,0 +1,1227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Turn Routing Switchyard</title>
+<style>
+:root{
+  color-scheme: light;
+  --ground:#ECEFE9; --surface:#F7F8F4; --surface-2:#E0E5DE; --sunk:#E3E8E1;
+  --ink:#16201B; --ink-2:#44504A; --ink-3:#5A6660;
+  --rule:#C4CCC5; --rule-strong:#9AA59E;
+  --track:#27302B; --cand:#8A958E; --head:#18201C;
+  --lit:#B8650A; --lit-ink:#8A4A00; --lit-soft:rgba(184,101,10,.12);
+  --red:#B8321F; --red-soft:rgba(184,50,31,.10);
+  --green:#13754A; --green-soft:rgba(19,117,74,.10);
+  --leaf:#DDE8DA; --leaf-ink:#1D4A2F;
+  --grid:rgba(22,32,27,.055); --ray:rgba(22,32,27,.075);
+  --glow:none;
+  --lamp-go:#39D98A; --lamp-div:#F2B233; --lamp-stop:#FF5A45;
+  --panel:#16201B; --panel-2:#1E2924; --panel-3:#27342E;
+  --panel-ink:#EAEDE5; --panel-ink-2:#AFBBB3; --panel-rule:#35443C;
+  --panel-lit:#F2B233; --panel-red:#FF6A52; --panel-green:#4FD68C;
+  --f-display:"Bahnschrift","DIN Condensed","DIN Alternate","Roboto Condensed","Arial Narrow",sans-serif;
+  --f-body:"Gill Sans Nova","Gill Sans","Gill Sans MT","Seravek","Segoe UI",system-ui,-apple-system,sans-serif;
+  --f-mono:"Cascadia Mono","SF Mono","JetBrains Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --ground:#111714; --surface:#19211D; --surface-2:#212B26; --sunk:#1D2621;
+    --ink:#E5E9E2; --ink-2:#B0BBB4; --ink-3:#96A29B;
+    --rule:#2E3933; --rule-strong:#4A5750;
+    --track:#8C9892; --cand:#58655E; --head:#080B09;
+    --lit:#F2B233; --lit-ink:#F5C15A; --lit-soft:rgba(242,178,51,.12);
+    --red:#FF7560; --red-soft:rgba(255,117,96,.11);
+    --green:#52D690; --green-soft:rgba(82,214,144,.10);
+    --leaf:#17241D; --leaf-ink:#A3DBB6;
+    --grid:rgba(229,233,226,.04); --ray:rgba(242,178,51,.075);
+    --glow:drop-shadow(0 0 5px rgba(242,178,51,.6));
+    --panel:#090D0B; --panel-2:#121915; --panel-3:#1B241F; --panel-rule:#27332D;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ground:#111714; --surface:#19211D; --surface-2:#212B26; --sunk:#1D2621;
+  --ink:#E5E9E2; --ink-2:#B0BBB4; --ink-3:#96A29B;
+  --rule:#2E3933; --rule-strong:#4A5750;
+  --track:#8C9892; --cand:#58655E; --head:#080B09;
+  --lit:#F2B233; --lit-ink:#F5C15A; --lit-soft:rgba(242,178,51,.12);
+  --red:#FF7560; --red-soft:rgba(255,117,96,.11);
+  --green:#52D690; --green-soft:rgba(82,214,144,.10);
+  --leaf:#17241D; --leaf-ink:#A3DBB6;
+  --grid:rgba(229,233,226,.04); --ray:rgba(242,178,51,.075);
+  --glow:drop-shadow(0 0 5px rgba(242,178,51,.6));
+  --panel:#090D0B; --panel-2:#121915; --panel-3:#1B241F; --panel-rule:#27332D;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--ground);color:var(--ink);font:400 17px/1.56 var(--f-body);-webkit-font-smoothing:antialiased;overflow-wrap:break-word}
+.wrap{max-width:1120px;margin-inline:auto;padding-inline:clamp(16px,4vw,44px)}
+h1,h2,h3{font-family:var(--f-display);font-stretch:85%;font-weight:700;text-wrap:balance;margin:0;line-height:1.04;letter-spacing:-.003em}
+p{margin:0}
+a{color:inherit;text-underline-offset:3px}
+:focus-visible{outline:3px solid var(--lit);outline-offset:3px;border-radius:2px}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--sunk);padding:.06em .34em;border-radius:3px;overflow-wrap:anywhere}
+.kicker{font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+section{padding-block:clamp(52px,7vw,92px)}
+.sec-h{display:grid;gap:10px;max-width:760px}
+.sec-h h2{font-size:clamp(32px,5.2vw,54px);text-transform:uppercase}
+.sec-h p{color:var(--ink-2);max-width:64ch}
+.alt{background:var(--surface)}
+.alt .cell,.alt .thr,.alt .notice,.alt .inv{background:var(--ground)}
+
+/* ---------- masthead ---------- */
+.mast{padding-block:clamp(36px,6vw,72px) clamp(20px,3vw,32px)}
+.mast h1{font-size:clamp(46px,10.5vw,118px);line-height:.88;text-transform:uppercase;margin-top:16px;letter-spacing:.004em}
+.mast h1 span{display:block;color:var(--lit-ink)}
+.lede{max-width:60ch;font-size:clamp(18px,2.1vw,21px);color:var(--ink-2);margin-top:24px;line-height:1.5}
+.describer{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;margin:32px 0 0;background:var(--panel-rule);border:1px solid var(--panel-rule);border-radius:6px;overflow:hidden}
+.describer > div{background:var(--panel);padding:13px 16px 12px;display:flex;flex-direction:column-reverse;justify-content:flex-end;gap:3px;min-width:0}
+.describer > div.big{grid-column:span 2}
+.describer dd{margin:0;font-family:var(--f-mono);font-weight:700;font-size:clamp(26px,3.3vw,36px);line-height:1.05;color:var(--panel-lit);font-variant-numeric:tabular-nums;text-shadow:0 0 14px rgba(242,178,51,.35)}
+.describer .big dd{font-size:clamp(38px,5vw,54px)}
+.describer dt{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--panel-ink-2)}
+@media (max-width:720px){.describer{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- switchyard ---------- */
+.yard{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr);grid-template-areas:"fig ro" "chips chips";gap:26px 30px;margin-top:30px}
+.fig{grid-area:fig;margin:0;min-width:0}
+.fig-frame{background-color:var(--surface);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:22px 22px;border:1px solid var(--rule);border-radius:6px;padding:10px 8px 6px}
+.yard-svg{display:block;width:100%;height:auto}
+.fig figcaption{font-size:14.5px;color:var(--ink-3);margin-top:10px;line-height:1.5}
+.stepper{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.step-btn{appearance:none;font:600 14px/1 var(--f-mono);color:var(--ink);background:var(--surface);border:1px solid var(--rule-strong);border-radius:4px;padding:10px 14px;cursor:pointer}
+.step-btn:hover{border-color:var(--ink)}
+.count{font-family:var(--f-mono);font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.ro{grid-area:ro;border-top:6px solid var(--ink);padding-top:14px;min-width:0}
+.ro dl{margin:0;display:grid;gap:14px}
+.ro dd{margin:4px 0 0}
+.ro-msg{font-family:var(--f-mono);font-size:17px;line-height:1.4}
+.ro-msg.kind{font-family:var(--f-body);font-style:italic;font-size:18px}
+.ro-msg .note{font-family:var(--f-body);font-style:normal;font-size:14.5px;color:var(--ink-3)}
+.route-pill{display:inline-flex;align-items:center;gap:8px;font:700 18px/1.2 var(--f-mono);padding:5px 11px 5px 9px;border-radius:4px;border:2px solid currentColor}
+.route-pill::before{content:"";width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
+.route-pill[data-kind="main"]{color:var(--green)}
+.route-pill[data-kind="special"]{color:var(--lit-ink)}
+.route-pill[data-kind="cand"]{color:var(--lit-ink);border-style:dashed}
+.route-pill[data-kind="refusal"]{color:var(--red)}
+.phase{font-family:var(--f-mono);font-size:12.5px;color:var(--ink-3);margin-left:8px;white-space:nowrap}
+.ro-by{font-family:var(--f-mono);font-size:14.5px;color:var(--ink)}
+.ro-why,.ro-track{font-size:16px;color:var(--ink-2)}
+.chips-wrap{grid-area:chips}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{appearance:none;font:inherit;cursor:pointer;background:var(--surface);color:var(--ink);border:1px solid var(--rule-strong);border-radius:4px;padding:7px 11px;text-align:left;display:inline-flex;flex-direction:column;gap:1px;line-height:1.3;max-width:100%;transition:background-color .15s,color .15s,border-color .15s}
+.chip .t{font-family:var(--f-mono);font-size:14px}
+.chip.kind .t{font-family:var(--f-body);font-style:italic;font-size:15.5px}
+.chip small{font-size:12.5px;color:var(--ink-3)}
+.chip:hover{border-color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.chip[aria-pressed="true"] small{color:inherit;opacity:.8}
+.legend-note{font-size:14px;color:var(--ink-3);margin-top:12px}
+@media (max-width:860px){.yard{grid-template-columns:minmax(0,1fr);grid-template-areas:"fig" "ro" "chips"}}
+
+.trk{fill:none;stroke:var(--track);stroke-width:4}
+.trk.cand{stroke:var(--cand);stroke-dasharray:9 7}
+.arrow{fill:var(--track)}
+.xover{fill:none;stroke:var(--cand);stroke-width:2.5;stroke-dasharray:4 5}
+.xover.on{stroke:var(--lit);stroke-width:3.5}
+.buf{fill:var(--track)}
+.buf.cand{fill:var(--cand)}
+.buf.on{fill:var(--lit)}
+.lbl{font-family:var(--f-mono);font-size:19px;fill:var(--ink)}
+.lbl.cand{fill:var(--ink-2)}
+.lbl.on{fill:var(--lit-ink);font-weight:700}
+.tag{font-family:var(--f-mono);font-size:14px;fill:var(--ink-3)}
+.tag.sm{font-size:12.5px}
+.rbox{fill:var(--surface);stroke:var(--track);stroke-width:2}
+.rtxt{font-family:var(--f-display);font-weight:700;font-size:15px;letter-spacing:.16em;fill:var(--ink)}
+.rlink,.post{stroke:var(--track);stroke-width:2.5}
+.shead{fill:var(--head);stroke:var(--track);stroke-width:1.5}
+.lamp{transition:fill .3s}
+.lamp.go{fill:var(--lamp-go)} .lamp.div{fill:var(--lamp-div)} .lamp.stop{fill:var(--lamp-stop)}
+.lit{fill:none;stroke:var(--lit);stroke-width:7;stroke-linecap:round;stroke-linejoin:round;filter:var(--glow)}
+.car{fill:var(--ink);stroke:var(--surface);stroke-width:2}
+.car-lamp{fill:var(--lamp-div)}
+
+/* ---------- brief / notice ---------- */
+.notice{margin-top:30px;background:var(--surface);border:1px solid var(--rule);border-top:8px solid var(--ink);border-radius:4px;max-width:920px}
+.notice-h{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 18px;padding:12px 20px;border-bottom:1px solid var(--rule);font:600 12px/1.4 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.notice dl{margin:0}
+.notice .row{display:grid;grid-template-columns:150px minmax(0,1fr);gap:6px 22px;padding:16px 20px;border-bottom:1px dashed var(--rule)}
+.notice .row:last-child{border-bottom:0}
+.notice dt{padding-top:3px}
+.notice dd{margin:0}
+.notice ul{margin:0;padding-left:1.1em;display:grid;gap:8px}
+.incident{font-size:clamp(18px,2vw,20px)}
+@media (max-width:620px){.notice .row{grid-template-columns:1fr}}
+
+/* ---------- line guide ---------- */
+.occ{display:flex;gap:4px;margin-top:30px;height:36px}
+.occ a{display:flex;align-items:center;justify-content:center;background:var(--track);color:var(--ground);font:700 13px/1 var(--f-mono);text-decoration:none;min-width:0;border-radius:2px;transition:background-color .15s}
+.occ a:hover{background:var(--lit)}
+.guide{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.guide a{display:flex;flex-direction:column;gap:3px;height:100%;padding:12px 14px 13px;background:var(--surface);border:1px solid var(--rule);border-radius:4px;text-decoration:none;transition:border-color .15s}
+.guide a:hover{border-color:var(--ink)}
+.g-name{font-family:var(--f-display);font-stretch:85%;font-weight:700;font-size:20px;line-height:1.1;text-transform:uppercase}
+.g-c{font-family:var(--f-mono);font-size:13px;color:var(--lit-ink);font-variant-numeric:tabular-nums}
+@media (max-width:900px){.guide{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- box plates ---------- */
+.plate{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 18px;align-items:start;margin-bottom:32px}
+.plate > *{min-width:0}
+.plate-no{grid-row:span 3;width:64px;height:64px;display:grid;place-items:center;background:var(--ink);color:var(--ground);font:700 38px/1 var(--f-display);font-stretch:85%;border-radius:4px}
+.plate h2{font-size:clamp(26px,5vw,50px);text-transform:uppercase}
+.plate-sub{color:var(--ink-2);max-width:66ch}
+@media (max-width:560px){.plate-no{width:48px;height:48px;font-size:28px}}
+
+/* ---------- 1 morphological grid ---------- */
+.morph{margin:0;border-top:3px solid var(--ink)}
+.m-row{display:grid;grid-template-columns:168px minmax(0,1fr);gap:10px 24px;padding-block:14px;border-bottom:1px solid var(--rule)}
+.m-row dt{font:600 13px/1.3 var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--ink);padding-top:11px;display:flex;flex-direction:column;gap:3px}
+.m-row dt small{font-size:11.5px;color:var(--ink-3);letter-spacing:.06em}
+.m-row dd{margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.cell{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:10px 13px;font-size:15.5px;line-height:1.48}
+.thr{grid-column:1/-1;margin:2px 0 0;background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:14px 16px}
+.thr figcaption{font-size:14px;color:var(--ink-3);margin-bottom:10px}
+.thr-row{display:grid;grid-template-columns:132px minmax(0,1fr) 52px;gap:12px;align-items:center;padding-block:4px}
+.thr-l{font-family:var(--f-mono);font-size:13.5px;overflow-wrap:anywhere}
+.thr-bar{position:relative;height:14px;background:repeating-linear-gradient(90deg,var(--rule) 0 1px,transparent 1px 25%),var(--sunk);border-radius:2px;overflow:hidden}
+.thr-bar i{position:absolute;inset:0 auto 0 0;background:var(--lit)}
+.thr-bar.refusal i{background:var(--red)}
+.thr-bar.none{background:repeating-linear-gradient(90deg,var(--rule) 0 1px,transparent 1px 25%),transparent;border:1px dashed var(--rule-strong)}
+.thr-v{font:700 14px/1 var(--f-mono);text-align:right;font-variant-numeric:tabular-nums}
+.thr-v.none{font-weight:400;font-size:12px;color:var(--ink-3)}
+.thr-axis{display:grid;grid-template-columns:132px minmax(0,1fr) 52px;gap:12px;margin-top:2px}
+.thr-axis span{display:flex;justify-content:space-between;font:12px/1 var(--f-mono);color:var(--ink-3)}
+.margin-rule{display:inline-block;margin-top:12px;font:600 13.5px/1.3 var(--f-mono);padding:6px 10px;border:1.5px solid var(--ink);border-radius:3px}
+@media (max-width:720px){.m-row{grid-template-columns:minmax(0,1fr)} .m-row dt{padding-top:0;flex-direction:row;gap:10px;align-items:baseline} .m-row dd{grid-template-columns:minmax(0,1fr)} .thr-row,.thr-axis{grid-template-columns:118px minmax(0,1fr) 44px;gap:8px} .thr-l{font-size:12.5px}}
+
+/* ---------- 2 chaos wall ---------- */
+.wall-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-bottom:14px;font:600 12.5px/1.3 var(--f-mono);letter-spacing:.08em;text-transform:uppercase}
+.wall{columns:3 250px;column-gap:10px;padding:10px;background:var(--surface-2);border-radius:6px}
+.fault{break-inside:avoid;margin-bottom:10px;background:var(--surface);border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.fault-top{height:7px;background:repeating-linear-gradient(135deg,var(--red) 0 6px,transparent 6px 12px);opacity:.6}
+.fault-body{padding:12px 14px 14px;display:grid;gap:10px}
+.lampl{display:inline-flex;align-items:center;gap:7px;font:700 11.5px/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase}
+.lampl::before{content:"";width:10px;height:10px;border-radius:50%;background:currentColor;flex:none}
+.c-red{color:var(--red)} .c-green{color:var(--green)} .c-lit{color:var(--lit-ink)}
+.fault .q{font-weight:600;font-size:16px;line-height:1.4;margin-top:6px}
+.fault .a{color:var(--ink-2);font-size:15.5px;line-height:1.45;border-top:1px dashed var(--rule);padding-top:10px}
+.fault .a p{margin-top:6px}
+
+/* ---------- 3 nature field guide ---------- */
+.field{columns:3 250px;column-gap:14px}
+.cellcard{break-inside:avoid;margin-bottom:14px;background:var(--leaf);border-radius:30px 30px 30px 6px;padding:18px 20px 20px;position:relative}
+.cellcard:nth-child(3n+2){border-radius:6px 30px 30px 30px}
+.cellcard:nth-child(3n){border-radius:30px 6px 30px 30px}
+.cellcard h3{font-family:var(--f-body);font-stretch:normal;font-style:italic;font-weight:600;font-size:22px;line-height:1.15;color:var(--leaf-ink);display:flex;align-items:center;gap:10px}
+.cellcard h3::before{content:"";width:12px;height:12px;border-radius:50%;border:2.5px solid var(--leaf-ink);flex:none}
+.cellcard p{margin-top:8px;font-size:15.5px;line-height:1.48}
+
+/* ---------- 4 lever frame ---------- */
+.levers{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0}
+.lever{display:flex;flex-direction:column;min-width:0}
+.lever-art{position:relative;height:138px;border-bottom:14px solid var(--track)}
+.lever:first-child .lever-art{border-radius:0}
+.slot{position:absolute;bottom:0;left:50%;width:70px;height:16px;margin-left:-35px;background:var(--surface-2);border:2px solid var(--track);border-bottom:0;border-radius:36px 36px 0 0}
+.rod{position:absolute;bottom:4px;left:50%;width:12px;height:108px;margin-left:-6px;background:var(--red);border-radius:6px 6px 2px 2px;transform-origin:50% 100%;transform:rotate(-24deg);transition:transform .4s cubic-bezier(.3,1.4,.5,1)}
+.rod::before{content:"";position:absolute;top:-6px;left:-5px;width:22px;height:30px;border-radius:7px;background:var(--ink-2)}
+.lever:hover .rod{transform:rotate(-30deg)}
+.lever-txt{padding:16px 14px 0 0;display:grid;gap:10px;align-content:start}
+.lever-plate{justify-self:start;font:700 16px/1.15 var(--f-display);font-stretch:85%;letter-spacing:.05em;text-transform:uppercase;background:var(--lit-soft);border:1.5px solid var(--lit);color:var(--lit-ink);padding:6px 10px 5px;border-radius:3px}
+.lever-txt p{font-size:15.5px;line-height:1.48;color:var(--ink-2)}
+@media (max-width:900px){
+  .levers{grid-template-columns:minmax(0,1fr);gap:18px}
+  .lever{display:grid;grid-template-columns:86px minmax(0,1fr);gap:0 16px}
+  .lever-art{height:112px}
+  .rod{height:84px}
+  .lever-txt{padding:0}
+}
+
+/* ---------- 5 scamper ---------- */
+.scamper{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 30px}
+.sc{display:grid;grid-template-columns:62px minmax(0,1fr);gap:3px 16px;align-items:start;padding:16px 0;border-top:1px solid var(--rule)}
+.sc-l{grid-row:span 2;width:62px;height:62px;display:grid;place-items:center;font:700 40px/1 var(--f-display);font-stretch:85%;background:var(--ink);color:var(--ground);border-radius:4px}
+.sc.more .sc-l{background:transparent;color:var(--ink);border:2px dashed var(--rule-strong)}
+.sc-v{font:600 12.5px/1.3 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--lit-ink);padding-top:3px}
+.sc p{font-size:16px;line-height:1.5}
+.sc ul{margin:4px 0 0;padding-left:1.1em;display:grid;gap:8px;font-size:15.5px}
+@media (max-width:760px){.scamper{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- 6 starburst ---------- */
+.burst{position:relative;isolation:isolate;padding-top:4px}
+.burst::before{content:"";position:absolute;inset:0;z-index:-1;background:repeating-conic-gradient(from -90deg at 50% 0%,var(--ray) 0deg 1.3deg,transparent 1.3deg 8deg);-webkit-mask-image:radial-gradient(ellipse 70% 90% at 50% 0%,#000 15%,transparent 80%);mask-image:radial-gradient(ellipse 70% 90% at 50% 0%,#000 15%,transparent 80%)}
+.hub{margin:0 auto 30px;width:fit-content;max-width:100%;text-align:center;background:var(--ink);color:var(--ground);padding:12px 24px 11px;border-radius:999px;font:700 19px/1.15 var(--f-display);font-stretch:85%;letter-spacing:.05em;text-transform:uppercase}
+.qs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.qcard{background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:16px 18px 18px}
+.qcard h3{font-size:24px;line-height:1.1}
+.qcard h3 .qw{color:var(--lit-ink)}
+.qcard ul{margin:10px 0 0;padding-left:1.05em;display:grid;gap:8px}
+.qcard li{font-size:15.5px;line-height:1.46}
+@media (max-width:920px){.qs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:600px){.qs{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- 7 worst / inverted ---------- */
+.flip-head{display:grid;grid-template-columns:minmax(0,1fr) 56px minmax(0,1.15fr);margin-bottom:8px}
+.flips{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.flip{display:grid;grid-template-columns:minmax(0,1fr) 56px minmax(0,1.15fr);align-items:stretch}
+.worst{background:repeating-linear-gradient(135deg,var(--red-soft) 0 9px,transparent 9px 18px);border:1px solid var(--red);border-radius:4px;padding:12px 14px;color:var(--ink-2);font-size:15.5px;line-height:1.46}
+.inv{background:var(--surface);border:1px solid var(--green);border-radius:4px;padding:12px 14px;font-size:15.5px;line-height:1.46}
+.pivot{display:grid;place-items:center}
+.pivot svg{width:30px;height:30px;fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .35s}
+.flip:hover .pivot svg{transform:rotate(180deg)}
+.flip .lampl{display:none}
+@media (max-width:700px){
+  .flip-head{display:none}
+  .flip{grid-template-columns:minmax(0,1fr)}
+  .flip .lampl{display:inline-flex;margin-bottom:6px}
+  .pivot{height:30px}
+  .pivot svg{transform:rotate(90deg);width:24px;height:24px}
+  .flip:hover .pivot svg{transform:rotate(90deg)}
+}
+
+/* ---------- 8 decision tree ---------- */
+.tree{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:40px;align-items:start}
+.flow{list-style:none;margin:0;padding:0;position:relative}
+.flow::before{content:"";position:absolute;left:21px;top:24px;bottom:24px;width:4px;background:var(--track);border-radius:2px}
+.st{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.78fr);gap:8px 40px;align-items:center;padding:7px 0 7px 62px}
+.st-n{position:absolute;left:0;top:50%;margin-top:-23px;width:46px;height:46px;border-radius:50%;background:var(--ground);border:4px solid var(--track);display:grid;place-items:center;font:700 20px/1 var(--f-display)}
+.st-q{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:10px 13px;font-size:15.5px;line-height:1.45}
+.st-q .kicker{display:block;margin-bottom:3px}
+.st-x{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+.st-x::before{content:"";position:absolute;left:-40px;top:50%;width:34px;height:3px;margin-top:-1.5px;background:var(--track)}
+.st-x::after{content:"";position:absolute;left:-9px;top:50%;margin-top:-6px;border:6px solid transparent;border-left:8px solid var(--track);border-right:0}
+.yes{font:600 11px/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.dest{display:inline-flex;align-items:center;gap:7px;font:600 13.5px/1.3 var(--f-mono);padding:5px 10px;border:2px solid currentColor;border-radius:3px;background:var(--surface)}
+.dest::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.dest.main{color:var(--green)} .dest.special{color:var(--lit-ink)} .dest.refusal{color:var(--red)} .dest.cand{color:var(--lit-ink);border-style:dashed}
+.st.end .st-n{background:var(--lit);border-color:var(--lit);color:var(--ground)}
+.rules{margin:18px 0 0 62px;padding:0;list-style:none;display:grid;gap:8px}
+.rules li{font-size:15px;line-height:1.45;color:var(--ink-2);padding:9px 12px;border:1px dashed var(--rule-strong);border-radius:3px}
+.mm{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:18px 18px 8px}
+.mm-hub{font:700 19px/1.15 var(--f-display);font-stretch:85%;text-transform:uppercase;letter-spacing:.03em;padding-bottom:12px;border-bottom:3px solid var(--ink)}
+.br{margin:16px 0 12px 6px;padding-left:18px;border-left:3px solid var(--track)}
+.br.cand{border-left-style:dashed;border-left-color:var(--lit)}
+.br.direct{border-left-color:var(--lit)}
+.br.main{border-left-color:var(--green)}
+.br h3{font-size:17px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.br ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.br li{position:relative;font-size:15px;line-height:1.45}
+.br li::before{content:"";position:absolute;left:-19px;top:.72em;width:13px;height:3px;background:var(--rule-strong)}
+.br b{font-family:var(--f-mono);font-size:14px;font-weight:700}
+@media (max-width:960px){.tree{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){
+  .st{grid-template-columns:minmax(0,1fr);padding-left:58px}
+  .st-n{top:8px;margin-top:0}
+  .st-x::before{left:-33px;width:28px}
+  .st-x::after{left:-8px}
+  .rules{margin-left:0}
+}
+
+/* ---------- insights ---------- */
+.ins{list-style:none;margin:30px 0 0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 36px}
+.ins li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:14px;padding:16px 0;border-top:1px solid var(--rule);font-size:16.5px;line-height:1.5}
+.sig{width:16px;height:30px;background:var(--head);border:1px solid var(--rule-strong);border-radius:8px;position:relative;margin-top:2px}
+.sig::before,.sig::after{content:"";position:absolute;left:4px;width:8px;height:8px;border-radius:50%}
+.sig::before{top:4px;background:#3a2622}
+.sig::after{bottom:4px;background:var(--lamp-go);box-shadow:0 0 6px var(--lamp-go)}
+@media (max-width:760px){.ins{grid-template-columns:minmax(0,1fr)}}
+
+/* ---------- climax panel ---------- */
+.panel{background:var(--panel);color:var(--panel-ink);border-block:1px solid var(--panel-rule);padding-block:clamp(60px,8vw,110px)}
+.panel .kicker{color:var(--panel-ink-2)}
+.panel .sec-h p{color:var(--panel-ink-2)}
+.panel h2{color:var(--panel-ink)}
+.panel h2 .litw{color:var(--panel-lit);text-shadow:0 0 22px rgba(242,178,51,.35)}
+.panel code{background:var(--panel-3);color:var(--panel-ink)}
+.syn{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:36px}
+.syn-card{background:var(--panel-2);border:1px solid var(--panel-rule);border-radius:6px;padding:22px 22px 20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.syn-card.key{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:22px 34px;align-items:center;border-color:var(--panel-lit);box-shadow:0 0 0 1px rgba(242,178,51,.15),0 0 40px -12px rgba(242,178,51,.35)}
+.syn-card.key .syn-text{display:flex;flex-direction:column;gap:14px}
+.syn-top{display:flex;align-items:flex-start;gap:16px}
+.syn-num{font:700 62px/.78 var(--f-display);font-stretch:85%;color:var(--panel-lit);text-shadow:0 0 18px rgba(242,178,51,.4);flex:none}
+.syn-card h3{font-size:clamp(22px,2.5vw,29px);color:var(--panel-ink);line-height:1.08}
+.syn-card.key h3{font-size:clamp(26px,3.4vw,40px)}
+.syn-card p{color:var(--panel-ink-2);font-size:16px;line-height:1.52}
+.traced{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:4px}
+.traced .kicker{width:100%;font-size:11px}
+.traced a{font:12.5px/1.3 var(--f-mono);padding:4px 8px;border:1px solid var(--panel-rule);border-radius:3px;text-decoration:none;color:var(--panel-ink-2);transition:color .15s,border-color .15s}
+.traced a:hover{color:var(--panel-lit);border-color:var(--panel-lit)}
+.nest{margin:0}
+.nest-outer{border:2px solid var(--panel-green);border-radius:8px;padding:14px;background:rgba(79,214,140,.05)}
+.nest-l{display:block;font:700 14px/1.3 var(--f-mono);color:var(--panel-green);margin-bottom:12px}
+.nest-inner{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.ni{display:flex;flex-direction:column;gap:3px;border:2px solid var(--panel-lit);border-radius:6px;padding:10px;font:700 13px/1.25 var(--f-mono);color:var(--panel-lit);overflow-wrap:anywhere}
+.ni.rf{border-color:var(--panel-red);color:var(--panel-red)}
+.ni small{font:400 12px/1.3 var(--f-body);color:var(--panel-ink-2)}
+.nest figcaption{margin-top:10px;font-size:14px;color:var(--panel-ink-2)}
+.chain{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+.chain li{position:relative;background:var(--panel-3);border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.chain li:not(:last-child)::after{content:"";position:absolute;right:-17px;top:50%;margin-top:-6px;border:6px solid transparent;border-left:9px solid var(--panel-lit);border-right:0}
+.chain b{font:700 13.5px/1.25 var(--f-mono);color:var(--panel-ink)}
+.chain span{font-size:13px;color:var(--panel-ink-2)}
+.fanout{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.fanout .src{font:700 13.5px/1.25 var(--f-mono);border:2px solid var(--panel-lit);color:var(--panel-lit);padding:8px 10px;border-radius:4px}
+.fanout .to{color:var(--panel-lit);font-size:20px;line-height:1}
+.fanout .outs{display:flex;flex-wrap:wrap;gap:6px}
+.fanout .outs span{font:13px/1.3 var(--f-mono);background:var(--panel-3);padding:6px 9px;border-radius:3px;color:var(--panel-ink)}
+.cost{width:100%;border-collapse:collapse;font-size:14px}
+.cost th,.cost td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--panel-rule);vertical-align:top}
+.cost th{font:600 11px/1.3 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--panel-ink-2)}
+.cost td:first-child{font-family:var(--f-mono);font-size:13px;color:var(--panel-ink)}
+.cost td.n{font:700 18px/1 var(--f-mono);color:var(--panel-lit);font-variant-numeric:tabular-nums}
+.cost td.n small{display:block;font:400 11.5px/1.3 var(--f-body);color:var(--panel-ink-2);margin-top:4px}
+.lanes{display:grid;gap:8px}
+.lane{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr);gap:10px;align-items:center;font:13px/1.25 var(--f-mono);color:var(--panel-ink)}
+.lane i{display:block;height:12px;border-radius:2px;background:var(--panel-lit);opacity:.85}
+.lane:nth-child(2) i{background:var(--panel-green)}
+.lane-note{font-size:12.5px;color:var(--panel-ink-2)}
+.tbl-scroll{overflow-x:auto}
+@media (max-width:860px){.syn{grid-template-columns:minmax(0,1fr)} .syn-card.key{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:520px){.nest-inner{grid-template-columns:minmax(0,1fr)} .chain{grid-template-columns:minmax(0,1fr);gap:18px} .chain li:not(:last-child)::after{right:auto;left:20px;top:auto;bottom:-14px;margin-top:0;border:6px solid transparent;border-top:9px solid var(--panel-lit);border-bottom:0} .syn-num{font-size:50px}}
+
+.subblock{margin-top:clamp(56px,8vw,96px)}
+.subblock > h2{font-size:clamp(28px,4.4vw,46px);text-transform:uppercase}
+.subblock > p{color:var(--panel-ink-2);max-width:64ch;margin-top:10px}
+.stations{list-style:none;margin:34px 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:relative}
+.stations::before{content:"";position:absolute;left:0;right:calc(20% - 12px);top:13px;height:6px;background:var(--panel-lit);border-radius:3px;box-shadow:0 0 14px rgba(242,178,51,.45)}
+.stn{position:relative;padding:48px 18px 0 0;display:flex;flex-direction:column;gap:6px;min-width:0}
+.stn::before{content:"";position:absolute;top:3px;left:0;width:26px;height:26px;border-radius:50%;background:var(--panel);border:5px solid var(--panel-lit)}
+.stn-code{font:700 36px/1 var(--f-display);font-stretch:85%;color:var(--panel-lit)}
+.stn h3{font-size:21px;color:var(--panel-ink);line-height:1.1}
+.stn p{font-size:15px;line-height:1.48;color:var(--panel-ink-2)}
+.beh{align-self:flex-start;margin-top:4px;font:600 11px/1.3 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--panel-ink);border:1px solid var(--panel-rule);border-radius:3px;padding:4px 7px}
+.beh.act{border-color:var(--panel-lit);color:var(--panel-lit)}
+@media (max-width:860px){
+  .stations{grid-template-columns:minmax(0,1fr)}
+  .stations::before{left:10px;right:auto;top:6px;bottom:30px;width:6px;height:auto}
+  .stn{padding:0 0 28px 48px}
+  .stn::before{top:0}
+}
+.qlist{list-style:none;margin:30px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.qitem{display:grid;grid-template-columns:38px minmax(0,1fr);gap:16px;background:var(--panel-2);border:1px solid var(--panel-rule);border-radius:6px;padding:20px 18px}
+.sighead{width:34px;height:72px;background:#050706;border:2px solid var(--panel-rule);border-radius:17px;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly}
+.sighead i{width:18px;height:18px;border-radius:50%;background:#12261B}
+.sighead i.red{background:var(--panel-red);box-shadow:0 0 16px var(--panel-red),0 0 4px var(--panel-red)}
+.await{font:700 11px/1.3 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--panel-red)}
+.qitem h3{font-size:22px;color:var(--panel-ink);line-height:1.12;margin-top:6px}
+.qitem p{font-size:15px;line-height:1.5;color:var(--panel-ink-2);margin-top:10px}
+.qitem .traced{margin-top:14px}
+@media (max-width:920px){.qlist{grid-template-columns:minmax(0,1fr)}}
+
+.foot{padding-block:36px 52px;color:var(--ink-3);font-size:14.5px}
+.foot p + p{margin-top:6px}
+.foot code{font-size:.9em}
+
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="mast" id="top">
+  <div class="wrap">
+    <p class="kicker">ShiftMind · brainstorm keepsake · 28 September 2026</p>
+    <h1>Turn Routing <span>Switchyard</span></h1>
+    <p class="lede">In conversation <code>f0cdeca6</code>, the scheduling assistant sang a song and wrote quadratic-equation Python instead of staying on scheduling. This session designed the switch that runs before every turn: a fast decision model, TypeSafe Jev, reads the planner’s message and sets one route, and each route gets a smaller prompt built from sections of the master prompt.</p>
+    <dl class="describer">
+      <div class="big"><dt>ideas logged</dt><dd>108</dd></div>
+      <div><dt>techniques</dt><dd>8</dd></div>
+      <div><dt>insights · 5 synthesis</dt><dd>12</dd></div>
+      <div><dt>phases chosen</dt><dd>R0–R4</dd></div>
+      <div><dt>questions for Minh</dt><dd>3</dd></div>
+    </dl>
+  </div>
+</header>
+
+<section id="yard" aria-labelledby="yard-h">
+  <div class="wrap">
+    <div class="sec-h">
+      <p class="kicker">The design in one diagram</p>
+      <h2 id="yard-h">Set a route</h2>
+      <p>Pick a message the session talked through. The switch sets the route the session gave it, and the readout names the rule that threw it.</p>
+    </div>
+
+    <div class="yard">
+      <figure class="fig" id="yard-fig">
+        <div class="fig-frame">
+          <svg class="yard-svg" viewBox="0 0 640 450" role="img" aria-labelledby="yard-t yard-d">
+            <title id="yard-t">Routing switchyard</title>
+            <desc id="yard-d">A planner message enters from the left, passes the router and a junction signal. The main line continues as scheduling, the default with every tool. A ladder track branches to seven sidings that end in buffer stops: direct, out_of_scope and prompt_attack are drawn solid; planner_control, explain_concept, workflow_status and meta/about_ai are drawn dashed as candidates. A dashed crossover labelled escalate leads from direct back to the main line.</desc>
+
+            <g>
+              <rect class="rbox" x="22" y="12" width="96" height="30" rx="3"/>
+              <text class="rtxt" x="70" y="32" text-anchor="middle">ROUTER</text>
+              <line class="rlink" x1="70" y1="42" x2="70" y2="58"/>
+            </g>
+            <text class="tag sm" x="12" y="88">planner message</text>
+
+            <path class="trk" d="M10 60 H612"/>
+            <polygon class="arrow" points="610,51 628,60 610,69"/>
+            <path class="trk" d="M160 60 L238 216"/>
+            <path class="trk cand" d="M238 216 L342 424"/>
+            <path class="trk" d="M186 112 H588"/>
+            <path class="trk" d="M212 164 H588"/>
+            <path class="trk" d="M238 216 H588"/>
+            <path class="trk cand" d="M264 268 H588"/>
+            <path class="trk cand" d="M290 320 H588"/>
+            <path class="trk cand" d="M316 372 H588"/>
+            <path class="trk cand" d="M342 424 H588"/>
+            <path id="xover" class="xover" d="M524 112 L570 60"/>
+            <text class="tag sm" x="552" y="95">escalate</text>
+
+            <path id="lit" class="lit" d="M10 60 H160 L212 164 H584"/>
+
+            <rect id="buf-1" class="buf" x="588" y="102" width="7" height="20"/>
+            <rect id="buf-2" class="buf on" x="588" y="154" width="7" height="20"/>
+            <rect id="buf-3" class="buf" x="588" y="206" width="7" height="20"/>
+            <rect id="buf-4" class="buf cand" x="588" y="258" width="7" height="20"/>
+            <rect id="buf-5" class="buf cand" x="588" y="310" width="7" height="20"/>
+            <rect id="buf-6" class="buf cand" x="588" y="362" width="7" height="20"/>
+            <rect id="buf-7" class="buf cand" x="588" y="414" width="7" height="20"/>
+
+            <text id="lbl-0" class="lbl" x="372" y="50">scheduling</text>
+            <text class="tag sm" x="372" y="84">default · every tool</text>
+            <text id="lbl-1" class="lbl" x="372" y="102">direct</text>
+            <text id="lbl-2" class="lbl on" x="372" y="154">out_of_scope</text>
+            <text id="lbl-3" class="lbl" x="372" y="206">prompt_attack</text>
+            <text id="lbl-4" class="lbl cand" x="372" y="258">planner_control</text>
+            <text id="lbl-5" class="lbl cand" x="372" y="310">explain_concept</text>
+            <text id="lbl-6" class="lbl cand" x="372" y="362">workflow_status</text>
+            <text id="lbl-7" class="lbl cand" x="372" y="414">meta/about_ai</text>
+
+            <text class="tag" x="604" y="117">R3</text>
+            <text class="tag" x="604" y="169">R3</text>
+            <text class="tag" x="604" y="221">R3</text>
+            <text class="tag" x="604" y="273">R4</text>
+            <text class="tag" x="604" y="325">R4</text>
+            <text class="tag" x="604" y="377">R4</text>
+            <text class="tag" x="604" y="429">—</text>
+
+            <line class="post" x1="142" y1="57" x2="142" y2="32"/>
+            <rect class="shead" x="133" y="5" width="18" height="28" rx="9"/>
+            <circle id="lamp" class="lamp stop" cx="142" cy="19" r="5.5"/>
+
+            <g id="train" transform="translate(566 164)">
+              <rect class="car" x="-16" y="-8" width="32" height="16" rx="3"/>
+              <rect class="car-lamp" x="9" y="-4" width="5" height="8" rx="1"/>
+            </g>
+          </svg>
+        </div>
+        <div class="stepper">
+          <button class="step-btn" id="prev" type="button" aria-label="Previous message">‹ Prev</button>
+          <span class="count" id="ro-count">1 / 20</span>
+          <button class="step-btn" id="next" type="button" aria-label="Next message">Next ›</button>
+        </div>
+        <figcaption>Solid sidings are the paths chosen for R3; dashed ones are candidates. Every siding ends in a buffer stop because a special path can only do less than the main line. Through R2 the router runs in shadow mode: it records its decision and the turn still runs as scheduling.</figcaption>
+      </figure>
+
+      <div class="ro" aria-live="polite">
+        <dl>
+          <div><dt class="kicker">Message</dt><dd id="ro-msg" class="ro-msg kind">A song request<span class="note"> (the f0cdeca6 trigger)</span></dd></div>
+          <div><dt class="kicker">Route set</dt><dd><span id="ro-route" class="route-pill" data-kind="refusal">out_of_scope</span><span id="ro-phase" class="phase">phase R3</span></dd></div>
+          <div><dt class="kicker">Thrown by</dt><dd id="ro-by" class="ro-by">Step 5 · decision table, threshold 0.9</dd></div>
+          <div><dt class="kicker">Why</dt><dd id="ro-why" class="ro-why">Clearly unrelated to workforce scheduling or this app. Songs are one of the off-topic families seeded into the routing eval set. It leaves the main line only if both p(out_of_scope) and Jev’s confidence clear 0.9.</dd></div>
+          <div><dt class="kicker">On this track</dt><dd id="ro-track" class="ro-track">Refusal only. It can be an application template with no LLM call: zero tokens, impossible to jailbreak. The refusal names two or three concrete things the assistant can do, with no partial compliance and no code fences.</dd></div>
+        </dl>
+      </div>
+
+      <div class="chips-wrap">
+        <p class="kicker" id="chips-l">Messages from the log</p>
+        <div class="chips" id="chips" role="group" aria-labelledby="chips-l"></div>
+        <p class="legend-note">Quoted chips are messages quoted in the log. Italic chips describe a kind of message or condition.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="brief" class="alt" aria-labelledby="brief-h">
+  <div class="wrap">
+    <div class="sec-h">
+      <p class="kicker">Why the box was built</p>
+      <h2 id="brief-h">Operating notice</h2>
+    </div>
+    <div class="notice">
+      <div class="notice-h"><span>Routing · ShiftMind agent loop</span><span>Mode: autonomous · status: complete</span></div>
+      <dl>
+        <div class="row"><dt class="kicker">Incident</dt><dd class="incident">Conversation <code>f0cdeca6</code>: a song and quadratic-equation Python where scheduling should have been. The FR-6 out-of-scope gap.</dd></div>
+        <div class="row"><dt class="kicker">Topic</dt><dd>Pre-turn routing step for the ShiftMind agent loop using TypeSafe Jev choice questions, with per-path composed prompts.</dd></div>
+        <div class="row"><dt class="kicker">Goal</dt><dd>Harden the routing design into input for <code>bmad-spec</code>; close the FR-6 out-of-scope gap seen in conversation <code>f0cdeca6</code>.</dd></div>
+        <div class="row"><dt class="kicker">Asked for</dt><dd><ul>
+          <li>A pre-turn decision step: direct answers without tools, an out-of-scope refusal pointing back to scheduling, and otherwise the current full path. Plus more special paths.</li>
+          <li>Each path uses a smaller prompt composed from parts of the master prompt, and the decision step uses the existing TypeSafe Jev integration.</li>
+        </ul></dd></div>
+        <div class="row"><dt class="kicker">Checked first</dt><dd>The Jev choice question, verified in the TypeSafe docs: same endpoint and body as <code>noul</code>; the response carries the choice, full probabilities per option, and a confidence.</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section id="line" aria-labelledby="line-h">
+  <div class="wrap">
+    <div class="sec-h">
+      <p class="kicker">Along the line</p>
+      <h2 id="line-h">108 ideas, eight boxes</h2>
+      <p>The session ran eight techniques in this order. Each track section is as long as the number of ideas that technique produced.</p>
+    </div>
+    <div class="occ" aria-hidden="true">
+      <a href="#t1" tabindex="-1" style="flex:20 1 0" title="Morphological Analysis: 20">20</a>
+      <a href="#t2" tabindex="-1" style="flex:19 1 0" title="Chaos Engineering: 19">19</a>
+      <a href="#t3" tabindex="-1" style="flex:10 1 0" title="Nature's Solutions: 10">10</a>
+      <a href="#t4" tabindex="-1" style="flex:5 1 0" title="Kill the Crown Jewel: 5">5</a>
+      <a href="#t5" tabindex="-1" style="flex:9 1 0" title="SCAMPER: 9">9</a>
+      <a href="#t6" tabindex="-1" style="flex:16 1 0" title="Starbursting: 16">16</a>
+      <a href="#t7" tabindex="-1" style="flex:10 1 0" title="Worst Possible Idea: 10">10</a>
+      <a href="#t8" tabindex="-1" style="flex:19 1 0" title="Decision Tree Mapping: 19">19</a>
+    </div>
+    <ol class="guide">
+      <li><a href="#t1"><span class="kicker">Box 1</span><span class="g-name">Morphological Analysis</span><span class="g-c">20 ideas</span></a></li>
+      <li><a href="#t2"><span class="kicker">Box 2</span><span class="g-name">Chaos Engineering</span><span class="g-c">19 ideas</span></a></li>
+      <li><a href="#t3"><span class="kicker">Box 3</span><span class="g-name">Nature’s Solutions</span><span class="g-c">10 ideas</span></a></li>
+      <li><a href="#t4"><span class="kicker">Box 4</span><span class="g-name">Kill the Crown Jewel</span><span class="g-c">5 ideas</span></a></li>
+      <li><a href="#t5"><span class="kicker">Box 5</span><span class="g-name">SCAMPER</span><span class="g-c">9 ideas</span></a></li>
+      <li><a href="#t6"><span class="kicker">Box 6</span><span class="g-name">Starbursting</span><span class="g-c">16 ideas</span></a></li>
+      <li><a href="#t7"><span class="kicker">Box 7</span><span class="g-name">Worst Possible Idea</span><span class="g-c">10 ideas</span></a></li>
+      <li><a href="#t8"><span class="kicker">Box 8</span><span class="g-name">Decision Tree Mapping</span><span class="g-c">19 ideas</span></a></li>
+    </ol>
+  </div>
+</section>
+
+<!-- BOX 1 -->
+<section id="t1" class="alt" aria-labelledby="t1-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">1</p>
+      <p class="kicker">Box 1 · 20 ideas</p>
+      <h2 id="t1-h">Morphological Analysis</h2>
+      <p class="plate-sub">The session split the router into nine parameters and generated options for each. Every idea sits in the row of the parameter it answers.</p>
+    </header>
+    <dl class="morph">
+      <div class="m-row"><dt>Placement <small>1 option</small></dt><dd>
+        <p class="cell">Decide the route in the API route, before <code>runtime_factory</code>, so one decision picks instructions, granted capabilities and output types together.</p>
+      </dd></div>
+      <div class="m-row"><dt>Router input <small>3 options</small></dt><dd>
+        <p class="cell">Router state = latest message + previous planner message + the first ~300 chars of the previous agent reply: enough to resolve “yes, do it”.</p>
+        <p class="cell">Include the previous turn’s route in router state, so short follow-ups stay on the path they came from.</p>
+        <p class="cell">Add snapshot flags (<code>has_draft</code>, <code>run_in_progress</code>, <code>completed_candidate</code>, <code>pending_approval</code>) to detect planner_control asks like “approve it”.</p>
+      </dd></div>
+      <div class="m-row"><dt>Label set <small>3 options</small></dt><dd>
+        <p class="cell">A closed route vocabulary, <code>TurnRouteV1 = Literal[scheduling, direct, out_of_scope, …]</code>, in the same style as <code>RefusalReasonV1</code>.</p>
+        <p class="cell">A two-level decision asked in ONE Jev request: in_domain yes/no, then direct-vs-tools, answered in parallel.</p>
+        <p class="cell">Replace one opaque 5-way choice with orthogonal noul probes (<code>needs_schedule_data</code>, <code>is_injection</code>, <code>is_followup</code>, <code>is_off_topic</code>) combined by an application decision table.</p>
+      </dd></div>
+      <div class="m-row"><dt>Decision rule <small>3 options</small></dt><dd>
+        <p class="cell">Asymmetric per-label thresholds: out_of_scope 0.9, direct 0.8, planner_control 0.85. Scheduling needs none because it is the default.</p>
+        <p class="cell">Leave the full path only when both the chosen option’s probability and Jev’s confidence clear the threshold.</p>
+        <p class="cell">Margin rule: take a special path only if p(label) − p(scheduling) is at least 0.6, comparing explicitly against the safe default.</p>
+        <figure class="thr">
+          <figcaption>The proposed thresholds, on a 0–1 probability scale</figcaption>
+          <div class="thr-row"><span class="thr-l">out_of_scope</span><span class="thr-bar refusal"><i style="width:90%"></i></span><span class="thr-v">0.90</span></div>
+          <div class="thr-row"><span class="thr-l">planner_control</span><span class="thr-bar"><i style="width:85%"></i></span><span class="thr-v">0.85</span></div>
+          <div class="thr-row"><span class="thr-l">direct</span><span class="thr-bar"><i style="width:80%"></i></span><span class="thr-v">0.80</span></div>
+          <div class="thr-row"><span class="thr-l">scheduling</span><span class="thr-bar none"></span><span class="thr-v none">default</span></div>
+          <div class="thr-axis" aria-hidden="true"><span></span><span><b style="font-weight:400">0</b><b style="font-weight:400">0.5</b><b style="font-weight:400">1</b></span><span></span></div>
+          <p class="margin-rule">margin: p(label) − p(scheduling) ≥ 0.6</p>
+        </figure>
+      </dd></div>
+      <div class="m-row"><dt>Fallback <small>1 option</small></dt><dd>
+        <p class="cell">A <code>TurnRouter</code> application port: a Protocol that never raises and returns closed error codes, with a Jev adapter in <code>adapters/routing</code>, mirroring <code>ClaimSupportChecker</code>.</p>
+      </dd></div>
+      <div class="m-row"><dt>Generator <small>2 options</small></dt><dd>
+        <p class="cell">The out-of-scope reply can be an application template with no LLM call: zero tokens and impossible to jailbreak.</p>
+        <p class="cell">Direct path = a small LLM prompt with prose output plus an escalate output tool.</p>
+      </dd></div>
+      <div class="m-row"><dt>Composition <small>2 options</small></dt><dd>
+        <p class="cell">Represent each path as a frozen <code>TurnPathV1</code> manifest: name, instruction sections, granted capability names, output types, history bound, <code>include_workflow_context</code> flag.</p>
+        <p class="cell">Special paths skip the workflow snapshot and use a ~6-message history bound. This is the main token saving.</p>
+      </dd></div>
+      <div class="m-row"><dt>Tool grant <small>1 option</small></dt><dd>
+        <p class="cell">Validate path manifests at startup like capability manifests (the <code>IncompleteManifestError</code> pattern): every referenced section and capability must exist.</p>
+      </dd></div>
+      <div class="m-row"><dt>Rollout <small>4 options</small></dt><dd>
+        <p class="cell">Settings: <code>agent_router_mode</code> off/shadow/on, per-label thresholds, router timeout. Reuse the grounding provider/key resolution.</p>
+        <p class="cell">Extract a shared <code>JevClient</code> (post, batching, closed error codes) used by both the claim checker and the router.</p>
+        <p class="cell">Route telemetry on the span: label, probability, confidence, <code>latency_ms</code>, closed error code, acted flag.</p>
+        <p class="cell">Optionally carry the route in the <code>agent_response</code> activity payload for analytics, avoiding a DB migration.</p>
+      </dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- BOX 2 -->
+<section id="t2" aria-labelledby="t2-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">2</p>
+      <p class="kicker">Box 2 · 19 ideas</p>
+      <h2 id="t2-h">Chaos Engineering</h2>
+      <p class="plate-sub">Break the router every way you can, and keep what survives. Each tile pairs a break with the design move that survives it.</p>
+    </header>
+    <div class="wall-meta"><span class="lampl c-red">19 breaks</span><span class="lampl c-green">19 survive</span></div>
+    <div class="wall">
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">Jev returns a 5xx or a transport error.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>The turn takes the full path (fail-open) and telemetry counts it. The turn never fails because of the router.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">The router is slow.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>It gets its own tight timeout (~1s), separate from the grounding checker’s 5s. Timeout → full path.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">A direct answer contains digits or scenario entity names.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>The escalate validator on the direct path reruns it on the full path automatically.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">A scheduling question is wrongly refused.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>The refusal’s <code>next_step</code> tells the planner how to rephrase it as a schedule question.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">Greeting + request: “hi, how many pickers Wed?”</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Direct’s criteria say ONLY greeting or small talk. Any schedule request means scheduling.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">Off-topic + scheduling: “write python to count my workers”.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>It routes to scheduling, where the scope rule answers only the in-scope part.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">An injection hides inside a real request.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>It reaches the full path. The router is not the security boundary; tool grants and validators are.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">Any misroute at all.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Invariant: every special path is strictly less capable than the full path, so a misroute can only lose capability, never gain it.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">Vietnamese greetings and questions.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Multilingual messages must route correctly: add them to the routing eval set.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">A very long message, like a pasted CSV.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>The router state is truncated. Over Jev’s 32k limit → full path.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">An empty, whitespace-only or emoji-only message.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>It routes to direct.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">An approval resume arrives.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>It bypasses the router: it continues a turn already on the full path.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">A reply to a clarification: “the second one”, “Ana B.”</p></div><div class="a"><span class="lampl c-green">Survives</span><p>A deterministic pre-rule forces it to scheduling.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">A follow-up to a clarification, draft or approval request.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Deterministic pre-rules run before Jev: if the previous agent activity was one of those, go straight to scheduling.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">“what did we discuss?” on a path with short history.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Direct cannot recall earlier facts, so this routes to scheduling, where summaries recompute numbers.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">Escalations climb, and each one doubles LLM calls.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Track the escalation rate; if it climbs, raise the direct threshold.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">Routing-eval results go stale.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Pin the Jev model version for routing (e.g. <code>jev-1.13</code>, not <code>jev-latest</code>).</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">A live-eval regression with no obvious culprit.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>Put the route label into eval reports, so it can be attributed to routing or to answering.</p></div></div></article>
+      <article class="fault"><div class="fault-top"></div><div class="fault-body"><div><span class="lampl c-red">Break</span><p class="q">The router lands in CI.</p></div><div class="a"><span class="lampl c-green">Survives</span><p>A CI stub router always returns scheduling, so every existing test is unchanged. Router tests use a scripted stub.</p></div></div></article>
+    </div>
+  </div>
+</section>
+
+<!-- BOX 3 -->
+<section id="t3" class="alt" aria-labelledby="t3-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">3</p>
+      <p class="kicker">Box 3 · 10 ideas</p>
+      <h2 id="t3-h">Nature’s Solutions</h2>
+      <p class="plate-sub">Biomimetic borrowing: reflexes, the immune system, triage, membranes. Each card takes a mechanism from nature and turns it into a router rule.</p>
+    </header>
+    <div class="field">
+      <article class="cellcard"><h3>Spinal reflex</h3><p>An exact-match set of trivial greetings goes to direct with no Jev call: zero latency, zero cost.</p></article>
+      <article class="cellcard"><h3>Immune self / non-self</h3><p>Define the scheduling domain positively and broadly. The out_of_scope criteria = “clearly unrelated to workforce scheduling or this app”.</p></article>
+      <article class="cellcard"><h3>ER triage</h3><p>Under uncertainty, escalate to the highest-care path. The router is triage; the full path is the senior doctor.</p></article>
+      <article class="cellcard"><h3>Bee waggle dance</h3><p>Log routing decisions and outcomes in shadow mode, and fit per-label thresholds from the calibration curve.</p></article>
+      <article class="cellcard"><h3>Octopus arms</h3><p>Each path is a semi-autonomous arm with its own small prompt, owned by its manifest.</p></article>
+      <article class="cellcard"><h3>Cell membrane</h3><p>The path manifest filters which capabilities pass into the runtime: a structural guarantee.</p></article>
+      <article class="cellcard"><h3>Pheromone cache</h3><p>Cache route decisions for identical, normalized, context-free messages like “hi”.</p></article>
+      <article class="cellcard"><h3>Chameleon</h3><p>The direct path answers in the planner’s language.</p></article>
+      <article class="cellcard"><h3>Vaccination</h3><p>Seed the routing eval set with attack prompts and off-topic families: code, songs, math, trivia, weather, personal advice, payroll/HR policy.</p></article>
+      <article class="cellcard"><h3>Homeostasis circuit breaker</h3><p>When the router error rate is high, bypass it for N minutes and warn once, like the tier-1 checker.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- BOX 4 -->
+<section id="t4" aria-labelledby="t4-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">4</p>
+      <p class="kicker">Box 4 · 5 ideas</p>
+      <h2 id="t4-h">Kill the Crown Jewel</h2>
+      <p class="plate-sub">Pull one lever at a time and remove a part the design leans on (Jev, the prompt split, the LLM, the escalate valve), then see what still runs.</p>
+    </header>
+    <ul class="levers">
+      <li class="lever">
+        <div class="lever-art" aria-hidden="true"><span class="slot"></span><span class="rod"></span></div>
+        <div class="lever-txt"><span class="kicker">Pulled</span><span class="lever-plate">Jev</span><p>A cheap LLM (Haiku/Flash) becomes an alternative router adapter behind the same <code>TurnRouter</code> port. Jev is one implementation.</p></div>
+      </li>
+      <li class="lever">
+        <div class="lever-art" aria-hidden="true"><span class="slot"></span><span class="rod"></span></div>
+        <div class="lever-txt"><span class="kicker">Pulled</span><span class="lever-plate">Any router</span><p>The FR-6 scope rule in the full prompt is the baseline to compare against, and it ships anyway as defence in depth.</p></div>
+      </li>
+      <li class="lever">
+        <div class="lever-art" aria-hidden="true"><span class="slot"></span><span class="rod"></span></div>
+        <div class="lever-txt"><span class="kicker">Pulled</span><span class="lever-plate">The prompt split</span><p>Special paths reuse the full prompt but restrict tools and outputs. Safety kept, token savings lost, so the split and the router are separable phases.</p></div>
+      </li>
+      <li class="lever">
+        <div class="lever-art" aria-hidden="true"><span class="slot"></span><span class="rod"></span></div>
+        <div class="lever-txt"><span class="kicker">Pulled</span><span class="lever-plate">The LLM on special paths</span><p>planner_control becomes a Jev choice over controls (run/approve/reject/cancel) plus a template reply naming the exact button.</p></div>
+      </li>
+      <li class="lever">
+        <div class="lever-art" aria-hidden="true"><span class="slot"></span><span class="rod"></span></div>
+        <div class="lever-txt"><span class="kicker">Pulled</span><span class="lever-plate">The escalate valve</span><p>The direct threshold must go ultra-conservative (~0.95). The valve is what lets direct be useful.</p></div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- BOX 5 -->
+<section id="t5" class="alt" aria-labelledby="t5-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">5</p>
+      <p class="kicker">Box 5 · 9 ideas</p>
+      <h2 id="t5-h">SCAMPER</h2>
+      <p class="plate-sub">Seven verbs applied to one object: the master prompt, and how to decompose it into sections that each path can compose from.</p>
+    </header>
+    <ol class="scamper">
+      <li class="sc"><span class="sc-l" aria-hidden="true">S</span><span class="sc-v">Substitute</span><p>Sections become named constants in an <code>agent/instructions</code> package.</p></li>
+      <li class="sc"><span class="sc-l" aria-hidden="true">C</span><span class="sc-v">Combine</span><p><code>compose_instructions(path)</code> joins sections in canonical order. The full path is byte-identical to today, pinned by a test.</p></li>
+      <li class="sc"><span class="sc-l" aria-hidden="true">A</span><span class="sc-v">Adapt</span><p>Each section declares the tools that require it, so granting <code>scheduling_compute</code> automatically pulls in the “Calculated values” section.</p></li>
+      <li class="sc"><span class="sc-l" aria-hidden="true">M</span><span class="sc-v">Modify</span><p>A test reports estimated tokens per composed path and guards that the direct prompt stays under a budget.</p></li>
+      <li class="sc"><span class="sc-l" aria-hidden="true">P</span><span class="sc-v">Put to other use</span><p>The live-eval judge could receive only the sections relevant to the route.</p></li>
+      <li class="sc"><span class="sc-l" aria-hidden="true">E</span><span class="sc-v">Eliminate</span><p>The “Greetings and capability questions” section leaves the full path only after the router is on and evals pass.</p></li>
+      <li class="sc"><span class="sc-l" aria-hidden="true">R</span><span class="sc-v">Reverse</span><p>Build paths up from a minimal core (identity + scope rule) shared by every path, instead of subtracting from the master.</p></li>
+      <li class="sc more"><span class="sc-l" aria-hidden="true">+</span><span class="sc-v">Two more from this box</span><ul>
+        <li>The shared core carries the FR-6 scope rule, so even the full path refuses the off-topic part of a mixed request.</li>
+        <li>Emit a hash of each composed prompt as a span attribute, so eval results can be attributed to a prompt version.</li>
+      </ul></li>
+    </ol>
+  </div>
+</section>
+
+<!-- BOX 6 -->
+<section id="t6" aria-labelledby="t6-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">6</p>
+      <p class="kicker">Box 6 · 16 ideas</p>
+      <h2 id="t6-h">Starbursting</h2>
+      <p class="plate-sub">Who, what, when and how questions about evaluation and rollout, each turned into ideas. The ideas are grouped here under the question they answer.</p>
+    </header>
+    <div class="burst">
+      <p class="hub">Evaluation &amp; rollout</p>
+      <div class="qs">
+        <article class="qcard"><h3><span class="qw">What</span> do we test against?</h3><ul>
+          <li>A routing eval dataset: JSONL of (history, message, expected_route, must_not_route) across families, ~150 cases.</li>
+          <li>Every existing golden and live-suite prompt is a free “must stay on the full path” negative case.</li>
+          <li>Live suite: add the <code>f0cdeca6</code> transcript as an off-topic conversation and a mixed one; assert a refusal with reason out_of_scope.</li>
+        </ul></article>
+        <article class="qcard"><h3><span class="qw">How</span> do we know it’s right?</h3><ul>
+          <li>Primary metric: false-exit rate (scheduling messages sent to a special path) ~0. Secondary: special-path recall.</li>
+          <li>Calibrate thresholds from shadow data: highest recall at zero false-exits on the labelled set.</li>
+          <li>A shadow-mode Logfire dashboard panel: route mix and probability histogram per label.</li>
+        </ul></article>
+        <article class="qcard"><h3><span class="qw">What</span> proves it in CI?</h3><ul>
+          <li>Deterministic golden cases inject the route via the stub and assert the path composition: no tools granted on direct, restricted output types.</li>
+          <li>Architecture test: each special path’s capability grant is a subset of the full path’s.</li>
+          <li>Test that <code>compose_instructions('scheduling')</code> equals today’s <code>SCHEDULING_ASSISTANT_INSTRUCTIONS</code> snapshot.</li>
+          <li>Red-then-green: a scripted model writing code on the out_of_scope path must fail once the output restriction exists, and pass without it.</li>
+        </ul></article>
+        <article class="qcard"><h3><span class="qw">When</span> does the turn wait?</h3><ul>
+          <li>Run the Jev call in parallel with the workflow-context DB read (they are independent) to hide router latency on the full path.</li>
+          <li>Speculatively build the full runtime while the router runs; build the small runtime only when a special path wins.</li>
+        </ul></article>
+        <article class="qcard"><h3><span class="qw">Where</span> does the route show?</h3><ul>
+          <li>Carry the route on the activity, so the timeline can show it in a dev/debug view.</li>
+          <li>A planner override, “Ask anyway”, re-sends with <code>force_route=scheduling</code>. Frontend work, parked for the portfolio MVP.</li>
+        </ul></article>
+        <article class="qcard"><h3><span class="qw">What</span> does it save?</h3><ul>
+          <li>Cost/latency evidence per path, before and after (p50/p95, tokens), as a portfolio metric: e.g. how much cheaper greeting turns become.</li>
+          <li>Repeated off-topic attempts never consume main-model budget: cost protection against abuse.</li>
+        </ul></article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BOX 7 -->
+<section id="t7" class="alt" aria-labelledby="t7-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">7</p>
+      <p class="kicker">Box 7 · 10 ideas</p>
+      <h2 id="t7-h">Worst Possible Idea</h2>
+      <p class="plate-sub">Design the router as badly as possible, then invert each bad call. The inversion is the idea that was kept.</p>
+    </header>
+    <div class="flip-head" aria-hidden="true"><span class="lampl c-red">Worst</span><span></span><span class="lampl c-green">Inverted</span></div>
+    <ul class="flips">
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>The LLM picks its own path mid-turn, with full tools.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>The application routes before the model sees anything; the model can only escalate to a more capable path.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>Route by keyword regex.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>Regex only for a tiny closed greeting set; Jev for everything else.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>Prompt fragments edited ad hoc per path.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>Immutable section constants, with a snapshot test per path.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>A router failure fails the turn.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>A never-raise port with closed error codes.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>Send the full history and records to Jev.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>Minimal, message-only, truncated state with no scenario records: content minimization.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>The route is recorded nowhere.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>Route and probabilities go on the span and into the eval report.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>“I can’t do that.”</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>The refusal names 2–3 concrete things it can do, taken from the workflow.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>Partial compliance: “here’s a short song, but…”</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>Refusal-only output with a length-capped detail, no code fences, and plain text never passed through.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>The direct path invents features: “I can export to Excel”.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>The direct prompt lists capabilities from the granted manifests’ descriptions: one source of truth.</p></div></li>
+      <li class="flip"><div class="worst"><span class="lampl c-red">Worst</span><p>Hard-coded thresholds.</p></div><div class="pivot" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h14M13 6l6 6-6 6"/></svg></div><div class="inv"><span class="lampl c-green">Inverted</span><p>Validated settings, like <code>tier1_flag_threshold</code>.</p></div></li>
+    </ul>
+  </div>
+</section>
+
+<!-- BOX 8 -->
+<section id="t8" aria-labelledby="t8-h">
+  <div class="wrap">
+    <header class="plate">
+      <p class="plate-no" aria-hidden="true">8</p>
+      <p class="kicker">Box 8 · 19 ideas</p>
+      <h2 id="t8-h">Decision Tree Mapping</h2>
+      <p class="plate-sub">The per-turn decision flow, step by step, plus a mind-map of new candidate paths and the edge messages that settle where they go.</p>
+    </header>
+    <div class="tree">
+      <div>
+        <p class="kicker" style="margin-bottom:14px">Each turn, top to bottom. A “yes” leaves the spine.</p>
+        <ol class="flow">
+          <li class="st"><span class="st-n" aria-hidden="true">0</span><p class="st-q"><span class="kicker">Step 0</span>Is this an approval resume?</p><div class="st-x"><span class="yes">yes</span><span class="dest main">full path · no router</span></div></li>
+          <li class="st"><span class="st-n" aria-hidden="true">1</span><p class="st-q"><span class="kicker">Step 1 · pre-rule</span>Was the previous agent activity a clarification, draft or approval request?</p><div class="st-x"><span class="yes">yes</span><span class="dest main">scheduling</span></div></li>
+          <li class="st"><span class="st-n" aria-hidden="true">2</span><p class="st-q"><span class="kicker">Step 2 · reflex</span>Is the message in the reflex greeting set?</p><div class="st-x"><span class="yes">yes</span><span class="dest special">direct · no Jev call</span></div></li>
+          <li class="st"><span class="st-n" aria-hidden="true">3</span><p class="st-q"><span class="kicker">Step 3</span>Is router mode off?</p><div class="st-x"><span class="yes">yes</span><span class="dest main">scheduling</span></div></li>
+          <li class="st"><span class="st-n" aria-hidden="true">4</span><p class="st-q"><span class="kicker">Step 4</span>Call Jev in parallel with the workflow-context load. Error or timeout?</p><div class="st-x"><span class="yes">yes</span><span class="dest main">scheduling</span></div></li>
+          <li class="st"><span class="st-n" aria-hidden="true">5</span><p class="st-q"><span class="kicker">Step 5</span>Run the decision table over the probes. Anything below threshold?</p><div class="st-x"><span class="yes">yes</span><span class="dest main">scheduling</span></div></li>
+          <li class="st"><span class="st-n" aria-hidden="true">6</span><p class="st-q"><span class="kicker">Step 6</span>Is router mode shadow?</p><div class="st-x"><span class="yes">yes</span><span class="dest main">record it · act as scheduling</span></div></li>
+          <li class="st end"><span class="st-n" aria-hidden="true">7</span><p class="st-q"><span class="kicker">Step 7 · on mode</span>Build the path runtime. A direct escalation rebuilds the full runtime, reruns the same prompt and records <code>escalated=true</code>.</p><div class="st-x"><span class="yes">route acts</span><span class="dest special">path runtime</span><span class="dest main">escalated → full runtime</span></div></li>
+        </ol>
+        <ul class="rules">
+          <li>At most one escalation per turn; the escalated run gets the full budget.</li>
+          <li>The router and any escalated rerun share the turn deadline; escalate only when enough deadline remains.</li>
+        </ul>
+      </div>
+
+      <div class="mm">
+        <p class="mm-hub">Candidate paths &amp; edge messages</p>
+        <div class="br cand">
+          <h3>New sidings</h3>
+          <ul>
+            <li><b>explain_concept</b>: “what is a soft constraint?”, “what is an EBA?”. Direct, with the business-context and soft-constraint sections.</li>
+            <li><b>workflow_status</b>: “did my run finish?”. Snapshot-only, no tools; escalate if names are needed.</li>
+            <li><b>meta/about_ai</b>: “which model are you?”. Direct with a fixed identity answer; provider disclosure is a policy choice.</li>
+            <li><b>prompt_attack</b>: abusive or unsafe messages join it as a refusal with reason <code>unsupported_request</code>.</li>
+            <li><b>investigate · change · approve</b>: tool-scoped paths (inspect+compute, inspect+draft, snapshot+baseline) in phase R4, composed automatically from the section-per-tool links.</li>
+          </ul>
+        </div>
+        <div class="br direct">
+          <h3>Goes direct</h3>
+          <ul>
+            <li>“Thanks!”</li>
+          </ul>
+        </div>
+        <div class="br main">
+          <h3>Stays on the main line</h3>
+          <ul>
+            <li>“that’s wrong”: it needs context.</li>
+            <li>Export requests (“give me a CSV”): scheduling can list rows. Not a refusal.</li>
+            <li>Multi-intent, scheduling + off-topic: the core scope rule answers only the in-scope part.</li>
+            <li>“Where do I start?”: the broad-orientation rule inspects the overview.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="insights" class="alt" aria-labelledby="ins-h">
+  <div class="wrap">
+    <div class="sec-h">
+      <p class="kicker">7 insights along the way</p>
+      <h2 id="ins-h">Signals cleared</h2>
+      <p>What the session concluded between techniques, before it pulled everything together.</p>
+    </div>
+    <ul class="ins">
+      <li><span class="sig" aria-hidden="true"></span><p>Special paths are strictly less capable than the full path, so a misroute can only lose capability. The router is not a security boundary and can safely be probabilistic.</p></li>
+      <li><span class="sig" aria-hidden="true"></span><p>Orthogonal noul probes combined by an application decision table are more debuggable and tunable than one opaque multi-way choice.</p></li>
+      <li><span class="sig" aria-hidden="true"></span><p>Deterministic pre-rules (clarification/draft/approval follow-ups, reflex greetings) remove the riskiest misroutes and many Jev calls.</p></li>
+      <li><span class="sig" aria-hidden="true"></span><p>Running Jev in parallel with the workflow-context load hides the router’s latency on the full path.</p></li>
+      <li><span class="sig" aria-hidden="true"></span><p>The FR-6 scope rule belongs in the shared core section: defence in depth even when the router misses.</p></li>
+      <li><span class="sig" aria-hidden="true"></span><p>Linking prompt sections to the tools that require them makes the later tool-scoped paths almost free.</p></li>
+      <li><span class="sig" aria-hidden="true"></span><p>Prompt split, router shadow and acting on routes are separable phases; the split alone is a zero-behaviour change.</p></li>
+    </ul>
+  </div>
+</section>
+
+<section id="interlocking" class="panel" aria-labelledby="syn-h">
+  <div class="wrap">
+    <div class="sec-h">
+      <p class="kicker">Synthesis · 5</p>
+      <h2 id="syn-h">The <span class="litw">interlocking</span></h2>
+      <p>In a signal box, the interlocking stops conflicting routes from being set. These five syntheses tie ideas from different boxes into one design, and the first is the lock that makes a probabilistic router acceptable at all.</p>
+    </div>
+
+    <div class="syn">
+      <article class="syn-card key">
+        <div class="syn-text">
+          <div class="syn-top"><span class="syn-num" aria-hidden="true">1</span><h3>Capability-monotonic routing</h3></div>
+          <p>The subset invariant (Chaos), the cell membrane (Nature) and the architecture subset test (Starbursting) are one idea: every non-default path is a strict subset of the full path’s tools and outputs. That is what makes a probabilistic router acceptable.</p>
+          <div class="traced"><span class="kicker">Traced to</span><a href="#t2">Chaos · subset invariant</a><a href="#t3">Nature · cell membrane</a><a href="#t6">Starbursting · architecture subset test</a></div>
+        </div>
+        <figure class="nest">
+          <div class="nest-outer">
+            <span class="nest-l">scheduling · every tool, every output</span>
+            <div class="nest-inner">
+              <span class="ni">direct<small>prose + escalate</small></span>
+              <span class="ni rf">out_of_scope<small>refusal only</small></span>
+              <span class="ni rf">prompt_attack<small>refusal only</small></span>
+            </div>
+          </div>
+          <figcaption>A misroute moves inward. It can lose capability; it can never gain it.</figcaption>
+        </figure>
+      </article>
+
+      <article class="syn-card">
+        <div class="syn-top"><span class="syn-num" aria-hidden="true">2</span><h3>The router mirrors the G-prime tier-0/tier-1 split</h3></div>
+        <p>Deterministic pre-rules and the reflex run first, Jev supplies calibrated probes, and application code decides. Jev never decides alone.</p>
+        <ol class="chain">
+          <li><b>Pre-rules + reflex</b><span>deterministic, first</span></li>
+          <li><b>Jev probes</b><span>calibrated probabilities</span></li>
+          <li><b>Application code</b><span>makes the decision</span></li>
+        </ol>
+        <div class="traced"><span class="kicker">Traced to</span><a href="#t2">Chaos · pre-rules</a><a href="#t3">Nature · spinal reflex</a><a href="#t1">Morph · noul probes</a><a href="#t8">Decision Tree · steps 1–5</a></div>
+      </article>
+
+      <article class="syn-card">
+        <div class="syn-top"><span class="syn-num" aria-hidden="true">3</span><h3>Capability manifests become the single source</h3></div>
+        <p>Manifests drive both prompt composition and path grants. Sections declare the tools that need them, so the tool-scoped paths (R4) and the direct path’s capability list both fall out of the manifests.</p>
+        <div class="fanout" aria-hidden="true"><span class="src">capability manifests</span><span class="to">→</span><span class="outs"><span>prompt composition</span><span>path grants</span></span></div>
+        <div class="traced"><span class="kicker">Traced to</span><a href="#t1">Morph · TurnPathV1 manifest</a><a href="#t5">SCAMPER · Adapt</a><a href="#t7">Worst · invented features</a><a href="#t8">Decision Tree · tool-scoped paths</a></div>
+      </article>
+
+      <article class="syn-card">
+        <div class="syn-top"><span class="syn-num" aria-hidden="true">4</span><h3>Two special paths need no LLM call</h3></div>
+        <p>The out_of_scope/prompt_attack refusal and planner_control can both be templates. Only direct needs a model, which changes the cost story.</p>
+        <div class="tbl-scroll">
+          <table class="cost">
+            <thead><tr><th scope="col">Path</th><th scope="col">Reply</th><th scope="col">LLM calls</th></tr></thead>
+            <tbody>
+              <tr><td>out_of_scope,<br>prompt_attack</td><td>template</td><td class="n">0</td></tr>
+              <tr><td>planner_control</td><td>template naming the button</td><td class="n">0</td></tr>
+              <tr><td>direct</td><td>small model prompt</td><td class="n">1<small>2 if it escalates</small></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="traced"><span class="kicker">Traced to</span><a href="#t1">Morph · template refusal</a><a href="#t4">Crown Jewel · no LLM on special paths</a><a href="#t2">Chaos · escalation doubles calls</a></div>
+      </article>
+
+      <article class="syn-card">
+        <div class="syn-top"><span class="syn-num" aria-hidden="true">5</span><h3>The latency objection dissolves</h3></div>
+        <p>Jev runs in parallel with the workflow-context DB read, and the existing golden and live prompts give free negative cases, so shadow calibration has data from day one.</p>
+        <div class="lanes" role="img" aria-label="Schematic: the Jev call and the workflow-context DB read start together and run side by side">
+          <div class="lane"><span>Jev call</span><i></i></div>
+          <div class="lane"><span>workflow-context read</span><i></i></div>
+          <p class="lane-note">side by side · schematic, not to scale</p>
+        </div>
+        <div class="traced"><span class="kicker">Traced to</span><a href="#t6">Starbursting · parallel call</a><a href="#t6">Starbursting · free negatives</a><a href="#t8">Decision Tree · step 4</a></div>
+      </article>
+    </div>
+
+    <div class="subblock" id="route">
+      <p class="kicker">Decision · chosen directions for bmad-spec</p>
+      <h2>The route to build</h2>
+      <p>Five phases, in order. R0 ships whether or not a router ever does, and nothing acts on a route until R3.</p>
+      <ol class="stations">
+        <li class="stn"><span class="stn-code">R0</span><h3>Core FR-6 scope rule + evals</h3><p>Ships first, independent of the router.</p><span class="beh act">no router needed</span></li>
+        <li class="stn"><span class="stn-code">R1</span><h3>Prompt split</h3><p>Tool-linked sections, with a byte-identical full path.</p><span class="beh">zero-behaviour change</span></li>
+        <li class="stn"><span class="stn-code">R2</span><h3>TurnRouter port + Jev adapter</h3><p>Pre-rules, reflex, probes/choice, parallel load, telemetry, shadow mode, routing eval set.</p><span class="beh">shadow: records only</span></li>
+        <li class="stn"><span class="stn-code">R3</span><h3>Act on routes</h3><p>direct (LLM + escalate) and out_of_scope/prompt_attack (refusal-only), with subset-invariant tests and a live-eval rerun.</p><span class="beh act">routes act</span></li>
+        <li class="stn"><span class="stn-code">R4</span><h3>More sidings</h3><p>planner_control template, explain_concept / workflow_status, tool-scoped paths.</p><span class="beh">candidates</span></li>
+      </ol>
+    </div>
+
+    <div class="subblock" id="danger">
+      <p class="kicker">Open questions</p>
+      <h2>Held at danger</h2>
+      <p>Three signals stay red until Minh clears them.</p>
+      <ol class="qlist">
+        <li class="qitem">
+          <span class="sighead" aria-hidden="true"><i class="red"></i><i></i></span>
+          <div><span class="await">Awaiting Minh</span><h3>May planner message text be sent to Jev?</h3><p>Content policy versus Story 5.2. The router state the session sketched is minimal and message-only, with no scenario records.</p>
+          <div class="traced"><a href="#t1">Morph · router input</a><a href="#t7">Worst · content minimization</a></div></div>
+        </li>
+        <li class="qitem">
+          <span class="sighead" aria-hidden="true"><i class="red"></i><i></i></span>
+          <div><span class="await">Awaiting Minh</span><h3>Out-of-scope reply: application template, or refusal-only LLM?</h3><p>A template costs zero tokens and cannot be jailbroken. Either way, the refusal should name two or three concrete things the assistant can do.</p>
+          <div class="traced"><a href="#t1">Morph · template refusal</a><a href="#t7">Worst · refusal-only output</a></div></div>
+        </li>
+        <li class="qitem">
+          <span class="sighead" aria-hidden="true"><i class="red"></i><i></i></span>
+          <div><span class="await">Awaiting Minh</span><h3>Disclose the model provider on meta/about-AI questions?</h3><p>The meta/about_ai candidate gives a fixed identity answer; whether it names the provider is a policy choice.</p>
+          <div class="traced"><a href="#t8">Decision Tree · meta/about_ai</a></div></div>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap">
+    <p>Built only from the session log, <code>brainstorm-agent-turn-routing-2026-09-28/.memlog.md</code>, last updated 2026-09-28 11:20.</p>
+    <p>108 idea entries, 12 insights, 2 decisions, 1 set of open questions. Mode: autonomous. Status: complete.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function byId(id){ return document.getElementById(id); }
+
+  var TR = {
+    "scheduling":{k:0, kind:"main", phase:"default path",
+      what:"The full master prompt and every tool: today’s path, kept byte-identical by a snapshot test once the prompt is split. Its shared core carries the FR-6 scope rule, so it still refuses the off-topic part of a mixed request."},
+    "direct":{k:1, kind:"special", phase:"phase R3",
+      what:"A small prompt with no tools: prose output plus an escalate output tool. No workflow snapshot, about six messages of history, and answers in the planner’s language. An answer with digits or scenario entity names reruns on the full path, at most once per turn."},
+    "out_of_scope":{k:2, kind:"refusal", phase:"phase R3",
+      what:"Refusal only. It can be an application template with no LLM call: zero tokens, impossible to jailbreak. The refusal names two or three concrete things the assistant can do, with no partial compliance and no code fences."},
+    "prompt_attack":{k:3, kind:"refusal", phase:"phase R3",
+      what:"Refusal only, like out_of_scope. Abusive or unsafe messages land here with reason unsupported_request."},
+    "planner_control":{k:4, kind:"cand", phase:"phase R4",
+      what:"A template reply naming the exact button, chosen by a Jev choice over run, approve, reject and cancel. No LLM call."},
+    "explain_concept":{k:5, kind:"cand", phase:"phase R4",
+      what:"Candidate path. Direct, with the business-context and soft-constraint sections."},
+    "workflow_status":{k:6, kind:"cand", phase:"phase R4",
+      what:"Candidate path. Snapshot only and no tools; it escalates if names are needed."},
+    "meta/about_ai":{k:7, kind:"cand", phase:"no phase yet",
+      what:"Candidate path. Direct with a fixed identity answer. Whether it names the model provider is still an open question."}
+  };
+
+  var MSGS = [
+    {t:"A song request", note:"the f0cdeca6 trigger", q:false, r:"out_of_scope", by:"Step 5 · decision table, threshold 0.9",
+      why:"Clearly unrelated to workforce scheduling or this app. Songs are one of the off-topic families seeded into the routing eval set. It leaves the main line only if both p(out_of_scope) and Jev’s confidence clear 0.9."},
+    {t:"hi", q:true, r:"direct", by:"Step 2 · reflex, no Jev call",
+      why:"The spinal reflex: an exact-match set of trivial greetings goes to direct with no Jev call. Zero latency, zero cost."},
+    {t:"hi, how many pickers Wed?", q:true, r:"scheduling", by:"Direct criteria: greetings and small talk only",
+      why:"A greeting mixed with a request. Direct’s criteria cover only greetings and small talk; any schedule request means scheduling."},
+    {t:"write python to count my workers", q:true, r:"scheduling", by:"Mixed request → scheduling",
+      why:"Off-topic mixed with scheduling. It stays on the full path, where the core FR-6 scope rule answers only the in-scope part."},
+    {t:"Thanks!", q:true, r:"direct", by:"Small talk → direct",
+      why:"The session sent “Thanks!” to direct, in contrast with “that’s wrong”, which needs context."},
+    {t:"that’s wrong", q:true, r:"scheduling", by:"Needs context → scheduling",
+      why:"It needs the conversation’s context, so it stays on scheduling."},
+    {t:"the second one", note:"replying to a clarification", q:true, r:"scheduling", by:"Step 1 · deterministic pre-rule",
+      why:"The previous agent activity was a clarification, so the turn goes straight to scheduling before Jev is asked."},
+    {t:"approve it", q:true, r:"planner_control", by:"Snapshot flags · threshold 0.85",
+      why:"Snapshot flags in the router state, pending_approval among them, let the router spot a planner_control ask."},
+    {t:"what is a soft constraint?", q:true, r:"explain_concept", by:"Candidate path",
+      why:"A concept question. The session proposed explain_concept for it, alongside “what is an EBA?”."},
+    {t:"did my run finish?", q:true, r:"workflow_status", by:"Candidate path",
+      why:"A status question. The session proposed workflow_status for it."},
+    {t:"which model are you?", q:true, r:"meta/about_ai", by:"Candidate path",
+      why:"A question about the assistant itself. The session proposed meta/about_ai for it."},
+    {t:"give me a CSV", q:true, r:"scheduling", by:"Export stays on scheduling",
+      why:"Export requests are not refusals. They stay on scheduling, which can list rows."},
+    {t:"what did we discuss?", q:true, r:"scheduling", by:"Short history can’t recall",
+      why:"Direct keeps a short history and cannot recall earlier facts. On scheduling, summaries recompute the numbers."},
+    {t:"Where do I start?", q:true, r:"scheduling", by:"Broad-orientation rule",
+      why:"It stays on scheduling because the broad-orientation rule inspects the overview."},
+    {t:"An abusive message", q:false, r:"prompt_attack", by:"Refusal · unsupported_request",
+      why:"Abusive or unsafe messages join prompt_attack as a refusal with reason unsupported_request."},
+    {t:"An emoji-only message", q:false, r:"direct", by:"Empty / emoji-only rule",
+      why:"Empty, whitespace-only and emoji-only messages route to direct."},
+    {t:"A pasted CSV over 32k", q:false, r:"scheduling", by:"Over Jev’s 32k limit",
+      why:"Very long messages get truncated router state. Over Jev’s 32k limit, the turn takes the full path."},
+    {t:"A real request hiding an injection", q:false, r:"scheduling", by:"Not the security boundary",
+      why:"It reaches the full path. The router is not the security boundary; tool grants and validators are."},
+    {t:"Any message while Jev returns a 5xx", q:false, r:"scheduling", by:"Step 4 · fail-open",
+      why:"A Jev error, or a timeout past the router’s own ~1s budget, sends the turn down the full path and telemetry counts it. The turn never fails because of the router."},
+    {t:"Resuming after an approval", q:false, r:"scheduling", by:"Step 0 · router bypassed",
+      why:"The approval-resume path bypasses the router: it continues a turn already on the full path."}
+  ];
+
+  var svg = document.querySelector('.yard-svg');
+  var lit = byId('lit'), train = byId('train'), lamp = byId('lamp'), xover = byId('xover');
+  var fig = byId('yard-fig'), chipsEl = byId('chips');
+  var ro = {msg:byId('ro-msg'), route:byId('ro-route'), phase:byId('ro-phase'), by:byId('ro-by'), why:byId('ro-why'), track:byId('ro-track'), count:byId('ro-count')};
+  if (!svg || !lit || !chipsEl) return;
+
+  var chips = [], cur = 0, raf = 0;
+
+  MSGS.forEach(function(m, i){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip' + (m.q ? '' : ' kind');
+    b.id = 'msg-' + i;
+    b.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+    var s = document.createElement('span');
+    s.className = 't';
+    s.textContent = m.q ? '“' + m.t + '”' : m.t;
+    b.appendChild(s);
+    if (m.note){ var n = document.createElement('small'); n.textContent = m.note; b.appendChild(n); }
+    b.addEventListener('click', function(){ select(i, true, true); });
+    chipsEl.appendChild(b);
+    chips.push(b);
+  });
+
+  function pathFor(k){
+    if (!k) return 'M10 60 H606';
+    var x = 160 + 26 * k, y = 60 + 52 * k;
+    return 'M10 60 H160 L' + x + ' ' + y + ' H584';
+  }
+
+  function place(len, total){
+    var a = lit.getPointAtLength(Math.max(0, len));
+    var b = lit.getPointAtLength(Math.min(total, Math.max(0, len) + 2));
+    var dx = b.x - a.x, dy = b.y - a.y;
+    if (dx === 0 && dy === 0){ dx = 1; }
+    var deg = Math.atan2(dy, dx) * 180 / Math.PI;
+    train.setAttribute('transform', 'translate(' + a.x.toFixed(1) + ' ' + a.y.toFixed(1) + ') rotate(' + deg.toFixed(1) + ')');
+  }
+
+  function drive(k, animate){
+    cancelAnimationFrame(raf);
+    lit.setAttribute('d', pathFor(k));
+    var L = lit.getTotalLength(), end = L - 18;
+    if (!animate){
+      lit.style.strokeDasharray = '';
+      lit.style.strokeDashoffset = '';
+      place(end, L);
+      return;
+    }
+    lit.style.strokeDasharray = L + ' ' + L;
+    lit.style.strokeDashoffset = L;
+    place(0, L);
+    var t0 = null, setDur = 420, runDur = 1050;
+    function ease(p){ return p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+    function tick(now){
+      if (t0 === null) t0 = now;
+      var t = now - t0;
+      if (t < setDur){
+        lit.style.strokeDashoffset = (L * (1 - ease(t / setDur))).toFixed(1);
+      } else {
+        lit.style.strokeDasharray = '';
+        lit.style.strokeDashoffset = '';
+        var p = Math.min(1, (t - setDur) / runDur);
+        place(end * ease(p), L);
+        if (p >= 1) return;
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function maybeScroll(){
+    if (window.innerWidth > 860 || !fig.scrollIntoView) return;
+    var r = fig.getBoundingClientRect();
+    if (r.top < 0 || r.top > window.innerHeight * 0.6){
+      fig.scrollIntoView({behavior: reduce ? 'auto' : 'smooth', block: 'start'});
+    }
+  }
+
+  function select(i, animate, user){
+    cur = (i + MSGS.length) % MSGS.length;
+    var m = MSGS[cur], t = TR[m.r];
+    chips.forEach(function(c, j){ c.setAttribute('aria-pressed', j === cur ? 'true' : 'false'); });
+
+    ro.msg.textContent = m.q ? '“' + m.t + '”' : m.t;
+    ro.msg.className = 'ro-msg' + (m.q ? '' : ' kind');
+    if (m.note){
+      var n = document.createElement('span');
+      n.className = 'note';
+      n.textContent = ' (' + m.note + ')';
+      ro.msg.appendChild(n);
+    }
+    ro.route.textContent = m.r;
+    ro.route.setAttribute('data-kind', t.kind);
+    ro.phase.textContent = t.phase;
+    ro.by.textContent = m.by;
+    ro.why.textContent = m.why;
+    ro.track.textContent = t.what;
+    ro.count.textContent = (cur + 1) + ' / ' + MSGS.length;
+
+    var ons = svg.querySelectorAll('.on');
+    for (var j = 0; j < ons.length; j++) ons[j].classList.remove('on');
+    var lbl = byId('lbl-' + t.k); if (lbl) lbl.classList.add('on');
+    if (t.k){ var bf = byId('buf-' + t.k); if (bf) bf.classList.add('on'); }
+    if (m.r === 'direct') xover.classList.add('on');
+    lamp.setAttribute('class', 'lamp ' + (t.kind === 'main' ? 'go' : (t.kind === 'refusal' ? 'stop' : 'div')));
+
+    drive(t.k, animate && !reduce);
+    if (user) maybeScroll();
+  }
+
+  byId('prev').addEventListener('click', function(){ select(cur - 1, true, false); });
+  byId('next').addEventListener('click', function(){ select(cur + 1, true, false); });
+
+  select(0, false, false);
+})();
+</script>
+</body>
+</html>
