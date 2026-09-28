@@ -175,7 +175,7 @@
       "turns": [
         {
           "user": "hi",
-          "obligation": "Greet the user briefly and naturally. State no scenario number or fact, and do not dump a list of capabilities."
+          "obligation": "Greet the user briefly and naturally. A short one-sentence offer of scheduling help is fine. State no scenario number or fact, and do not give a long multi-paragraph walkthrough of features."
         },
         {
           "user": "how are you?",
