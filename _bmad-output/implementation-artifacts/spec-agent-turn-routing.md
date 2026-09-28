@@ -88,6 +88,17 @@ Review fixes: every `out_of_scope` refusal is the fixed `OUT_OF_SCOPE_REFUSAL`, 
 - `cd backend && uv run pytest -q tests/test_turn_routing.py` -- expected: all pass.
 - `cd backend && uv run pytest -q tests/test_live_conversation_cases.py` -- expected: pass, unchanged.
 
+## Live Eval (2026-09-28, sandbox, not evidence-grade)
+
+Paid run on `openai/gpt-5.6-luna` with the `google/gemini-2.5-flash` judge, run from the cloud sandbox. The images came from the sandbox fallback build plus a proxy layer, and the suite ran with `--skip-image-build`, so `evals.live_conversations.evidence` refuses the report. The committed evidence and baseline must be refreshed from a local run.
+
+- **Full matrix (3 repetitions):** 83/90 turns passed, against the baseline's 87/90. No turn dropped to 0/3.
+  - Five misses were judge outages (`judge_malformed_JSONDecodeError_at_root`), not agent failures.
+  - B:5 missed once on judge completeness, which predates routing (2/3 in the baseline too).
+  - C:10 was a routing miss: the demonstration request went to `out_of_scope`. Fixed in `7781f25` by naming the app's features in the router question (Jev: 0.84-0.95 out_of_scope -> 0.97-0.99 scheduling).
+- **Scenario C rerun after the fix (3 repetitions):** C:10 passed in all 3. The misses were one judge outage and two completeness scores on the scheduling path (C:3, which was 2/3 in the baseline; C:4).
+- **`f0cdeca6` replay on a live stack:** the five small-talk messages got short replies with no tools. The song and quadratic-Python requests were refused as `out_of_scope`. The mixed message stayed on scheduling: it answered the worker count and declined the Python.
+
 ## Suggested Review Order
 
 **Where the route is decided**
