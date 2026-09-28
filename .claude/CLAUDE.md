@@ -45,6 +45,20 @@ operations (cutover, legacy-route flag, readiness report) are in
 explicitly descoped for this portfolio MVP — see `EXPERIENCE.md`'s
 Accessibility Floor; accessibility is proven by automated coverage alone.
 
+### Running the docker-compose stack in a Claude Code cloud session — read before re-diagnosing it
+
+Plain `docker compose up -d --build` fails in a Claude Code cloud sandbox
+for two reasons that are sandbox-networking artifacts, not app bugs: the
+root `Dockerfile`'s `ghcr.io/astral-sh/uv` base is blocked by this kind of
+session's network policy, and `npm ci` run *inside* the frontend's Docker
+build is intermittently flaky under this sandbox's container networking
+(host `npm ci` is unaffected). Run `.claude/sandbox/docker-dev.sh` instead —
+it tries the real build first and only falls back to the workarounds on
+that specific failure. Full story, why each workaround exists, and how to
+tell if it's no longer needed: `.claude/sandbox/README.md`. Do not
+re-derive these workarounds from scratch each session; that cost a full
+session's diagnostic budget the first time.
+
 ### Constraints
 
 - **Tech stack**: Python backend, OR-Tools CP-SAT solver, FastAPI, SQLite (WAL),

@@ -1,0 +1,10 @@
+# Sandbox-only fallback for frontend/Dockerfile: skips the `npm ci` build
+# stage entirely (it intermittently dies with npm's own "Exit handler never
+# called!" bug when run inside this sandbox's container networking — npm ci
+# on the host is unaffected). docker-dev.sh runs `npm ci && npm run build` on
+# the host first and this Dockerfile just packages the resulting frontend/dist
+# into the same nginx image the real frontend/Dockerfile produces. Build
+# context must be the frontend/ directory, after dist/ exists.
+FROM nginx:1.29-alpine
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY dist /usr/share/nginx/html
