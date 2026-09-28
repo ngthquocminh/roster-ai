@@ -2,7 +2,7 @@ import { useId } from "react";
 
 import type { Timeline } from "@/api/conversations";
 import { EmptyState } from "@/components/primitives/EmptyState";
-import { EvidenceLink } from "@/components/primitives/EvidenceLink";
+import { EvidenceLink, VerifiedMark } from "@/components/primitives/EvidenceLink";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { DraftCard } from "./DraftCard";
@@ -36,6 +36,20 @@ function fieldOrRange(reference: Claim["evidence_refs"][number]): string | undef
   return reference.field ?? range;
 }
 
+// The model sometimes writes a markdown-style bullet list ("Tasks:\n\n- ",
+// then "\n- " before each further item). The parent `<p>` is
+// `whitespace-pre-wrap` (so a genuinely multi-paragraph answer keeps its
+// blank lines) and `flex flex-wrap` (so fact/claim segments sit inline beside
+// prose) -- combined, an embedded newline forces a line break INSIDE this one
+// flex item's own box, which visually detaches a bare "-" from the item it
+// was meant to introduce. Collapsing internal whitespace runs to a single
+// space (gap-2 already supplies the visible spacing between flex children)
+// fixes the wrap without touching the sibling `<p>`s that still need
+// pre-wrap (planner messages, clarification questions).
+function normalizeProseText(text: string): string {
+  return text.replace(/\s*\n\s*/g, " ").trim();
+}
+
 // A claim renders no prose of its own and the gate forbids numerals in prose,
 // so without this the answer cannot say WHICH task or window a number belongs
 // to — the number would be exact and unattributed at the same time.
@@ -60,50 +74,53 @@ function formatClaimValue(value: number): string {
   return String(Number(value.toPrecision(12)));
 }
 
-function EvidenceRefLinks({
+// The consolidated evidence control for a segment with exactly one evidence
+// ref: one link, replacing what used to be a per-ref `.map()` list (that list
+// had no consumer left needing >1 ref once the supported paths below moved to
+// this component -- see gate.py's `_fact`, always a 1-tuple, and
+// `ClaimSegment`'s multi-ref branch, which renders no link at all).
+// `verified` toggles the leading check icon; the wording-flagged fact case
+// below passes `verified={false}` since that record is NOT fully verified.
+function SingleEvidenceLink({
+  fieldOrRange,
   item,
   navigate,
-  references,
+  reference,
   segmentIndex,
+  verified = true,
 }: Readonly<{
+  fieldOrRange: string | undefined;
   item: AgentResponse;
   navigate: NavigateFunction;
-  references: Claim["evidence_refs"];
+  reference: Claim["evidence_refs"][number];
   segmentIndex: number;
+  verified?: boolean;
 }>) {
+  const origin: EvidenceOrigin = {
+    conversationId: item.conversation_id,
+    activityId: item.activity_id,
+    segmentIndex,
+    refIndex: 0,
+  };
+  const activate = () => {
+    rememberOrigin(origin);
+    navigate(
+      `/scenarios/${item.scenario_id}/data?${toSearchParams(reference)}`,
+      { state: { evidenceOrigin: origin } },
+    );
+  };
   return (
     <>
-      {references.map((reference, refIndex) => {
-        const origin: EvidenceOrigin = {
-          conversationId: item.conversation_id,
-          activityId: item.activity_id,
-          segmentIndex,
-          refIndex,
-        };
-        const activate = () => {
-          rememberOrigin(origin);
-          navigate(
-            `/scenarios/${item.scenario_id}/data?${toSearchParams(reference)}`,
-            { state: { evidenceOrigin: origin } },
-          );
-        };
-        // Keyed by ref POSITION, not by locator content: two refs can cite the
-        // same group/record/field for different windows, and a colliding key
-        // made React reconcile the very elements focus restoration targets.
-        return (
-          <span className="inline-flex flex-wrap items-center gap-2" key={`ref-${refIndex}`}>
-          <EvidenceLink
-            fieldOrRange={fieldOrRange(reference)}
-            group={reference.group}
-            id={originElementId(origin)}
-            onActivate={activate}
-            record={reference.record_id}
-            version={reference.scenario_version_id}
-          />
-          {isEvidenceUnavailable(origin) ? <span className="text-destructive">Evidence unavailable</span> : null}
-          </span>
-        );
-      })}
+      <EvidenceLink
+        fieldOrRange={fieldOrRange}
+        group={reference.group}
+        id={originElementId(origin)}
+        onActivate={activate}
+        record={reference.record_id}
+        verified={verified}
+        version={reference.scenario_version_id}
+      />
+      {isEvidenceUnavailable(origin) ? <span className="text-destructive">Evidence unavailable</span> : null}
     </>
   );
 }
@@ -141,11 +158,13 @@ function FactSegment({
         <span className="text-xs text-amber-700 dark:text-amber-400">
           Wording not supported by the record · {fact.field}: {fact.value}
         </span>
-        <EvidenceRefLinks
+        <SingleEvidenceLink
+          fieldOrRange={fieldOrRange(fact.evidence_refs[0])}
           item={item}
           navigate={navigate}
-          references={fact.evidence_refs}
+          reference={fact.evidence_refs[0]}
           segmentIndex={segmentIndex}
+          verified={false}
         />
       </span>
     );
@@ -153,13 +172,11 @@ function FactSegment({
   return (
     <span className="inline-flex flex-wrap items-center gap-2" data-fact-state="supported">
       <span>{fact.text}</span>
-      <span className="text-xs text-muted-foreground">
-        Verified: {fact.field}: {fact.value}
-      </span>
-      <EvidenceRefLinks
+      <SingleEvidenceLink
+        fieldOrRange={`${fact.field}: ${fact.value}`}
         item={item}
         navigate={navigate}
-        references={fact.evidence_refs}
+        reference={fact.evidence_refs[0]}
         segmentIndex={segmentIndex}
       />
     </span>
@@ -196,6 +213,11 @@ function ClaimSegment({
       </span>
     );
   }
+  // A claim backed by many rows (e.g. `worker_count` draining every worker) is
+  // itself the verification -- a link per row added nothing a planner could
+  // act on, so only a single-ref claim gets a jump-to-record link; a multi-ref
+  // one gets just the check.
+  const singleRef = claim.evidence_refs.length === 1 ? claim.evidence_refs[0] : undefined;
   return (
     <span className="inline-flex flex-wrap items-center gap-2" data-claim-state="supported">
       {/* Exactness is this feature's whole premise, so a raw float repr
@@ -206,12 +228,17 @@ function ClaimSegment({
         {formatClaimValue(Number(claim.value))} {claim.unit}
         {subject ? <span className="text-muted-foreground"> ({subject})</span> : null}
       </span>
-      <EvidenceRefLinks
-        item={item}
-        navigate={navigate}
-        references={claim.evidence_refs}
-        segmentIndex={segmentIndex}
-      />
+      {singleRef ? (
+        <SingleEvidenceLink
+          fieldOrRange={fieldOrRange(singleRef)}
+          item={item}
+          navigate={navigate}
+          reference={singleRef}
+          segmentIndex={segmentIndex}
+        />
+      ) : (
+        <VerifiedMark />
+      )}
     </span>
   );
 }
@@ -241,7 +268,7 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
       <p className="flex flex-wrap items-center gap-2 text-sm whitespace-pre-wrap">
         {item.response.segments.map((segment, index) =>
           segment.kind === "prose" ? (
-            <span key={`prose-${index}`}>{segment.text}</span>
+            <span key={`prose-${index}`}>{normalizeProseText(segment.text)}</span>
           ) : segment.kind === "fact" ? (
             <FactSegment fact={segment} item={item} key={`fact-${index}`} navigate={navigate} segmentIndex={index} />
           ) : (

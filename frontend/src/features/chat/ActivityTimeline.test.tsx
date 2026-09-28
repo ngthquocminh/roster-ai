@@ -265,7 +265,7 @@ describe("ActivityTimeline", () => {
     expect(screen.getByLabelText("ShiftMind response")).toBeInTheDocument();
     const supported = screen.getByText("45 minutes").closest("[data-claim-state]");
     const evidence = screen.getByRole("button", {
-      name: `Evidence: demand DEM-204, amount, 780–1020 minutes, fixture ${item.scenario_version_id}`,
+      name: `Verified Evidence: demand DEM-204, amount, 780–1020 minutes, fixture ${item.scenario_version_id}`,
     });
     expect(evidence).toHaveAttribute(
       "id",
@@ -279,6 +279,60 @@ describe("ActivityTimeline", () => {
     );
     expect(screen.queryByText(/approximately|confidence|%/i)).not.toBeInTheDocument();
     expect(document.body.innerHTML).not.toMatch(/gradient|animate-pulse|ai-glow/i);
+  });
+
+  it("collapses a many-row claim (e.g. worker_count) to one check, never a link per row", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const workerCount = {
+      ...agentResponse,
+      activity_id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            schema_version: "1", kind: "claim" as const, metric: "worker_count" as const,
+            arguments: { schema_version: "1" }, result_id: "result-3", value: 23,
+            unit: "workers" as const, verdict: "supported" as const, failure: null,
+            evidence_refs: Array.from({ length: 23 }, (_, i) => ({
+              ...ref, group: "workers" as const, record_id: `w${i}`, field: "name",
+              start_minute: null, end_minute: null,
+            })),
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[workerCount]} />);
+
+    expect(screen.getByText("23 workers")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Verified" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /Evidence/ })).toHaveLength(0);
+  });
+
+  it("treats even a small multi-ref claim (N=2) the same as a large one -- check only, no link", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const twoWorkers = {
+      ...agentResponse,
+      activity_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            schema_version: "1", kind: "claim" as const, metric: "worker_count" as const,
+            arguments: { schema_version: "1" }, result_id: "result-4", value: 2,
+            unit: "workers" as const, verdict: "supported" as const, failure: null,
+            evidence_refs: Array.from({ length: 2 }, (_, i) => ({
+              ...ref, group: "workers" as const, record_id: `w${i}`, field: "name",
+              start_minute: null, end_minute: null,
+            })),
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[twoWorkers]} />);
+
+    expect(screen.getByText("2 workers")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Verified" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /Evidence/ })).toHaveLength(0);
   });
 
   it("shows a verified fact with the checked field and its record, and a failed one flagged", () => {
@@ -310,9 +364,10 @@ describe("ActivityTimeline", () => {
 
     const verified = screen.getByText("Ana is qualified for pick").closest("[data-fact-state]");
     expect(verified).toHaveAttribute("data-fact-state", "supported");
-    expect(verified).toHaveTextContent("Verified: qualifications: pick");
     expect(verified).toContainElement(
-      screen.getByRole("button", { name: /Evidence: workers w1, qualifications/ }),
+      screen.getByRole("button", {
+        name: `Verified Evidence: workers w1, qualifications: pick, fixture ${item.scenario_version_id}`,
+      }),
     );
     const failed = screen.getByText("Ben is on grade 9").closest("[data-fact-state]");
     expect(failed).toHaveAttribute("data-fact-state", "failed");
@@ -320,6 +375,41 @@ describe("ActivityTimeline", () => {
     expect(failed?.querySelector("button")).toBeNull();
     // The rest of the answer is unaffected.
     expect(screen.getByText("and")).toBeInTheDocument();
+  });
+
+  it("collapses a markdown-style bullet list's embedded newlines instead of breaking the flex-wrap layout", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const taskList = {
+      ...agentResponse,
+      activity_id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          { schema_version: "1", kind: "prose" as const, text: "Tasks:\n\n- " },
+          {
+            schema_version: "1", kind: "fact" as const, text: "Chiller Putaway | Forklift C01",
+            field: "name", value: "Chiller Putaway | Forklift C01", verdict: "supported" as const,
+            failure: null, support_probability: null, wording_flagged: false,
+            evidence_refs: [{ ...ref, group: "work-areas-and-tasks" as const, record_id: "t1", field: "name",
+                              start_minute: null, end_minute: null }],
+          },
+          { schema_version: "1", kind: "prose" as const, text: "\n- " },
+          {
+            schema_version: "1", kind: "fact" as const, text: "Chiller Pick | Order Picker C02",
+            field: "name", value: "Chiller Pick | Order Picker C02", verdict: "supported" as const,
+            failure: null, support_probability: null, wording_flagged: false,
+            evidence_refs: [{ ...ref, group: "work-areas-and-tasks" as const, record_id: "t2", field: "name",
+                              start_minute: null, end_minute: null }],
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[taskList]} />);
+
+    expect(screen.getByText("Tasks: -")).toBeInTheDocument();
+    expect(screen.getByText("-")).toBeInTheDocument();
+    // Never a raw, unnormalized newline in the rendered prose text.
+    expect(document.body.innerHTML).not.toMatch(/Tasks:\\n/);
   });
 
   it("marks a fact whose wording the record does not support, keeping its text and record link", () => {

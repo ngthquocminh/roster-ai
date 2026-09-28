@@ -6,8 +6,8 @@
     "source_path": "data/sample_tiny_input.json"
   },
   "overview": {
-    "horizon_start": "2026-05-31T14:00:00Z",
-    "site_timezone": "Australia/Sydney",
+    "horizon_start": "2026-05-31T17:00:00Z",
+    "site_timezone": "Asia/Ho_Chi_Minh",
     "horizon_minutes": 10080,
     "baseline_schedule_version": null,
     "work_area_count": 3,

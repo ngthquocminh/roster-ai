@@ -59,7 +59,7 @@ Consequences that follow from the table and MUST NOT be worked around:
 **Time:** all projection intervals are integer minutes from horizon start,
 half-open. Overlap is `interval_overlap_minutes`
 (`backend/application/grounding/calculators.py`) — never containment. Site
-timezone is `Australia/Sydney`, applied once at the adapter boundary.
+timezone is `Asia/Ho_Chi_Minh`, applied once at the adapter boundary.
 
 ---
 
