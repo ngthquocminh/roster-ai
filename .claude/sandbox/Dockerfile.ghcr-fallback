@@ -1,0 +1,27 @@
+# Sandbox-only fallback for the tracked root Dockerfile: installs `uv` from
+# PyPI instead of copying it from the ghcr.io/astral-sh/uv image, because this
+# Claude Code cloud sandbox's network policy blocks ghcr.io's blob CDN. Same
+# uv version, same lockfile, same runtime image otherwise. See README.md in
+# this directory. Not used by production builds or CI — those pull the real
+# ghcr.io base image and never reference this file.
+FROM python:3.12-slim
+
+COPY .ca-bundle.sandboxtmp /usr/local/share/ca-certificates/ccr-agent-proxy.crt
+RUN update-ca-certificates
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+RUN pip install --no-cache-dir uv==0.10.8
+
+WORKDIR /app
+COPY backend/pyproject.toml backend/uv.lock backend/
+RUN uv sync --project backend --frozen --no-dev --no-install-project
+COPY alembic.ini ./
+COPY data/ data/
+COPY backend/ backend/
+
+ENV PATH="/app/backend/.venv/bin:$PATH" \
+    PYTHONPATH="/app/backend" \
+    PYTHONUNBUFFERED=1
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
