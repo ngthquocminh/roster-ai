@@ -10,9 +10,9 @@
 cd backend
 uv run python -m evals.live_conversations.suite \
   --agent-model 'openrouter:openai/gpt-5.6-luna' \
-  --judge-model 'openrouter:google/gemini-2.5-flash' \
+  --judge-model 'typesafe:jev-1.13.0' \
   --reasoning-effort low --repetitions 3 \
-  --spend-limit-usd <approved ceiling> --prior-spend-usd <real OpenRouter usage> \
+  --spend-limit-usd <approved ceiling> --prior-spend-usd <real OpenRouter + TypeSafe usage> \
   --output ../_bmad-output/test-artifacts/live-matrix.json
 
 uv run python -m evals.live_conversations.evidence \
@@ -20,6 +20,8 @@ uv run python -m evals.live_conversations.evidence \
 ```
 
 The suite is opt-in and paid: it is never selected by `pytest`. It builds the API and web images once, then each execution brings up and tears down its own Compose stack (Postgres, API, worker, web) and drives the authenticated HTTP conversation path — no doubles, no stubs. Scenario B runs the real CP-SAT solver and a real approval. Keys come from `backend/.env`; nothing is printed.
+
+The judge model's prefix picks the judge. `typesafe:` (the default when neither `--judge-model` nor `LIVE_CONVERSATION_JUDGE_MODEL` is set) sends each turn to TypeSafe Jev as one typed `score` question per dimension, with `TYPESAFE_API_KEY`. Code then turns the level probabilities into the verdict (`evals/live_conversations/jev_judge.py`). `openrouter:<model>` uses the LLM judge in `judge.py` with `LIVE_CONVERSATION_JUDGE_API_KEY`. Changing the judge changes `behavioral_digest`, so the baseline below must be re-derived before the gate compares again.
 
 `--accept-finding SCENARIO:TURN` is given once per turn the owner has accepted (below); the example is the turn the recorded matrix accepted. Give none when nothing was accepted.
 

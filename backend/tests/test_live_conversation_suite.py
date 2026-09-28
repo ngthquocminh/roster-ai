@@ -169,3 +169,26 @@ def test_a_report_measured_on_different_images_cannot_be_resumed(run_suite, monk
         run_suite(Script(), '--resume', str(earlier))
     monkeypatch.setattr(suite, 'live_image_digests', lambda: IMAGES)
     assert run_suite(Script(), '--resume', str(earlier))[0] == 0
+
+
+def _without_judge_env(monkeypatch, **values):
+    for name in ('LIVE_CONVERSATION_JUDGE_MODEL', 'TYPESAFE_API_KEY'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(suite, 'dotenv_values', lambda _path: {
+        'AGENT_RUNTIME_MODEL': 'openrouter:m', 'AGENT_RUNTIME_API_KEY': 'k', **values})
+
+
+def test_with_no_judge_configured_the_run_is_judged_by_pinned_typesafe_jev(run_suite, monkeypatch):
+    _without_judge_env(monkeypatch, TYPESAFE_API_KEY='typesafe-secret-value')
+    _code, report = run_suite(Script())
+    assert report['judge_model'] == 'typesafe:jev-1.13.0'
+    assert report['configuration']['judge'] == {
+        'model': 'typesafe:jev-1.13.0', 'endpoint': 'https://api.typesafe.ai/v1/systemone'}
+    assert 'typesafe-secret-value' not in json.dumps(report)
+
+
+def test_a_typesafe_judge_without_its_own_key_is_refused_not_given_the_agent_key(
+        run_suite, monkeypatch):
+    _without_judge_env(monkeypatch)
+    with pytest.raises(SystemExit, match='judge model/key'):
+        run_suite(Script())

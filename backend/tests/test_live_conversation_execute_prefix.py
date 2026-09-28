@@ -98,14 +98,14 @@ def _judge_always_passes(monkeypatch):
     monkeypatch.setattr(runner, 'judge_turn', lambda **_kwargs: (judgment(), {'attempts': []}))
 
 
-def drive(app, *actions, requires_persisted_draft=False, turns=1):
+def drive(app, *actions, requires_persisted_draft=False, turns=1, judge_model='m'):
     first = ConversationTurn(user='go', obligation='Answer', actions_after=tuple(actions),
                              requires_persisted_draft=requires_persisted_draft)
     rest = tuple(ConversationTurn(user='and then?', obligation='Answer')
                  for _ in range(turns - 1))
     case = ConversationScenario(id='X', prefixes=(turns,), turns=(first, *rest))
     return execute_prefix(app=app, case=case, endpoint=turns, isolation_id='iso', telemetry=Telemetry(),
-                          judge_key='k', judge_model='m', budget=ConversationBudget(LiveSuiteBudgetV1(
+                          judge_key='k', judge_model=judge_model, budget=ConversationBudget(LiveSuiteBudgetV1(
                               case_limit=1, request_limit=50, tool_call_limit=50, token_limit=1000000,
                               elapsed_seconds_limit=600, spend_usd_limit=5)),
                           save=lambda _report: None)
@@ -333,3 +333,101 @@ def test_a_decision_on_an_approval_that_is_not_pending_is_refused():
 def test_a_decision_must_be_explicit():
     with pytest.raises(ValueError):
         client_with(lambda path: {}).decide('ap-1', decision='maybe')
+
+
+def test_a_typesafe_judge_model_is_judged_by_jev_and_openrouter_by_the_llm_judge(monkeypatch):
+    called = []
+    monkeypatch.setattr(runner, 'judge_turn_jev',
+                        lambda **kwargs: called.append(('jev', kwargs['model']))
+                        or (judgment(), {'attempts': []}))
+    monkeypatch.setattr(runner, 'judge_turn',
+                        lambda **kwargs: called.append(('llm', kwargs['model']))
+                        or (judgment(), {'attempts': []}))
+    idle = {'activity_type': 'agent_response', 'response': {'segments': []}}
+    drive(FakeApp(activity=idle), judge_model='typesafe:jev-1.13.0')
+    drive(FakeApp(activity=idle), judge_model='openrouter:vendor/judge')
+    assert called == [('jev', 'typesafe:jev-1.13.0'), ('llm', 'openrouter:vendor/judge')]
+
+
+def _reply(text):
+    return {'activity_type': 'agent_response',
+            'response': {'segments': [{'kind': 'prose', 'text': text}]}}
+
+
+def _staffed_app(text):
+    rows = [{'record_id': f'a{index}', 'worker_id': f'w{index}', 'task_id': 't9',
+             'shift_id': None, 'start_minute': 60 * index, 'end_minute': 60 * index + 30}
+            for index in range(76)]
+    app = FakeApp(activity=_reply(text), run_result={
+        'run': {'status': 'solver_completed'},
+        'candidate': {**COMPLETED['candidate'], 'assignments': rows,
+                      'metrics': {'assignment_count': 76}}})
+    app.groups['workers'] = [{'record_id': f'w{index}', 'name': f'Worker {index:02d}'}
+                             for index in range(76)]
+    app.groups['work-areas-and-tasks'] = [{'record_id': 't9', 'task_id': 't9', 'name': 'Picking'}]
+    return app
+
+
+def test_the_judge_gets_only_the_candidate_rows_the_reply_names_with_their_minutes():
+    verified = drive(_staffed_app('Worker 03 and Worker 41 start early.'),
+                     'run_optimization')['turns'][0]['verified']
+    assert [row['record_id'] for row in verified['candidate_assignments']] == ['a3', 'a41']
+    assert verified['candidate_assignments'][0] == {
+        'record_id': 'a3', 'worker_id': 'w3', 'worker_name': 'Worker 03', 'task_id': 't9',
+        'task_name': 'Picking', 'start_minute': 180, 'end_minute': 210}
+    # The full count and the truncation flag still let a "how many" claim be checked.
+    assert verified['candidate_assignment_count'] == 76
+    assert verified['candidate_assignments_truncated'] is True
+
+
+def test_a_reply_naming_a_task_gets_that_tasks_rows_and_naming_nothing_gets_none():
+    named_task = drive(_staffed_app('Picking is fully covered.'), 'run_optimization')
+    assert len(named_task['turns'][0]['verified']['candidate_assignments']) == 76
+    silent = drive(_staffed_app('The run finished.'), 'run_optimization')
+    assert silent['turns'][0]['verified']['candidate_assignments'] == []
+    assert silent['turns'][0]['verified']['candidate_assignment_count'] == 76
+
+
+def test_the_judge_gets_a_compact_provenance_while_the_report_keeps_it_whole():
+    app = FakeApp(activity=APPROVAL)
+    app.provenance = {'schedule_run_id': 'sr-1', 'schema_version': 3, 'items': [
+        {'item_type': 'baseline_promotion', 'after_version': CANDIDATE},
+        *({'item_type': 'assignment_change', 'detail': 'x' * 200} for _ in range(50))]}
+    report = drive(app, 'run_optimization', 'approve')
+    judged = report['turns'][0]['verified']['effects_after_reply'][-1]
+    observed = report['command_observations'][-1]
+    assert judged['provenance'] == {'schedule_run_id': 'sr-1', 'item_count': 51,
+                                    'baseline_promotion_count': 1,
+                                    'promoted_after_version': CANDIDATE}
+    assert observed['provenance'] is app.provenance
+    assert failures_of(report) == []
+
+
+def test_a_provenance_failure_is_still_detected_on_the_full_payload():
+    app = FakeApp(activity=APPROVAL)
+    app.provenance = {'items': []}
+    report = drive(app, 'run_optimization', 'approve')
+    assert 'baseline_promotion_provenance_not_exactly_once' in failures_of(report)
+    assert report['turns'][0]['verified']['effects_after_reply'][-1]['provenance'][
+        'baseline_promotion_count'] == 0
+
+
+def test_a_short_id_matches_only_as_a_whole_token():
+    app = _staffed_app('See w1 for the early start.')
+    verified = drive(app, 'run_optimization')['turns'][0]['verified']
+    assert [row['record_id'] for row in verified['candidate_assignments']] == ['a1']
+
+
+def test_a_worker_named_only_in_a_claim_segment_still_gets_its_rows():
+    app = _staffed_app('')
+    app.activity = {'activity_type': 'agent_response', 'response': {'segments': [
+        {'kind': 'claim', 'metric': 'worker_hours', 'arguments': {'worker': 'Worker 07'},
+         'value': 0.5, 'unit': 'hours', 'verdict': 'supported', 'result_id': 'r-1'}]}}
+    verified = drive(app, 'run_optimization')['turns'][0]['verified']
+    assert [row['record_id'] for row in verified['candidate_assignments']] == ['a7']
+
+
+def test_a_null_provenance_compacts_instead_of_crashing():
+    assert runner.compact_provenance(None) == {
+        'schedule_run_id': None, 'item_count': 0, 'baseline_promotion_count': 0,
+        'promoted_after_version': None}

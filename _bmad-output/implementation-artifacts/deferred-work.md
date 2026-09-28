@@ -1203,3 +1203,7 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-agent-turn-routing.md`
   summary: Give the Jev turn router (and the tier-1 checker it copies) a true wall-clock deadline and a pooled HTTP client.
   evidence: httpx `timeout=2.0` bounds each phase (connect/read/write/pool) separately and DNS not at all, and each call opens a fresh TLS connection, so a slow provider can delay every routed turn by several seconds despite `AGENT_ROUTER_TIMEOUT_SECONDS=2`.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-live-judge-typesafe-jev.md`
+  summary: The Jev judge's price (`USD_PER_INPUT_MTOK` in `backend/evals/live_conversations/jev_judge.py`) is a code constant, not a rate in the tracked `compose.override.yml` whose sha256 feeds `configuration_digest`.
+  evidence: The OpenRouter judge charged the provider-reported `usage.cost`, so it had no price to track. TypeSafe reports only tokens, so a price correction changes cost accounting without moving `configuration_digest` (the pinned `judge_model` still moves both digests on a model change).

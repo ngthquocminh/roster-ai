@@ -22,6 +22,7 @@ import hashlib
 import json
 from pathlib import Path
 
+from evals.live_conversations.jev_judge import TYPESAFE_JUDGE_ENDPOINT, is_typesafe_judge
 from evals.live_conversations.judge import JUDGE_ENDPOINT
 from evals.live_conversations.stack import ROOT
 
@@ -98,6 +99,11 @@ def behavioral_environment_from_text(override_text: str) -> dict:
     }
 
 
+def judge_endpoint(judge_model: str) -> str:
+    """The endpoint identity the judge model's provider prefix selects."""
+    return TYPESAFE_JUDGE_ENDPOINT if is_typesafe_judge(judge_model) else JUDGE_ENDPOINT
+
+
 def measured_configuration(*, model: str, judge_model: str, reasoning_effort: str,
                            override_file: Path) -> dict:
     provider = model.partition(':')[0]
@@ -112,7 +118,7 @@ def measured_configuration(*, model: str, judge_model: str, reasoning_effort: st
         recorded_path = override.name
     body = {
         'agent': {'model': model, 'endpoint': AGENT_ENDPOINTS[provider]},
-        'judge': {'model': judge_model, 'endpoint': JUDGE_ENDPOINT},
+        'judge': {'model': judge_model, 'endpoint': judge_endpoint(judge_model)},
         'reasoning_effort': reasoning_effort,
         'override_file': recorded_path,
         'override_sha256': _file_digest(override),

@@ -1,12 +1,15 @@
 """Opt-in real HTTP prefix execution with independent facts and a separate judge."""
 from __future__ import annotations
 
+import json
+import re
 from collections import Counter
 from dataclasses import asdict
 
 from application.use_cases.conversation_workflow_context import CANDIDATE_ASSIGNMENT_PREVIEW
 from evals.live_conversations.facts import read_group, verify_claim
 from evals.live_conversations.http_client import ApplicationConversation
+from evals.live_conversations.jev_judge import is_typesafe_judge, judge_turn_jev
 from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS, judge_turn
 from evals.live_conversations.protocol import IncompleteConversationRun, turn_verdict
 from evals.live_conversations.reporting import tier1_fact_rows
@@ -87,10 +90,58 @@ def compact_reload_effect(timeline):
     }
 
 
+def reply_text(activity):
+    """The reply's prose, casefolded: what `relevant_entities` matches names in."""
+    return ' '.join(segment.get('text', '') for segment in
+                    activity.get('response', {}).get('segments', ())).casefold()
+
+
+def named_candidate_rows(activity, rows, workers_by_id, tasks_by_id):
+    """Candidate rows whose worker or task the reply names, WITH their minutes.
+
+    A truthful reply quoting an assignment's times needs those times in the
+    judge's facts (live-suite-evidence B8), but only for the rows it names:
+    every row cost ~20k chars on each Scenario B turn. The count and the
+    truncation flag stay separate facts, so a "how many" claim is still checked.
+
+    Matched against everything the judge sees of the reply (`visible_activity`),
+    so a name only in a claim's arguments or a clarification still counts; and
+    as a whole token, so `w1` does not pull in `w12`'s rows.
+    """
+    text = json.dumps(visible_activity(activity), ensure_ascii=False).casefold()
+
+    def mentioned(term):
+        return bool(term) and re.search(
+            r'(?<![0-9a-z])' + re.escape(term.casefold()) + r'(?![0-9a-z])', text) is not None
+
+    def named(record_id, by_id):
+        return mentioned(record_id) or mentioned(by_id.get(record_id))
+
+    return [
+        {'record_id': row.get('record_id'), 'worker_id': row.get('worker_id'),
+         'worker_name': workers_by_id.get(row.get('worker_id')),
+         'task_id': row.get('task_id'), 'task_name': tasks_by_id.get(row.get('task_id')),
+         'start_minute': row.get('start_minute'), 'end_minute': row.get('end_minute')}
+        for row in rows
+        if named(row.get('worker_id'), workers_by_id) or named(row.get('task_id'), tasks_by_id)
+    ]
+
+
+def compact_provenance(provenance):
+    """The judge's view of an approval's provenance: the harness checks the full
+    payload itself, and its items were ~156k chars on B:9 -- after the reply, so
+    never something the reply is graded against."""
+    provenance = provenance or {}
+    items = provenance.get('items') or []
+    promotions = [item for item in items if item.get('item_type') == 'baseline_promotion']
+    return {'schedule_run_id': provenance.get('schedule_run_id'), 'item_count': len(items),
+            'baseline_promotion_count': len(promotions),
+            'promoted_after_version': promotions[0].get('after_version') if promotions else None}
+
+
 def relevant_entities(activity, workers, tasks, assignments, demand=()):
     """Give the judge exact facts only for entities visible in this reply."""
-    text = ' '.join(segment.get('text', '') for segment in
-                    activity.get('response', {}).get('segments', ())).casefold()
+    text = reply_text(activity)
     named_workers = []
     for worker in workers:
         if worker['name'].casefold() in text or worker['record_id'].casefold() in text:
@@ -280,24 +331,20 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 else:
                     raise IncompleteConversationRun('unsupported_authored_action')
                 report['command_observations'].append(effect)
-                verified['effects_after_reply'].append(effect)
+                # The judge gets the compact provenance; the report keeps it whole.
+                verified['effects_after_reply'].append(
+                    {**effect, 'provenance': compact_provenance(effect['provenance'])}
+                    if 'provenance' in effect else effect)
             if latest_run:
                 verified['latest_run'] = latest_run['run']
                 candidate = latest_run.get('candidate') or {}
                 count, truncated = latest_count
                 verified['candidate_solver_status'] = candidate.get('feasible_solver_status')
-                # Every candidate row, WITH its minutes: the judge scored a truthful
-                # reply 0 for "inventing" times that were in the snapshot but absent
-                # from its facts (live-suite-evidence B8). The assistant itself saw
-                # only a preview; `candidate_assignments_truncated` says so.
-                verified['candidate_assignments'] = [
-                    {'record_id': row.get('record_id'), 'worker_id': row.get('worker_id'),
-                     'worker_name': workers_by_id.get(row.get('worker_id')),
-                     'task_id': row.get('task_id'),
-                     'task_name': tasks_by_id.get(row.get('task_id')),
-                     'start_minute': row.get('start_minute'), 'end_minute': row.get('end_minute')}
-                    for row in candidate.get('assignments', ())
-                ]
+                # The reply-named candidate rows, WITH their minutes (see
+                # `named_candidate_rows`). The assistant itself saw only a preview;
+                # `candidate_assignments_truncated` says so.
+                verified['candidate_assignments'] = named_candidate_rows(
+                    activity, candidate.get('assignments', ()), workers_by_id, tasks_by_id)
                 verified['candidate_assignment_count'] = count
                 verified['candidate_assignments_truncated'] = truncated
             transcript.append({'id': row['id'], 'user': turn.user, 'assistant': visible_activity(activity)})
@@ -306,7 +353,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             obligation_id = row['id'] + ':obligation'
             known = known_citation_ids(transcript, verified, obligation_id)
             try:
-                judgment, judge_usage = judge_turn(api_key=judge_key, model=judge_model,
+                judge = judge_turn_jev if is_typesafe_judge(judge_model) else judge_turn
+                judgment, judge_usage = judge(api_key=judge_key, model=judge_model,
                     transcript=transcript, obligation=turn.obligation, obligation_id=obligation_id,
                     verified=verified, budget=budget, not_applicable=not_applicable)
             except IncompleteConversationRun as exc:
