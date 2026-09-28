@@ -2,23 +2,24 @@
   "clean_scenarios": [
     "A",
     "B",
-    "C"
+    "C",
+    "D"
   ],
   "complete_repetitions": 3,
   "configuration": {
     "agent_model": "openrouter:openai/gpt-5.6-luna",
     "behavioral_digest": "c065dd87f5aa8ef0311dfea7fdb1dc7a9525e6389231b7c0f63c01dedbc73bec",
-    "configuration_digest": "8c9a1d5f4d6439c73848aed022045a57fb848fab2f811c0c41c91eb025126422",
+    "configuration_digest": "0915e322a6c0bc95fc548dcaa688f45f425d15638228de0a4869124760c6fe46",
     "judge_model": "openrouter:google/gemini-2.5-flash",
     "reasoning_effort": "low"
   },
-  "measured_at_commit": "db0a5dd0e5ace0929b8115299f57b10fb73c6c90",
+  "measured_at_commit": "371964a33462a17d6e2e76ee6658e1a2fd2e6cc6",
   "note": "A projection of the committed Story 5.7 measurement, not a second measurement. Tracked config, deliberately outside evidence/.",
   "schema_version": "1",
   "source_evidence_path": "evidence/story-5.7/live-conversation-journeys.json",
-  "source_evidence_sha256": "5a760cee43b6f95b5f22c68953a83a30265de9aae32d3a02d1c910a022f35609",
-  "total_executed": 90,
-  "total_passed": 87,
+  "source_evidence_sha256": "53f3a882eaacbcabfc8d1788c4b613a1546c5c9079e2faeb9800c56a00dfb7e2",
+  "total_executed": 108,
+  "total_passed": 108,
   "turn_pass_rates": {
     "A:1": {
       "executed": 3,
@@ -74,7 +75,7 @@
     },
     "B:5": {
       "executed": 3,
-      "passed": 2
+      "passed": 3
     },
     "B:6": {
       "executed": 3,
@@ -86,7 +87,7 @@
     },
     "B:8": {
       "executed": 3,
-      "passed": 2
+      "passed": 3
     },
     "B:9": {
       "executed": 3,
@@ -114,7 +115,7 @@
     },
     "C:3": {
       "executed": 3,
-      "passed": 2
+      "passed": 3
     },
     "C:4": {
       "executed": 3,
@@ -137,6 +138,30 @@
       "passed": 3
     },
     "C:9": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:6": {
       "executed": 3,
       "passed": 3
     }
