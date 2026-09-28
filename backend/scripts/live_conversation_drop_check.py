@@ -48,14 +48,17 @@ from scripts.derive_live_conversation_baseline import (  # noqa: E402
 )
 from scripts.evidence_binding import REPO_ROOT, dataset_file_digest  # noqa: E402
 
-#: Tier 3's floor, chosen against the measured distribution: Poisson around the
-#: baseline's 3 failures puts a drop to <= 82 at ~1.2% per run, versus ~8.4% at
-#: a floor of 85. It catches BROAD degradation; a single broken turn is Tier 1's.
-#: NOT derived from the baseline file at runtime -- it is a one-time judgement
-#: against the CURRENT 87/90 baseline (Decision 5). If a future re-derivation
-#: changes `total_passed`/`total_executed`, re-run the Poisson comparison by
-#: hand and update this constant; nothing here will flag the staleness.
-AGGREGATE_FLOOR = 83
+#: Tier 3's floor, chosen against the measured distribution. The current
+#: baseline is 108/108, which gives a degenerate Poisson, so the rate is the
+#: historical 3 failures per 90 turns scaled to 108 (lambda 3.6): a drop to
+#: <= 99 happens by chance ~1.2% per run, the same false-alarm rate the earlier
+#: floor of 83 had against the 87/90 baseline. It catches BROAD degradation; a
+#: single broken turn is Tier 1's.
+#: NOT derived from the baseline file at runtime (Decision 5). If a future
+#: re-derivation changes `total_passed`/`total_executed`, re-run the Poisson
+#: comparison by hand and update this constant; nothing here will flag the
+#: staleness.
+AGGREGATE_FLOOR = 100
 
 
 #: Minimum complete repetitions on both sides -- a budget-truncated run has fewer.
