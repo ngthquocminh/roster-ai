@@ -36,6 +36,20 @@ function fieldOrRange(reference: Claim["evidence_refs"][number]): string | undef
   return reference.field ?? range;
 }
 
+// The model sometimes writes a markdown-style bullet list ("Tasks:\n\n- ",
+// then "\n- " before each further item). The parent `<p>` is
+// `whitespace-pre-wrap` (so a genuinely multi-paragraph answer keeps its
+// blank lines) and `flex flex-wrap` (so fact/claim segments sit inline beside
+// prose) -- combined, an embedded newline forces a line break INSIDE this one
+// flex item's own box, which visually detaches a bare "-" from the item it
+// was meant to introduce. Collapsing internal whitespace runs to a single
+// space (gap-2 already supplies the visible spacing between flex children)
+// fixes the wrap without touching the sibling `<p>`s that still need
+// pre-wrap (planner messages, clarification questions).
+function normalizeProseText(text: string): string {
+  return text.replace(/\s*\n\s*/g, " ").trim();
+}
+
 // A claim renders no prose of its own and the gate forbids numerals in prose,
 // so without this the answer cannot say WHICH task or window a number belongs
 // to — the number would be exact and unattributed at the same time.
@@ -254,7 +268,7 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
       <p className="flex flex-wrap items-center gap-2 text-sm whitespace-pre-wrap">
         {item.response.segments.map((segment, index) =>
           segment.kind === "prose" ? (
-            <span key={`prose-${index}`}>{segment.text}</span>
+            <span key={`prose-${index}`}>{normalizeProseText(segment.text)}</span>
           ) : segment.kind === "fact" ? (
             <FactSegment fact={segment} item={item} key={`fact-${index}`} navigate={navigate} segmentIndex={index} />
           ) : (

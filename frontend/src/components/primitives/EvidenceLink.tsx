@@ -40,24 +40,42 @@ export function EvidenceLink({
   // to a decorative-only glyph.
   const label = `${verified ? "Verified Evidence" : "Evidence"}: ${group} ${record}${fieldOrRange ? `, ${fieldOrRange}` : ""}, fixture ${version}`;
   const classes = cn(
-    "inline-flex min-h-11 items-center gap-1 rounded-evidence text-evidence-link underline underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+    "inline-flex min-h-11 items-center gap-1 rounded-evidence outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+    // Icon-only (`verified`) has no visible text to underline -- the
+    // `underline` class here previously painted a stray decoration line
+    // under the bare icon. It gets a circular hover highlight instead (the
+    // standard icon-button affordance); the text-link shape keeps its
+    // existing underline + hover-color treatment, unchanged.
+    verified
+      ? "rounded-full justify-center hover:bg-muted"
+      : "text-evidence-link underline underline-offset-4 hover:text-evidence-link/80",
     className,
   );
+  // `verified` renders as the check icon ALONE (the full label moves to
+  // `sr-only` text on the same control) -- one small button carrying the
+  // link, not an icon beside a separate visible text link. The non-verified
+  // shape (every other EvidenceLink call site) is untouched: visible text.
   const icon = verified ? <CheckIcon aria-hidden className="size-4 text-emerald-600 dark:text-emerald-400" /> : null;
+  const content = verified ? (
+    <>
+      {icon}
+      <span className="sr-only">{label}</span>
+    </>
+  ) : (
+    label
+  );
 
   if (href) {
     return (
       <a className={classes} href={href} id={id} onClick={onActivate}>
-        {icon}
-        {label}
+        {content}
       </a>
     );
   }
 
   return (
     <button className={classes} id={id} onClick={onActivate} type="button">
-      {icon}
-      {label}
+      {content}
     </button>
   );
 }

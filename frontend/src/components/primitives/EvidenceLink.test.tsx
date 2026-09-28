@@ -21,6 +21,10 @@ describe("EvidenceLink", () => {
       name: "Evidence: Demand DEM-204, 13:00–17:00, fixture v7",
     });
     expect(control).toHaveAttribute("id", "evidence-origin-activity-1-0-0");
+    // Unlike `verified`, the plain form shows its full label as visible text
+    // and keeps its underline (there IS text here for it to decorate).
+    expect(control.querySelector(".sr-only")).not.toBeInTheDocument();
+    expect(control.className).toContain("underline");
     fireEvent.click(control);
     expect(onActivate).toHaveBeenCalledOnce();
   });
@@ -38,11 +42,22 @@ describe("EvidenceLink", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("button", {
-        name: "Verified Evidence: workers w1, qualifications: pick, fixture v7",
-      }),
-    ).toBeInTheDocument();
+    const control = screen.getByRole("button", {
+      name: "Verified Evidence: workers w1, qualifications: pick, fixture v7",
+    });
+    expect(control).toBeInTheDocument();
+    // The button is the check icon alone -- one clickable control, not an
+    // icon beside a separate visible text link. The full label still reaches
+    // a screen reader via `sr-only` text (asserted above via accessible name).
+    expect(control.querySelector("svg")).toBeInTheDocument();
+    expect(control.querySelector(".sr-only")).toHaveTextContent(
+      "Verified Evidence: workers w1, qualifications: pick, fixture v7",
+    );
+    // No visible text to underline -- `underline` here previously painted a
+    // stray decoration line under the bare icon. A circular hover highlight
+    // stands in as the icon-button affordance instead.
+    expect(control.className).not.toContain("underline");
+    expect(control.className).toContain("hover:bg-muted");
   });
 
   it("also folds the verified state into the href-based (anchor) variant", () => {

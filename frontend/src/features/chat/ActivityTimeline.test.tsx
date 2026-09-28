@@ -377,6 +377,41 @@ describe("ActivityTimeline", () => {
     expect(screen.getByText("and")).toBeInTheDocument();
   });
 
+  it("collapses a markdown-style bullet list's embedded newlines instead of breaking the flex-wrap layout", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const taskList = {
+      ...agentResponse,
+      activity_id: "dddddddd-dddd-dddd-dddd-dddddddddddd",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          { schema_version: "1", kind: "prose" as const, text: "Tasks:\n\n- " },
+          {
+            schema_version: "1", kind: "fact" as const, text: "Chiller Putaway | Forklift C01",
+            field: "name", value: "Chiller Putaway | Forklift C01", verdict: "supported" as const,
+            failure: null, support_probability: null, wording_flagged: false,
+            evidence_refs: [{ ...ref, group: "work-areas-and-tasks" as const, record_id: "t1", field: "name",
+                              start_minute: null, end_minute: null }],
+          },
+          { schema_version: "1", kind: "prose" as const, text: "\n- " },
+          {
+            schema_version: "1", kind: "fact" as const, text: "Chiller Pick | Order Picker C02",
+            field: "name", value: "Chiller Pick | Order Picker C02", verdict: "supported" as const,
+            failure: null, support_probability: null, wording_flagged: false,
+            evidence_refs: [{ ...ref, group: "work-areas-and-tasks" as const, record_id: "t2", field: "name",
+                              start_minute: null, end_minute: null }],
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[taskList]} />);
+
+    expect(screen.getByText("Tasks: -")).toBeInTheDocument();
+    expect(screen.getByText("-")).toBeInTheDocument();
+    // Never a raw, unnormalized newline in the rendered prose text.
+    expect(document.body.innerHTML).not.toMatch(/Tasks:\\n/);
+  });
+
   it("marks a fact whose wording the record does not support, keeping its text and record link", () => {
     const ref = agentResponse.response.segments[1].evidence_refs![0];
     const flagged = {
