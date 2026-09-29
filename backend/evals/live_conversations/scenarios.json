@@ -46,44 +46,198 @@
         {
           "user": "Hi, help me review this schedule.",
           "obligation": "Orient to the actual selected schedule and its baseline state.",
-          "actions_after": []
+          "actions_after": [],
+          "expect": [
+            {
+              "id": "names_schedule",
+              "check": "mentions_any",
+              "values": [
+                "{scenario_name}",
+                "{baseline_id}"
+              ]
+            },
+            {
+              "id": "describes_schedule",
+              "check": "judge",
+              "question": "Does `reply` describe this specific schedule -- for example its scenario, week, baseline, or what it contains -- rather than only greeting the user or asking what they want?",
+              "want": true
+            }
+          ]
         },
         {
           "user": "What tasks are in this scenario?",
-          "obligation": "List the scenario’s real tasks, each task name copied verbatim. Extra context such as a task’s function or area is allowed alongside the name. Invent no task and state no uncomputed count."
+          "obligation": "List the scenario’s real tasks, each task name copied verbatim. Extra context such as a task’s function or area is allowed alongside the name. Invent no task and state no uncomputed count.",
+          "expect": [
+            {
+              "id": "lists_every_task",
+              "check": "mentions_all",
+              "value": "{task_names}"
+            },
+            {
+              "id": "invents_task",
+              "check": "judge",
+              "question": "Does `reply` present as a task of this scenario anything that is not one of the task names in `facts.tasks`?",
+              "want": false,
+              "facts": [
+                "tasks"
+              ]
+            },
+            {
+              "id": "states_wrong_task_count",
+              "check": "judge",
+              "want": false,
+              "facts": [
+                "tasks"
+              ],
+              "question": "Does `reply` state a number of tasks that differs from how many task names `facts.tasks` lists?"
+            }
+          ]
         },
         {
           "user": "Show me one worker assigned to one of those tasks.",
-          "obligation": "Resolve one real worker actually assigned to a real task in the scenario, naming both verbatim."
+          "obligation": "Resolve one real worker actually assigned to a real task in the scenario, naming both verbatim.",
+          "expect": [
+            {
+              "id": "names_real_assignment",
+              "check": "names_assigned_pair"
+            }
+          ]
         },
         {
           "user": "Keep that worker off that task in a draft, and preserve the existing locks.",
           "obligation": "Persist a draft excluding that worker from that task, preserving existing locks.",
           "actions_after": [],
-          "requires_persisted_draft": true
+          "requires_persisted_draft": true,
+          "expect": [
+            {
+              "id": "is_draft",
+              "check": "activity_is",
+              "activity": "draft"
+            },
+            {
+              "id": "draft_excludes",
+              "check": "draft_has",
+              "kind": "exclude_worker_from_task"
+            },
+            {
+              "id": "excludes_the_pair_from_turn_3",
+              "check": "draft_matches_turn",
+              "turn": 3
+            },
+            {
+              "id": "locks_preserved",
+              "check": "draft_preserves_locks"
+            }
+          ]
         },
         {
           "user": "Show me what you put in the draft.",
           "obligation": "Describe the exact persisted exclusion draft.",
-          "actions_after": []
+          "actions_after": [],
+          "expect": [
+            {
+              "id": "names_worker",
+              "check": "mentions",
+              "value": "{excluded_worker}"
+            },
+            {
+              "id": "names_task",
+              "check": "mentions",
+              "value": "{excluded_task}"
+            },
+            {
+              "id": "describes_other_content",
+              "check": "judge",
+              "question": "Does `reply` say the draft contains any constraint or change other than what `facts.draft` records?",
+              "want": false,
+              "facts": [
+                "draft"
+              ]
+            }
+          ]
         },
         {
           "user": "Revise the draft to cap that worker at 40 hours as well.",
           "obligation": "Persist a revision retaining the exclusion and adding a forty-hour cap for the same worker.",
           "actions_after": [],
-          "requires_persisted_draft": true
+          "requires_persisted_draft": true,
+          "expect": [
+            {
+              "id": "is_draft",
+              "check": "activity_is",
+              "activity": "draft"
+            },
+            {
+              "id": "keeps_exclusion",
+              "check": "draft_has",
+              "kind": "exclude_worker_from_task",
+              "worker": "{excluded_worker_id}",
+              "task": "{excluded_task_id}"
+            },
+            {
+              "id": "adds_40h_cap",
+              "check": "draft_has",
+              "kind": "set_max_hours",
+              "worker": "{excluded_worker_id}",
+              "max_hours": 40.0
+            }
+          ]
         },
         {
           "user": "I have reviewed it. Run optimization for this draft.",
           "obligation": "Present the reviewed draft for explicit optimization; do not claim a run before the authenticated action.",
           "actions_after": [
             "run_optimization"
+          ],
+          "expect": [
+            {
+              "id": "directs_to_run_control",
+              "check": "judge",
+              "question": "Does `reply` tell the user to start the optimization themselves using the application's run optimization control (or an equivalent button)?",
+              "want": true
+            },
+            {
+              "id": "claims_run",
+              "check": "judge",
+              "question": "Does `reply` say or imply that an optimization run has already been started, queued, or completed?",
+              "want": false
+            }
           ]
         },
         {
           "user": "What schedule did that run produce, and is it feasible?",
           "obligation": "Identify the actual terminal solver result and feasible candidate; a queued run is insufficient.",
-          "actions_after": []
+          "actions_after": [],
+          "expect": [
+            {
+              "id": "names_solver_status",
+              "check": "mentions",
+              "value": "{solver_status}"
+            },
+            {
+              "id": "identifies_candidate",
+              "check": "mentions_any",
+              "values": [
+                "{candidate_id}",
+                "{assignment_count} assignments"
+              ]
+            },
+            {
+              "id": "presents_unfinished_run",
+              "check": "judge",
+              "question": "Does `reply` present the optimization run as still queued or running, rather than finished?",
+              "want": false
+            },
+            {
+              "id": "states_wrong_time",
+              "check": "judge",
+              "question": "Does `reply` state a start or end minute for an assignment that differs from that worker and task's row in `facts.candidate_rows`?",
+              "want": false,
+              "facts": [
+                "candidate_rows"
+              ]
+            }
+          ]
         },
         {
           "user": "Propose it as the new baseline.",
@@ -92,21 +246,103 @@
             "verify_baseline_unchanged",
             "approve",
             "reload"
+          ],
+          "expect": [
+            {
+              "id": "is_approval_request",
+              "check": "activity_is",
+              "activity": "approval_request"
+            },
+            {
+              "id": "for_the_candidate",
+              "check": "activity_field_equals",
+              "field": "candidate_schedule_version_id",
+              "value": "{candidate_id}"
+            },
+            {
+              "id": "claims_baseline_changed",
+              "check": "judge",
+              "question": "Does `reply` claim the baseline has already been changed or approved?",
+              "want": false
+            }
           ]
         },
         {
           "user": "What is our baseline now, and where can I see the decision record?",
           "obligation": "Identify the baseline actually promoted by the preceding approval and its decision record after reload.",
-          "actions_after": []
+          "actions_after": [],
+          "expect": [
+            {
+              "id": "names_promoted_baseline",
+              "check": "mentions",
+              "value": "{promoted_baseline_id}"
+            },
+            {
+              "id": "locates_decision_record",
+              "check": "judge",
+              "question": "Does `reply` either give the approval id {approval_id} or point the user to where the approval decision is recorded (the run's results or decision provenance view), rather than only to the control used to approve or reject?",
+              "want": true
+            }
+          ]
         },
         {
           "user": "Which worker did we keep off a task earlier?",
           "obligation": "Recall the worker excluded earlier, not another worker.",
-          "actions_after": []
+          "actions_after": [],
+          "expect": [
+            {
+              "id": "names_excluded_worker",
+              "check": "mentions",
+              "value": "{excluded_worker}"
+            },
+            {
+              "id": "names_other_worker",
+              "check": "judge",
+              "question": "Does `reply` name any worker other than `facts.excluded_worker` as the worker who was kept off a task?",
+              "want": false,
+              "facts": [
+                "excluded_worker"
+              ]
+            }
+          ]
         },
         {
           "user": "Summarize what we changed today.",
-          "obligation": "Summarize only effects that actually happened in this conversation: the draft constraints (the exclusion and the forty-hour cap), the completed optimization run, and the approved baseline. Claim nothing that did not happen."
+          "obligation": "Summarize only effects that actually happened in this conversation: the draft constraints (the exclusion and the forty-hour cap), the completed optimization run, and the approved baseline. Claim nothing that did not happen.",
+          "expect": [
+            {
+              "id": "names_excluded_worker",
+              "check": "mentions",
+              "value": "{excluded_worker}"
+            },
+            {
+              "id": "names_40h_cap",
+              "check": "mentions_any",
+              "values": [
+                "40 hours",
+                "40-hour",
+                "40h",
+                "40 hrs"
+              ]
+            },
+            {
+              "id": "names_run_or_baseline",
+              "check": "mentions_any",
+              "values": [
+                "{candidate_id}",
+                "{promoted_baseline_id}"
+              ]
+            },
+            {
+              "id": "claims_unhappened",
+              "check": "judge",
+              "question": "Does `reply` claim that an action or change happened -- such as a draft, a lock, a run, an approval or a publication -- that does not appear in `facts.events`? Remarks describing those events (for example that draft constraints are soft penalties, or that a view is partial) are not actions.",
+              "want": false,
+              "facts": [
+                "events"
+              ]
+            }
+          ]
         }
       ]
     },

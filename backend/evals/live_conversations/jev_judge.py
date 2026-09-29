@@ -186,12 +186,45 @@ def judge_turn_jev(*, api_key: str, model: str, transcript: list[dict], obligati
                    obligation_id: str = 'obligation', verified: dict,
                    budget: ConversationBudget, not_applicable: frozenset[str] = frozenset(),
                    client: httpx.Client | None = None):
+    """The holistic four-dimension judgment (turns without authored expectations)."""
+    body = payload(model=model, transcript=transcript, obligation=obligation,
+                   obligation_id=obligation_id, verified=verified, not_applicable=not_applicable)
+    return _call(api_key=api_key, body=body, budget=budget, client=client,
+                 parse=lambda data: _judgment(_Answers.model_validate(data).answers, not_applicable))
+
+
+class _NoulAnswer(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    type: Literal['noul']
+    noul: float = Field(ge=0, le=1)
+
+
+class _NoulAnswers(BaseModel):
+    model_config = ConfigDict(extra='ignore')
+    answers: dict[str, _NoulAnswer]
+
+
+def ask_yes_no(*, api_key: str, model: str, state: dict, questions: dict[str, dict],
+               budget: ConversationBudget, client: httpx.Client | None = None):
+    """One request of independent `noul` questions over one state; returns
+    ({question id: P(yes)}, usage). Same retry, usage and budget rules as the
+    holistic judgment."""
+    body = {'model': model[len(TYPESAFE_PREFIX):] if is_typesafe_judge(model) else model,
+            'state': state, 'questions': questions}
+
+    def parse(data):
+        answers = _NoulAnswers.model_validate(data).answers
+        return {question_id: float(answers[question_id].noul) for question_id in questions}
+
+    return _call(api_key=api_key, body=body, budget=budget, client=client, parse=parse)
+
+
+def _call(*, api_key: str, body: dict, budget: ConversationBudget,
+          client: httpx.Client | None, parse):
     """Up to two attempts. A transport error, 429, 5xx or malformed answer is
     retried once; any other status (e.g. a state over Jev's context) is final.
     Missing usage/answers can never become a successful evaluation."""
     budget.admit(reserve_usd=.01, tokens=4096)
-    body = payload(model=model, transcript=transcript, obligation=obligation,
-                   obligation_id=obligation_id, verified=verified, not_applicable=not_applicable)
     owned = client is None
     transport = client or httpx.Client(timeout=45)
     attempts = []
@@ -232,7 +265,7 @@ def judge_turn_jev(*, api_key: str, model: str, transcript: list[dict], obligati
                 'cost_usd': cost,
             }
             try:
-                result = _judgment(_Answers.model_validate(data).answers, not_applicable)
+                result = parse(data)
             except (ValidationError, KeyError) as exc:
                 if isinstance(exc, ValidationError):
                     first = exc.errors(include_url=False, include_input=False)[0]

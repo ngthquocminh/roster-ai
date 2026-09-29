@@ -1207,3 +1207,11 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-live-judge-typesafe-jev.md`
   summary: The Jev judge's price (`USD_PER_INPUT_MTOK` in `backend/evals/live_conversations/jev_judge.py`) is a code constant, not a rate in the tracked `compose.override.yml` whose sha256 feeds `configuration_digest`.
   evidence: The OpenRouter judge charged the provider-reported `usage.cost`, so it had no price to track. TypeSafe reports only tokens, so a price correction changes cost accounting without moving `configuration_digest` (the pinned `judge_model` still moves both digests on a model change).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-live-eval-per-turn-expectations-b.md`
+  summary: The agent cannot tell a user where an approval's decision record lives, and does not reuse the approval ID it created, so live B:10 is graded `needs_review`.
+  evidence: The agent has no approval or provenance read tool (none in `backend/application/capabilities` or `backend/agent`). The record is shown in the web app under the run's Results → Debug details → "Decision provenance" (`frontend/src/features/provenance/ProvenanceTimeline.tsx`). On the smoke run, B:10 pointed at the "approval control" (where you approve or reject), although the B:9 approval request card carried approval `11b13b41…`. Fix is in the agent's instructions (name the view; repeat the approval ID from its own request), not in the eval.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-live-eval-per-turn-expectations-b.md`
+  summary: Publishing a live run to Logfire (`backend/evals/live_conversations/publication.py`) does not carry an expectation-graded turn's per-check results (`checks`: id, outcome, `p_wanted`).
+  evidence: Those rows have `judgment: None`, which `_judge_scores` maps to `{}`. A published `fail` or `needs_review` on Scenario B therefore has no explanation in Logfire, although the local report JSON has one.
