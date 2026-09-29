@@ -1215,3 +1215,7 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-live-eval-per-turn-expectations-b.md`
   summary: Publishing a live run to Logfire (`backend/evals/live_conversations/publication.py`) does not carry an expectation-graded turn's per-check results (`checks`: id, outcome, `p_wanted`).
   evidence: Those rows have `judgment: None`, which `_judge_scores` maps to `{}`. A published `fail` or `needs_review` on Scenario B therefore has no explanation in Logfire, although the local report JSON has one.
+
+- source_spec: none (B:10 agent fix, 2026-09-29)
+  summary: The agent cannot say when, or by whom, the current baseline was approved; the workflow snapshot carries no approval decision.
+  evidence: `load_workflow_context` (`backend/application/use_cases/conversation_workflow_context.py`) reads drafts, runs and the baseline version, but no approval record. The agent now points the planner to Runs → the run → Debug details → Decision provenance, which shows the time. Adding the decision (outcome and time) via the approval repository (`list_for_schedule_run`) is a new data path, and a time in prose must pass the grounding gate.

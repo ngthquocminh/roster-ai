@@ -273,15 +273,32 @@
           "actions_after": [],
           "expect": [
             {
+              "id": "confirms_approval_took_effect",
+              "check": "judge",
+              "want": true,
+              "question": "Does `reply` confirm that the approved schedule is now the baseline -- that the planner's approval took effect?"
+            },
+            {
               "id": "names_promoted_baseline",
               "check": "mentions",
               "value": "{promoted_baseline_id}"
             },
             {
+              "id": "identifies_by_origin",
+              "check": "judge",
+              "want": true,
+              "question": "Does `reply` identify the new baseline by where it came from -- the optimization run, or the draft changes behind it -- and not only by an id?"
+            },
+            {
+              "id": "gives_approval_id",
+              "check": "mentions",
+              "value": "{approval_id}"
+            },
+            {
               "id": "locates_decision_record",
               "check": "judge",
-              "question": "Does `reply` either give the approval id {approval_id} or point the user to where the approval decision is recorded (the run's results or decision provenance view), rather than only to the control used to approve or reject?",
-              "want": true
+              "want": true,
+              "question": "Does `reply` tell the user where in the application the approval decision is recorded -- the run's page or its decision provenance -- rather than only the control used to approve or reject?"
             }
           ]
         },
