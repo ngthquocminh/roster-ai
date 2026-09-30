@@ -4,7 +4,7 @@ Date: 2026-09-30
 Author: Developer agent, with Minh
 Mode: Batch
 Trigger: design spec `docs/superpowers/specs/2026-09-28-draft-lifecycle-design.md` (brainstormed 2026-09-28, revised twice on 2026-09-30, the second time after a 14-point adversarial spec review checked against the code).
-Status: **Awaiting Minh's approval.**
+Status: **Approved by Minh 2026-09-30. Artifact edits §4.1–§4.7 applied the same day, as written. Story 5.11 handed to `bmad-create-story`.**
 
 ## 1. Issue summary
 

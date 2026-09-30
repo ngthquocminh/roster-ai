@@ -139,7 +139,7 @@ stateDiagram-v2
 
 - **Binds:** FR-9–FR-11, FR-14, FR-15, FR-17–FR-20
 - **Prevents:** in-place mutation, silent rebasing, and proposals detached from solver evidence
-- **Rule:** constraints/goals form reversible proposal versions; solver inputs and outputs form immutable run/schedule versions; the site baseline is a versioned pointer. Every proposal names its expected scenario and baseline versions. Stale inputs fail closed and require refresh/recompute.
+- **Rule:** constraints/goals form reversible proposal versions; solver inputs and outputs form immutable run/schedule versions; the site baseline is a versioned pointer. Every proposal names its expected scenario and baseline versions. Stale inputs fail closed and require refresh/recompute. 2026-09-30 (sprint-change-proposal-2026-09-30, Story 5.11): a conversation has at most one working (`active`) proposal, enforced by a partial unique index. A proposal ends as `rejected` (discarded) or `applied` (a run from it was promoted, set inside the promotion transaction); ended proposals refuse revise, discard and run. Versions stay append-only and runs keep pinning an exact version, so an `applied` proposal records the version that was promoted, not its latest.
 
 ### AD-10 — Exact-action approval and atomic promotion [ADOPTED]
 

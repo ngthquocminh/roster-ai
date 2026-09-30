@@ -125,7 +125,7 @@ Every component named by the experience spine is covered below. “Inherited” 
 | Conversation timeline | Inherits normal document flow, shadcn Separator, and system typography; no chat bubbles required for agent prose. Planner and agent authorship use labels and alignment, not color alone. |
 | Chat composer | Inherits shadcn Textarea, Button, Tooltip, and focus ring. Send and Run optimization cannot share the same primary control treatment. |
 | Message block | Inherits body typography and card/border tokens. Clarification and refusal variants use shadcn Alert structure with explicit headings. |
-| Draft card | Inherits shadcn Card, Input, Select, Button, and Separator. “Draft — no baseline change” is a text label above parameters. |
+| Draft card | Inherits shadcn Card, Input, Button, Badge, and Separator. “Draft — no baseline change” is a text label above parameters; the version and state badge sits beside it. |
 | Run progress card | Inherits shadcn Alert/Card and indeterminate Loader styling. State label and run ID remain visible; no fabricated percentage or ETA. |
 | Comparison summary | Inherits shadcn Card/Table and existing metric typography. Deltas use signed text and labels, not green/red alone. |
 | Approval request | Inherits shadcn Card, Alert, Button, and Dialog. Consequence summary precedes the destructive-consequence action; Approve as baseline is visually distinct from Run optimization. |

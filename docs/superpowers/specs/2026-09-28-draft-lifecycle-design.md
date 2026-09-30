@@ -1,6 +1,6 @@
 # Draft lifecycle: one working draft per conversation
 
-Date: 2026-09-28 · Status: approved in brainstorming; revised after spec review 2026-09-30
+Date: 2026-09-28 · Status: approved; planned as Stories 5.11–5.12 by sprint-change-proposal-2026-09-30
 Revised 2026-09-30 against `main` at `ba8c706` (live eval graded by per-turn expectations,
 draft-id rebinding, baseline-answer instructions), then again after a 14-point spec review
 checked against the code. The review's main correction: a conversation is pinned to one
@@ -193,7 +193,7 @@ same `proposal_id` with the new `proposal_version_id` when updating.
 
 New capability module (manifest, feature policy `scheduling_draft_discard_enabled`, golden
 fixtures under `evals/golden/scheduling_draft_discard/`: `valid.json`,
-`no-working-draft.json`, `after-draft-same-turn.json`), no arguments, risk class `draft`.
+`no-working-draft.json`, `after-draft-same-turn.json`, and `start-over-is-not-discard.json` — the fourth keeps the Gate B floor of four cases per capability), no arguments, risk class `draft`.
 At tool time it resolves the working draft and records a trusted "discard" result with its
 observed id and `resource_version`; it refuses when there is none. Finalize applies it
 under the §2.2 guard. It reports `discarded`. No new activity type: the newest draft card
