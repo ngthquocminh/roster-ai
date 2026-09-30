@@ -1,5 +1,36 @@
 # Handover: live eval, per-turn expectations
 
+## Update 2026-09-30: done through evidence
+
+Minh chose option 1 below. A, C and D now carry expectations; every live turn is graded by
+them. Recorded run at `8f35907` (clean tree, images rebuilt): **108/108**, readiness eligible,
+drop check passes. Evidence and the re-derived baseline are committed (`8c06bfb`). Nothing is
+pushed; the PR is Minh's call. Commits since the note below, oldest first:
+
+- `a5dd9d9` A/C/D expectations; new checks `claims_metric`, `draft_has_roster_lock`,
+  `each_item_mentions`, bindings `worker_count`/`worker_names`/`first_task`/`indirect_task`.
+- `49523ec` suite budgets a case slot per retry; C:4 family and D:2 wording relaxed.
+- `ad89854` agent: a garbled `draft` citation binds to the draft this run created (the model
+  copied the 64-hex id truncated; 3 turns failed as invalid_output).
+- `46cd04f` grounding: an unterminated `<claim` opener is repaired, plus a corrective retry.
+- `c4b619c` agent: keep a summary to the subject asked (A:6 added the planner's name).
+- `9b8dad2` evals: raw `<claim` markup fails any turn; A:6 asks about off-subject content.
+- `4067750` agent: pass a named demand family into metric arguments (C:3 used family=null).
+- `a9cc7bf` evals: the approval event names the baseline it replaced (B:12 false needs_review).
+- `8f35907` evals: `each_item_mentions` reads lines from segment text (it had read a lone `-`
+  per bullet); A:6 drops it; B:2's `invents_task` judge replaced by it (Minh approved).
+
+Lessons worth keeping:
+- Most "judge noise" had a cause: an incomplete `events` log (B:12), a check reading the
+  wrong rendering (A:6), or a real agent slip Jev half-saw (B:2 raw markup, A:6 name).
+  Read the full reply and the judge's facts before rewording a question.
+- An OpenRouter 402 (out of credit) shows as `provider_error` on every turn and charges the
+  full reservation per turn, cutting later prefixes. Check Logfire for the status code.
+- Background runs here are killed under memory pressure; the report is then partial.
+- A:6 can still miss the count claim (1 of 3 on one run); watch it.
+
+The original note follows, kept for its authoring rules and gotchas.
+
 Written 2026-09-29 at the end of the session. Read this first. Everything here that isn't in the
 specs or the code is listed on purpose.
 

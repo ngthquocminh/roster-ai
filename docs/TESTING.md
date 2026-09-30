@@ -21,7 +21,7 @@ uv run python -m evals.live_conversations.evidence \
 
 The suite is opt-in and paid: it is never selected by `pytest`. It builds the API and web images once, then each execution brings up and tears down its own Compose stack (Postgres, API, worker, web) and drives the authenticated HTTP conversation path — no doubles, no stubs. Scenario B runs the real CP-SAT solver and a real approval. Keys come from `backend/.env`; nothing is printed.
 
-The judge model's prefix picks the judge. `typesafe:` (the default when neither `--judge-model` nor `LIVE_CONVERSATION_JUDGE_MODEL` is set) sends each turn to TypeSafe Jev as one typed `score` question per dimension, with `TYPESAFE_API_KEY`. Code then turns the level probabilities into the verdict (`evals/live_conversations/jev_judge.py`). `openrouter:<model>` uses the LLM judge in `judge.py` with `LIVE_CONVERSATION_JUDGE_API_KEY`. Changing the judge changes `behavioral_digest`, so the baseline below must be re-derived before the gate compares again.
+The judge model's prefix picks the judge. `typesafe:` (the default when neither `--judge-model` nor `LIVE_CONVERSATION_JUDGE_MODEL` is set) grades each turn by the per-turn expectations authored on it in `scenarios.json` (every turn of A–D has them): code checks over the visible reply, its activity and the saved draft, plus narrow TypeSafe Jev yes/no questions for what code cannot decide, with `TYPESAFE_API_KEY` (`evals/live_conversations/expectations.py`). Any reply showing raw `<claim` markup fails its turn. A turn without expectations falls back to the holistic Jev judge (`evals/live_conversations/jev_judge.py`). `openrouter:<model>` uses the LLM judge in `judge.py` with `LIVE_CONVERSATION_JUDGE_API_KEY`. Changing the judge changes `behavioral_digest`, so the baseline below must be re-derived before the gate compares again.
 
 `--accept-finding SCENARIO:TURN` is given once per turn the owner has accepted (below); the example is the turn the recorded matrix accepted. Give none when nothing was accepted.
 
@@ -29,7 +29,7 @@ The measured configuration -- reasoning effort, the per-token prices that drive 
 
 ### Gate the result against the committed baseline
 
-The suite above answers *how good is it right now*. `backend/evals/baselines/live-conversations.json` records what known-good looked like -- the per-turn `{executed, passed}` counts of the current Story 5.7 measurement (108/108, re-derived 2026-09-28 when scenario D was added), its models, effort and behavioural configuration digest. It is a projection of that one measurement, derived by `backend/scripts/derive_live_conversation_baseline.py` and never hand-typed, and it is deliberately tracked config rather than evidence, so it does not live under `evidence/`.
+The suite above answers *how good is it right now*. `backend/evals/baselines/live-conversations.json` records what known-good looked like -- the per-turn `{executed, passed}` counts of the current Story 5.7 measurement (108/108, re-derived 2026-09-30 from the run at `8f35907` graded by per-turn expectations), its models, effort and behavioural configuration digest. It is a projection of that one measurement, derived by `backend/scripts/derive_live_conversation_baseline.py` and never hand-typed, and it is deliberately tracked config rather than evidence, so it does not live under `evidence/`.
 
 After a paid run, compare the evidence document it produced against that baseline:
 
