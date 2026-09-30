@@ -22,18 +22,21 @@ BINDING_NAMES = frozenset({
     'excluded_worker', 'excluded_worker_id', 'excluded_task', 'excluded_task_id',
     'candidate_id', 'solver_status', 'assignment_count',
     'promoted_baseline_id', 'approval_id',
+    'worker_count', 'worker_names', 'indirect_task', 'indirect_task_id',
+    'first_task', 'first_task_id',
 })
 #: Facts a judge question may name; each is built from bindings or this turn.
-FACT_NAMES = frozenset({'tasks', 'candidate_rows', 'events', 'draft', 'excluded_worker'})
+FACT_NAMES = frozenset({'tasks', 'candidate_rows', 'events', 'draft', 'excluded_worker',
+                        'worker_count', 'workers', 'locks'})
 CODE_CHECKS = frozenset({
     'mentions', 'mentions_all', 'mentions_any', 'mentions_none', 'activity_is',
     'activity_field_equals', 'draft_has', 'draft_preserves_locks', 'names_assigned_pair',
-    'draft_matches_turn',
+    'draft_matches_turn', 'claims_metric', 'draft_has_roster_lock', 'each_item_mentions',
 })
 #: Checks that can only fail by the reply doing something wrong; a turn needs at
 #: least one check that requires the reply to DO something (tau-bench: a
 #: do-nothing agent passes every "must not").
-NEGATIVE_CHECKS = frozenset({'mentions_none'})
+NEGATIVE_CHECKS = frozenset({'mentions_none', 'each_item_mentions'})
 
 #: P(wanted answer) a judge check needs to pass; under FAIL_P it fails.
 PASS_P = 0.70
@@ -54,6 +57,10 @@ class Expectation:
     worker: str | None = None
     task: str | None = None
     max_hours: float | None = None
+    n: int | None = None
+    factor: float | None = None
+    metric: str | None = None
+    family: str | None = None
     turn: int | None = None
     question: str | None = None
     want: bool | None = None
@@ -81,18 +88,24 @@ def _templates(value) -> set[str]:
 _FIELDS = {
     'mentions': ({'value'}, set()),
     'mentions_all': ({'value'}, set()),
+    'each_item_mentions': ({'value'}, set()),
     'mentions_any': ({'values'}, set()),
     'mentions_none': ({'values'}, set()),
     'activity_is': ({'activity'}, set()),
     'activity_field_equals': ({'field', 'value'}, set()),
-    'draft_has': ({'kind'}, {'worker', 'task', 'max_hours'}),
+    'draft_has': ({'kind'}, {'worker', 'task', 'max_hours', 'n', 'factor'}),
+    'draft_has_roster_lock': ({'task'}, set()),
+    'claims_metric': ({'metric'}, {'task', 'family'}),
     'draft_preserves_locks': (set(), set()),
     'names_assigned_pair': (set(), set()),
     'draft_matches_turn': ({'turn'}, set()),
     'judge': ({'question', 'want'}, {'facts'}),
 }
 #: Bindings that hold a list: only `mentions_all` may take one whole.
-LIST_BINDINGS = frozenset({'task_names'})
+LIST_BINDINGS = frozenset({'task_names', 'worker_names'})
+LIST_CHECKS = frozenset({'mentions_all', 'each_item_mentions'})
+#: A bulleted or numbered list item, as the visible text keeps it.
+_LIST_ITEM = re.compile(r'^(?:[-*•]|\d+[.)])\s')
 _FACT_REFERENCE = re.compile(r'`facts\.([a-z_]+)')
 
 
@@ -127,7 +140,7 @@ def validate_expectation(expectation: Expectation, present: set[str] | None = No
             raise ValueError(f'{where}: {expectation.check} needs {sorted(missing)}')
         if extra:
             raise ValueError(f'{where}: {expectation.check} does not take {sorted(extra)}')
-    for name in ('value', 'activity', 'field', 'kind', 'worker', 'task', 'question'):
+    for name in ('value', 'activity', 'field', 'kind', 'worker', 'task', 'question', 'metric', 'family'):
         value = getattr(expectation, name)
         if value is not None and (not isinstance(value, (str, int, float)) or isinstance(value, bool)
                                   or (isinstance(value, str) and not value.strip())):
@@ -135,16 +148,17 @@ def validate_expectation(expectation: Expectation, present: set[str] | None = No
     if expectation.turn is not None and (isinstance(expectation.turn, bool)
                                          or not isinstance(expectation.turn, int) or expectation.turn < 1):
         raise ValueError(f'{where}: turn must be a positive turn number')
-    if expectation.max_hours is not None and (isinstance(expectation.max_hours, bool)
-                                              or not isinstance(expectation.max_hours, (int, float))):
-        raise ValueError(f'{where}: max_hours must be a number')
+    for name in ('max_hours', 'n', 'factor'):
+        number = getattr(expectation, name)
+        if number is not None and (isinstance(number, bool) or not isinstance(number, (int, float))):
+            raise ValueError(f'{where}: {name} must be a number')
     if expectation.is_judge and not isinstance(expectation.want, bool):
         raise ValueError(f'{where}: want must be true or false')
     names = set().union(*(_templates(getattr(expectation, name)) for name in
                           ('value', 'values', 'worker', 'task', 'question')))
     if names - BINDING_NAMES:
         raise ValueError(f'{where}: unknown bindings {sorted(names - BINDING_NAMES)}')
-    if expectation.check != 'mentions_all' and names & LIST_BINDINGS:
+    if expectation.check not in LIST_CHECKS and names & LIST_BINDINGS:
         raise ValueError(f'{where}: a list binding {sorted(names & LIST_BINDINGS)} needs mentions_all')
     if set(expectation.facts) - FACT_NAMES:
         raise ValueError(f'{where}: unknown facts {sorted(set(expectation.facts) - FACT_NAMES)}')
@@ -209,10 +223,35 @@ class Bindings:
             raise Unbound(name)
         return self.values[name]
 
-    def capture_start(self, overview: dict, tasks: list[dict]) -> None:
+    def capture_start(self, overview: dict, tasks: list[dict], workers: list[dict] = (),
+                      demand: list[dict] = ()) -> None:
         self.bind('scenario_name', overview.get('scenario_name'))
         self.bind('baseline_id', overview.get('baseline_schedule_version'))
         self.bind('task_names', [task['name'] for task in tasks if task.get('name')] or None)
+        if workers:
+            self.bind('worker_count', len(workers))
+            self.bind('worker_names', [worker['name'] for worker in workers if worker.get('name')] or None)
+        # Only when exactly one task carries indirect demand: "which task" then
+        # has one right answer.
+        indirect = {_key(row.get('task_id')) for row in demand if row.get('family') == 'indirect'}
+        if len(indirect) == 1:
+            task = _task_by_key(tasks, indirect.pop())
+            if task:
+                self.bind('indirect_task_id', _key(task['record_id']))
+                self.bind('indirect_task', task.get('name'))
+
+    def capture_claims(self, activity: dict, tasks: list[dict]) -> None:
+        """The task the conversation settles on: the first grounded outbound
+        required-volume claim ("the first task in that demand"). Its value is
+        already checked by the independent oracle (`facts.verify_claim`)."""
+        for claim in _claims(activity):
+            arguments = claim.get('arguments') or {}
+            if claim.get('metric') == 'required_demand_volume' and arguments.get('family') == 'outbound':
+                task = _task_by_key(tasks, _key(arguments.get('task_id')))
+                if task:
+                    self.bind('first_task_id', _key(task['record_id']))
+                    self.bind('first_task', task.get('name'))
+                return
 
     def capture_draft(self, draft: dict | None, workers_by_id: dict, tasks_by_id: dict) -> None:
         if not draft:
@@ -268,6 +307,21 @@ class Bindings:
         else:
             self.events.append(f"Approval {approval.get('approval_id')} rejected by the user: "
                                f"the baseline is unchanged ({baseline_now}).")
+
+
+def _key(record_id) -> str | None:
+    """Ids arrive upper- or lower-case depending on the surface."""
+    return record_id.casefold() if isinstance(record_id, str) else None
+
+
+def _task_by_key(tasks, key) -> dict | None:
+    return next((task for task in tasks if key and key in
+                 (_key(task.get('record_id')), _key(task.get('task_id')))), None)
+
+
+def _claims(activity: dict) -> list[dict]:
+    return [segment for segment in (activity.get('response') or {}).get('segments') or ()
+            if segment.get('kind') == 'claim' and segment.get('verdict') == 'supported']
 
 
 def _entity(constraint: dict, group: str) -> str | None:
@@ -374,6 +428,8 @@ class TurnContext:
     reply_lines: dict
     candidate_rows: list
     turn: int = 0
+    #: Full worker rows (qualifications, roster windows).
+    workers: list = ()
 
     @property
     def text(self) -> str:
@@ -397,11 +453,51 @@ def _draft_has(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -
     for constraint in (ctx.draft or {}).get('constraints') or ():
         if constraint.get('kind') != expectation.kind:
             continue
-        if worker and _entity(constraint, 'workers') != worker:
+        if worker and _key(_entity(constraint, 'workers')) != _key(worker):
             continue
-        if task and _entity(constraint, 'work-areas-and-tasks') != task:
+        if task and _key(_entity(constraint, 'work-areas-and-tasks')) != _key(task):
             continue
-        if expectation.max_hours is not None and constraint.get('max_hours') != expectation.max_hours:
+        if not all(_same_number(getattr(expectation, name), constraint.get(name))
+                   for name in ('max_hours', 'n', 'factor')):
+            continue
+        return True
+    return False
+
+
+def _same_number(wanted, actual) -> bool:
+    return wanted is None or (isinstance(actual, (int, float)) and not isinstance(actual, bool)
+                              and abs(actual - wanted) < 1e-9)
+
+
+def _draft_has_roster_lock(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -> bool:
+    """A shift lock for a worker qualified for the task, over exactly one of
+    that worker's own roster windows."""
+    task = _key(resolve(expectation.task, bindings.as_of(ctx.turn)))
+    workers = {_key(worker['record_id']): worker for worker in ctx.workers}
+    for constraint in (ctx.draft or {}).get('constraints') or ():
+        if constraint.get('kind') != 'lock_worker_shift':
+            continue
+        worker = workers.get(_key(_entity(constraint, 'workers')))
+        if not worker or task not in {_key(row.get('task_id')) for row in worker.get('qualifications', ())}:
+            continue
+        window = (constraint.get('start_minute'), constraint.get('end_minute'))
+        if window in {(row.get('start_minute'), row.get('end_minute'))
+                      for row in worker.get('availability_windows', ()) if row.get('kind') == 'roster'}:
+            return True
+    return False
+
+
+def _claims_metric(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -> bool:
+    """The reply carries a grounded claim of this metric (for this task and
+    family). Whether its number is right is the oracle's job, not this check's."""
+    task = _key(resolve(expectation.task, bindings)) if expectation.task else None
+    for claim in _claims(ctx.activity):
+        arguments = claim.get('arguments') or {}
+        if claim.get('metric') != expectation.metric:
+            continue
+        if task and _key(arguments.get('task_id')) != task:
+            continue
+        if expectation.family and arguments.get('family') != expectation.family:
             continue
         return True
     return False
@@ -422,6 +518,13 @@ def code_check(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -
         value = resolve(expectation.value, bindings)
         items = value if isinstance(value, list) else [value]
         return bool(items) and all(mentioned(item, text) for item in items)
+    if check == 'each_item_mentions':
+        # Every list item names one of these: a list that adds an invented
+        # entry fails, whatever notes sit beside the real names.
+        value = resolve(expectation.value, bindings)
+        items = value if isinstance(value, list) else [value]
+        return all(any(mentioned(item, line) for item in items)
+                   for line in ctx.lines if _LIST_ITEM.match(line))
     if check in ('mentions_any', 'mentions_none'):
         bound, first_unbound = [], None
         for template in expectation.values:
@@ -441,6 +544,10 @@ def code_check(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -
         return actual is not None and str(actual).casefold() == str(wanted).casefold()
     if check == 'draft_has':
         return _draft_has(expectation, ctx, bindings)
+    if check == 'draft_has_roster_lock':
+        return _draft_has_roster_lock(expectation, ctx, bindings)
+    if check == 'claims_metric':
+        return _claims_metric(expectation, ctx, bindings)
     if check == 'draft_preserves_locks':
         return ctx.draft is not None and _lock_ids(ctx.draft.get('preserved_locks')) == _lock_ids(ctx.locks)
     if check == 'names_assigned_pair':
@@ -459,6 +566,12 @@ def _fact(name: str, ctx: TurnContext, bindings: Bindings):
         return bindings.get('task_names')
     if name == 'excluded_worker':
         return bindings.get('excluded_worker')
+    if name == 'worker_count':
+        return bindings.get('worker_count')
+    if name == 'workers':
+        return bindings.get('worker_names')
+    if name == 'locks':
+        return list(ctx.locks)
     if name == 'events':
         return list(bindings.events)
     if name == 'candidate_rows':

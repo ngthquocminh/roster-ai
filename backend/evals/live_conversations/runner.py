@@ -225,7 +225,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             before = app._request('GET', projection_path)
             bindings.turn = index
             if index == 1:
-                bindings.capture_start(before, tasks)
+                bindings.capture_start(before, tasks, workers, demand)
             row = {'id': f'turn-{index}', 'user': turn.user,
                    'obligation': turn.obligation, 'verdict': 'incomplete'}
             report['turns'].append(row)
@@ -257,6 +257,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             if activity['activity_type'] == 'approval_request':
                 pending_approval = activity
                 bindings.capture_approval_request(activity)
+            bindings.capture_claims(activity, tasks)
             assignments = read_group(app, 'baseline-assignments')
             claims = [s for s in activity.get('response', {}).get('segments', []) if s['kind'] == 'claim']
             row['tier1_facts'] = tier1_fact_rows(activity)
@@ -286,7 +287,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 checks, questions, judge_state = evaluate(turn.expect, TurnContext(
                     activity=activity, visible=visible, draft=verified.get('persisted_draft'),
                     assignments=assignments, locks=locks, workers_by_id=workers_by_id,
-                    tasks_by_id=tasks_by_id, reply_lines=reply_lines, turn=index,
+                    tasks_by_id=tasks_by_id, reply_lines=reply_lines, turn=index, workers=workers,
                     candidate_rows=named_candidate_rows(
                         activity, ((latest_run or {}).get('candidate') or {}).get('assignments', ()),
                         workers_by_id, tasks_by_id),

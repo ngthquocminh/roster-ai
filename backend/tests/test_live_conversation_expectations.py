@@ -119,10 +119,100 @@ def test_duplicate_expectation_ids_are_refused():
         validate_turn_expectations((_e(check='activity_is', activity='draft'),) * 2)
 
 
-def test_scenario_b_carries_expectations_on_every_turn_and_the_others_none():
+def test_every_scenario_carries_expectations_on_every_turn():
     scenarios = {case.id: case for case in load_scenarios()}
-    assert all(turn.expect for turn in scenarios['B'].turns)
-    assert not any(turn.expect for case_id in 'ACD' for turn in scenarios[case_id].turns)
+    assert set(scenarios) == set('ABCD')
+    assert all(turn.expect for case in scenarios.values() for turn in case.turns)
+
+
+# --- grounded claims, starting bindings, and C's draft checks ---------------------------
+
+def _claim(metric, task_id=None, family=None, verdict='supported'):
+    return {'kind': 'claim', 'metric': metric, 'verdict': verdict, 'value': 1, 'unit': 'u',
+            'arguments': {'task_id': task_id, 'family': family}}
+
+
+def _claiming(*claims):
+    return {'activity_type': 'agent_response',
+            'response': {'segments': [{'kind': 'prose', 'text': 'x'}, *claims]}}
+
+
+def test_claims_metric_needs_a_supported_claim_of_that_metric_task_and_family():
+    bindings = _bound(first_task_id='t1')
+    check = _e(check='claims_metric', metric='staffed_minutes', task='{first_task_id}')
+    assert code_check(check, _ctx(_claiming(_claim('staffed_minutes', 'T1'))), bindings)
+    assert not code_check(check, _ctx(_claiming(_claim('staffed_minutes', 't2'))), bindings)
+    assert not code_check(check, _ctx(_claiming(_claim('staffed_minutes', 't1', verdict='unsupported'))),
+                          bindings)
+    assert not code_check(check, _ctx(_reply('t1 has 2796 staffed minutes')), bindings)
+    family = _e(check='claims_metric', metric='required_demand_volume', family='inbound')
+    assert not code_check(family, _ctx(_claiming(_claim('required_demand_volume', 't1', 'outbound'))),
+                          Bindings())
+
+
+def test_start_binds_worker_facts_and_the_only_indirect_task():
+    tasks = [{'record_id': 'T1', 'name': 'Main Pick'}, {'record_id': 'T2', 'name': 'Chiller Pick'}]
+    bindings = Bindings()
+    bindings.capture_start({}, tasks, [{'name': 'Priya Nair'}, {'name': 'Arjun Patel'}],
+                           [{'task_id': 't2', 'family': 'indirect'}, {'task_id': 't1', 'family': 'outbound'}])
+    assert bindings.get('worker_count') == 2
+    assert bindings.get('worker_names') == ['Priya Nair', 'Arjun Patel']
+    assert (bindings.get('indirect_task_id'), bindings.get('indirect_task')) == ('t2', 'Chiller Pick')
+    two = Bindings()
+    two.capture_start({}, tasks, [], [{'task_id': 't1', 'family': 'indirect'},
+                                      {'task_id': 't2', 'family': 'indirect'}])
+    with pytest.raises(Unbound):
+        two.get('indirect_task')
+
+
+def test_the_first_outbound_volume_claim_fixes_the_conversations_task():
+    tasks = [{'record_id': 'T1', 'name': 'Main Pick'}, {'record_id': 'T2', 'name': 'Chiller Pick'}]
+    bindings = Bindings()
+    bindings.capture_claims(_claiming(_claim('required_demand_volume', 'T2', 'inbound'),
+                                      _claim('required_demand_volume', 'T1', 'outbound')), tasks)
+    bindings.capture_claims(_claiming(_claim('required_demand_volume', 'T2', 'outbound')), tasks)
+    assert (bindings.get('first_task_id'), bindings.get('first_task')) == ('t1', 'Main Pick')
+
+
+MIN_TWO = {'kind': 'set_min_workers_per_task', 'n': 2, 'resolved_entities': [_entity('work-areas-and-tasks', 'T1')]}
+SCALE = {'kind': 'scale_demand', 'factor': 1.1, 'resolved_entities': [_entity('work-areas-and-tasks', 'T1')]}
+
+
+def test_draft_has_compares_n_and_factor():
+    bindings = _bound(first_task_id='t1')
+    ctx = _ctx(_reply('x'), draft=_draft(MIN_TWO, SCALE))
+    assert code_check(_e(check='draft_has', kind='set_min_workers_per_task', task='{first_task_id}', n=2),
+                      ctx, bindings)
+    assert not code_check(_e(check='draft_has', kind='set_min_workers_per_task', n=3), ctx, bindings)
+    assert code_check(_e(check='draft_has', kind='scale_demand', factor=1.1), ctx, bindings)
+    assert not code_check(_e(check='draft_has', kind='scale_demand', factor=1.2), ctx, bindings)
+
+
+def _lock(worker, start, end):
+    return {'kind': 'lock_worker_shift', 'start_minute': start, 'end_minute': end,
+            'resolved_entities': [_entity('workers', worker)]}
+
+
+def test_a_roster_lock_needs_a_qualified_worker_on_one_of_their_own_roster_windows():
+    workers = [
+        {'record_id': 'W1', 'qualifications': [{'task_id': 'T1'}],
+         'availability_windows': [{'kind': 'roster', 'start_minute': 300, 'end_minute': 810},
+                                  {'kind': 'availability', 'start_minute': 900, 'end_minute': 1200}]},
+        {'record_id': 'W2', 'qualifications': [{'task_id': 'T2'}],
+         'availability_windows': [{'kind': 'roster', 'start_minute': 300, 'end_minute': 810}]},
+    ]
+    bindings = _bound(first_task_id='t1')
+    check = _e(check='draft_has_roster_lock', task='{first_task_id}')
+
+    def ok(lock):
+        ctx = _ctx(_reply('x'), draft=_draft(MIN_TWO, lock))
+        ctx.workers = workers
+        return code_check(check, ctx, bindings)
+
+    assert ok(_lock('w1', 300, 810))
+    assert not ok(_lock('W1', 900, 1200))  # an availability window, not a roster one
+    assert not ok(_lock('W1', 300, 800))   # not exactly the rostered window
+    assert not ok(_lock('W2', 300, 810))   # not qualified for the task
 
 
 # --- matching the visible reply ---------------------------------------------------------
