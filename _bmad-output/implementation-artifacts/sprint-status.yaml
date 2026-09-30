@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-25
+last_updated: 2026-09-30
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2721,7 +2721,10 @@ development_status:
   # cases, TX2 proposal write per amended EAD-6, card). 5.12 = live checks + scenario E +
   # re-measurement; writes evidence/story-5.12/ and re-derives the live baseline. Both BEFORE
   # the next Gate B assessment.
-  5-11-keep-one-working-draft-per-conversation: backlog
+  # 5.11 story created 2026-09-30 (bmad-create-story): 19 creation findings (C1-C19) against the
+  # spec, resolved by 17 decisions -- incl. mark_applied as the LAST TX2 write (lock order),
+  # a per-turn DraftTurnState on AgentDepsV1, and the rejected_proposal code alignment.
+  5-11-keep-one-working-draft-per-conversation: ready-for-dev
   5-12-prove-the-draft-lifecycle-in-live-conversations: backlog
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
