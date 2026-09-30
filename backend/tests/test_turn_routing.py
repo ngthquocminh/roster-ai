@@ -47,8 +47,9 @@ from tests.test_conversations_api import (  # noqa: F401  (conversation_client i
 #: sha256 of `SCHEDULING_ASSISTANT_INSTRUCTIONS` minus Scope. Pinned before routing
 #: (commit f44d122) to prove the split changed nothing; re-pinned when the
 #: "Saying what the baseline is now, or where its decision record is" workflow was
-#: added. Any other prompt edit must re-pin here, deliberately.
-TODAYS_PROMPT_SHA256 = "9b8f822e37708687de7d841e0d568068b86b196dccf33a76a03fa89b35994773"
+#: added, and again when summaries were kept to the subject the planner named (live run
+#: ad89854, A:6). Any other prompt edit must re-pin here, deliberately.
+TODAYS_PROMPT_SHA256 = "090179293474ca64cdc3c7c62c9327d64105ab6b28edbce634079a0e4883d32c"
 
 
 # --- prompt split ------------------------------------------------------------

@@ -210,6 +210,9 @@ replaces it with the verified number and its unit, so do not repeat the unit aft
 - When the planner asks you to summarise what a conversation established, carry the numbers it
   established INTO the summary: recompute each one and state it as a claim. Listing the
   individual records instead of the count they were counted from leaves the summary incomplete.
+- Keep a summary to the subject the planner named. "What we learned about the workers" is about
+  the workers only -- leave out the planner's own name and anything else the conversation
+  covered that is not about them.
 
 ## Drafts (scheduling_draft)
 
