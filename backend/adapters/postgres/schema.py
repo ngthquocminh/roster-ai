@@ -359,11 +359,24 @@ proposal = Table(
     Column("current_version_id", UUID(as_uuid=True), nullable=True),
     Column("resource_version", BigInteger, nullable=False, server_default=text("1")),
     Column("created_at", DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")),
+    # Story 5.11: who ended the draft, and which version a promotion applied.
+    Column("ended_by", String(20), nullable=True),
+    Column("applied_version_id", UUID(as_uuid=True), nullable=True),
     ForeignKeyConstraint(["scenario_id", "site_id"], ["scenario.id", "scenario.site_id"], name="fk_proposal_scenario_site", ondelete="RESTRICT"),
     ForeignKeyConstraint(["scenario_version_id", "site_id"], ["scenario_version.id", "scenario_version.site_id"], name="fk_proposal_scenario_version_site", ondelete="RESTRICT"),
     ForeignKeyConstraint(["conversation_id", "site_id"], ["conversation.id", "conversation.site_id"], name="fk_proposal_conversation_site", ondelete="RESTRICT"),
     UniqueConstraint("id", "site_id", name="uq_proposal_id_site"),
-    CheckConstraint("state IN ('active','rejected')", name="ck_proposal_state"),
+    CheckConstraint("state IN ('active','rejected','applied')", name="ck_proposal_state"),
+    CheckConstraint(
+        "ended_by IS NULL OR ended_by IN ('planner','assistant','system')",
+        name="ck_proposal_ended_by",
+    ),
+    CheckConstraint(
+        "(state = 'active' AND ended_by IS NULL AND applied_version_id IS NULL) OR "
+        "(state = 'rejected' AND ended_by IS NOT NULL AND applied_version_id IS NULL) OR "
+        "(state = 'applied' AND ended_by = 'system' AND applied_version_id IS NOT NULL)",
+        name="ck_proposal_lifecycle",
+    ),
 )
 
 proposal_version = Table(
@@ -391,6 +404,15 @@ proposal.append_constraint(
         use_alter=True,
     )
 )
+proposal.append_constraint(
+    ForeignKeyConstraint(
+        ["applied_version_id", "site_id"],
+        ["proposal_version.id", "proposal_version.site_id"],
+        name="fk_proposal_applied_version_site",
+        ondelete="RESTRICT",
+        use_alter=True,
+    )
+)
 
 command_idempotency = Table(
     "command_idempotency", metadata, _id_column(), _site_id_column(),
@@ -412,6 +434,13 @@ Index("ix_proposal_site_id", proposal.c.site_id)
 Index("ix_proposal_version_site_id", proposal_version.c.site_id)
 Index("ix_command_idempotency_site_id", command_idempotency.c.site_id)
 Index("ix_proposal_conversation_id", proposal.c.conversation_id)
+# AD-9 as amended: at most one working (`active`) draft per conversation.
+Index(
+    "uq_proposal_one_active_per_conversation",
+    proposal.c.conversation_id,
+    unique=True,
+    postgresql_where=text("state = 'active'"),
+)
 Index("ix_proposal_version_proposal_id", proposal_version.c.proposal_id)
 Index("ix_command_idempotency_actor_operation", command_idempotency.c.actor_id, command_idempotency.c.operation)
 

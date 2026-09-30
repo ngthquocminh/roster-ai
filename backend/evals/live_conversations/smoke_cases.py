@@ -24,6 +24,13 @@ CONVERSATION_TOOL_SMOKES = (
     ConversationToolSmokeCase(
         id='draft-max-hours', capability='scheduling_draft', precondition='baseline',
         second_turn='Create a draft capping Mika Tane at 40 hours.', expected_activity='draft'),
+    # Story 5.11: authored only -- it is not run until Story 5.12 owns live runs.
+    # With no working draft the tool answers `no_working_draft` and the model
+    # replies in prose, which is still one tool call.
+    ConversationToolSmokeCase(
+        id='discard-working-draft', capability='scheduling_draft_discard',
+        precondition='baseline', second_turn='Throw away my current draft.',
+        expected_activity='agent_response'),
     ConversationToolSmokeCase(
         id='baseline-proposal', capability='scheduling_baseline', precondition='candidate',
         second_turn='Propose the completed candidate as the new baseline for my approval.',

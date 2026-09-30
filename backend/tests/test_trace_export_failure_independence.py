@@ -214,14 +214,16 @@ def _verdicts(provider) -> list[tuple[str, bool, str]]:
             runtime = report._runtime_for_case(case, installed_modules(), results)
         else:
             # `_runtime_for_case`'s own selection and wiring, plus the provider.
-            wanted = report.EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
+            wanted = report.granted_capability_names(case)
             runtime = PydanticAIAgentRuntime(
                 model=report.build_model_double(case),
                 capabilities=tuple(
                     module for module in installed_modules()
-                    if module.manifest.capability_name == wanted
+                    if module.manifest.capability_name in wanted
                 ),
-                deps=report._report_deps(results),
+                deps=report._report_deps(
+                    results, seeded_working_draft=case.seeded_working_draft
+                ),
                 answer_type=GroundedAnswerV2 if report._needs_named_output_tools(case) else None,
                 tracer_provider=provider,
             )

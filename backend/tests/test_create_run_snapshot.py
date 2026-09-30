@@ -143,7 +143,14 @@ def test_create_run_snapshot_freezes_persisted_authority_and_evidence() -> None:
 
 @pytest.mark.parametrize(
     ("proposal_state", "version_drift", "code"),
-    (("rejected", False, "rejected_proposal"), ("active", True, "stale_proposal")),
+    (
+        ("rejected", False, "rejected_proposal"),
+        # Story 5.11: an ended state wins over staleness, so an applied draft that
+        # is ALSO version-drifted still reads applied, never stale.
+        ("applied", False, "applied_proposal"),
+        ("applied", True, "applied_proposal"),
+        ("active", True, "stale_proposal"),
+    ),
 )
 def test_create_run_snapshot_fails_closed_before_write(
     proposal_state, version_drift, code

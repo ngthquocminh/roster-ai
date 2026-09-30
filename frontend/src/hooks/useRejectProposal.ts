@@ -15,6 +15,8 @@ export function useRejectProposal(id: string) {
     onSuccess: (proposal) => {
       keys.current.settle();
       queryClient.setQueryData(proposalKey(id), proposal);
+      // See useReviseProposal: a replay's body must not stand as current state.
+      void queryClient.invalidateQueries({ queryKey: proposalKey(id) });
     },
     onError: () => {
       void queryClient.invalidateQueries({ queryKey: proposalKey(id) });

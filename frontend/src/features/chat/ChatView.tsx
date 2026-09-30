@@ -307,7 +307,17 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
               {/* Only rendered once something has actually gone wrong; a
                   healthy stream shows no banner at all. */}
               {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
-              <ActivityTimeline items={stream.items} navigate={navigate} />
+              <ActivityTimeline
+                // The in-flight fact already on the page is the timeline's own
+                // `latest_agent_run_status`. `mutation.isPending` is NOT it: the
+                // send resolves when the message is ACCEPTED and the agent turn
+                // executes afterwards, so it is false for the whole turn (C7).
+                agentTurnInFlight={["agent_queued", "agent_running"].includes(
+                  timeline.data.latest_agent_run_status ?? "",
+                )}
+                items={stream.items}
+                navigate={navigate}
+              />
               {stream.updatesAreDelayed ? (
                 // AC2 requires the fallback to be LABELLED. Silent polling
                 // would leave the planner believing they are seeing live

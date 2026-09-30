@@ -10,6 +10,9 @@ from application.contracts.proposal import ProposalV1
 from application.ports.proposal import ProposalRecordV1
 from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.schedule_run import IdempotentScheduleRunResultV1
+from dataclasses import replace
+
+from application.use_cases.create_run_snapshot import SnapshotCreationError
 from application.use_cases.enqueue_compute import (
     IdempotencyKeyConflictError,
     NON_TERMINAL_RUN_STATUSES,
@@ -309,6 +312,43 @@ def test_new_request_fails_closed_when_site_concurrency_is_exhausted() -> None:
             idempotency_key="second", **common,
         )
     assert len(runs.jobs) == 1
+
+
+@pytest.mark.parametrize(
+    ("state", "code"), [("rejected", "rejected_proposal"), ("applied", "applied_proposal")]
+)
+def test_an_ended_draft_is_refused_before_the_resource_version_comparison(state, code) -> None:
+    """Story 5.11 C5: `mark_applied` bumps the resource version, so comparing it first
+    would answer `stale_resource_version` for a draft whose real state is permanent.
+    Mutation: move the ended-state check after the comparison and this reddens."""
+    actor_id, site_id, proposal, context, settings = _fixture()
+    ended = replace(proposal, state=state, resource_version=2)
+    runs = _RunRepository()
+    with pytest.raises(SnapshotCreationError) as caught:
+        enqueue_compute(
+            _ProposalRepository(ended, actor_id), _Catalogue(context), runs, object(),
+            proposal_id=proposal.proposal_id, site_id=site_id, actor_id=actor_id,
+            expected_proposal_resource_version=1,  # the pre-`applied` version
+            idempotency_key="ended", capability_version="1", settings=settings,
+        )
+    assert caught.value.code == code
+    assert runs.snapshots == [] and runs.jobs == []
+
+
+def test_a_replay_still_returns_the_stored_run_after_the_draft_ended() -> None:
+    actor_id, site_id, proposal, context, settings = _fixture()
+    runs = _RunRepository()
+    arguments = dict(
+        proposal_id=proposal.proposal_id, site_id=site_id, actor_id=actor_id,
+        expected_proposal_resource_version=1, idempotency_key="replay-ended",
+        capability_version="1", settings=settings,
+    )
+    first = enqueue_compute(
+        _ProposalRepository(proposal, actor_id), _Catalogue(context), runs, object(), **arguments)
+    applied = replace(proposal, state="applied", resource_version=2)
+    replay = enqueue_compute(
+        _ProposalRepository(applied, actor_id), _Catalogue(context), runs, object(), **arguments)
+    assert replay == first and len(runs.jobs) == 1
 
 
 def test_non_terminal_status_enumeration_is_exhaustive() -> None:

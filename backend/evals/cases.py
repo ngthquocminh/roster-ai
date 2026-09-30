@@ -134,6 +134,9 @@ class GoldenCase:
     live_expected_evidence_refs: tuple[str, ...] | None = None
     live_expected_outcome: ExpectedOutcome | None = None
     live_eligible: bool = True
+    # Story 5.11: the case starts with the conversation's working draft (v1, one
+    # fixed id). Optional so every existing case keeps its shape.
+    seeded_working_draft: bool = False
 
 
 HistoryModeV1 = Literal["independent", "raw_turn", "rehydrated_activities"]
@@ -533,6 +536,7 @@ CASE_FIELDS: frozenset[str] = frozenset(
         "live_expected_evidence_refs",
         "live_expected_outcome",
         "live_eligible",
+        "seeded_working_draft",
     }
 )
 
@@ -631,6 +635,9 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
     live_eligible = raw.get("live_eligible", True)
     if not isinstance(live_eligible, bool):
         raise ValueError(f"{label}.live_eligible must be boolean")
+    seeded_working_draft = raw.get("seeded_working_draft", False)
+    if not isinstance(seeded_working_draft, bool):
+        raise ValueError(f"{label}.seeded_working_draft must be boolean")
 
     return GoldenCase(
         case_id=_string(raw.get("case_id"), f"{label}.case_id"),
@@ -662,6 +669,7 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
         live_expected_evidence_refs=live_evidence_refs,
         live_expected_outcome=cast(ExpectedOutcome | None, live_outcome),
         live_eligible=live_eligible,
+        seeded_working_draft=seeded_working_draft,
     )
 
 

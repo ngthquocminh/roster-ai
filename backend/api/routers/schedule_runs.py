@@ -255,6 +255,11 @@ _SNAPSHOT_PROBLEMS: dict[str, tuple[int, str, str]] = {
         "Proposal was rejected",
         "A rejected proposal cannot start a run. Describe the change again to create a new one.",
     ),
+    "applied_proposal": (
+        409,
+        "Draft was applied",
+        "This draft was already applied to the baseline, so it cannot start a run.",
+    ),
     "scenario_unavailable": (
         503,
         "Scenario could not be read",

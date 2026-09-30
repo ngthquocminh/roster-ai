@@ -409,7 +409,7 @@ def decide_approval_route(request: Request, approval_id: UUID, body: ApprovalDec
         return _out(replayed, now)
     decision_request_id = uuid4()
     try:
-        result = decide_approval(connection, command=DecideApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, approval_id=approval_id, decision=body.decision, expected_resource_version=body.expected_resource_version, request_id=decision_request_id), approvals=approvals, schedule_runs=schedule_runs, baselines=baselines, baseline_writer=baseline_writer, memberships=memberships, audit_writer=audit_writer, conversations=conversations, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: now, telemetry=telemetry)
+        result = decide_approval(connection, command=DecideApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, approval_id=approval_id, decision=body.decision, expected_resource_version=body.expected_resource_version, request_id=decision_request_id), approvals=approvals, schedule_runs=schedule_runs, baselines=baselines, baseline_writer=baseline_writer, memberships=memberships, audit_writer=audit_writer, conversations=conversations, proposals=proposals, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: now, telemetry=telemetry)
     except DecideApprovalError as exc:
         if isinstance(exc, (PostWriteApprovalNotPendingError, BaselineConcurrentlyMovedError)):
             raise

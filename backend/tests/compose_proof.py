@@ -103,7 +103,20 @@ def _create_deterministic_draft(
                     ),
                 ),
             )
-            PostgresProposalRepository().create_draft(
+            proposals = PostgresProposalRepository()
+            # One working draft per conversation (Story 5.11): a proof that drafts
+            # twice in one conversation first ends the earlier draft, exactly as a
+            # discard-then-draft turn would, rather than tripping the unique index.
+            working = proposals.get_working(
+                connection, conversation_id=conversation_id, for_update=True
+            )
+            if working is not None:
+                proposals.end_by_assistant(
+                    connection,
+                    proposal_id=working.proposal.proposal_id,
+                    resource_version=working.proposal.resource_version + 1,
+                )
+            proposals.create_draft(
                 connection,
                 proposal=result.proposal,
                 site_id=site_id,

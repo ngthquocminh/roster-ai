@@ -32,6 +32,7 @@ from settings import default_settings
 from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditReader, PostgresAuditWriter
 from adapters.postgres.conversation import PostgresConversationRepository
+from adapters.postgres.proposal import PostgresProposalRepository
 from adapters.postgres.schedule_run import PostgresScheduleRunRepository
 from adapters.postgres.scenario_projection import PostgresScenarioProjectionReader
 from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
@@ -438,6 +439,7 @@ def _decision_dependencies(*, now=NOW):
         approvals=PostgresApprovalRepository(),
         audit_writer=PostgresAuditWriter(),
         conversations=PostgresConversationRepository(),
+        proposals=PostgresProposalRepository(),
         scheduling_baseline_enabled=True,
         clock=lambda: now,
     )

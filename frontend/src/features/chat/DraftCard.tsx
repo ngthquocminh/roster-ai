@@ -1,34 +1,50 @@
-import { useEffect, useId, useRef, useState } from "react";
+/**
+ * The conversation's one working draft, reviewed and edited in place.
+ *
+ * Story 5.11 (UX-DR9 as amended, UX-DR25, UX-DR35): every constraint row is
+ * editable, rows can be removed (never the last), Save changes / Cancel act on
+ * the local list, Run optimization is disabled while edits are unsaved, Discard
+ * asks for an inline two-step confirmation, and an ended draft is read-only
+ * with one state line. The unsaved edits live in `ActivityTimeline` (or a local
+ * fallback) so they survive this card moving to a newer activity (C8).
+ */
+import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 
-import {
-  toConstraintInput,
-  type ProposalConstraintInput,
-} from "@/api/proposals";
+import type { Proposal, ProposalConstraintInput } from "@/api/proposals";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useProposal } from "@/hooks/useProposal";
 import { useRejectProposal } from "@/hooks/useRejectProposal";
 import { useReviseProposal } from "@/hooks/useReviseProposal";
+import { useScenarioOverview } from "@/hooks/useScenarioProjection";
 import { useStartScheduleRun } from "@/hooks/useStartScheduleRun";
 import { getErrorCode, getErrorStatus } from "@/lib/errors";
 
-type NumericKey = "n" | "factor" | "max_hours" | "start_minute";
+import {
+  rowsEqual,
+  rowsFromProposal,
+  stateLine,
+  validateRow,
+  type EditBuffer,
+  type EditRow,
+  type EditableField,
+} from "./draftEdits";
 
-const PARAMETER: Partial<
-  Record<ProposalConstraintInput["kind"], { key: NumericKey; label: string }>
-> = {
-  set_min_workers_per_task: { key: "n", label: "Minimum workers" },
-  scale_demand: { key: "factor", label: "Demand factor" },
-  lock_worker_shift: { key: "start_minute", label: "Start minute" },
-  set_max_hours: { key: "max_hours", label: "Maximum hours" },
-  // `exclude_worker_from_task` is absent on purpose: it carries no numeric
-  // argument. A placeholder entry here would be a lookup that must never be
-  // looked up, and the next editor removing its guard would bind an input to a
-  // key the kind rejects.
+/** Which editable inputs each kind shows, in order. */
+const FIELDS: Partial<Record<ProposalConstraintInput["kind"], readonly { key: EditableField; label: string; step?: string }[]>> = {
+  set_min_workers_per_task: [{ key: "n", label: "Minimum workers", step: "1" }],
+  scale_demand: [{ key: "factor", label: "Demand factor", step: "any" }],
+  set_max_hours: [{ key: "max_hours", label: "Maximum hours", step: "any" }],
+  lock_worker_shift: [
+    { key: "start_minute", label: "Start minute", step: "1" },
+    { key: "end_minute", label: "End minute", step: "1" },
+  ],
+  // `exclude_worker_from_task` is absent on purpose: it carries no argument. A
+  // placeholder entry would be a lookup that must never be looked up.
 };
 
 function Identifier({ children }: Readonly<{ children: string }>) {
@@ -55,8 +71,12 @@ const CODE_MESSAGES: Readonly<Record<string, string>> = {
   site_concurrency_exhausted: "This site is at its run limit. Try again shortly.",
   proposal_not_found:
     "This draft is no longer available. Describe the change again to create a new one.",
+  // Reachable from revise, discard and run since Story 5.11 (C4): the router now
+  // answers `rejected_proposal` for all three.
   rejected_proposal:
-    "This proposal was rejected, so it cannot be run. Describe the change again to create a new one.",
+    "This proposal was rejected, so it cannot be changed or run. Describe the change again to create a new one.",
+  applied_proposal:
+    "This draft was applied to the baseline, so it cannot be changed or run. Describe the change again to start a new draft.",
   scenario_unavailable:
     "The scenario could not be read just now. Try again shortly.",
   compute_not_granted:
@@ -83,31 +103,67 @@ function commandMessage(error: unknown): string {
   return "That command did not complete. Try again.";
 }
 
+const IN_FLIGHT_HINT = "Wait for the assistant to finish";
+
+type DraftCardProps = Readonly<{
+  proposalId: string;
+  consequenceSummary?: string;
+  /** An agent turn is running in this conversation: Save, Discard and Run wait. */
+  agentTurnInFlight?: boolean;
+  /**
+   * Controlled edit buffer. `ActivityTimeline` owns it so unsaved edits survive
+   * this card being unmounted and re-mounted on a newer activity (C8); a card
+   * rendered without it keeps its own.
+   */
+  buffer?: EditBuffer | null;
+  onBufferChange?: (buffer: EditBuffer | null) => void;
+}>;
+
 export function DraftCard({
   proposalId,
   consequenceSummary,
-}: Readonly<{ proposalId: string; consequenceSummary?: string }>) {
+  agentTurnInFlight = false,
+  buffer: controlledBuffer,
+  onBufferChange,
+}: DraftCardProps) {
   const query = useProposal(proposalId);
   const revision = useReviseProposal(proposalId);
   const rejection = useRejectProposal(proposalId);
   const run = useStartScheduleRun();
-  const staleDescriptionId = useId();
-  const runDescriptionId = `${staleDescriptionId}-run`;
-  const [constraints, setConstraints] = useState<ProposalConstraintInput[]>([]);
-  const [selected, setSelected] = useState("0");
-  // Which server version the local edits were seeded from. Re-seeding on every
-  // `query.data` identity change discarded whatever the planner had typed the
-  // moment a background refetch landed (TanStack refetches on window focus by
-  // default), with no indication that it had happened.
-  const seededVersion = useRef<string | null>(null);
+  const overview = useScenarioOverview(query.data?.scenario_id ?? "");
+  const horizon = overview?.data?.horizon_minutes;
+  const baseId = useId();
+  const staleDescriptionId = `${baseId}-stale`;
+  const runDescriptionId = `${baseId}-run`;
+  const inFlightId = `${baseId}-inflight`;
+
+  const [localBuffer, setLocalBuffer] = useState<EditBuffer | null>(null);
+  const controlled = onBufferChange !== undefined;
+  const buffer = controlled ? (controlledBuffer ?? null) : localBuffer;
+  const setBuffer = controlled ? onBufferChange : setLocalBuffer;
+  const [savedAs, setSavedAs] = useState<number | null>(null);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const keepRef = useRef<HTMLButtonElement>(null);
+  const discardRef = useRef<HTMLButtonElement>(null);
+  const returnFocusToDiscard = useRef(false);
+
+  const proposal = query.data;
+  const serverRows = useMemo(() => (proposal ? rowsFromProposal(proposal) : []), [proposal]);
+
+  // A buffer whose rows already equal the server's carries nothing: the planner's
+  // own save landed (possibly while this card was being re-mounted), or the
+  // assistant made the same change. Drop it rather than reporting a phantom diff.
+  useEffect(() => {
+    if (buffer && proposal && rowsEqual(buffer.rows, serverRows)) setBuffer(null);
+  }, [buffer, proposal, serverRows, setBuffer]);
 
   useEffect(() => {
-    if (!query.data) return;
-    if (seededVersion.current === query.data.proposal_version_id) return;
-    seededVersion.current = query.data.proposal_version_id;
-    setConstraints(query.data.constraints.map(toConstraintInput));
-    setSelected("0");
-  }, [query.data]);
+    if (confirmingDiscard) keepRef.current?.focus();
+    else if (returnFocusToDiscard.current) {
+      returnFocusToDiscard.current = false;
+      discardRef.current?.focus();
+    }
+  }, [confirmingDiscard]);
 
   // The persisted activity already carries the application-composed summary, so
   // the immutable audit record can be shown immediately rather than replaced by
@@ -128,7 +184,7 @@ export function DraftCard({
       </Card>
     );
   }
-  if (query.isError || !query.data) {
+  if (query.isError || !proposal) {
     return (
       <InlineAlert
         action={<Button className="min-h-11" onClick={() => query.refetch()} variant="outline">Retry</Button>}
@@ -145,23 +201,27 @@ export function DraftCard({
     );
   }
 
-  const proposal = query.data;
-  const rejected = proposal.state === "rejected";
-  const selectedIndex = Math.min(Number(selected), Math.max(constraints.length - 1, 0));
-  const current = constraints[selectedIndex];
-  const parameter = current ? PARAMETER[current.kind] : undefined;
+  const ended = proposal.state !== "active";
+  const rows: readonly EditRow[] = buffer?.rows ?? serverRows;
+  const hasDifference = buffer !== null && !rowsEqual(buffer.rows, serverRows);
+  const changedUnderEdits = hasDifference && buffer.baseVersionId !== proposal.proposal_version_id;
+  const rowErrors = rows.map((row) => validateRow(row.input, horizon));
+  const allValid = rowErrors.every((errors) => Object.keys(errors).length === 0);
   const mutationPending = revision.isPending || rejection.isPending || run.isPending;
-  const runDisabled = proposal.stale || rejected || mutationPending;
+  const editable = !ended && !proposal.stale;
+
+  const canSave = editable && hasDifference && allValid && !changedUnderEdits
+    && !mutationPending && !agentTurnInFlight;
+  const runDisabled = proposal.stale || ended || hasDifference || mutationPending || agentTurnInFlight;
   const runExplanation = [
     "Running optimization starts a bounded computation and does not change the baseline.",
     proposal.stale ? "Refresh the proposal before running optimization." : null,
-    rejected ? "A rejected proposal cannot be run." : null,
+    ended ? "An ended draft cannot be run." : null,
+    hasDifference ? "Save or cancel your changes first." : null,
+    agentTurnInFlight ? `${IN_FLIGHT_HINT}.` : null,
     mutationPending ? "Wait for the current proposal command to finish." : null,
   ].filter(Boolean).join(" ");
-  // Most recent failure wins, not a fixed order. A fixed chain meant a revise
-  // that failed once — and whose error TanStack retains until that same
-  // mutation is re-fired — masked every later run failure, so the site-limit
-  // message could never be seen after any failed revise.
+
   // The acknowledgement is only true of the version the run was started from.
   // `run.data` alone survives a successful revise — TanStack clears it only
   // when the run mutation itself is re-fired — so the live region kept
@@ -173,41 +233,68 @@ export function DraftCard({
     run.variables?.expected_resource_version === proposal.resource_version
       ? run.data
       : null;
+  // Most recent failure wins, not a fixed order. A fixed chain meant a revise
+  // that failed once — and whose error TanStack retains until that same
+  // mutation is re-fired — masked every later run failure.
   const commandError = [revision, rejection, run]
     .filter((mutation) => mutation.error)
     .sort((a, b) => (b.submittedAt ?? 0) - (a.submittedAt ?? 0))
     .map((mutation) => mutation.error)
     .at(0) ?? null;
-  const updateNumber = (key: NumericKey | "end_minute", raw: string) => {
-    const value = raw === "" ? null : Number(raw);
-    setConstraints((existing) => existing.map((constraint, index) =>
-      index === selectedIndex ? { ...constraint, [key]: value } : constraint,
-    ));
+
+  const commit = (next: readonly EditRow[]) => {
+    const baseVersionId = buffer?.baseVersionId ?? proposal.proposal_version_id;
+    setSavedAs(null);
+    if (baseVersionId === proposal.proposal_version_id && rowsEqual(next, serverRows)) {
+      setBuffer(null);
+    } else {
+      setBuffer({ baseVersionId, rows: next });
+    }
   };
+  const updateField = (index: number, key: EditableField, raw: string) => {
+    const value = raw === "" ? null : Number(raw);
+    commit(rows.map((row, position) => position === index
+      ? { ...row, input: { ...row.input, [key]: Number.isNaN(value) ? null : value } }
+      : row));
+  };
+  const removeRow = (index: number) => {
+    if (rows.length <= 1) return;
+    commit(rows.filter((_row, position) => position !== index));
+  };
+  const save = () => revision.mutate(
+    {
+      constraints: rows.map((row) => row.input),
+      expected_resource_version: proposal.resource_version,
+    },
+    {
+      onSuccess: (saved) => {
+        setBuffer(null);
+        setSavedAs(saved.version_ordinal ?? null);
+      },
+    },
+  );
+  const versionLabel = proposal.version_ordinal != null ? `v${proposal.version_ordinal}` : null;
 
   return (
     <Card aria-label="Draft proposal" role="region">
       <CardHeader>
-        <CardTitle>Draft — no baseline change</CardTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>Draft — no baseline change</CardTitle>
+          <Badge variant={ended ? "outline" : proposal.stale ? "destructive" : "secondary"}>
+            {stateLine(proposal)}
+          </Badge>
+        </div>
         <CardDescription>{proposal.consequence_summary}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Both states can hold at once, so both are announced. Testing `stale`
-            first and returning made the rejected notice unreachable whenever a
-            scenario reimport followed a rejection. */}
-        {proposal.stale ? (
+        {/* The stale notice belongs to an ACTIVE draft only: an ended draft
+            offers no action for staleness to block, and its badge already says
+            what it is (Decision 14). */}
+        {!ended && proposal.stale ? (
           <div aria-label="Draft is stale" className="rounded-lg border border-destructive/40 p-3" role="status">
             <p className="font-medium text-destructive">Draft is stale</p>
             <p className="text-sm text-muted-foreground" id={staleDescriptionId}>
               The scenario version changed. Refresh before revising this proposal.
-            </p>
-          </div>
-        ) : null}
-        {rejected ? (
-          <div aria-label="Draft is rejected" className="rounded-lg border p-3" role="status">
-            <p className="font-medium">This proposal was rejected.</p>
-            <p className="text-sm text-muted-foreground">
-              A rejected draft is final. Describe the change again to create a new one.
             </p>
           </div>
         ) : null}
@@ -217,10 +304,13 @@ export function DraftCard({
           <div><dt className="text-muted-foreground">Current scenario version</dt><dd><Identifier>{proposal.current_scenario_version_id}</Identifier></dd></div>
           <div><dt className="text-muted-foreground">Expected baseline version</dt><dd><Identifier>{proposal.expected_baseline_schedule_version ?? "No baseline version"}</Identifier></dd></div>
           <div><dt className="text-muted-foreground">Proposal version</dt><dd><Identifier>{proposal.proposal_version_id}</Identifier></dd></div>
+          {versionLabel ? (
+            <div><dt className="text-muted-foreground">Draft version</dt><dd>{versionLabel}</dd></div>
+          ) : null}
         </dl>
 
-        <section aria-labelledby={`${staleDescriptionId}-entities`}>
-          <h3 className="text-sm font-medium" id={`${staleDescriptionId}-entities`}>Resolved entities</h3>
+        <section aria-labelledby={`${baseId}-entities`}>
+          <h3 className="text-sm font-medium" id={`${baseId}-entities`}>Resolved entities</h3>
           <ul className="mt-1 space-y-1 text-sm">
             {proposal.resolved_entities.map((entity) => (
               <li key={`${entity.group}:${entity.record_id}`}>
@@ -230,53 +320,77 @@ export function DraftCard({
           </ul>
         </section>
 
-        <section aria-labelledby={`${staleDescriptionId}-constraints`} className="space-y-2">
-          <h3 className="text-sm font-medium" id={`${staleDescriptionId}-constraints`}>Constraints and objectives</h3>
-          {/* Server-composed descriptions, always. The card never echoes a
-              description back on revision, so this text cannot drift from the
-              argument it describes. */}
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {proposal.constraints.map((constraint, index) => <li key={`${constraint.kind}-${index}`}>{constraint.description}</li>)}
-          </ul>
-          {constraints.length && !rejected ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span>Constraint to revise</span>
-                <Select onValueChange={setSelected} value={String(selectedIndex)}>
-                  <SelectTrigger className="min-h-11 w-full" aria-label="Constraint to revise"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {proposal.constraints.map((constraint, index) => (
-                      <SelectItem key={`${constraint.kind}-${index}`} value={String(index)}>{constraint.description}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </label>
-              {current && parameter ? (
-                <label className="space-y-1 text-sm">
-                  <span>{parameter.label}</span>
-                  <Input
-                    aria-label={parameter.label}
-                    className="min-h-11"
-                    disabled={proposal.stale}
-                    min="0"
-                    onChange={(event) => updateNumber(parameter.key, event.target.value)}
-                    type="number"
-                    value={String(current[parameter.key] ?? "")}
-                  />
-                </label>
-              ) : null}
-              {current?.kind === "lock_worker_shift" ? (
-                <label className="space-y-1 text-sm">
-                  <span>End minute</span>
-                  <Input aria-label="End minute" className="min-h-11" disabled={proposal.stale} min="0" onChange={(event) => updateNumber("end_minute", event.target.value)} type="number" value={String(current.end_minute ?? "")} />
-                </label>
-              ) : null}
-            </div>
-          ) : null}
+        <section aria-labelledby={`${baseId}-constraints`} className="space-y-2">
+          <h3 className="text-sm font-medium" id={`${baseId}-constraints`}>Constraints and objectives</h3>
+          {ended ? (
+            // Ended drafts are read-only facts: the server-composed descriptions
+            // and nothing to press.
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {proposal.constraints.map((constraint, index) => (
+                <li key={`${constraint.kind}-${index}`}>{constraint.description}</li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="space-y-3">
+              {rows.map((row, index) => {
+                const fields = FIELDS[row.input.kind] ?? [];
+                const errors = rowErrors[index];
+                const isLast = rows.length === 1;
+                const removeHintId = `${baseId}-row${index}-remove`;
+                return (
+                  <li key={`${row.input.kind}:${row.input.record_id}:${row.input.related_record_id ?? ""}:${index}`}>
+                    <div aria-label={row.description} className="space-y-2 rounded-lg border p-3" role="group">
+                      <p className="text-sm">{row.description}</p>
+                      <div className="flex flex-wrap items-start gap-3">
+                        {fields.map((field) => {
+                          const errorId = `${baseId}-row${index}-${field.key}-error`;
+                          const message = errors[field.key];
+                          return (
+                            <div className="space-y-1 text-sm" key={field.key}>
+                              <label className="block" htmlFor={`${baseId}-row${index}-${field.key}`}>{field.label}</label>
+                              <Input
+                                aria-describedby={message ? errorId : undefined}
+                                aria-invalid={message ? true : undefined}
+                                aria-label={field.label}
+                                className="min-h-11 w-32"
+                                disabled={!editable}
+                                id={`${baseId}-row${index}-${field.key}`}
+                                onChange={(event) => updateField(index, field.key, event.target.value)}
+                                step={field.step}
+                                type="number"
+                                value={String(row.input[field.key] ?? "")}
+                              />
+                              {message ? (
+                                <p className="text-sm text-destructive" id={errorId}>{message}</p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                        <div className="space-y-1 text-sm">
+                          <Button
+                            aria-describedby={isLast ? removeHintId : undefined}
+                            aria-label={`Remove ${row.description}`}
+                            className="min-h-11"
+                            disabled={!editable || isLast}
+                            onClick={() => removeRow(index)}
+                            type="button"
+                            variant="ghost"
+                          >Remove</Button>
+                          {isLast ? (
+                            <p className="text-xs text-muted-foreground" id={removeHintId}>Discard the draft instead</p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
-        <section aria-labelledby={`${staleDescriptionId}-locks`}>
-          <h3 className="text-sm font-medium" id={`${staleDescriptionId}-locks`}>Preserved locks</h3>
+        <section aria-labelledby={`${baseId}-locks`}>
+          <h3 className="text-sm font-medium" id={`${baseId}-locks`}>Preserved locks</h3>
           {proposal.preserved_locks.length ? (
             <ul className="mt-1 space-y-1 text-sm">{proposal.preserved_locks.map((lock) => <li key={lock.record_id}><Identifier>{lock.record_id}</Identifier> · {lock.scope} · {lock.target_ref}</li>)}</ul>
           ) : <p className="text-sm text-muted-foreground">No existing locks.</p>}
@@ -290,63 +404,194 @@ export function DraftCard({
             variant="destructive"
           />
         ) : null}
-        {acknowledged ? (
-          <div
-            aria-label="Optimization queued"
-            aria-live="polite"
-            className="rounded-lg border p-3 text-sm"
-            role="status"
-          >
-            Run <Identifier>{acknowledged.schedule_run_id}</Identifier> was accepted with status{" "}
-            <span className="font-medium">{acknowledged.status}</span>.
-          </div>
-        ) : null}
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground" id={runDescriptionId}>
-            {runExplanation}
-          </p>
-          <Button
-            aria-describedby={runDescriptionId}
-            className="min-h-11"
-            disabled={runDisabled}
-            onClick={() => run.mutate({
+        {ended ? null : (
+          <EditableFooter
+            acknowledged={acknowledged}
+            agentTurnInFlight={agentTurnInFlight}
+            baseId={baseId}
+            canSave={canSave}
+            changedUnderEdits={changedUnderEdits}
+            confirmingDiscard={confirmingDiscard}
+            discardRef={discardRef}
+            hasDifference={hasDifference}
+            inFlightId={inFlightId}
+            keepRef={keepRef}
+            mutationPending={mutationPending}
+            onCancel={() => { setSavedAs(null); setBuffer(null); }}
+            onConfirmDiscard={() => {
+              rejection.mutate(
+                { expected_resource_version: proposal.resource_version },
+                { onSettled: () => setConfirmingDiscard(false) },
+              );
+            }}
+            onKeep={() => {
+              returnFocusToDiscard.current = true;
+              setConfirmingDiscard(false);
+            }}
+            onLoad={() => { setSavedAs(null); setBuffer(null); }}
+            onRefresh={() => query.refetch()}
+            onRun={() => run.mutate({
               proposal_id: proposal.proposal_id,
               expected_resource_version: proposal.resource_version,
             })}
-            type="button"
-            variant="secondary"
-          >Run optimization</Button>
-        </div>
-        {rejected ? null : (
-          <>
-            {/* Revise stays MOUNTED and disabled when stale, carrying the
-                explanation. Rendering a separate screen-reader-only button
-                instead left the real control unrendered and satisfied the
-                accessibility assertions against a decoy that could never be
-                enabled. */}
-            <div>
-              <Button
-                aria-describedby={proposal.stale ? staleDescriptionId : undefined}
-                className="min-h-11"
-                disabled={proposal.stale || mutationPending}
-                onClick={() => revision.mutate({ constraints, expected_resource_version: proposal.resource_version })}
-                type="button"
-              >Revise proposal</Button>
-            </div>
-            <Separator />
-            {/* Reject is available while stale, deliberately: it changes no
-                baseline and is the only terminal path a stale draft has. */}
-            <div>
-              <Button className="min-h-11" disabled={mutationPending} onClick={() => rejection.mutate({ expected_resource_version: proposal.resource_version })} type="button" variant="destructive">Reject proposal</Button>
-            </div>
-            {proposal.stale ? (
-              <div>
-                <Button className="min-h-11" onClick={() => query.refetch()} type="button" variant="outline">Refresh proposal</Button>
-              </div>
-            ) : null}
-          </>
+            onSave={save}
+            onStartDiscard={() => setConfirmingDiscard(true)}
+            proposal={proposal}
+            runDescriptionId={runDescriptionId}
+            runDisabled={runDisabled}
+            runExplanation={runExplanation}
+            savedAs={savedAs}
+            staleDescriptionId={staleDescriptionId}
+          />
         )}
       </CardFooter>
     </Card>
+  );
+}
+
+type EditableFooterProps = Readonly<{
+  proposal: Proposal;
+  baseId: string;
+  acknowledged: { schedule_run_id: string; status: string } | null;
+  agentTurnInFlight: boolean;
+  canSave: boolean;
+  changedUnderEdits: boolean;
+  confirmingDiscard: boolean;
+  discardRef: RefObject<HTMLButtonElement | null>;
+  keepRef: RefObject<HTMLButtonElement | null>;
+  hasDifference: boolean;
+  inFlightId: string;
+  mutationPending: boolean;
+  onCancel: () => void;
+  onConfirmDiscard: () => void;
+  onKeep: () => void;
+  onLoad: () => void;
+  onRefresh: () => void;
+  onRun: () => void;
+  onSave: () => void;
+  onStartDiscard: () => void;
+  runDescriptionId: string;
+  runDisabled: boolean;
+  runExplanation: string;
+  savedAs: number | null;
+  staleDescriptionId: string;
+}>;
+
+function EditableFooter(props: EditableFooterProps) {
+  const {
+    proposal, acknowledged, agentTurnInFlight, canSave, changedUnderEdits, confirmingDiscard,
+    discardRef, keepRef, hasDifference, inFlightId, mutationPending, runDescriptionId,
+    runDisabled, runExplanation, savedAs, staleDescriptionId,
+  } = props;
+  const latest = proposal.version_ordinal != null ? `v${proposal.version_ordinal}` : null;
+  const describedBy = (...ids: (string | false | undefined)[]) =>
+    ids.filter(Boolean).join(" ") || undefined;
+  return (
+    <>
+      {changedUnderEdits ? (
+        <div className="space-y-2 rounded-lg border border-destructive/40 p-3">
+          <p aria-live="polite" className="text-sm" role="status">
+            {latest ? `This draft changed to ${latest}.` : "This draft changed."} Your edits were not saved.
+          </p>
+          {/* UX-DR35: each action carries its own treatment. Cancel, Keep, Load and
+              Refresh are all outline buttons, so each takes a distinct border colour
+              rather than sharing one signature (stateMatrix's merged-treatment rule). */}
+          <Button className="min-h-11 border-primary" onClick={props.onLoad} type="button" variant="outline">
+            {latest ? `Load ${latest}` : "Load latest"}
+          </Button>
+        </div>
+      ) : null}
+      {savedAs !== null ? (
+        <p aria-live="polite" className="text-sm" role="status">Saved as v{savedAs}</p>
+      ) : null}
+      {acknowledged ? (
+        <div
+          aria-label="Optimization queued"
+          aria-live="polite"
+          className="rounded-lg border p-3 text-sm"
+          role="status"
+        >
+          Run <Identifier>{acknowledged.schedule_run_id}</Identifier> was accepted with status{" "}
+          <span className="font-medium">{acknowledged.status}</span>.
+        </div>
+      ) : null}
+      {agentTurnInFlight ? (
+        <p className="text-sm text-muted-foreground" id={inFlightId}>{IN_FLIGHT_HINT}</p>
+      ) : null}
+
+      {/* Edits: Cancel and Save act on the local list. Stale keeps Save mounted
+          and disabled, carrying the explanation, rather than a decoy. */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          className="min-h-11"
+          disabled={!hasDifference}
+          onClick={props.onCancel}
+          type="button"
+          variant="outline"
+        >Cancel</Button>
+        <Button
+          aria-describedby={describedBy(proposal.stale && staleDescriptionId, agentTurnInFlight && inFlightId)}
+          className="min-h-11"
+          disabled={!canSave}
+          onClick={props.onSave}
+          type="button"
+        >Save changes</Button>
+      </div>
+      <Separator />
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground" id={runDescriptionId}>
+          {runExplanation}
+        </p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <Button
+            aria-describedby={describedBy(runDescriptionId, agentTurnInFlight && inFlightId)}
+            className="min-h-11"
+            disabled={runDisabled}
+            onClick={props.onRun}
+            type="button"
+            variant="secondary"
+          >Run optimization</Button>
+          {confirmingDiscard ? (
+            <div aria-label="Confirm discard" className="space-y-2 rounded-lg border border-destructive/40 p-3" role="group">
+              <p className="text-sm">Discard this draft? It can&apos;t be restored.</p>
+              <div className="flex gap-2">
+                <Button
+                  aria-describedby={describedBy(agentTurnInFlight && inFlightId)}
+                  className="min-h-11"
+                  disabled={mutationPending || agentTurnInFlight}
+                  onClick={props.onConfirmDiscard}
+                  type="button"
+                  variant="destructive"
+                >Discard</Button>
+                <Button
+                  className="min-h-11 border-foreground"
+                  onClick={props.onKeep}
+                  ref={keepRef}
+                  type="button"
+                  variant="outline"
+                >Keep</Button>
+              </div>
+            </div>
+          ) : (
+            // Available while stale, deliberately: it changes no baseline and is
+            // the only terminal path a stale draft has.
+            <Button
+              aria-describedby={describedBy(agentTurnInFlight && inFlightId)}
+              className="min-h-11"
+              disabled={mutationPending || agentTurnInFlight}
+              onClick={props.onStartDiscard}
+              ref={discardRef}
+              type="button"
+              variant="destructive"
+            >Discard draft</Button>
+          )}
+        </div>
+      </div>
+      {proposal.stale ? (
+        <div>
+          <Button className="min-h-11 border-muted-foreground" onClick={props.onRefresh} type="button" variant="outline">Refresh proposal</Button>
+        </div>
+      ) : null}
+    </>
   );
 }

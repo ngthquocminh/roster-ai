@@ -16,6 +16,9 @@ export function useReviseProposal(id: string) {
     onSuccess: (proposal) => {
       keys.current.settle();
       queryClient.setQueryData(proposalKey(id), proposal);
+      // A replayed command answers "what did my command do", so the body just
+      // cached can be an old state presented as current (C9). Re-read the truth.
+      void queryClient.invalidateQueries({ queryKey: proposalKey(id) });
     },
     onError: () => {
       // Deliberately does NOT settle: the next attempt reuses the same key so a

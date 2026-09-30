@@ -1242,3 +1242,45 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   Load vN drops the local edits (spec §3.2). **Deferred reason: rare once card controls
   are disabled during an in-flight turn; a merge UI is not worth building first.**
   **Owner: open.**
+
+## Deferred from: Story 5.11 creation (2026-09-30)
+
+- **Baseline staleness of a working draft is invisible until Run.** `ProposalViewV1.stale`
+  compares scenario versions only, while `create_run_snapshot` also refuses when the
+  proposal's `expected_baseline_schedule_version` no longer matches the current baseline
+  (Story 5.11 C14). A working draft left baseline-stale by another conversation's promotion
+  therefore shows no "out of date" state, and is refused on Run with `stale_proposal`.
+  The planner-revise path still copies the old pin; an agent `updated` version re-pins at
+  tool time. **Deferred reason: not part of the lifecycle's ACs; fixing it changes what
+  `stale` means for every reader.** **Owner: open.**
+
+- **Most `SCHEDULING_*_ENABLED` flags are undocumented.** Only `SCHEDULING_BASELINE_ENABLED`
+  (and, from Story 5.11, `SCHEDULING_DRAFT_DISCARD_ENABLED`) appears in
+  `docs/CONFIGURATION.md`; none appears in `backend/.env.example` except the new one, as a
+  commented line (Story 5.11 C19). **Deferred reason: documenting the rest is unrelated to
+  the draft lifecycle.** **Owner: open.**
+
+- **For Story 5.12: `behavioral_digest` does not hash instructions.** It covers model,
+  judge, reasoning effort and the env override file only
+  (`backend/evals/live_conversations/configuration.py`), so sprint-change-proposal
+  2026-09-30 section 2.2's "these instruction changes move the `behavioral_digest`" is
+  inaccurate (Story 5.11 C15). Default CI is unaffected by the instruction rewrite. Story
+  5.12's reason to re-measure scenarios A-D stands on its own (behaviour changed), and the
+  proposal's wording should be corrected there. **Owner: Story 5.12.**
+
+## Deferred from: Story 5.11 implementation (2026-09-30)
+
+- **`scheduling_draft_discard`'s error vocabulary carries its base code.** The conformance
+  suite requires `manifest.errors` to equal every code the module can raise, so
+  `draft_discard_failed` (the base class code, never raised on its own) is declared beside
+  the three the story names (`no_working_draft`, `draft_changed_this_turn`,
+  `budget_exhausted`). **Deferred reason: harmless, and the same shape as
+  `scheduling_draft`'s `draft_failed`; removing it means reshaping the conformance rule.**
+  **Owner: open.**
+
+- **A draft turn still has no model prose channel.** `DraftProposalV1` carries only
+  `draft_id`, so "Created a draft (v1)" / "Updated your draft (now v3)" wording comes from
+  the card's badge, not from the assistant (Story 5.11 C6). The instructions ask for the
+  reported outcome and version only when the assistant mentions the draft in a prose answer.
+  **Deferred reason: adding a prose field to the draft output is a contract change outside
+  this story.** **Owner: open.**

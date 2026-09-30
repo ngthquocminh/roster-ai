@@ -11,9 +11,10 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from adapters.postgres.approval import PostgresApprovalRepository
 from adapters.postgres.audit import PostgresAuditWriter
 from adapters.postgres.conversation import PostgresConversationRepository
-from adapters.postgres.schema import agent_run, approval_request, audit_event, membership, persisted_event, scenario_version, schedule_run, schedule_version, site_baseline
+from adapters.postgres.proposal import PostgresProposalRepository
+from adapters.postgres.schema import agent_run, approval_request, audit_event, membership, persisted_event, proposal, scenario_version, schedule_run, schedule_version, site_baseline
 from adapters.postgres.site_baseline import PostgresSiteBaselineReader, PostgresSiteBaselineWriter
-from api.deps import get_approval_repository, get_audit_writer, get_clock, get_conversation_repository, get_site_baseline_writer, site_context
+from api.deps import get_approval_repository, get_audit_writer, get_clock, get_conversation_repository, get_proposal_repository, get_site_baseline_writer, site_context
 from api.main import app
 from application.use_cases.request_approval import RequestApprovalCommandV1, request_approval
 from application.use_cases.decide_approval import DecideApprovalCommandV1, decide_approval
@@ -289,6 +290,10 @@ _TX2_FAULTS = {
     "audit": (get_audit_writer, PostgresAuditWriter, "append", True),
     "event_resume": (get_conversation_repository, PostgresConversationRepository, "resume_agent_run_for_approval", True),
     "event_activity": (get_conversation_repository, PostgresConversationRepository, "append_approval_request_activity", False),
+    # Story 5.11 Decision 10 / verification obligation 6's "proposal" write:
+    # `mark_applied` is TX2's LAST write and runs on both initiator paths, so one
+    # agent-backed node covers it (the agent path is the longer bundle).
+    "proposal": (get_proposal_repository, PostgresProposalRepository, "mark_applied", True),
 }
 
 
@@ -314,6 +319,12 @@ def test_faulted_tx2_rolls_back_and_retries_once(fault, governed_postgres_engine
     # terminalizes, the pointer never moves, the faulted attempt leaves no audit
     # row behind, and the paused agent run is still waiting on the decision.
     assert _state(governed_postgres_engine, binding)[0] == "pending"
+    # ...and the draft is still `active`: `applied` commits with the bundle or not at all.
+    with governed_postgres_engine.connect() as connection:
+        assert connection.execute(
+            select(proposal.c.state, proposal.c.ended_by, proposal.c.applied_version_id)
+            .where(proposal.c.id == ids["proposal"])
+        ).one() == ("active", None, None)
     with governed_postgres_engine.connect() as connection:
         assert connection.execute(select(site_baseline).where(site_baseline.c.site_id == site_ids["site"])).all() == baseline_before
         assert connection.execute(select(func.count()).select_from(audit_event).where(
@@ -326,6 +337,11 @@ def test_faulted_tx2_rolls_back_and_retries_once(fault, governed_postgres_engine
     retry = _post(client, settings, binding, key=f"fault-{fault}")
     assert retry.status_code == 200 and retry.json()["state"] == "consumed"
     assert _counts(governed_postgres_engine, binding)[("approval_consumed", True)] == 1
+    with governed_postgres_engine.connect() as connection:
+        assert connection.execute(
+            select(proposal.c.state, proposal.c.ended_by, proposal.c.applied_version_id)
+            .where(proposal.c.id == ids["proposal"])
+        ).one() == ("applied", "system", ids["proposal_version"])
 
 
 def test_audit_evidence_refs_resolve_by_group(governed_postgres_engine, site_ids):

@@ -187,6 +187,10 @@ class ConversationRepository(Protocol):
         agent_run_id: UUID,
     ) -> ClaimedAgentRunV1 | None: ...
 
+    def lock_conversation(self, connection: Any, *, conversation_id: UUID) -> None:
+        """`SELECT ... FOR UPDATE` on the conversation row (lock order: conversation first)."""
+        ...
+
     def finish_agent_run(
         self,
         connection: Any,

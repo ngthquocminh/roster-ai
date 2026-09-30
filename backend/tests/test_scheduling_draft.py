@@ -120,7 +120,10 @@ def test_capability_resolves_validates_preserves_real_locks_and_hides_details_fr
     assert result.result_id == derive_draft_id(
         VERSION, result.proposal.constraints, result.proposal.preserved_locks
     )
-    assert asdict(projected) == {"draft_id": result.result_id, "schema_version": "1"}
+    assert asdict(projected) == {
+        "draft_id": result.result_id, "outcome": "created", "version_ordinal": 1,
+        "schema_version": "1",
+    }
     assert "scheduling_draft" == scheduling_draft_manifest().capability_name
     description = scheduling_draft_module().model_description
     assert "expected_scenario_version_id" in description
@@ -337,3 +340,112 @@ def test_the_valid_golden_case_cites_the_draft_id_the_capability_actually_produc
     assert result.result_id == cited
     # The case asserts the APPLICATION-composed summary, not model prose.
     assert case["expected_visible_text"] == result.proposal.consequence_summary
+
+
+# --- Story 5.11: resolving the conversation's one working draft ---------------
+
+from application.contracts.proposal import WorkingDraftObservationV1  # noqa: E402
+from application.drafting.turn_state import DraftTurnState  # noqa: E402
+
+WORKING_ID = UUID(int=900)
+
+
+def _hours(value: float = 40.0) -> DraftConstraintProposalV1:
+    return DraftConstraintProposalV1(
+        kind="set_max_hours", group="workers", record_id="worker-1", max_hours=value,
+    )
+
+
+def _deps_with(reader: ProjectionStub, state: DraftTurnState) -> AgentDepsV1:
+    return replace(_deps(reader), draft_turn=state)
+
+
+def _working(resource_version: int = 4, ordinal: int = 3) -> WorkingDraftObservationV1:
+    return WorkingDraftObservationV1(WORKING_ID, resource_version, ordinal)
+
+
+def test_no_working_draft_creates_v1_with_a_fresh_proposal_id_and_records_no_observation() -> None:
+    state = DraftTurnState(lambda: None)
+    result = scheduling_draft(_deps_with(ProjectionStub(), state), _request(_hours()))
+    assert (result.outcome, result.version_ordinal) == ("created", 1)
+    assert (result.observed_working_id, result.observed_resource_version) == (None, None)
+    assert result.proposal.proposal_id not in (None, WORKING_ID)
+    assert result.proposal.resource_version == 1
+    assert state.drafted is True
+
+
+def test_a_working_draft_is_updated_in_place_with_the_next_version_and_records_what_it_saw() -> None:
+    state = DraftTurnState(lambda: _working(resource_version=4, ordinal=3))
+    result = scheduling_draft(_deps_with(ProjectionStub(), state), _request(_hours(35.0)))
+    assert (result.outcome, result.version_ordinal) == ("updated", 4)
+    assert result.proposal.proposal_id == WORKING_ID
+    assert result.proposal.resource_version == 5
+    assert (result.observed_working_id, result.observed_resource_version) == (WORKING_ID, 4)
+    # A new immutable version row is minted every time, never reused.
+    assert result.proposal.proposal_version_id not in (None, WORKING_ID)
+    assert [c.max_hours for c in result.proposal.constraints] == [35.0]  # full replacement
+
+
+def test_the_citation_stays_the_content_hash_not_the_proposal_id() -> None:
+    """C1: draft_id is `derive_draft_id`, so the pinned golden ids stay valid."""
+    reader = ProjectionStub()
+    state = DraftTurnState(lambda: _working())
+    result = scheduling_draft(_deps_with(reader, state), _request(_hours()))
+    assert result.result_id == derive_draft_id(
+        VERSION, result.proposal.constraints, result.proposal.preserved_locks
+    )
+    assert result.result_id != str(WORKING_ID)
+    view = scheduling_draft_module().model_facing_view(result)
+    assert (view.draft_id, view.outcome, view.version_ordinal) == (result.result_id, "updated", 4)
+
+
+def test_two_calls_in_one_turn_see_the_same_pre_turn_state_even_if_the_reader_changes() -> None:
+    """`observe()` is memoized: mutation = re-read on every call."""
+    answers = iter([_working(resource_version=4, ordinal=3), None, _working(resource_version=9, ordinal=8)])
+    state = DraftTurnState(lambda: next(answers))
+    reader = ProjectionStub()
+    first = scheduling_draft(_deps_with(reader, state), _request(_hours(30.0)))
+    second = scheduling_draft(_deps_with(reader, state), _request(_hours(31.0)))
+    assert (first.observed_working_id, first.observed_resource_version) == (WORKING_ID, 4)
+    assert (second.observed_working_id, second.observed_resource_version) == (WORKING_ID, 4)
+    assert first.version_ordinal == second.version_ordinal == 4
+
+
+def test_a_draft_after_a_same_turn_discard_reports_created_not_updated() -> None:
+    state = DraftTurnState(lambda: _working())
+    state.record_discard(state.observe())
+    result = scheduling_draft(_deps_with(ProjectionStub(), state), _request(_hours()))
+    assert (result.outcome, result.version_ordinal) == ("created", 1)
+    assert (result.observed_working_id, result.observed_resource_version) == (None, None)
+    assert result.proposal.proposal_id != WORKING_ID
+
+
+def test_the_baseline_pin_is_the_tool_time_overview_value() -> None:
+    """C14: an agent `updated` version re-resolves the baseline pin, not the old one."""
+    reader = ProjectionStub()
+    original = reader.get_overview
+
+    def with_baseline(connection, scenario_id):
+        return replace(original(connection, scenario_id), baseline_schedule_version="sched-77")
+
+    reader.get_overview = with_baseline
+    state = DraftTurnState(lambda: _working())
+    result = scheduling_draft(_deps_with(reader, state), _request(_hours()))
+    assert result.proposal.expected_baseline_schedule_version == "sched-77"
+
+
+def test_a_refused_draft_does_not_count_as_drafted() -> None:
+    state = DraftTurnState(lambda: _working())
+    with pytest.raises(InvalidQueryError):
+        scheduling_draft(_deps_with(ProjectionStub(), state), _request())
+    assert state.drafted is False
+
+
+def test_scope_controls_and_description_name_the_lifecycle() -> None:
+    from application.capabilities.scheduling_draft import SCOPE_CONTROLS
+
+    assert "NOT COVERED" in SCOPE_CONTROLS["lifecycle:one_working_draft"]
+    assert "finalize" in SCOPE_CONTROLS["lifecycle:one_working_draft"]
+    description = scheduling_draft_module().model_description
+    assert "omit a constraint to remove it" in description
+    assert "outcome" in description and "version_ordinal" in description

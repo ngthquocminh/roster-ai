@@ -13,7 +13,7 @@ from application.use_cases.promote_baseline import (
     BaselineConcurrentlyMovedError,
     promote_baseline,
 )
-from tests.test_decide_approval import NOW, pending
+from tests.test_decide_approval import NOW, Proposals, pending
 
 
 class Writer:
@@ -46,13 +46,15 @@ def _tx(*, agent_run_id=None, consume=True, promote=True, fail_at=None):
     return runs, approvals, audit, conversations, command, writer
 
 
-def _promote(values):
+def _promote(values, proposals=None):
     runs, approvals, audit, conversations, command, writer = values
     return promote_baseline(
         None, binding=approvals.binding, candidate=runs.candidate,
         actor_id=command.actor_id, request_id=uuid4(),
         approvals=approvals, baseline_writer=writer, audit_writer=audit,
-        conversations=conversations, occurred_at=NOW,
+        conversations=conversations,
+        proposals=Proposals() if proposals is None else proposals,
+        occurred_at=NOW,
     )
 
 
@@ -153,3 +155,60 @@ def test_an_unusable_agent_payload_is_typed_and_rolls_the_bundle_back(payload, r
     with pytest.raises(ApprovalPayloadUnreadableError) as raised:
         _promote(values)
     assert raised.value.code == "approval_payload_unreadable", reason
+
+
+# --- Story 5.11: `mark_applied` is TX2's LAST write (Decision 10, C3) ---------
+
+
+@pytest.mark.parametrize("agent_run_id", [None, "agent"], ids=["planner-path", "agent-path"])
+def test_mark_applied_is_the_last_write_on_both_initiator_paths(agent_run_id) -> None:
+    """Conversation before proposal: the one lock order that cannot deadlock with
+    `finalize_agent_run`'s guard (conversation -> proposal)."""
+    values = _tx(agent_run_id=uuid4() if agent_run_id else None)
+    _, approvals, audit, conversations, _, writer = values
+    order: list[str] = []
+    real_promote = writer.promote
+    writer.promote = lambda *a, **k: order.append("pointer") or real_promote(*a, **k)
+    real_append = audit.append
+    audit.append = lambda *a, **k: order.append("audit") or real_append(*a, **k)
+    conversations.append_approval_request_activity = lambda *_a, **_k: order.append("conversation")
+    conversations.resume_agent_run_for_approval = lambda *_a, **_k: order.append("conversation")
+    proposals = Proposals()
+    proposals.mark_applied = lambda _c, **kw: order.append("proposal") or False
+    _promote(values, proposals)
+    assert order == ["pointer", "audit", "conversation", "proposal"]
+
+
+def test_mark_applied_is_handed_the_promoted_schedule_version_and_site() -> None:
+    values = _tx()
+    proposals = Proposals()
+    result = _promote(values, proposals)
+    (call,) = proposals.calls
+    assert call == {
+        "site_id": values[1].binding.site_id,
+        "schedule_version_id": values[1].binding.candidate_schedule_version_id,
+    }
+    assert result.binding.state == "consumed"
+
+
+def test_mark_applied_zero_rows_is_normal_not_an_error() -> None:
+    proposals = Proposals(changed=False)
+    assert _promote(_tx(), proposals).baseline is not None
+
+
+@pytest.mark.parametrize("lost", ["consume", "pointer"])
+def test_mark_applied_is_not_called_when_the_consume_or_pointer_cas_loses(lost) -> None:
+    proposals = Proposals()
+    values = _tx(consume=lost != "consume", promote=lost != "pointer")
+    with pytest.raises((ApprovalNotPendingError, BaselineConcurrentlyMovedError)):
+        _promote(values, proposals)
+    assert proposals.calls == []
+
+
+def test_a_fault_in_mark_applied_escapes_so_tx2_rolls_back_whole() -> None:
+    proposals = Proposals()
+    proposals.mark_applied = lambda *_a, **_k: (_ for _ in ()).throw(
+        DBAPIError("UPDATE", {}, RuntimeError("down"))
+    )
+    with pytest.raises(DBAPIError):
+        _promote(_tx(), proposals)

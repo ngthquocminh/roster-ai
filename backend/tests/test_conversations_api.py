@@ -525,6 +525,60 @@ def test_execute_turn_emits_claim_to_finalize_telemetry(conversation_client) -> 
     assert completed[0].labels["cost_basis"] == "usage_unavailable"
 
 
+def test_execute_turn_wires_the_working_draft_reader_through_the_proposal_repository(
+    conversation_client,
+) -> None:
+    """Story 5.11 Decision 4: the route, not the default, supplies `draft_turn`.
+
+    `AgentDepsV1`'s default reader answers "no working draft", so a route that
+    forgot to wire the real one would pass every tool test and still make every
+    draft `created`. A recording repository proves the read goes through
+    `get_working` for THIS conversation, once, without a row lock.
+    """
+    from api.deps import get_proposal_repository
+    from application.contracts.proposal import ProposalV1, WorkingDraftObservationV1
+    from application.ports.proposal import ProposalRecordV1
+
+    client, repository, settings = conversation_client
+    reads: list[dict] = []
+    working = ProposalRecordV1(
+        proposal=ProposalV1(proposal_id=UUID(int=77), resource_version=6),
+        version_ordinal=4, created_by_actor_id=uuid4(),
+    )
+
+    class Proposals:
+        def get_working(self, _connection, **kwargs):
+            reads.append(kwargs)
+            return working
+
+    observed: list[object] = []
+
+    class ObservingRuntime:
+        name = "observing"
+
+        def __init__(self, deps) -> None:
+            self.deps = deps
+
+        def run_turn(self, _request):
+            observed.append(self.deps.draft_turn.observe())
+            observed.append(self.deps.draft_turn.observe())  # memoized: one read
+            return AgentRunOutcomeV1(
+                status="completed", answer=GroundedAnswerV2(text="Coverage checked."))
+
+    app.dependency_overrides[get_proposal_repository] = lambda: Proposals()
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **kwargs: ObservingRuntime(kwargs["deps"])
+    )
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert observed == [WorkingDraftObservationV1(UUID(int=77), 6, 4)] * 2
+    assert reads == [{"conversation_id": repository.conversation_id, "for_update": False}]
+
+
 @pytest.mark.parametrize(
     ("runtime", "activity_type"),
     [(_ClarifyingRuntime(), "clarification"), (_RefusingRuntime(), "terminal_outcome")],

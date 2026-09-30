@@ -9210,7 +9210,8 @@
             "type": "string",
             "enum": [
               "active",
-              "rejected"
+              "rejected",
+              "applied"
             ],
             "title": "State"
           },
@@ -9221,6 +9222,44 @@
           "stale": {
             "type": "boolean",
             "title": "Stale"
+          },
+          "version_ordinal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Ordinal"
+          },
+          "ended_by": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "planner",
+                  "assistant",
+                  "system"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended By"
+          },
+          "applied_version_ordinal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Version Ordinal"
           },
           "schema_version": {
             "type": "string",

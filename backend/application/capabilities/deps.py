@@ -7,6 +7,7 @@ from typing import Any, Callable
 from uuid import UUID
 
 from application.contracts.agent_runtime import AgentBudgetV1
+from application.drafting.turn_state import DraftTurnState
 from application.grounding.evidence_registry import EvidenceRegistry
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.telemetry import TelemetrySink
@@ -53,6 +54,13 @@ class AgentDepsV1:
     # construction.
     evidence_registry: EvidenceRegistry = field(
         default_factory=EvidenceRegistry, compare=False, repr=False
+    )
+    # The conversation's working draft as this turn first saw it, plus what the
+    # turn's draft tools have done (Story 5.11). The default -- "no working
+    # draft" -- keeps every existing deps construction in tests and evals valid;
+    # the execute route wires the real reader.
+    draft_turn: DraftTurnState = field(
+        default_factory=lambda: DraftTurnState(lambda: None), compare=False, repr=False
     )
     schema_version: str = SCHEMA_VERSION
 

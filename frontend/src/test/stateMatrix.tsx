@@ -11,6 +11,8 @@ import { ApprovalDecisionPanel } from "@/features/approvals/ApprovalDecisionPane
 import { ApprovalRequestCard } from "@/features/approvals/ApprovalRequestCard";
 import { ActivityTimeline } from "@/features/chat/ActivityTimeline";
 import { DraftCard } from "@/features/chat/DraftCard";
+import { rowsFromProposal, type EditBuffer } from "@/features/chat/draftEdits";
+import { PressOnMount } from "@/test/PressOnMount";
 import { ProvenanceTimeline } from "@/features/provenance/ProvenanceTimeline";
 import { approvalKey } from "@/hooks/useApproval";
 import { proposalKey } from "@/hooks/useProposal";
@@ -166,7 +168,23 @@ const proposal = (overrides: Record<string, unknown> = {}) => ({
   consequence_summary: "One reversible constraint; preserved one existing lock; no baseline change.",
   canonical_hash: "a".repeat(64), canonical_hash_algorithm: "sha256",
   canonical_hash_schema_version: "rfc8785-v1", state: "active", resource_version: 1,
-  stale: false, schema_version: "1", ...overrides,
+  stale: false, version_ordinal: 3, ended_by: null, applied_version_ordinal: null,
+  schema_version: "1", ...overrides,
+});
+
+// The Draft card reads the scenario horizon for input validation. Seeding the
+// SAME cache key the hook reads keeps these fixtures off the network.
+const overviewKey = ["scenario-projection", SCENARIO_ID, "overview"] as const;
+const overview = { horizon_minutes: 10080 };
+const draftEntries = (overrides: Record<string, unknown> = {}) =>
+  [[proposalKey(PROPOSAL_ID), proposal(overrides)], [overviewKey, overview]] as const;
+
+/** The unsaved edits a planner would have typed: the cap changed from 40 to 36. */
+const editedBuffer = (baseVersionId: string): EditBuffer => ({
+  baseVersionId,
+  rows: rowsFromProposal(proposal() as never).map((row) => ({
+    ...row, input: { ...row.input, max_hours: 36 },
+  })),
 });
 
 const approval = (state: string, overrides: Record<string, unknown> = {}) => ({
@@ -239,9 +257,27 @@ const customStates: readonly StateFixture[] = [
     render: () => timeline([terminalActivity(reason, index)]),
   })),
 
-  { family: "draft", state: "fresh", render: () => seeded([[proposalKey(PROPOSAL_ID), proposal()]], <DraftCard proposalId={PROPOSAL_ID} />) },
-  { family: "draft", state: "stale", render: () => seeded([[proposalKey(PROPOSAL_ID), proposal({ stale: true })]], <DraftCard proposalId={PROPOSAL_ID} />) },
-  { family: "draft", state: "rejected", render: () => seeded([[proposalKey(PROPOSAL_ID), proposal({ state: "rejected" })]], <DraftCard proposalId={PROPOSAL_ID} />) },
+  // Story 5.11: every state the one working draft can be in, each rendered by the
+  // shipped card. `stale` is the "Working draft · out of date" state.
+  { family: "draft", state: "fresh", render: () => seeded(draftEntries(), <DraftCard proposalId={PROPOSAL_ID} />) },
+  { family: "draft", state: "stale", render: () => seeded(draftEntries({ stale: true }), <DraftCard proposalId={PROPOSAL_ID} />) },
+  { family: "draft", state: "discarded", render: () => seeded(draftEntries({ state: "rejected", ended_by: "planner" }), <DraftCard proposalId={PROPOSAL_ID} />) },
+  { family: "draft", state: "discarded by assistant", render: () => seeded(draftEntries({ state: "rejected", ended_by: "assistant" }), <DraftCard proposalId={PROPOSAL_ID} />) },
+  { family: "draft", state: "replaced", render: () => seeded(draftEntries({ state: "rejected", ended_by: "system" }), <DraftCard proposalId={PROPOSAL_ID} />) },
+  { family: "draft", state: "applied", render: () => seeded(draftEntries({ state: "applied", ended_by: "system", applied_version_ordinal: 2 }), <DraftCard proposalId={PROPOSAL_ID} />) },
+  {
+    family: "draft", state: "unsaved edits",
+    render: () => seeded(draftEntries(), <DraftCard buffer={editedBuffer(proposal().proposal_version_id)} onBufferChange={() => {}} proposalId={PROPOSAL_ID} />),
+  },
+  {
+    family: "draft", state: "changed under edits",
+    render: () => seeded(draftEntries(), <DraftCard buffer={editedBuffer("99999999-9999-4999-8999-999999999999")} onBufferChange={() => {}} proposalId={PROPOSAL_ID} />),
+  },
+  { family: "draft", state: "in flight", render: () => seeded(draftEntries(), <DraftCard agentTurnInFlight proposalId={PROPOSAL_ID} />) },
+  {
+    family: "draft", state: "discard confirming",
+    render: () => seeded(draftEntries(), <PressOnMount name="Discard draft"><DraftCard proposalId={PROPOSAL_ID} /></PressOnMount>),
+  },
 
   // Named `progress …` because `PRIMITIVE_FIXTURES`' StatusBadge already owns
   // `run/queued` and `run/running`; identities must stay unique within the family.

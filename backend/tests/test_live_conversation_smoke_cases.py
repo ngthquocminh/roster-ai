@@ -7,7 +7,7 @@ def test_every_agent_invocable_capability_has_a_two_turn_smoke_case():
     assert len({case.id for case in CONVERSATION_TOOL_SMOKES}) == len(CONVERSATION_TOOL_SMOKES)
     assert {case.capability for case in CONVERSATION_TOOL_SMOKES} == {
         'scheduling_inspect', 'scheduling_compute', 'scheduling_draft',
-        'scheduling_baseline', 'shiftmind_demonstration',
+        'scheduling_draft_discard', 'scheduling_baseline', 'shiftmind_demonstration',
     }
 
 

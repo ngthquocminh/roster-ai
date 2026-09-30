@@ -17,7 +17,7 @@ from adapters.postgres.conversation import (
     UnsupportedActivityPayloadError,
 )
 from adapters.postgres.proposal import PostgresProposalRepository
-from application.contracts.proposal import DraftConstraintProposalV1, ProposalV1
+from application.contracts.proposal import AgentDraftWriteV1, DraftConstraintProposalV1, ProposalV1
 from application.contracts.scenario_projection import TaskV1
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.activity import TerminalOutcomeActivityV1
@@ -646,7 +646,7 @@ def test_create_draft_bundle_is_committed_as_one_transaction(
             connection,
             claimed=claimed,
             status="agent_completed",
-            payload=draft,
+            payload=AgentDraftWriteV1(proposal=draft, outcome="created", version_ordinal=1),
             request_id=uuid4(),
         )
 
@@ -705,7 +705,8 @@ def test_create_draft_bundle_rolls_back_proposal_when_event_write_fails(
         with _site_context(engine, ids["site"]) as connection:
             finalize_agent_run(
                 conversations, proposals, connection,
-                claimed=claimed, status="agent_completed", payload=draft,
+                claimed=claimed, status="agent_completed",
+                payload=AgentDraftWriteV1(proposal=draft, outcome="created", version_ordinal=1),
                 request_id=uuid4(),
             )
 
@@ -748,7 +749,9 @@ def _draft_for_commands(engine, ids):
     with _site_context(engine, ids["site"]) as connection:
         finalize_agent_run(
             conversations, proposals, connection, claimed=claimed,
-            status="agent_completed", payload=value, request_id=uuid4(),
+            status="agent_completed",
+            payload=AgentDraftWriteV1(proposal=value, outcome="created", version_ordinal=1),
+            request_id=uuid4(),
         )
     return value
 

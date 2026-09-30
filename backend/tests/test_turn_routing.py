@@ -48,9 +48,11 @@ from tests.test_conversations_api import (  # noqa: F401  (conversation_client i
 #: (commit f44d122) to prove the split changed nothing; re-pinned when the
 #: "Saying what the baseline is now, or where its decision record is" workflow was
 #: added, and again when summaries were kept to the subject the planner named (live run
-#: ad89854, A:6), and when a named family was required in metric arguments (9b8dad2, C:3).
+#: ad89854, A:6), when a named family was required in metric arguments (9b8dad2, C:3), and
+#: for Story 5.11's one-working-draft rewrite (Revising a draft, the discard section, the
+#: Tool routing line, "Saying what the baseline is now" step 2).
 #: Any other prompt edit must re-pin here, deliberately.
-TODAYS_PROMPT_SHA256 = "c46122507f030e0c3a2a97ab2f1456289ea21c7bd71c160a0894c16c9a89e673"
+TODAYS_PROMPT_SHA256 = "4afcee3d9c87a03c6de19fa08426dfb3802a03b8bab2c30472bb3e867e2526fe"
 
 
 # --- prompt split ------------------------------------------------------------
@@ -444,3 +446,29 @@ def _claiming(repository, message):
         return None if claimed is None else replace(claimed, prompt=message)
 
     return claim
+
+
+def test_the_scheduling_prompt_teaches_the_one_working_draft_lifecycle() -> None:
+    """Story 5.11 Decision 12: the rules the model needs, in the sections it reads."""
+    full = prompts.SCHEDULING_ASSISTANT_INSTRUCTIONS
+    revising = full.split("**Revising a draft.**", 1)[1].split("\n\n", 1)[0]
+    for needed in ("at most one working draft", "working_draft", "next version",
+                   "omit a constraint to remove it"):
+        assert needed in revising, needed
+    # The draft output stays the reply (C6): the prompt must not ask the model to
+    # word a draft turn's reply, and the citation rule survives verbatim.
+    assert ("After a successful scheduling_draft call, return the draft output citing the "
+            "exact draft_id\nthat call returned. Never claim draft success in prose alone.") in full
+    discard = " ".join(
+        full.split("## Discarding a draft (scheduling_draft_discard)", 1)[1].split("\n## ", 1)[0].split()
+    )
+    assert "explicitly asks to discard, delete, or throw away" in discard
+    assert "Start over with just X" in discard and "never discard" in discard
+    assert "There is no undo tool" in discard and "Never claim an undo happened" in discard
+    assert ("- Discarding the working draft on explicit request: scheduling_draft_discard, only."
+            in full)
+    # Both the full and the direct prompt compose Tool routing from one section.
+    assert ("- Discarding the working draft on explicit request: scheduling_draft_discard, only."
+            in prompts.DIRECT_INSTRUCTIONS)
+    baseline = full.split("**Saying what the baseline is now", 1)[1].split("\n\n", 1)[0]
+    assert "applied_version" in baseline and "proposal_version" in baseline

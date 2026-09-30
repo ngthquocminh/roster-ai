@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import type { Timeline } from "@/api/conversations";
 import { EmptyState } from "@/components/primitives/EmptyState";
@@ -6,6 +6,7 @@ import { EvidenceLink, VerifiedMark } from "@/components/primitives/EvidenceLink
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
 import { DraftCard } from "./DraftCard";
+import type { EditBuffer } from "./draftEdits";
 import { ApprovalDecisionPanel } from "@/features/approvals/ApprovalDecisionPanel";
 import { toSearchParams } from "@/features/evidence/locator";
 import { isEvidenceUnavailable, useEvidenceAvailability } from "@/features/evidence/availability";
@@ -389,7 +390,20 @@ function ActivityContent({
   navigate,
   isLatest = false,
   isCurrentApproval = true,
-}: Readonly<{ item: Activity; navigate: NavigateFunction; isLatest?: boolean; isCurrentApproval?: boolean }>) {
+  isCurrentDraft = true,
+  agentTurnInFlight = false,
+  draftBuffers,
+  setDraftBuffer,
+}: Readonly<{
+  item: Activity;
+  navigate: NavigateFunction;
+  isLatest?: boolean;
+  isCurrentApproval?: boolean;
+  isCurrentDraft?: boolean;
+  agentTurnInFlight?: boolean;
+  draftBuffers: Readonly<Record<string, EditBuffer>>;
+  setDraftBuffer: (proposalId: string, buffer: EditBuffer | null) => void;
+}>) {
   switch (item.activity_type) {
     case "planner_message":
       return (
@@ -406,9 +420,23 @@ function ActivityContent({
       // No cast: narrowing the discriminated union is exactly what the
       // `const exhaustive: never` guard below exists to keep honest, and
       // `as Draft` disabled that check for this branch alone.
+      //
+      // Only the NEWEST activity for a proposal mounts the live card (spec 3.1);
+      // every earlier one is one history line from its persisted summary. This
+      // mirrors `isCurrentApproval` below.
+      if (!isCurrentDraft) {
+        return (
+          <p className="text-sm text-muted-foreground">
+            Earlier version of this draft · {item.consequence_summary}
+          </p>
+        );
+      }
       return (
         <DraftCard
+          agentTurnInFlight={agentTurnInFlight}
+          buffer={draftBuffers[item.proposal_id] ?? null}
           consequenceSummary={item.consequence_summary}
+          onBufferChange={(next) => setDraftBuffer(item.proposal_id, next)}
           proposalId={item.proposal_id}
         />
       );
@@ -447,11 +475,32 @@ function ActivityContent({
 // `navigate` is REQUIRED: activation writes the origin to storage before it
 // navigates, so an omitted navigate left a live origin behind that the next
 // ChatView mount would consume and use to move focus after nothing happened.
-export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline["items"]; navigate: NavigateFunction }>) {
+export function ActivityTimeline({
+  items,
+  navigate,
+  agentTurnInFlight = false,
+}: Readonly<{ items: Timeline["items"]; navigate: NavigateFunction; agentTurnInFlight?: boolean }>) {
   // The "Evidence unavailable" marker lives in an external mutable store; this
   // subscribes ONCE per timeline (never inside the segment/ref loops, so the
   // hook count cannot vary) and re-renders when any mark changes.
   useEvidenceAvailability();
+  // Unsaved card edits, keyed by proposal. They live HERE, not in the card: when
+  // the assistant appends a version, a newer `draft` activity becomes the newest,
+  // the live card moves to a different <li>, React unmounts the old instance, and
+  // any `useState` inside it would vanish silently -- exactly the case the "This
+  // draft changed to vN" notice exists for (Story 5.11 C8). The buffer keeps the
+  // version its edits were made from, so the card can say so.
+  const [draftBuffers, setDraftBuffers] = useState<Readonly<Record<string, EditBuffer>>>({});
+  const setDraftBuffer = (proposalId: string, buffer: EditBuffer | null) => {
+    setDraftBuffers((current) => {
+      if (buffer === null) {
+        if (!(proposalId in current)) return current;
+        const { [proposalId]: _dropped, ...rest } = current;
+        return rest;
+      }
+      return { ...current, [proposalId]: buffer };
+    });
+  };
   // Deduplicate by activity identity, not array position (UX-DR6): a refetch
   // that re-delivers an already-rendered activity must not produce a second
   // card, and a reorder must not merge two distinct ones.
@@ -462,6 +511,13 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
   for (const item of unique) {
     if (item.activity_type === "approval_request") {
       currentApprovalActivity.set(item.approval_id, item.activity_id);
+    }
+  }
+  // Same rule for drafts: the newest activity per proposal is the live card.
+  const currentDraftActivity = new Map<string, string>();
+  for (const item of unique) {
+    if (item.activity_type === "draft") {
+      currentDraftActivity.set(item.proposal_id, item.activity_id);
     }
   }
   if (!unique.length) {
@@ -478,13 +534,20 @@ export function ActivityTimeline({ items, navigate }: Readonly<{ items: Timeline
           key={item.activity_id}
         >
           <ActivityContent
+            agentTurnInFlight={agentTurnInFlight}
+            draftBuffers={draftBuffers}
             isCurrentApproval={
               item.activity_type !== "approval_request" ||
               currentApprovalActivity.get(item.approval_id) === item.activity_id
             }
+            isCurrentDraft={
+              item.activity_type !== "draft" ||
+              currentDraftActivity.get(item.proposal_id) === item.activity_id
+            }
             isLatest={index === unique.length - 1}
             item={item}
             navigate={navigate}
+            setDraftBuffer={setDraftBuffer}
           />
         </li>
       ))}

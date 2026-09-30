@@ -30,7 +30,11 @@ from typing import Literal
 from application.contracts.grounding import GroundedAnswerV2
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.agent_status import AgentRunStatusV1
-from application.contracts.proposal import DraftProposalV1, ProposalV1
+from application.contracts.proposal import (
+    AgentDraftDiscardV1,
+    AgentDraftWriteV1,
+    DraftProposalV1,
+)
 from application.contracts.telemetry import AgentUsageV1, BudgetOutcomeV1
 
 SCHEMA_VERSION = "1"
@@ -263,10 +267,14 @@ class AgentRunOutcomeV1:
     refusal: RefusalV1 | None = None
     # Drafts mirror the grounding and clarification trust-boundary pairs:
     # `draft` is the UNTRUSTED model citation set in `backend/agent/`;
-    # `resolved_draft` is the TRUSTED proposal bound by the use case from this
-    # turn's captured capability results. Only the latter may be persisted.
+    # `resolved_draft` is the TRUSTED draft write (the proposal plus what it
+    # observed: created vs updated, the working draft it resolved against) bound
+    # by the use case from this turn's captured capability results. Only the
+    # latter may be persisted. `resolved_discard` is the same for an explicit
+    # `scheduling_draft_discard`, bound on every completed turn (Story 5.11).
     draft: DraftProposalV1 | None = None
-    resolved_draft: ProposalV1 | None = None
+    resolved_draft: AgentDraftWriteV1 | None = None
+    resolved_discard: AgentDraftDiscardV1 | None = None
     turn: AgentTurnV1 = field(default_factory=AgentTurnV1)
     summary: str | None = None
     approval: AgentApprovalPendingV1 | None = None

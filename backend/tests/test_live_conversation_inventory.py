@@ -18,7 +18,7 @@ def report():
 
 def test_inventory_contains_installed_tools_request_variants_and_actual_query_keys():
     inventory = capability_inventory()
-    assert len(inventory['modules']) == 6
+    assert len(inventory['modules']) == 7
     assert 'scheduling_inspect:workers:filter=qualified_task_id' in inventory['operations']
     assert any('qualified_worker_count' in key for key in inventory['operations'])
     assert any('set_max_hours' in key for key in inventory['operations'])

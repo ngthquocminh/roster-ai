@@ -49,7 +49,8 @@ from application.ports.agent_runtime import AgentProviderError, AgentRuntimeErro
 from application.capabilities.deps import AgentDepsV1
 from application.contracts.capability_manifest import IncompleteManifestError
 from application.capabilities.scheduling_draft import SchedulingDraftResultV1
-from application.contracts.proposal import ProposalV1
+from application.capabilities.scheduling_draft_discard import SchedulingDraftDiscardResultV1
+from application.contracts.proposal import AgentDraftDiscardV1, AgentDraftWriteV1
 
 #: Upper bound on messages handed to a provider as prior history. Applies to
 #: BOTH rehydrated activity history and an already-owned `AgentTurnV1` replayed
@@ -81,7 +82,37 @@ def resolve_draft_citation(
             failure_reason="invalid_output",
             failure_source="agent",
         )
-    return replace(outcome, resolved_draft=trusted.proposal)
+    return replace(
+        outcome,
+        resolved_draft=AgentDraftWriteV1(
+            proposal=trusted.proposal,
+            outcome=trusted.outcome,
+            version_ordinal=trusted.version_ordinal,
+            observed_working_id=trusted.observed_working_id,
+            observed_resource_version=trusted.observed_resource_version,
+        ),
+    )
+
+
+def resolve_discard(calculation_results: list[object]) -> AgentDraftDiscardV1 | None:
+    """Bind the turn's one trusted discard result, if any (Story 5.11).
+
+    The discard handler makes a second one impossible, so more than one here is a
+    broken invariant rather than something to pick between.
+    """
+    discards = [
+        result for result in calculation_results
+        if isinstance(result, SchedulingDraftDiscardResultV1)
+    ]
+    if not discards:
+        return None
+    assert len(discards) == 1, "at most one scheduling_draft_discard result per turn"
+    (discard,) = discards
+    return AgentDraftDiscardV1(
+        proposal_id=discard.proposal_id,
+        observed_resource_version=discard.observed_resource_version,
+        version_ordinal=discard.version_ordinal,
+    )
 
 
 def execute_turn(
@@ -116,7 +147,12 @@ def execute_turn(
         )
     )
     if outcome.status != "completed":
+        # A turn that did not complete binds and applies neither a draft nor a
+        # discard: nothing persists from a failed turn.
         return outcome
+    # Every completed turn (answer, draft, clarification, refusal) carries its
+    # discard, so finalize can apply it whatever the model finally said.
+    outcome = replace(outcome, resolved_discard=resolve_discard(calculation_results))
     if outcome.clarification is not None:
         return replace(
             outcome,
@@ -393,7 +429,7 @@ def visible_response(outcome: AgentRunOutcomeV1, deps: AgentDepsV1) -> GroundedR
 
 def activity_payload(
     outcome: AgentRunOutcomeV1, deps: AgentDepsV1
-) -> GroundedResponseV1 | ResolvedClarificationV1 | ProposalV1 | TerminalOutcomeV1:
+) -> GroundedResponseV1 | ResolvedClarificationV1 | AgentDraftWriteV1 | TerminalOutcomeV1:
     if outcome.resolved_clarification is not None:
         return outcome.resolved_clarification
     if outcome.resolved_draft is not None:
@@ -431,7 +467,7 @@ def outcome_visible_text(outcome: AgentRunOutcomeV1) -> str:
     if outcome.refusal is not None:
         return outcome.refusal.detail
     if outcome.resolved_draft is not None:
-        return outcome.resolved_draft.consequence_summary
+        return outcome.resolved_draft.proposal.consequence_summary
     return outcome.output_text or ""
 
 

@@ -74,7 +74,7 @@ from evals.evaluators import (
 )
 from evals.report import (
     CaseEvaluation,
-    EVAL_TAG_TO_CAPABILITY,
+    granted_capability_names,
     LiveReadinessExceptionV1,
     LiveSuiteBudgetV1,
     MultiTurnCaseEvaluation,
@@ -555,6 +555,7 @@ MVP_PRODUCT_CAPABILITIES = {
     "scheduling_baseline",
     "scheduling_compute",
     "scheduling_draft",
+    "scheduling_draft_discard",
     "scheduling_inspect",
     "scheduling_optimize",
 }
@@ -731,8 +732,7 @@ def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> No
         expected_modules = tuple(
             module
             for module in installed_modules()
-            if module.manifest.capability_name
-            == EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
+            if module.manifest.capability_name in granted_capability_names(case)
         )
         expected_names = tuple(
             module.manifest.capability_name for module in expected_modules

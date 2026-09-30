@@ -1,0 +1,93 @@
+{
+  "case_id": "draft-discard-after-draft-same-turn",
+  "case_version": "1",
+  "capability": "scheduling_draft_discard",
+  "risk_class": "draft",
+  "prompt": "Cap worker w1 at 40 hours, then discard the draft.",
+  "scripted_turns": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 40,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      },
+      "tool_call_id": "draft-1"
+    },
+    {
+      "tool_name": "scheduling_draft_discard",
+      "arguments": {
+        "request": {
+          "schema_version": "1"
+        }
+      },
+      "tool_call_id": "discard-1"
+    },
+    {
+      "output_tool": "draft",
+      "response_data": {
+        "draft_id": "1018fba65677dd3186627becb4dcf0f07a0cb81ad58c2abb5837e8c2c82fa08e",
+        "schema_version": "1"
+      }
+    }
+  ],
+  "expected_outcome": "allow",
+  "expected_tool_calls": [
+    {
+      "tool_name": "scheduling_draft",
+      "arguments": {
+        "request": {
+          "expected_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+          "constraints": [
+            {
+              "kind": "set_max_hours",
+              "group": "workers",
+              "record_id": "w1",
+              "related_group": null,
+              "related_record_id": null,
+              "n": null,
+              "factor": null,
+              "max_hours": 40,
+              "start_minute": null,
+              "end_minute": null,
+              "schema_version": "1"
+            }
+          ],
+          "schema_version": "1"
+        }
+      }
+    },
+    {
+      "tool_name": "scheduling_draft_discard",
+      "arguments": {
+        "request": {
+          "schema_version": "1"
+        }
+      }
+    }
+  ],
+  "expected_evidence_refs": [],
+  "expected_visible_state": "completed",
+  "expected_visible_text": "1 reversible constraint; preserved 0 existing locks; no baseline change.",
+  "scenario_fixtures": [
+    "eval-fixture:v1"
+  ],
+  "seeded_working_draft": true,
+  "live_eligible": false
+}

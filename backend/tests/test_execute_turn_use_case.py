@@ -360,10 +360,15 @@ def test_execute_turn_binds_a_model_draft_citation_to_this_turns_trusted_result(
         calculation_results=(SchedulingDraftResultV1("draft-123", proposal),),
     )
 
-    assert outcome.resolved_draft is proposal
+    # Story 5.11: the bound value is the trusted draft WRITE (proposal + what it
+    # observed), not the bare proposal.
+    assert outcome.resolved_draft.proposal is proposal
+    assert (outcome.resolved_draft.outcome, outcome.resolved_draft.version_ordinal) == ("created", 1)
+    assert (outcome.resolved_draft.observed_working_id, outcome.resolved_draft.observed_resource_version) == (None, None)
+    assert outcome.resolved_discard is None
     assert terminal_status(outcome) == "agent_completed"
     assert terminal_outcome(outcome) is None
-    assert activity_payload(outcome, deps) is proposal
+    assert activity_payload(outcome, deps) is outcome.resolved_draft
     assert outcome_visible_text(outcome) == proposal.consequence_summary
 
 

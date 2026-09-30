@@ -93,6 +93,7 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
         settings,
         scheduling_compute_enabled=True,
         scheduling_draft_enabled=True,
+        scheduling_draft_discard_enabled=True,
         scheduling_inspect_enabled=True,
         scheduling_optimize_enabled=True,
         scheduling_baseline_enabled=True,
@@ -102,6 +103,7 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
         settings,
         scheduling_compute_enabled=False,
         scheduling_draft_enabled=False,
+        scheduling_draft_discard_enabled=False,
         scheduling_inspect_enabled=False,
         scheduling_optimize_enabled=False,
         scheduling_baseline_enabled=False,
@@ -135,6 +137,8 @@ def test_a_disabled_capability_is_absent_from_the_composed_grant() -> None:
     assert _granted(compute_off) == every_name - {"scheduling_compute"}
     draft_off = replace_dataclass(all_on, scheduling_draft_enabled=False)
     assert _granted(draft_off) == every_name - {"scheduling_draft"}
+    discard_off = replace_dataclass(all_on, scheduling_draft_discard_enabled=False)
+    assert _granted(discard_off) == every_name - {"scheduling_draft_discard"}
     optimize_off = replace_dataclass(all_on, scheduling_optimize_enabled=False)
     assert _granted(optimize_off) == every_name - {"scheduling_optimize"}
 

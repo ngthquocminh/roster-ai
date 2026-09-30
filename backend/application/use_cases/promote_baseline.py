@@ -114,6 +114,7 @@ def promote_baseline(
     baseline_writer: Any,
     audit_writer: Any,
     conversations: Any,
+    proposals: Any,
     occurred_at: datetime,
     app_version: str = APP_VERSION,
 ) -> PromotionResultV1:
@@ -205,6 +206,20 @@ def promote_baseline(
             tool_call_id=pending.pending_calls[0].tool_call_id,
             history=pending.turn,
         )
+    # LAST WRITE OF TX2, on both initiator paths (Story 5.11 Decision 10, EAD-6
+    # as amended). It is "after the site_baseline CAS", but deliberately not right
+    # after it: every conversation write above locks the conversation row, and
+    # `finalize_agent_run`'s guard locks conversation THEN proposal. Writing the
+    # proposal before the conversation writes would give TX2 proposal ->
+    # conversation, a deadlock cycle with a concurrent finalize. Zero rows changed
+    # is normal (no proposal, or an already-ended one) and is not an error; a
+    # raised error escapes like every other post-write fault, so the whole bundle
+    # rolls back and the draft stays `active`.
+    proposals.mark_applied(
+        connection,
+        site_id=binding.site_id,
+        schedule_version_id=binding.candidate_schedule_version_id,
+    )
     return PromotionResultV1(consumed, baseline, activity, resume)
 
 

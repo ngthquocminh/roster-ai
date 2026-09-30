@@ -35,6 +35,9 @@ export function useDecideApproval(id: string) {
       void queryClient.invalidateQueries({ queryKey: ["conversation-timeline"] });
       void queryClient.invalidateQueries({ queryKey: ["scheduleRunResult"] });
       void queryClient.invalidateQueries({ queryKey: ["scenario-projection"] });
+      // A promotion marks the draft `applied` inside TX2 (Story 5.11); no
+      // activity announces it, so re-read the proposals.
+      void queryClient.invalidateQueries({ queryKey: ["proposal"] });
     },
   });
 }

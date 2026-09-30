@@ -456,6 +456,7 @@ def test_a_committed_golden_case_outcome_is_unchanged_by_the_answer_type_seam() 
         "refusal": None,
         "draft": None,
         "resolved_draft": None,
+        "resolved_discard": None,
         "turn": {
             "schema_version": "1",
             "messages": [
@@ -923,7 +924,8 @@ def _stub_draft_module():
     from application.capabilities.scheduling_draft import scheduling_draft_module
 
     return replace(scheduling_draft_module(),
-                   handler=lambda deps, request, manifest: SimpleNamespace(result_id="draft-abc"))
+                   handler=lambda deps, request, manifest: SimpleNamespace(
+                       result_id="draft-abc", outcome="created", version_ordinal=1))
 
 
 def _draft_call():

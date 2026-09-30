@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgresUUID
 
 from adapters.postgres.schema import metadata
 from application.contracts.activity import DraftReferenceV1
-from application.contracts.proposal import ProposalV1
+from application.contracts.proposal import AgentDraftWriteV1, ProposalV1
 from application.ports.conversation import ClaimedAgentRunV1
 from application.use_cases.finalize_agent_run import finalize_agent_run
 from api.main import app
@@ -27,6 +27,7 @@ def test_proposal_metadata_has_governed_aggregate_tables() -> None:
         "id", "site_id", "scenario_id", "scenario_version_id",
         "conversation_id", "created_by_actor_id", "state",
         "current_version_id", "resource_version", "created_at",
+        "ended_by", "applied_version_id",
     } == set(proposal.c.keys())
     assert isinstance(version.c.payload.type, JSONB)
     assert isinstance(version.c.proposal_id.type, PostgresUUID)
@@ -48,7 +49,13 @@ def test_proposal_metadata_has_governed_aggregate_tables() -> None:
     # than inserting a second, indistinguishable row.
     assert ("site_id", "actor_id", "operation", "idempotency_key") in idempotency_uniques
     assert ("site_id", "actor_id", "operation", "body_hash") not in idempotency_uniques
-    assert any("state IN ('active','rejected')" in str(item.sqltext) for item in proposal.constraints if isinstance(item, CheckConstraint))
+    assert any("state IN ('active','rejected','applied')" in str(item.sqltext) for item in proposal.constraints if isinstance(item, CheckConstraint))
+    names = {item.name for item in proposal.constraints if isinstance(item, CheckConstraint)}
+    assert {"ck_proposal_state", "ck_proposal_ended_by", "ck_proposal_lifecycle"} <= names
+    assert any(
+        index.name == "uq_proposal_one_active_per_conversation" and index.unique
+        for index in proposal.indexes
+    )
 
 
 def test_proposal_migration_enforces_rls_composite_identity_and_runtime_grants() -> None:
@@ -94,12 +101,20 @@ def test_draft_finalization_composes_both_repositories_on_one_connection() -> No
     )
 
     class Proposals:
+        def get_working(self, used_connection, **kwargs):
+            calls.append(("get_working", used_connection))
+            assert kwargs["for_update"] is True
+            return None
+
         def create_draft(self, used_connection, **kwargs):
             calls.append(("proposal", used_connection))
             assert kwargs["proposal"] is proposal
             return proposal
 
     class Conversations:
+        def lock_conversation(self, used_connection, **kwargs):
+            calls.append(("lock", used_connection))
+
         def finish_agent_run(self, used_connection, **kwargs):
             calls.append(("conversation", used_connection))
             # AD-22: the repository receives the Conversation-owned reference,
@@ -116,15 +131,19 @@ def test_draft_finalization_composes_both_repositories_on_one_connection() -> No
         Conversations(), Proposals(), connection,
         claimed=claimed,
         status="agent_completed",
-        payload=proposal,
+        payload=AgentDraftWriteV1(proposal=proposal, outcome="created", version_ordinal=1),
         request_id=UUID(int=10),
     )
 
     assert result == "completed"
-    # The conversation write comes FIRST: it holds the still-claimable guard, so
-    # a duplicate finalisation raises AgentRunNotQueuedError instead of failing
-    # on a proposal-side constraint and masking the real cause.
-    assert calls == [("conversation", connection), ("proposal", connection)]
+    # Lock order first (conversation, then the working-draft row), then the run's
+    # still-claimable guard, THEN the proposal write: the conversation write holds
+    # the guard, so a duplicate finalisation raises AgentRunNotQueuedError instead
+    # of failing on a proposal-side constraint and masking the real cause.
+    assert calls == [
+        ("lock", connection), ("get_working", connection),
+        ("conversation", connection), ("proposal", connection),
+    ]
 
 
 def test_proposal_routes_do_not_widen_the_scenario_command_surface() -> None:

@@ -32,7 +32,8 @@ def setup_context():
     candidate = ScheduleVersionV1(schedule_version_id=UUID(int=24), schedule_run_id=run.schedule_run_id,
         scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
         feasible_solver_status='FEASIBLE')
-    proposals = SimpleNamespace(get_current=lambda *a, **k: ProposalRecordV1(proposal, 1, deps.actor_id))
+    proposals = SimpleNamespace(get_current=lambda *a, **k: ProposalRecordV1(proposal, 1, deps.actor_id),
+        get_working=lambda *a, **k: None, get_version=lambda *a, **k: None)
     runs = SimpleNamespace(
         list_runs=lambda *a, **k: ScheduleRunPageV1((run,), None, 1, 1),
         get_conversation_for_run=lambda *a, **k: deps.conversation_id,
@@ -275,3 +276,78 @@ def test_an_unfinished_run_page_is_reported_as_truncated():
     assert '"runs_truncated": true' in _load(claimed, proposals, runs, baselines)
     runs.list_runs = lambda *a, **k: ScheduleRunPageV1((run,), None, 1, 1)
     assert '"runs_truncated": false' in _load(claimed, proposals, runs, baselines)
+
+
+# --- Story 5.11: the working draft and the ended drafts (Decision 12) ----------
+
+
+def _facts(text):
+    import json
+    return json.loads(text[text.index('\n') + 1:])
+
+
+def test_no_working_draft_reads_null_and_a_working_draft_reads_its_version_ordinal():
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    assert _facts(_load(claimed, proposals, runs, baselines))['working_draft'] is None
+    record = proposals.get_current()
+    working = replace(record, proposal=replace(record.proposal, proposal_id=UUID(int=90)),
+                      version_ordinal=3)
+    proposals.get_working = lambda *a, **k: working
+    facts = _facts(_load(claimed, proposals, runs, baselines))
+    assert facts['working_draft']['proposal_id'] == str(UUID(int=90))
+    assert facts['working_draft']['version_ordinal'] == 3
+    assert facts['working_draft']['state'] == 'active'
+
+
+def test_the_working_draft_is_present_even_when_its_activities_left_the_window():
+    """Read from the repository, never inferred from history (mutation: history only)."""
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    filler = tuple(SimpleNamespace(activity_type='planner_message') for _ in range(150))
+    claimed.history = filler
+    seen = []
+    record = proposals.get_current()
+    proposals.get_working = lambda *a, **k: seen.append(k) or record
+    facts = _facts(_load(claimed, proposals, runs, baselines))
+    assert facts['working_draft'] is not None
+    assert seen == [{'conversation_id': claimed.conversation_id, 'for_update': False}]
+
+
+def test_the_working_draft_is_not_repeated_among_the_ended_drafts():
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    record = proposals.get_current()
+    proposals.get_working = lambda *a, **k: record
+    facts = _facts(_load(claimed, proposals, runs, baselines))
+    assert facts['working_draft'] is not None
+    assert facts['drafts'] == []
+
+
+def test_ended_drafts_carry_state_ended_by_and_version_ordinal():
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    record = proposals.get_current()
+    ended = replace(record, proposal=replace(record.proposal, state='rejected'),
+                    ended_by='assistant', version_ordinal=4)
+    proposals.get_current = lambda *a, **k: ended
+    (draft,) = _facts(_load(claimed, proposals, runs, baselines))['drafts']
+    assert (draft['state'], draft['ended_by'], draft['version_ordinal']) == ('rejected', 'assistant', 4)
+    assert 'applied_version' not in draft
+
+
+def test_an_applied_draft_reports_the_pinned_version_not_the_latest():
+    from application.contracts.proposal import DraftConstraintV1
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    record = proposals.get_current()
+    latest = replace(record.proposal, state='applied', consequence_summary='v3 latest')
+    applied_version_id = UUID(int=77)
+    applied = replace(record.proposal, consequence_summary='v2 pinned',
+        constraints=(DraftConstraintV1(kind='set_max_hours', max_hours=40.0, description='cap'),))
+    proposals.get_current = lambda *a, **k: replace(
+        record, proposal=latest, ended_by='system', version_ordinal=3,
+        applied_version_id=applied_version_id, applied_version_ordinal=2)
+    asked = []
+    proposals.get_version = lambda *a, **k: asked.append(k['proposal_version_id']) or (2, applied)
+    (draft,) = _facts(_load(claimed, proposals, runs, baselines))['drafts']
+    assert asked == [applied_version_id]
+    assert draft['state'] == 'applied' and draft['version_ordinal'] == 3
+    assert draft['applied_version']['version_ordinal'] == 2
+    assert draft['applied_version']['consequence_summary'] == 'v2 pinned'
+    assert draft['applied_version']['constraints'][0]['max_hours'] == 40.0
