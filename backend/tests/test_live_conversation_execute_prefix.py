@@ -280,6 +280,16 @@ def test_a_reply_that_is_not_a_draft_fails_a_turn_that_requires_one():
         drive(app, requires_persisted_draft=True))
 
 
+def test_raw_claim_markup_the_planner_can_see_fails_any_turn():
+    # Live run ad89854 (B:2): an unterminated <claim opener reached the planner.
+    broken = {'activity_type': 'agent_response', 'response': {'segments': [
+        {'kind': 'prose', 'text': "Loader M03 — <claim ev='t6' field='function' value='Despatch, Main"}]}}
+    assert 'raw_claim_markup_shown' in failures_of(drive(FakeApp(activity=broken)))
+    clean = {'activity_type': 'agent_response', 'response': {'segments': [
+        {'kind': 'prose', 'text': 'Loader M03 — Despatch, Main'}]}}
+    assert 'raw_claim_markup_shown' not in failures_of(drive(FakeApp(activity=clean)))
+
+
 def test_an_unauthored_action_is_incomplete():
     app = FakeApp(activity={'activity_type': 'agent_response', 'response': {'segments': []}})
     assert drive(app, 'launch_missiles')['incomplete_reason'] == 'unsupported_authored_action'

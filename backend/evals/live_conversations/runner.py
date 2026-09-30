@@ -281,6 +281,10 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 failures.append('required_persisted_draft_missing')
             visible = visible_activity(activity)
             reply_lines[index] = visible_lines(visible)
+            # Raw fact-tag syntax the planner can see is broken output on any
+            # turn, whatever the turn asked (live run ad89854, B:2).
+            if '<claim' in visible_text(visible) or '</claim' in visible_text(visible):
+                failures.append('raw_claim_markup_shown')
             use_expectations = bool(turn.expect) and is_typesafe_judge(judge_model)
             if use_expectations:
                 # Graded as of the reply: before this turn's scripted actions run.

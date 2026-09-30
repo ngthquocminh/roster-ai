@@ -112,13 +112,10 @@
               "value": "{worker_names}"
             },
             {
-              "id": "invents_worker",
+              "id": "off_subject",
               "check": "judge",
               "want": false,
-              "facts": [
-                "workers"
-              ],
-              "question": "Does `reply` name as a worker of this scenario anyone who is not in `facts.workers`?"
+              "question": "Does `reply` include anything that is not about the scenario’s workers, such as the user’s own name or other things the conversation covered?"
             }
           ]
         }
