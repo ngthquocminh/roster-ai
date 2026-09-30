@@ -955,6 +955,22 @@ def test_a_draft_created_this_turn_must_be_returned_as_the_draft_output() -> Non
     assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
 
 
+def test_a_garbled_draft_citation_is_bound_to_the_draft_this_run_created() -> None:
+    """Live run 49523ec (B4, C8, C9): the model copied the 64-hex draft_id back
+    truncated, and a draft that WAS saved failed the turn as invalid output."""
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if not any(isinstance(m, ModelResponse) for m in messages):
+            return _draft_call()
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="draft", args=json.dumps({"draft_id": "draft-ab"}), tool_call_id="out-1")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV2)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
+    assert outcome.status == "completed"
+    assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
+
+
 def test_prose_never_stands_in_for_a_draft_the_model_did_not_create() -> None:
     """The prose claim alone must not become a success. (A draft that WAS
     created is recovered instead -- see the unusable-final-message test below.)"""
@@ -1013,6 +1029,23 @@ def test_a_malformed_placeholder_is_corrected_in_loop(malformed) -> None:
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="show me what you put in the draft"))
     assert len(attempts) == 2, "the malformed placeholder must be corrected inside the run"
     assert outcome.answer == GroundedAnswerV2(text="The draft keeps that worker off that task.")
+
+
+def test_an_unterminated_claim_tag_is_corrected_in_loop() -> None:
+    """Live run ad89854 (B:2): the opener never closed and the planner saw raw markup."""
+    attempts = []
+    broken = "Main Despatch — <claim ev='t6' field='function' value='Despatch</claim>, Main"
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV2(text=broken if len(attempts) == 1 else "Main Despatch — Despatch, Main")
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV2)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="what tasks are in this scenario?"))
+    assert len(attempts) == 2
+    assert outcome.answer == GroundedAnswerV2(text="Main Despatch — Despatch, Main")
 
 
 def _answer_json(answer) -> str:

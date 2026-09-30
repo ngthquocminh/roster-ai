@@ -7,6 +7,7 @@ import pytest
 from evals.live_conversations.configuration import (
     DEFAULT_OVERRIDE_FILE, measured_configuration,
 )
+from evals.live_conversations.jev_judge import DEFAULT_JUDGE_MODEL, TYPESAFE_JUDGE_ENDPOINT
 from evals.live_conversations.judge import JUDGE_ENDPOINT
 
 OVERRIDE = 'services:\n  api:\n    environment:\n      AGENT_RUNTIME_REQUEST_LIMIT: "12"\n'
@@ -40,6 +41,15 @@ def test_it_records_model_endpoint_effort_and_override_identity(override):
     assert configuration['reasoning_effort'] == 'low'
     assert len(configuration['override_sha256']) == 64
     assert len(configuration['configuration_digest']) == 64
+
+
+def test_a_typesafe_judge_records_the_typesafe_endpoint_and_moves_both_digests(override):
+    jev = _configuration(override, judge_model=DEFAULT_JUDGE_MODEL)
+    llm = _configuration(override)
+    assert jev['judge'] == {'model': 'typesafe:jev-1.13.0', 'endpoint': TYPESAFE_JUDGE_ENDPOINT}
+    # A judge swap must not compare against a baseline measured by the other judge.
+    assert jev['behavioral_digest'] != llm['behavioral_digest']
+    assert jev['configuration_digest'] != llm['configuration_digest']
 
 
 @pytest.mark.parametrize('change', [

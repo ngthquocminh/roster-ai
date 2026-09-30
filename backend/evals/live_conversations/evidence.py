@@ -23,8 +23,18 @@ import json
 from pathlib import Path
 
 from evals.live_conversations.inventory import capability_inventory
+from evals.live_conversations.jev_judge import is_typesafe_judge
 from evals.live_conversations.reporting import summarize_runs
 from evals.live_conversations.stack import ROOT
+
+def _judge_source(judge_model: str) -> str:
+    """Where the judge's grading lives: the runner sends a `typesafe:` model to
+    Jev and every other model to the LLM judge, and this says the same."""
+    if is_typesafe_judge(judge_model):
+        return ('TypeSafe Jev typed scores, evals/live_conversations/jev_judge.py '
+                'GRADING_RULES and verdict_from')
+    return 'LLM judge, evals/live_conversations/judge.py RUBRIC'
+
 
 #: Named, checkable proof for every chat-reachable operation no authored turn can
 #: legitimately exercise. Each entry says WHY a planner turn cannot reach it and
@@ -282,8 +292,10 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
     bindings = resolve_bindings(
         {
             'evaluator': ('independent application/fixture reads per turn plus a separately '
-                          'configured LLM judge (evals/live_conversations/judge.py RUBRIC); '
-                          'a judge pass can never override a fact or effect failure'),
+                          'configured judge ('
+                          + '; '.join(_judge_source(judge)
+                                      for judge in sorted({run.get('judge_model') or '' for run in runs}))
+                          + '); a judge pass can never override a fact or effect failure'),
             'model': models,
             'prompt': ('agent/scheduling_instructions.py as built into the measured image; '
                        'authored user turns in evals/live_conversations/scenarios.json'),

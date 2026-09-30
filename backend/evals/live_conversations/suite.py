@@ -14,6 +14,7 @@ from evals.live_conversations.cases import load_scenarios
 from evals.live_conversations.configuration import DEFAULT_OVERRIDE_FILE, measured_configuration
 from evals.live_conversations.fixtures import prepare_initial_baseline
 from evals.live_conversations.http_client import ApplicationConversation
+from evals.live_conversations.jev_judge import DEFAULT_JUDGE_MODEL, is_typesafe_judge
 from evals.live_conversations.protocol import ConversationBudget, IncompleteConversationRun
 from evals.live_conversations.runner import execute_prefix
 from evals.live_conversations.stack import (
@@ -35,7 +36,10 @@ def _arguments(argv=None):
     parser.add_argument('--scenario', help='Run one authored scenario during development.')
     parser.add_argument('--endpoint', type=int, help='Run one authored endpoint during development.')
     parser.add_argument('--agent-model', help='Override only the application agent model for this run.')
-    parser.add_argument('--judge-model', help='Override only the separate evaluation judge model.')
+    parser.add_argument('--judge-model', help=(
+        'Override only the separate evaluation judge model. Its prefix picks the judge: '
+        'typesafe: (TypeSafe Jev, key TYPESAFE_API_KEY; the default) or openrouter: '
+        '(the LLM judge, key LIVE_CONVERSATION_JUDGE_API_KEY).'))
     parser.add_argument('--reasoning-effort', choices=('none', 'low', 'medium', 'high'), default='low')
     parser.add_argument('--repetitions', type=int, default=1)
     parser.add_argument('--spend-limit-usd', type=float, default=7.0)
@@ -71,8 +75,11 @@ def main(argv=None) -> int:
              or os.environ.get('AGENT_RUNTIME_MODEL'))
     key = values.get('AGENT_RUNTIME_API_KEY') or os.environ.get('AGENT_RUNTIME_API_KEY')
     judge_model = (args.judge_model or values.get('LIVE_CONVERSATION_JUDGE_MODEL')
-                   or os.environ.get('LIVE_CONVERSATION_JUDGE_MODEL'))
-    judge_key = values.get('LIVE_CONVERSATION_JUDGE_API_KEY') or key
+                   or os.environ.get('LIVE_CONVERSATION_JUDGE_MODEL') or DEFAULT_JUDGE_MODEL)
+    if is_typesafe_judge(judge_model):
+        judge_key = values.get('TYPESAFE_API_KEY') or os.environ.get('TYPESAFE_API_KEY')
+    else:
+        judge_key = values.get('LIVE_CONVERSATION_JUDGE_API_KEY') or key
     # Story 5.9: the disposable stack exports its traces when a Logfire token is
     # configured. Passed to the stack only; never recorded anywhere.
     trace_export = {
@@ -102,7 +109,8 @@ def main(argv=None) -> int:
     executions = len(selected) * args.repetitions
     authored_turns = sum(endpoint for _case, endpoint in selected) * args.repetitions
     budget = ConversationBudget(LiveSuiteBudgetV1(
-        case_limit=executions, request_limit=max(100, authored_turns * 20),
+        # Room for every retry: a retried prefix must not take a later prefix's slot.
+        case_limit=executions * (args.execution_retries + 1), request_limit=max(100, authored_turns * 20),
         tool_call_limit=max(100, authored_turns * 20),
         token_limit=max(150_000, authored_turns * 175_000),
         elapsed_seconds_limit=max(1800, executions * 600), spend_usd_limit=args.spend_limit_usd,

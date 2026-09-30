@@ -10,6 +10,10 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from evals.live_conversations.expectations import (
+    Expectation, parse_expectation, validate_turn_expectations,
+)
+
 DATASET = Path(__file__).parent / 'scenarios.json'
 REQUIRED_SCENARIOS = {'A': 6, 'B': 12, 'C': 12, 'D': 6}
 SUPPORTED_ACTIONS = frozenset({
@@ -26,6 +30,9 @@ class ConversationTurn:
     actions_after: tuple[str, ...] = ()
     allowed_run_statuses: tuple[str, ...] = DEFAULT_RUN_STATUSES
     requires_persisted_draft: bool = False
+    #: Authored per-turn checks; when present (under a `typesafe:` judge) they
+    #: grade the turn instead of the holistic judge. See expectations.py.
+    expect: tuple[Expectation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -45,7 +52,7 @@ def validate_scenarios(scenarios: tuple[ConversationScenario, ...]) -> None:
     for case in scenarios:
         if case.prefixes != (len(case.turns),):
             raise ValueError('every scenario must execute its complete conversation only')
-        for turn in case.turns:
+        for position, turn in enumerate(case.turns, 1):
             if not turn.user.strip() or not turn.obligation.strip():
                 raise ValueError('each turn requires user text and a semantic obligation')
             unknown = set(turn.actions_after) - SUPPORTED_ACTIONS
@@ -55,6 +62,7 @@ def validate_scenarios(scenarios: tuple[ConversationScenario, ...]) -> None:
                 raise ValueError(f'duplicate authored actions: {turn.actions_after}')
             if not turn.allowed_run_statuses:
                 raise ValueError('each turn must allow at least one agent run status')
+            validate_turn_expectations(turn.expect, position)
 
 
 def load_scenarios(path: Path = DATASET) -> tuple[ConversationScenario, ...]:
@@ -69,6 +77,7 @@ def load_scenarios(path: Path = DATASET) -> tuple[ConversationScenario, ...]:
             actions_after=tuple(turn.get('actions_after', ())),
             allowed_run_statuses=tuple(turn.get('allowed_run_statuses', DEFAULT_RUN_STATUSES)),
             requires_persisted_draft=bool(turn.get('requires_persisted_draft', False)),
+            expect=tuple(parse_expectation(raw) for raw in turn.get('expect', ())),
         ) for turn in row['turns']),
     ) for row in data['scenarios'])
     validate_scenarios(cases)

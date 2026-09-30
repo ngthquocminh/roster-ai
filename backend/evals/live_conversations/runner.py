@@ -7,6 +7,11 @@ from dataclasses import asdict
 from application.use_cases.conversation_workflow_context import CANDIDATE_ASSIGNMENT_PREVIEW
 from evals.live_conversations.facts import read_group, verify_claim
 from evals.live_conversations.http_client import ApplicationConversation
+from evals.live_conversations.expectations import (
+    Bindings, TurnContext, apply_answers, evaluate, mentioned, verdict_from_checks, visible_lines,
+    visible_text,
+)
+from evals.live_conversations.jev_judge import ask_yes_no, is_typesafe_judge, judge_turn_jev
 from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS, judge_turn
 from evals.live_conversations.protocol import IncompleteConversationRun, turn_verdict
 from evals.live_conversations.reporting import tier1_fact_rows
@@ -87,10 +92,54 @@ def compact_reload_effect(timeline):
     }
 
 
+def reply_text(activity):
+    """The reply's prose, casefolded: what `relevant_entities` matches names in."""
+    return ' '.join(segment.get('text', '') for segment in
+                    activity.get('response', {}).get('segments', ())).casefold()
+
+
+def named_candidate_rows(activity, rows, workers_by_id, tasks_by_id):
+    """Candidate rows whose worker or task the reply names, WITH their minutes.
+
+    A truthful reply quoting an assignment's times needs those times in the
+    judge's facts (live-suite-evidence B8), but only for the rows it names:
+    every row cost ~20k chars on each Scenario B turn. The count and the
+    truncation flag stay separate facts, so a "how many" claim is still checked.
+
+    Matched against everything the judge sees of the reply (`visible_activity`),
+    so a name only in a claim's arguments or a clarification still counts; and
+    as a whole token, so `w1` does not pull in `w12`'s rows.
+    """
+    text = visible_text(visible_activity(activity))
+
+    def named(record_id, by_id):
+        return mentioned(record_id, text) or mentioned(by_id.get(record_id), text)
+
+    return [
+        {'record_id': row.get('record_id'), 'worker_id': row.get('worker_id'),
+         'worker_name': workers_by_id.get(row.get('worker_id')),
+         'task_id': row.get('task_id'), 'task_name': tasks_by_id.get(row.get('task_id')),
+         'start_minute': row.get('start_minute'), 'end_minute': row.get('end_minute')}
+        for row in rows
+        if named(row.get('worker_id'), workers_by_id) or named(row.get('task_id'), tasks_by_id)
+    ]
+
+
+def compact_provenance(provenance):
+    """The judge's view of an approval's provenance: the harness checks the full
+    payload itself, and its items were ~156k chars on B:9 -- after the reply, so
+    never something the reply is graded against."""
+    provenance = provenance or {}
+    items = provenance.get('items') or []
+    promotions = [item for item in items if item.get('item_type') == 'baseline_promotion']
+    return {'schedule_run_id': provenance.get('schedule_run_id'), 'item_count': len(items),
+            'baseline_promotion_count': len(promotions),
+            'promoted_after_version': promotions[0].get('after_version') if promotions else None}
+
+
 def relevant_entities(activity, workers, tasks, assignments, demand=()):
     """Give the judge exact facts only for entities visible in this reply."""
-    text = ' '.join(segment.get('text', '') for segment in
-                    activity.get('response', {}).get('segments', ())).casefold()
+    text = reply_text(activity)
     named_workers = []
     for worker in workers:
         if worker['name'].casefold() in text or worker['record_id'].casefold() in text:
@@ -158,6 +207,10 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
     pending_approval = None
     latest_run = None
     latest_count = (None, None)
+    # Per-turn expectations: values bound from application state as they happen,
+    # and each reply's visible text for a check that refers back to it.
+    bindings = Bindings()
+    reply_lines = {}
     try:
         workers = read_group(app, 'workers')
         workers_by_id = {row['record_id']: row['name'] for row in workers}
@@ -170,6 +223,9 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
         for index, turn in enumerate(case.turns[:endpoint], 1):
             budget.admit(reserve_usd=.05, tokens=150000)
             before = app._request('GET', projection_path)
+            bindings.turn = index
+            if index == 1:
+                bindings.capture_start(before, tasks, workers, demand)
             row = {'id': f'turn-{index}', 'user': turn.user,
                    'obligation': turn.obligation, 'verdict': 'incomplete'}
             report['turns'].append(row)
@@ -200,6 +256,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
             activity = executed['activity']
             if activity['activity_type'] == 'approval_request':
                 pending_approval = activity
+                bindings.capture_approval_request(activity)
+            bindings.capture_claims(activity, tasks)
             assignments = read_group(app, 'baseline-assignments')
             claims = [s for s in activity.get('response', {}).get('segments', []) if s['kind'] == 'claim']
             row['tier1_facts'] = tier1_fact_rows(activity)
@@ -218,8 +276,29 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 'independent_claim_failures': failures.copy(), 'effects_after_reply': []}
             if activity['activity_type'] == 'draft':
                 verified['persisted_draft'] = app.latest_draft()
+                bindings.capture_draft(verified['persisted_draft'], workers_by_id, tasks_by_id)
             if turn.requires_persisted_draft and activity['activity_type'] != 'draft':
                 failures.append('required_persisted_draft_missing')
+            visible = visible_activity(activity)
+            reply_lines[index] = visible_lines(visible)
+            # Raw fact-tag syntax the planner can see is broken output on any
+            # turn, whatever the turn asked (live run ad89854, B:2).
+            if '<claim' in visible_text(visible) or '</claim' in visible_text(visible):
+                failures.append('raw_claim_markup_shown')
+            use_expectations = bool(turn.expect) and is_typesafe_judge(judge_model)
+            if use_expectations:
+                # Graded as of the reply: before this turn's scripted actions run.
+                checks, questions, judge_state = evaluate(turn.expect, TurnContext(
+                    activity=activity, visible=visible, draft=verified.get('persisted_draft'),
+                    assignments=assignments, locks=locks, workers_by_id=workers_by_id,
+                    tasks_by_id=tasks_by_id, reply_lines=reply_lines, turn=index, workers=workers,
+                    candidate_rows=named_candidate_rows(
+                        activity, ((latest_run or {}).get('candidate') or {}).get('assignments', ()),
+                        workers_by_id, tasks_by_id),
+                ), bindings, turn.user)
+                # On the row now: an action below that aborts the turn must not
+                # discard checks already graded against the reply.
+                row['checks'] = checks
             for action in turn.actions_after:
                 effect = {'action': action, 'id': row['id'] + ':' + action, 'source': 'application_command'}
                 if action in {'run_optimization', 'run_and_cancel'}:
@@ -246,6 +325,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                         raise
                     effect['run'] = latest_run['run']
                     effect['candidate_schedule_version_id'] = (latest_run.get('candidate') or {}).get('schedule_version_id')
+                    bindings.capture_run(latest_run, latest_count[0])
                 elif action == 'verify_baseline_unchanged':
                     now = app._request('GET', projection_path)
                     if now['baseline_schedule_version'] != before['baseline_schedule_version']:
@@ -272,6 +352,9 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                         if not candidate_assignments.get('assignments') or not same_assignments(
                                 after_assignments, candidate_assignments['assignments']):
                             failures.append('promoted_assignments_do_not_match_candidate')
+                    bindings.capture_decision(pending_approval, approved=action == 'approve',
+                                              baseline_now=now['baseline_schedule_version'],
+                                              baseline_before=before['baseline_schedule_version'])
                     pending_approval = None
                 elif action == 'reload':
                     effect['timeline'] = compact_reload_effect(app.timeline())
@@ -280,33 +363,49 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 else:
                     raise IncompleteConversationRun('unsupported_authored_action')
                 report['command_observations'].append(effect)
-                verified['effects_after_reply'].append(effect)
+                # The judge gets the compact provenance; the report keeps it whole.
+                verified['effects_after_reply'].append(
+                    {**effect, 'provenance': compact_provenance(effect['provenance'])}
+                    if 'provenance' in effect else effect)
             if latest_run:
                 verified['latest_run'] = latest_run['run']
                 candidate = latest_run.get('candidate') or {}
                 count, truncated = latest_count
                 verified['candidate_solver_status'] = candidate.get('feasible_solver_status')
-                # Every candidate row, WITH its minutes: the judge scored a truthful
-                # reply 0 for "inventing" times that were in the snapshot but absent
-                # from its facts (live-suite-evidence B8). The assistant itself saw
-                # only a preview; `candidate_assignments_truncated` says so.
-                verified['candidate_assignments'] = [
-                    {'record_id': row.get('record_id'), 'worker_id': row.get('worker_id'),
-                     'worker_name': workers_by_id.get(row.get('worker_id')),
-                     'task_id': row.get('task_id'),
-                     'task_name': tasks_by_id.get(row.get('task_id')),
-                     'start_minute': row.get('start_minute'), 'end_minute': row.get('end_minute')}
-                    for row in candidate.get('assignments', ())
-                ]
+                # The reply-named candidate rows, WITH their minutes (see
+                # `named_candidate_rows`). The assistant itself saw only a preview;
+                # `candidate_assignments_truncated` says so.
+                verified['candidate_assignments'] = named_candidate_rows(
+                    activity, candidate.get('assignments', ()), workers_by_id, tasks_by_id)
                 verified['candidate_assignment_count'] = count
                 verified['candidate_assignments_truncated'] = truncated
-            transcript.append({'id': row['id'], 'user': turn.user, 'assistant': visible_activity(activity)})
+            transcript.append({'id': row['id'], 'user': turn.user, 'assistant': visible})
+            if use_expectations:
+                judge_usage = None
+                if questions:
+                    try:
+                        p_yes, judge_usage = ask_yes_no(api_key=judge_key, model=judge_model,
+                                                        state=judge_state, questions=questions,
+                                                        budget=budget)
+                    except IncompleteConversationRun as exc:
+                        row.update(factual_failures=failures, judgment=None, checks=checks,
+                                   verified=verified, judge_unavailable_reason=str(exc),
+                                   verdict='incomplete')
+                        save(report)
+                        continue
+                    apply_answers(checks, p_yes)
+                row.update(factual_failures=failures, judgment=None, checks=checks,
+                           judge_usage=judge_usage, verified=verified,
+                           verdict=verdict_from_checks(checks, failures))
+                save(report)
+                continue
             not_applicable = (frozenset({'clarification_refusal'})
                               if activity['activity_type'] == 'agent_response' else frozenset())
             obligation_id = row['id'] + ':obligation'
             known = known_citation_ids(transcript, verified, obligation_id)
             try:
-                judgment, judge_usage = judge_turn(api_key=judge_key, model=judge_model,
+                judge = judge_turn_jev if is_typesafe_judge(judge_model) else judge_turn
+                judgment, judge_usage = judge(api_key=judge_key, model=judge_model,
                     transcript=transcript, obligation=turn.obligation, obligation_id=obligation_id,
                     verified=verified, budget=budget, not_applicable=not_applicable)
             except IncompleteConversationRun as exc:

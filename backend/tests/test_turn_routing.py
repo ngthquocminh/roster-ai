@@ -44,8 +44,13 @@ from tests.test_conversations_api import (  # noqa: F401  (conversation_client i
     _Runtime, _headers, _with_workflow_context_reader, conversation_client,
 )
 
-#: sha256 of `SCHEDULING_ASSISTANT_INSTRUCTIONS` before routing (commit f44d122).
-TODAYS_PROMPT_SHA256 = "ac3d83962b98ed01811ac931127cd4be1f78262abf282fca975453a8a58bdd33"
+#: sha256 of `SCHEDULING_ASSISTANT_INSTRUCTIONS` minus Scope. Pinned before routing
+#: (commit f44d122) to prove the split changed nothing; re-pinned when the
+#: "Saying what the baseline is now, or where its decision record is" workflow was
+#: added, and again when summaries were kept to the subject the planner named (live run
+#: ad89854, A:6), and when a named family was required in metric arguments (9b8dad2, C:3).
+#: Any other prompt edit must re-pin here, deliberately.
+TODAYS_PROMPT_SHA256 = "c46122507f030e0c3a2a97ab2f1456289ea21c7bd71c160a0894c16c9a89e673"
 
 
 # --- prompt split ------------------------------------------------------------
@@ -56,6 +61,18 @@ def test_the_full_path_prompt_minus_scope_is_todays_prompt() -> None:
     without_scope = full.replace(prompts.SCOPE + "\n\n", "", 1)
     assert hashlib.sha256(without_scope.encode()).hexdigest() == TODAYS_PROMPT_SHA256
     assert prompts.instructions_for("scheduling") == full
+
+
+def test_the_scheduling_prompt_says_where_a_baseline_decision_record_is() -> None:
+    # Live B:10 answered with a bare version id and "if available in the
+    # application": the agent knew the approval id and the run, but not the path.
+    full = prompts.SCHEDULING_ASSISTANT_INSTRUCTIONS
+    workflow = full.split("**Saying what the baseline is now", 1)[1].split("\n\n", 1)[0]
+    for needed in ("baseline_schedule_version", "proposal_id", "approval_id", "Runs tab",
+                   "Debug details", "Decision provenance", "the baseline it replaced"):
+        assert needed.casefold() in workflow.casefold(), needed
+    # A direct (no-data) reply never gets it: it has no snapshot to follow.
+    assert "Decision provenance" not in prompts.DIRECT_INSTRUCTIONS
 
 
 def test_special_paths_compose_only_their_sections() -> None:

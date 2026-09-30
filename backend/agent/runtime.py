@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from time import perf_counter
 
@@ -79,7 +79,7 @@ from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.ports.turn_router import TurnRoute
 from application.contracts.proposal import DraftProposalV1
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
-from application.grounding.claim_tags import fact_handles
+from application.grounding.claim_tags import fact_handles, malformed_claim_tags
 from application.grounding.placeholders import malformed_placeholders, placeholder_handles
 from agent.capability_tools import render_capabilities
 
@@ -197,13 +197,13 @@ def _messages_this_run(messages: list) -> list:
     return messages[start:]
 
 
-def _latest_draft_id_this_run(messages: list) -> str | None:
-    """The draft_id returned by scheduling_draft after the current user prompt.
+def _draft_ids_this_run(messages: list) -> list[str]:
+    """Every draft_id scheduling_draft returned after the current user prompt, in order.
 
     Rehydrated history also carries earlier turns' tool returns, so only parts
     after the last user prompt belong to this run.
     """
-    draft_id = None
+    draft_ids = []
     for message in _messages_this_run(messages):
         if not isinstance(message, ModelRequest):
             continue
@@ -211,8 +211,14 @@ def _latest_draft_id_this_run(messages: list) -> str | None:
             if isinstance(part, ToolReturnPart) and part.tool_name == SCHEDULING_DRAFT_CAPABILITY:
                 content = part.content
                 if isinstance(content, dict) and isinstance(content.get("draft_id"), str):
-                    draft_id = content["draft_id"]
-    return draft_id
+                    draft_ids.append(content["draft_id"])
+    return draft_ids
+
+
+def _latest_draft_id_this_run(messages: list) -> str | None:
+    """The draft_id scheduling_draft last returned after the current user prompt."""
+    draft_ids = _draft_ids_this_run(messages)
+    return draft_ids[-1] if draft_ids else None
 
 
 def _retry_cause(exc: BaseException) -> str | None:
@@ -476,6 +482,17 @@ class PydanticAIAgentRuntime:
                         "Read the record and use the ev handle on its row, or state the "
                         "fact without the tag." + _COMPLETE_ANSWER
                     )
+                broken_tags = malformed_claim_tags(text)
+                if broken_tags and not last_attempt:
+                    # Live run ad89854 (B:2): `value='Despatch</claim>` -- the
+                    # opener never closed. On the last attempt the parser shows
+                    # its value as plain prose instead (G' phase 2b).
+                    self._last_retry_rule = "claim_tag_malformed"
+                    raise ModelRetry(
+                        f"The answer contains {broken_tags[0]!r}, a <claim> tag whose opening "
+                        "tag is never closed with '>'. Write each fact exactly as "
+                        "<claim ev='...' field='...' value='...'>text</claim>." + _COMPLETE_ANSWER
+                    )
                 malformed = malformed_placeholders(text)
                 if malformed and not last_attempt:
                     self._last_retry_rule = "claim_gap"
@@ -519,7 +536,18 @@ class PydanticAIAgentRuntime:
                 # persists a proposal, so that prose was a false success claim.
                 # A draft created in THIS run must be returned as the draft
                 # output; the model is told the exact id it received to cite.
-                if isinstance(output, (DraftProposalV1, DeferredToolRequests)):
+                if isinstance(output, DraftProposalV1):
+                    # The model copies a 64-hex draft_id back and garbles it
+                    # (live run 49523ec: B4, C8, C9 cited 41-58 character
+                    # prefixes), failing a turn whose draft WAS saved. A
+                    # citation matching no draft of this run is bound to the
+                    # latest one -- the same trusted tool result the
+                    # retries-exhausted recovery in `run_turn` already cites.
+                    draft_ids = _draft_ids_this_run(ctx.messages)
+                    if draft_ids and output.draft_id not in draft_ids:
+                        return replace(output, draft_id=draft_ids[-1])
+                    return output
+                if isinstance(output, DeferredToolRequests):
                     return output
                 draft_id = _latest_draft_id_this_run(ctx.messages)
                 if draft_id is not None:

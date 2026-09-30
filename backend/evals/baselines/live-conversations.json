@@ -8,16 +8,16 @@
   "complete_repetitions": 3,
   "configuration": {
     "agent_model": "openrouter:openai/gpt-5.6-luna",
-    "behavioral_digest": "c065dd87f5aa8ef0311dfea7fdb1dc7a9525e6389231b7c0f63c01dedbc73bec",
-    "configuration_digest": "0915e322a6c0bc95fc548dcaa688f45f425d15638228de0a4869124760c6fe46",
-    "judge_model": "openrouter:google/gemini-2.5-flash",
+    "behavioral_digest": "d3b984917850107fc91662a65a383ccecfd30cee3bea713598714ac92a1c34e7",
+    "configuration_digest": "7dfabe1aa5b64a76d09e8b852511260b4b782197232e819aed26ea30d48865db",
+    "judge_model": "typesafe:jev-1.13.0",
     "reasoning_effort": "low"
   },
-  "measured_at_commit": "371964a33462a17d6e2e76ee6658e1a2fd2e6cc6",
+  "measured_at_commit": "8f359071e208d1b293511568240682938c00b423",
   "note": "A projection of the committed Story 5.7 measurement, not a second measurement. Tracked config, deliberately outside evidence/.",
   "schema_version": "1",
   "source_evidence_path": "evidence/story-5.7/live-conversation-journeys.json",
-  "source_evidence_sha256": "53f3a882eaacbcabfc8d1788c4b613a1546c5c9079e2faeb9800c56a00dfb7e2",
+  "source_evidence_sha256": "d832aa1bc3876562bd05cad897e42add9e6be7a6ce1b11b3c4feaa84160d2e7e",
   "total_executed": 108,
   "total_passed": 108,
   "turn_pass_rates": {

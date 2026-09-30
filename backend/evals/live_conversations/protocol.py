@@ -163,7 +163,43 @@ class ConversationJudgment(BaseModel):
         })
 
 
-def turn_verdict(*, factual_failures: list[str], judgment: ConversationJudgment | None,
+class JevDimensionGrade(BaseModel):
+    """One dimension as TypeSafe Jev scored it: level probabilities, no citations.
+
+    `score` is the most probable level (null when not applicable); `reason` is
+    always null -- kept so publication reads both judges' dimensions alike.
+    """
+    model_config = ConfigDict(extra='forbid', strict=True)
+    score: Literal[0, 1, 2] | None
+    probabilities: dict[Literal['0', '1', '2'], float] | None
+    confidence: float | None
+    reason: None = None
+
+
+class JevConversationJudgment(BaseModel):
+    """A Jev judgment. Its verdict is code policy over the probabilities
+    (`jev_judge.verdict_from`), so there is no citation for `passes()` to gate."""
+    model_config = ConfigDict(extra='forbid', strict=True)
+    relevance: JevDimensionGrade
+    continuity: JevDimensionGrade
+    completeness: JevDimensionGrade
+    clarification_refusal: JevDimensionGrade
+    verdict: Literal['pass', 'fail', 'uncertain']
+
+    def passes(self, *, known_ids: set[str], not_applicable: frozenset[str] = frozenset()) -> bool:
+        del known_ids  # no citations to resolve
+        return self.verdict == 'pass' and all(
+            getattr(self, name).score == 2
+            for name in ('relevance', 'continuity', 'completeness', 'clarification_refusal')
+            if name not in not_applicable)
+
+    def unknown_citations(self, *, known_ids: set[str]) -> list[str]:
+        del known_ids
+        return []
+
+
+def turn_verdict(*, factual_failures: list[str],
+                 judgment: ConversationJudgment | JevConversationJudgment | None,
                  known_ids: set[str], not_applicable: frozenset[str] = frozenset()) -> str:
     if factual_failures:
         return 'fail'

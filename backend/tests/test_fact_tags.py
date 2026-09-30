@@ -128,12 +128,26 @@ def test_a_fact_read_on_another_version_is_a_version_mismatch() -> None:
     ("x <claim ev='w1' field='name' value='A'>A "
      "<claim ev='w2' field='name' value='B'>B</claim></claim> y", "x A B y"),  # nested
     ("x </claim> y", "x  y"),                                         # orphan close
+    # an opener never closed with `>` (live run ad89854, B:2)
+    ("Loader M03 — <claim ev='t6' field='function' value='Despatch</claim>, Main",
+     "Loader M03 — Despatch, Main"),
+    ("x <claim ev='t6' field='f' value='A\n- y", "x A\n- y"),        # never swallows the next line
+    # the value closed but the tag did not (live run ad89854, C:1): keep the prose after it
+    ("— <claim ev='t6' field='function' value='despatch'; area: main", "— despatch; area: main"),
     ("x <claim-note ev='w1'>A</claim-note> y",                        # another tag
      "x <claim-note ev='w1'>A</claim-note> y"),
 ])
 def test_a_malformed_tag_shows_its_text_as_prose_without_the_syntax(text, expected) -> None:
     assert parse_claim_tags(text) == (PlainTextPart(expected),)
     assert _ground(text) == (GroundedProseSegmentV1(text=expected),)
+
+
+def test_only_an_unterminated_opener_is_reported_malformed() -> None:
+    from application.grounding.claim_tags import malformed_claim_tags
+
+    assert malformed_claim_tags("x <claim ev='t6' field='f' value='A</claim>, B") == (
+        "<claim ev='t6' field='f' value='A",)
+    assert malformed_claim_tags(_tag("w1", "name", "A", "A")) == ()
 
 
 def test_attributes_accept_either_quote_in_any_order() -> None:

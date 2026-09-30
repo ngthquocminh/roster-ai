@@ -16,6 +16,30 @@ REQUIRED_ATTRIBUTES = ("ev", "field", "value")
 
 _TAG = re.compile(r"(<claim(?=[\s>])[^<>]*>|</claim\s*>)", re.IGNORECASE)
 _ATTRIBUTE = re.compile(r"""([A-Za-z_]+)\s*=\s*(?:'([^']*)'|"([^"]*)")""")
+#: An opening tag the model never closed with `>`: it runs into the next tag or
+#: the end. Live run ad89854 (B:2): `value='Despatch</claim>, Main` reached the
+#: planner as raw markup because `_TAG` only matches a terminated opener.
+#: One line at most: a broken opener must not swallow the prose after it.
+_BROKEN_OPEN = re.compile(r"<claim(?=\s)[^<>\n]*(?=<|\n|$)", re.IGNORECASE)
+_PARTIAL_VALUE = re.compile(r"""value\s*=\s*(['"])(.*?)(?:\1|$)""", re.IGNORECASE)
+
+
+def malformed_claim_tags(text: str) -> tuple[str, ...]:
+    """Opening `<claim` tags left without their closing `>`."""
+    return tuple(match.group(0) for match in _BROKEN_OPEN.finditer(text))
+
+
+def _repair_broken_openers(text: str) -> str:
+    """Drop an unterminated opener's syntax, keeping the value it was writing
+    and any prose after a closed value
+    (`<claim ev='t6' field='function' value='Despatch` -> `Despatch`;
+    `<claim ev='t6' field='function' value='despatch'; area: main` -> `despatch; area: main`)."""
+    def visible(match: re.Match) -> str:
+        opener = match.group(0)
+        value = _PARTIAL_VALUE.search(opener)
+        return value.group(2) + opener[value.end():] if value else ""
+
+    return _BROKEN_OPEN.sub(visible, text)
 
 
 @dataclass(frozen=True)
@@ -57,7 +81,7 @@ def parse_claim_tags(text: str) -> tuple[TagPart, ...]:
     nested = False
     attributes: dict[str, str] = {}
     inner: list[str] = []
-    for token in _TAG.split(text):
+    for token in _TAG.split(_repair_broken_openers(text)):
         if not token:
             continue
         if token.lower().startswith("<claim"):
@@ -117,5 +141,5 @@ def fact_handles(text: str) -> tuple[str, ...]:
 
 __all__ = [
     "FactTagPart", "REQUIRED_ATTRIBUTES", "TagPart", "PlainTextPart",
-    "fact_handles", "parse_claim_tags", "restates_value_only",
+    "fact_handles", "malformed_claim_tags", "parse_claim_tags", "restates_value_only",
 ]
