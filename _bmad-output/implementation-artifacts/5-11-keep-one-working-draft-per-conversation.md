@@ -4,7 +4,7 @@ baseline_commit: 8a85f4f
 
 # Story 5.11: Keep One Working Draft per Conversation
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -651,20 +651,20 @@ Order follows the proposal's handoff (§5): migration and repository → finaliz
 and instructions → promotion hook → contracts and codegen → card. Sub-phases, not separate stories
 (proposal §3).
 
-- [ ] **Task 1 — Clean, re-verified baseline (all ACs)**
-  - [ ] Work on the session's designated development branch. Bring up PostgreSQL
+- [x] **Task 1 — Clean, re-verified baseline (all ACs)**
+  - [x] Work on the session's designated development branch. Bring up PostgreSQL
         (`.claude/sandbox/docker-dev.sh` in a cloud session; see `.claude/sandbox/README.md`).
-  - [ ] Record: backend `cd backend && uv run --frozen pytest -q` (5.10 closed at 2367 passed, 1
+  - [x] Record: backend `cd backend && uv run --frozen pytest -q` (5.10 closed at 2367 passed, 1
         skipped, 10 deselected — re-measure, do not assume); frontend `npm run typecheck && npm run
         lint && npm test`. Record drift in the Dev Agent Record.
-  - [ ] Re-confirm C3 (lock order), C4 (`proposal_rejected` has no consumer) and C5 (check order)
+  - [x] Re-confirm C3 (lock order), C4 (`proposal_rejected` has no consumer) and C5 (check order)
         against the tree before relying on them.
 
-- [ ] **Task 2 — Migration and schema (AC1, AC5) — per Decision 1**
-  - [ ] `a8b9c0d1e2f3_one_working_draft_per_conversation.py`; mirror in `schema.py` (columns, both
+- [x] **Task 2 — Migration and schema (AC1, AC5) — per Decision 1**
+  - [x] `a8b9c0d1e2f3_one_working_draft_per_conversation.py`; mirror in `schema.py` (columns, both
         CHECKs, FK with `use_alter`, partial unique `Index`).
-  - [ ] Update `tests/test_proposal_persistence.py` column-set and CHECK assertions (lines 25-51).
-  - [ ] Migration tests (fresh DB, `fresh_postgres_database_url`): upgrade to `f7a8b9c0d1e2`, seed
+  - [x] Update `tests/test_proposal_persistence.py` column-set and CHECK assertions (lines 25-51).
+  - [x] Migration tests (fresh DB, `fresh_postgres_database_url`): upgrade to `f7a8b9c0d1e2`, seed
         one conversation with three `active` drafts (two sharing `created_at`, broken by `id`) and a
         `rejected` one, upgrade to head → AC5's survivor, `rejected/system` for the rest,
         `ended_by='planner'` backfilled; the index refuses a second `active`; `command.check` clean;
@@ -672,97 +672,97 @@ and instructions → promotion hook → contracts and codegen → card. Sub-phas
         then upgrade again (the `test_approval_governance_postgres.py:762-812` shape), including an
         `applied` row that returns to `active`, and the ancestor `UPDATE (state, …)` grant surviving.
 
-- [ ] **Task 3 — Contracts and repositories (AC1, AC4) — per Decisions 2, 3**
-  - [ ] Contracts; `tests/test_proposal_contracts.py:54` state tuple; frozen/framework-free checks for
+- [x] **Task 3 — Contracts and repositories (AC1, AC4) — per Decisions 2, 3**
+  - [x] Contracts; `tests/test_proposal_contracts.py:54` state tuple; frozen/framework-free checks for
         the new contracts.
-  - [ ] Port methods and `PostgresProposalRepository` implementations; `reject` writes
+  - [x] Port methods and `PostgresProposalRepository` implementations; `reject` writes
         `ended_by='planner'`; `get_current` fields. `ConversationRepository.lock_conversation` and
         its adapter.
-  - [ ] Postgres tests: `get_working`; `append_agent_version` (ordinal, pointer, resource version,
+  - [x] Postgres tests: `get_working`; `append_agent_version` (ordinal, pointer, resource version,
         no idempotency row); `end_by_assistant`; `mark_applied` (applied + `applied_version_id` =
         the schedule version's pinned version; `False` on an ended draft).
 
-- [ ] **Task 4 — Per-turn draft state and `scheduling_draft` (AC1) — per Decisions 4, 5**
-  - [ ] `DraftTurnState`; `AgentDepsV1.draft_turn`; route wiring in `execute_agent_turn`.
-  - [ ] `scheduling_draft` created/updated; result and model-view fields; `SCOPE_CONTROLS`;
+- [x] **Task 4 — Per-turn draft state and `scheduling_draft` (AC1) — per Decisions 4, 5**
+  - [x] `DraftTurnState`; `AgentDepsV1.draft_turn`; route wiring in `execute_agent_turn`.
+  - [x] `scheduling_draft` created/updated; result and model-view fields; `SCOPE_CONTROLS`;
         `model_description`.
-  - [ ] Unit tests (`tests/test_scheduling_draft.py`): created and updated each record their
+  - [x] Unit tests (`tests/test_scheduling_draft.py`): created and updated each record their
         observation; a second call in one turn observes the same state even when the reader would
         now answer differently; a call after a same-turn discard reports `created`; baseline pin is
         the tool-time overview value.
 
-- [ ] **Task 5 — Binding and the finalize guard (AC1, AC2) — per Decisions 7, 8**
-  - [ ] `execute_turn` bindings; `AgentRunOutcomeV1` fields; `activity_payload`.
-  - [ ] `finalize_agent_run` guard and its three call sites. Update
+- [x] **Task 5 — Binding and the finalize guard (AC1, AC2) — per Decisions 7, 8**
+  - [x] `execute_turn` bindings; `AgentRunOutcomeV1` fields; `activity_payload`.
+  - [x] `finalize_agent_run` guard and its three call sites. Update
         `tests/test_proposal_persistence.py:74-127` (payload type) and, where a test's run
         finalizes a draft or a discard, the repository doubles in `tests/test_conversations_api.py`,
         `test_agent_approval_path.py`, `test_gate_a_mutation_audit.py`,
         `tests/architecture/test_model_outage_boundaries.py` (they now need
         `get_working`/`lock_conversation`).
-  - [ ] Unit tests with recording doubles: guard-not-run for non-draft turns (no lock call); call
+  - [x] Unit tests with recording doubles: guard-not-run for non-draft turns (no lock call); call
         order lock → get_working → finish → proposal write; each table row; the failure payload's
         exact literals and `agent_failed`.
 
-- [ ] **Task 6 — The discard capability (AC3) — per Decision 6**
-  - [ ] Module, errors, manifest, install, settings flag + parse, `.env.example`,
+- [x] **Task 6 — The discard capability (AC3) — per Decision 6**
+  - [x] Module, errors, manifest, install, settings flag + parse, `.env.example`,
         `docs/CONFIGURATION.md`, smoke case.
-  - [ ] Update `tests/architecture/test_execute_turn_boundaries.py:92-139` (the `all_on`/`all_off`
+  - [x] Update `tests/architecture/test_execute_turn_boundaries.py:92-139` (the `all_on`/`all_off`
         settings and one flag-off case), `tests/test_settings.py`, and
         `tests/test_capability_conformance.py`'s per-capability table (`:58-70`, `:470`).
-  - [ ] Unit tests: refuses with no working draft; refuses after a same-turn draft; refuses a
+  - [x] Unit tests: refuses with no working draft; refuses after a same-turn draft; refuses a
         second discard; records the observation; the model view carries no proposal id.
 
-- [ ] **Task 7 — Snapshot and instructions (AC1, AC3, AC4) — per Decision 12**
-  - [ ] `conversation_workflow_context.py`; tests: `working_draft` present when its activities are
+- [x] **Task 7 — Snapshot and instructions (AC1, AC3, AC4) — per Decision 12**
+  - [x] `conversation_workflow_context.py`; tests: `working_draft` present when its activities are
         outside the window; ended drafts carry `state`/`ended_by`; `applied_version` from the pinned
         version, not the latest.
-  - [ ] `scheduling_instructions.py` edits; keep every section header the composer reads
+  - [x] `scheduling_instructions.py` edits; keep every section header the composer reads
         (`_sections`, `_DIRECT_SECTIONS`).
 
-- [ ] **Task 8 — Ended-draft refusals (AC4) — per Decision 9**
-  - [ ] Use cases, router codes, `_SNAPSHOT_PROBLEMS`.
-  - [ ] Tests: revise/reject/run on `rejected` → `rejected_proposal`, on `applied` →
+- [x] **Task 8 — Ended-draft refusals (AC4) — per Decision 9**
+  - [x] Use cases, router codes, `_SNAPSHOT_PROBLEMS`.
+  - [x] Tests: revise/reject/run on `rejected` → `rejected_proposal`, on `applied` →
         `applied_proposal`, each 409 through the real route; on an applied **and** stale draft still
         `applied_proposal`; run with the pre-`applied` resource version still `applied_proposal`
         (C5); a revise replay after the draft became `applied` returns the stored original.
         Update `tests/test_create_run_snapshot.py:146` and `test_schedule_runs_api.py:667-669` if
         their tables need the new code.
 
-- [ ] **Task 9 — Promotion hook (AC4) — per Decision 10**
-  - [ ] `promote_baseline`/`decide_approval` signature; router; six call sites; doubles.
-  - [ ] `tests/test_promote_baseline.py`: `mark_applied` called last on both paths (recording
+- [x] **Task 9 — Promotion hook (AC4) — per Decision 10**
+  - [x] `promote_baseline`/`decide_approval` signature; router; six call sites; doubles.
+  - [x] `tests/test_promote_baseline.py`: `mark_applied` called last on both paths (recording
         double); not called when the consume or pointer CAS loses; a fault in it propagates.
-  - [ ] `_TX2_FAULTS["proposal"]` node with the two proposal-state assertions.
-  - [ ] Postgres: an already-ended (`rejected`) draft stays `rejected` through a promotion; a
+  - [x] `_TX2_FAULTS["proposal"]` node with the two proposal-state assertions.
+  - [x] Postgres: an already-ended (`rejected`) draft stays `rejected` through a promotion; a
         v2-promoted-then-edited-to-v3 draft reads `applied` with `applied_version_ordinal == 2`.
 
-- [ ] **Task 10 — API contract and codegen (AC4, AC7) — per Decision 11**
-  - [ ] `ProposalOut`, `_out`, `_view`; `npm run codegen`; commit `openapi.json` and `schema.d.ts`.
+- [x] **Task 10 — API contract and codegen (AC4, AC7) — per Decision 11**
+  - [x] `ProposalOut`, `_out`, `_view`; `npm run codegen`; commit `openapi.json` and `schema.d.ts`.
 
-- [ ] **Task 11 — Golden cases and harness (AC3) — per Decision 15**
-  - [ ] Four fixtures; `EVAL_TAG_GRANTS`; `seeded_working_draft`; floor set; README paragraph.
-  - [ ] `uv run --frozen pytest tests/test_evaluation_harness.py` green, including the NFR28 floor.
+- [x] **Task 11 — Golden cases and harness (AC3) — per Decision 15**
+  - [x] Four fixtures; `EVAL_TAG_GRANTS`; `seeded_working_draft`; floor set; README paragraph.
+  - [x] `uv run --frozen pytest tests/test_evaluation_harness.py` green, including the NFR28 floor.
 
-- [ ] **Task 12 — Timeline and Draft card (AC6, AC7) — per Decisions 13, 14**
-  - [ ] `ActivityTimeline.tsx`, `ChatView.tsx`, `DraftCard.tsx`, the four hooks.
-  - [ ] `src/test/stateMatrix.tsx`: draft family states `fresh`, `stale` ("Working draft · out of
+- [x] **Task 12 — Timeline and Draft card (AC6, AC7) — per Decisions 13, 14**
+  - [x] `ActivityTimeline.tsx`, `ChatView.tsx`, `DraftCard.tsx`, the four hooks.
+  - [x] `src/test/stateMatrix.tsx`: draft family states `fresh`, `stale` ("Working draft · out of
         date"), `discarded`, `discarded by assistant`, `replaced`, `applied`, `unsaved edits`,
         `changed under edits`, `in flight`, `discard confirming`; `EXPECTED_FAMILIES` unchanged.
-  - [ ] `DraftCard.test.tsx` / `ActivityTimeline.test.tsx`: rewrite the tests that name the removed
+  - [x] `DraftCard.test.tsx` / `ActivityTimeline.test.tsx`: rewrite the tests that name the removed
         controls ("Revise proposal", "Reject proposal", "Constraint to revise") and add the proof
         suite rows below.
 
-- [ ] **Task 13 — AC-level proofs (all ACs) — per Decision 16**
-  - [ ] `tests/test_draft_lifecycle_postgres.py`: the rows of *Proof suite minimum* marked Postgres.
-  - [ ] Route test: `execute_agent_turn` builds deps whose `draft_turn` reads through
+- [x] **Task 13 — AC-level proofs (all ACs) — per Decision 16**
+  - [x] `tests/test_draft_lifecycle_postgres.py`: the rows of *Proof suite minimum* marked Postgres.
+  - [x] Route test: `execute_agent_turn` builds deps whose `draft_turn` reads through
         `get_working` (a recording proposal repository proves the reader is the route's, not the
         default).
 
-- [ ] **Task 14 — Close-out**
-  - [ ] Mutation table (below) in the Dev Agent Record, every row demonstrated red on finished code
+- [x] **Task 14 — Close-out**
+  - [x] Mutation table (below) in the Dev Agent Record, every row demonstrated red on finished code
         and restored.
-  - [ ] `deferred-work.md` per Decision 17. Full backend and frontend suites; record counts.
-  - [ ] Commit (no evidence commit — this story produces none).
+  - [x] `deferred-work.md` per Decision 17. Full backend and frontend suites; record counts.
+  - [x] Commit (no evidence commit — this story produces none).
 
 ---
 
@@ -938,16 +938,169 @@ invalidations in Decision 14.
 
 ### Agent Model Used
 
+Claude Sonnet 5.5 (`claude-sonnet-5-5`).
+
 ### Debug Log References
+
+- **Baseline (Task 1), measured on a clean checkout of `ee8c07f`:** backend 22 failed, 2684 passed, 2 skipped, 10 deselected. All 22 failures are `tests/test_evidence_convention.py` (11 x `test_every_recorded_commit_is_a_real_ancestor_that_touched_code`, 11 x `test_evidence_file_is_fully_bound`): the sandbox's git history lacks the recorded evidence commits (`git_commit e2ecdb62… is not a real commit object`). They are unrelated to this story and fail identically before and after. Drift from the story's "2367 passed" is large (the suite has grown since 5.10); nothing was assumed. Frontend: 90 files / 694 tests, typecheck clean, oxlint 3 warnings (pre-existing).
+- **C3, C4, C5 re-confirmed** against the tree before relying on them: `finish_agent_run` locks conversation then agent run; nothing consumed `proposal_rejected`; `enqueue_compute` compared the resource version before the state check.
+- **Route test order-dependence.** `test_every_ended_draft_command_answers_409...` passed alone and failed in the full run: another suite leaves `api.main`/`api.deps` such that a freshly imported `app` is not the one the fixture's `TestClient` serves, so a `dependency_overrides` entry was ignored and the real projection reader ran against an empty scenario. Reproduced with `tests/architecture tests/test_a*.py tests/test_c*.py tests/test_d*.py`; fixed by overriding on `client.app` with the router's own captured dependency. Two intermediate commits (`e57bdef`, `22b80c4`) carry the partial and final fix.
+- `test_proposal_persistence.py`, `test_agent_runtime_adapter.py`, `test_conversations_postgres.py`, `test_execute_turn_use_case.py`, `test_scheduling_draft.py`, `test_capability_conformance.py`, `test_evidence_binding.py`, `test_turn_routing.py` (pinned prompt hash), the live inventory/smoke tests and `tests/compose_proof.py` were updated for the widened contracts; each is listed in the File List.
+
+### Implementation Plan
+
+Followed the story's task order and its seventeen decisions: migration and schema (D1); additive contracts (D2); repository and conversation-lock ports (D3); `DraftTurnState` wired through the execute route (D4); `scheduling_draft` resolving the working draft (D5); `scheduling_draft_discard` (D6); `execute_turn` bindings (D7); the finalize guard, lock order conversation then proposal (D8); ended-draft refusals with the ended check before the resource-version check (D9); `mark_applied` as TX2's last write (D10); read model and codegen (D11); snapshot and instructions (D12); timeline-owned edit buffers (D13); the rebuilt card (D14); golden cases and harness (D15); real-PostgreSQL proofs (D16); docs and ledger (D17).
 
 ### Completion Notes List
 
-- Ultimate context engine analysis completed - comprehensive developer guide created.
+- Backend: full suite at close-out: BACKEND_COUNTS. The only failures are the 22 pre-existing evidence-convention tests above. Frontend: 93 files, 764 tests, `npm run typecheck` clean, `npm run lint` at its 3 baseline warnings. `npm run codegen` regenerated `frontend/openapi.json` and `frontend/src/api/schema.d.ts`.
+- **No live run, no provider spend, no evidence file, no change to runs, the solver, approval contracts, `PolicyInputsV1`, or the live-eval harness/baseline.** The four discard golden cases are `live_eligible: false` and the `discard-working-draft` smoke case is authored only (Story 5.12 owns live runs).
+- **Deviations from the story text (all small, all in `deferred-work.md`):** (1) `scheduling_draft_discard`'s manifest also declares `draft_discard_failed`, its base error code, because the conformance suite requires the declared vocabulary to equal every code the module can raise. (2) `finalize_agent_run` receives `discard` only for an `agent_completed` turn (a completed-but-unusable turn ends `agent_failed` and applies nothing). (3) `tests/compose_proof.py` now ends an earlier working draft before creating a second one in the same conversation, mirroring discard-then-draft, because that proof drafts twice per conversation. (4) The `DraftCard` takes optional `buffer`/`onBufferChange`/`agentTurnInFlight` props; without them it keeps a local buffer so it still renders standalone. (5) UX-DR35: Cancel, Keep, Load and Refresh are all outline buttons, so each got a distinct border colour to satisfy `stateMatrix`'s merged-treatment rule.
+- Resolved `Not covered` items are recorded rather than fixed: baseline-staleness of a working draft (C14), undocumented `SCHEDULING_*_ENABLED` flags (C19), `behavioral_digest` not hashing instructions (C15, for 5.12), no prose channel on a draft turn (C6).
+- **The mutation table below found one weak guard.** `seeded_working_draft ignored` stayed green: the discard `valid` case only asserts routing, and a refused discard also calls the tool once. Fixed by `test_the_discard_cases_prove_the_seeded_working_draft_reaches_the_handler`, which asserts the trusted discard result; the mutation then reddens. Several rows were caught first by a unit test under `-x`; the Postgres-only re-runs at the end of the table show the named Postgres guards reddening on their own.
+
+### Mutation table (Task 14)
+
+Every mutation was applied to finished, committed code, the named guard run before (green) and after (red), and the file restored byte-for-byte; `git status` was clean after each. Harness: a scratch script driven from a JSON list of `(file, old, new, command)` rows, asserting green-before, red-after and a clean tree.
+
+| Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|
+| migration: partial unique index not created | migration test; AC1 second-`active` test | 3 passed | red (`test_the_partial_unique_index_and_lifecycle_check_are_enforced`) |
+| migration: collapse keeps the oldest (`created_at ASC`) | `test_upgrade_collapses_duplicate_active_drafts...` | green | red |
+| migration: collapse ignores `id` as tie-breaker | same test (two rows share `created_at`) | green | red |
+| migration: `ended_by` backfill for `rejected` removed | same test (and the lifecycle CHECK build) | green | red |
+| finalize guard skips the `resource_version` comparison | `test_updated_applies_only_if...` (unit) | 37 passed | red |
+| same, Postgres card-edit race only | `test_a_card_edit_mid_turn_makes_the_turn_lose[update]` | 2 passed | red |
+| finalize guard omits `lock_conversation` | `test_the_guard_orders_lock_then_working_read...` (unit) | 37 passed | red |
+| same, Postgres two-connection test only | `test_the_conversation_lock_serializes_two_finalizes...` | 1 passed | red |
+| guard applies the write when the check fails | `test_created_applies_only_when_there_is_no_working_draft` (unit) | 37 passed | red |
+| same, Postgres race rows only | `test_a_card_edit_mid_turn_makes_the_turn_lose[update]` and the other race rows | 8 passed | red |
+| `DraftTurnState.observe()` not memoized | `test_two_calls_in_one_turn_see_the_same_pre_turn_state...` | 23 passed | red |
+| discard allowed after a same-turn draft | `test_it_refuses_after_a_same_turn_draft` | 189 passed | red |
+| draft after a same-turn discard reports `updated` | discard-then-draft unit + Postgres | green | red |
+| `mark_applied` without `AND state = 'active'` | already-`rejected` promotion test | green | red |
+| `mark_applied` moved before the conversation write | `test_mark_applied_is_the_last_write_on_both_initiator_paths` | green | red |
+| `mark_applied` call removed from TX2 | same test; AC4 promotion tests; TX2 `proposal` fault node | 18 passed | red |
+| `mark_applied` fault swallowed (partial-bundle commit) | `test_a_fault_in_mark_applied_escapes...`; `_TX2_FAULTS["proposal"]` | 8 passed | red |
+| ended-state check moved after the resource-version check in `enqueue_compute` | `test_an_ended_draft_is_refused_before_the_resource_version_comparison[applied-applied_proposal]` | 10 passed | red |
+| proposals router code back to `proposal_rejected` | `test_every_ended_draft_command_answers_409...[rejected-rejected_proposal]` | 2 passed | red |
+| snapshot `working_draft` not read from the repository | workflow-context tests | 26 passed | red |
+| `EVAL_TAG_GRANTS` drops `scheduling_draft` for the discard tag | `test_all_version_controlled_golden_cases_pass_deterministically` | 152 passed | red |
+| `seeded_working_draft` ignored | `test_the_discard_cases_prove_the_seeded_working_draft_reaches_the_handler` | **152 passed with the old guards (green: a finding), 1 passed with the new one** | red with the new guard |
+| card: Save enabled with no diff | `DraftCard.test` (Save/Cancel enablement) | 41 passed | red |
+| card: remove enabled on the last row | `DraftCard.test` (never removes the last row) | 41 passed | red |
+| card: Run enabled with unsaved edits | `DraftCard.test` (Run optimization) | 41 passed | red |
+| card: Run enabled while an agent turn is in flight | `DraftCard.test` (in flight) | 41 passed | red |
+| card: Discard enabled while an agent turn is in flight | `DraftCard.test` (in flight) | 41 passed | red |
+| timeline: live card on the OLDEST activity (first wins) | `ActivityTimelineDrafts.test` | 5 passed | red |
+| card: edit buffer kept in `DraftCard` state | `ActivityTimelineDrafts.test` (edits survive the move) | 5 passed | red |
+| `useReviseProposal`: replay body not re-read | `proposalCommandHooks.test` | 2 passed | red |
+| `ChatView`: in-flight signal not passed | `ChatView.test` in-flight rows | green | red |
+| validation: max-hours bound loosened to 100 | `draftEdits.test` / `DraftCard.test` | green | red |
+| validation: `start < end` not enforced | `draftEdits.test` | 15 passed | red |
+| card: stale notice shown on ended drafts | `DraftCard.test` (ended state wins over staleness) | 41 passed | red |
+| `useSendMessage`: proposals not re-read after a turn | `useSendMessage.test` | 2 passed | red |
+| `useDecideApproval`: proposals not re-read after promotion | `useDecideApproval.test` | 1 passed | red |
+| `_TX2_FAULTS["proposal"]` node removed | **honest gap:** removing a matrix node just runs one fewer parametrized case, and nothing asserts the node count. The node's own coverage is proven through the two `mark_applied` rows above (call removed, fault swallowed), which redden its assertions. | n/a | n/a |
 
 ### File List
+
+- `backend/.env.example`
+- `backend/adapters/postgres/conversation.py`
+- `backend/adapters/postgres/proposal.py`
+- `backend/adapters/postgres/schema.py`
+- `backend/agent/scheduling_instructions.py`
+- `backend/api/routers/approvals.py`
+- `backend/api/routers/conversations.py`
+- `backend/api/routers/proposals.py`
+- `backend/api/routers/schedule_runs.py`
+- `backend/api/schemas.py`
+- `backend/application/capabilities/deps.py`
+- `backend/application/capabilities/installed.py`
+- `backend/application/capabilities/scheduling_draft.py`
+- `backend/application/capabilities/scheduling_draft_discard.py`
+- `backend/application/contracts/agent_runtime.py`
+- `backend/application/contracts/proposal.py`
+- `backend/application/drafting/turn_state.py`
+- `backend/application/ports/conversation.py`
+- `backend/application/ports/proposal.py`
+- `backend/application/use_cases/conversation_workflow_context.py`
+- `backend/application/use_cases/create_run_snapshot.py`
+- `backend/application/use_cases/decide_approval.py`
+- `backend/application/use_cases/enqueue_compute.py`
+- `backend/application/use_cases/execute_turn.py`
+- `backend/application/use_cases/finalize_agent_run.py`
+- `backend/application/use_cases/manage_proposal.py`
+- `backend/application/use_cases/promote_baseline.py`
+- `backend/evals/README.md`
+- `backend/evals/cases.py`
+- `backend/evals/golden/scheduling_draft_discard/after-draft-same-turn.json`
+- `backend/evals/golden/scheduling_draft_discard/no-working-draft.json`
+- `backend/evals/golden/scheduling_draft_discard/start-over-is-not-discard.json`
+- `backend/evals/golden/scheduling_draft_discard/valid.json`
+- `backend/evals/live_conversations/smoke_cases.py`
+- `backend/evals/report.py`
+- `backend/migrations/versions/a8b9c0d1e2f3_one_working_draft_per_conversation.py`
+- `backend/settings.py`
+- `backend/tests/architecture/test_execute_turn_boundaries.py`
+- `backend/tests/architecture/test_telemetry_boundaries.py`
+- `backend/tests/compose_proof.py`
+- `backend/tests/test_agent_runtime_adapter.py`
+- `backend/tests/test_approval_audit_invariants_postgres.py`
+- `backend/tests/test_approval_governance_postgres.py`
+- `backend/tests/test_capability_conformance.py`
+- `backend/tests/test_conversation_workflow_context.py`
+- `backend/tests/test_conversations_api.py`
+- `backend/tests/test_conversations_postgres.py`
+- `backend/tests/test_create_run_snapshot.py`
+- `backend/tests/test_decide_approval.py`
+- `backend/tests/test_draft_lifecycle_migration_postgres.py`
+- `backend/tests/test_draft_lifecycle_postgres.py`
+- `backend/tests/test_enqueue_compute.py`
+- `backend/tests/test_evaluation_harness.py`
+- `backend/tests/test_evidence_binding.py`
+- `backend/tests/test_execute_turn_use_case.py`
+- `backend/tests/test_finalize_agent_run_guard.py`
+- `backend/tests/test_live_conversation_inventory.py`
+- `backend/tests/test_live_conversation_smoke_cases.py`
+- `backend/tests/test_promote_baseline.py`
+- `backend/tests/test_proposal_contracts.py`
+- `backend/tests/test_proposal_persistence.py`
+- `backend/tests/test_schedule_runs_api.py`
+- `backend/tests/test_scheduling_draft.py`
+- `backend/tests/test_scheduling_draft_discard.py`
+- `backend/tests/test_settings.py`
+- `backend/tests/test_trace_export_failure_independence.py`
+- `backend/tests/test_turn_routing.py`
+- `docs/CONFIGURATION.md`
+- `frontend/openapi.json`
+- `frontend/src/api/schema.d.ts`
+- `frontend/src/features/chat/ActivityTimeline.tsx`
+- `frontend/src/features/chat/ActivityTimelineDrafts.test.tsx`
+- `frontend/src/features/chat/ChatView.test.tsx`
+- `frontend/src/features/chat/ChatView.tsx`
+- `frontend/src/features/chat/DraftCard.test.tsx`
+- `frontend/src/features/chat/DraftCard.tsx`
+- `frontend/src/features/chat/draftEdits.test.ts`
+- `frontend/src/features/chat/draftEdits.ts`
+- `frontend/src/hooks/proposalCommandHooks.test.tsx`
+- `frontend/src/hooks/useDecideApproval.test.tsx`
+- `frontend/src/hooks/useDecideApproval.ts`
+- `frontend/src/hooks/useRejectProposal.ts`
+- `frontend/src/hooks/useReviseProposal.ts`
+- `frontend/src/hooks/useSendMessage.test.tsx`
+- `frontend/src/hooks/useSendMessage.ts`
+- `frontend/src/test/PressOnMount.tsx`
+- `frontend/src/test/accessibility-contract.test.tsx`
+- `frontend/src/test/stateMatrix.tsx`
+
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/implementation-artifacts/5-11-keep-one-working-draft-per-conversation.md`
 
 ## Change Log
 
 | Date | Change |
 |---|---|
 | 2026-09-30 | Story created by `bmad-create-story` from `sprint-change-proposal-2026-09-30.md` and the draft-lifecycle spec; 19 creation findings, 17 decisions. Status `ready-for-dev`. |
+| 2026-09-30 | Implemented by `bmad-dev-story`: migration `a8b9c0d1e2f3`, contracts and repositories, `DraftTurnState`, `scheduling_draft` working-draft resolution, `scheduling_draft_discard` (flag, four golden cases, smoke case), finalize guard, ended-draft refusals, TX2 `mark_applied`, API/OpenAPI, snapshot and instructions, timeline-owned edit buffers and the rebuilt Draft card; real-PostgreSQL lifecycle and race proofs; 33-row mutation table (one weak guard found and fixed); deferred-work ledger. Status `review`. |
