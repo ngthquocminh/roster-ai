@@ -1031,6 +1031,23 @@ def test_a_malformed_placeholder_is_corrected_in_loop(malformed) -> None:
     assert outcome.answer == GroundedAnswerV2(text="The draft keeps that worker off that task.")
 
 
+def test_an_unterminated_claim_tag_is_corrected_in_loop() -> None:
+    """Live run ad89854 (B:2): the opener never closed and the planner saw raw markup."""
+    attempts = []
+    broken = "Main Despatch — <claim ev='t6' field='function' value='Despatch</claim>, Main"
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        attempts.append(len(attempts))
+        answer = GroundedAnswerV2(text=broken if len(attempts) == 1 else "Main Despatch — Despatch, Main")
+        return ModelResponse(parts=[ToolCallPart(
+            tool_name="final_result", args=_answer_json(answer), tool_call_id=f"o{len(attempts)}")])
+
+    runtime = _runtime(model=FunctionModel(model), answer_type=GroundedAnswerV2)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="what tasks are in this scenario?"))
+    assert len(attempts) == 2
+    assert outcome.answer == GroundedAnswerV2(text="Main Despatch — Despatch, Main")
+
+
 def _answer_json(answer) -> str:
     return json.dumps(asdict(answer))
 

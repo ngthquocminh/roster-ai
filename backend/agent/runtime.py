@@ -79,7 +79,7 @@ from application.contracts.dialogue import ClarificationV1, RefusalV1
 from application.ports.turn_router import TurnRoute
 from application.contracts.proposal import DraftProposalV1
 from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
-from application.grounding.claim_tags import fact_handles
+from application.grounding.claim_tags import fact_handles, malformed_claim_tags
 from application.grounding.placeholders import malformed_placeholders, placeholder_handles
 from agent.capability_tools import render_capabilities
 
@@ -481,6 +481,17 @@ class PydanticAIAgentRuntime:
                         "returned records in this turn, so the handle cannot be checked. "
                         "Read the record and use the ev handle on its row, or state the "
                         "fact without the tag." + _COMPLETE_ANSWER
+                    )
+                broken_tags = malformed_claim_tags(text)
+                if broken_tags and not last_attempt:
+                    # Live run ad89854 (B:2): `value='Despatch</claim>` -- the
+                    # opener never closed. On the last attempt the parser shows
+                    # its value as plain prose instead (G' phase 2b).
+                    self._last_retry_rule = "claim_tag_malformed"
+                    raise ModelRetry(
+                        f"The answer contains {broken_tags[0]!r}, a <claim> tag whose opening "
+                        "tag is never closed with '>'. Write each fact exactly as "
+                        "<claim ev='...' field='...' value='...'>text</claim>." + _COMPLETE_ANSWER
                     )
                 malformed = malformed_placeholders(text)
                 if malformed and not last_attempt:
