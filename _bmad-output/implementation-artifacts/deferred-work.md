@@ -1236,3 +1236,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   a full editor (add or retarget constraints).** **Deferred reason: the planner reviews the
   full constraint list on the card, and structural edits go through chat, where the agent
   resolves names to real IDs.** **Owner: open.**
+
+- **Merging unsaved card edits with a concurrent assistant update.** When the draft
+  changes under a planner's unsaved edits, the card shows "This draft changed to vN" and
+  Load vN drops the local edits (spec §3.2). **Deferred reason: rare once card controls
+  are disabled during an in-flight turn; a merge UI is not worth building first.**
+  **Owner: open.**
