@@ -61,7 +61,9 @@ def claims(activity):
 
 
 for scenario in wanted:
-    prefix = [p for p in report['prefixes'] if p['scenario'] == scenario][-1]
+    rep = int(os.environ.get('REP', '0'))  # 0: the last recorded prefix
+    prefix = [p for p in report['prefixes'] if p['scenario'] == scenario
+              and (not rep or p['repetition'] == rep) and p['turns']][-1]
     turns, authored = prefix['turns'], cases[scenario].turns
     workers_by_id, tasks_by_id, worker_names = {}, {}, {}
     for t in turns:
@@ -70,9 +72,10 @@ for scenario in wanted:
             workers_by_id[w['record_id']] = worker_names[w['record_id']] = w['name']
         for x in v.get('named_tasks', []): tasks_by_id[x['record_id']] = x['name']
     tasks = [{'record_id': k, 'name': n} for k, n in tasks_by_id.items()]
+    # C:4 asks for the indirect task: its headcount claim names it.
     demand = [{'task_id': s['arguments']['task_id'], 'family': 'indirect'}
               for t in turns for s in claims(t['activity'])
-              if (s.get('arguments') or {}).get('family') == 'indirect']
+              if s.get('metric') == 'required_headcount_minutes']
     worker_count = turns[0]['verified']['worker_count']
     workers = [{'record_id': k, 'name': n} for k, n in worker_names.items()]
     # Only the count is known for sure; names come from replies that named them.

@@ -539,8 +539,7 @@
               "id": "headcount_minutes",
               "check": "claims_metric",
               "metric": "required_headcount_minutes",
-              "task": "{indirect_task_id}",
-              "family": "indirect"
+              "task": "{indirect_task_id}"
             }
           ]
         },
@@ -746,7 +745,7 @@
               "id": "is_brief",
               "check": "judge",
               "want": true,
-              "question": "Is `reply` brief -- one or two short sentences?"
+              "question": "Is `reply` short -- a few sentences at most, not a long walkthrough of features?"
             },
             {
               "id": "states_scenario_fact",

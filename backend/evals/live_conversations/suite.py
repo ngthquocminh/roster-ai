@@ -109,7 +109,8 @@ def main(argv=None) -> int:
     executions = len(selected) * args.repetitions
     authored_turns = sum(endpoint for _case, endpoint in selected) * args.repetitions
     budget = ConversationBudget(LiveSuiteBudgetV1(
-        case_limit=executions, request_limit=max(100, authored_turns * 20),
+        # Room for every retry: a retried prefix must not take a later prefix's slot.
+        case_limit=executions * (args.execution_retries + 1), request_limit=max(100, authored_turns * 20),
         tool_call_limit=max(100, authored_turns * 20),
         token_limit=max(150_000, authored_turns * 175_000),
         elapsed_seconds_limit=max(1800, executions * 600), spend_usd_limit=args.spend_limit_usd,
