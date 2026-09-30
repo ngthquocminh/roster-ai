@@ -829,13 +829,14 @@ def _route_headers(settings, key=None):
 def test_every_ended_draft_command_answers_409_with_the_ended_code_through_the_routes(
     governed_postgres_engine, conv, site_ids, decision_http_client, ended, code  # noqa: F811
 ) -> None:
-    from api.main import app
-    # The dependency object the router itself captured: another suite may reload
-    # `api.deps`, which would leave a freshly imported name pointing elsewhere.
     from api.routers.proposals import get_projection_reader
 
     engine = governed_postgres_engine
     client, settings = decision_http_client
+    # The app and dependency object the CLIENT is actually serving: another suite
+    # may reload `api.main` / `api.deps`, so a freshly imported name can point at a
+    # different object than the one this client routes through.
+    app = client.app
     # The routes read the proposal's scenario through the real projection reader; the
     # seeded scenario carries no fixture rows, so resolve it with the in-memory one.
     app.dependency_overrides[get_projection_reader] = lambda: _Projection(conv)
