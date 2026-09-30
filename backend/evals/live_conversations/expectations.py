@@ -298,12 +298,16 @@ class Bindings:
             f"{started}; it completed with solver status {candidate.get('feasible_solver_status')}, "
             f"candidate schedule {candidate.get('schedule_version_id')}, {count} assignments.")
 
-    def capture_decision(self, approval: dict, *, approved: bool, baseline_now: str | None) -> None:
+    def capture_decision(self, approval: dict, *, approved: bool, baseline_now: str | None,
+                         baseline_before: str | None = None) -> None:
         if approved:
             self.bind('approval_id', approval.get('approval_id'))
             self.bind('promoted_baseline_id', baseline_now)
+            # The replaced baseline too: a summary that names it (live run
+            # 9b8dad2, B:12) must find it among what happened.
+            replaced = f" (it replaced {baseline_before})" if baseline_before else ''
             self.events.append(f"Approval {approval.get('approval_id')} approved by the user: "
-                               f"the baseline is now {baseline_now}.")
+                               f"the baseline is now {baseline_now}{replaced}.")
         else:
             self.events.append(f"Approval {approval.get('approval_id')} rejected by the user: "
                                f"the baseline is unchanged ({baseline_now}).")

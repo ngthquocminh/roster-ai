@@ -353,7 +353,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                                 after_assignments, candidate_assignments['assignments']):
                             failures.append('promoted_assignments_do_not_match_candidate')
                     bindings.capture_decision(pending_approval, approved=action == 'approve',
-                                              baseline_now=now['baseline_schedule_version'])
+                                              baseline_now=now['baseline_schedule_version'],
+                                              baseline_before=before['baseline_schedule_version'])
                     pending_approval = None
                 elif action == 'reload':
                     effect['timeline'] = compact_reload_effect(app.timeline())

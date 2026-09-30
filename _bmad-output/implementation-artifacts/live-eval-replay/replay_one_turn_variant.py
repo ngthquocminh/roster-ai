@@ -61,5 +61,6 @@ for index, (t, authored) in enumerate(zip(turns, B.turns), 1):
                 turns[index]['verified']['candidate_assignment_count'])
         if effect['action'] == 'approve':
             bindings.capture_decision(effect['decision'], approved=True,
-                                      baseline_now=turns[index]['verified']['baseline_before'])
+                                      baseline_now=turns[index]['verified']['baseline_before'],
+                                      baseline_before=v['baseline_before'])
 print('jev spend $', round(budget.spend_usd, 5))

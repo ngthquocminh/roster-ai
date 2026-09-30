@@ -11,7 +11,10 @@ from evals.report import LiveSuiteBudgetV1
 
 key = dotenv_values('.env').get('TYPESAFE_API_KEY')
 report = json.load(open(sys.argv[1], encoding='utf-8'))
-turns = report['prefixes'][-1]['turns']
+import os
+_rep = int(os.environ.get('REP', '0'))  # 0: the last B prefix
+turns = [p for p in report['prefixes'] if p.get('scenario', 'B') == 'B'
+         and (not _rep or p.get('repetition') == _rep) and p['turns']][-1]['turns']
 B = next(c for c in load_scenarios() if c.id == 'B')
 budget = ConversationBudget(LiveSuiteBudgetV1(case_limit=1, request_limit=50, tool_call_limit=50,
     token_limit=2_000_000, elapsed_seconds_limit=1800, spend_usd_limit=.2))
@@ -57,5 +60,6 @@ for index, (t, authored) in enumerate(zip(turns, B.turns), 1):
                 turns[index]['verified']['candidate_assignment_count'])
         if effect['action'] == 'approve':
             bindings.capture_decision(effect['decision'], approved=True,
-                                      baseline_now=turns[index]['verified']['baseline_before'])
+                                      baseline_now=turns[index]['verified']['baseline_before'],
+                                      baseline_before=v['baseline_before'])
 print('jev spend $', round(budget.spend_usd, 5))

@@ -165,6 +165,15 @@ def test_start_binds_worker_facts_and_the_only_indirect_task():
         two.get('indirect_task')
 
 
+def test_an_approval_event_names_the_baseline_it_replaced():
+    # Live run 9b8dad2, B:12: a truthful "it replaced <old>" had no event behind it.
+    bindings = Bindings()
+    bindings.capture_decision({'approval_id': 'ap-1'}, approved=True, baseline_now='new',
+                              baseline_before='old')
+    assert bindings.events == ['Approval ap-1 approved by the user: the baseline is now new '
+                               '(it replaced old).']
+
+
 def test_the_first_outbound_volume_claim_fixes_the_conversations_task():
     tasks = [{'record_id': 'T1', 'name': 'Main Pick'}, {'record_id': 'T2', 'name': 'Chiller Pick'}]
     bindings = Bindings()
