@@ -829,8 +829,10 @@ def _route_headers(settings, key=None):
 def test_every_ended_draft_command_answers_409_with_the_ended_code_through_the_routes(
     governed_postgres_engine, conv, site_ids, decision_http_client, ended, code  # noqa: F811
 ) -> None:
-    from api.deps import get_projection_reader
     from api.main import app
+    # The dependency object the router itself captured: another suite may reload
+    # `api.deps`, which would leave a freshly imported name pointing elsewhere.
+    from api.routers.proposals import get_projection_reader
 
     engine = governed_postgres_engine
     client, settings = decision_http_client
