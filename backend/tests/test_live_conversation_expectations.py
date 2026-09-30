@@ -165,6 +165,19 @@ def test_start_binds_worker_facts_and_the_only_indirect_task():
         two.get('indirect_task')
 
 
+def test_list_items_are_read_with_their_verified_names_on_the_same_line():
+    # Live run a9cc7bf, A:6: split into segments, every bullet read as a lone "-".
+    reply = {'activity_type': 'agent_response', 'response': {'segments': [
+        {'kind': 'prose', 'text': 'Tasks:\n- '}, {'kind': 'fact', 'text': 'Main Pick | Order Picker M02'},
+        {'kind': 'prose', 'text': ' — pick\n- '}, {'kind': 'fact', 'text': 'Chiller Pick | Order Picker C02'},
+        {'kind': 'prose', 'text': ' — pick'}]}}
+    check = _e(check='each_item_mentions', value='{task_names}')
+    bindings = _bound(task_names=list(TASKS.values()))
+    assert code_check(check, _ctx(reply), bindings)
+    reply['response']['segments'].append({'kind': 'prose', 'text': '\n- Yard Sweep — sweeping'})
+    assert not code_check(check, _ctx(reply), bindings)
+
+
 def test_an_approval_event_names_the_baseline_it_replaced():
     # Live run 9b8dad2, B:12: a truthful "it replaced <old>" had no event behind it.
     bindings = Bindings()

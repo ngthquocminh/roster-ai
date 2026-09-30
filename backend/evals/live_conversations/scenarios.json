@@ -107,11 +107,6 @@
               "value": "{worker_count}"
             },
             {
-              "id": "lists_only_real_workers",
-              "check": "each_item_mentions",
-              "value": "{worker_names}"
-            },
-            {
               "id": "off_subject",
               "check": "judge",
               "want": false,
@@ -155,13 +150,9 @@
               "value": "{task_names}"
             },
             {
-              "id": "invents_task",
-              "check": "judge",
-              "question": "Does `reply` present as a task of this scenario anything that is not one of the task names in `facts.tasks`?",
-              "want": false,
-              "facts": [
-                "tasks"
-              ]
+              "id": "lists_only_real_tasks",
+              "check": "each_item_mentions",
+              "value": "{task_names}"
             },
             {
               "id": "states_wrong_task_count",

@@ -444,6 +444,24 @@ class TurnContext:
         return visible_lines(self.visible)
 
 
+def reading_lines(activity: dict) -> list[str]:
+    """The reply's lines as the planner reads them: each segment's own text in
+    order, so a verified name stays on its bullet's line. `visible_lines` splits
+    every segment onto its own line, which left each bullet a lone `-` (live run
+    a9cc7bf, A:6)."""
+    segments = (activity.get('response') or {}).get('segments')
+    if not segments:
+        return []
+    parts = []
+    for segment in segments:
+        if segment.get('kind') == 'claim':
+            parts.append(' '.join(str(segment[key]) for key in ('value', 'unit')
+                                  if segment.get(key) is not None))
+        else:
+            parts.append(str(segment.get('text') or segment.get('value') or ''))
+    return [line for line in (_normalise(line) for line in ''.join(parts).splitlines()) if line]
+
+
 def _pair_on_one_line(worker, task, lines) -> bool:
     """Worker and task named TOGETHER: a list naming every worker and every
     task must not pass as naming one real assignment."""
@@ -528,7 +546,7 @@ def code_check(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -
         value = resolve(expectation.value, bindings)
         items = value if isinstance(value, list) else [value]
         return all(any(mentioned(item, line) for item in items)
-                   for line in ctx.lines if _LIST_ITEM.match(line))
+                   for line in reading_lines(ctx.activity) if _LIST_ITEM.match(line))
     if check in ('mentions_any', 'mentions_none'):
         bound, first_unbound = [], None
         for template in expectation.values:
