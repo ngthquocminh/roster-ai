@@ -1,6 +1,8 @@
 # Draft lifecycle: one working draft per conversation
 
 Date: 2026-09-28 · Status: approved in brainstorming, awaiting spec review
+Revised 2026-09-30 against `main` at `ba8c706` (live eval graded by per-turn expectations,
+draft-id rebinding, baseline-answer instructions). Changes are in §2.1, §4 and §5.2.
 
 ## Problem
 
@@ -96,6 +98,19 @@ New repository read on `ProposalRepository`:
 
 The model view grows from `{draft_id}` to `{draft_id, outcome, version}` so the reply can
 say "Updated your draft (now v3)" instead of "Created a draft".
+
+Two things on `main` constrain this, and both still hold:
+
+- `agent/runtime.py` reads only `content["draft_id"]` from the tool return
+  (`_draft_ids_this_run`), so the wider view is compatible. On `updated` the `draft_id` is
+  the *existing* proposal id, so a model that cites an earlier turn's id is citing the right
+  draft; a garbled citation is still rebound to the run's latest `draft_id`.
+- A turn may call `scheduling_draft` more than once, and nothing is persisted until
+  finalize, so every call resolves against the same pre-turn state. Only the draft the final
+  output cites is persisted (the rebinding above picks the latest when the citation matches
+  none), so two `created` results in one turn cannot both hit the unique index, and two
+  `updated` results carry the same `expected_resource_version`, of which only the cited one
+  is applied.
 
 ### 2.2 Persistence at finalize (one transaction, unchanged boundary)
 
@@ -235,6 +250,14 @@ In `agent/scheduling_instructions.py`:
 - Update workflow stage 2 ("Draft (you)") to match. Stage 3 stays planner-only.
 - Tool routing gains "Discarding the working draft on explicit request:
   scheduling_draft_discard, only."
+- Update **"Saying what the baseline is now"**, step 2 (added on `main` for live B:10):
+  "find the draft whose proposal_id is the run's proposal_id" and describe what it
+  changed. Once drafts have versions and an `applied` state, that draft's current version
+  can differ from the version the run pinned (the v2-promoted-then-edited-to-v3 case in
+  section 1). Describe the constraints of the version the run pinned, not the draft's
+  latest, and say "applied to baseline" from the draft's state. This needs the run's
+  `proposal_version_id` in the workflow snapshot; add it there if the runs list does not
+  already carry it.
 
 ## 5. Testing and evaluation
 
@@ -258,16 +281,33 @@ In `agent/scheduling_instructions.py`:
 
 ### 5.2 Live
 
-- Existing scenarios whose turns say "Revise the draft…" / "Add to that draft…"
-  (`evals/live_conversations/scenarios.json`, the two `requires_persisted_draft` follow-up
-  turns) now expect the **same** proposal at a new version; their persisted-draft check
-  accepts an update and asserts it did not create a second proposal.
-- New live scenario **E — draft lifecycle**: create → add → remove one → "undo that"
-  (clarify or concrete removal, never a claimed undo) → "start over with just X"
-  (replace, not discard) → explicit discard → new request (fresh draft).
-- Re-derive the live baseline and drop-check floor for the new turn count, following
-  `docs/EVIDENCE-CONVENTION.md`: commit code, measure, generate through
-  `backend/scripts/evidence_binding.py`, commit evidence separately.
+Since `main` (`ba8c706`) scenarios A-D are graded by authored per-turn `expect` lists in
+`scenarios.json`: code checks over the reply, its activity and the saved draft, plus narrow
+TypeSafe Jev yes/no questions (`evals/live_conversations/expectations.py`). A turn without
+`expect` falls back to a holistic judge, so every new turn below is authored with `expect`.
+
+- **Existing turns.** B:6 ("Revise the draft to cap that worker...") and C:9 ("Add to that
+  draft...") already assert `activity_is` draft plus `draft_has`. They must now also assert
+  the draft was *updated*: same `proposal_id` as the earlier draft turn, higher version. That
+  needs one new code check kind (for example `draft_updates_turn: n`), registered in
+  `CODE_CHECKS` and `_FIELDS`, bound from `Bindings.draft` (which already records
+  `proposal_id`; add the version ordinal). Add its unit tests to
+  `tests/test_live_conversation_expectations.py`.
+- **New scenario E — draft lifecycle**: create → add → remove one → "undo that" (clarify or
+  concrete removal, never a claimed undo) → "start over with just X" (replace, not discard)
+  → explicit discard → new request (fresh draft). Register it in `REQUIRED_SCENARIOS` in
+  `cases.py` with its turn count. The discard turn uses the agent tool, so it is graded by
+  a check on the persisted state (`activity_field_equals` or a new state check), not by the
+  authored `reject_draft` action, which is the planner's card path. "Never a claimed undo"
+  is a `mentions_none` plus a Jev yes/no question.
+- **Baseline.** Adding E changes `total_executed` (now 108 = 36 turns x 3 repetitions), and
+  the section 4 instruction changes move `behavioral_digest`, so A-D must be re-measured
+  too. Re-derive `backend/evals/baselines/live-conversations.json` and the drop-check floor
+  following `docs/EVIDENCE-CONVENTION.md`: commit code, measure, generate through
+  `backend/scripts/evidence_binding.py` and `derive_live_conversation_baseline.py`, commit
+  evidence separately. Do not hand-edit the baseline.
+- **Regression risk to watch.** The B:10 turn ("where is the approval record") now depends
+  on the baseline-answer instructions; re-check it after the section 4 edit to step 2.
 
 ## 6. Deferred
 
@@ -282,6 +322,11 @@ Recorded in `_bmad-output/implementation-artifacts/deferred-work.md`:
 - Re-activating a discarded draft.
 - A diff between versions on the card.
 - A full card editor (add or retarget constraints).
+
+Related open items on `main` (`deferred-work.md`), not solved here: the agent cannot say
+when or by whom a baseline was approved, and does not reuse the approval id it created.
+The `applied` state and `applied_version_id` tell the agent *that* a draft was promoted,
+not the approval's time or actor; that still needs the approval-repository read path.
 
 ## Out of scope
 
