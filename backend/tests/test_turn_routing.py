@@ -48,8 +48,9 @@ from tests.test_conversations_api import (  # noqa: F401  (conversation_client i
 #: (commit f44d122) to prove the split changed nothing; re-pinned when the
 #: "Saying what the baseline is now, or where its decision record is" workflow was
 #: added, and again when summaries were kept to the subject the planner named (live run
-#: ad89854, A:6). Any other prompt edit must re-pin here, deliberately.
-TODAYS_PROMPT_SHA256 = "090179293474ca64cdc3c7c62c9327d64105ab6b28edbce634079a0e4883d32c"
+#: ad89854, A:6), and when a named family was required in metric arguments (9b8dad2, C:3).
+#: Any other prompt edit must re-pin here, deliberately.
+TODAYS_PROMPT_SHA256 = "c46122507f030e0c3a2a97ab2f1456289ea21c7bd71c160a0894c16c9a89e673"
 
 
 # --- prompt split ------------------------------------------------------------

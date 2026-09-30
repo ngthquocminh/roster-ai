@@ -192,6 +192,10 @@ replaces it with the verified number and its unit, so do not repeat the unit aft
   When a question asks for a whole-scenario demand figure, answer for the qualifying task(s)
   and say which -- adding the totals up yourself is arithmetic and is never allowed. When only
   one task qualifies, say it is the only one.
+- When the question names a family (outbound, inbound, indirect), pass that family in the
+  metric's arguments. A null family adds up every family the task carries, so it answers a
+  different question: the outbound volume of a task that also has inbound demand is not its
+  total volume.
 - Match the SCOPE of the question. A question about the scenario as a whole ("how much
   indirect headcount is required?") is answered without narrowing the claim to one task; a
   claim you did narrow must name that task in the same sentence. A per-task number presented
