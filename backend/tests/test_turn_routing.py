@@ -50,9 +50,10 @@ from tests.test_conversations_api import (  # noqa: F401  (conversation_client i
 #: added, and again when summaries were kept to the subject the planner named (live run
 #: ad89854, A:6), when a named family was required in metric arguments (9b8dad2, C:3), and
 #: for Story 5.11's one-working-draft rewrite (Revising a draft, the discard section, the
-#: Tool routing line, "Saying what the baseline is now" step 2).
+#: Tool routing line, "Saying what the baseline is now" step 2), and for Story 5.12's undo
+#: rule (reverse the previous change; live smoke E:4 read "undo" as removing another constraint).
 #: Any other prompt edit must re-pin here, deliberately.
-TODAYS_PROMPT_SHA256 = "4afcee3d9c87a03c6de19fa08426dfb3802a03b8bab2c30472bb3e867e2526fe"
+TODAYS_PROMPT_SHA256 = "0ab16a24b0c4a57ed4d6a5c53005c99e4a627f078ae19870bfb634e7a8e0e04c"
 
 
 # --- prompt split ------------------------------------------------------------
@@ -464,7 +465,11 @@ def test_the_scheduling_prompt_teaches_the_one_working_draft_lifecycle() -> None
     )
     assert "explicitly asks to discard, delete, or throw away" in discard
     assert "Start over with just X" in discard and "never discard" in discard
-    assert "There is no undo tool" in discard and "Never claim an undo happened" in discard
+    # Undo reverses the planner's previous change (live smoke E:4 read "undo" as
+    # "remove another constraint" under the old wording), and never claims a revert.
+    assert "There is no undo tool" in discard
+    assert "re-add the constraint it removed" in discard
+    assert "Never claim the draft was reverted or restored to an earlier version" in discard
     assert ("- Discarding the working draft on explicit request: scheduling_draft_discard, only."
             in full)
     # Both the full and the direct prompt compose Tool routing from one section.
