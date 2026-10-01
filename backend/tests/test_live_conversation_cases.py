@@ -80,6 +80,11 @@ def test_a_relative_override_file_is_resolved_before_compose_runs_elsewhere():
                        'evals/live_conversations/compose.override.yml'])
     assert args.override_file.is_absolute()
     assert args.override_file == Path('evals/live_conversations/compose.override.yml').resolve()
+    from evals.live_conversations.smoke_suite import _args
+
+    smoke = _args(['--prior-spend-usd', '0', '--output', 'out.json', '--override-file',
+                   'evals/live_conversations/compose.override.yml'])
+    assert smoke.override_file == args.override_file
 
 
 def test_resume_and_retry_are_offered_by_the_runner_cli():
