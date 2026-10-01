@@ -125,12 +125,10 @@
           "actions_after": [],
           "expect": [
             {
-              "id": "names_schedule",
-              "check": "mentions_any",
-              "values": [
-                "{scenario_name}",
-                "{baseline_id}"
-              ]
+              "id": "reads_overview",
+              "check": "tool_called",
+              "value": "scheduling_inspect",
+              "fact_group": "overview"
             },
             {
               "id": "describes_schedule",

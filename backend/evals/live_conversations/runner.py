@@ -302,6 +302,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                     assignments=assignments, locks=locks, workers_by_id=workers_by_id,
                     tasks_by_id=tasks_by_id, reply_lines=reply_lines, turn=index, workers=workers,
                     draft_state=draft_state,
+                    tool_calls=[observation.get('labels') or {} for observation in tools
+                                if observation.get('event') == 'agent.tool.call.completed'],
                     candidate_rows=named_candidate_rows(
                         activity, ((latest_run or {}).get('candidate') or {}).get('assignments', ()),
                         workers_by_id, tasks_by_id),
@@ -365,6 +367,8 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                     bindings.capture_decision(pending_approval, approved=action == 'approve',
                                               baseline_now=now['baseline_schedule_version'],
                                               baseline_before=before['baseline_schedule_version'])
+                    if action == 'approve':
+                        bindings.capture_draft_ended(app.newest_draft_proposal())
                     pending_approval = None
                 elif action == 'reload':
                     effect['timeline'] = compact_reload_effect(app.timeline())

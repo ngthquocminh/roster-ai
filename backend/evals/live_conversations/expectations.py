@@ -35,6 +35,7 @@ CODE_CHECKS = frozenset({
     'activity_field_equals', 'draft_has', 'draft_preserves_locks', 'names_assigned_pair',
     'draft_matches_turn', 'claims_metric', 'draft_has_roster_lock', 'each_item_mentions',
     'draft_updates_turn', 'draft_state_is', 'draft_constraint_count', 'draft_is_new',
+    'tool_called',
 })
 #: The draft lifecycle's vocabulary (`application/contracts/proposal.py`):
 #: `draft_state_is` takes "<state>" or "<state>/<ended_by>".
@@ -78,6 +79,7 @@ class Expectation:
     want: bool | None = None
     facts: tuple[str, ...] = ()
     when: str | None = None
+    fact_group: str | None = None
 
     @property
     def is_judge(self) -> bool:
@@ -116,6 +118,7 @@ _FIELDS = {
     'draft_state_is': ({'value'}, set()),
     'draft_constraint_count': ({'n'}, set()),
     'draft_is_new': (set(), set()),
+    'tool_called': ({'value'}, {'fact_group'}),
     'judge': ({'question', 'want'}, {'facts'}),
 }
 #: Bindings that hold a list: only `mentions_all` may take one whole.
@@ -157,7 +160,8 @@ def validate_expectation(expectation: Expectation, present: set[str] | None = No
             raise ValueError(f'{where}: {expectation.check} needs {sorted(missing)}')
         if extra:
             raise ValueError(f'{where}: {expectation.check} does not take {sorted(extra)}')
-    for name in ('value', 'activity', 'field', 'kind', 'worker', 'task', 'question', 'metric', 'family'):
+    for name in ('value', 'activity', 'field', 'kind', 'worker', 'task', 'question', 'metric', 'family',
+                 'fact_group'):
         value = getattr(expectation, name)
         if value is not None and (not isinstance(value, (str, int, float)) or isinstance(value, bool)
                                   or (isinstance(value, str) and not value.strip())):
@@ -325,6 +329,14 @@ class Bindings:
         self.events.append('Draft saved: ' + '; '.join(descriptions)
                            + (f' ({summary})' if summary else ''))
 
+    def capture_draft_ended(self, proposal: dict | None) -> None:
+        """What promotion did to the working draft, read from the application
+        after the harness's own approval: a summary may truthfully say the draft
+        was applied and closed (live run 62269c0, B:12), so the judge needs it."""
+        if proposal and proposal.get('state') == 'applied':
+            self.events.append(f"The working draft (v{proposal.get('version_ordinal')}) was applied "
+                               "to the baseline and ended.")
+
     def capture_approval_request(self, activity: dict) -> None:
         self.events.append(
             f"The assistant requested approval {activity.get('approval_id')} to make candidate "
@@ -484,6 +496,9 @@ class TurnContext:
     #: checks `draft_state_is`: {proposal_id, state, ended_by, version_ordinal},
     #: or None when the conversation has no draft.
     draft_state: dict | None = None
+    #: This turn's completed tool calls as telemetry labelled them:
+    #: {capability_name, fact_group?}. What the agent DID, not what it said.
+    tool_calls: list = ()
 
     @property
     def text(self) -> str:
@@ -649,6 +664,10 @@ def code_check(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -
         seen = {entry['proposal_id'] for entry in bindings.as_of(ctx.turn).drafts.values()}
         return (ctx.draft is not None and _ordinal(ctx.draft) == 1
                 and ctx.draft.get('proposal_id') not in seen)
+    if check == 'tool_called':
+        return any(call.get('capability_name') == expectation.value
+                   and (expectation.fact_group is None or call.get('fact_group') == expectation.fact_group)
+                   for call in ctx.tool_calls)
     if check == 'draft_matches_turn':
         return _pair_on_one_line(bindings.get('excluded_worker'), bindings.get('excluded_task'),
                                  ctx.reply_lines.get(expectation.turn, ()))

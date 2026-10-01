@@ -504,6 +504,20 @@ Claude Opus 5.5 (`claude-opus-5-5`)
     (E:4 v4 = cap + exclusion restored; E:6 `rejected/assistant`, "Discarded your draft (v5).";
     E:7 new proposal v1). 5.11's `discard-working-draft` smoke passed (`no_working_draft`, prose
     reply). Live spend under $0.10 in total.
+- **Task 8, first A-E pass at `62269c0` (Minh approved both paid runs, 2026-10-01).** A, C, D, E were
+  clean (31/31). B had two non-clean turns, neither a false claim. Both were resolved by Minh's decision
+  (2026-10-01) under the grade-the-action rule:
+  - **B:12 overrides D6.** The reply's "The working draft is now closed because its changes were applied
+    to the baseline" is true and instructed by 5.11, but no event recorded it, so `claims_unhappened`
+    landed at 0.57 (uncertain). After the harness's own `approve`, `Bindings.capture_draft_ended` reads
+    the newest draft's real state and, when it is `applied`, appends "The working draft (vN) was applied
+    to the baseline and ended." Offline replay of the live reply with real Jev: 0.54-0.56 → 0.80-0.83 over
+    3 rounds. Two invented summaries (a shift lock, a publication) still fail at 0.07 and 0.16-0.18.
+  - **B:1 `names_schedule` (a wording check: the reply must contain the scenario name or baseline id)
+    is replaced** by a new action check, `tool_called` (`scheduling_inspect` with `fact_group:
+    overview`, read from this turn's tool telemetry). `describes_schedule` is kept. The failing reply
+    was truthful and had read the overview.
+  - Default suite 2851 passed / 2 skipped.
 #### Mutation table (every mutation reverted; tree verified clean after each batch)
 
 | Mutation applied to real code | Guard that should redden | Before | After |
@@ -530,6 +544,10 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 | M20 runtime: `draft` output with no draft this run not retried | `test_a_draft_output_with_no_draft_this_turn_is_retried_into_prose` | green | red |
 | M21 `smoke_suite._args`: relative `--override-file` not resolved | `test_a_relative_override_file_is_resolved_before_compose_runs_elsewhere` | green | red |
 | M22 instruction: undo rule reverted to 5.11's wording | `test_the_scheduling_prompt_teaches_the_one_working_draft_lifecycle` (and the prompt hash pin) | green | red |
+| M23 `tool_called`: `fact_group` ignored | `test_tool_called_reads_this_turns_completed_calls_and_their_fact_group` | green | red |
+| M24 runner: tool calls not passed to `TurnContext` | `test_the_runner_grades_a_turn_by_the_tools_its_agent_run_called` | green | red |
+| M25 `capture_draft_ended`: any state becomes an applied event | `test_an_applied_draft_becomes_an_event_and_any_other_state_does_not` | green | red |
+| M26 runner: draft state not read after the harness approves | `test_after_the_harness_approves_the_judge_learns_the_draft_was_applied` | green | red |
 
 ### File List
 
@@ -557,3 +575,4 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 
 - 2026-10-01: Phase A (Tasks 0-5) and Task 6 offline validation; E:4 graded by action per Minh's decision (`when` field).
 - 2026-10-01: Task 7 live smokes; harness path fix, discard-turn runtime retry, undo instruction rewritten.
+- 2026-10-01: Task 8 first pass; B:12 applied-draft event (overrides D6) and B:1 action check `tool_called`, per Minh.

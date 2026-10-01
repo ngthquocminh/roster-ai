@@ -100,6 +100,9 @@ def _e(**raw):
     ({'check': 'draft_constraint_count', 'n': -1}, 'whole number'),
     ({'check': 'draft_is_new', 'turn': 1}, 'does not take'),
     ({'check': 'activity_is', 'activity': 'draft', 'when': 'prose'}, 'when must be one of'),
+    ({'check': 'tool_called'}, "needs \\['value'\\]"),
+    ({'check': 'tool_called', 'value': 'scheduling_inspect', 'kind': 'x'}, 'does not take'),
+    ({'check': 'tool_called', 'value': 'scheduling_inspect', 'fact_group': ''}, 'non-empty'),
 ])
 def test_a_malformed_expectation_is_refused_at_load(raw, message):
     with pytest.raises(ValueError, match=message):
@@ -533,7 +536,7 @@ def test_ask_yes_no_retries_a_missing_answer_once_then_is_incomplete():
 
 # --- the runner path --------------------------------------------------------------------
 
-def _drive(app, turns, *, judge_model, monkeypatch, p_yes=None):
+def _drive(app, turns, *, judge_model, monkeypatch, p_yes=None, telemetry=None):
     asked = []
 
     def fake_ask(**kwargs):
@@ -545,7 +548,8 @@ def _drive(app, turns, *, judge_model, monkeypatch, p_yes=None):
     monkeypatch.setattr(runner, 'judge_turn_jev', lambda **_kwargs: (judgment(), {'attempts': []}))
     case = ConversationScenario(id='X', prefixes=(len(turns),), turns=tuple(turns))
     report = execute_prefix(
-        app=app, case=case, endpoint=len(turns), isolation_id='iso', telemetry=Telemetry(),
+        app=app, case=case, endpoint=len(turns), isolation_id='iso',
+        telemetry=telemetry or Telemetry(),
         judge_key='k', judge_model=judge_model, save=lambda _report: None,
         budget=ConversationBudget(LiveSuiteBudgetV1(
             case_limit=1, request_limit=50, tool_call_limit=50, token_limit=1000000,
@@ -865,3 +869,72 @@ def test_every_reply_kind_needs_a_positive_check_of_its_own():
     with pytest.raises(ValueError, match='when the reply is not_draft'):
         validate_turn_expectations(only_draft_positive)
     validate_turn_expectations(UNDO)
+
+
+# --- graded by what the agent DID: its tool calls, and the draft promotion ended -------
+
+def test_tool_called_reads_this_turns_completed_calls_and_their_fact_group():
+    overview = _e(check='tool_called', value='scheduling_inspect', fact_group='overview')
+    anything = _e(check='tool_called', value='scheduling_inspect')
+    reply = _reply('Three work areas, six tasks.')
+
+    def ctx(*calls):
+        context = _ctx(reply)
+        context.tool_calls = list(calls)
+        return context
+
+    assert code_check(overview, ctx({'capability_name': 'scheduling_inspect', 'fact_group': 'overview'}),
+                      Bindings())
+    assert not code_check(overview, ctx({'capability_name': 'scheduling_inspect', 'fact_group': 'tasks'}),
+                          Bindings())
+    assert code_check(anything, ctx({'capability_name': 'scheduling_inspect', 'fact_group': 'tasks'}),
+                      Bindings())
+    assert not code_check(anything, ctx({'capability_name': 'scheduling_draft'}), Bindings())
+    assert not code_check(anything, ctx(), Bindings())  # answered without reading anything
+
+
+def test_an_applied_draft_becomes_an_event_and_any_other_state_does_not():
+    bindings = Bindings()
+    bindings.capture_draft_ended({'state': 'applied', 'version_ordinal': 2})
+    bindings.capture_draft_ended({'state': 'active', 'version_ordinal': 3})
+    bindings.capture_draft_ended(None)
+    assert bindings.events == ['The working draft (v2) was applied to the baseline and ended.']
+
+
+class _Tools:
+    def __init__(self, *labels):
+        self.labels = labels
+
+    def read_run(self, _run_id):
+        return ({'usage': {'requests': 1, 'input_tokens': 10, 'output_tokens': 5},
+                 'estimated_cost_usd': .001},
+                [{'event': 'agent.tool.call.completed', 'labels': label} for label in self.labels])
+
+
+def test_the_runner_grades_a_turn_by_the_tools_its_agent_run_called(monkeypatch):
+    turn = [_turn('review it', {'id': 'reads', 'check': 'tool_called', 'value': 'scheduling_inspect',
+                                'fact_group': 'overview'})]
+    called = _Tools({'capability_name': 'scheduling_inspect', 'fact_group': 'overview'})
+    report, _asked = _drive(_Scripted([_reply('Six tasks.')]), turn, telemetry=called,
+                            judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    assert report['turns'][0]['verdict'] == 'pass'
+    report, _asked = _drive(_Scripted([_reply('Six tasks.')]), turn,
+                            judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    assert report['turns'][0]['verdict'] == 'fail'
+
+
+def test_after_the_harness_approves_the_judge_learns_the_draft_was_applied(monkeypatch):
+    turns = [
+        _turn('run it', {'id': 'directs', 'check': 'judge', 'want': True, 'question': 'Directs?'},
+              actions=('run_optimization',)),
+        _turn('propose it', {'id': 'is_approval', 'check': 'activity_is',
+                             'activity': 'approval_request'}, actions=('approve',)),
+        _turn('summarize', {'id': 'honest', 'check': 'judge', 'want': False, 'question': 'Invents?',
+                            'facts': ['events']}),
+    ]
+    app = _Lifecycle([(_reply('Use the Run optimization control.'), None), (APPROVAL, None),
+                      (_reply('The draft was applied.'), None)])
+    app.current = _proposal('p-1', 2, EXCLUDE, CAP, state='applied', ended_by='system')
+    _report, asked = _drive(app, turns, judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    events = asked[-1]['questions']['honest']['instructions']['facts']['events']
+    assert events[-1] == 'The working draft (v2) was applied to the baseline and ended.'
