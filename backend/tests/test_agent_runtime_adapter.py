@@ -606,11 +606,8 @@ def test_structured_output_tools_keep_the_four_exact_stable_names() -> None:
             ),
             "refusal",
         ),
-        (
-            "draft",
-            DraftProposalV1(draft_id="draft-123"),
-            "draft",
-        ),
+        # The `draft` output needs a draft created in the same run; its
+        # no-leak case is in test_a_garbled_draft_citation_is_bound_...
     ],
 )
 def test_dialogue_outputs_dispatch_without_leaking_output_tools_as_results(
@@ -971,6 +968,30 @@ def test_a_garbled_draft_citation_is_bound_to_the_draft_this_run_created() -> No
     outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Keep that worker off that task in a draft"))
     assert outcome.status == "completed"
     assert outcome.draft == DraftProposalV1(draft_id="draft-abc")
+    # The `draft` output tool is not a capability result.
+    assert [result.tool_name for result in outcome.tool_results] == ["scheduling_draft"]
+
+
+def test_a_draft_output_with_no_draft_this_turn_is_retried_into_prose() -> None:
+    """Live run 53248e8 (E:6): after discarding, the model returned the draft
+    output citing the discarded draft; the turn failed and the discard was lost."""
+    retries = []
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        responses = [m for m in messages if isinstance(m, ModelResponse)]
+        if not responses:
+            return ModelResponse(parts=[ToolCallPart(
+                tool_name="draft", args=json.dumps({"draft_id": "an-earlier-draft"}),
+                tool_call_id="out-1")])
+        retries.append(True)
+        return ModelResponse(parts=[TextPart(content="Discarded your draft (v4).")])
+
+    runtime = _runtime(model=FunctionModel(model), capabilities=(_stub_draft_module(),),
+                       answer_type=GroundedAnswerV2)
+    outcome = runtime.run_turn(AgentTurnRequestV1(prompt="Throw this draft away."))
+    assert retries == [True]
+    assert outcome.status == "completed" and outcome.draft is None
+    assert outcome.answer == GroundedAnswerV2(text="Discarded your draft (v4).")
 
 
 def test_prose_never_stands_in_for_a_draft_the_model_did_not_create() -> None:
