@@ -284,11 +284,11 @@ Phases are ordered. Do not start a phase before the previous one's exit conditio
   - [x] E:6: a truthful discard confirmation passes; "I've created a fresh draft" fails; "the draft is still available to run" fails.
   - [x] Reword only on evidence: read the full reply and the facts first (handover "Lessons"). Ask about actions, not "anything not in facts".
 
-- [ ] **Task 7 — Single-scenario live smokes** (AC3; allowed without asking under the handover rule)
-  - [ ] Start Docker Desktop. Run `--scenario B --repetitions 1` first: B:10 is the riskiest turn (proposal §3 mitigation). Then run `--scenario E`. Each costs a few cents with the Jev judge.
-  - [ ] Run 5.11's authored `discard-working-draft` smoke case once (F17): `uv run python -m evals.live_conversations.smoke_suite --case discard-working-draft --prior-spend-usd <spent so far> --override-file evals/live_conversations/compose.override.yml --output ../_bmad-output/test-artifacts/smoke-discard-5-12.json`. Pass `--override-file` explicitly, because the default path is a git-ignored file that may not exist. The result is diagnostic only, not evidence: it proves the discard tool routes on a no-draft conversation.
-  - [ ] On a failure, read the report's `checks`, `verified` and the reply before changing anything (memory: "noise" had a cause each time). A product fix follows D9. Batch commits during this loop; do not commit every micro-fix (memory `feedback-batch-commits`).
-  - [ ] An OpenRouter 402 shows up as `provider_error` on every turn; check Logfire for the status code. Background runs can be killed under memory pressure, which leaves a partial report.
+- [x] **Task 7 — Single-scenario live smokes** (AC3; allowed without asking under the handover rule)
+  - [x] Start Docker Desktop. Run `--scenario B --repetitions 1` first: B:10 is the riskiest turn (proposal §3 mitigation). Then run `--scenario E`. Each costs a few cents with the Jev judge.
+  - [x] Run 5.11's authored `discard-working-draft` smoke case once (F17): `uv run python -m evals.live_conversations.smoke_suite --case discard-working-draft --prior-spend-usd <spent so far> --override-file evals/live_conversations/compose.override.yml --output ../_bmad-output/test-artifacts/smoke-discard-5-12.json`. Pass `--override-file` explicitly, because the default path is a git-ignored file that may not exist. The result is diagnostic only, not evidence: it proves the discard tool routes on a no-draft conversation.
+  - [x] On a failure, read the report's `checks`, `verified` and the reply before changing anything (memory: "noise" had a cause each time). A product fix follows D9. Batch commits during this loop; do not commit every micro-fix (memory `feedback-batch-commits`).
+  - [x] An OpenRouter 402 shows up as `provider_error` on every turn; check Logfire for the status code. Background runs can be killed under memory pressure, which leaves a partial report.
 
 ### Phase C — the recorded measurement (paid; Minh's go-ahead required)
 
@@ -486,6 +486,24 @@ Claude Opus 5.5 (`claude-opus-5-5`)
   demonstration tool ran with the right arguments; B:7 and C:12 rely on the judge where the tool log
   could show no run or approval was created.
 
+- **Task 7, live smokes (diagnostic, not evidence).** Each failure was read from the report and
+  fixed at its root cause (D9), with a deterministic regression test:
+  - **Harness:** `suite` and `smoke_suite` took `--override-file` as given, but compose runs from
+    the repo root, so the story's relative path made every build `isolated_stack_build_failed`
+    (`53248e8`, plus the smoke_suite commit).
+  - **Runtime, E:6:** after `scheduling_draft_discard`, the model returned the `draft` output citing
+    the draft it had just discarded. That citation can never bind, so the turn failed and, by 5.11's
+    rule, applied no discard. The draft-output validator now retries into prose when no draft was
+    created this run (`fd8eed0`). This is not a 5.11 contract change: such a citation already always
+    failed.
+  - **Instruction, E:4, two live runs:** 5.11's undo rule ("remove or change that constraint ...
+    otherwise ask which one") made the agent read "Undo that." as "remove another constraint". It now
+    says undo reverses the previous change, as a full-list revision (`81722bb`, `54e3550`).
+    `TODAYS_PROMPT_SHA256` re-pinned. Spec §4 and F16 quote the old wording; neither is edited.
+  - **Results:** B 12/12 (B:6 same proposal v1→v2; B:10 `applied/system`). E 7/7 at `54e3550`
+    (E:4 v4 = cap + exclusion restored; E:6 `rejected/assistant`, "Discarded your draft (v5).";
+    E:7 new proposal v1). 5.11's `discard-working-draft` smoke passed (`no_working_draft`, prose
+    reply). Live spend under $0.10 in total.
 #### Mutation table (every mutation reverted; tree verified clean after each batch)
 
 | Mutation applied to real code | Guard that should redden | Before | After |
@@ -508,6 +526,10 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 | M16 `evaluate`: `when` ignored | `test_each_reply_kind_is_graded_only_by_the_checks_for_it` | green | red |
 | M17 loader: per-branch positive requirement dropped | `test_every_reply_kind_needs_a_positive_check_of_its_own` | green | red |
 | M18 loader: unknown `when` value accepted | `test_a_malformed_expectation_is_refused_at_load` | green | red |
+| M19 `suite._arguments`: relative `--override-file` not resolved | `test_a_relative_override_file_is_resolved_before_compose_runs_elsewhere` | green | red |
+| M20 runtime: `draft` output with no draft this run not retried | `test_a_draft_output_with_no_draft_this_turn_is_retried_into_prose` | green | red |
+| M21 `smoke_suite._args`: relative `--override-file` not resolved | `test_a_relative_override_file_is_resolved_before_compose_runs_elsewhere` | green | red |
+| M22 instruction: undo rule reverted to 5.11's wording | `test_the_scheduling_prompt_teaches_the_one_working_draft_lifecycle` (and the prompt hash pin) | green | red |
 
 ### File List
 
@@ -523,8 +545,15 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 - `backend/tests/test_live_conversation_execute_prefix.py`
 - `backend/tests/test_live_conversation_cases.py`
 - `backend/tests/test_live_conversation_reporting.py`
+- `backend/evals/live_conversations/suite.py`
+- `backend/evals/live_conversations/smoke_suite.py`
+- `backend/agent/runtime.py`
+- `backend/agent/scheduling_instructions.py`
+- `backend/tests/test_agent_runtime_adapter.py`
+- `backend/tests/test_turn_routing.py`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ### Change Log
 
 - 2026-10-01: Phase A (Tasks 0-5) and Task 6 offline validation; E:4 graded by action per Minh's decision (`when` field).
+- 2026-10-01: Task 7 live smokes; harness path fix, discard-turn runtime retry, undo instruction rewritten.
