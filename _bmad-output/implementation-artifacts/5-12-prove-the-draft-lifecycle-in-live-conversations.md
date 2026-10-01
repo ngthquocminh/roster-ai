@@ -4,7 +4,7 @@ baseline_commit: 3d747f7 (Story 5.11 merged; story created at 8a85f4f, re-verifi
 depends_on: 5-11-keep-one-working-draft-per-conversation (done; merged into feat/draft-lifecycle)
 ---
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -247,42 +247,42 @@ Phases are ordered. Do not start a phase before the previous one's exit conditio
 
 ### Phase A — prerequisites and harness code (keyless)
 
-- [ ] **Task 0 — Record the starting point** (all ACs)
-  - [ ] The 5.11 names in F11, F16 and D11 were verified at `3d747f7`. If HEAD has moved past it in `backend/application/contracts/proposal.py`, `api/schemas.py`, `scheduling_draft_discard.py` or `settings.py`, re-check those names; a mismatch → stop and ask.
-  - [ ] Starting counts: the backend default suite was 2803 passed / 2 skipped against PostgreSQL 18 (5.11's review record). The live-eval subset (nine `test_live_conversation_*.py` files) was 263 passed at `3d747f7`. Re-run the default suite once and record the counts in the completion notes.
+- [x] **Task 0 — Record the starting point** (all ACs)
+  - [x] The 5.11 names in F11, F16 and D11 were verified at `3d747f7`. If HEAD has moved past it in `backend/application/contracts/proposal.py`, `api/schemas.py`, `scheduling_draft_discard.py` or `settings.py`, re-check those names; a mismatch → stop and ask.
+  - [x] Starting counts: the backend default suite was 2803 passed / 2 skipped against PostgreSQL 18 (5.11's review record). The live-eval subset (nine `test_live_conversation_*.py` files) was 263 passed at `3d747f7`. Re-run the default suite once and record the counts in the completion notes.
 
-- [ ] **Task 1 — Register the four check kinds** (AC1; per D1)
-  - [ ] `expectations.py`: add to `CODE_CHECKS` and `_FIELDS`. Implement them in `code_check` and validate the `draft_state_is` value vocabulary in `validate_expectation`.
-  - [ ] `TurnContext` gains `draft_state: dict | None = None` (D3).
+- [x] **Task 1 — Register the four check kinds** (AC1; per D1)
+  - [x] `expectations.py`: add to `CODE_CHECKS` and `_FIELDS`. Implement them in `code_check` and validate the `draft_state_is` value vocabulary in `validate_expectation`.
+  - [x] `TurnContext` gains `draft_state: dict | None = None` (D3).
 
-- [ ] **Task 2 — Per-turn draft identity** (AC1; per D2)
-  - [ ] `Bindings.drafts`, `capture_draft` recording plus `version_ordinal` on `Bindings.draft`, `as_of` carrying `drafts`, and the `draft_version_ordinal_missing` refusal.
+- [x] **Task 2 — Per-turn draft identity** (AC1; per D2)
+  - [x] `Bindings.drafts`, `capture_draft` recording plus `version_ordinal` on `Bindings.draft`, `as_of` carrying `drafts`, and the `draft_version_ordinal_missing` refusal.
 
-- [ ] **Task 3 — Read the newest draft's state** (AC1; per D3)
-  - [ ] `http_client.py`: `newest_draft_proposal()`, with `latest_draft()` re-expressed over it and its behaviour unchanged.
-  - [ ] `runner.py`: read it only for turns that carry `draft_state_is`, and fill `TurnContext.draft_state` and `verified['newest_draft_state']`.
-  - [ ] `cases.py` `validate_scenarios`: refuse `draft_state_is` on a turn with `actions_after` (D3).
+- [x] **Task 3 — Read the newest draft's state** (AC1; per D3)
+  - [x] `http_client.py`: `newest_draft_proposal()`, with `latest_draft()` re-expressed over it and its behaviour unchanged.
+  - [x] `runner.py`: read it only for turns that carry `draft_state_is`, and fill `TurnContext.draft_state` and `verified['newest_draft_state']`.
+  - [x] `cases.py` `validate_scenarios`: refuse `draft_state_is` on a turn with `actions_after` (D3).
 
-- [ ] **Task 4 — Author scenario E and the three turn edits** (AC2; per D4, D5)
-  - [ ] `scenarios.json`: append E, edit B:6, C:9, B:10. Round-trip the file as bytes with `json.dumps(data, indent=2, ensure_ascii=False) + '\n'` so it keeps LF line endings (handover "Gotchas"; on Windows, Python's `write_text` writes CRLF).
-  - [ ] `cases.py`: `REQUIRED_SCENARIOS = {'A': 6, 'B': 12, 'C': 12, 'D': 6, 'E': 7}`.
-  - [ ] `evidence.py` binding prose per D10.
-  - [ ] `scripts/derive_live_conversation_baseline.py`: make the `note` text name no story. For example: "A projection of the committed live-conversation measurement named by source_evidence_path, not a second measurement…". The module docstring follows suit, and `SOURCE_EVIDENCE` stays 5.7 until D8 step 4.
+- [x] **Task 4 — Author scenario E and the three turn edits** (AC2; per D4, D5)
+  - [x] `scenarios.json`: append E, edit B:6, C:9, B:10. Round-trip the file as bytes with `json.dumps(data, indent=2, ensure_ascii=False) + '\n'` so it keeps LF line endings (handover "Gotchas"; on Windows, Python's `write_text` writes CRLF).
+  - [x] `cases.py`: `REQUIRED_SCENARIOS = {'A': 6, 'B': 12, 'C': 12, 'D': 6, 'E': 7}`.
+  - [x] `evidence.py` binding prose per D10.
+  - [x] `scripts/derive_live_conversation_baseline.py`: make the `note` text name no story. For example: "A projection of the committed live-conversation measurement named by source_evidence_path, not a second measurement…". The module docstring follows suit, and `SOURCE_EVIDENCE` stays 5.7 until D8 step 4.
 
-- [ ] **Task 5 — Unit tests** (AC1, AC2)
-  - [ ] `tests/test_live_conversation_expectations.py`: for each new kind, a passing case and each way it fails. Cover `draft_updates_turn` with the same proposal at an equal or lower ordinal, a different proposal, a non-draft turn, and an unrecorded turn *n* → `unbound`. Cover `draft_state_is` with state-only, state/ended_by, a wrong ended_by, and `None`. Cover `draft_is_new` against a proposal recorded earlier, a recording made in the same turn (must not count; D2), and `version_ordinal` ≠ 1. Cover `draft_constraint_count`. Add loader refusals: an unknown state or ended_by, missing fields, extra fields, and `draft_state_is` on a turn with `actions_after`. Add `Bindings.drafts` with `as_of`, the `draft_version_ordinal_missing` refusal, and `Bindings.draft` carrying `version_ordinal`.
-  - [ ] Runner integration through `_Scripted`/`FakeApp`. `FakeApp` gains `newest_draft_proposal()`, and its `latest_draft()` returns a `version_ordinal`. Prove the state is read only for `draft_state_is` turns, and that an E-like sequence of create, update, discard and new grades as expected.
-  - [ ] `tests/test_live_conversation_execute_prefix.py`: client tests for `newest_draft_proposal()`: no draft → `None`; an ended proposal is returned, not refused; a truncated timeline still raises. Existing `latest_draft` tests stay green unchanged.
-  - [ ] Update `test_every_scenario_carries_expectations_on_every_turn` to `'ABCDE'`, and `tests/test_live_conversation_reporting.py`'s pinned `required_scenarios_per_run`/`required_user_turns_per_run`/`clean_scenarios` to 5/43/A–E.
-  - [ ] Exit: the live-eval subset and the default backend suite are green (at creation, the seven live-eval files gave 253 passed in 24 s at `8a85f4f`). Commit (D8 step 1).
+- [x] **Task 5 — Unit tests** (AC1, AC2)
+  - [x] `tests/test_live_conversation_expectations.py`: for each new kind, a passing case and each way it fails. Cover `draft_updates_turn` with the same proposal at an equal or lower ordinal, a different proposal, a non-draft turn, and an unrecorded turn *n* → `unbound`. Cover `draft_state_is` with state-only, state/ended_by, a wrong ended_by, and `None`. Cover `draft_is_new` against a proposal recorded earlier, a recording made in the same turn (must not count; D2), and `version_ordinal` ≠ 1. Cover `draft_constraint_count`. Add loader refusals: an unknown state or ended_by, missing fields, extra fields, and `draft_state_is` on a turn with `actions_after`. Add `Bindings.drafts` with `as_of`, the `draft_version_ordinal_missing` refusal, and `Bindings.draft` carrying `version_ordinal`.
+  - [x] Runner integration through `_Scripted`/`FakeApp`. `FakeApp` gains `newest_draft_proposal()`, and its `latest_draft()` returns a `version_ordinal`. Prove the state is read only for `draft_state_is` turns, and that an E-like sequence of create, update, discard and new grades as expected.
+  - [x] `tests/test_live_conversation_execute_prefix.py`: client tests for `newest_draft_proposal()`: no draft → `None`; an ended proposal is returned, not refused; a truncated timeline still raises. Existing `latest_draft` tests stay green unchanged.
+  - [x] Update `test_every_scenario_carries_expectations_on_every_turn` to `'ABCDE'`, and `tests/test_live_conversation_reporting.py`'s pinned `required_scenarios_per_run`/`required_user_turns_per_run`/`clean_scenarios` to 5/43/A–E.
+  - [x] Exit: the live-eval subset and the default backend suite are green (at creation, the seven live-eval files gave 253 passed in 24 s at `8a85f4f`). Commit (D8 step 1).
 
 ### Phase B — validation before spending (cheap first)
 
-- [ ] **Task 6 — Validate the new judge questions offline, with real Jev** (AC3; per D4, D5)
-  - [ ] Adapt `_bmad-output/implementation-artifacts/live-eval-replay/replay_one_turn_variant.py` (it is B-specific; rebuild E's bindings and events by hand). Each run costs under $0.001.
-  - [ ] E:4: grade (a) a clarifying question, (b) a re-add whose `facts.draft` holds the exclusion again, (c) a re-add holding a different constraint, (d) prose "I've undone that". (a) and (b) must pass, and (c) and (d) must fail. Otherwise apply D5's stop condition.
-  - [ ] E:6: a truthful discard confirmation passes; "I've created a fresh draft" fails; "the draft is still available to run" fails.
-  - [ ] Reword only on evidence: read the full reply and the facts first (handover "Lessons"). Ask about actions, not "anything not in facts".
+- [x] **Task 6 — Validate the new judge questions offline, with real Jev** (AC3; per D4, D5)
+  - [x] Adapt `_bmad-output/implementation-artifacts/live-eval-replay/replay_one_turn_variant.py` (it is B-specific; rebuild E's bindings and events by hand). Each run costs under $0.001.
+  - [x] E:4: grade (a) a clarifying question, (b) a re-add whose `facts.draft` holds the exclusion again, (c) a re-add holding a different constraint, (d) prose "I've undone that". (a) and (b) must pass, and (c) and (d) must fail. Otherwise apply D5's stop condition.
+  - [x] E:6: a truthful discard confirmation passes; "I've created a fresh draft" fails; "the draft is still available to run" fails.
+  - [x] Reword only on evidence: read the full reply and the facts first (handover "Lessons"). Ask about actions, not "anything not in facts".
 
 - [ ] **Task 7 — Single-scenario live smokes** (AC3; allowed without asking under the handover rule)
   - [ ] Start Docker Desktop. Run `--scenario B --repetitions 1` first: B:10 is the riskiest turn (proposal §3 mitigation). Then run `--scenario E`. Each costs a few cents with the Jev judge.
@@ -436,11 +436,95 @@ code history: `a5dd9d9` (new check kinds and bindings: the pattern to copy), `8f
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`claude-opus-5-5`)
+
 ### Debug Log References
+
+- Task 6 offline replays (real Jev, hand-written replies, $0.0012 total): scratch script
+  `replay_e.py` (adapted from `live-eval-replay/replay_one_turn_variant.py`; E's bindings rebuilt by hand).
 
 ### Completion Notes List
 
 - Story created 2026-10-01 at `8a85f4f` (Story 5.11 still in backlog). Ultimate context engine analysis completed - comprehensive developer guide created.
 - 2026-10-01: 5.11 (`claude/wizardly-knuth-u7mh15`, done) fast-forward-merged into `feat/draft-lifecycle` at `3d747f7`; story re-verified against its code (see "Re-verification after 5.11").
+- **Task 0.** HEAD `0e531b3` has no backend change since `3d747f7`, so F11/F16/D11 names hold. Starting
+  default-suite count: 5.11's record (2803 passed / 2 skipped). My own baseline run was invalidated
+  because I edited `scenarios.json` while it ran (`test_catalogue_is_four_full_conversations` failed
+  on the new scenario E, not a regression).
+- **Tasks 1-5.** Four check kinds per D1; `Bindings.drafts` + `version_ordinal` + the
+  `draft_version_ordinal_missing` refusal per D2; `newest_draft_proposal()` with `latest_draft()` over
+  it, the runner's targeted read and the `actions_after` refusal per D3; scenario E, B:6, B:10, C:9 per
+  D4; `REQUIRED_SCENARIOS` with E; D10 binding prose; the baseline `note` names no story.
+  - The note is pinned by `test_committed_baseline_is_exactly_what_the_script_derives`, so the baseline
+    was re-derived **by the script** from the unchanged 5.7 source in the code commit. Only `note`
+    changed (still 108/108, same digests).
+  - E's draft-turn obligations start with "Persist" so the existing
+    `test_every_turn_that_must_persist_a_draft_says_so_explicitly_and_only_those` invariant still holds.
+  - Live-eval subset 519 passed; default suite **2843 passed / 2 skipped** (PostgreSQL 18).
+- **F7 correction recorded:** the agent instructions and scenarios are not in `behavioral_digest`
+  (spec §5.2 says they are). A-D are still re-measured for the reasons under F7.
+- **Task 6 / D5 stop condition hit, resolved by Minh (2026-10-01).** As authored, `handles_undo` could not
+  separate a correct re-add (0.59-0.80) from a wrong one (0.43-0.58). A draft reply has no prose (F5), so
+  Jev had to judge from `facts.draft`. `claims_undo` also scored ~0.5 on a correct clarification. Minh's
+  rule, for **all** tests: *grade the action (right tool, right arguments, non-fabricated result), not the
+  reply's wording.* Applied as a generic optional `when: draft | not_draft` field on any expectation. A
+  check that does not apply to this reply's kind is `skipped`; each branch must still carry a positive
+  check. E:4 now:
+  - draft branch, code only: `draft_updates_turn: 1`, `draft_has` the Priya/Main Pick exclusion,
+    `draft_has` the 30h cap, `draft_constraint_count: 2`;
+  - prose branch: judge `asks_which` (want true), judge `claims_restored` (want false, narrowed to the
+    one action that could be faked on this turn);
+  - unconditional `mentions_none says_undid`.
+
+  Replayed 3 rounds: (a) clarification passes (0.97-0.98 / 0.91-0.93); (b) correct re-add passes by
+  code; (c) wrong re-add fails by code; (d) a claimed undo fails (0.03 / 0.16-0.17). E:6 passes for the
+  truthful discard (0.97 / 0.92) and fails for "fresh draft" (0.05-0.06) and "still runnable"
+  (0.05-0.06). E:6's wording is unchanged from D4.
+- **A-D audit under the same rule (not changed; D9 needs Minh's approval):** D:1 `long_walkthrough`,
+  D:2 `is_brief` and A:6 `off_subject` grade style; B:10 `identifies_by_origin` and
+  `locates_decision_record` grade explanation quality; C:10 checks the word "ready" but not that the
+  demonstration tool ran with the right arguments; B:7 and C:12 rely on the judge where the tool log
+  could show no run or approval was created.
+
+#### Mutation table (every mutation reverted; tree verified clean after each batch)
+
+| Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|
+| M1 `draft_updates_turn`: `>` → `>=` on `version_ordinal` | `test_draft_updates_turn_needs_the_same_proposal_at_a_higher_version` | green | red |
+| M2 `draft_updates_turn`: `proposal_id` comparison dropped | same | green | red |
+| M3 `draft_updates_turn`: unrecorded turn returns False, not `Unbound` | `test_draft_updates_turn_on_a_turn_that_saved_no_draft_is_unbound` | green | red |
+| M4 `draft_state_is`: `ended_by` ignored | `test_draft_state_is_reads_the_newest_drafts_state_and_ender` | green | red |
+| M5 `draft_is_new`: compares against `drafts` (incl. this turn), not `as_of` | `test_draft_is_new_needs_version_one_of_a_proposal_no_earlier_turn_saved` | green | red |
+| M6 `draft_is_new`: `version_ordinal == 1` dropped | same | green | red |
+| M7 `draft_constraint_count`: `==` → `>=` | `test_draft_constraint_count_counts_the_persisted_constraints` | green | red |
+| M8 loader: `ended_by` vocabulary not checked | `test_a_malformed_expectation_is_refused_at_load` | green | red |
+| M9 `capture_draft`: missing `version_ordinal` not refused | `test_a_persisted_draft_without_an_integer_version_ordinal_is_a_contract_break` | green | red |
+| M10 `as_of`: carries every recorded draft | `test_each_draft_turn_records_its_draft_identity_and_the_latest_carries_its_ordinal` | green | red |
+| M11 runner: newest draft state read on every turn | `test_an_e_like_lifecycle_grades_update_discard_and_a_new_draft` | green | red |
+| M12 runner: `draft_state` not passed to `TurnContext` | same | green | red |
+| M13 `validate_scenarios`: `draft_state_is` with `actions_after` not refused | `test_draft_state_is_cannot_grade_a_turn_that_has_actions` | green | red |
+| M14 client: `newest_draft_proposal` raises on no draft | `test_the_newest_draft_proposal_is_none_without_a_draft` | green | red |
+| M15 client: `latest_draft` active/stale guard dropped | `test_a_draft_that_is_not_current_cannot_be_optimized` | green | red |
+| M16 `evaluate`: `when` ignored | `test_each_reply_kind_is_graded_only_by_the_checks_for_it` | green | red |
+| M17 loader: per-branch positive requirement dropped | `test_every_reply_kind_needs_a_positive_check_of_its_own` | green | red |
+| M18 loader: unknown `when` value accepted | `test_a_malformed_expectation_is_refused_at_load` | green | red |
 
 ### File List
+
+- `backend/evals/live_conversations/expectations.py`
+- `backend/evals/live_conversations/runner.py`
+- `backend/evals/live_conversations/http_client.py`
+- `backend/evals/live_conversations/cases.py`
+- `backend/evals/live_conversations/scenarios.json`
+- `backend/evals/live_conversations/evidence.py`
+- `backend/scripts/derive_live_conversation_baseline.py`
+- `backend/evals/baselines/live-conversations.json` (re-derived by script; `note` only)
+- `backend/tests/test_live_conversation_expectations.py`
+- `backend/tests/test_live_conversation_execute_prefix.py`
+- `backend/tests/test_live_conversation_cases.py`
+- `backend/tests/test_live_conversation_reporting.py`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+### Change Log
+
+- 2026-10-01: Phase A (Tasks 0-5) and Task 6 offline validation; E:4 graded by action per Minh's decision (`when` field).

@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from evals.live_conversations.protocol import IncompleteConversationRun
+
 #: Values the harness binds, and where (see `Bindings.capture_*`).
 BINDING_NAMES = frozenset({
     'scenario_name', 'baseline_id', 'task_names',
@@ -32,11 +34,21 @@ CODE_CHECKS = frozenset({
     'mentions', 'mentions_all', 'mentions_any', 'mentions_none', 'activity_is',
     'activity_field_equals', 'draft_has', 'draft_preserves_locks', 'names_assigned_pair',
     'draft_matches_turn', 'claims_metric', 'draft_has_roster_lock', 'each_item_mentions',
+    'draft_updates_turn', 'draft_state_is', 'draft_constraint_count', 'draft_is_new',
 })
+#: The draft lifecycle's vocabulary (`application/contracts/proposal.py`):
+#: `draft_state_is` takes "<state>" or "<state>/<ended_by>".
+DRAFT_STATES = frozenset({'active', 'rejected', 'applied'})
+DRAFT_ENDED_BY = frozenset({'planner', 'assistant', 'system'})
 #: Checks that can only fail by the reply doing something wrong; a turn needs at
 #: least one check that requires the reply to DO something (tau-bench: a
 #: do-nothing agent passes every "must not").
 NEGATIVE_CHECKS = frozenset({'mentions_none', 'each_item_mentions'})
+
+#: `when`: the reply kind an expectation applies to. A turn with more than one
+#: valid ACTION (save a draft, or ask first) grades each by its own evidence --
+#: the persisted draft by code, prose by a judge -- and skips the other's checks.
+WHEN = frozenset({'draft', 'not_draft'})
 
 #: P(wanted answer) a judge check needs to pass; under FAIL_P it fails.
 PASS_P = 0.70
@@ -65,6 +77,7 @@ class Expectation:
     question: str | None = None
     want: bool | None = None
     facts: tuple[str, ...] = ()
+    when: str | None = None
 
     @property
     def is_judge(self) -> bool:
@@ -99,6 +112,10 @@ _FIELDS = {
     'draft_preserves_locks': (set(), set()),
     'names_assigned_pair': (set(), set()),
     'draft_matches_turn': ({'turn'}, set()),
+    'draft_updates_turn': ({'turn'}, set()),
+    'draft_state_is': ({'value'}, set()),
+    'draft_constraint_count': ({'n'}, set()),
+    'draft_is_new': (set(), set()),
     'judge': ({'question', 'want'}, {'facts'}),
 }
 #: Bindings that hold a list: only `mentions_all` may take one whole.
@@ -125,7 +142,7 @@ def parse_expectation(raw: dict) -> Expectation:
                 raise ValueError(f"expectation {raw['id']!r}: {name} must be a list of strings")
             data[name] = tuple(data[name])
     expectation = Expectation(**data)
-    validate_expectation(expectation, present=set(raw) - {'id', 'check'})
+    validate_expectation(expectation, present=set(raw) - {'id', 'check', 'when'})
     return expectation
 
 
@@ -152,6 +169,16 @@ def validate_expectation(expectation: Expectation, present: set[str] | None = No
         number = getattr(expectation, name)
         if number is not None and (isinstance(number, bool) or not isinstance(number, (int, float))):
             raise ValueError(f'{where}: {name} must be a number')
+    if expectation.when is not None and expectation.when not in WHEN:
+        raise ValueError(f'{where}: when must be one of {sorted(WHEN)}')
+    if expectation.check == 'draft_state_is':
+        state, _, ended_by = str(expectation.value).partition('/')
+        if state not in DRAFT_STATES or (ended_by and ended_by not in DRAFT_ENDED_BY)                 or str(expectation.value).endswith('/'):
+            raise ValueError(f'{where}: draft_state_is takes <state>[/<ended_by>] with state in '
+                             f'{sorted(DRAFT_STATES)} and ended_by in {sorted(DRAFT_ENDED_BY)}')
+    if expectation.check == 'draft_constraint_count' and (
+            not isinstance(expectation.n, int) or isinstance(expectation.n, bool) or expectation.n < 0):
+        raise ValueError(f'{where}: draft_constraint_count needs a whole number n')
     if expectation.is_judge and not isinstance(expectation.want, bool):
         raise ValueError(f'{where}: want must be true or false')
     names = set().union(*(_templates(getattr(expectation, name)) for name in
@@ -177,6 +204,14 @@ def validate_turn_expectations(expectations: tuple[Expectation, ...],
         raise ValueError(f'duplicate expectation ids: {ids}')
     if expectations and not any(expectation.is_positive for expectation in expectations):
         raise ValueError('a turn with expectations needs at least one positive expectation')
+    # Each branch must require the reply to DO something, or a do-nothing reply
+    # of the other kind passes on its must-nots alone.
+    if any(expectation.when for expectation in expectations):
+        for branch in sorted(WHEN):
+            if not any(expectation.is_positive and expectation.when in (None, branch)
+                       for expectation in expectations):
+                raise ValueError(f'a turn graded by reply kind needs a positive expectation '
+                                 f'that applies when the reply is {branch}')
     for expectation in expectations:
         if position is not None and expectation.turn is not None and expectation.turn >= position:
             raise ValueError(f'expectation {expectation.id!r}: turn {expectation.turn} is not an '
@@ -203,6 +238,10 @@ class Bindings:
     #: The turn being graded; each binding remembers the turn that bound it.
     turn: int = 0
     bound_at: dict = field(default_factory=dict)
+    #: Each draft turn's saved draft identity, by turn number:
+    #: {proposal_id, version_ordinal}. `draft` alone cannot say which proposal
+    #: an earlier turn saved.
+    drafts: dict = field(default_factory=dict)
 
     def bind(self, name: str, value) -> None:
         if name not in BINDING_NAMES:
@@ -216,7 +255,8 @@ class Bindings:
         holds an earlier exclusion must not read that exclusion from itself."""
         earlier = {name: value for name, value in self.values.items() if self.bound_at[name] < turn}
         return Bindings(values=earlier, events=list(self.events), draft=self.draft, turn=turn,
-                        bound_at={name: self.bound_at[name] for name in earlier})
+                        bound_at={name: self.bound_at[name] for name in earlier},
+                        drafts={n: entry for n, entry in self.drafts.items() if n < turn})
 
     def get(self, name: str):
         if name not in self.values:
@@ -256,6 +296,12 @@ class Bindings:
     def capture_draft(self, draft: dict | None, workers_by_id: dict, tasks_by_id: dict) -> None:
         if not draft:
             return
+        ordinal = draft.get('version_ordinal')
+        # Every fresh read fills it; a draft without one is a contract break in
+        # the application, not something the model did.
+        if type(ordinal) is not int:
+            raise IncompleteConversationRun('draft_version_ordinal_missing')
+        self.drafts[self.turn] = {'proposal_id': draft.get('proposal_id'), 'version_ordinal': ordinal}
         constraints = draft.get('constraints') or []
         exclusions = [constraint for constraint in constraints
                       if constraint.get('kind') == 'exclude_worker_from_task']
@@ -275,7 +321,7 @@ class Bindings:
         # baseline change") is part of what happened: a reply may repeat it.
         summary = draft.get('consequence_summary')
         self.draft = {'constraints': descriptions, 'consequence_summary': summary,
-                      'proposal_id': draft.get('proposal_id')}
+                      'proposal_id': draft.get('proposal_id'), 'version_ordinal': ordinal}
         self.events.append('Draft saved: ' + '; '.join(descriptions)
                            + (f' ({summary})' if summary else ''))
 
@@ -434,6 +480,10 @@ class TurnContext:
     turn: int = 0
     #: Full worker rows (qualifications, roster windows).
     workers: list = ()
+    #: The conversation's newest draft as stored, read only for a turn that
+    #: checks `draft_state_is`: {proposal_id, state, ended_by, version_ordinal},
+    #: or None when the conversation has no draft.
+    draft_state: dict | None = None
 
     @property
     def text(self) -> str:
@@ -530,6 +580,11 @@ def _lock_ids(items) -> set:
             for item in items or ()}
 
 
+def _ordinal(draft: dict) -> int:
+    ordinal = draft.get('version_ordinal')
+    return ordinal if type(ordinal) is int else -1
+
+
 def code_check(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -> bool:
     """True when the reply meets it. Raises `Unbound` for a value never observed."""
     text = ctx.text
@@ -577,6 +632,23 @@ def code_check(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -
         return any(_pair_on_one_line(ctx.workers_by_id.get(row.get('worker_id')),
                                      ctx.tasks_by_id.get(row.get('task_id')), lines)
                    for row in ctx.assignments)
+    if check == 'draft_updates_turn':
+        earlier = bindings.drafts.get(expectation.turn)
+        if earlier is None:
+            raise Unbound(f'draft_turn_{expectation.turn}')
+        return (ctx.draft is not None and ctx.draft.get('proposal_id') == earlier['proposal_id']
+                and _ordinal(ctx.draft) > earlier['version_ordinal'])
+    if check == 'draft_state_is':
+        state, _, ended_by = str(expectation.value).partition('/')
+        return (ctx.draft_state is not None and ctx.draft_state.get('state') == state
+                and (not ended_by or ctx.draft_state.get('ended_by') == ended_by))
+    if check == 'draft_constraint_count':
+        return ctx.draft is not None and len(ctx.draft.get('constraints') or ()) == expectation.n
+    if check == 'draft_is_new':
+        # Earlier turns only: this turn's own draft is already recorded.
+        seen = {entry['proposal_id'] for entry in bindings.as_of(ctx.turn).drafts.values()}
+        return (ctx.draft is not None and _ordinal(ctx.draft) == 1
+                and ctx.draft.get('proposal_id') not in seen)
     if check == 'draft_matches_turn':
         return _pair_on_one_line(bindings.get('excluded_worker'), bindings.get('excluded_task'),
                                  ctx.reply_lines.get(expectation.turn, ()))
@@ -616,8 +688,13 @@ def evaluate(expectations, ctx: TurnContext, bindings: Bindings, user_message: s
     the facts IT names inside its own instructions, so no question sees another's.
     """
     checks, questions = [], {}
+    kind = 'draft' if ctx.activity.get('activity_type') == 'draft' else 'not_draft'
     for expectation in expectations:
         entry = {'id': expectation.id, 'check': expectation.check}
+        if expectation.when and expectation.when != kind:
+            entry['outcome'] = 'skipped'
+            checks.append(entry)
+            continue
         try:
             if expectation.is_judge:
                 question = resolve(expectation.question, bindings)

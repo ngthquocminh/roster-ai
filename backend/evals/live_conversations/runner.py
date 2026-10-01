@@ -279,6 +279,15 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                 bindings.capture_draft(verified['persisted_draft'], workers_by_id, tasks_by_id)
             if turn.requires_persisted_draft and activity['activity_type'] != 'draft':
                 failures.append('required_persisted_draft_missing')
+            draft_state = None
+            if any(expectation.check == 'draft_state_is' for expectation in turn.expect):
+                # Read whatever state the newest draft is in now: an ended draft
+                # is exactly what a discard or promotion turn has to show.
+                newest = app.newest_draft_proposal()
+                if newest is not None:
+                    draft_state = {key: newest.get(key) for key in
+                                   ('proposal_id', 'state', 'ended_by', 'version_ordinal')}
+                verified['newest_draft_state'] = draft_state
             visible = visible_activity(activity)
             reply_lines[index] = visible_lines(visible)
             # Raw fact-tag syntax the planner can see is broken output on any
@@ -292,6 +301,7 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                     activity=activity, visible=visible, draft=verified.get('persisted_draft'),
                     assignments=assignments, locks=locks, workers_by_id=workers_by_id,
                     tasks_by_id=tasks_by_id, reply_lines=reply_lines, turn=index, workers=workers,
+                    draft_state=draft_state,
                     candidate_rows=named_candidate_rows(
                         activity, ((latest_run or {}).get('candidate') or {}).get('assignments', ()),
                         workers_by_id, tasks_by_id),

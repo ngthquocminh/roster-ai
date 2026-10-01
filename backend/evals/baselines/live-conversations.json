@@ -14,7 +14,7 @@
     "reasoning_effort": "low"
   },
   "measured_at_commit": "8f359071e208d1b293511568240682938c00b423",
-  "note": "A projection of the committed Story 5.7 measurement, not a second measurement. Tracked config, deliberately outside evidence/.",
+  "note": "A projection of the committed live-conversation measurement named by source_evidence_path, not a second measurement. Tracked config, deliberately outside evidence/.",
   "schema_version": "1",
   "source_evidence_path": "evidence/story-5.7/live-conversation-journeys.json",
   "source_evidence_sha256": "d832aa1bc3876562bd05cad897e42add9e6be7a6ce1b11b3c4feaa84160d2e7e",

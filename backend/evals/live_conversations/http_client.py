@@ -100,15 +100,22 @@ class ApplicationConversation:
         return self._request('GET', '/api/v1/scenarios/' + self.fixture['scenario_id']
                              + '/projection/' + group + f'?limit={limit}&cursor={cursor}')
 
-    def latest_draft(self):
-        """Resolve actual persisted draft identity; never synthesize model effects."""
+    def newest_draft_proposal(self):
+        """The newest draft activity's proposal as stored, in whatever state it
+        is now (an ended draft too), or None when the conversation has none."""
         timeline = self.timeline()
         if timeline.get('has_more'):
             raise IncompleteConversationRun('timeline_truncated')
         drafts = [item for item in timeline['items'] if item['activity_type'] == 'draft']
         if not drafts:
+            return None
+        return self._request('GET', '/api/v1/proposals/' + drafts[-1]['proposal_id'])
+
+    def latest_draft(self):
+        """Resolve actual persisted draft identity; never synthesize model effects."""
+        proposal = self.newest_draft_proposal()
+        if proposal is None:
             raise IncompleteConversationRun('required_draft_missing')
-        proposal = self._request('GET', '/api/v1/proposals/' + drafts[-1]['proposal_id'])
         if proposal['state'] != 'active' or proposal['stale']:
             raise IncompleteConversationRun('required_draft_not_current')
         return proposal

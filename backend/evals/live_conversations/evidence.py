@@ -302,10 +302,11 @@ def generate(run_paths, output: Path, *, allow_dirty: bool = False,
             'tool': sorted(module['manifest']['capability_name'] for module in inventory['modules']),
             'policy': ('production grant composition (application/capabilities/registry.py); '
                        'compute-risk modules are withheld from an ordinary planner turn'),
-            'application': ('ShiftMind Story 5.7 live conversation suite over the authenticated '
+            'application': ('ShiftMind Story 5.7 live conversation suite, extended by Story 5.12, '
+                            'over the authenticated '
                             'HTTP path against a disposable composed stack'),
             'solver': ('real CP-SAT worker run started through POST /api/v1/schedule-runs in '
-                       'Scenario B; no solver participates in Scenarios A and C'),
+                       'Scenario B; no solver participates in Scenarios A, C, D and E'),
         },
         repo_root=ROOT,
         dataset_files=[ROOT / 'backend/evals/live_conversations/scenarios.json'],

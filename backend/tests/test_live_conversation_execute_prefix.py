@@ -68,7 +68,10 @@ class FakeApp:
                 {'agent_run_status': 'agent_completed', 'activity': self.activity})
 
     def latest_draft(self):
-        return {'proposal_id': 'p-1'}
+        return {'proposal_id': 'p-1', 'version_ordinal': 1}
+
+    def newest_draft_proposal(self):
+        return {'proposal_id': 'p-1', 'state': 'active', 'ended_by': None, 'version_ordinal': 1}
 
     def run_optimization(self):
         return {'schedule_run_id': 'sr-1'}
@@ -332,6 +335,23 @@ def test_the_latest_of_several_drafts_is_the_one_resolved():
 
     client_with(responses).latest_draft()
     assert seen[-1].endswith('/proposals/p-2')
+
+
+def test_the_newest_draft_proposal_is_none_without_a_draft():
+    assert client_with(lambda path: timeline(drafts=0)).newest_draft_proposal() is None
+    with pytest.raises(IncompleteConversationRun, match='required_draft_missing'):
+        client_with(lambda path: timeline(drafts=0)).latest_draft()
+
+
+def test_the_newest_draft_proposal_returns_an_ended_draft_rather_than_refusing_it():
+    ended = {'state': 'rejected', 'stale': False, 'ended_by': 'assistant', 'proposal_id': 'p-2'}
+    app = client_with(lambda path: ended if '/proposals/' in path else timeline(drafts=3))
+    assert app.newest_draft_proposal() == ended
+
+
+def test_the_newest_draft_proposal_still_refuses_a_truncated_timeline():
+    with pytest.raises(IncompleteConversationRun, match='timeline_truncated'):
+        client_with(lambda path: timeline(has_more=True)).newest_draft_proposal()
 
 
 def test_a_decision_on_an_approval_that_is_not_pending_is_refused():
