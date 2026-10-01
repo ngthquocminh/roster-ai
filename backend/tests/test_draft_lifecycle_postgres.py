@@ -27,6 +27,7 @@ from sqlalchemy.exc import IntegrityError
 from adapters.postgres.conversation import PostgresConversationRepository
 from adapters.postgres.proposal import PostgresProposalRepository
 from adapters.postgres.schema import (
+    agent_run,
     command_idempotency,
     conversation,
     persisted_event,
@@ -296,6 +297,13 @@ def _events(engine, run_id: UUID) -> list:
             .order_by(persisted_event.c.sequence)))
 
 
+def _run_status(engine, run_id: UUID) -> str:
+    """The PERSISTED `agent_run.status`, not the use case's return value (AC2)."""
+    with engine.connect() as connection:
+        return connection.execute(
+            select(agent_run.c.status).where(agent_run.c.id == run_id)).scalar_one()
+
+
 def _planner_revise(engine, conv, proposal_id, constraints, expected_resource_version, key=None):
     with site_context(engine, conv["site"]) as connection:
         return revise_proposal(
@@ -510,6 +518,7 @@ def _assert_lost(engine, conv, turn: Turn, before, executed) -> None:
     assert _proposals(engine, conv) == before[0]
     assert _version_count(engine, conv) == before[1]
     assert executed.agent_run_status == "agent_failed"
+    assert _run_status(engine, turn.claimed.agent_run_id) == "agent_failed"
     payload = executed.event.payload
     assert payload.activity_type == "terminal_outcome"
     assert payload.outcome == TerminalOutcomeV1(
@@ -667,6 +676,8 @@ def test_the_conversation_lock_serializes_two_finalizes_and_never_reaches_the_in
     assert "a_error" not in outcomes and "b_error" not in outcomes, outcomes
     assert outcomes["a"].event.payload.activity_type == "draft"
     assert outcomes["b"].agent_run_status == "agent_failed"
+    assert _run_status(engine, b.claimed.agent_run_id) == "agent_failed"
+    assert _run_status(engine, a.claimed.agent_run_id) == "agent_completed"
     assert outcomes["b"].event.payload.outcome.reason == "capability_error"
     assert _active(engine, conv) == [result_a.proposal.proposal_id]
     assert len(_proposals(engine, conv)) == 1
@@ -817,6 +828,20 @@ def test_a_replay_after_the_draft_became_applied_returns_the_stored_original(
     replay = _planner_revise(engine, conv, first.proposal.proposal_id, [_hours(31.0)], 1, key)
     assert replay.proposal.proposal_version_id == original.proposal.proposal_version_id
     assert (replay.version_ordinal, replay.ended_by) == (original.version_ordinal, None)
+
+
+def test_a_replayed_discard_keeps_the_stored_lifecycle_fields(governed_postgres_engine, conv) -> None:
+    """A replay answers "what did my command do": the stored `ended_by` comes
+    back, not a default. Mutation: drop the lifecycle fields from
+    `_replay_or_conflict` => this reddens (code review of story-5.11)."""
+    engine = governed_postgres_engine
+    _, first, _ = _draft_and_finalize(engine, conv, _hours())
+    key = uuid4().hex[:30]
+    original = _planner_reject(engine, conv, first.proposal.proposal_id, 1, key)
+    replay = _planner_reject(engine, conv, first.proposal.proposal_id, 1, key)
+    assert original.ended_by == "planner"
+    assert (replay.proposal.state, replay.ended_by, replay.version_ordinal) == (
+        "rejected", "planner", original.version_ordinal)
 
 
 def _route_headers(settings, key=None):

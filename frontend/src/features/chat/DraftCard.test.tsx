@@ -17,6 +17,7 @@ vi.mock("@/hooks/useScenarioProjection");
 vi.mock("@/hooks/useStartScheduleRun");
 
 const mutateRevision = vi.fn();
+const resetRevision = vi.fn();
 const mutateRejection = vi.fn();
 const mutateStart = vi.fn();
 const refetch = vi.fn();
@@ -91,7 +92,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   show(proposal);
   vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({
-    mutate: mutateRevision, isPending: false, isError: false,
+    mutate: mutateRevision, reset: resetRevision, isPending: false, isError: false,
   } as never);
   vi.mocked(rejectHooks.useRejectProposal).mockReturnValue({
     mutate: mutateRejection, isPending: false, isError: false,
@@ -351,6 +352,15 @@ describe("DraftCard — the working draft", () => {
       expect(button("Cancel")).toBeEnabled();
     });
 
+    it("disables the confirm-step Discard when a turn starts while the confirmation is open", async () => {
+      const { rerender } = render(<DraftCard proposalId={proposal.proposal_id} />);
+      await userEvent.click(button("Discard draft"));
+      rerender(<DraftCard agentTurnInFlight proposalId={proposal.proposal_id} />);
+      const group = screen.getByRole("group", { name: "Confirm discard" });
+      expect(within(group).getByRole("button", { name: "Discard" })).toBeDisabled();
+      expect(within(group).getByRole("button", { name: "Keep" })).toBeEnabled();
+    });
+
     it("enables them again when it ends", () => {
       const { rerender } = render(<DraftCard agentTurnInFlight proposalId={proposal.proposal_id} />);
       rerender(<DraftCard proposalId={proposal.proposal_id} />);
@@ -495,7 +505,7 @@ describe("DraftCard — the working draft", () => {
   describe("command errors", () => {
     it("surfaces a failed command instead of silently re-enabling the button", () => {
       vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({
-        mutate: mutateRevision, isPending: false, error: { status: 409 },
+        mutate: mutateRevision, reset: resetRevision, isPending: false, error: { status: 409 },
       } as never);
       render(<DraftCard proposalId={proposal.proposal_id} />);
       expect(screen.getByText(/changed since you opened it/i)).toBeInTheDocument();
@@ -558,7 +568,7 @@ describe("DraftCard — the working draft", () => {
 
     it("shows the newest command failure, not a stale one from another mutation", () => {
       vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({
-        mutate: mutateRevision, isPending: false, submittedAt: 10, error: { status: 422, code: "invalid_proposal" },
+        mutate: mutateRevision, reset: resetRevision, isPending: false, submittedAt: 10, error: { status: 422, code: "invalid_proposal" },
       } as never);
       vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
         mutate: mutateStart, isPending: false, submittedAt: 20,
@@ -578,6 +588,79 @@ describe("DraftCard — the working draft", () => {
       } as never);
       render(<DraftCard proposalId={proposal.proposal_id} />);
       expect(screen.queryByRole("status", { name: "Optimization queued" })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("code review of story-5.11", () => {
+    it("keeps the rows read-only while a command is pending, so its success cannot wipe new typing", () => {
+      vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({
+        mutate: mutateRevision, reset: resetRevision, isPending: true,
+      } as never);
+      show(multi);
+      render(<DraftCard proposalId={proposal.proposal_id} />);
+      expect(field("Maximum hours")).toBeDisabled();
+      for (const remove of screen.getAllByRole("button", { name: /^Remove / })) {
+        expect(remove).toBeDisabled();
+      }
+    });
+
+    it("Cancel and Load clear a revise error about the abandoned edits", async () => {
+      render(<DraftCard proposalId={proposal.proposal_id} />);
+      await typeInto(field("Maximum hours"), "36");
+      await userEvent.click(button("Cancel"));
+      expect(resetRevision).toHaveBeenCalledTimes(1);
+
+      const older: EditBuffer = {
+        baseVersionId: "99999999-9999-4999-8999-999999999999",
+        rows: rowsFromProposal(proposal as never).map((row) => ({ ...row, input: { ...row.input, max_hours: 33 } })),
+      };
+      render(<DraftCard buffer={older} onBufferChange={vi.fn()} proposalId={proposal.proposal_id} />);
+      await userEvent.click(button("Load v3"));
+      expect(resetRevision).toHaveBeenCalledTimes(2);
+    });
+
+    it("withdraws 'Saved as vN' once the draft moves past the saved version", async () => {
+      const { act } = await import("@testing-library/react");
+      const { rerender } = render(<DraftCard proposalId={proposal.proposal_id} />);
+      await typeInto(field("Maximum hours"), "36");
+      await userEvent.click(button("Save changes"));
+      const [, options] = mutateRevision.mock.calls.at(-1)!;
+      const saved = { ...proposal, version_ordinal: 4, resource_version: 2 };
+      show(saved);
+      act(() => options.onSuccess(saved));
+      expect(await screen.findByText("Saved as v4")).toBeInTheDocument();
+
+      show({ ...saved, proposal_version_id: "55555555-5555-4555-8555-555555555555", version_ordinal: 5 });
+      rerender(<DraftCard proposalId={proposal.proposal_id} />);
+      expect(screen.queryByText("Saved as v4")).not.toBeInTheDocument();
+    });
+
+    it("still acknowledges a save whose response carries no version number", async () => {
+      const { act } = await import("@testing-library/react");
+      render(<DraftCard proposalId={proposal.proposal_id} />);
+      await typeInto(field("Maximum hours"), "36");
+      await userEvent.click(button("Save changes"));
+      const [, options] = mutateRevision.mock.calls.at(-1)!;
+      const saved = { ...proposal, version_ordinal: null };
+      show(saved);
+      act(() => options.onSuccess(saved));
+      const status = await screen.findByText("Saved");
+      expect(status).toHaveAttribute("role", "status");
+    });
+
+    it("blocks Save on a lock row until the horizon is known", async () => {
+      vi.mocked(projectionHooks.useScenarioOverview).mockReturnValue({ data: undefined } as never);
+      show({ ...proposal, constraints: [constraint("lock_worker_shift", { start_minute: 60, end_minute: 480 })] });
+      render(<DraftCard proposalId={proposal.proposal_id} />);
+      await typeInto(field("End minute"), "99999");
+      expect(button("Save changes")).toBeDisabled();
+    });
+
+    it("does not block Save on other kinds while the horizon is unknown", async () => {
+      vi.mocked(projectionHooks.useScenarioOverview).mockReturnValue({ data: undefined } as never);
+      render(<DraftCard proposalId={proposal.proposal_id} />);
+      await typeInto(field("Maximum hours"), "36");
+      expect(button("Save changes")).toBeEnabled();
     });
   });
 

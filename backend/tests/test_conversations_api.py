@@ -446,11 +446,15 @@ def _with_workflow_context_reader(loader, monkeypatch):
     """Give the route a connection and run repository rich enough that it calls the loader."""
     from types import SimpleNamespace
 
-    from api.deps import get_schedule_run_repository
+    from api.deps import get_proposal_repository, get_schedule_run_repository
 
     app.dependency_overrides[get_site_context_opener] = lambda: _open_executing_context
     app.dependency_overrides[get_schedule_run_repository] = lambda: SimpleNamespace(
         list_runs=lambda *args, **kwargs: None)
+    # The route observes the working draft in the snapshot's transaction, just
+    # before the loader (code review of story-5.11).
+    app.dependency_overrides.setdefault(get_proposal_repository, lambda: SimpleNamespace(
+        get_working=lambda *args, **kwargs: None))
     monkeypatch.setattr("api.routers.conversations.load_workflow_context", loader)
 
 
@@ -577,6 +581,108 @@ def test_execute_turn_wires_the_working_draft_reader_through_the_proposal_reposi
     assert response.status_code == 200
     assert observed == [WorkingDraftObservationV1(UUID(int=77), 6, 4)] * 2
     assert reads == [{"conversation_id": repository.conversation_id, "for_update": False}]
+
+
+def test_a_completed_but_unusable_turn_applies_no_discard(conversation_client, monkeypatch) -> None:
+    """A discard rides only an `agent_completed` finalize: a completed turn with no
+    usable payload ends `agent_failed`, and nothing persists from a failed turn
+    (Decision 7). Mutation: pass `outcome.resolved_discard` unconditionally =>
+    this reddens (code review of story-5.11)."""
+    from application.capabilities.scheduling_draft_discard import SchedulingDraftDiscardResultV1
+    from api.routers import conversations as module
+
+    client, repository, settings = conversation_client
+    discards: list[object] = []
+    real_finalize = module.finalize_agent_run
+
+    def recording_finalize(*args, **kwargs):
+        discards.append(kwargs.get("discard"))
+        return real_finalize(*args, **kwargs)
+
+    class DiscardThenNothingRuntime:
+        name = "discard-then-nothing"
+
+        def __init__(self, deps) -> None:
+            self.deps = deps
+
+        def run_turn(self, _request):
+            self.deps.tool_result_sink(SchedulingDraftDiscardResultV1("discard-1", UUID(int=90), 3, 2))
+            return AgentRunOutcomeV1(status="completed")
+
+    monkeypatch.setattr(module, "finalize_agent_run", recording_finalize)
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **kwargs: DiscardThenNothingRuntime(kwargs["deps"])
+    )
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert repository.claimed_statuses == ["agent_failed"]
+    assert discards == [None]
+
+
+def test_the_working_draft_is_observed_before_the_snapshot_not_at_the_first_draft_tool(
+    conversation_client, monkeypatch,
+) -> None:
+    """A card save between the snapshot and the first draft tool must not become
+    the observation: a full-list update built from the older snapshot would then
+    overwrite it with the finalize guard passing (code review of story-5.11).
+
+    Mutation that must turn this red: drop the route's `observe_with` call. The
+    runtime's lazy `observe()` then reads the edited draft (rv 7), not the one the
+    snapshot showed (rv 6).
+    """
+    from api.deps import get_proposal_repository
+    from application.contracts.proposal import ProposalV1, WorkingDraftObservationV1
+    from application.ports.proposal import ProposalRecordV1
+
+    client, repository, settings = conversation_client
+    events: list[str] = []
+    shown = ProposalV1(proposal_id=UUID(int=77), resource_version=6)
+    records = iter([
+        ProposalRecordV1(proposal=shown, version_ordinal=4, created_by_actor_id=uuid4()),
+        # A planner card save lands after the snapshot.
+        ProposalRecordV1(proposal=replace(shown, resource_version=7), version_ordinal=5,
+                         created_by_actor_id=uuid4()),
+    ])
+
+    class Proposals:
+        def get_working(self, _connection, **_kwargs):
+            events.append("get_working")
+            return next(records)
+
+    def loader(*_args, **_kwargs):
+        events.append("snapshot")
+        return None
+
+    observed: list[object] = []
+
+    class ObservingRuntime:
+        name = "observing"
+
+        def __init__(self, deps) -> None:
+            self.deps = deps
+
+        def run_turn(self, _request):
+            observed.append(self.deps.draft_turn.observe())
+            return AgentRunOutcomeV1(
+                status="completed", answer=GroundedAnswerV2(text="Coverage checked."))
+
+    app.dependency_overrides[get_proposal_repository] = lambda: Proposals()
+    _with_workflow_context_reader(loader, monkeypatch)
+    app.dependency_overrides[get_agent_runtime_factory] = lambda: (
+        lambda **kwargs: ObservingRuntime(kwargs["deps"])
+    )
+    response = client.post(
+        f"/api/v1/conversations/{repository.conversation_id}/agent-runs/{uuid4()}/execute",
+        headers=_headers(settings),
+    )
+
+    assert response.status_code == 200
+    assert events == ["get_working", "snapshot"]
+    assert observed == [WorkingDraftObservationV1(UUID(int=77), 6, 4)]
 
 
 @pytest.mark.parametrize(

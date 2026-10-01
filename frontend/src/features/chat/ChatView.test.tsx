@@ -252,6 +252,28 @@ describe("ChatView", () => {
     expect(screen.getByRole("button", { name: "Discard draft" }).hasAttribute("disabled")).toBe(inFlight);
   });
 
+  it("keeps the timeline (and its unsaved Draft edits) mounted when a background refetch fails", () => {
+    // TanStack v5 sets `isError` on a failed refetch while keeping `data`.
+    // Swapping the timeline out would unmount it and drop the edit buffers it
+    // owns (C8; code review of story-5.11).
+    mockTimeline.mockReturnValue({
+      data: {
+        conversation_id: NEWER,
+        resource_version: 3,
+        latest_agent_run_status: "agent_completed",
+        items: [activity("11111111-1111-1111-1111-111111111111", "Saved request", "1"), draftActivity()],
+        limit: 200,
+        has_more: false,
+      },
+      error: { status: 503 }, isError: true, isPending: false, refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByRole("region", { name: "Draft proposal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
   it.each([
     ["pending", { data: undefined, error: null, isError: false, isPending: true }],
     ["errored", { data: undefined, error: { status: 503 }, isError: true, isPending: false }],

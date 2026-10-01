@@ -78,6 +78,8 @@ describe("stateLine (Decision 14's table, verbatim)", () => {
     [{ state: "rejected", ended_by: "assistant" }, "Discarded by assistant"],
     [{ state: "rejected", ended_by: "system" }, "Replaced by a newer draft"],
     [{ state: "applied", ended_by: "system", applied_version_ordinal: 2 }, "Applied to baseline — v2 promoted"],
+    // A promotion recorded before the lifecycle columns carries no ordinal.
+    [{ state: "applied", ended_by: "system", applied_version_ordinal: null }, "Applied to baseline"],
     // An ended state wins over staleness.
     [{ state: "rejected", ended_by: "planner", stale: true }, "Discarded"],
   ])("%j", (overrides, line) => expect(stateLine(p(overrides))).toBe(line));

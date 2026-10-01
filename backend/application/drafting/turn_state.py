@@ -30,8 +30,19 @@ class DraftTurnState:
         turn see different worlds. A change after this read is exactly what the
         finalize guard catches.
         """
+        return self.observe_with(self._read_working)
+
+    def observe_with(
+        self, read_working: Callable[[], WorkingDraftObservationV1 | None]
+    ) -> WorkingDraftObservationV1 | None:
+        """Observe through the caller's read, unless this turn already observed.
+
+        The execute route calls this inside the workflow snapshot's transaction,
+        before the snapshot read, so the observation is never newer than what the
+        model was shown (code review of story-5.11).
+        """
         if not self._observed:
-            self._observation = self._read_working()
+            self._observation = read_working()
             self._observed = True
         return self._observation
 

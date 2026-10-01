@@ -305,12 +305,17 @@ async def execute_agent_turn(
 
         Same shape as `ShortTransactionScenarioProjectionReader`: a draft tool
         reads through this once per turn (`DraftTurnState.observe`) and never
-        holds a connection across the model call (Story 5.11 Decision 4).
+        holds a connection across the model call (Story 5.11 Decision 4). It is
+        only the fallback: a scheduling turn normally observes inside the
+        workflow snapshot's transaction first (`_workflow_context`).
         """
         with open_site_context(claimed.site_id) as connection:
-            working = proposal_repository.get_working(
-                connection, conversation_id=claimed.conversation_id, for_update=False
-            )
+            return _observe_working_draft(connection)
+
+    def _observe_working_draft(connection) -> WorkingDraftObservationV1 | None:
+        working = proposal_repository.get_working(
+            connection, conversation_id=claimed.conversation_id, for_update=False
+        )
         if working is None:
             return None
         return WorkingDraftObservationV1(
@@ -371,6 +376,14 @@ async def execute_agent_turn(
                 if (not callable(getattr(connection, "execute", None))
                         or not callable(getattr(schedule_runs, "list_runs", None))):
                     return None
+                # Observe the working draft BEFORE the snapshot, in its
+                # transaction -- never lazily at the first draft tool: a card save
+                # between the snapshot and that call would become the observation,
+                # and a full-list update built from the older snapshot would
+                # overwrite it with the finalize guard passing (spec 2.1 "pre-turn
+                # state"; code review of story-5.11). An edit after this read makes
+                # the guard refuse, which is the safe side.
+                deps.draft_turn.observe_with(lambda: _observe_working_draft(connection))
                 try:
                     return load_workflow_context(connection, claimed=claimed,
                         proposals=proposal_repository, runs=schedule_runs, baselines=baselines,

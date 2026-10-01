@@ -172,6 +172,18 @@ def test_the_partial_unique_index_and_lifecycle_check_are_enforced(
                         {**ids, "id": uuid4(), "c": _seed_conversation(connection, ids),
                          "state": state, "ended_by": ended_by},
                     )
+        # `ended_by` is a closed vocabulary, independent of the lifecycle CHECK
+        # (code review of story-5.11: no test wrote an unknown value).
+        with pytest.raises(IntegrityError, match="ck_proposal_ended_by"):
+            with engine.begin() as connection:
+                connection.execute(
+                    text(
+                        "INSERT INTO proposal (id, site_id, scenario_id, scenario_version_id,"
+                        " conversation_id, created_by_actor_id, state, ended_by)"
+                        " VALUES (:id, :site, :scenario, :sv, :c, :actor, 'rejected', 'robot')"
+                    ),
+                    {**ids, "id": uuid4(), "c": _seed_conversation(connection, ids)},
+                )
     finally:
         engine.dispose()
 

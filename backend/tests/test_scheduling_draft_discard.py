@@ -112,3 +112,32 @@ def test_the_description_routes_start_over_to_scheduling_draft() -> None:
     assert "explicitly asks to discard, delete, or throw away" in description
     assert "scheduling_draft with only X, never discard" in description
     assert all("NOT COVERED" in text for key, text in SCOPE_CONTROLS.items() if key.startswith("lifecycle"))
+
+
+@pytest.mark.parametrize("changed", ["drafted", "discarded"])
+def test_baseline_refuses_in_a_turn_that_already_changed_the_draft(changed) -> None:
+    """A suspended turn binds neither a draft nor a discard (Decision 7), so an
+    approval pause after one would lose it while the resumed model still reads
+    the tool result. Mutation: drop the refusal => the pause is requested
+    instead (code review of story-5.11)."""
+    from application.capabilities.scheduling_baseline import (
+        SchedulingBaselineApprovalRequired,
+        SchedulingBaselineDraftChangedThisTurn,
+        SchedulingBaselineRequestV1,
+        scheduling_baseline,
+        scheduling_baseline_module,
+    )
+
+    state = _state()
+    if changed == "drafted":
+        state.note_drafted()
+    else:
+        _discard(state)
+    request = SchedulingBaselineRequestV1(schedule_run_id=UUID(int=11),
+                                          expected_baseline_schedule_version=None)
+    with pytest.raises(SchedulingBaselineDraftChangedThisTurn) as raised:
+        scheduling_baseline(_deps(state), request, None)
+    assert raised.value.code == "draft_changed_this_turn"
+    assert "draft_changed_this_turn" in scheduling_baseline_module().retryable_error_codes
+    with pytest.raises(SchedulingBaselineApprovalRequired):
+        scheduling_baseline(_deps(_state()), request, None)

@@ -141,7 +141,10 @@ export function DraftCard({
   const controlled = onBufferChange !== undefined;
   const buffer = controlled ? (controlledBuffer ?? null) : localBuffer;
   const setBuffer = controlled ? onBufferChange : setLocalBuffer;
-  const [savedAs, setSavedAs] = useState<number | null>(null);
+  // The save acknowledgement is true only of the version it saved: kept with
+  // that version's id so it disappears once the draft moves on, the same rule
+  // as the run acknowledgement below (code review of story-5.11).
+  const [saved, setSaved] = useState<{ versionId: string; ordinal: number | null } | null>(null);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const keepRef = useRef<HTMLButtonElement>(null);
   const discardRef = useRef<HTMLButtonElement>(null);
@@ -209,8 +212,15 @@ export function DraftCard({
   const allValid = rowErrors.every((errors) => Object.keys(errors).length === 0);
   const mutationPending = revision.isPending || rejection.isPending || run.isPending;
   const editable = !ended && !proposal.stale;
+  // Typing while a command is pending would be wiped by that command's success
+  // (it clears the buffer), so the rows wait for it (code review of story-5.11).
+  const rowsEditable = editable && !mutationPending;
+  // `validateRow` skips the horizon bound when the horizon is unknown, so a lock
+  // row cannot be judged until the scenario overview has loaded.
+  const horizonKnown = horizon !== undefined
+    || !rows.some((row) => row.input.kind === "lock_worker_shift");
 
-  const canSave = editable && hasDifference && allValid && !changedUnderEdits
+  const canSave = editable && hasDifference && allValid && horizonKnown && !changedUnderEdits
     && !mutationPending && !agentTurnInFlight;
   const runDisabled = proposal.stale || ended || hasDifference || mutationPending || agentTurnInFlight;
   const runExplanation = [
@@ -244,7 +254,7 @@ export function DraftCard({
 
   const commit = (next: readonly EditRow[]) => {
     const baseVersionId = buffer?.baseVersionId ?? proposal.proposal_version_id;
-    setSavedAs(null);
+    setSaved(null);
     if (baseVersionId === proposal.proposal_version_id && rowsEqual(next, serverRows)) {
       setBuffer(null);
     } else {
@@ -267,13 +277,23 @@ export function DraftCard({
       expected_resource_version: proposal.resource_version,
     },
     {
-      onSuccess: (saved) => {
+      onSuccess: (result) => {
         setBuffer(null);
-        setSavedAs(saved.version_ordinal ?? null);
+        setSaved({ versionId: result.proposal_version_id, ordinal: result.version_ordinal ?? null });
       },
     },
   );
   const versionLabel = proposal.version_ordinal != null ? `v${proposal.version_ordinal}` : null;
+  const savedLabel = saved && saved.versionId === proposal.proposal_version_id
+    ? (saved.ordinal != null ? `Saved as v${saved.ordinal}` : "Saved")
+    : null;
+  // Load and Cancel start over from the server's version, so a revise error
+  // about the abandoned edits is no longer true (code review of story-5.11).
+  const resetEdits = () => {
+    setSaved(null);
+    setBuffer(null);
+    revision.reset();
+  };
 
   return (
     <Card aria-label="Draft proposal" role="region">
@@ -353,7 +373,7 @@ export function DraftCard({
                                 aria-invalid={message ? true : undefined}
                                 aria-label={field.label}
                                 className="min-h-11 w-32"
-                                disabled={!editable}
+                                disabled={!rowsEditable}
                                 id={`${baseId}-row${index}-${field.key}`}
                                 onChange={(event) => updateField(index, field.key, event.target.value)}
                                 step={field.step}
@@ -371,7 +391,7 @@ export function DraftCard({
                             aria-describedby={isLast ? removeHintId : undefined}
                             aria-label={`Remove ${row.description}`}
                             className="min-h-11"
-                            disabled={!editable || isLast}
+                            disabled={!rowsEditable || isLast}
                             onClick={() => removeRow(index)}
                             type="button"
                             variant="ghost"
@@ -417,7 +437,7 @@ export function DraftCard({
             inFlightId={inFlightId}
             keepRef={keepRef}
             mutationPending={mutationPending}
-            onCancel={() => { setSavedAs(null); setBuffer(null); }}
+            onCancel={resetEdits}
             onConfirmDiscard={() => {
               rejection.mutate(
                 { expected_resource_version: proposal.resource_version },
@@ -428,7 +448,7 @@ export function DraftCard({
               returnFocusToDiscard.current = true;
               setConfirmingDiscard(false);
             }}
-            onLoad={() => { setSavedAs(null); setBuffer(null); }}
+            onLoad={resetEdits}
             onRefresh={() => query.refetch()}
             onRun={() => run.mutate({
               proposal_id: proposal.proposal_id,
@@ -440,7 +460,7 @@ export function DraftCard({
             runDescriptionId={runDescriptionId}
             runDisabled={runDisabled}
             runExplanation={runExplanation}
-            savedAs={savedAs}
+            savedLabel={savedLabel}
             staleDescriptionId={staleDescriptionId}
           />
         )}
@@ -473,7 +493,7 @@ type EditableFooterProps = Readonly<{
   runDescriptionId: string;
   runDisabled: boolean;
   runExplanation: string;
-  savedAs: number | null;
+  savedLabel: string | null;
   staleDescriptionId: string;
 }>;
 
@@ -481,7 +501,7 @@ function EditableFooter(props: EditableFooterProps) {
   const {
     proposal, acknowledged, agentTurnInFlight, canSave, changedUnderEdits, confirmingDiscard,
     discardRef, keepRef, hasDifference, inFlightId, mutationPending, runDescriptionId,
-    runDisabled, runExplanation, savedAs, staleDescriptionId,
+    runDisabled, runExplanation, savedLabel, staleDescriptionId,
   } = props;
   const latest = proposal.version_ordinal != null ? `v${proposal.version_ordinal}` : null;
   const describedBy = (...ids: (string | false | undefined)[]) =>
@@ -501,8 +521,8 @@ function EditableFooter(props: EditableFooterProps) {
           </Button>
         </div>
       ) : null}
-      {savedAs !== null ? (
-        <p aria-live="polite" className="text-sm" role="status">Saved as v{savedAs}</p>
+      {savedLabel !== null ? (
+        <p aria-live="polite" className="text-sm" role="status">{savedLabel}</p>
       ) : null}
       {acknowledged ? (
         <div

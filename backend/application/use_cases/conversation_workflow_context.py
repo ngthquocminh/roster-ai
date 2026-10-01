@@ -46,8 +46,11 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
     # just as surely as the 11th-and-later id within it -- the flag below must
     # cover both, or a long conversation's earlier draft silently disappears
     # from the snapshot while `drafts_truncated` still reads False.
+    # The working draft is reported directly above, so its own old activities
+    # never count as a truncated ended draft (code review of story-5.11).
     older_draft_exists = any(
-        isinstance(activity, DraftActivityV1) for activity in claimed.history[:-100]
+        isinstance(activity, DraftActivityV1) and activity.proposal_id != working_id
+        for activity in claimed.history[:-100]
     )
     # Read only proposals already referenced by this conversation. The site
     # transaction enforces RLS; the immutable pin is independently checked here.

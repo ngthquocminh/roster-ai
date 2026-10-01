@@ -602,3 +602,17 @@ def test_a_second_turn_after_a_draft_rehydrates_without_losing_the_conversation(
 def test_framework_rehydration_rejects_unknown_owned_discriminants(turn) -> None:
     with pytest.raises(ValueError):
         to_framework_messages(turn)
+
+
+def test_more_than_one_discard_result_is_a_broken_invariant_not_a_choice() -> None:
+    """Story 5.11 Decision 7: the handler makes a second discard impossible, so
+    two results must fail loudly rather than bind the first. Mutation: bind
+    `discards[0]` => this reddens (code review of story-5.11)."""
+    from uuid import UUID
+
+    from application.capabilities.scheduling_draft_discard import SchedulingDraftDiscardResultV1
+    from application.use_cases.execute_turn import resolve_discard
+
+    results = [SchedulingDraftDiscardResultV1(f"discard-{i}", UUID(int=90), 3, 2) for i in range(2)]
+    with pytest.raises(AssertionError, match="at most one"):
+        resolve_discard(results)

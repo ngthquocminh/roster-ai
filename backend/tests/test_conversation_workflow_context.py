@@ -321,6 +321,22 @@ def test_the_working_draft_is_not_repeated_among_the_ended_drafts():
     assert facts['drafts'] == []
 
 
+def test_the_working_drafts_own_old_activities_do_not_mark_drafts_truncated():
+    """The working draft is reported directly, so its activities outside the
+    100-activity window truncate nothing (Decision 12: the flag covers ended
+    drafts). Mutation: count every old draft activity => this reddens (code
+    review of story-5.11)."""
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    record = proposals.get_current()
+    working = replace(record, proposal=replace(record.proposal, proposal_id=UUID(int=600)))
+    proposals.get_working = lambda *a, **k: working
+    filler = tuple(SimpleNamespace(activity_type='planner_message') for _ in range(100))
+    claimed.history = (_draft_activity(claimed, 0), *filler)
+    assert '"drafts_truncated": false' in _load(claimed, proposals, runs, baselines)
+    claimed.history = (_draft_activity(claimed, 0), _draft_activity(claimed, 1), *filler)
+    assert '"drafts_truncated": true' in _load(claimed, proposals, runs, baselines)
+
+
 def test_ended_drafts_carry_state_ended_by_and_version_ordinal():
     claimed, proposals, runs, baselines, *_ = setup_context()
     record = proposals.get_current()

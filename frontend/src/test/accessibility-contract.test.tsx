@@ -152,7 +152,7 @@ function mockProposal(stale = false, overrides: Record<string, unknown> = {}) {
     } : { ...accessibleProposal, ...overrides },
     isPending: false, isError: false, error: null, refetch: vi.fn(),
   } as never);
-  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
+  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), reset: vi.fn(), isPending: false } as never);
   vi.mocked(rejectHooks.useRejectProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
   vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
     mutate: vi.fn(), isPending: false, data: undefined, error: null,
@@ -534,7 +534,7 @@ it("associates validation errors with the affected control and keeps the draft a
 it("announces 'Saved as vN' through a polite live region", async () => {
   mockProposal();
   const mutate = vi.fn();
-  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate, isPending: false } as never);
+  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate, reset: vi.fn(), isPending: false } as never);
   const { DraftCard } = await import("@/features/chat/DraftCard");
   const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
 
@@ -588,6 +588,77 @@ it("names the discard confirmation and its two choices distinctly, without a bro
   expect(discard).toHaveAttribute("data-variant", "destructive");
   expect(keep).not.toHaveAttribute("data-variant", "destructive");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await expectAxeClean(container);
+});
+
+// AC7 "covers every new control" (code review of story-5.11): every input kind,
+// the two-input lock row with paired errors, an ENABLED Remove per row, and the
+// timeline's "Earlier version" line -- not only the one-row max-hours fixture.
+const multiKindConstraints = [
+  { kind: "set_min_workers_per_task" as const, resolved_entities: [], n: 2,
+    description: "Require at least 2 workers on Picking.", schema_version: "1" },
+  { kind: "scale_demand" as const, resolved_entities: [], factor: 1.5,
+    description: "Scale Picking demand by 1.5.", schema_version: "1" },
+  { kind: "set_max_hours" as const, resolved_entities: [], max_hours: 40,
+    description: "Cap CONTACT-9 at 40 hours per week.", schema_version: "1" },
+  { kind: "lock_worker_shift" as const, resolved_entities: [], start_minute: 60, end_minute: 480,
+    description: "Lock CONTACT-9 from minute 60 to 480.", schema_version: "1" },
+  { kind: "exclude_worker_from_task" as const, resolved_entities: [],
+    description: "Exclude CONTACT-9 from Picking.", schema_version: "1" },
+];
+
+it("names every input kind and every enabled Remove control distinctly, and stays axe clean", async () => {
+  mockProposal(false, { constraints: multiKindConstraints });
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  for (const name of ["Minimum workers", "Demand factor", "Maximum hours", "Start minute", "End minute"]) {
+    expect(screen.getByRole("spinbutton", { name })).toBeEnabled();
+  }
+  for (const constraint of multiKindConstraints) {
+    expect(screen.getByRole("group", { name: constraint.description })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Remove ${constraint.description}` })).toBeEnabled();
+  }
+  await expectAxeClean(container);
+});
+
+it("pairs each lock-row error with its own input and stays axe clean", async () => {
+  mockProposal(false, { constraints: [multiKindConstraints[3]] });
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  const start = screen.getByRole("spinbutton", { name: "Start minute" });
+  const end = screen.getByRole("spinbutton", { name: "End minute" });
+  await userEvent.clear(start);
+  await userEvent.type(start, "-5");
+  await userEvent.clear(end);
+  await userEvent.type(end, "1.5");
+  for (const input of [start, end]) {
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(document.getElementById(input.getAttribute("aria-describedby")!)).toBeInTheDocument();
+  }
+  expect(start.getAttribute("aria-describedby")).not.toBe(end.getAttribute("aria-describedby"));
+  await expectAxeClean(container);
+});
+
+it("keeps the timeline's 'Earlier version of this draft' line axe clean", async () => {
+  mockProposal();
+  const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
+  const draft = (index: number, summary: string) => ({
+    ...dialogueBase,
+    activity_id: `cccccccc-cccc-4ccc-8ccc-${String(index).padStart(12, "0")}`,
+    activity_type: "draft" as const,
+    sequence: String(index),
+    proposal_id: accessibleProposal.proposal_id,
+    proposal_version_id: `dddddddd-dddd-4ddd-8ddd-${String(index).padStart(12, "0")}`,
+    consequence_summary: summary,
+  });
+  const { container } = render(
+    <ActivityTimeline navigate={vi.fn()} items={[draft(1, "Cap at 40."), draft(2, "Cap at 36.")] as never} />,
+  );
+
+  expect(screen.getByText(/Earlier version of this draft/)).toBeInTheDocument();
+  expect(screen.getAllByRole("region", { name: "Draft proposal" })).toHaveLength(1);
   await expectAxeClean(container);
 });
 

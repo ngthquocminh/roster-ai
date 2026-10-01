@@ -70,7 +70,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   clearEvidenceUnavailable();
   use(serverProposal("22222222-2222-4222-8222-222222222222", 1));
-  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
+  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), reset: vi.fn(), isPending: false } as never);
   vi.mocked(rejectHooks.useRejectProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
   vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
   vi.mocked(projectionHooks.useScenarioOverview).mockReturnValue({ data: { horizon_minutes: 10080 } } as never);
