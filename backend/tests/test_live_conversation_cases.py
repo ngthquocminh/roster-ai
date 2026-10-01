@@ -71,6 +71,17 @@ def test_an_unknown_action_is_rejected():
         validate_scenarios((cases[0], changed, *cases[2:]))
 
 
+def test_a_relative_override_file_is_resolved_before_compose_runs_elsewhere():
+    from pathlib import Path
+
+    from evals.live_conversations.suite import _arguments
+
+    args = _arguments(['--output', 'out.json', '--override-file',
+                       'evals/live_conversations/compose.override.yml'])
+    assert args.override_file.is_absolute()
+    assert args.override_file == Path('evals/live_conversations/compose.override.yml').resolve()
+
+
 def test_resume_and_retry_are_offered_by_the_runner_cli():
     """A late infrastructure fault must cost one execution, not a whole run."""
     from evals.live_conversations.suite import _arguments
