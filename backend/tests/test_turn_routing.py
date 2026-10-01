@@ -53,7 +53,7 @@ from tests.test_conversations_api import (  # noqa: F401  (conversation_client i
 #: Tool routing line, "Saying what the baseline is now" step 2), and for Story 5.12's undo
 #: rule (reverse the previous change; live smoke E:4 read "undo" as removing another constraint).
 #: Any other prompt edit must re-pin here, deliberately.
-TODAYS_PROMPT_SHA256 = "0ab16a24b0c4a57ed4d6a5c53005c99e4a627f078ae19870bfb634e7a8e0e04c"
+TODAYS_PROMPT_SHA256 = "3cd0a0dc53123fa6e49158ae2f2100e6c2eef2bd539e7fda872b5256de2b6c14"
 
 
 # --- prompt split ------------------------------------------------------------
@@ -468,7 +468,8 @@ def test_the_scheduling_prompt_teaches_the_one_working_draft_lifecycle() -> None
     # Undo reverses the planner's previous change (live smoke E:4 read "undo" as
     # "remove another constraint" under the old wording), and never claims a revert.
     assert "There is no undo tool" in discard
-    assert "re-add the constraint it removed" in discard
+    assert ("every constraint the draft holds now, plus the one that change removed"
+            in discard)
     assert "Never claim the draft was reverted or restored to an earlier version" in discard
     assert ("- Discarding the working draft on explicit request: scheduling_draft_discard, only."
             in full)
