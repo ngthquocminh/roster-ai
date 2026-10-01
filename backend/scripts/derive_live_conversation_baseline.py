@@ -40,7 +40,7 @@ from evals.live_conversations.configuration import (  # noqa: E402
 from scripts.evidence_binding import REPO_ROOT, dataset_file_digest  # noqa: E402
 
 #: The one measurement this baseline projects.
-SOURCE_EVIDENCE = REPO_ROOT / "evidence" / "story-5.7" / "live-conversation-journeys.json"
+SOURCE_EVIDENCE = REPO_ROOT / "evidence" / "story-5.12" / "live-conversation-journeys.json"
 
 #: Tracked config, NOT evidence. See the module docstring.
 BASELINE_PATH = BACKEND_ROOT / "evals" / "baselines" / "live-conversations.json"

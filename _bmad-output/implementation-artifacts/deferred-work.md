@@ -1267,6 +1267,10 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   inaccurate (Story 5.11 C15). Default CI is unaffected by the instruction rewrite. Story
   5.12's reason to re-measure scenarios A-D stands on its own (behaviour changed), and the
   proposal's wording should be corrected there. **Owner: Story 5.12.**
+  **Closed by Story 5.12 (2026-10-01):** recorded as that story's F7 correction (completion
+  notes) and in `docs/TESTING.md` ("The agent instructions and `scenarios.json` are not in
+  `behavioral_digest`"); A-E were re-measured deliberately (129/129, `evidence/story-5.12/`).
+  The approved spec and proposal are left as written.
 
 ## Deferred from: Story 5.11 implementation (2026-09-30)
 

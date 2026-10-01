@@ -2733,7 +2733,7 @@ development_status:
   # stale evidence and E coverage; four check kinds, not two (E:3/E:5 need a count, E:7 a
   # new-proposal check); E:4 accepts a clarification or a re-add (spec contradiction, D5);
   # floor 120 for 129 turns (lambda 4.3, 1.29%); discard:invoke is live-required, covered only by E:6.
-  5-12-prove-the-draft-lifecycle-in-live-conversations: in-progress
+  5-12-prove-the-draft-lifecycle-in-live-conversations: review
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog

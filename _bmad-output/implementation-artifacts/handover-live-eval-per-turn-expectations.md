@@ -1,5 +1,16 @@
 # Handover: live eval, per-turn expectations
 
+## Update 2026-10-01: Story 5.12 re-measured A-E
+
+Story 5.12 (`5-12-prove-the-draft-lifecycle-in-live-conversations.md`) added scenario E (the
+draft lifecycle, 7 turns) and re-measured A-E: **129/129** at `70594bf`,
+`evidence/story-5.12/live-conversation-journeys.json`; the baseline and the drop-check floor
+(120) follow it. Minh's rule from that story applies to every check: grade the action (right
+tool, right arguments, a result not invented), not the reply's wording. New check kinds:
+`draft_updates_turn`, `draft_state_is`, `draft_constraint_count`, `draft_is_new`,
+`tool_called`, and the `when: draft | not_draft` field. Its completion notes list A-D checks
+that still grade wording (D:1, D:2, A:6, B:10, C:10, B:7, C:12) for a later decision.
+
 ## Update 2026-09-30: done through evidence
 
 Minh chose option 1 below. A, C and D now carry expectations; every live turn is graded by

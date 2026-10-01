@@ -347,7 +347,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('runs', nargs='+', type=Path)
     parser.add_argument('--output', type=Path,
-                        default=ROOT / 'evidence/story-5.7/live-conversation-journeys.json')
+                        default=ROOT / 'evidence/story-5.12/live-conversation-journeys.json')
     parser.add_argument('--allow-dirty', action='store_true')
     parser.add_argument('--ignore-path', action='append', default=[],
                         help='A repo-relative path that cannot affect the measurement (the '

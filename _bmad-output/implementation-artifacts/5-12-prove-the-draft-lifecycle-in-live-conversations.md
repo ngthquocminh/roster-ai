@@ -4,7 +4,7 @@ baseline_commit: 3d747f7 (Story 5.11 merged; story created at 8a85f4f, re-verifi
 depends_on: 5-11-keep-one-working-draft-per-conversation (done; merged into feat/draft-lifecycle)
 ---
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -292,30 +292,30 @@ Phases are ordered. Do not start a phase before the previous one's exit conditio
 
 ### Phase C — the recorded measurement (paid; Minh's go-ahead required)
 
-- [ ] **Task 8 — STOP: ask Minh, then measure** (AC3; per D8)
-  - [ ] Ask Minh for one approval covering both runs below. Estimate about $1–1.5 in total: 5.7's run was $0.66 for 108 turns.
-  - [ ] Run A–E once (`--repetitions 1`); every scenario must pass clean. Fix (D9) and repeat if needed.
-  - [ ] Clean tree, images rebuilt (no `--skip-image-build`): `uv run python -m evals.live_conversations.suite --repetitions 3 --output ../_bmad-output/test-artifacts/live-matrix-5-12.json`. The exit code must be 0.
+- [x] **Task 8 — STOP: ask Minh, then measure** (AC3; per D8)
+  - [x] Ask Minh for one approval covering both runs below. Estimate about $1–1.5 in total: 5.7's run was $0.66 for 108 turns.
+  - [x] Run A–E once (`--repetitions 1`); every scenario must pass clean. Fix (D9) and repeat if needed.
+  - [x] Clean tree, images rebuilt (no `--skip-image-build`): `uv run python -m evals.live_conversations.suite --repetitions 3 --output ../_bmad-output/test-artifacts/live-matrix-5-12.json`. The exit code must be 0.
 
-- [ ] **Task 9 — STOP: ask Minh, then generate evidence and re-derive** (AC3; per D7, D8)
-  - [ ] `uv run python -m evals.live_conversations.evidence ../_bmad-output/test-artifacts/live-matrix-5-12.json --output ../evidence/story-5.12/live-conversation-journeys.json`. Pass `--accept-finding` only for a turn Minh approved by name. Required: `live_conversation_journeys: passed`, no `false_claims`, `clean_scenarios` A–E, `complete_repetitions` 3, and `scheduling_draft_discard:invoke` covered live (F9).
-  - [ ] Before re-deriving, run the drop check against the **current 108-turn baseline** (`scripts/live_conversation_drop_check.py --report ../evidence/story-5.12/live-conversation-journeys.json`). Record every tier's result, or the refusal (D11), for the commit message and `docs/TESTING.md`.
-  - [ ] `uv run --frozen python scripts/derive_live_conversation_baseline.py --source ../evidence/story-5.12/live-conversation-journeys.json`. Expect 129 executed.
-  - [ ] Evidence commit (D8 step 3): the evidence file and the baseline only.
+- [x] **Task 9 — STOP: ask Minh, then generate evidence and re-derive** (AC3; per D7, D8)
+  - [x] `uv run python -m evals.live_conversations.evidence ../_bmad-output/test-artifacts/live-matrix-5-12.json --output ../evidence/story-5.12/live-conversation-journeys.json`. Pass `--accept-finding` only for a turn Minh approved by name. Required: `live_conversation_journeys: passed`, no `false_claims`, `clean_scenarios` A–E, `complete_repetitions` 3, and `scheduling_draft_discard:invoke` covered live (F9).
+  - [x] Before re-deriving, run the drop check against the **current 108-turn baseline** (`scripts/live_conversation_drop_check.py --report ../evidence/story-5.12/live-conversation-journeys.json`). Record every tier's result, or the refusal (D11), for the commit message and `docs/TESTING.md`.
+  - [x] `uv run --frozen python scripts/derive_live_conversation_baseline.py --source ../evidence/story-5.12/live-conversation-journeys.json`. Expect 129 executed.
+  - [x] Evidence commit (D8 step 3): the evidence file and the baseline only.
 
-- [ ] **Task 10 — Gate follows the new baseline** (AC3; per D7, D8 step 4)
-  - [ ] `scripts/live_conversation_drop_check.py`: `AGGREGATE_FLOOR` and its comment per D7, plus the usage example's path.
-  - [ ] `scripts/derive_live_conversation_baseline.py`: `SOURCE_EVIDENCE` → story-5.12. `evidence.py`: default `--output` → story-5.12.
-  - [ ] `tests/test_live_conversation_drop_check.py`: pinned 108 → 129, the source path, and the Tier 3 arithmetic comments and boundary tests.
-  - [ ] Re-run the drop check against the new baseline. It must pass, with Tier 3 at 129/129 or the measured total.
-  - [ ] Full default backend suite and Vitest are green. Commit, together with Task 11.
+- [x] **Task 10 — Gate follows the new baseline** (AC3; per D7, D8 step 4)
+  - [x] `scripts/live_conversation_drop_check.py`: `AGGREGATE_FLOOR` and its comment per D7, plus the usage example's path.
+  - [x] `scripts/derive_live_conversation_baseline.py`: `SOURCE_EVIDENCE` → story-5.12. `evidence.py`: default `--output` → story-5.12.
+  - [x] `tests/test_live_conversation_drop_check.py`: pinned 108 → 129, the source path, and the Tier 3 arithmetic comments and boundary tests.
+  - [x] Re-run the drop check against the new baseline. It must pass, with Tier 3 at 129/129 or the measured total.
+  - [x] Full default backend suite and Vitest are green. Commit, together with Task 11.
 
-- [ ] **Task 11 — Documentation** (AC3)
-  - [ ] `docs/TESTING.md`: the scenario list (five conversations, 43 turns per repetition, E described); "every turn of A–E"; the recorded-result table and run id; the baseline paragraph (129, story-5.12 source); Tier 1 and Tier 3 text with floor 120 and λ 4.3; Structural A–E; inventory counts from the new evidence; the drop-check command path; the D7 correction note that instructions are not in `behavioral_digest`.
-  - [ ] `README.md` (around line 109): the recorded result.
-  - [ ] `handover-live-eval-per-turn-expectations.md`: a short dated update pointing at this story.
-  - [ ] `deferred-work.md`: close 5.11's "For Story 5.12: `behavioral_digest` does not hash instructions" entry, citing this story's F7 correction.
-  - [ ] `sprint-status.yaml`: the story's status when it is finished (via code review).
+- [x] **Task 11 — Documentation** (AC3)
+  - [x] `docs/TESTING.md`: the scenario list (five conversations, 43 turns per repetition, E described); "every turn of A–E"; the recorded-result table and run id; the baseline paragraph (129, story-5.12 source); Tier 1 and Tier 3 text with floor 120 and λ 4.3; Structural A–E; inventory counts from the new evidence; the drop-check command path; the D7 correction note that instructions are not in `behavioral_digest`.
+  - [x] `README.md` (around line 109): the recorded result.
+  - [x] `handover-live-eval-per-turn-expectations.md`: a short dated update pointing at this story.
+  - [x] `deferred-work.md`: close 5.11's "For Story 5.12: `behavioral_digest` does not hash instructions" entry, citing this story's F7 correction.
+  - [x] `sprint-status.yaml`: the story's status when it is finished (via code review).
 
 ## Dev Notes
 
@@ -518,6 +518,32 @@ Claude Opus 5.5 (`claude-opus-5-5`)
     overview`, read from this turn's tool telemetry). `describes_schedule` is kept. The failing reply
     was truthful and had read the overview.
   - Default suite 2851 passed / 2 skipped.
+- **Task 8, second A-E pass (`012bc03`).** A, C clean. Four non-clean turns: B:5 (judge HTTP 520)
+  and D:3 (provider timeout) were infrastructure; B:12 was 0.54 because the reply named the true
+  run id, which no event carried; E:4 lost the 30h cap again. Root cause for E:4: the agent could
+  not see the draft's previous version (history renders a past draft as its consequence line, and
+  the snapshot held only the current version), so an undo was a reconstruction. Per Minh
+  (2026-10-01; 5.11 model-view change, D9): the snapshot's `working_draft.previous_version` now
+  carries the version before the latest (new `ProposalRepository.get_version_at`), and the undo
+  rule re-sends exactly that list. The run event now names the run (`70594bf`). E x3 at `70594bf`:
+  3/3 clean. Third A-E pass: 43/43 clean.
+- **Task 8, recorded run** (`--repetitions 3`, clean tree at `70594bf`, images rebuilt): run
+  `0a1349a4-4ea4-4ddd-8405-5785b62c4fc0`, **129/129**, 15/15 clean executions, no retries, no
+  accepted finding, tracked agent spend USD 0.08.
+- **Task 9.** Evidence `passed`, no blocking reasons, 3 complete repetitions, clean A-E, no false
+  claims, `scheduling_draft_discard:invoke` covered live. Drop check against the previous 108-turn
+  baseline: not refused (same `behavioral_digest`); Tier 1 36/36 watched turns hold; Tier 2 none;
+  Tier 3 108/108; Structural A-E. Baseline re-derived: 129/129, 43 turns. Evidence commit `e9de041`.
+- **Task 10.** `AGGREGATE_FLOOR = 120` (lambda 4.3; P(>=10 failures) = 1.29%, nearest to the old
+  1.17%); `SOURCE_EVIDENCE` and `evidence.py --output` → story-5.12; gate tests re-pinned (129, 43
+  turns; the Tier 1 exemption test needs a fourth partial turn, since 129 - 9 = 120 is at the floor).
+  Drop check against the new baseline: passed, Tier 3 129/129.
+- **Task 11.** `docs/TESTING.md` (five conversations, 43 turns, E, results, baseline, floor 120,
+  inventory 141/38/103 with 28 live and 10 named-reason, the action-grading rule, and the F7 note
+  that instructions are not in `behavioral_digest`), `README.md`, handover update, the 5.11 ledger
+  entry closed.
+- **Final counts (HEAD before the step-4 commit):** backend default suite 2861 passed / 2 skipped
+  (PostgreSQL 18); Vitest 94 files / 784 tests passed.
 #### Mutation table (every mutation reverted; tree verified clean after each batch)
 
 | Mutation applied to real code | Guard that should redden | Before | After |
@@ -548,6 +574,10 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 | M24 runner: tool calls not passed to `TurnContext` | `test_the_runner_grades_a_turn_by_the_tools_its_agent_run_called` | green | red |
 | M25 `capture_draft_ended`: any state becomes an applied event | `test_an_applied_draft_becomes_an_event_and_any_other_state_does_not` | green | red |
 | M26 runner: draft state not read after the harness approves | `test_after_the_harness_approves_the_judge_learns_the_draft_was_applied` | green | red |
+| M27 run event: run id dropped | `test_the_run_event_names_the_run_a_summary_may_cite` | green | red |
+| M28 snapshot: `previous_version` not added | `test_the_working_draft_carries_the_version_before_its_latest` | green | red |
+| M29 snapshot: reads the latest version, not the one before | same | green | red |
+| M30 adapter: `get_version_at` ordinal filter dropped | `test_each_version_of_a_draft_is_readable_by_its_ordinal` | green | red |
 
 ### File List
 
@@ -569,6 +599,18 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 - `backend/agent/scheduling_instructions.py`
 - `backend/tests/test_agent_runtime_adapter.py`
 - `backend/tests/test_turn_routing.py`
+- `backend/application/ports/proposal.py`
+- `backend/adapters/postgres/proposal.py`
+- `backend/application/use_cases/conversation_workflow_context.py`
+- `backend/tests/test_conversation_workflow_context.py`
+- `backend/tests/test_draft_lifecycle_postgres.py`
+- `backend/scripts/live_conversation_drop_check.py`
+- `backend/tests/test_live_conversation_drop_check.py`
+- `evidence/story-5.12/live-conversation-journeys.json` (NEW, generated)
+- `docs/TESTING.md`
+- `README.md`
+- `_bmad-output/implementation-artifacts/handover-live-eval-per-turn-expectations.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ### Change Log
@@ -576,3 +618,4 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 - 2026-10-01: Phase A (Tasks 0-5) and Task 6 offline validation; E:4 graded by action per Minh's decision (`when` field).
 - 2026-10-01: Task 7 live smokes; harness path fix, discard-turn runtime retry, undo instruction rewritten.
 - 2026-10-01: Task 8 first pass; B:12 applied-draft event (overrides D6) and B:1 action check `tool_called`, per Minh.
+- 2026-10-01: previous_version in the snapshot for undo; recorded run 129/129; evidence, baseline, floor 120, docs. Status review.
