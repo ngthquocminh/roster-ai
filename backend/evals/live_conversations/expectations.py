@@ -352,9 +352,13 @@ class Bindings:
         self.bind('candidate_id', candidate.get('schedule_version_id'))
         self.bind('solver_status', candidate.get('feasible_solver_status'))
         self.bind('assignment_count', count)
+        # The run's own id too: a summary that names it (live run 012bc03, B:12)
+        # must find it among what happened.
+        run_id = f" (run {run['schedule_run_id']})" if run.get('schedule_run_id') else ''
         self.events.append(
-            f"{started}; it completed with solver status {candidate.get('feasible_solver_status')}, "
-            f"candidate schedule {candidate.get('schedule_version_id')}, {count} assignments.")
+            f"{started}{run_id}; it completed with solver status "
+            f"{candidate.get('feasible_solver_status')}, candidate schedule "
+            f"{candidate.get('schedule_version_id')}, {count} assignments.")
 
     def capture_decision(self, approval: dict, *, approved: bool, baseline_now: str | None,
                          baseline_before: str | None = None) -> None:

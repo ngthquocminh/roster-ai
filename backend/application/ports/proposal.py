@@ -74,6 +74,12 @@ class ProposalRepository(Protocol):
         self, connection: Any, *, proposal_version_id: UUID
     ) -> tuple[int, ProposalV1] | None: ...
 
+    def get_version_at(
+        self, connection: Any, *, proposal_id: UUID, version_ordinal: int
+    ) -> ProposalV1 | None:
+        """One version of a draft by its ordinal, or None when it has no such version."""
+        ...
+
     def get_idempotent_result(
         self,
         connection: Any,

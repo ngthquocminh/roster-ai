@@ -395,6 +395,22 @@ def test_a_working_draft_is_updated_in_place_with_the_next_version(governed_post
             select(func.count()).select_from(command_idempotency)).scalar_one() == idempotency_before
 
 
+def test_each_version_of_a_draft_is_readable_by_its_ordinal(governed_postgres_engine, conv) -> None:
+    """The snapshot's previous_version reads this (Story 5.12, live E:4 "undo")."""
+    engine = governed_postgres_engine
+    _, first, _ = _draft_and_finalize(engine, conv, _hours(40.0), _min_workers(2))
+    turn = Turn(engine, conv, "Drop the minimum, cap at 35")
+    turn.finalize(cite=turn.draft(_hours(35.0)))
+    proposal_id = first.proposal.proposal_id
+    with site_context(engine, conv["site"]) as connection:
+        v1 = PROPOSALS.get_version_at(connection, proposal_id=proposal_id, version_ordinal=1)
+        v2 = PROPOSALS.get_version_at(connection, proposal_id=proposal_id, version_ordinal=2)
+        assert PROPOSALS.get_version_at(connection, proposal_id=proposal_id, version_ordinal=3) is None
+        assert PROPOSALS.get_version_at(connection, proposal_id=uuid4(), version_ordinal=1) is None
+    assert [c.kind for c in v1.constraints] == ["set_max_hours", "set_min_workers_per_task"]
+    assert [(c.kind, c.max_hours) for c in v2.constraints] == [("set_max_hours", 35.0)]
+
+
 def test_a_second_active_proposal_for_a_conversation_violates_the_unique_index(
     governed_postgres_engine, conv
 ) -> None:

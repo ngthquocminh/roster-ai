@@ -148,6 +148,18 @@ class PostgresProposalRepository:
             return None
         return row.version_ordinal, TypeAdapter(ProposalV1).validate_python(row.payload)
 
+    def get_version_at(
+        self, connection: Connection, *, proposal_id: UUID, version_ordinal: int
+    ) -> ProposalV1 | None:
+        # (proposal_id, version_ordinal) is unique (uq_proposal_version_ordinal).
+        payload = connection.execute(
+            select(proposal_version.c.payload).where(
+                proposal_version.c.proposal_id == proposal_id,
+                proposal_version.c.version_ordinal == version_ordinal,
+            )
+        ).scalar_one_or_none()
+        return None if payload is None else TypeAdapter(ProposalV1).validate_python(payload)
+
     def get_idempotent_result(
         self,
         connection: Connection,

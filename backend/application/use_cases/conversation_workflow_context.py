@@ -38,6 +38,18 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
                 and working_record.proposal.scenario_version_id == claimed.scenario_version_id):
             working_value = {**asdict(working_record.proposal),
                              'version_ordinal': working_record.version_ordinal}
+            # The version before the latest, so "undo that" re-sends a list the
+            # agent can read instead of rebuilding it from the chat: live E:4
+            # lost the hours cap 2 runs in 5 when it had to (Story 5.12).
+            if working_record.version_ordinal > 1:
+                previous = proposals.get_version_at(
+                    connection, proposal_id=working_id,
+                    version_ordinal=working_record.version_ordinal - 1)
+                if previous is not None:
+                    working_value['previous_version'] = {
+                        'version_ordinal': working_record.version_ordinal - 1,
+                        'constraints': asdict(previous)['constraints'],
+                    }
     # Ended drafts only: the working one is reported above, once.
     draft_ids = tuple(dict.fromkeys(activity.proposal_id for activity in claimed.history[-100:]
                                    if isinstance(activity, DraftActivityV1)

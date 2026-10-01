@@ -938,3 +938,9 @@ def test_after_the_harness_approves_the_judge_learns_the_draft_was_applied(monke
     _report, asked = _drive(app, turns, judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
     events = asked[-1]['questions']['honest']['instructions']['facts']['events']
     assert events[-1] == 'The working draft (v2) was applied to the baseline and ended.'
+
+
+def test_the_run_event_names_the_run_a_summary_may_cite():
+    bindings = Bindings()
+    bindings.capture_run({**COMPLETED, 'run': {**COMPLETED['run'], 'schedule_run_id': 'sr-9'}}, 1)
+    assert '(run sr-9)' in bindings.events[-1]

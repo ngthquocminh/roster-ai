@@ -242,10 +242,12 @@ Ended drafts (state rejected or applied in the snapshot's drafts list) are read-
 "Bring the old one back" means drafting its constraints again with scheduling_draft.
 
 There is no undo tool. "Undo that" asks you to reverse the planner's previous change to the
-draft. It is a revision (see Revising a draft): call scheduling_draft with every constraint
-the draft holds now, plus the one that change removed, without the one it added, or with the
-value it changed restored. If you cannot tell which change is meant, ask which change to
-reverse. Never claim the draft was reverted or restored to an earlier version.
+draft. The snapshot's working_draft.previous_version holds the constraints the draft had
+before its latest version: call scheduling_draft with exactly those constraints (kind,
+arguments, resolved entities), and return the draft output. It appends a new version; it does
+not restore the old one. If there is no previous_version, or the planner means an earlier
+change, ask which change to reverse. Never claim the draft was reverted or restored to an
+earlier version.
 
 ## Soft constraints
 

@@ -1,4 +1,5 @@
-from dataclasses import replace
+import json
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -33,7 +34,8 @@ def setup_context():
         scenario_id=deps.scenario_id, scenario_version_id=deps.scenario_version_id,
         feasible_solver_status='FEASIBLE')
     proposals = SimpleNamespace(get_current=lambda *a, **k: ProposalRecordV1(proposal, 1, deps.actor_id),
-        get_working=lambda *a, **k: None, get_version=lambda *a, **k: None)
+        get_working=lambda *a, **k: None, get_version=lambda *a, **k: None,
+        get_version_at=lambda *a, **k: None)
     runs = SimpleNamespace(
         list_runs=lambda *a, **k: ScheduleRunPageV1((run,), None, 1, 1),
         get_conversation_for_run=lambda *a, **k: deps.conversation_id,
@@ -367,3 +369,29 @@ def test_an_applied_draft_reports_the_pinned_version_not_the_latest():
     assert draft['applied_version']['version_ordinal'] == 2
     assert draft['applied_version']['consequence_summary'] == 'v2 pinned'
     assert draft['applied_version']['constraints'][0]['max_hours'] == 40.0
+
+
+def test_the_working_draft_carries_the_version_before_its_latest():
+    """"Undo that" re-sends this list instead of rebuilding it from the chat
+    (Story 5.12: live E:4 dropped the hours cap 2 runs in 5)."""
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    record = proposals.get_current()
+    working = replace(record, proposal=replace(record.proposal, proposal_id=UUID(int=91)),
+                      version_ordinal=3)
+    proposals.get_working = lambda *a, **k: working
+    asked = []
+    earlier = replace(record.proposal, proposal_id=UUID(int=91))
+    proposals.get_version_at = lambda *a, **k: asked.append(k) or earlier
+    facts = _facts(_load(claimed, proposals, runs, baselines))
+    assert asked == [{'proposal_id': UUID(int=91), 'version_ordinal': 2}]
+    assert facts['working_draft']['previous_version'] == {
+        'version_ordinal': 2, 'constraints': json.loads(json.dumps(
+            asdict(earlier)['constraints'], default=str))}
+
+
+def test_a_first_version_has_no_previous_version():
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    record = proposals.get_current()
+    proposals.get_working = lambda *a, **k: record  # version_ordinal 1
+    proposals.get_version_at = lambda *a, **k: pytest.fail('v1 has no earlier version')
+    assert 'previous_version' not in _facts(_load(claimed, proposals, runs, baselines))['working_draft']
