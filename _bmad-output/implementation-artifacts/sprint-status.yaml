@@ -2725,7 +2725,15 @@ development_status:
   # spec, resolved by 17 decisions -- incl. mark_applied as the LAST TX2 write (lock order),
   # a per-turn DraftTurnState on AgentDepsV1, and the rejected_proposal code alignment.
   5-11-keep-one-working-draft-per-conversation: done
-  5-12-prove-the-draft-lifecycle-in-live-conversations: backlog
+  # 5.12 CREATED 2026-10-01 at 8a85f4f, before 5.11 existed; RE-VERIFIED the same day at 3d747f7
+  # after 5.11 (claude/wizardly-knuth-u7mh15) was merged into feat/draft-lifecycle -- both stories
+  # ship on that one branch. Discard flag defaults True (no override edit, drop check vs the
+  # 108-turn baseline still compares); inventory 141/38/103; live-eval subset 263 passed. Findings: spec §5.2's claim that instruction edits move
+  # behavioral_digest is wrong (instructions are not in it), but A-D are still re-measured for
+  # stale evidence and E coverage; four check kinds, not two (E:3/E:5 need a count, E:7 a
+  # new-proposal check); E:4 accepts a clarification or a re-add (spec contradiction, D5);
+  # floor 120 for 129 turns (lambda 4.3, 1.29%); discard:invoke is live-required, covered only by E:6.
+  5-12-prove-the-draft-lifecycle-in-live-conversations: ready-for-dev
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog
