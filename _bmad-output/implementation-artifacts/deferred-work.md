@@ -1284,3 +1284,55 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   reported outcome and version only when the assistant mentions the draft in a prose answer.
   **Deferred reason: adding a prose field to the draft output is a contract change outside
   this story.** **Owner: open.**
+
+- **A discard rides only an `agent_completed` finalize.** Decision 8 names the three `_finish`
+  call sites; the two `agent_cancelled` sites handle suspended turns, which bind no discard
+  (Decision 7), and a completed-but-unusable turn ends `agent_failed` and applies nothing
+  (`api/routers/conversations.py`, the `discard=` argument). **Deferred reason: this is the
+  reading Decision 7 implies ("nothing persists from a failed turn"); no call site loses a
+  discard it bound.** **Owner: open.**
+
+- **`tests/compose_proof.py` ends an earlier working draft before drafting again.** The
+  proof drafts twice in one conversation, which the partial unique index now forbids; it
+  mirrors discard-then-draft (`end_by_assistant`, then `create_draft`). **Deferred reason:
+  test-harness shape only; production has no second create path.** **Owner: open.**
+
+- **`DraftCard` takes optional `buffer`/`onBufferChange`/`agentTurnInFlight` props.** Without
+  them it keeps a local buffer, so it still renders standalone (tests, state matrix); the
+  timeline always passes them (Decision 14). **Deferred reason: the optional path is a
+  rendering convenience; revisit if a second caller appears.** **Owner: open.**
+
+- **UX-DR35 outline buttons got distinct border colours.** Cancel, Keep, Load and Refresh are
+  all outline buttons, so each got its own border colour to satisfy `stateMatrix`'s
+  merged-treatment rule. **Deferred reason: a visual-design call the story did not make;
+  revisit with the next design pass.** **Owner: open.**
+
+## Deferred from: code review of 5-11-keep-one-working-draft-per-conversation (2026-10-01)
+
+- **A degraded snapshot plus a full-list draft update drops constraints.** When
+  `load_workflow_context` raises `ValueError` the turn proceeds with no context
+  (`backend/api/routers/conversations.py:375-389`), so the model cannot see the working draft's
+  constraints, yet `scheduling_draft` still resolves `updated` and replaces the full constraint
+  list with whatever the model sent. **Deferred reason: the degrade path (dangling baseline
+  pointer, oversized snapshot) is rare, and the fix (refuse `updated` without a snapshot, or
+  observe through the snapshot read) is a design choice.** **Owner: open.**
+
+- **A Draft card that remounts mid-command forgets the command.** Mutation state and the
+  Idempotency-Key live in `DraftCard` (`frontend/src/features/chat/DraftCard.tsx:130`); a newer
+  `draft` activity arriving while Save/Run/Discard is pending moves the live card to a new
+  instance with `isPending=false` and a new key. **Deferred reason: needs the mutations lifted
+  to the timeline like the buffers; the trigger (send a message while a card command is
+  pending) is narrow.** **Owner: open.**
+
+- **Focus after a confirmed Discard and after removing a row falls to `<body>`.** Only Keep
+  restores focus; rows are index-keyed (`DraftCard.tsx:341,421`). **Deferred reason: needs a
+  focus-target decision (badge? next row?).** **Owner: open.**
+
+- **Edited rows announce the old description; a draft ending with unsaved edits drops them
+  silently.** Group label and Remove name read `row.description` from the server version; the
+  ended branch ignores the buffer and the timeline never deletes its entry (`DraftCard.tsx:342,407`).
+  **Deferred reason: low impact; revisit with the next card pass.** **Owner: open.**
+
+- **Ended-state transitions are not announced.** Spec §3.4 says the ended state is announced;
+  Decision 14 makes the badge (not a live region) the accessible text (`DraftCard.tsx:283`).
+  **Deferred reason: reconcile spec and story wording first.** **Owner: open.**

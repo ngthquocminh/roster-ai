@@ -4,7 +4,7 @@ baseline_commit: 8a85f4f
 
 # Story 5.11: Keep One Working Draft per Conversation
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -764,6 +764,105 @@ and instructions → promotion hook → contracts and codegen → card. Sub-phas
   - [x] `deferred-work.md` per Decision 17. Full backend and frontend suites; record counts.
   - [x] Commit (no evidence commit — this story produces none).
 
+### Review Findings
+
+Code review 2026-10-01, backend chunk (`backend/**`, `docs/CONFIGURATION.md`,
+`frontend/openapi.json`; diff `8a85f4f..425125e`). The frontend chunk is reviewed separately.
+Independent mutations on finished code: finalize guard without the `resource_version` comparison
+→ `test_finalize_agent_run_guard.py` red (matches the table); second discard in one turn allowed
+→ `test_it_refuses_a_second_discard_in_one_turn` red (a guard with no table row).
+
+- [x] [Review][Patch] Draft tools across an approval pause (resolved 2026-10-01: enforce "resume never drafts" — withhold `scheduling_draft`/`scheduling_draft_discard` from the resumed grant, and make `scheduling_baseline` refuse with a model-visible error in a turn that already drafted or discarded) — The resume path
+  (`api/routers/approvals.py:237-251,258-264,285-289`) grants the full planner set including
+  `scheduling_draft` and `scheduling_draft_discard`, but builds `AgentDepsV1` without `draft_turn`
+  and finalizes without `discard=`. Decision 4's "the approval-resume path never drafts" is
+  asserted, not enforced: a resumed draft always resolves `created` and, with a working draft
+  present, the turn fails with the false "Your draft changed while I was working"; a resumed
+  discard always answers `no_working_draft`. Related: a discard made before `scheduling_baseline`
+  suspends the turn is never applied (`execute_turn.py` binds only on `completed`; Decision 7's
+  Not covered), yet the pending history carries the "discarded" tool result, so the resumed model
+  can tell the planner the draft is gone while it is still `active`.
+- [x] [Review][Patch] The finalize guard observes the working draft at the first draft-tool call,
+  not when the model's snapshot was read — a card save between the snapshot and that call is
+  overwritten by a full-list `updated` write built from the older snapshot, and the guard passes
+  (spec §2.1 "pre-turn state"; AC2). Observe eagerly before `load_workflow_context` so the
+  observation is never newer than what the model saw [backend/api/routers/conversations.py:303,367]
+- [x] [Review][Patch] `drafts_truncated` fires on the working draft's own activities outside the
+  100-activity window, although the working draft is now reported directly (Decision 12: the flag
+  applies to ended drafts) [backend/application/use_cases/conversation_workflow_context.py:49]
+- [x] [Review][Patch] Deviations (2)–(5) in the Completion Notes are said to be in
+  `deferred-work.md` but only (1) is ledgered (Decision 17)
+  [_bmad-output/implementation-artifacts/deferred-work.md:1271]
+- [x] [Review][Patch] Mutation table has no rows for ~25 delivered guards (e.g. `ck_proposal_lifecycle`,
+  the step-8 column grant, `end_by_assistant` at `observed + 1`, second discard in one turn,
+  ended-state order in revise/reject, `AppliedProposalError` → `applied_proposal`, snapshot
+  working-draft exclusion, route wiring of `DraftTurnState`, the `agent_completed` gate on
+  `discard=`) — add rows (a spot-mutation reddened, so this is paperwork, not detection)
+  [_bmad-output/implementation-artifacts/5-11-keep-one-working-draft-per-conversation.md:962] — 18 unit rows and 11 PostgreSQL
+  rows added; four guards stayed green and got new tests; `mark_applied`'s `site_id` filter is an RLS-covered gap
+- [x] [Review][Patch] Postgres race proofs assert `agent_failed` from the use case's return value;
+  AC2's proof row asks for the persisted `agent_run.status` — query the row
+  [backend/tests/test_draft_lifecycle_postgres.py:3566,3723] — patched (`_run_status`); run green
+  against PostgreSQL 18
+- [x] [Review][Defer] When the snapshot degrades to no context (`ValueError` in
+  `load_workflow_context`), the model cannot see the working draft's constraints but
+  `scheduling_draft` still performs a full-list `updated`, dropping every constraint it did not
+  re-send [backend/api/routers/conversations.py:375-389] — deferred, rare degrade path; owner open
+
+Code review 2026-10-01, frontend chunk (`frontend/src/**`; diff `8a85f4f..425125e`). Independent
+mutation: Save's `!agentTurnInFlight` gate removed → `DraftCard.test` "disables Save, Discard and
+Run with the literal reason" red (a guard with no table row).
+
+- [x] [Review][Patch] A Save the server refused keeps its Idempotency-Key, so the next edited Save
+  (after Load vN, or a corrected 422 value) answers `idempotency_key_conflict` and tells the
+  planner to reload, which drops the buffers — settle the key on any server-answered error, as
+  `useDecideApproval` does [frontend/src/hooks/useReviseProposal.ts:23]
+- [x] [Review][Patch] A failed timeline refetch (TanStack v5 sets `isError` while keeping data;
+  `retry: false`) swaps `ErrorState` in for `ActivityTimeline` and drops every unsaved buffer —
+  the C8 loss Decision 13 exists to prevent. Keep the timeline mounted while data exists
+  [frontend/src/features/chat/ChatView.tsx:303]
+- [x] [Review][Patch] The in-flight flag is read once from `timeline.data.latest_agent_run_status`
+  and only the sending tab refetches when the turn ends; after a reload mid-turn Save/Run/Discard
+  stay disabled with "Wait for the assistant to finish". Poll the timeline while a turn is in
+  flight [frontend/src/features/chat/ChatView.tsx:315; frontend/src/hooks/useConversationTimeline.ts:7]
+- [x] [Review][Patch] Inputs and Remove stay enabled while a Save is pending; its `onSuccess` clears
+  the buffer, silently discarding anything typed meanwhile — disable them while a command is
+  pending [frontend/src/features/chat/DraftCard.tsx:356]
+- [x] [Review][Patch] A Run refused as `applied_proposal`/`rejected_proposal` re-reads nothing, so
+  the card keeps a live editor under an "applied" error (spec §1: re-read after any command)
+  [frontend/src/hooks/useStartScheduleRun.ts]
+- [x] [Review][Patch] The revise error alert survives Load and Cancel and stacks with the
+  changed-under-you notice — reset the revision on Load/Cancel
+  [frontend/src/features/chat/DraftCard.tsx:420,431]
+- [x] [Review][Patch] "Saved as vN" stays after the draft moves on (same class as the run
+  acknowledgement fix) and is silent when the response has no `version_ordinal` (Decision 14) —
+  clear it when the current version changes; announce "Saved" when the ordinal is null
+  [frontend/src/features/chat/DraftCard.tsx:144,272,504]
+- [x] [Review][Patch] Save is enabled for `lock_worker_shift` rows while the horizon is unknown, so an
+  out-of-range end minute reaches the API — block Save for lock rows until the horizon loads
+  [frontend/src/features/chat/DraftCard.tsx:213; frontend/src/features/chat/draftEdits.ts:93]
+- [x] [Review][Patch] AC7 "covers every new control": the axe/role contract uses a one-row
+  `set_max_hours` fixture only — add the other kinds, the two-input lock row, an enabled Remove
+  and the "Earlier version" line [frontend/src/test/accessibility-contract.test.tsx]
+- [x] [Review][Patch] Frontend mutation table lacks rows for: Save on invalid input, Save while
+  changed under edits, Save in flight, Cancel enablement, confirm-step Discard in flight, the
+  first click not mutating, ended drafts render no editor, stale disables inputs, `stateLine`
+  literals, reject invalidation, `applied_proposal` copy, the remaining validation rules
+  [_bmad-output/implementation-artifacts/5-11-keep-one-working-draft-per-conversation.md:962]
+- [x] [Review][Defer] A card that remounts mid-command (a newer `draft` activity arrives while
+  Save/Run/Discard is pending) gets fresh mutation state and a new key: buttons re-enable and the
+  first command's result is never shown [frontend/src/features/chat/DraftCard.tsx:130] —
+  deferred, needs mutations lifted out of the card; owner open
+- [x] [Review][Defer] Focus falls to `<body>` after a confirmed Discard (success or error) and after
+  removing a row (index-keyed rows) [frontend/src/features/chat/DraftCard.tsx:341,421] —
+  deferred, focus-target choice; owner open
+- [x] [Review][Defer] An edited row's group label and Remove name announce the server's old
+  description; a draft that ends with unsaved edits drops them with no notice and leaks the
+  buffer entry [frontend/src/features/chat/DraftCard.tsx:342,407] — deferred; owner open
+- [x] [Review][Defer] Ended-state transitions are not announced in a live region (spec §3.4) —
+  Decision 14 makes the badge the accessible text but never states it as a correction of §3.4
+  [frontend/src/features/chat/DraftCard.tsx:283] — deferred; owner open
+
 ---
 
 ## Dev Notes
@@ -1003,6 +1102,77 @@ Every mutation was applied to finished, committed code, the named guard run befo
 | `useDecideApproval`: proposals not re-read after promotion | `useDecideApproval.test` | 1 passed | red |
 | `_TX2_FAULTS["proposal"]` node removed | **honest gap:** removing a matrix node just runs one fewer parametrized case, and nothing asserts the node count. The node's own coverage is proven through the two `mark_applied` rows above (call removed, fault swallowed), which redden its assertions. | n/a | n/a |
 
+**Code review additions (2026-10-01).** Same harness shape (green before on a 15-file unit set, mutation applied, red after, bytes restored, `git status` unchanged). Rows marked *(review)* guard the review's own patches. The Postgres-only guards are demonstrated in the PostgreSQL table that follows the frontend one.
+
+| Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|
+| finalize guard drops the proposal-id comparison | `test_updated_applies_only_if_the_same_draft_at_the_same_resource_version` | 521 passed | red |
+| finalize reads the working draft without `FOR UPDATE` | `test_the_guard_orders_lock_then_working_read_then_finish_then_the_write` | 521 passed | red |
+| `end_by_assistant` given `observed` instead of `observed + 1` | `test_a_discard_applies_only_to_the_observed_draft_at_the_observed_version` | 521 passed | red |
+| `updated` + discard `ValueError` removed | `test_updated_together_with_a_discard_is_a_programming_error` | 521 passed | red |
+| `created` applies regardless of an existing working draft | `test_created_applies_only_when_there_is_no_working_draft` | 521 passed | red |
+| route drops the `agent_completed` gate on `discard=` | **stayed green** (the Postgres `Turn` helper re-implements the gate instead of calling the route) → new `test_a_completed_but_unusable_turn_applies_no_discard` | 523 passed | red with the new test |
+| discard budget check removed | `test_it_spends_no_tool_call_budget_it_does_not_have` | 521 passed | red |
+| second discard in one turn allowed | `test_it_refuses_a_second_discard_in_one_turn` | 521 passed | red |
+| `create_run_snapshot` `applied` refusal removed | `test_create_run_snapshot_fails_closed_before_write[applied-False-applied_proposal]` | 521 passed | red |
+| `AppliedProposalError` → `applied_proposal` router mapping removed | unit set stays green; reddens in the PostgreSQL table below | 521 passed | green (unit) / red (Postgres) |
+| `resolve_discard` at-most-one assertion removed | **stayed green** → new `test_more_than_one_discard_result_is_a_broken_invariant_not_a_choice` | 523 passed | red with the new test |
+| snapshot repeats the working draft among ended drafts | `test_the_working_draft_is_not_repeated_among_the_ended_drafts` | 521 passed | red |
+| snapshot `applied_version` from the latest version, not the pinned one | `test_an_applied_draft_reports_the_pinned_version_not_the_latest` | 521 passed | red |
+| route builds the default `DraftTurnState` (reader not wired) | `test_execute_turn_wires_the_working_draft_reader_through_the_proposal_repository` | 521 passed | red |
+| *(review)* resume grant keeps the draft tools | `test_the_resumed_turn_is_never_granted_the_draft_tools` | 521 passed | red |
+| *(review)* `scheduling_baseline` allowed after a same-turn draft or discard | `test_baseline_refuses_in_a_turn_that_already_changed_the_draft[drafted]` | 521 passed | red |
+| *(review)* route observes lazily (no `observe_with` before the snapshot) | `test_the_working_draft_is_observed_before_the_snapshot_not_at_the_first_draft_tool` | 521 passed | red |
+| *(review)* `drafts_truncated` counts the working draft's old activities | `test_the_working_drafts_own_old_activities_do_not_mark_drafts_truncated` | 521 passed | red |
+
+**Frontend code review additions (2026-10-01).** Harness over `src/features/chat`, `src/test` and `src/hooks` (415 tests green before each row, then 417 after the two new tests; file bytes restored; `git status` unchanged).
+
+| Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|
+| Save enabled on invalid input (`allValid` dropped) | `DraftCard.test` Save/Cancel enablement; a11y validation contract | 415 passed | red |
+| Save enabled while changed under edits | `DraftCard.test` "keeps the local values, disables Save, and offers Load vN"; a11y changed-notice contract | 415 passed | red |
+| Save enabled while an agent turn is in flight | `DraftCard.test` "disables Save, Discard and Run with the literal reason" | 415 passed | red |
+| Cancel always enabled | `DraftCard.test` Save/Cancel enablement | 415 passed | red |
+| confirm-step Discard enabled in flight | **stayed green** → new `DraftCard.test` "disables the confirm-step Discard when a turn starts while the confirmation is open" | 417 passed | red with the new test |
+| first Discard click mutates (no confirmation) | a11y "names the discard confirmation…"; `stateMatrix` AC1 families | 415 passed | red |
+| ended drafts render the editable footer | a11y "renders the ended state … read-only and accessible" | 415 passed | red |
+| stale drafts keep inputs editable | `DraftCard.test` stale row | 415 passed | red |
+| `stateLine`: assistant discard reads "Discarded" | a11y ended-state rows; `stateMatrix` AC1 families | 415 passed | red |
+| `stateLine`: null applied ordinal unhandled | **stayed green** → new `draftEdits.test` row (`applied`, ordinal null → "Applied to baseline") | 417 passed | red with the new test |
+| `useRejectProposal` success re-read removed | `proposalCommandHooks.test` reject row | 415 passed | red |
+| `applied_proposal` copy removed | `DraftCard.test` "maps applied_proposal…" | 415 passed | red |
+| validation: `n` may be 0 | `draftEdits.test` "n is a whole number above 0"; `DraftCard.test` Minimum workers | 415 passed | red |
+| validation: `factor` may be 0 | `draftEdits.test` factor row; `DraftCard.test` Demand factor | 415 passed | red |
+| validation: start may be negative | `draftEdits.test` lock row; a11y lock-row pairing | 415 passed | red |
+| validation: end need not be whole | `draftEdits.test` lock row; a11y lock-row pairing | 415 passed | red |
+| validation: end may exceed the horizon | `draftEdits.test` lock row; `DraftCard.test` lock row | 415 passed | red |
+| *(review)* revise key not settled on a server-answered error | `proposalCommandHooks.test` "after a server-answered refusal" | 415 passed | red |
+| *(review)* a failed background refetch replaces the timeline | `ChatView.test` "keeps the timeline … mounted when a background refetch fails" | 415 passed | red |
+| *(review)* no polling while a turn is in flight | `useConversationTimeline.test` queued/running rows | 415 passed | red |
+| *(review)* rows editable while a command is pending | `DraftCard.test` "keeps the rows read-only while a command is pending…" | 415 passed | red |
+| *(review)* a refused run re-reads nothing | `proposalCommandHooks.test` "useStartScheduleRun re-reads the proposal…" | 415 passed | red |
+| *(review)* Load/Cancel keep the revise error | `DraftCard.test` "Cancel and Load clear a revise error…" | 415 passed | red |
+| *(review)* "Saved as vN" kept after the draft moves on | `DraftCard.test` "withdraws 'Saved as vN'…" | 415 passed | red |
+| *(review)* no acknowledgement when the ordinal is null | `DraftCard.test` "still acknowledges a save whose response carries no version number" | 415 passed | red |
+| *(review)* lock rows savable while the horizon is unknown | `DraftCard.test` "blocks Save on a lock row until the horizon is known" | 415 passed | red |
+
+**PostgreSQL code review additions (2026-10-01).** Live `postgres:18` from `docker-compose.yml`; suite = `test_draft_lifecycle_postgres.py`, `test_draft_lifecycle_migration_postgres.py`, `test_proposal_persistence.py` (39 passed before each row, none skipped; bytes restored).
+
+| Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|
+| migration: `ck_proposal_lifecycle` not created | `test_the_partial_unique_index_and_lifecycle_check_are_enforced` | 39 passed | red |
+| migration: `ck_proposal_ended_by` allows any value | **stayed green** → same test now writes `ended_by='robot'` | 39 passed | red with the new assertion |
+| migration: step-8 column grant omitted | `test_the_five_turn_lifecycle_ends_with_exactly_one_active_draft` | 39 passed | red |
+| migration downgrade: `applied` not returned to `active` | `test_one_step_downgrade_round_trips_and_keeps_the_ancestor_grant` | 39 passed | red |
+| `mark_applied` does not bump `resource_version` | `test_a_promotion_marks_the_draft_applied_at_the_pinned_version` | 39 passed | red |
+| `reject` adapter writes `ended_by='system'` | `test_get_working_returns_only_this_conversations_active_draft` | 39 passed | red |
+| revise: ended-state check after staleness and resource version | `test_revise_and_reject_on_an_applied_draft_answer_applied_even_when_stale_or_out_of_date` | 39 passed | red |
+| reject: ended-state check after the resource version | same test | 39 passed | red |
+| `AppliedProposalError` → `applied_proposal` router mapping removed | `test_every_ended_draft_command_answers_409_with_the_ended_code_through_the_routes[applied-applied_proposal]` | 39 passed | red |
+| replay drops the stored lifecycle fields | **stayed green** → new `test_a_replayed_discard_keeps_the_stored_lifecycle_fields` | 39 passed | red with the new test |
+| `mark_applied` drops the `site_id` filter | **honest gap:** stays green. The adapter runs inside the site's RLS transaction, which already hides other sites' rows, so the filter is defence in depth that no test can isolate without bypassing RLS. | 39 passed | green |
+| *(review)* race proofs read the persisted `agent_run.status` | `test_a_card_edit_mid_turn_makes_the_turn_lose` rows and the two-connection lock test now query `agent_run` | 32 passed | n/a (assertion added, run green) |
+
 ### File List
 
 - `backend/.env.example`
@@ -1104,3 +1274,4 @@ Every mutation was applied to finished, committed code, the named guard run befo
 |---|---|
 | 2026-09-30 | Story created by `bmad-create-story` from `sprint-change-proposal-2026-09-30.md` and the draft-lifecycle spec; 19 creation findings, 17 decisions. Status `ready-for-dev`. |
 | 2026-09-30 | Implemented by `bmad-dev-story`: migration `a8b9c0d1e2f3`, contracts and repositories, `DraftTurnState`, `scheduling_draft` working-draft resolution, `scheduling_draft_discard` (flag, four golden cases, smoke case), finalize guard, ended-draft refusals, TX2 `mark_applied`, API/OpenAPI, snapshot and instructions, timeline-owned edit buffers and the rebuilt Draft card; real-PostgreSQL lifecycle and race proofs; 33-row mutation table (one weak guard found and fixed); deferred-work ledger. Status `review`. |
+| 2026-10-01 | Code review (`bmad-code-review`, backend and frontend chunks, three layers each): 1 decision (resume path withholds the draft tools; `scheduling_baseline` refuses after a same-turn draft or discard) and 15 patches applied, 5 deferred to the ledger. Mutation table extended with 18 backend-unit, 26 frontend and 11 PostgreSQL rows; four guards that stayed green got new tests, one (`mark_applied`'s `site_id` filter) is an RLS-covered gap. Backend 2803 passed / 2 skipped against PostgreSQL 18; frontend 94 files / 784 tests, typecheck clean, lint at its 3 baseline warnings. Status `done`. |
