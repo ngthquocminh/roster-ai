@@ -98,7 +98,7 @@ def revalidate_binding(connection: Any, *, binding: ApprovalBindingV1, schedule_
         return RevalidationV1(None, {}, {}, candidate)
     return RevalidationV1("stale", {"candidate_schedule_version_id": str(binding.candidate_schedule_version_id), "baseline_schedule_version": binding.baseline_schedule_version, "parameter_hash": binding.parameter_hash, "consequence_hash": binding.consequence_hash, "policy_version": binding.policy_version, "initiating_actor_membership": "active"}, {"candidate_schedule_version_id": str(candidate.schedule_version_id) if candidate else None, "baseline_schedule_version": current_baseline, "parameter_hash": parameter_hash, "consequence_hash": consequence_hash, "policy_version": current_policy, "initiating_actor_membership": "active" if active_initiator else "revoked_or_absent"}, candidate)
 
-def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approvals: Any, schedule_runs: Any, baselines: Any, baseline_writer: Any, memberships: Any, audit_writer: Any, conversations: Any, scheduling_baseline_enabled: bool, clock: Any, app_version: str = APP_VERSION, telemetry: TelemetrySink | None = None) -> DecisionResultV1:
+def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approvals: Any, schedule_runs: Any, baselines: Any, baseline_writer: Any, memberships: Any, audit_writer: Any, conversations: Any, proposals: Any, scheduling_baseline_enabled: bool, clock: Any, app_version: str = APP_VERSION, telemetry: TelemetrySink | None = None) -> DecisionResultV1:
     if not scheduling_baseline_enabled: raise ApprovalNotGrantedError("baseline approval is not granted by policy")
     binding = approvals.get(connection, approval_id=command.approval_id, site_id=command.site_id)
     if binding is None: raise ApprovalNotFoundError("approval is not visible in this site")
@@ -121,7 +121,7 @@ def decide_approval(connection: Any, *, command: DecideApprovalCommandV1, approv
                     connection, binding=binding, candidate=check.candidate, actor_id=command.actor_id,
                     request_id=command.request_id, approvals=approvals,
                     baseline_writer=baseline_writer, audit_writer=audit_writer,
-                    conversations=conversations, occurred_at=now,
+                    conversations=conversations, proposals=proposals, occurred_at=now,
                     app_version=app_version,
                 )
             except ApprovalNotPendingError as exc:

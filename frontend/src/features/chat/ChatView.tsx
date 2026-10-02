@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { conversationsKey, useArchiveConversation, useConversations } from "@/hooks/useConversations";
 import { forgetOrigin, originElementId, peekOrigin, type EvidenceOrigin } from "@/features/evidence/origin";
 import { useConversationStream } from "@/hooks/useConversationStream";
+import { isAgentTurnInFlight } from "@/hooks/useConversationTimeline";
 import { useAgentAvailability } from "@/hooks/useAgentAvailability";
 import { useScenarioContext } from "@/hooks/useScenarioContext";
 import { useSendMessage } from "@/hooks/useSendMessage";
@@ -300,14 +301,30 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
                 <Skeleton className="h-16 w-full" key={row} />
               ))}
             </div>
-          ) : timeline.isError ? (
+          ) : timeline.isError && timeline.data === undefined ? (
             <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} scenarioId={scenarioId} />
           ) : (
             <>
+              {/* A failed BACKGROUND refetch keeps its data (TanStack v5 sets
+                  `isError` anyway). Swapping the timeline out for the error
+                  would unmount it and drop every unsaved Draft card edit it
+                  owns (C8), so the error is shown above it instead (code review
+                  of story-5.11). */}
+              {timeline.isError ? (
+                <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} scenarioId={scenarioId} />
+              ) : null}
               {/* Only rendered once something has actually gone wrong; a
                   healthy stream shows no banner at all. */}
               {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
-              <ActivityTimeline items={stream.items} navigate={navigate} />
+              <ActivityTimeline
+                // The in-flight fact already on the page is the timeline's own
+                // `latest_agent_run_status`. `mutation.isPending` is NOT it: the
+                // send resolves when the message is ACCEPTED and the agent turn
+                // executes afterwards, so it is false for the whole turn (C7).
+                agentTurnInFlight={isAgentTurnInFlight(timeline.data.latest_agent_run_status)}
+                items={stream.items}
+                navigate={navigate}
+              />
               {stream.updatesAreDelayed ? (
                 // AC2 requires the fallback to be LABELLED. Silent polling
                 // would leave the planner believing they are seeing live

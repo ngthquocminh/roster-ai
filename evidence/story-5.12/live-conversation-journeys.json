@@ -1,0 +1,2239 @@
+{
+  "accepted_finding_details": [],
+  "accepted_findings": [],
+  "blocking_reasons": [],
+  "clean_scenarios": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E"
+  ],
+  "complete_repetitions": 3,
+  "false_claims": [],
+  "ignored_dirty_paths": [],
+  "images_rebuilt": true,
+  "inventory_digest": "8baa0281c7d9b031222d6721a3e747de4f46e224c9277507f4d184ecdd675e0b",
+  "live_conversation_journeys": "passed",
+  "measured_at_commit": "70594bfa836584f47dd4144186778fba83008c93",
+  "measured_configuration": {
+    "agent": {
+      "endpoint": "https://openrouter.ai/api/v1",
+      "model": "openrouter:openai/gpt-5.6-luna"
+    },
+    "behavioral_digest": "d3b984917850107fc91662a65a383ccecfd30cee3bea713598714ac92a1c34e7",
+    "configuration_digest": "7dfabe1aa5b64a76d09e8b852511260b4b782197232e819aed26ea30d48865db",
+    "judge": {
+      "endpoint": "https://api.typesafe.ai/v1/systemone",
+      "model": "typesafe:jev-1.13.0"
+    },
+    "override_file": "backend/evals/live_conversations/compose.override.yml",
+    "override_sha256": "42d9c0c4bd8ef5105945f1a317839d89e86fcd228f937502d87d1b6e37bfdb88",
+    "reasoning_effort": "low"
+  },
+  "measurement_tree_dirty": false,
+  "readiness": "eligible",
+  "required_scenarios_per_run": 5,
+  "required_user_turns_per_run": 43,
+  "runs": [
+    {
+      "complete": true,
+      "executed_user_turns": 43,
+      "repetition": 1,
+      "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0"
+    },
+    {
+      "complete": true,
+      "executed_user_turns": 43,
+      "repetition": 2,
+      "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0"
+    },
+    {
+      "complete": true,
+      "executed_user_turns": 43,
+      "repetition": 3,
+      "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0"
+    }
+  ],
+  "schema_version": "3",
+  "source_runs": [
+    {
+      "name": "live-matrix-5-12.json",
+      "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+      "sha256": "32689c41a65e4a6dd1439a005966d3c3ce1ed7f9511bf0f2553785c852558317"
+    }
+  ],
+  "tier1_shadow": {
+    "checked": 23,
+    "checker_calls": 2,
+    "checker_latency_ms": {
+      "max": 1511.218954998185,
+      "median": 999.4449060031911,
+      "p95": 1511.218954998185
+    },
+    "checker_outcomes": {
+      "ok": 2
+    },
+    "checker_providers": {
+      "typesafe": 2
+    },
+    "facts": [
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Chiller Pick | Order Picker C02",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Chiller Pick | Order Picker C02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Main Receive | Unloader M01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Main Receive | Unloader M01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Freezer Pick | Order Picker F01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Freezer Pick | Order Picker F01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Main Pick | Order Picker M02",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Main Pick | Order Picker M02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Main Despatch | Loader M03",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Main Despatch | Loader M03",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Pick | Order Picker C02",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Chiller Pick | Order Picker C02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Receive | Unloader M01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Receive | Unloader M01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Freezer Pick | Order Picker F01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Freezer Pick | Order Picker F01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Pick | Order Picker M02",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Pick | Order Picker M02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Despatch | Loader M03",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Despatch | Loader M03",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 3,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Despatch | Loader M03",
+        "tier0_only": true,
+        "turn": 3,
+        "value": "Main Despatch | Loader M03",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.9,
+        "text": "Maximum Agency Shifts: 6 per week",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "6",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.86,
+        "text": "Maximum Agency Weekly Hours: 50",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "50",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.92,
+        "text": "Maximum Full Time Shifts: 13 per fortnight",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "13",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.88,
+        "text": "Full Time maximum hours: 56 per week",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "56",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.92,
+        "text": "Part Time maximum hours: 56 per week",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "56",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.88,
+        "text": "Casual maximum hours: 40 per week",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "40",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.96,
+        "text": "Maximum Part Time Shifts: 13 per fortnight",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "13",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.93,
+        "text": "Casual minimum hours: 24 per week",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "24",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 1,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.93,
+        "text": "Minimum hours between shifts: 10",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "10",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Chiller Pick | Order Picker C02",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Chiller Pick | Order Picker C02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Freezer Pick | Order Picker F01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Freezer Pick | Order Picker F01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Main Despatch | Loader M03",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Main Despatch | Loader M03",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Main Pick | Order Picker M02",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Main Pick | Order Picker M02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "B",
+        "support_probability": null,
+        "text": "Main Receive | Unloader M01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Main Receive | Unloader M01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "function",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Putaways",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Putaways",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Pick | Order Picker C02",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Chiller Pick | Order Picker C02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "function",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Pick",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Pick",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Receive | Unloader M01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Receive | Unloader M01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "function",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Receiving",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Receiving",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Freezer Pick | Order Picker F01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Freezer Pick | Order Picker F01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "function",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Pick",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Pick",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Pick | Order Picker M02",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Pick | Order Picker M02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "function",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Pick",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Pick",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Despatch | Loader M03",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Despatch | Loader M03",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "function",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Despatch",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Despatch",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 3,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Despatch | Loader M03",
+        "tier0_only": true,
+        "turn": 3,
+        "value": "Main Despatch | Loader M03",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.88,
+        "text": "Maximum Agency Shifts: 6 per Weekly period",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "6",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.88,
+        "text": "Maximum Agency Weekly Hours: 50",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "50",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.93,
+        "text": "Maximum Full Time Shifts: 13 per Fortnightly period",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "13",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.89,
+        "text": "Maximum Hours a Week for Full Time: 56",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "56",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.94,
+        "text": "Maximum Hours a Week for Part Time: 56",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "56",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.94,
+        "text": "Maximum Hours a Week for Casual: 40",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "40",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.96,
+        "text": "Maximum Part Time Shifts: 13 per Fortnightly period",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "13",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.93,
+        "text": "Minimum Hours in a Week for Casual: 24",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "24",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.93,
+        "text": "MinimumHoursBetweenShifts: 10",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "10",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.97,
+        "text": "Casual shift starts: 05:00,05:30,06:00,06:30,07:00,08:00,08:30,09:00,09:30,14:00,18:00",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "05:00,05:30,06:00,06:30,07:00,08:00,08:30,09:00,09:30,14:00,18:00",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.96,
+        "text": "Agency shift starts: 05:30,07:00,08:00,11:00,12:00,12:30,14:00",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "05:30,07:00,08:00,11:00,12:00,12:30,14:00",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.96,
+        "text": "Part Time shift starts: 11:00,12:00,13:00",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "11:00,12:00,13:00",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.91,
+        "text": "General shift starts: 05:00,12:15,13:15,15:00,21:00,11:00",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "05:00,12:15,13:15,15:00,21:00,11:00",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 2,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": 0.94,
+        "text": "Full Time shift starts: 05:00,07:00,12:00,13:00,14:00,20:00,20:04",
+        "tier0_only": false,
+        "turn": 7,
+        "value": "05:00,07:00,12:00,13:00,14:00,20:00,20:04",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Pick | Order Picker C02",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Chiller Pick | Order Picker C02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Receive | Unloader M01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Receive | Unloader M01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Freezer Pick | Order Picker F01",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Freezer Pick | Order Picker F01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Pick | Order Picker M02",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Pick | Order Picker M02",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Main Despatch | Loader M03",
+        "tier0_only": true,
+        "turn": 1,
+        "value": "Main Despatch | Loader M03",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "name",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Chiller Putaway | Forklift C01",
+        "tier0_only": true,
+        "turn": 2,
+        "value": "Chiller Putaway | Forklift C01",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Maximum Agency Shifts",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Maximum Agency Shifts",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "6",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "6",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Maximum Agency Weekly Hours",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Maximum Agency Weekly Hours",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "50",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "50",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Maximum Full Time Shifts",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Maximum Full Time Shifts",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "13",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "13",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Maximum Hours a Week",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Maximum Hours a Week",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "56",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "56",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Maximum Hours a Week",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Maximum Hours a Week",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "56",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "56",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Maximum Hours a Week",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Maximum Hours a Week",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "40",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "40",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Maximum Part Time Shifts",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Maximum Part Time Shifts",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "13",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "13",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "Minimum Hours in a Week",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "Minimum Hours in a Week",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "24",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "24",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "constraint_type",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "MinimumHoursBetweenShifts",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "MinimumHoursBetweenShifts",
+        "verdict": "supported",
+        "wording_flagged": false
+      },
+      {
+        "failure": null,
+        "field": "value",
+        "repetition": 3,
+        "run_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0",
+        "scenario": "C",
+        "support_probability": null,
+        "text": "10",
+        "tier0_only": true,
+        "turn": 7,
+        "value": "10",
+        "verdict": "supported",
+        "wording_flagged": false
+      }
+    ],
+    "low_probability": [],
+    "review_threshold": 0.5,
+    "supported_unchecked": 0,
+    "tier0_only": 60,
+    "wording_flagged": 0
+  },
+  "tool_coverage": [
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1",
+      "observation_id": "call_RdprcguQNISjaV4jR3dmR41e",
+      "operation": "scheduling_baseline:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:A:rep1",
+      "observation_id": "call_35okAdGCS7oSf5awZ76ypLPZ",
+      "operation": "scheduling_compute:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-3",
+      "operation": "scheduling_compute:request.$defs.ClaimArgumentsV1.properties.family.anyOf.0=inbound",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-4",
+      "operation": "scheduling_compute:request.$defs.ClaimArgumentsV1.properties.family.anyOf.0=indirect",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-3",
+      "operation": "scheduling_compute:request.$defs.ClaimArgumentsV1.properties.family.anyOf.0=outbound",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-6",
+      "operation": "scheduling_compute:request.properties.metric=qualified_worker_count",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-3",
+      "operation": "scheduling_compute:request.properties.metric=required_demand_volume",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-4",
+      "operation": "scheduling_compute:request.properties.metric=required_headcount_minutes",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-5",
+      "operation": "scheduling_compute:request.properties.metric=staffed_minutes",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:A:rep1 supported claim",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:A:rep1:turn-3",
+      "operation": "scheduling_compute:request.properties.metric=worker_count",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1",
+      "observation_id": "call_UZsxaKt1tpgkdZj0HnkwEJSw",
+      "operation": "scheduling_draft:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=work-areas-and-tasks",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=workers",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=exclude_worker_from_task",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-9",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=lock_worker_shift",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-8",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=scale_demand",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1:turn-6",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=set_max_hours",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1:turn-8",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.kind=set_min_workers_per_task",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1 persisted draft",
+      "observation_id": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1:turn-4",
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=work-areas-and-tasks",
+      "source": "effect",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:E:rep1",
+      "observation_id": "call_UvM3ejKMIH6mDcKVSYttvG0s",
+      "operation": "scheduling_draft_discard:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1",
+      "observation_id": "call_jT1DVkM5CmwlSzsWJ16mN4p9",
+      "operation": "scheduling_inspect:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1",
+      "observation_id": "call_fKxhgjkWuIUXtsT2c6UWueCB",
+      "operation": "scheduling_inspect:request.properties.group=constraints",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1",
+      "observation_id": "call_GTxTvi1XJVwAYWXFIUeHK7kJ",
+      "operation": "scheduling_inspect:request.properties.group=demand",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1",
+      "observation_id": "call_fvNJOCjqZYEACrX5TQlrlWex",
+      "operation": "scheduling_inspect:request.properties.group=locks",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1",
+      "observation_id": "call_jT1DVkM5CmwlSzsWJ16mN4p9",
+      "operation": "scheduling_inspect:request.properties.group=overview",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:B:rep1",
+      "observation_id": "call_mwXmwUTsMdqOiCCx1HG114v5",
+      "operation": "scheduling_inspect:request.properties.group=tasks",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1",
+      "observation_id": "call_yRuAdOYjXtosjZ8zD7AvT22r",
+      "operation": "scheduling_inspect:request.properties.group=workers",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "detail": "0a1349a4-4ea4-4ddd-8405-5785b62c4fc0:C:rep1",
+      "observation_id": "call_VNVNN6V6QhFliXjJsbD0my82",
+      "operation": "shiftmind_demonstration:invoke",
+      "source": "capability",
+      "state": "success"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=baseline-assignments",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=constraints-and-objectives",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=demand",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.group=locks",
+      "reason": "resolve_constraints rejects every draft group except workers and work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=baseline-assignments",
+      "reason": "related_group is only valid as work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=constraints-and-objectives",
+      "reason": "related_group is only valid as work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=demand",
+      "reason": "related_group is only valid as work-areas-and-tasks (exclude_worker_from_task); proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=locks",
+      "reason": "related_group is only valid as work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:request.$defs.DraftConstraintProposalV1.properties.related_group.anyOf.0=workers",
+      "reason": "related_group is only valid as work-areas-and-tasks; proved by tests/test_scheduling_draft.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:request.properties.group=assignments",
+      "reason": "A planner turn reads assignments from the workflow snapshot, which carries them for the baseline and any candidate, so no authored turn addresses the projection group itself; the group is proved by tests/test_scheduling_inspect.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_baseline:error=approval_required",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_baseline:error=baseline_request_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_baseline:error=draft_changed_this_turn",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_baseline:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=calculation_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=metric_dimension_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=scenario_not_found",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=site_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_compute:error=version_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=draft_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=scenario_not_found",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=site_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft:error=version_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft_discard:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft_discard:error=draft_changed_this_turn",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft_discard:error=draft_discard_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_draft_discard:error=no_working_draft",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:filter=shift_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:filter=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:filter=worker_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:sort=start_minute",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:sort=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:assignments:sort=worker_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:filter=constraint_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:filter=value_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:sort=constraint_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:constraints:sort=value_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=area_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=end_minute_lte",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=family",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=start_minute_gte",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:filter=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=amount",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=end_minute",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=family",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=start_minute",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:demand:sort=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=inspection_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=inspection_timeout",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=scenario_not_found",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=site_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:error=version_mismatch",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=scope",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=source",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=target_ref",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:filter=target_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=scope",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=source",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=target_ref",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:locks:sort=target_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:request.properties.order=asc",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:request.properties.order=desc",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=area_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=function",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=name_contains",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:filter=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=area_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=area_name",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=function",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=name",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:tasks:sort=task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:empty",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=contact_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=employment_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=grade",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=name_contains",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:filter=qualified_task_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:pagination",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=contact_id",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=contracted_hours",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=employment_type",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=grade",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_inspect:workers:sort=name",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:error=invalid_query",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:error=optimize_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "scheduling_optimize:invoke",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=approval_required",
+      "reason": "A suspended demonstration call has no approval path over the authenticated HTTP conversation route: it finalizes the run as cancelled (api/routers/conversations.py) instead of raising an approval request, so no live turn can complete this branch. Story 5.7 Decision 1 reports it as a gap rather than widening the schedule-run-shaped approval contract; the approval branch of the capability itself is proved by tests/test_demonstration_capability.py.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=budget_exhausted",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=demonstration_failed",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    },
+    {
+      "operation": "shiftmind_demonstration:error=invalid_repeat",
+      "reason": "Not addressable by a planner turn (query key, paging or invalid-query path, manifest error code, or the compute-risk run tool); proved by the offline backend suite.",
+      "source": "deterministic"
+    }
+  ],
+  "turn_pass_rates": {
+    "A:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "A:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:10": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:11": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:12": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:7": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:8": {
+      "executed": 3,
+      "passed": 3
+    },
+    "B:9": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:10": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:11": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:12": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:7": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:8": {
+      "executed": 3,
+      "passed": 3
+    },
+    "C:9": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "D:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:7": {
+      "executed": 3,
+      "passed": 3
+    }
+  },
+  "unaccepted_turn_failures": [],
+  "version_bindings": {
+    "application": "ShiftMind Story 5.7 live conversation suite, extended by Story 5.12, over the authenticated HTTP path against a disposable composed stack",
+    "code": {
+      "git_commit": "70594bfa836584f47dd4144186778fba83008c93",
+      "working_tree_dirty": false
+    },
+    "dataset": {
+      "capability_distribution": {
+        "scheduling_conversation": 1
+      },
+      "case_count": 1,
+      "case_versions": {
+        "live-conversation-scenarios-5-7": "2"
+      },
+      "files": {
+        "backend/evals/live_conversations/scenarios.json": {
+          "case_id": "live-conversation-scenarios-5-7",
+          "case_version": "2",
+          "sha256": "d705bc9bea9a8aff42fad0a69a30fa4f9f7e1908cb8091622542b6c4a08996a4"
+        }
+      },
+      "kind": "version-controlled golden evaluation dataset",
+      "risk_class_distribution": {
+        "consequential": 1
+      }
+    },
+    "evaluator": "independent application/fixture reads per turn plus a separately configured judge (TypeSafe Jev typed scores, evals/live_conversations/jev_judge.py GRADING_RULES and verdict_from); a judge pass can never override a fact or effect failure",
+    "image": {
+      "api": "sha256:6845daf7ba9e6b0578b2a7b333ca4f0108c8e5aac636211832052214775391d2",
+      "database": "postgres:18",
+      "web": "sha256:d704fb64606a054fcf48ce797ab3695519ab372f7a0135df3f9456b8d5715308"
+    },
+    "model": [
+      "agent:openrouter:openai/gpt-5.6-luna",
+      "judge:typesafe:jev-1.13.0"
+    ],
+    "policy": "production grant composition (application/capabilities/registry.py); compute-risk modules are withheld from an ordinary planner turn",
+    "prompt": "agent/scheduling_instructions.py as built into the measured image; authored user turns in evals/live_conversations/scenarios.json",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "schema_version": "a8b9c0d1e2f3",
+    "solver": "real CP-SAT worker run started through POST /api/v1/schedule-runs in Scenario B; no solver participates in Scenarios A, C, D and E",
+    "tool": [
+      "scheduling_baseline",
+      "scheduling_compute",
+      "scheduling_draft",
+      "scheduling_draft_discard",
+      "scheduling_inspect",
+      "scheduling_optimize",
+      "shiftmind_demonstration"
+    ]
+  }
+}

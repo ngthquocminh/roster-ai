@@ -10,13 +10,19 @@ from pydantic import TypeAdapter
 
 from application.clarification.resolve import planner_label
 from application.contracts.proposal import (
+    AgentDraftDiscardV1,
+    AgentDraftWriteV1,
     DraftConstraintKindV1,
     DraftConstraintProposalV1,
     DraftConstraintV1,
+    DraftOutcomeV1,
     DraftProposalV1,
+    ProposalEndedByV1,
     ProposalStateV1,
     ProposalV1,
+    ProposalViewV1,
     ResolvedEntityV1,
+    WorkingDraftObservationV1,
 )
 from application.contracts.scenario_projection import TaskV1
 from application.contracts.agent_runtime import AgentRunOutcomeV1
@@ -51,7 +57,27 @@ def test_proposal_contracts_have_the_normative_frozen_transport_free_shape() -> 
         "set_min_workers_per_task", "scale_demand", "lock_worker_shift",
         "exclude_worker_from_task", "set_max_hours",
     )
-    assert get_args(ProposalStateV1) == ("active", "rejected")
+    assert get_args(ProposalStateV1) == ("active", "rejected", "applied")
+    assert get_args(ProposalEndedByV1) == ("planner", "assistant", "system")
+    assert get_args(DraftOutcomeV1) == ("created", "updated")
+    # Story 5.11: the persisted version payload gains NO field; the view and the
+    # trusted agent-turn contracts carry the lifecycle.
+    assert [field.name for field in fields(ProposalViewV1)] == [
+        "proposal", "current_scenario_version_id", "stale", "version_ordinal",
+        "ended_by", "applied_version_ordinal", "schema_version",
+    ]
+    assert [field.name for field in fields(WorkingDraftObservationV1)] == [
+        "proposal_id", "resource_version", "version_ordinal", "schema_version",
+    ]
+    assert [field.name for field in fields(AgentDraftWriteV1)] == [
+        "proposal", "outcome", "version_ordinal", "observed_working_id",
+        "observed_resource_version", "schema_version",
+    ]
+    assert [field.name for field in fields(AgentDraftDiscardV1)] == [
+        "proposal_id", "observed_resource_version", "version_ordinal", "schema_version",
+    ]
+    for contract in (WorkingDraftObservationV1, AgentDraftWriteV1, AgentDraftDiscardV1):
+        assert contract.__dataclass_params__.frozen is True
 
     module_names = set(vars(__import__(ProposalV1.__module__, fromlist=["*"])))
     assert not {"fastapi", "pydantic", "sqlalchemy"}.intersection(module_names)

@@ -164,6 +164,9 @@ class Settings:
     # and grantable whenever this flag is on.
     scheduling_compute_enabled: bool = True
     scheduling_draft_enabled: bool = True
+    # Story 5.11: explicit discard of the working draft. Not a PolicyInputsV1
+    # input (it is a draft-risk capability, not an approval rule).
+    scheduling_draft_discard_enabled: bool = True
     scheduling_inspect_enabled: bool = True
     scheduling_optimize_enabled: bool = True
     approval_expiry_seconds: int = 3600
@@ -540,6 +543,10 @@ def default_settings() -> Settings:
         "SCHEDULING_DRAFT_ENABLED",
         os.environ.get("SCHEDULING_DRAFT_ENABLED"), True
     )
+    scheduling_draft_discard_enabled = _flag(
+        "SCHEDULING_DRAFT_DISCARD_ENABLED",
+        os.environ.get("SCHEDULING_DRAFT_DISCARD_ENABLED"), True
+    )
     scheduling_inspect_enabled = _flag(
         "SCHEDULING_INSPECT_ENABLED",
         os.environ.get("SCHEDULING_INSPECT_ENABLED"), True
@@ -615,6 +622,7 @@ def default_settings() -> Settings:
         lease_seconds=lease_seconds,
         scheduling_compute_enabled=scheduling_compute_enabled,
         scheduling_draft_enabled=scheduling_draft_enabled,
+        scheduling_draft_discard_enabled=scheduling_draft_discard_enabled,
         scheduling_inspect_enabled=scheduling_inspect_enabled,
         scheduling_optimize_enabled=scheduling_optimize_enabled,
         approval_expiry_seconds=approval_expiry_seconds,

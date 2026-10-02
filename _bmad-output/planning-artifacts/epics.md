@@ -191,7 +191,7 @@ UX-DR7: Implement a multiline chat composer where Enter inserts a newline and Ct
 
 UX-DR8: Render every numerical or schedule-specific claim with an adjacent evidence link naming exact group, record, field/range, and version rather than a generic message-level Sources link.
 
-UX-DR9: Implement Draft cards showing resolved entities, proposed constraints/objectives, preserved locks, expected versions, consequence summary, and the label “Draft — no baseline change,” with separate revise, reject, and Run optimization controls.
+UX-DR9: Implement Draft cards showing resolved entities, proposed constraints/objectives, preserved locks, expected versions, consequence summary, and the label “Draft — no baseline change,” with the draft's version and lifecycle state beside it; in-place value editing and row removal saved as a new version, a separate Discard draft control, and a separate Run optimization control. Ended drafts are read-only. (Amended 2026-09-30, Story 5.11.)
 
 UX-DR10: Implement Run progress cards showing run ID and literal persisted state without invented percentages or ETA; recovery must retain the same run ID.
 
@@ -330,7 +330,7 @@ The complete planner journey runs reproducibly on any developer machine from one
 
 **FRs covered:** none new (makes the FR1–FR24 outcomes reproducible and legible outside the author's machine)
 
-**Implementation notes:** This is the portfolio milestone and completes Gate B. It delivers run instrumentation (tokens, cost, latency, budget outcomes, run-ID correlation), content and secret minimization with adversarial fixtures, a one-command reproducible environment whose locally built image digest satisfies every evaluation report's image binding, and the walkthrough that makes the system judgeable by a reader. NFR10's telemetry independence is already proven by Story 3.9; NFR35's thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and measured on CI per AD-26. Stories 5.9–5.10 (added 2026-09-24, sprint-change-proposal-2026-09-24) export sanitized full-request-path traces and live-evaluation results to Logfire; neither is a Gate B criterion.
+**Implementation notes:** This is the portfolio milestone and completes Gate B. It delivers run instrumentation (tokens, cost, latency, budget outcomes, run-ID correlation), content and secret minimization with adversarial fixtures, a one-command reproducible environment whose locally built image digest satisfies every evaluation report's image binding, and the walkthrough that makes the system judgeable by a reader. NFR10's telemetry independence is already proven by Story 3.9; NFR35's thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and measured on CI per AD-26. Stories 5.9–5.10 (added 2026-09-24, sprint-change-proposal-2026-09-24) export sanitized full-request-path traces and live-evaluation results to Logfire; neither is a Gate B criterion. Stories 5.11–5.12 (added 2026-09-30, sprint-change-proposal-2026-09-30) give each conversation one working draft and re-prove live conversations against it; 5.12's measurement replaces Story 5.7's as the source of the live-conversation baseline.
 
 ### Epic 6: Reliable Hosted Planner Workspace
 
@@ -873,6 +873,8 @@ So that I can correct constraints and objectives before any computation or basel
 **When** review or execution is attempted
 **Then** the draft is visibly stale, computation is blocked, and the planner must refresh or create a new version
 **And** no silent rebase occurs. (AR9, UX-DR25)
+
+> *Superseded in part (2026-09-30):* the one-working-draft lifecycle, the `applied` state and the in-place card editor are owned by Story 5.11. This story's acceptance stands as delivered.
 
 ### Story 3.2: Produce a Deterministic Candidate from an Immutable Snapshot [Technical Enabler]
 
@@ -1628,6 +1630,75 @@ So that I can open a failing turn's trace from its verdict and compare runs side
 
 **Out of scope, deliberately.** Publishing from inside the suite run, rewriting the live suite on pydantic-evals, Logfire live evaluations or LLM judges, and publishing deterministic golden-case results.
 
+### Story 5.11: Keep One Working Draft per Conversation [Corrective Insert]
+
+**Inserted 2026-09-30** by `sprint-change-proposal-2026-09-30.md`. The design source is `docs/superpowers/specs/2026-09-28-draft-lifecycle-design.md` (§1–§4, §5.1, decisions D1–D8), which the story implements; this entry does not restate it.
+
+As a planner,
+I want each conversation to have exactly one working draft that chat requests and card edits both change,
+So that I always know which draft I would run, and the timeline stays readable.
+
+**Acceptance Criteria:**
+
+**Given** a conversation with no working draft, or with one
+**When** the agent drafts
+**Then** it creates v1 of a new proposal, or appends the next version of the working draft with the full constraint list replaced, and reports `created` or `updated` with `version_ordinal`
+**And** at most one `active` proposal exists per conversation, enforced by the partial unique index `uq_proposal_one_active_per_conversation`. (FR9, FR10, AD-9)
+
+**Given** the planner edited or discarded the draft, a run from it was promoted, or another turn finalized, while an agent turn was in flight
+**When** that turn finalizes
+**Then** nothing is written to `proposal` or `proposal_version`, and the turn ends with the `capability_error` terminal outcome "Your draft changed while I was working, so I didn't apply this change."
+**And** each of the four races is tested on that visible outcome and on unchanged proposal rows. (spec §2.2, D8)
+
+**Given** the planner explicitly asks to discard the draft
+**When** the agent calls `scheduling_draft_discard`
+**Then** the draft becomes `rejected` with `ended_by='assistant'`, "start over with just X" replaces the draft rather than discarding it, and discard-then-draft in one turn is ordered by the tools
+**And** the capability ships with a manifest, the feature flag `scheduling_draft_discard_enabled`, and at least four golden cases, including the negative "start over" routing case. (FR23, Gate B dataset floor)
+
+**Given** a run whose snapshot pins this proposal
+**When** it is promoted to baseline
+**Then** TX2 marks the draft `applied` with `applied_version_id` = the pinned version, an already-ended draft is left alone, and a TX2 rollback leaves the draft `active`
+**And** revise, discard and run optimization on an ended draft fail with `rejected_proposal` or `applied_proposal` (RFC 7807, 409), while an idempotent replay still returns the original result. (FR10, AD-9, EAD-6 as amended)
+
+**Given** the migration runs on a database with duplicate active drafts
+**When** it upgrades
+**Then** the newest by `(created_at DESC, id DESC)` stays `active`, the rest become `rejected`/`system`, and the downgrade round-trips. (spec §2.5)
+
+**Given** the working draft in Chat
+**When** the planner reviews it
+**Then** only the newest draft activity for a proposal mounts the live card, and older ones render one history line
+**And** the card edits values in place and removes rows (never the last row). Save changes and Cancel enable only when there is a valid difference; Run optimization is disabled while edits are unsaved; Discard asks for inline two-step confirmation; controls are disabled while an agent turn is in flight; and "This draft changed to vN … [Load vN]" appears when the draft changes under unsaved edits. (UX-DR9 as amended, UX-DR25, UX-DR35)
+
+**Given** an ended or stale draft
+**When** its card renders
+**Then** it is read-only and states "Discarded", "Discarded by assistant", "Replaced by a newer draft", "Applied to baseline — vN promoted" or "Working draft · out of date"
+**And** the automated accessibility contract covers every new control, the save acknowledgement, the changed-under-you notice and each ended state. (Accessibility Floor, automated only)
+
+**Out of scope, deliberately.** Undo, restore, diff, re-activation, adding or retargeting constraints on the card, and merging card edits with a concurrent assistant update (all recorded in `deferred-work.md`). No change to runs, the solver, or approval rules and contracts.
+
+### Story 5.12: Prove the Draft Lifecycle in Live Conversations [Corrective Insert]
+
+**Inserted 2026-09-30** by `sprint-change-proposal-2026-09-30.md`. It implements spec §5.2 after Story 5.11.
+
+As a planner,
+I want real-provider conversations to show that chat edits update one draft and that discard and promotion end it,
+So that the lifecycle holds with the configured model, not only in deterministic tests.
+
+**Acceptance Criteria:**
+
+**Given** the per-turn expectation grader
+**When** the new code checks `draft_updates_turn: n` and `draft_state_is: <state>[/<ended_by>]` are registered
+**Then** each has unit tests in `tests/test_live_conversation_expectations.py`, and `Bindings.draft` records the version ordinal. (spec §5.2)
+
+**Given** scenarios A–D and the new scenario E (7 turns: create, add, remove, "undo that", "start over with just Z", "throw this draft away", then a new request)
+**When** the suite is authored
+**Then** B:6 and C:9 assert `draft_updates_turn`, B:10 asserts `draft_state_is: applied`, every E turn carries authored `expect` checks, and `REQUIRED_SCENARIOS` is `{A: 6, B: 12, C: 12, D: 6, E: 7}`.
+
+**Given** the committed code of Stories 5.11 and 5.12
+**When** the suite runs one clean pass per scenario plus three repetitions on the configured provider and the real stack
+**Then** `evidence/story-5.12/live-conversation-journeys.json` is generated through `backend/scripts/evidence_binding.py` and committed separately from the code, and `backend/evals/baselines/live-conversations.json` and the drop-check floor are re-derived from it with `derive_live_conversation_baseline.py` (129 executed turns)
+**And** no counted run makes a false claim, including a claimed undo. Missing, partial or stale evidence blocks Gate B's `live_conversation_journeys` row. (Gate B, EVIDENCE-CONVENTION)
+
 ## Epic 6: Reliable Hosted Planner Workspace
 
 The planner can sign in to the hosted ShiftMind workspace and trust it: it is reproducibly deployed from reviewed infrastructure code, diagnosable without privacy leaks, and its invariants hold through the real edge, load-balancer, and database topology.
@@ -1755,7 +1826,7 @@ Release evaluation is not an epic or story. Each epic proves its own slice throu
 | Gate | Milestone | Threshold | Evidence owner |
 |---|---|---|---|
 | Deterministic-first CI and live AI readiness | B | Deterministic evidence is mandatory and authoritative for safety and correctness. For the pinned release provider/model configuration, every release-eligible live scenario must also pass under its explicit application-owned budget. A live pass is necessary but never sufficient: it cannot satisfy, weaken, or replace a deterministic gate. A live failure blocks the AI feature unless an explicit, time-bounded release exception records owner, rationale, scope, expiry, and user-facing limitation. | Stories 2.2, 5.5, 5.6 |
-| Required live conversation journeys | B | Story 5.7 (right-sized 2026-09-17): three scenarios (6, 12, 12 user turns); every installed tool and supported operation; real persisted draft/solver/candidate/approval/baseline effects; one clean run per scenario plus three repetitions with per-turn pass rates on the same configured stack; no false claim or wrong fact/effect in any counted run. Missing, skipped, failed, partial, or stale evidence blocks. Deterministic results and the preceding row's exception mechanism cannot satisfy or waive this verdict. | Story 5.7; Gate B requires `live_conversation_journeys` |
+| Required live conversation journeys | B | Story 5.7 (right-sized 2026-09-17), extended by Story 5.12: the scenarios fixed by `REQUIRED_SCENARIOS` (A–E: 6, 12, 12, 6, 7 user turns); every installed tool and supported operation; real persisted draft/solver/candidate/approval/baseline effects; one clean run per scenario plus three repetitions with per-turn pass rates on the same configured stack; no false claim or wrong fact/effect in any counted run. Missing, skipped, failed, partial, or stale evidence blocks. Deterministic results and the preceding row's exception mechanism cannot satisfy or waive this verdict. | Stories 5.7, 5.12; Gate B requires `live_conversation_journeys` |
 | Report version binding | B | Every evaluation report binds dataset, evaluator, model, prompt, tool, policy, application, scenario, solver, code, and image versions; the image binding is satisfied by Story 5.3's locally built digest. | Stories 2.2, 5.3 |
 | Golden dataset size | B | At least 50 versioned cases, at least four per allowed capability, and at least ten consequential/prohibited cases; case count may later change only from reviewed failure diversity. | Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute; Gate B measures |
 | Tool routing | B | At least 90% overall and 100% for consequential/prohibited cases. | Gate B |
@@ -1774,7 +1845,7 @@ Release evaluation is not an epic or story. Each epic proves its own slice throu
 | 2 - Grounded Conversational Investigation | 2.1 AgentRuntime boundary [TE] - 2.2 Evaluation harness [TE] - 2.3 Durable conversations - 2.4 Live event replay - 2.5 Governed inspect capability - 2.6 Governed capability module [TE] - 2.7 Evidence grounding - 2.8 Evidence jump/return - 2.9 Clarify/refuse/fail safely |
 | 3 - Governed and Recoverable Schedule Repair | 3.1 Reversible draft - 3.2 Deterministic candidate [TE] - 3.3 Job leasing/fencing [TE] - 3.4 Cancellation command [TE] - 3.5 Literal run state/replay [TE] - 3.6 Explicit bounded optimization - 3.7 Monitor/cancel/reopen runs - 3.8 Candidate/baseline comparison - 3.9 Model-outage continuity - 3.10 Repair correctness - 3.11 Recovery and idempotency - 3.12 Repair browser journey |
 | 4 - Exact Baseline Decision and Decision Record | 4.1 Request approval - 4.2 Review and decide - 4.3 Atomic promotion with audit - 4.4 Decision provenance - 4.5 Approval and audit invariants - 4.6 State semantics and automated accessibility |
-| 5 - Demonstrable Local Planner Workspace | 5.0 Real baseline comparison - 5.1 Run instrumentation - 5.2 Content/secret leak prevention - 5.3 One-command reproducible run [TE] - 5.3a Real solve to candidate [TE] - 5.4 Portfolio walkthrough - 5.5 Live golden routing (corrective story artifact) - 5.6 Multi-turn history evaluation - 5.7 Natural live conversations through baseline promotion - 5.9 Full-stack Logfire tracing - 5.10 Live-eval results in Logfire |
+| 5 - Demonstrable Local Planner Workspace | 5.0 Real baseline comparison - 5.1 Run instrumentation - 5.2 Content/secret leak prevention - 5.3 One-command reproducible run [TE] - 5.3a Real solve to candidate [TE] - 5.4 Portfolio walkthrough - 5.5 Live golden routing (corrective story artifact) - 5.6 Multi-turn history evaluation - 5.7 Natural live conversations through baseline promotion - 5.9 Full-stack Logfire tracing - 5.10 Live-eval results in Logfire - 5.11 One working draft per conversation - 5.12 Live draft-lifecycle proof |
 | 6 - Reliable Hosted Planner Workspace | 6.1 AWS edge/identity/network [TE] - 6.2 AWS data/runtime [TE] - 6.3 Immutable deploys [TE] - 6.4 Hosted invariants/parity/mutation denial - 6.5 Backups and rollback |
 
 47 stories across 6 epics. Blocking dependencies are backward-only: 1 -> 2 -> 3 -> 4 -> 5 -> 6. Epic 5 is the portfolio milestone (Gate B) and is complete without Epic 6; Epic 6 adds the hosted proof (Gate C).

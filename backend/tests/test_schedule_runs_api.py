@@ -669,6 +669,11 @@ def test_start_route_maps_capability_validation_failures(client) -> None:
             "rejected_proposal",
         ),
         (
+            SnapshotCreationError("applied_proposal", "applied"),
+            409,
+            "applied_proposal",
+        ),
+        (
             SnapshotCreationError("scenario_unavailable", "unreadable"),
             503,
             "scenario_unavailable",

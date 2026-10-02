@@ -74,6 +74,8 @@ from application.capabilities.deps import AgentDepsV1
 from application.capabilities.installed import enabled_feature_policy
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
 from application.contracts.agent_runtime import AgentBudgetV1
+from application.contracts.proposal import WorkingDraftObservationV1
+from application.drafting.turn_state import DraftTurnState
 from application.contracts.grounding import GroundedAnswerV2
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.proposal import ProposalRepository
@@ -297,6 +299,31 @@ async def execute_agent_turn(
         raise HTTPException(status_code=404)
 
     raw_results: list[object] = []
+
+    def _read_working_draft() -> WorkingDraftObservationV1 | None:
+        """The conversation's working draft, in its own short transaction.
+
+        Same shape as `ShortTransactionScenarioProjectionReader`: a draft tool
+        reads through this once per turn (`DraftTurnState.observe`) and never
+        holds a connection across the model call (Story 5.11 Decision 4). It is
+        only the fallback: a scheduling turn normally observes inside the
+        workflow snapshot's transaction first (`_workflow_context`).
+        """
+        with open_site_context(claimed.site_id) as connection:
+            return _observe_working_draft(connection)
+
+    def _observe_working_draft(connection) -> WorkingDraftObservationV1 | None:
+        working = proposal_repository.get_working(
+            connection, conversation_id=claimed.conversation_id, for_update=False
+        )
+        if working is None:
+            return None
+        return WorkingDraftObservationV1(
+            proposal_id=working.proposal.proposal_id,
+            resource_version=working.proposal.resource_version,
+            version_ordinal=working.version_ordinal,
+        )
+
     # Read the id `emit_request_telemetry` (api/main.py) already minted for
     # this HTTP request, rather than minting a second, unrelated one -- NFR22
     # requires one run searchable by one stable identifier across
@@ -321,6 +348,7 @@ async def execute_agent_turn(
         remaining_budget=AgentBudgetV1(),
         tool_result_sink=raw_results.append,
         telemetry=telemetry,
+        draft_turn=DraftTurnState(_read_working_draft),
     )
     # EVERYTHING below runs after `_claim` committed `agent_running` in its own
     # short transaction, and `claim_queued_run` only ever claims `agent_queued`
@@ -348,6 +376,14 @@ async def execute_agent_turn(
                 if (not callable(getattr(connection, "execute", None))
                         or not callable(getattr(schedule_runs, "list_runs", None))):
                     return None
+                # Observe the working draft BEFORE the snapshot, in its
+                # transaction -- never lazily at the first draft tool: a card save
+                # between the snapshot and that call would become the observation,
+                # and a full-list update built from the older snapshot would
+                # overwrite it with the finalize guard passing (spec 2.1 "pre-turn
+                # state"; code review of story-5.11). An edit after this read makes
+                # the guard refuse, which is the safe side.
+                deps.draft_turn.observe_with(lambda: _observe_working_draft(connection))
                 try:
                     return load_workflow_context(connection, claimed=claimed,
                         proposals=proposal_repository, runs=schedule_runs, baselines=baselines,
@@ -514,13 +550,18 @@ async def execute_agent_turn(
                 if result.activity is None:
                     raise RuntimeError("agent approval did not persist an activity")
                 return result.activity
+            final_status = terminal_status(outcome)
             return finalize_agent_run(
                 repository,
                 proposal_repository,
                 connection,
                 claimed=claimed,
-                status=terminal_status(outcome),
+                status=final_status,
                 payload=activity_payload(outcome, deps),
+                # A discard rides only a turn that produced a usable answer: a
+                # completed-but-unusable turn ends `agent_failed` and applies
+                # nothing (Decision 7's "nothing persists from a failed turn").
+                discard=outcome.resolved_discard if final_status == "agent_completed" else None,
                 request_id=deps.request_id,
             )
 

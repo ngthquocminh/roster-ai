@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import UUID
 
-from application.contracts.proposal import ProposalV1
+from application.contracts.proposal import ProposalEndedByV1, ProposalV1
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,9 @@ class ProposalRecordV1:
     proposal: ProposalV1
     version_ordinal: int
     created_by_actor_id: UUID
+    ended_by: ProposalEndedByV1 | None = None
+    applied_version_id: UUID | None = None
+    applied_version_ordinal: int | None = None
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,47 @@ class ProposalRepository(Protocol):
     def get_current(
         self, connection: Any, *, proposal_id: UUID, for_update: bool = False
     ) -> ProposalRecordV1 | None: ...
+
+    def get_working(
+        self, connection: Any, *, conversation_id: UUID, for_update: bool
+    ) -> ProposalRecordV1 | None:
+        """The conversation's `active` proposal (at most one, by the unique index)."""
+        ...
+
+    def append_agent_version(
+        self,
+        connection: Any,
+        *,
+        proposal: ProposalV1,
+        site_id: UUID,
+        version_ordinal: int,
+    ) -> None:
+        """Append a version by the agent: no idempotency row (finalize is exactly-once)."""
+        ...
+
+    def end_by_assistant(
+        self, connection: Any, *, proposal_id: UUID, resource_version: int
+    ) -> None: ...
+
+    def mark_applied(
+        self, connection: Any, *, site_id: UUID, schedule_version_id: UUID
+    ) -> bool:
+        """Mark the draft a promoted schedule version pinned as `applied`.
+
+        Zero rows changed is normal (no proposal, or already ended) and returns
+        ``False``; it is not an error.
+        """
+        ...
+
+    def get_version(
+        self, connection: Any, *, proposal_version_id: UUID
+    ) -> tuple[int, ProposalV1] | None: ...
+
+    def get_version_at(
+        self, connection: Any, *, proposal_id: UUID, version_ordinal: int
+    ) -> ProposalV1 | None:
+        """One version of a draft by its ordinal, or None when it has no such version."""
+        ...
 
     def get_idempotent_result(
         self,

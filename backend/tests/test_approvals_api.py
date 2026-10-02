@@ -917,7 +917,7 @@ def _outcome_stub(**overrides) -> SimpleNamespace:
 
 
 def _drive(monkeypatch, *, binding, resume, opener, outcome=None, turn_error=None,
-           finalize_error=None, settings=None):
+           finalize_error=None, settings=None, compose_capabilities=None):
     """Call the real `_drive_resumed_turn` with the collaborators faked out."""
     from api.routers import approvals as module
 
@@ -947,11 +947,15 @@ def _drive(monkeypatch, *, binding, resume, opener, outcome=None, turn_error=Non
     monkeypatch.setattr(module, "failed_outcome_for_exception",
                         lambda _exc: _outcome_stub(status="failed"))
 
+    def _runtime_factory(**kwargs):
+        recorded["capabilities"] = kwargs["capabilities"]
+        return object()
+
     module._drive_resumed_turn(
         resume=resume, binding=binding,
         settings=settings if settings is not None else _settings_stub(),
-        runtime_factory=lambda **_k: object(),
-        compose_capabilities=lambda _ctx: (),
+        runtime_factory=_runtime_factory,
+        compose_capabilities=compose_capabilities or (lambda _ctx: ()),
         projection_reader=object(), conversations=object(), proposals=object(),
         open_site_context=opener,
         telemetry=_NullSink(), request_id=uuid4(),
@@ -976,6 +980,32 @@ def test_the_resumed_turn_forwards_the_server_owned_approval_for_the_exact_call(
     # from a client boolean (AC1).
     assert decision.approved is True
     assert recorded["status"] == "agent_timed_out"
+
+
+def test_the_resumed_turn_is_never_granted_the_draft_tools(monkeypatch) -> None:
+    """Story 5.11 Decision 4: the approval-resume path never drafts.
+
+    Mutation that must turn this red: drop the `RESUME_WITHHELD_CAPABILITIES`
+    filter. The resumed runtime then registers `scheduling_draft` and
+    `scheduling_draft_discard` with no working-draft reader and no discard
+    finalize, so a resumed draft fails the turn with a false "draft changed"
+    (code review of story-5.11).
+    """
+    from application.capabilities.scheduling_baseline import scheduling_baseline_module
+    from application.capabilities.scheduling_draft import scheduling_draft_module
+    from application.capabilities.scheduling_draft_discard import scheduling_draft_discard_module
+    from application.capabilities.scheduling_inspect import scheduling_inspect_module
+
+    composed = (scheduling_inspect_module(), scheduling_draft_module(),
+                scheduling_draft_discard_module(), scheduling_baseline_module())
+    binding, resume, opener = _resume_fixtures()
+    recorded = _drive(monkeypatch, binding=binding, resume=resume, opener=opener,
+                      outcome=_outcome_stub(status="timed_out"),
+                      compose_capabilities=lambda _ctx: composed)
+
+    assert [module.manifest.capability_name for module in recorded["capabilities"]] == [
+        "scheduling_inspect", "scheduling_baseline",
+    ]
 
 
 def test_a_resumed_turn_that_defers_again_is_refused_instead_of_parked(monkeypatch) -> None:

@@ -32,6 +32,9 @@ export function useSendMessage(conversationId: string, scenarioId: string) {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: conversationTimelineKey(conversationId) }),
             queryClient.invalidateQueries({ queryKey: conversationsKey(scenarioId) }),
+            // An agent discard, or an agent update, changes a draft without any
+            // `draft` activity to re-mount the card (C9): re-read every proposal.
+            queryClient.invalidateQueries({ queryKey: ["proposal"] }),
           ]);
         }
       })().catch(() => undefined);

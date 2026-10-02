@@ -73,8 +73,8 @@ def repo_local_tmp_path():
 def green_report(committed_evidence: dict, baseline: dict) -> dict:
     """The committed measurement as a run a fresh suite would produce.
 
-    The only edit is the `behavioral_digest` the 5.7 evidence predates; a run
-    under this story's code records it itself.
+    The `behavioral_digest` edit was needed while the source was the 5.7
+    evidence, which predates it; the 5.12 evidence records it, so it is a no-op.
     """
     report = copy.deepcopy(committed_evidence)
     report["measured_configuration"]["behavioral_digest"] = baseline["configuration"][
@@ -102,12 +102,12 @@ def test_committed_baseline_is_exactly_what_the_script_derives(baseline: dict):
 
 def test_baseline_records_the_measurement_it_projects(baseline: dict):
     assert baseline["source_evidence_path"] == (
-        "evidence/story-5.7/live-conversation-journeys.json"
+        "evidence/story-5.12/live-conversation-journeys.json"
     )
     assert baseline["measured_at_commit"]
-    assert baseline["total_passed"] == 108
-    assert baseline["total_executed"] == 108
-    assert len(baseline["turn_pass_rates"]) == 36
+    assert baseline["total_passed"] == 129
+    assert baseline["total_executed"] == 129
+    assert len(baseline["turn_pass_rates"]) == 43
     configuration = baseline["configuration"]
     assert set(configuration) == {
         "agent_model",
@@ -288,17 +288,17 @@ def test_tier_1_exempts_turns_the_baseline_never_scored_full(
 ):
     """A turn at 2/3 in the baseline is watched by Tier 3, not Tier 1.
 
-    The current baseline is 108/108, so the exemption is exercised on a copy
-    with the earlier baseline's three partial turns restored to 2/3.
+    The current baseline is 129/129, so the exemption is exercised on a copy
+    with the earlier baseline's three partial turns restored to 2/3, plus one.
     """
     partial_baseline = copy.deepcopy(baseline)
-    partial = ["B:5", "B:8", "C:3"]
+    partial = ["B:5", "B:8", "C:3", "E:4"]
     for turn in partial:
         partial_baseline["turn_pass_rates"][turn] = {"executed": 3, "passed": 2}
         green_report["turn_pass_rates"][turn] = {"executed": 3, "passed": 0}
     result = compare(partial_baseline, green_report)
     assert _check(result, "tier_1_full_marks_collapse")["status"] == "passed"
-    # 108 - 9 = 99, which is below the floor: Tier 3 is what catches them.
+    # 129 - 12 = 117, which is below the floor: Tier 3 is what catches them.
     assert _check(result, "tier_3_aggregate")["status"] == "failed"
 
 
@@ -325,7 +325,7 @@ def test_tier_1_fails_when_an_exempt_partial_turn_vanishes_entirely(
     tier1 = _check(result, "tier_1_full_marks_collapse")
     assert tier1["status"] == "failed"
     assert "'B:5'" in tier1["detail"]
-    # 108 - 3 = 105, still above the floor: only Tier 1's presence check catches it.
+    # 129 - 3 = 126, still above the floor: only Tier 1's presence check catches it.
     assert _check(result, "tier_3_aggregate")["status"] == "passed"
 
 
@@ -373,14 +373,14 @@ def test_tier_3_fails_one_turn_below_the_floor(baseline: dict, green_report: dic
     result = compare(baseline, green_report)
     tier3 = _check(result, "tier_3_aggregate")
     assert tier3["status"] == "failed"
-    assert f"{AGGREGATE_FLOOR - 1}/108" in tier3["detail"]
+    assert f"{AGGREGATE_FLOOR - 1}/129" in tier3["detail"]
 
 
 def test_tier_3_passes_exactly_at_the_floor(baseline: dict, green_report: dict):
     _drop_passes(green_report, baseline["total_passed"] - AGGREGATE_FLOOR)
     tier3 = _check(compare(baseline, green_report), "tier_3_aggregate")
     assert tier3["status"] == "passed"
-    assert f"{AGGREGATE_FLOOR}/108" in tier3["detail"]
+    assert f"{AGGREGATE_FLOOR}/129" in tier3["detail"]
 
 
 def test_tier_3_ignores_turns_the_baseline_never_measured(
@@ -392,7 +392,7 @@ def test_tier_3_ignores_turns_the_baseline_never_measured(
         green_report["turn_pass_rates"][f"Z:{index}"] = {"executed": 3, "passed": 3}
     tier3 = _check(compare(baseline, green_report), "tier_3_aggregate")
     assert tier3["status"] == "failed"
-    assert f"{AGGREGATE_FLOOR - 1}/108" in tier3["detail"]
+    assert f"{AGGREGATE_FLOOR - 1}/129" in tier3["detail"]
 
 
 def test_structural_check_fails_when_a_scenario_lost_its_clean_run(

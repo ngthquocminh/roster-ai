@@ -13,7 +13,7 @@ from application.contracts.schedule_version import ScheduleRunStatusV1
 from application.ports.proposal import ProposalRepository
 from application.ports.scenario_catalogue import ScenarioCatalogueReader
 from application.ports.schedule_run import ScheduleRunRepository
-from application.use_cases.create_run_snapshot import create_run_snapshot
+from application.use_cases.create_run_snapshot import SnapshotCreationError, create_run_snapshot
 
 
 SCOPE_CONTROLS = (
@@ -141,6 +141,18 @@ def enqueue_compute(
         return EnqueueComputeResultV1(
             schedule_run_id=UUID(stored.response_payload["schedule_run_id"]),
             job_id=UUID(stored.response_payload["job_id"]),
+        )
+    # An ended draft is refused BEFORE the resource-version comparison
+    # (Story 5.11 C5): `mark_applied` bumps the resource version, so comparing
+    # first would answer `stale_resource_version` for a draft whose real,
+    # permanent state is `applied`.
+    if record.proposal.state == "rejected":
+        raise SnapshotCreationError(
+            "rejected_proposal", "a rejected proposal cannot be scheduled"
+        )
+    if record.proposal.state == "applied":
+        raise SnapshotCreationError(
+            "applied_proposal", "an applied proposal cannot be scheduled"
         )
     # Validate before taking capacity. Ordering matters twice over: a stale
     # request refused with `site_concurrency_exhausted` tells the planner to

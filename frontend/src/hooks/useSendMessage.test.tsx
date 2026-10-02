@@ -127,5 +127,9 @@ describe("useSendMessage", () => {
     expect(invalidated).toHaveBeenCalledWith({
       queryKey: conversationTimelineKey("conversation-1"),
     });
+    // An agent discard or update creates no `draft` activity to re-mount the card
+    // (Story 5.11 C9), so every proposal is re-read when a turn ends -- rejected
+    // or not.
+    await waitFor(() => expect(invalidated).toHaveBeenCalledWith({ queryKey: ["proposal"] }));
   });
 });

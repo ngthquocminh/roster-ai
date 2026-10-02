@@ -496,6 +496,16 @@ class PostgresConversationRepository:
             ),
         )
 
+    def lock_conversation(self, connection: Connection, *, conversation_id: UUID) -> None:
+        # Same contract as `finish_agent_run`: not visible is a bug, not a 404.
+        locked = connection.execute(
+            select(conversation.c.id)
+            .where(conversation.c.id == conversation_id)
+            .with_for_update()
+        ).one_or_none()
+        if locked is None:
+            raise RuntimeError("claimed conversation is no longer visible")
+
     def finish_agent_run(
         self,
         connection: Connection,

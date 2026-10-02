@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-09-25
+last_updated: 2026-10-02
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2715,6 +2715,25 @@ development_status:
   # timestamp-bounds validation, top-level exception guard, float-score rejection, verdicts-only's
   # null experiment field, Decision 1/4/5 doc drift fixed). Full regression green.
   5-10-publish-live-evaluation-results-to-logfire: done
+  # 5.11/5.12 added 2026-09-30 by sprint-change-proposal-2026-09-30.md (draft lifecycle).
+  # Design source: docs/superpowers/specs/2026-09-28-draft-lifecycle-design.md. 5.11 = one
+  # working draft end to end (migration, finalize guard, discard capability with >=4 golden
+  # cases, TX2 proposal write per amended EAD-6, card). 5.12 = live checks + scenario E +
+  # re-measurement; writes evidence/story-5.12/ and re-derives the live baseline. Both BEFORE
+  # the next Gate B assessment.
+  # 5.11 story created 2026-09-30 (bmad-create-story): 19 creation findings (C1-C19) against the
+  # spec, resolved by 17 decisions -- incl. mark_applied as the LAST TX2 write (lock order),
+  # a per-turn DraftTurnState on AgentDepsV1, and the rejected_proposal code alignment.
+  5-11-keep-one-working-draft-per-conversation: done
+  # 5.12 CREATED 2026-10-01 at 8a85f4f, before 5.11 existed; RE-VERIFIED the same day at 3d747f7
+  # after 5.11 (claude/wizardly-knuth-u7mh15) was merged into feat/draft-lifecycle -- both stories
+  # ship on that one branch. Discard flag defaults True (no override edit, drop check vs the
+  # 108-turn baseline still compares); inventory 141/38/103; live-eval subset 263 passed. Findings: spec §5.2's claim that instruction edits move
+  # behavioral_digest is wrong (instructions are not in it), but A-D are still re-measured for
+  # stale evidence and E coverage; four check kinds, not two (E:3/E:5 need a count, E:7 a
+  # new-proposal check); E:4 accepts a clarification or a re-add (spec contradiction, D5);
+  # floor 120 for 129 turns (lambda 4.3, 1.29%); discard:invoke is live-required, covered only by E:6.
+  5-12-prove-the-draft-lifecycle-in-live-conversations: done
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog

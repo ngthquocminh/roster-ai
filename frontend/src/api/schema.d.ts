@@ -2708,11 +2708,17 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "active" | "rejected";
+            state: "active" | "rejected" | "applied";
             /** Resource Version */
             resource_version: number;
             /** Stale */
             stale: boolean;
+            /** Version Ordinal */
+            version_ordinal?: number | null;
+            /** Ended By */
+            ended_by?: ("planner" | "assistant" | "system") | null;
+            /** Applied Version Ordinal */
+            applied_version_ordinal?: number | null;
             /** Schema Version */
             schema_version: string;
         };

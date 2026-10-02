@@ -15,7 +15,7 @@ from evals.live_conversations.expectations import (
 )
 
 DATASET = Path(__file__).parent / 'scenarios.json'
-REQUIRED_SCENARIOS = {'A': 6, 'B': 12, 'C': 12, 'D': 6}
+REQUIRED_SCENARIOS = {'A': 6, 'B': 12, 'C': 12, 'D': 6, 'E': 7}
 SUPPORTED_ACTIONS = frozenset({
     'run_optimization', 'run_and_cancel', 'verify_baseline_unchanged', 'approve',
     'reject_approval', 'reload', 'reject_draft',
@@ -63,6 +63,11 @@ def validate_scenarios(scenarios: tuple[ConversationScenario, ...]) -> None:
             if not turn.allowed_run_statuses:
                 raise ValueError('each turn must allow at least one agent run status')
             validate_turn_expectations(turn.expect, position)
+            # Checks grade the reply before the turn's own actions run, so a
+            # state check there would read the state before the action changed it.
+            if turn.actions_after and any(e.check == 'draft_state_is' for e in turn.expect):
+                raise ValueError(f'scenario {case.id} turn {position}: draft_state_is cannot '
+                                 'grade a turn that has actions_after')
 
 
 def load_scenarios(path: Path = DATASET) -> tuple[ConversationScenario, ...]:

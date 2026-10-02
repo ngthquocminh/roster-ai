@@ -105,6 +105,22 @@ The model-facing view contains only
 application-authored identifiers and a version number, so it introduces no new
 untrusted content source and owes no additional NFR5 injection case.
 
+Story 5.11 contributes four scheduling_draft_discard cases: a valid discard of a
+seeded working draft, `no-working-draft` (the tool refuses with the retryable
+`no_working_draft` and the model tells the planner), `after-draft-same-turn` (a
+discard after a draft in the same turn is refused `draft_changed_this_turn` and
+the draft applies), and the negative `start-over-is-not-discard` routing case
+("start over with just X" is `scheduling_draft` with only X, never a discard).
+Two harness pieces support them: the optional `seeded_working_draft` case field
+starts a case with the conversation's working draft (v1), and the
+`EVAL_TAG_GRANTS` mapping in `report.py` grants the discard tag BOTH
+`scheduling_draft_discard` and `scheduling_draft` — the negative routing case is
+meaningless unless both tools are offered. All four are `live_eligible: false`:
+they are scripted conformance, not routing quality, and whether a real model
+follows the "start over" rule is Story 5.12's live proof. The module's
+model-facing view carries only the word `discarded` and a version number, so it
+introduces no new untrusted content source and owes no additional NFR5 case.
+
 **NFR5 coverage is organised by untrusted SOURCE, not by transport.** This MVP
 introduces exactly two sources of untrusted content: the planner's own chat
 text, and scenario/fixture data. Every installed capability's

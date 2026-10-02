@@ -1,13 +1,14 @@
 """Per-turn expectations: authored checks, bindings, and verdicts. HTTP doubles
 and canned application state only; not live acceptance evidence."""
 import json
+from dataclasses import replace
 
 import httpx
 import pytest
 
 from evals.live_conversations import runner
 from evals.live_conversations.cases import (
-    ConversationScenario, ConversationTurn, load_scenarios,
+    ConversationScenario, ConversationTurn, load_scenarios, validate_scenarios,
 )
 from evals.live_conversations.expectations import (
     Bindings, TurnContext, Unbound, apply_answers, code_check, evaluate, mentioned,
@@ -31,9 +32,10 @@ def _entity(group, record_id):
     return {'group': group, 'record_id': record_id}
 
 
-def _draft(*constraints, locks=(), summary='1 reversible constraint; preserved 0 existing locks.'):
-    return {'proposal_id': 'p-1', 'constraints': list(constraints), 'preserved_locks': list(locks),
-            'consequence_summary': summary}
+def _draft(*constraints, locks=(), summary='1 reversible constraint; preserved 0 existing locks.',
+           proposal_id='p-1', version_ordinal=1):
+    return {'proposal_id': proposal_id, 'constraints': list(constraints), 'preserved_locks': list(locks),
+            'consequence_summary': summary, 'version_ordinal': version_ordinal}
 
 
 EXCLUDE = {'kind': 'exclude_worker_from_task', 'description': 'Keep Priya Nair off Main Pick.',
@@ -48,11 +50,12 @@ def _reply(text):
             'response': {'segments': [{'kind': 'prose', 'text': text}]}}
 
 
-def _ctx(activity, *, draft=None, assignments=(), locks=(), reply_lines=None, rows=(), turn=5):
+def _ctx(activity, *, draft=None, assignments=(), locks=(), reply_lines=None, rows=(), turn=5,
+         draft_state=None):
     return TurnContext(activity=activity, visible=runner.visible_activity(activity), draft=draft,
                        assignments=list(assignments), locks=list(locks), workers_by_id=WORKERS,
                        tasks_by_id=TASKS, reply_lines=reply_lines or {}, candidate_rows=list(rows),
-                       turn=turn)
+                       turn=turn, draft_state=draft_state)
 
 
 def _bound(**values):
@@ -85,6 +88,22 @@ def _e(**raw):
     ({'check': 'draft_matches_turn', 'turn': '3'}, 'positive turn number'),
     ({'check': 'draft_has', 'kind': 'set_max_hours', 'max_hours': '40'}, 'max_hours must be a number'),
     ({'check': 'judge', 'question': 'Is `facts.tasks` complete?', 'want': True}, 'does not declare'),
+    ({'check': 'draft_state_is', 'value': 'deleted'}, 'state in'),
+    ({'check': 'draft_state_is', 'value': 'rejected/user'}, 'ended_by in'),
+    ({'check': 'draft_state_is', 'value': 'rejected/'}, 'state in'),
+    ({'check': 'draft_state_is', 'value': 'active/planner'}, 'ended_by in'),
+    ({'check': 'draft_state_is'}, "needs \\['value'\\]"),
+    ({'check': 'draft_state_is', 'value': 'active', 'turn': 1}, 'does not take'),
+    ({'check': 'draft_updates_turn'}, "needs \\['turn'\\]"),
+    ({'check': 'draft_updates_turn', 'turn': 1, 'n': 2}, 'does not take'),
+    ({'check': 'draft_constraint_count'}, "needs \\['n'\\]"),
+    ({'check': 'draft_constraint_count', 'n': 1.5}, 'whole number'),
+    ({'check': 'draft_constraint_count', 'n': -1}, 'whole number'),
+    ({'check': 'draft_is_new', 'turn': 1}, 'does not take'),
+    ({'check': 'activity_is', 'activity': 'draft', 'when': 'prose'}, 'when must be one of'),
+    ({'check': 'tool_called'}, "needs \\['value'\\]"),
+    ({'check': 'tool_called', 'value': 'scheduling_inspect', 'kind': 'x'}, 'does not take'),
+    ({'check': 'tool_called', 'value': 'scheduling_inspect', 'fact_group': ''}, 'non-empty'),
 ])
 def test_a_malformed_expectation_is_refused_at_load(raw, message):
     with pytest.raises(ValueError, match=message):
@@ -121,7 +140,7 @@ def test_duplicate_expectation_ids_are_refused():
 
 def test_every_scenario_carries_expectations_on_every_turn():
     scenarios = {case.id: case for case in load_scenarios()}
-    assert set(scenarios) == set('ABCD')
+    assert set(scenarios) == set('ABCDE')
     assert all(turn.expect for case in scenarios.values() for turn in case.turns)
 
 
@@ -518,7 +537,7 @@ def test_ask_yes_no_retries_a_missing_answer_once_then_is_incomplete():
 
 # --- the runner path --------------------------------------------------------------------
 
-def _drive(app, turns, *, judge_model, monkeypatch, p_yes=None):
+def _drive(app, turns, *, judge_model, monkeypatch, p_yes=None, telemetry=None):
     asked = []
 
     def fake_ask(**kwargs):
@@ -530,7 +549,8 @@ def _drive(app, turns, *, judge_model, monkeypatch, p_yes=None):
     monkeypatch.setattr(runner, 'judge_turn_jev', lambda **_kwargs: (judgment(), {'attempts': []}))
     case = ConversationScenario(id='X', prefixes=(len(turns),), turns=tuple(turns))
     report = execute_prefix(
-        app=app, case=case, endpoint=len(turns), isolation_id='iso', telemetry=Telemetry(),
+        app=app, case=case, endpoint=len(turns), isolation_id='iso',
+        telemetry=telemetry or Telemetry(),
         judge_key='k', judge_model=judge_model, save=lambda _report: None,
         budget=ConversationBudget(LiveSuiteBudgetV1(
             case_limit=1, request_limit=50, tool_call_limit=50, token_limit=1000000,
@@ -649,3 +669,279 @@ def test_the_runner_binds_the_run_count_and_the_approval_it_observed(monkeypatch
                      _reply(f'Baseline {CANDIDATE} (approval ap-1), 1 assignments.')])
     report, _asked = _drive(app, turns, judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
     assert [row['verdict'] for row in report['turns']] == ['pass', 'pass', 'pass']
+
+
+# --- the draft lifecycle: per-turn draft identity and state (Story 5.12) ---------------
+
+def _drafted(*recorded):
+    """Bindings whose turns 1..n each saved the given (proposal_id, version_ordinal)."""
+    bindings = Bindings()
+    for turn, (proposal_id, ordinal) in enumerate(recorded, 1):
+        bindings.turn = turn
+        bindings.capture_draft(_draft(EXCLUDE, proposal_id=proposal_id, version_ordinal=ordinal),
+                               WORKERS, TASKS)
+    return bindings
+
+
+def test_each_draft_turn_records_its_draft_identity_and_the_latest_carries_its_ordinal():
+    bindings = _drafted(('p-1', 1), ('p-1', 2))
+    assert bindings.drafts == {1: {'proposal_id': 'p-1', 'version_ordinal': 1},
+                               2: {'proposal_id': 'p-1', 'version_ordinal': 2}}
+    assert bindings.draft['version_ordinal'] == 2
+    assert bindings.as_of(2).drafts == {1: {'proposal_id': 'p-1', 'version_ordinal': 1}}
+
+
+@pytest.mark.parametrize('ordinal', [None, '2', 2.0, True])
+def test_a_persisted_draft_without_an_integer_version_ordinal_is_a_contract_break(ordinal):
+    with pytest.raises(IncompleteConversationRun, match='draft_version_ordinal_missing'):
+        Bindings().capture_draft(_draft(EXCLUDE, version_ordinal=ordinal), WORKERS, TASKS)
+
+
+UPDATES_1 = _e(check='draft_updates_turn', turn=1)
+
+
+@pytest.mark.parametrize('draft,expected', [
+    (_draft(EXCLUDE, version_ordinal=2), True),
+    (_draft(EXCLUDE, version_ordinal=1), False),   # same version: nothing updated
+    (_draft(EXCLUDE, version_ordinal=0), False),
+    (_draft(EXCLUDE, proposal_id='p-2', version_ordinal=2), False),  # a second draft was minted
+    (None, False),  # this turn saved no draft
+])
+def test_draft_updates_turn_needs_the_same_proposal_at_a_higher_version(draft, expected):
+    activity = {'activity_type': 'draft'} if draft else _reply('Done.')
+    ctx = _ctx(activity, draft=draft, turn=3)
+    assert code_check(UPDATES_1, ctx, _drafted(('p-1', 1))) is expected
+
+
+def test_draft_updates_turn_on_a_turn_that_saved_no_draft_is_unbound():
+    bindings = _drafted(('p-1', 1))
+    with pytest.raises(Unbound, match='draft_turn_2'):
+        code_check(_e(check='draft_updates_turn', turn=2),
+                   _ctx({'activity_type': 'draft'}, draft=_draft(EXCLUDE, version_ordinal=3), turn=3),
+                   bindings)
+
+
+@pytest.mark.parametrize('value,state,expected', [
+    ('active', {'state': 'active', 'ended_by': None}, True),
+    ('rejected', {'state': 'rejected', 'ended_by': 'planner'}, True),
+    ('rejected/assistant', {'state': 'rejected', 'ended_by': 'assistant'}, True),
+    ('rejected/assistant', {'state': 'rejected', 'ended_by': 'planner'}, False),
+    ('rejected/assistant', {'state': 'active', 'ended_by': None}, False),
+    ('applied', {'state': 'active', 'ended_by': None}, False),
+    ('applied', None, False),  # the conversation has no draft at all
+])
+def test_draft_state_is_reads_the_newest_drafts_state_and_ender(value, state, expected):
+    ctx = _ctx(_reply('Discarded your draft (v3).'), draft_state=state)
+    assert code_check(_e(check='draft_state_is', value=value), ctx, Bindings()) is expected
+
+
+def test_draft_is_new_needs_version_one_of_a_proposal_no_earlier_turn_saved():
+    is_new = _e(check='draft_is_new')
+    bindings = _drafted(('p-1', 1), ('p-1', 2))
+    fresh = _draft(EXCLUDE, proposal_id='p-2', version_ordinal=1)
+    assert code_check(is_new, _ctx({'activity_type': 'draft'}, draft=fresh, turn=3), bindings)
+    # This turn's own recording must not count as "seen before" (capture runs first).
+    bindings.turn = 3
+    bindings.capture_draft(fresh, WORKERS, TASKS)
+    assert code_check(is_new, _ctx({'activity_type': 'draft'}, draft=fresh, turn=3), bindings)
+    reused = _draft(EXCLUDE, proposal_id='p-1', version_ordinal=1)
+    assert not code_check(is_new, _ctx({'activity_type': 'draft'}, draft=reused, turn=3), bindings)
+    second = _draft(EXCLUDE, proposal_id='p-2', version_ordinal=2)
+    assert not code_check(is_new, _ctx({'activity_type': 'draft'}, draft=second, turn=3), bindings)
+    assert not code_check(is_new, _ctx(_reply('no draft')), bindings)
+
+
+def test_draft_constraint_count_counts_the_persisted_constraints():
+    count = _e(check='draft_constraint_count', n=1)
+    assert code_check(count, _ctx({'activity_type': 'draft'}, draft=_draft(CAP)), Bindings())
+    assert not code_check(count, _ctx({'activity_type': 'draft'}, draft=_draft(EXCLUDE, CAP)),
+                          Bindings())
+    assert not code_check(count, _ctx(_reply('no draft')), Bindings())
+    assert code_check(_e(check='draft_constraint_count', n=0),
+                      _ctx({'activity_type': 'draft'}, draft=_draft()), Bindings())
+
+
+def test_draft_state_is_cannot_grade_a_turn_that_has_actions():
+    # Checks run before the turn's actions: the state they read would predate them.
+    cases = load_scenarios()
+    b = cases[1]
+    assert any(e.check == 'draft_state_is' for e in b.turns[9].expect)
+    acting = replace(b.turns[9], actions_after=('reload',))
+    changed = replace(b, turns=(*b.turns[:9], acting, *b.turns[10:]))
+    with pytest.raises(ValueError, match='actions_after'):
+        validate_scenarios((cases[0], changed, *cases[2:]))
+
+
+class _Lifecycle(_Scripted):
+    """Each reply's persisted proposal, as the application would store it."""
+
+    def __init__(self, steps):
+        super().__init__([activity for activity, _proposal in steps])
+        self.proposals = [proposal for _activity, proposal in steps]
+        self.current = None
+        self.state_reads = 0
+
+    def send(self, user):
+        self.current = self.proposals.pop(0) or self.current
+        return super().send(user)
+
+    def latest_draft(self):
+        return self.current
+
+    def newest_draft_proposal(self):
+        self.state_reads += 1
+        return self.current
+
+
+def _proposal(proposal_id, ordinal, *constraints, state='active', ended_by=None):
+    return {**_draft(*constraints, proposal_id=proposal_id, version_ordinal=ordinal),
+            'state': state, 'ended_by': ended_by}
+
+
+DRAFT_ACTIVITY = {'activity_type': 'draft', 'proposal_id': 'p', 'consequence_summary': 's'}
+IS_DRAFT = {'id': 'is_draft', 'check': 'activity_is', 'activity': 'draft'}
+
+
+def test_an_e_like_lifecycle_grades_update_discard_and_a_new_draft(monkeypatch):
+    turns = [
+        _turn('create', IS_DRAFT, {'id': 'one', 'check': 'draft_constraint_count', 'n': 1},
+              {'id': 'active', 'check': 'draft_state_is', 'value': 'active'}),
+        _turn('add', IS_DRAFT, {'id': 'upd', 'check': 'draft_updates_turn', 'turn': 1},
+              {'id': 'two', 'check': 'draft_constraint_count', 'n': 2}),
+        _turn('throw it away',
+              {'id': 'gone', 'check': 'draft_state_is', 'value': 'rejected/assistant'}),
+        _turn('new one', IS_DRAFT, {'id': 'new', 'check': 'draft_is_new'},
+              {'id': 'active', 'check': 'draft_state_is', 'value': 'active'}),
+    ]
+    discarded = _proposal('p-1', 2, EXCLUDE, CAP, state='rejected', ended_by='assistant')
+    app = _Lifecycle([(DRAFT_ACTIVITY, _proposal('p-1', 1, EXCLUDE)),
+                      (DRAFT_ACTIVITY, _proposal('p-1', 2, EXCLUDE, CAP)),
+                      (_reply('Discarded your draft (v2).'), discarded),
+                      (DRAFT_ACTIVITY, _proposal('p-2', 1, CAP))])
+    report, _asked = _drive(app, turns, judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    assert [row['verdict'] for row in report['turns']] == ['pass'] * 4
+    assert app.state_reads == 3  # only the turns that check draft_state_is
+    assert 'newest_draft_state' not in report['turns'][1]['verified']
+    assert report['turns'][2]['verified']['newest_draft_state'] == {
+        'proposal_id': 'p-1', 'state': 'rejected', 'ended_by': 'assistant', 'version_ordinal': 2}
+
+
+def test_a_lifecycle_that_mints_a_second_draft_or_fails_to_discard_fails(monkeypatch):
+    turns = [
+        _turn('create', IS_DRAFT),
+        _turn('add', IS_DRAFT, {'id': 'upd', 'check': 'draft_updates_turn', 'turn': 1}),
+        _turn('throw it away',
+              {'id': 'gone', 'check': 'draft_state_is', 'value': 'rejected/assistant'}),
+    ]
+    app = _Lifecycle([(DRAFT_ACTIVITY, _proposal('p-1', 1, EXCLUDE)),
+                      (DRAFT_ACTIVITY, _proposal('p-2', 1, EXCLUDE, CAP)),
+                      (_reply('Discarded your draft.'), None)])  # still active: nothing ended it
+    report, _asked = _drive(app, turns, judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    assert [row['verdict'] for row in report['turns']] == ['pass', 'fail', 'fail']
+
+
+# --- `when`: a turn with two valid actions grades each by its own evidence -------------
+
+UNDO = (
+    _e(id='restores', check='draft_has', kind='exclude_worker_from_task', worker='w1', task='t1',
+       when='draft'),
+    _e(id='asks_which', check='judge', want=True, question='Asks which?', when='not_draft'),
+    _e(id='claims_restored', check='judge', want=False, question='Claims it?', when='not_draft'),
+    _e(id='says_undid', check='mentions_none', values=['undid']),
+)
+
+
+def test_each_reply_kind_is_graded_only_by_the_checks_for_it():
+    draft_ctx = _ctx({'activity_type': 'draft'}, draft=_draft(EXCLUDE, CAP))
+    checks, questions, _state = evaluate(UNDO, draft_ctx, Bindings(), 'Undo that.')
+    assert [c['outcome'] for c in checks] == ['pass', 'skipped', 'skipped', 'pass']
+    assert questions == {}  # the persisted draft decides; no judge reads a card with no prose
+    assert verdict_from_checks(checks, []) == 'pass'
+    wrong = _ctx({'activity_type': 'draft'}, draft=_draft(CAP))
+    assert verdict_from_checks(evaluate(UNDO, wrong, Bindings(), 'Undo that.')[0], []) == 'fail'
+    checks, questions, _state = evaluate(UNDO, _ctx(_reply('Which one?')), Bindings(), 'Undo that.')
+    assert [c['outcome'] for c in checks] == ['skipped', 'pending', 'pending', 'pass']
+    assert set(questions) == {'asks_which', 'claims_restored'}
+
+
+def test_every_reply_kind_needs_a_positive_check_of_its_own():
+    # Without one, a do-nothing reply of that kind passes on the must-nots alone.
+    only_draft_positive = (UNDO[0], UNDO[2], UNDO[3])
+    with pytest.raises(ValueError, match='when the reply is not_draft'):
+        validate_turn_expectations(only_draft_positive)
+    validate_turn_expectations(UNDO)
+
+
+# --- graded by what the agent DID: its tool calls, and the draft promotion ended -------
+
+def test_tool_called_reads_this_turns_completed_calls_and_their_fact_group():
+    overview = _e(check='tool_called', value='scheduling_inspect', fact_group='overview')
+    anything = _e(check='tool_called', value='scheduling_inspect')
+    reply = _reply('Three work areas, six tasks.')
+
+    def ctx(*calls):
+        context = _ctx(reply)
+        context.tool_calls = list(calls)
+        return context
+
+    assert code_check(overview, ctx({'capability_name': 'scheduling_inspect', 'fact_group': 'overview'}),
+                      Bindings())
+    assert not code_check(overview, ctx({'capability_name': 'scheduling_inspect', 'fact_group': 'tasks'}),
+                          Bindings())
+    assert code_check(anything, ctx({'capability_name': 'scheduling_inspect', 'fact_group': 'tasks'}),
+                      Bindings())
+    assert not code_check(anything, ctx({'capability_name': 'scheduling_draft'}), Bindings())
+    assert not code_check(anything, ctx(), Bindings())  # answered without reading anything
+
+
+def test_an_applied_draft_becomes_an_event_and_any_other_state_does_not():
+    bindings = Bindings()
+    bindings.capture_draft_ended({'state': 'applied', 'version_ordinal': 2})
+    bindings.capture_draft_ended({'state': 'active', 'version_ordinal': 3})
+    bindings.capture_draft_ended(None)
+    assert bindings.events == ['The working draft (v2) was applied to the baseline and ended.']
+
+
+class _Tools:
+    def __init__(self, *labels):
+        self.labels = labels
+
+    def read_run(self, _run_id):
+        return ({'usage': {'requests': 1, 'input_tokens': 10, 'output_tokens': 5},
+                 'estimated_cost_usd': .001},
+                [{'event': 'agent.tool.call.completed', 'labels': label} for label in self.labels])
+
+
+def test_the_runner_grades_a_turn_by_the_tools_its_agent_run_called(monkeypatch):
+    turn = [_turn('review it', {'id': 'reads', 'check': 'tool_called', 'value': 'scheduling_inspect',
+                                'fact_group': 'overview'})]
+    called = _Tools({'capability_name': 'scheduling_inspect', 'fact_group': 'overview'})
+    report, _asked = _drive(_Scripted([_reply('Six tasks.')]), turn, telemetry=called,
+                            judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    assert report['turns'][0]['verdict'] == 'pass'
+    report, _asked = _drive(_Scripted([_reply('Six tasks.')]), turn,
+                            judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    assert report['turns'][0]['verdict'] == 'fail'
+
+
+def test_after_the_harness_approves_the_judge_learns_the_draft_was_applied(monkeypatch):
+    turns = [
+        _turn('run it', {'id': 'directs', 'check': 'judge', 'want': True, 'question': 'Directs?'},
+              actions=('run_optimization',)),
+        _turn('propose it', {'id': 'is_approval', 'check': 'activity_is',
+                             'activity': 'approval_request'}, actions=('approve',)),
+        _turn('summarize', {'id': 'honest', 'check': 'judge', 'want': False, 'question': 'Invents?',
+                            'facts': ['events']}),
+    ]
+    app = _Lifecycle([(_reply('Use the Run optimization control.'), None), (APPROVAL, None),
+                      (_reply('The draft was applied.'), None)])
+    app.current = _proposal('p-1', 2, EXCLUDE, CAP, state='applied', ended_by='system')
+    _report, asked = _drive(app, turns, judge_model='typesafe:jev-1.13.0', monkeypatch=monkeypatch)
+    events = asked[-1]['questions']['honest']['instructions']['facts']['events']
+    assert events[-1] == 'The working draft (v2) was applied to the baseline and ended.'
+
+
+def test_the_run_event_names_the_run_a_summary_may_cite():
+    bindings = Bindings()
+    bindings.capture_run({**COMPLETED, 'run': {**COMPLETED['run'], 'schedule_run_id': 'sr-9'}}, 1)
+    assert '(run sr-9)' in bindings.events[-1]

@@ -63,7 +63,11 @@ def _arguments(argv=None):
     parser.add_argument('--override-file', type=Path, default=DEFAULT_OVERRIDE_FILE,
                         help='The tracked measured configuration (prices, limits); its sha256 '
                              'is recorded in the report and bound into the evidence.')
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    # Compose runs from the repository root, so a path relative to where the
+    # suite was started would name no file there (every build then failed).
+    args.override_file = args.override_file.resolve()
+    return args
 
 
 def main(argv=None) -> int:

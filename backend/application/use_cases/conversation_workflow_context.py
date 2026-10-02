@@ -25,14 +25,44 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
                           proposals: ProposalRepository, runs: ScheduleRunRepository,
                           baselines: SiteBaselineReader,
                           projection: ScenarioProjectionReader | None = None) -> AgentMessageV1:
+    # The working draft is read DIRECTLY, never inferred from history: its
+    # activities may fall outside the 100-activity window, and "which draft would
+    # the planner run" must not depend on how long the conversation is (Story 5.11).
+    working_record = proposals.get_working(
+        connection, conversation_id=claimed.conversation_id, for_update=False)
+    working_value = None
+    working_id = None
+    if working_record is not None:
+        working_id = working_record.proposal.proposal_id
+        if (working_record.proposal.scenario_id == claimed.scenario_id
+                and working_record.proposal.scenario_version_id == claimed.scenario_version_id):
+            working_value = {**asdict(working_record.proposal),
+                             'version_ordinal': working_record.version_ordinal}
+            # The version before the latest, so "undo that" re-sends a list the
+            # agent can read instead of rebuilding it from the chat: live E:4
+            # lost the hours cap 2 runs in 5 when it had to (Story 5.12).
+            if working_record.version_ordinal > 1:
+                previous = proposals.get_version_at(
+                    connection, proposal_id=working_id,
+                    version_ordinal=working_record.version_ordinal - 1)
+                if previous is not None:
+                    working_value['previous_version'] = {
+                        'version_ordinal': working_record.version_ordinal - 1,
+                        'constraints': asdict(previous)['constraints'],
+                    }
+    # Ended drafts only: the working one is reported above, once.
     draft_ids = tuple(dict.fromkeys(activity.proposal_id for activity in claimed.history[-100:]
-                                   if isinstance(activity, DraftActivityV1)))
+                                   if isinstance(activity, DraftActivityV1)
+                                   and activity.proposal_id != working_id))
     # A draft referenced only outside the 100-activity window is truncated away
     # just as surely as the 11th-and-later id within it -- the flag below must
     # cover both, or a long conversation's earlier draft silently disappears
     # from the snapshot while `drafts_truncated` still reads False.
+    # The working draft is reported directly above, so its own old activities
+    # never count as a truncated ended draft (code review of story-5.11).
     older_draft_exists = any(
-        isinstance(activity, DraftActivityV1) for activity in claimed.history[:-100]
+        isinstance(activity, DraftActivityV1) and activity.proposal_id != working_id
+        for activity in claimed.history[:-100]
     )
     # Read only proposals already referenced by this conversation. The site
     # transaction enforces RLS; the immutable pin is independently checked here.
@@ -44,7 +74,22 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
         value = record.proposal
         if value.scenario_id != claimed.scenario_id or value.scenario_version_id != claimed.scenario_version_id:
             continue
-        draft_values.append(asdict(value))
+        draft_value = {**asdict(value), 'ended_by': record.ended_by,
+                       'version_ordinal': record.version_ordinal}
+        if record.applied_version_id is not None:
+            # What the promotion actually applied: the PINNED version, not the
+            # latest (a draft edited after its run started reads applied at v2
+            # even when it now stands at v3).
+            applied = proposals.get_version(
+                connection, proposal_version_id=record.applied_version_id)
+            if applied is not None:
+                applied_ordinal, applied_proposal = applied
+                draft_value['applied_version'] = {
+                    'version_ordinal': applied_ordinal,
+                    'constraints': asdict(applied_proposal)['constraints'],
+                    'consequence_summary': applied_proposal.consequence_summary,
+                }
+        draft_values.append(draft_value)
     page = runs.list_runs(connection, scenario_id=claimed.scenario_id,
                           site_id=claimed.site_id, cursor=0, limit=20)
     run_values = []
@@ -102,6 +147,7 @@ def load_workflow_context(connection, *, claimed: ClaimedAgentRunV1,
             baseline_truncated = (len(schedule.assignments) > 10 or workers.next_cursor is not None
                                   or tasks.next_cursor is not None)
     facts = {'current_scenario_version_id': str(claimed.scenario_version_id),
+             'working_draft': working_value,
              'drafts': draft_values,
              'drafts_truncated': len(draft_ids) > 10 or older_draft_exists,
              'runs': run_values, 'runs_truncated': page.next_cursor is not None,

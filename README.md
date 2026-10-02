@@ -106,7 +106,7 @@ Coverage is therefore decided first. An over-broad preference may affect cost or
 
 - **Deterministic:** 30 single-turn and 6 multi-turn golden cases run keylessly through the real execution seams.
 - **Live acceptance:** an opt-in paid suite drives disposable containers through authenticated HTTP. Fact and effect checks are independent of the LLM judge.
-- **Recorded result:** 4 scenarios × 3 repetitions produced 108 turns; **all 108 passed**, including scenario D's routing turns (small talk, off-topic refusals, a mixed message). No false claim was recorded. The previous three-scenario measurement passed 87/90.
+- **Recorded result:** 5 scenarios × 3 repetitions produced 129 turns; **all 129 passed**, including scenario D's routing turns and scenario E's draft lifecycle (one draft updated in place, "undo that", "start over", a discard, then a new draft). No false claim was recorded. The previous four-scenario measurement passed 108/108.
 - **Coverage:** 135 operations—37 live-required and 98 deterministic-only. Ten live-required operations document why a planner cannot reach them and which deterministic test covers them.
 
 This result describes one bound configuration, not general reliability. See [Testing](docs/TESTING.md) and the [evidence](evidence/story-5.7/live-conversation-journeys.json).
@@ -168,4 +168,4 @@ Also open:
 
 - **Decisions:** [architecture spine](_bmad-output/planning-artifacts/architecture/architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md).
 - **Code:** [capability registry](backend/application/capabilities/installed.py), [grounding gate](backend/application/grounding/gate.py), [tier-1 claim-support checker](backend/adapters/grounding/jev_checker.py), [approval decision](backend/application/use_cases/decide_approval.py), [provenance query](backend/application/queries/decision_provenance.py), [CP-SAT objective](backend/engine/cpsat/objective.py), and [agent tracing](backend/agent/runtime.py).
-- **Evidence:** [approval and audit invariants](evidence/story-4.5/approval-audit-invariants.json), [live conversations](evidence/story-5.7/live-conversation-journeys.json), and [CI workflow](.github/workflows/ci.yml).
+- **Evidence:** [approval and audit invariants](evidence/story-4.5/approval-audit-invariants.json), [live conversations](evidence/story-5.12/live-conversation-journeys.json), and [CI workflow](.github/workflows/ci.yml).

@@ -544,7 +544,21 @@ class PydanticAIAgentRuntime:
                     # latest one -- the same trusted tool result the
                     # retries-exhausted recovery in `run_turn` already cites.
                     draft_ids = _draft_ids_this_run(ctx.messages)
-                    if draft_ids and output.draft_id not in draft_ids:
+                    if not draft_ids:
+                        # Live run 53248e8 (E:6): after scheduling_draft_discard the
+                        # model returned the draft output citing the draft it had
+                        # just discarded. A citation of no draft from this run is
+                        # always invalid, and a failed turn applies no discard, so
+                        # the planner's discard was lost.
+                        self._last_retry_rule = "draft_output_without_draft"
+                        raise ModelRetry(
+                            "No draft was created in this turn, so there is no draft to "
+                            f"return as the `{DRAFT_OUTPUT_TOOL}` output. If you discarded the "
+                            "draft, answer in prose with the reported version, e.g. "
+                            "\"Discarded your draft (v3).\"; otherwise answer, clarify, or "
+                            "refuse." + _COMPLETE_ANSWER
+                        )
+                    if output.draft_id not in draft_ids:
                         return replace(output, draft_id=draft_ids[-1])
                     return output
                 if isinstance(output, DeferredToolRequests):

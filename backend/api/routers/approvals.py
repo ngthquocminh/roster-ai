@@ -52,6 +52,10 @@ from application.contracts.decision_provenance import (
 from application.queries.decision_provenance import query_decision_provenance
 from application.contracts.grounding import GroundedAnswerV2
 from application.capabilities.deps import AgentDepsV1
+from application.capabilities.scheduling_draft import CAPABILITY_NAME as SCHEDULING_DRAFT_CAPABILITY
+from application.capabilities.scheduling_draft_discard import (
+    CAPABILITY_NAME as SCHEDULING_DRAFT_DISCARD_CAPABILITY,
+)
 from application.capabilities.registry import CapabilityGrantContextV1, PLANNER_ROLE, POLICY_GENERATION
 from adapters.grounding.factory import create_claim_support_checker
 from settings import tier1_flag_threshold
@@ -197,6 +201,15 @@ def _provenance_item_out(item):
     raise TypeError(f"unsupported provenance item: {type(item).__name__}")
 
 
+#: A resumed turn never drafts (Story 5.11 Decision 4): it has no working-draft
+#: reader and finalizes no discard, so a draft tool there would resolve against
+#: "no working draft" and fail the turn with a false "draft changed". Withheld,
+#: not wired -- the tool does not exist on resume (code review of story-5.11).
+RESUME_WITHHELD_CAPABILITIES = frozenset({
+    SCHEDULING_DRAFT_CAPABILITY, SCHEDULING_DRAFT_DISCARD_CAPABILITY,
+})
+
+
 def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_capabilities,
                         projection_reader, conversations, proposals, open_site_context,
                         telemetry: TelemetrySink, request_id: UUID) -> None:
@@ -257,12 +270,15 @@ def _drive_resumed_turn(*, resume, binding, settings, runtime_factory, compose_c
     )
     run_started = perf_counter()
     try:
-        granted = compose_capabilities(CapabilityGrantContextV1(
-            role=PLANNER_ROLE, site_id=binding.site_id,
-            feature_policy=enabled_feature_policy(settings),
-            conversation_id=binding.conversation_id,
-            conversation_site_id=binding.site_id,
-        ))
+        granted = tuple(
+            module for module in compose_capabilities(CapabilityGrantContextV1(
+                role=PLANNER_ROLE, site_id=binding.site_id,
+                feature_policy=enabled_feature_policy(settings),
+                conversation_id=binding.conversation_id,
+                conversation_site_id=binding.site_id,
+            ))
+            if module.manifest.capability_name not in RESUME_WITHHELD_CAPABILITIES
+        )
         runtime = runtime_factory(
             settings=settings, capabilities=granted, deps=deps,
             answer_type=GroundedAnswerV2,
@@ -409,7 +425,7 @@ def decide_approval_route(request: Request, approval_id: UUID, body: ApprovalDec
         return _out(replayed, now)
     decision_request_id = uuid4()
     try:
-        result = decide_approval(connection, command=DecideApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, approval_id=approval_id, decision=body.decision, expected_resource_version=body.expected_resource_version, request_id=decision_request_id), approvals=approvals, schedule_runs=schedule_runs, baselines=baselines, baseline_writer=baseline_writer, memberships=memberships, audit_writer=audit_writer, conversations=conversations, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: now, telemetry=telemetry)
+        result = decide_approval(connection, command=DecideApprovalCommandV1(site_id=session.site_id, actor_id=session.app_user_id, approval_id=approval_id, decision=body.decision, expected_resource_version=body.expected_resource_version, request_id=decision_request_id), approvals=approvals, schedule_runs=schedule_runs, baselines=baselines, baseline_writer=baseline_writer, memberships=memberships, audit_writer=audit_writer, conversations=conversations, proposals=proposals, scheduling_baseline_enabled=settings.scheduling_baseline_enabled, clock=lambda: now, telemetry=telemetry)
     except DecideApprovalError as exc:
         if isinstance(exc, (PostWriteApprovalNotPendingError, BaselineConcurrentlyMovedError)):
             raise

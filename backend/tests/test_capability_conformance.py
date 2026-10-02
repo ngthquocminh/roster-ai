@@ -54,6 +54,7 @@ _PROBE_ARGS = {
         "expected_scenario_version_id": str(UUID(int=1)),
         "constraints": [],
     },
+    "scheduling_draft_discard": {},
     "scheduling_inspect": {"group": "overview"},
     "scheduling_optimize": {
         "proposal_id": str(UUID(int=9)),
@@ -595,7 +596,10 @@ def test_scheduling_draft_never_hands_the_model_proposal_contents() -> None:
     projected = scheduling_draft_module().model_facing_view(result)
     rendered = json.dumps(dataclasses.asdict(projected))
 
-    assert rendered == '{"draft_id": "c0ffee", "schema_version": "1"}'
+    assert rendered == (
+        '{"draft_id": "c0ffee", "outcome": "created", "version_ordinal": 1, '
+        '"schema_version": "1"}'
+    )
     assert "must remain" not in rendered
 
 

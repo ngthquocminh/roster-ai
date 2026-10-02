@@ -38,12 +38,25 @@ from application.contracts.agent_runtime import (
     AgentUsageV1,
 )
 from application.contracts.grounding import GroundedAnswerV2, GroundedProseSegmentV1, GroundedResponseV1
+from application.contracts.proposal import WorkingDraftObservationV1
+from application.drafting.turn_state import DraftTurnState
 from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 
 # Golden cases tag themselves with an evaluation `capability` label, which is not
 # always the registered tool name. Declared once, here, rather than branched on
-# at each construction site.
-EVAL_TAG_TO_CAPABILITY = {"demonstration": "shiftmind_demonstration"}
+# at each construction site. The value is EVERY tool the case's runtime is
+# granted (default: the tag itself). `scheduling_draft_discard` is granted beside
+# `scheduling_draft` because its negative "start over is not discard" routing case
+# is meaningless unless BOTH tools are offered -- with discard alone the model has
+# nothing else to route to (Story 5.11 C11).
+EVAL_TAG_GRANTS: dict[str, tuple[str, ...]] = {
+    "demonstration": ("shiftmind_demonstration",),
+    "scheduling_draft_discard": ("scheduling_draft_discard", "scheduling_draft"),
+}
+
+
+def granted_capability_names(case: "GoldenCase") -> tuple[str, ...]:
+    return EVAL_TAG_GRANTS.get(case.capability, (case.capability,))
 from evals.cases import GoldenCase, GoldenTurn, MultiTurnGoldenCase
 from evals.cases import load_cases, load_multi_turn_cases
 from evals.doubles import (
@@ -418,7 +431,13 @@ def _evaluate_case(
     return verdict, outcome
 
 
-def _report_deps(sink: list | None = None) -> AgentDepsV1:
+# Fixed identity of the working draft a `seeded_working_draft` case starts with.
+SEEDED_WORKING_DRAFT_ID = UUID(int=0x5EED)
+
+
+def _report_deps(
+    sink: list | None = None, *, seeded_working_draft: bool = False
+) -> AgentDepsV1:
     """Trusted deps for a deterministic, offline report run.
 
     The projection carries REAL rows (`evals/fixture_projection.py`) so a
@@ -436,6 +455,12 @@ def _report_deps(sink: list | None = None) -> AgentDepsV1:
         projection_reader=FixtureProjectionReader(),
         connection=object(), remaining_budget=AgentBudgetV1(),
         tool_result_sink=(sink.append if sink is not None else None),
+        # A case that starts with a working draft (v1, resource version 1); every
+        # other case sees none, which is `AgentDepsV1`'s own default.
+        draft_turn=DraftTurnState(
+            (lambda: WorkingDraftObservationV1(SEEDED_WORKING_DRAFT_ID, 1, 1))
+            if seeded_working_draft else (lambda: None)
+        ),
     )
 
 
@@ -458,7 +483,8 @@ def runtime_for_modules(
     """
     return PydanticAIAgentRuntime(
         model=model if model is not None else build_model_double(case),
-        capabilities=modules, deps=_report_deps(sink),
+        capabilities=modules,
+        deps=_report_deps(sink, seeded_working_draft=case.seeded_working_draft),
         answer_type=GroundedAnswerV2 if _needs_named_output_tools(case) else None,
     )
 
@@ -508,12 +534,12 @@ def _runtime_for_case(
     *,
     model: object | None = None,
 ) -> PydanticAIAgentRuntime:
-    """Grant a case exactly the module its `capability` tag names."""
-    wanted = EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
+    """Grant a case exactly the modules its `capability` tag names."""
+    wanted = granted_capability_names(case)
     selected = tuple(
-        module for module in modules if module.manifest.capability_name == wanted
+        module for module in modules if module.manifest.capability_name in wanted
     )
-    if not selected:
+    if {module.manifest.capability_name for module in selected} != set(wanted):
         # Silently registering no tool would let the case "pass" without ever
         # routing anything, which is the hole this generator was fixed for.
         raise ValueError(

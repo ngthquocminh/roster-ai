@@ -12,7 +12,9 @@ from application.contracts.capability_manifest import CapabilityApprovalRequired
 SCHEMA_VERSION = "1"
 CAPABILITY_NAME = "scheduling_baseline"
 SCHEDULING_BASELINE_POLICY = "scheduling_baseline_enabled"
-ERROR_CODES = ("baseline_request_failed", "approval_required", "invalid_query")
+ERROR_CODES = (
+    "baseline_request_failed", "approval_required", "invalid_query", "draft_changed_this_turn",
+)
 EVALUATION_FIXTURES = ("evals/golden/scheduling_baseline/approval-required.json",)
 SCOPE_CONTROLS: Mapping[str, str] = {
     "promotion": "NOT COVERED: promotion:owned_by_story_4_3",
@@ -26,6 +28,17 @@ class SchedulingBaselineError(CapabilityError):
 
 class SchedulingBaselineInvalidRequest(SchedulingBaselineError):
     code = "invalid_query"
+
+
+class SchedulingBaselineDraftChangedThisTurn(SchedulingBaselineError):
+    """This turn already drafted or discarded, and an approval pause would lose it.
+
+    A suspended turn binds neither a draft nor a discard (Story 5.11 Decision 7),
+    yet the pending history keeps the tool result, so the resumed model would
+    report a change that never landed (code review of story-5.11).
+    """
+
+    code = "draft_changed_this_turn"
 
 
 class SchedulingBaselineApprovalRequired(SchedulingBaselineError, CapabilityApprovalRequired):
@@ -59,6 +72,10 @@ def scheduling_baseline(deps: AgentDepsV1, request: SchedulingBaselineRequestV1,
         raise SchedulingBaselineError("no tool-call budget remains for this run")
     if request.schedule_run_id.int == 0:
         raise SchedulingBaselineInvalidRequest("schedule_run_id must identify a run")
+    if deps.draft_turn.drafted or deps.draft_turn.discarded is not None:
+        raise SchedulingBaselineDraftChangedThisTurn(
+            "this turn already changed the draft; ask for the baseline promotion in a new message"
+        )
     # Story 4.3 owns the approved re-invocation and promotion body. This story
     # deliberately suspends on every call, before any candidate lookup or effect.
     raise SchedulingBaselineApprovalRequired("baseline promotion requires exact approval")
@@ -68,7 +85,8 @@ def scheduling_baseline_module() -> CapabilityModuleV1:
     return CapabilityModuleV1(
         manifest=scheduling_baseline_manifest(), handler=scheduling_baseline,
         request_type=SchedulingBaselineRequestV1, error_type=SchedulingBaselineError,
-        retryable_error_codes=frozenset({"invalid_query"}), required_role="planner",
+        retryable_error_codes=frozenset({"invalid_query", "draft_changed_this_turn"}),
+        required_role="planner",
         required_feature_policy=SCHEDULING_BASELINE_POLICY,
         model_facing_view=lambda result: result,
         model_description=(
@@ -84,4 +102,4 @@ def scheduling_baseline_module() -> CapabilityModuleV1:
     )
 
 
-__all__ = ["SchedulingBaselineApprovalRequired", "SchedulingBaselineError", "SchedulingBaselineRequestV1", "scheduling_baseline", "scheduling_baseline_manifest", "scheduling_baseline_module"]
+__all__ = ["SchedulingBaselineApprovalRequired", "SchedulingBaselineDraftChangedThisTurn", "SchedulingBaselineError", "SchedulingBaselineRequestV1", "scheduling_baseline", "scheduling_baseline_manifest", "scheduling_baseline_module"]

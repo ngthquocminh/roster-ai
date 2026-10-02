@@ -12,6 +12,7 @@ from application.contracts.capability_manifest import CapabilityError, Capabilit
 from application.contracts.proposal import (
     DraftConstraintProposalV1,
     DraftConstraintV1,
+    DraftOutcomeV1,
     ProposalV1,
 )
 from application.contracts.scenario_projection import LockV1
@@ -70,8 +71,17 @@ SCOPE_CONTROLS: Mapping[str, str] = {
     "identity:content_addressed_citation_only": (
         "AUTHORITATIVE. draft_id is content-addressed so a golden case can cite it, and two "
         "identical drafts legitimately share one. NOT COVERED: durable row identity — "
-        "proposal_id and proposal_version_id are freshly minted per draft, because a "
+        "proposal_id is the conversation's working draft's when one exists (a fresh one "
+        "otherwise) and proposal_version_id is always freshly minted, because a "
         "content-addressed primary key turns a repeated request into a write conflict."
+    ),
+    "lifecycle:one_working_draft": (
+        "COVERS resolving the conversation's one working draft at tool time: created (v1) when "
+        "none exists, otherwise updated (the next version, full constraint list replaced), read "
+        "once per turn so every call sees the same pre-turn state. NOT COVERED: a change after "
+        "that observation (a card edit, a discard, a promotion, another turn) — the finalize "
+        "guard applies the write only if the conversation still matches what was observed, and "
+        "otherwise the turn ends with a capability_error and nothing is written."
     ),
     "authz:site_scoped_shared_drafting": (
         "COVERS site scoping through RLS and the server-owned site pin. NOT COVERED: per-actor "
@@ -143,19 +153,34 @@ class SchedulingDraftResultV1:
 
     result_id: str
     proposal: ProposalV1
+    outcome: DraftOutcomeV1 = "created"
+    version_ordinal: int = 1
+    # The working draft this call resolved against (None when there was none),
+    # carried to finalize so it can tell whether the conversation moved.
+    observed_working_id: UUID | None = None
+    observed_resource_version: int | None = None
     schema_version: str = SCHEMA_VERSION
 
 
 @dataclass(frozen=True)
 class SchedulingDraftModelViewV1:
-    """The model receives only the content-addressed citation handle."""
+    """The model receives the citation handle and what the call did.
+
+    `draft_id` stays the content-addressed `result_id`, never the proposal id.
+    """
 
     draft_id: str
+    outcome: DraftOutcomeV1 = "created"
+    version_ordinal: int = 1
     schema_version: str = SCHEMA_VERSION
 
 
 def _model_view(result: SchedulingDraftResultV1) -> SchedulingDraftModelViewV1:
-    return SchedulingDraftModelViewV1(draft_id=result.result_id)
+    return SchedulingDraftModelViewV1(
+        draft_id=result.result_id,
+        outcome=result.outcome,
+        version_ordinal=result.version_ordinal,
+    )
 
 
 def _context(deps: AgentDepsV1) -> DraftResolutionContextV1:
@@ -281,11 +306,15 @@ def scheduling_draft(
         _timed_out()
 
     result_id = derive_draft_id(deps.scenario_version_id, constraints, locks)
+    # A same-turn discard makes this a create: the discard reaches finalize
+    # separately (`resolved_discard`), and the finalize table orders the two.
+    observed = None if deps.draft_turn.discarded is not None else deps.draft_turn.observe()
     # Durable identity is NOT the citation. A content-addressed primary key
     # makes a legitimately repeated draft a write conflict that aborts the
-    # finalisation transaction and strands the agent run.
+    # finalisation transaction and strands the agent run. The proposal id IS
+    # the working draft's when one exists: the write is a new version of it.
     proposal = ProposalV1(
-        proposal_id=uuid4(),
+        proposal_id=uuid4() if observed is None else observed.proposal_id,
         proposal_version_id=uuid4(),
         scenario_id=deps.scenario_id,
         scenario_version_id=deps.scenario_version_id,
@@ -295,8 +324,17 @@ def scheduling_draft(
         preserved_locks=locks,
         consequence_summary=consequence_summary(constraints, locks),
         canonical_hash=result_id,
+        resource_version=1 if observed is None else observed.resource_version + 1,
     )
-    return SchedulingDraftResultV1(result_id=result_id, proposal=proposal)
+    deps.draft_turn.note_drafted()
+    return SchedulingDraftResultV1(
+        result_id=result_id,
+        proposal=proposal,
+        outcome="created" if observed is None else "updated",
+        version_ordinal=1 if observed is None else observed.version_ordinal + 1,
+        observed_working_id=None if observed is None else observed.proposal_id,
+        observed_resource_version=None if observed is None else observed.resource_version,
+    )
 
 
 def scheduling_draft_module() -> CapabilityModuleV1:
@@ -310,7 +348,10 @@ def scheduling_draft_module() -> CapabilityModuleV1:
         required_feature_policy=SCHEDULING_DRAFT_POLICY,
         model_facing_view=_model_view,
         model_description=(
-            "scheduling_draft creates a new reversible draft of soft solver constraints. "
+            "scheduling_draft writes the conversation's one working draft of soft solver "
+            "constraints: it creates v1 when none exists, otherwise it appends the next version "
+            "with the full list you send; omit a constraint to remove it. The result reports "
+            "outcome (created or updated) and version_ordinal. "
             "Always set expected_scenario_version_id to current_scenario_version_id from the "
             "workflow snapshot. Each constraint uses exactly these fields and leaves every other "
             "field unset: "
@@ -325,7 +366,7 @@ def scheduling_draft_module() -> CapabilityModuleV1:
             "Resolve the user's intended change to these kinds and exact record IDs using scenario "
             "inspection and the workflow snapshot. Ask about ambiguous workers, tasks, or values in "
             "plain language; do not ask the planner for internal IDs available from those reads. "
-            "It takes no draft ID: to revise a draft, send every constraint that should remain "
+            "It takes no draft ID: to change the draft, send every constraint that should remain "
             "plus the change. It does not run the solver or promote a schedule; it returns a "
             "draft_id to cite in the draft output."
         ),

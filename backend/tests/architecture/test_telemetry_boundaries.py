@@ -606,6 +606,7 @@ def test_raising_sink_cannot_block_approval_promotion_or_audit() -> None:
         memberships=Memberships(),
         audit_writer=audit,
         conversations=conversations,
+        proposals=type("Proposals", (), {"mark_applied": lambda *_a, **_k: False})(),
         scheduling_baseline_enabled=True,
         clock=lambda: command and approvals.binding.created_at,
         telemetry=sink,

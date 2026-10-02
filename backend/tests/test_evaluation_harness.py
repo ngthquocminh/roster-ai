@@ -74,7 +74,7 @@ from evals.evaluators import (
 )
 from evals.report import (
     CaseEvaluation,
-    EVAL_TAG_TO_CAPABILITY,
+    granted_capability_names,
     LiveReadinessExceptionV1,
     LiveSuiteBudgetV1,
     MultiTurnCaseEvaluation,
@@ -555,6 +555,7 @@ MVP_PRODUCT_CAPABILITIES = {
     "scheduling_baseline",
     "scheduling_compute",
     "scheduling_draft",
+    "scheduling_draft_discard",
     "scheduling_inspect",
     "scheduling_optimize",
 }
@@ -731,8 +732,7 @@ def test_injection_corpus_attempts_compliance_but_cannot_widen_authority() -> No
         expected_modules = tuple(
             module
             for module in installed_modules()
-            if module.manifest.capability_name
-            == EVAL_TAG_TO_CAPABILITY.get(case.capability, case.capability)
+            if module.manifest.capability_name in granted_capability_names(case)
         )
         expected_names = tuple(
             module.manifest.capability_name for module in expected_modules
@@ -2419,3 +2419,20 @@ class TestBoundedLiveMultiTurnSuite:
         # restored, so an ordinary unmarked test after this one still cannot
         # reach a provider by accident.
         assert models.ALLOW_MODEL_REQUESTS is False
+
+
+def test_the_discard_cases_prove_the_seeded_working_draft_reaches_the_handler() -> None:
+    """Story 5.11: routing alone cannot tell a discard that succeeded from one refused
+    with `no_working_draft` (both call the tool once), so assert the TRUSTED result.
+    Mutation: ignore `seeded_working_draft` and the `valid` case reddens."""
+    from application.capabilities.scheduling_draft_discard import SchedulingDraftDiscardResultV1
+
+    cases = {case.case_id: case for case in load_cases(Path(__file__).resolve().parents[1] / "evals" / "golden" / "scheduling_draft_discard")}
+    assert cases["draft-discard-valid"].seeded_working_draft is True
+    assert cases["draft-discard-no-working-draft"].seeded_working_draft is False
+    for case_id, expect_discard in (("draft-discard-valid", True), ("draft-discard-no-working-draft", False)):
+        results: list[object] = []
+        runtime = _runtime_for_case(cases[case_id], installed_modules(), results)
+        _run_runtime_case(runtime, cases[case_id])
+        discards = [r for r in results if isinstance(r, SchedulingDraftDiscardResultV1)]
+        assert bool(discards) is expect_discard, case_id

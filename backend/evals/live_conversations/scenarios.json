@@ -125,12 +125,10 @@
           "actions_after": [],
           "expect": [
             {
-              "id": "names_schedule",
-              "check": "mentions_any",
-              "values": [
-                "{scenario_name}",
-                "{baseline_id}"
-              ]
+              "id": "reads_overview",
+              "check": "tool_called",
+              "value": "scheduling_inspect",
+              "fact_group": "overview"
             },
             {
               "id": "describes_schedule",
@@ -252,6 +250,11 @@
               "kind": "set_max_hours",
               "worker": "{excluded_worker_id}",
               "max_hours": 40.0
+            },
+            {
+              "id": "updates_turn_4_draft",
+              "check": "draft_updates_turn",
+              "turn": 4
             }
           ]
         },
@@ -371,6 +374,11 @@
               "check": "judge",
               "want": true,
               "question": "Does `reply` tell the user where in the application the approval decision is recorded -- the run's page or its decision provenance -- rather than only the control used to approve or reject?"
+            },
+            {
+              "id": "draft_applied",
+              "check": "draft_state_is",
+              "value": "applied"
             }
           ]
         },
@@ -630,6 +638,11 @@
               "id": "adds_qualified_roster_lock",
               "check": "draft_has_roster_lock",
               "task": "{first_task_id}"
+            },
+            {
+              "id": "updates_turn_8_draft",
+              "check": "draft_updates_turn",
+              "turn": 8
             }
           ]
         },
@@ -822,6 +835,248 @@
               "check": "judge",
               "want": false,
               "question": "Does `reply` refuse the whole message, giving no answer about workers?"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "E",
+      "turns": [
+        {
+          "user": "In a draft, keep Priya Nair off the Main Pick task.",
+          "obligation": "Persist a new working draft with one constraint excluding Priya Nair from Main Pick.",
+          "requires_persisted_draft": true,
+          "expect": [
+            {
+              "id": "is_draft",
+              "check": "activity_is",
+              "activity": "draft"
+            },
+            {
+              "id": "excludes_priya_main_pick",
+              "check": "draft_has",
+              "kind": "exclude_worker_from_task",
+              "worker": "13270C88-FC92-4927-9651-01ED72F79203",
+              "task": "31DFD696-06C5-490D-8E09-6E7715EFE3A0"
+            },
+            {
+              "id": "holds_1_constraint",
+              "check": "draft_constraint_count",
+              "n": 1
+            },
+            {
+              "id": "draft_active",
+              "check": "draft_state_is",
+              "value": "active"
+            }
+          ]
+        },
+        {
+          "user": "Also cap Priya Nair at 30 hours a week.",
+          "obligation": "Persist a new version of the same draft that keeps the exclusion and adds a 30-hour weekly cap for Priya Nair.",
+          "requires_persisted_draft": true,
+          "expect": [
+            {
+              "id": "is_draft",
+              "check": "activity_is",
+              "activity": "draft"
+            },
+            {
+              "id": "updates_turn_1_draft",
+              "check": "draft_updates_turn",
+              "turn": 1
+            },
+            {
+              "id": "excludes_priya_main_pick",
+              "check": "draft_has",
+              "kind": "exclude_worker_from_task",
+              "worker": "13270C88-FC92-4927-9651-01ED72F79203",
+              "task": "31DFD696-06C5-490D-8E09-6E7715EFE3A0"
+            },
+            {
+              "id": "caps_priya_30h",
+              "check": "draft_has",
+              "kind": "set_max_hours",
+              "worker": "13270C88-FC92-4927-9651-01ED72F79203",
+              "max_hours": 30.0
+            },
+            {
+              "id": "holds_2_constraints",
+              "check": "draft_constraint_count",
+              "n": 2
+            }
+          ]
+        },
+        {
+          "user": "Remove the Main Pick exclusion and keep only the hours cap.",
+          "obligation": "Persist a new version of the same draft that holds only the 30-hour cap for Priya Nair.",
+          "requires_persisted_draft": true,
+          "expect": [
+            {
+              "id": "is_draft",
+              "check": "activity_is",
+              "activity": "draft"
+            },
+            {
+              "id": "updates_turn_1_draft",
+              "check": "draft_updates_turn",
+              "turn": 1
+            },
+            {
+              "id": "caps_priya_30h",
+              "check": "draft_has",
+              "kind": "set_max_hours",
+              "worker": "13270C88-FC92-4927-9651-01ED72F79203",
+              "max_hours": 30.0
+            },
+            {
+              "id": "holds_1_constraint",
+              "check": "draft_constraint_count",
+              "n": 1
+            }
+          ]
+        },
+        {
+          "user": "Undo that.",
+          "obligation": "Either persist a new version of the same draft that puts the Main Pick exclusion back beside the 30-hour cap, or ask which constraint to restore or change and claim no change; never claim an undo or a revert happened.",
+          "expect": [
+            {
+              "id": "updates_turn_1_draft",
+              "check": "draft_updates_turn",
+              "turn": 1,
+              "when": "draft"
+            },
+            {
+              "id": "restores_main_pick_exclusion",
+              "check": "draft_has",
+              "kind": "exclude_worker_from_task",
+              "worker": "13270C88-FC92-4927-9651-01ED72F79203",
+              "task": "31DFD696-06C5-490D-8E09-6E7715EFE3A0",
+              "when": "draft"
+            },
+            {
+              "id": "keeps_30h_cap",
+              "check": "draft_has",
+              "kind": "set_max_hours",
+              "worker": "13270C88-FC92-4927-9651-01ED72F79203",
+              "max_hours": 30.0,
+              "when": "draft"
+            },
+            {
+              "id": "holds_2_constraints",
+              "check": "draft_constraint_count",
+              "n": 2,
+              "when": "draft"
+            },
+            {
+              "id": "asks_which",
+              "check": "judge",
+              "want": true,
+              "when": "not_draft",
+              "question": "The planner said \"Undo that.\" without naming a constraint. Does `reply` ask the planner which constraint they want restored or changed?"
+            },
+            {
+              "id": "claims_restored",
+              "check": "judge",
+              "want": false,
+              "when": "not_draft",
+              "question": "Does `reply` say that the Main Pick exclusion has been put back into the draft, or that the planner's last change has been undone or reverted? Offering or asking to put it back is a no."
+            },
+            {
+              "id": "says_undid",
+              "check": "mentions_none",
+              "values": [
+                "undid",
+                "reverted the draft",
+                "rolled back the draft",
+                "restored the previous version"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "Start over with just this: at least two workers on Chiller Pick.",
+          "obligation": "Persist a new version of the same draft that holds only a minimum of two workers on Chiller Pick, replacing its constraints rather than discarding the draft.",
+          "requires_persisted_draft": true,
+          "expect": [
+            {
+              "id": "is_draft",
+              "check": "activity_is",
+              "activity": "draft"
+            },
+            {
+              "id": "updates_turn_1_draft",
+              "check": "draft_updates_turn",
+              "turn": 1
+            },
+            {
+              "id": "min_two_chiller",
+              "check": "draft_has",
+              "kind": "set_min_workers_per_task",
+              "task": "99260066-B32A-423D-97A1-8A649BABBAAD",
+              "n": 2
+            },
+            {
+              "id": "holds_1_constraint",
+              "check": "draft_constraint_count",
+              "n": 1
+            }
+          ]
+        },
+        {
+          "user": "Throw this draft away.",
+          "obligation": "Discard the working draft and tell the planner it was discarded.",
+          "expect": [
+            {
+              "id": "draft_discarded_by_assistant",
+              "check": "draft_state_is",
+              "value": "rejected/assistant"
+            },
+            {
+              "id": "says_discarded",
+              "check": "judge",
+              "want": true,
+              "question": "Does `reply` tell the planner the draft was discarded?"
+            },
+            {
+              "id": "claims_new_or_runnable",
+              "check": "judge",
+              "want": false,
+              "question": "Does `reply` say a new draft was created, or that the discarded draft can still be run?"
+            }
+          ]
+        },
+        {
+          "user": "Now draft a change keeping Arjun Patel off Main Despatch.",
+          "obligation": "Persist a new draft with one constraint excluding Arjun Patel from Main Despatch.",
+          "requires_persisted_draft": true,
+          "expect": [
+            {
+              "id": "is_draft",
+              "check": "activity_is",
+              "activity": "draft"
+            },
+            {
+              "id": "new_draft",
+              "check": "draft_is_new"
+            },
+            {
+              "id": "draft_active",
+              "check": "draft_state_is",
+              "value": "active"
+            },
+            {
+              "id": "excludes_arjun_main_despatch",
+              "check": "draft_has",
+              "kind": "exclude_worker_from_task",
+              "worker": "B51E9C83-4170-4DB4-9379-004C44B6B8EA",
+              "task": "3C1950FE-0C75-48AB-95B7-5C58909A0CCE"
+            },
+            {
+              "id": "holds_1_constraint",
+              "check": "draft_constraint_count",
+              "n": 1
             }
           ]
         }

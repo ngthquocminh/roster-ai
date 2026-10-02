@@ -38,7 +38,10 @@ def _args(argv=None):
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--override-file', type=Path,
                         default=ROOT / '_bmad-output/test-artifacts/story-5-7.compose.override.yml')
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    # Compose runs from the repository root (see suite._arguments).
+    args.override_file = args.override_file.resolve()
+    return args
 
 
 def main(argv=None):

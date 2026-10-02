@@ -629,9 +629,14 @@ class ProposalOut(BaseModel):
     canonical_hash: str
     canonical_hash_algorithm: str
     canonical_hash_schema_version: str
-    state: Literal["active", "rejected"]
+    state: Literal["active", "rejected", "applied"]
     resource_version: int
     stale: bool
+    # Story 5.11: which version this is, who ended the draft, and which version a
+    # promotion applied. Null on rows written before the lifecycle existed.
+    version_ordinal: int | None = None
+    ended_by: Literal["planner", "assistant", "system"] | None = None
+    applied_version_ordinal: int | None = None
     schema_version: str
 
 

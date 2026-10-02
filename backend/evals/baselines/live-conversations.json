@@ -3,7 +3,8 @@
     "A",
     "B",
     "C",
-    "D"
+    "D",
+    "E"
   ],
   "complete_repetitions": 3,
   "configuration": {
@@ -13,13 +14,13 @@
     "judge_model": "typesafe:jev-1.13.0",
     "reasoning_effort": "low"
   },
-  "measured_at_commit": "8f359071e208d1b293511568240682938c00b423",
-  "note": "A projection of the committed Story 5.7 measurement, not a second measurement. Tracked config, deliberately outside evidence/.",
+  "measured_at_commit": "70594bfa836584f47dd4144186778fba83008c93",
+  "note": "A projection of the committed live-conversation measurement named by source_evidence_path, not a second measurement. Tracked config, deliberately outside evidence/.",
   "schema_version": "1",
-  "source_evidence_path": "evidence/story-5.7/live-conversation-journeys.json",
-  "source_evidence_sha256": "d832aa1bc3876562bd05cad897e42add9e6be7a6ce1b11b3c4feaa84160d2e7e",
-  "total_executed": 108,
-  "total_passed": 108,
+  "source_evidence_path": "evidence/story-5.12/live-conversation-journeys.json",
+  "source_evidence_sha256": "0b95815b40f26d8cc6da30afb6bb7667a9d00ea0af83d558422982fd30ad5a63",
+  "total_executed": 129,
+  "total_passed": 129,
   "turn_pass_rates": {
     "A:1": {
       "executed": 3,
@@ -162,6 +163,34 @@
       "passed": 3
     },
     "D:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:1": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:2": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:3": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:4": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:5": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:6": {
+      "executed": 3,
+      "passed": 3
+    },
+    "E:7": {
       "executed": 3,
       "passed": 3
     }

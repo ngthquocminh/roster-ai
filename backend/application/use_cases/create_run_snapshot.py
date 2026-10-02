@@ -77,6 +77,10 @@ def create_run_snapshot(
         raise SnapshotCreationError(
             "rejected_proposal", "a rejected proposal cannot be scheduled"
         )
+    if proposal.state == "applied":
+        raise SnapshotCreationError(
+            "applied_proposal", "an applied proposal cannot be scheduled"
+        )
     if proposal.scenario_id is None:
         raise SnapshotCreationError(
             "invalid_proposal", "proposal does not carry a governed scenario"

@@ -1,6 +1,6 @@
 # Testing
 
-## Required live conversation acceptance — Story 5.7
+## Required live conversation acceptance — Story 5.7, extended by Story 5.12
 
 **AI conversational readiness requires live evidence.** Deterministic tests cannot establish that natural conversations work. Story 5.7's suite is the acceptance evidence; its verdict feeds Gate B as `live_conversation_journeys`.
 
@@ -21,7 +21,9 @@ uv run python -m evals.live_conversations.evidence \
 
 The suite is opt-in and paid: it is never selected by `pytest`. It builds the API and web images once, then each execution brings up and tears down its own Compose stack (Postgres, API, worker, web) and drives the authenticated HTTP conversation path — no doubles, no stubs. Scenario B runs the real CP-SAT solver and a real approval. Keys come from `backend/.env`; nothing is printed.
 
-The judge model's prefix picks the judge. `typesafe:` (the default when neither `--judge-model` nor `LIVE_CONVERSATION_JUDGE_MODEL` is set) grades each turn by the per-turn expectations authored on it in `scenarios.json` (every turn of A–D has them): code checks over the visible reply, its activity and the saved draft, plus narrow TypeSafe Jev yes/no questions for what code cannot decide, with `TYPESAFE_API_KEY` (`evals/live_conversations/expectations.py`). Any reply showing raw `<claim` markup fails its turn. A turn without expectations falls back to the holistic Jev judge (`evals/live_conversations/jev_judge.py`). `openrouter:<model>` uses the LLM judge in `judge.py` with `LIVE_CONVERSATION_JUDGE_API_KEY`. Changing the judge changes `behavioral_digest`, so the baseline below must be re-derived before the gate compares again.
+The judge model's prefix picks the judge. `typesafe:` (the default when neither `--judge-model` nor `LIVE_CONVERSATION_JUDGE_MODEL` is set) grades each turn by the per-turn expectations authored on it in `scenarios.json` (every turn of A–E has them): code checks over the visible reply, its activity and the saved draft, plus narrow TypeSafe Jev yes/no questions for what code cannot decide, with `TYPESAFE_API_KEY` (`evals/live_conversations/expectations.py`). Any reply showing raw `<claim` markup fails its turn. A turn without expectations falls back to the holistic Jev judge (`evals/live_conversations/jev_judge.py`). `openrouter:<model>` uses the LLM judge in `judge.py` with `LIVE_CONVERSATION_JUDGE_API_KEY`. Changing the judge changes `behavioral_digest`, so the baseline below must be re-derived before the gate compares again. The agent instructions and `scenarios.json` are **not** in `behavioral_digest` (it covers the models, reasoning effort and the override's environment maps): an instruction or scenario edit does not stop the gate from comparing, so re-measure deliberately after one.
+
+Checks grade what the agent **did** — the right tool, the right arguments, a result it did not invent — not how the reply is worded. `tool_called` reads the turn's tool telemetry; the draft checks (`draft_has`, `draft_updates_turn`, `draft_state_is`, `draft_constraint_count`, `draft_is_new`) read the persisted proposal; judge questions are kept for prose truthfulness. When a turn has more than one correct action, `when: draft | not_draft` grades each by its own evidence (scenario E:4: a re-add is checked on the saved draft, a clarifying question by the judge).
 
 `--accept-finding SCENARIO:TURN` is given once per turn the owner has accepted (below); the example is the turn the recorded matrix accepted. Give none when nothing was accepted.
 
@@ -29,13 +31,13 @@ The measured configuration -- reasoning effort, the per-token prices that drive 
 
 ### Gate the result against the committed baseline
 
-The suite above answers *how good is it right now*. `backend/evals/baselines/live-conversations.json` records what known-good looked like -- the per-turn `{executed, passed}` counts of the current Story 5.7 measurement (108/108, re-derived 2026-09-30 from the run at `8f35907` graded by per-turn expectations), its models, effort and behavioural configuration digest. It is a projection of that one measurement, derived by `backend/scripts/derive_live_conversation_baseline.py` and never hand-typed, and it is deliberately tracked config rather than evidence, so it does not live under `evidence/`.
+The suite above answers *how good is it right now*. `backend/evals/baselines/live-conversations.json` records what known-good looked like -- the per-turn `{executed, passed}` counts of the current Story 5.12 measurement (129/129 over A–E, run at `70594bf`), its models, effort and behavioural configuration digest. It is a projection of that one measurement, derived by `backend/scripts/derive_live_conversation_baseline.py` and never hand-typed, and it is deliberately tracked config rather than evidence, so it does not live under `evidence/`.
 
 After a paid run, compare the evidence document it produced against that baseline:
 
 ```bash
 cd backend
-uv run --frozen python scripts/live_conversation_drop_check.py   --report ../evidence/story-5.7/live-conversation-journeys.json
+uv run --frozen python scripts/live_conversation_drop_check.py   --report ../evidence/story-5.12/live-conversation-journeys.json
 ```
 
 Pass the *evidence* document (what `evals.live_conversations.evidence` writes), not the raw `live-matrix.json` run report -- only the former carries `turn_pass_rates`.
@@ -44,35 +46,40 @@ The path above is the evidence file your paid run overwrites, so point it at tha
 
 The check exits non-zero on any of:
 
-- **Tier 1** -- a turn the baseline recorded at full marks now passes zero executions, named. Turns the baseline never scored full (at 2/3) are exempt from this tier and watched by Tier 3 instead; the current 108/108 baseline has none.
+- **Tier 1** -- a turn the baseline recorded at full marks now passes zero executions, named. Turns the baseline never scored full (at 2/3) are exempt from this tier and watched by Tier 3 instead; the current 129/129 baseline has none.
 - **Tier 2** -- any never-accept occurrence, on a single instance: a wrong value, unit, entity or version, a missing or unauthorized effect, or a false success claim.
-- **Tier 3** -- fewer than 100 of the baseline's 108 turns passed. Only turns the baseline measured are counted, so a newly added scenario cannot pad the total. The floor keeps a ~1.2% false-alarm rate per run (historical 3/90 failure rate scaled to 108 turns); it is a hand-set constant in `live_conversation_drop_check.py`, recalculated whenever the baseline's totals change.
-- **Structural** -- `clean_scenarios` no longer contains every scenario the baseline has clean (`A`, `B`, `C`, `D`).
+- **Tier 3** -- fewer than 120 of the baseline's 129 turns passed. Only turns the baseline measured are counted, so a newly added scenario cannot pad the total. The floor keeps a ~1.3% false-alarm rate per run (historical 3/90 failure rate scaled to 129 turns, λ 4.3); it is a hand-set constant in `live_conversation_drop_check.py`, recalculated whenever the baseline's totals change.
+- **Structural** -- `clean_scenarios` no longer contains every scenario the baseline has clean (`A`, `B`, `C`, `D`, `E`).
 - **Refusal** -- the run's `behavioral_digest` differs from the baseline's, or either side was truncated (`blocking_reasons`, `complete_repetitions`, `runs[].complete`). A refusal is reported as a distinct outcome from a failure and never yields a tier verdict.
 
-Each verdict is reported separately in the Gate A readiness status vocabulary (`passed` / `failed` / `skipped` / `missing`), so a future Gate B assessment consumes them as rows. It is operator-invoked on the machine that ran the paid suite: the live suite may never run in `ci.yml` (NFR26/AD-16), so no workflow job, secret or cron entry exists for it. The half that needs no credential -- that the committed baseline still matches the committed Story 5.7 evidence -- runs in the default `pytest` suite on every CI run (`backend/tests/test_live_conversation_drop_check.py`). Re-derive the baseline whenever that evidence is regenerated.
+Each verdict is reported separately in the Gate A readiness status vocabulary (`passed` / `failed` / `skipped` / `missing`), so a future Gate B assessment consumes them as rows. It is operator-invoked on the machine that ran the paid suite: the live suite may never run in `ci.yml` (NFR26/AD-16), so no workflow job, secret or cron entry exists for it. The half that needs no credential -- that the committed baseline still matches the committed Story 5.12 evidence -- runs in the default `pytest` suite on every CI run (`backend/tests/test_live_conversation_drop_check.py`). Re-derive the baseline whenever that evidence is regenerated.
 
 `--resume <report.json>` continues an interrupted report (refused unless it names the same commit, configuration and image ids; pair it with `--skip-image-build`), `--execution-retries` retries one execution that ends on an infrastructure fault, and `--skip-image-build` reuses images already built from the same code (recorded in the report). Evidence generation refuses a set of reports of which none built its images, so a first run must build; only a resume of a report that did may skip the build.
 
 ### What it covers
 
-- Four authored conversations: **A** introduction, typo and memory (6 turns); **B** draft → real solver run → approval → baseline (12); **C** tool tour (12); **D** turn routing: small talk, off-topic refusals, an app-features question and a mixed message (6). 36 user turns per repetition, generated live from fresh state, with a verdict on every turn.
-- The inventory is 135 operations, derived from the installed capabilities. 37 are live-required: every one is exercised live, or carries a named reason a planner turn cannot reach it plus the test that proves it instead (10 do, e.g. draft groups the resolver rejects). The other 98 — query keys, paging, invalid-query paths, manifest error codes and the compute-risk run tool the registry withholds from chat — are deterministic-only. Neither set may vanish from the denominator, and a known product gap (the demonstration approval branch, Story 5.7 Decision 1) is stated as one.
+- Five authored conversations: **A** introduction, typo and memory (6 turns); **B** draft → real solver run → approval → baseline (12); **C** tool tour (12); **D** turn routing: small talk, off-topic refusals, an app-features question and a mixed message (6); **E** the draft lifecycle (7): create, add, remove, "undo that", "start over with just X" (the same draft, replaced), "throw this draft away" (ended `rejected` by the assistant), then a new draft. 43 user turns per repetition, generated live from fresh state, with a verdict on every turn.
+- The inventory is 141 operations, derived from the installed capabilities. 38 are live-required: every one is exercised live (28), or carries a named reason a planner turn cannot reach it plus the test that proves it instead (10, e.g. draft groups the resolver rejects). The other 103 — query keys, paging, invalid-query paths, manifest error codes and the compute-risk run tool the registry withholds from chat — are deterministic-only. Neither set may vanish from the denominator, and a known product gap (the demonstration approval branch, Story 5.7 Decision 1) is stated as one.
 - Two independent layers per turn: fact/effect checks read the application and fixture directly, and a separately configured LLM judge scores relevance, continuity, completeness and clarification/refusal. A judge pass can never override a fact or effect failure.
 
 ### Measured results
 
-Recorded matrix (the one the committed evidence file describes; refreshed with it), `openai/gpt-5.6-luna` + `google/gemini-2.5-flash`, reasoning effort low, images rebuilt, 12 executions:
+Recorded matrix (the one the committed evidence file describes; refreshed with it), `openai/gpt-5.6-luna` + `typesafe:jev-1.13.0`, reasoning effort low, images rebuilt, 15 executions:
 
 | | Result |
 |---|---|
-| Turns passed | **108 / 108** |
-| Clean executions | **12 / 12** (three complete repetitions, no retries) |
-| Clean run per scenario | A ✅ B ✅ C ✅ D ✅ |
+| Turns passed | **129 / 129** |
+| Clean executions | **15 / 15** (three complete repetitions, no retries) |
+| Clean run per scenario | A ✅ B ✅ C ✅ D ✅ E ✅ |
 | False claims, wrong facts, missing effects | **none** |
-| Tracked spend | USD 0.66 |
+| Accepted findings | **none** |
+| Tracked agent spend | USD 0.08 |
 
-Run `d04a1eb4-77da-4f83-81f2-bce173fb1ae2`, measured 2026-09-28 on a clean tree at `371964a`, the code commit the evidence binds. Against the previous baseline, every drop-check tier passed (Tier 3: 90/90 on that baseline's turns). `--accept-finding B:5` was still given, but no turn failed, so nothing was accepted in practice. `evidence/story-5.7/live-conversation-journeys.json` carries the per-turn pass rates, the verdict, and the sha256 of the source report.
+Run `0a1349a4-4ea4-4ddd-8405-5785b62c4fc0`, measured 2026-10-01 on a clean tree at `70594bf`, the code commit the evidence binds. Before the baseline was re-derived, the run was checked against the previous 108-turn baseline (same `behavioral_digest`, so not refused): every tier passed (Tier 3: 108/108 on that baseline's turns). `evidence/story-5.12/live-conversation-journeys.json` carries the per-turn pass rates, the verdict, and the sha256 of the source report.
+
+The live smokes before it found and fixed real defects, each with a regression test: "undo that" read as "remove another constraint" (the instruction is now: reverse the previous change, re-sending the snapshot's `working_draft.previous_version`), a discard lost because the model cited the discarded draft (now retried into prose), and the smoke runners resolving a relative `--override-file` against the wrong directory.
+
+Previous measurement (Story 5.7, `evidence/story-5.7/live-conversation-journeys.json`, kept as history): run `d04a1eb4-77da-4f83-81f2-bce173fb1ae2` at `371964a`, A–D, 108/108, USD 0.66.
 
 One run is not general reliability: the previous measurement (run `64ca2862`, `437b63a`, three scenarios) passed 87/90, with B:5, B:8 and C:3 each failing once without a false claim, roughly 1 turn in 30. Before the recorded run, a 1-repetition smoke run of D alone (USD 0.02) failed D:1 on an over-strict authored obligation (a one-line offer of help counted as a capability list); the obligation was relaxed in `371964a`, not the product.
 

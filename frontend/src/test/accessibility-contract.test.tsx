@@ -137,19 +137,22 @@ const accessibleProposal = {
   consequence_summary: "One reversible constraint; no baseline change.",
   canonical_hash: "a".repeat(64), canonical_hash_algorithm: "sha256",
   canonical_hash_schema_version: "rfc8785-v1", state: "active" as const,
-  resource_version: 1, stale: false, schema_version: "1",
+  resource_version: 1, stale: false, version_ordinal: 3,
+  ended_by: null as "planner" | "assistant" | "system" | null,
+  applied_version_ordinal: null as number | null, schema_version: "1",
 };
 
-function mockProposal(stale = false) {
+function mockProposal(stale = false, overrides: Record<string, unknown> = {}) {
   vi.mocked(proposalHooks.useProposal).mockReturnValue({
     data: stale ? {
       ...accessibleProposal,
       stale: true,
       current_scenario_version_id: "55555555-5555-4555-8555-555555555555",
-    } : accessibleProposal,
+      ...overrides,
+    } : { ...accessibleProposal, ...overrides },
     isPending: false, isError: false, error: null, refetch: vi.fn(),
   } as never);
-  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
+  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate: vi.fn(), reset: vi.fn(), isPending: false } as never);
   vi.mocked(rejectHooks.useRejectProposal).mockReturnValue({ mutate: vi.fn(), isPending: false } as never);
   vi.mocked(startHooks.useStartScheduleRun).mockReturnValue({
     mutate: vi.fn(), isPending: false, data: undefined, error: null,
@@ -393,16 +396,21 @@ it("makes the Draft card and its discontinuous commands independently identifiab
 
   const region = screen.getByRole("region", { name: "Draft proposal" });
   expect(region).toHaveTextContent("Draft — no baseline change");
-  const revise = screen.getByRole("button", { name: "Revise proposal" });
-  const reject = screen.getByRole("button", { name: "Reject proposal" });
+  const save = screen.getByRole("button", { name: "Save changes" });
+  const cancel = screen.getByRole("button", { name: "Cancel" });
+  const discard = screen.getByRole("button", { name: "Discard draft" });
   const run = screen.getByRole("button", { name: "Run optimization" });
-  expect(new Set([revise, reject, run].map((button) => button.getAttribute("aria-label") ?? button.textContent)).size).toBe(3);
+  const remove = screen.getByRole("button", { name: "Remove Cap CONTACT-9 at 40 hours per week." });
+  const names = [save, cancel, discard, run, remove].map((button) => button.getAttribute("aria-label") ?? button.textContent);
+  expect(new Set(names).size).toBe(5);
   expect(run).toHaveAccessibleDescription(/starts a bounded computation.*does not change the baseline/i);
-  expect(revise.parentElement).not.toBe(reject.parentElement);
-  // Structural, not merely visual: the rule between the two commands has to be
-  // reportable. An aria-hidden div left the discontinuity claim resting on two
-  // sibling divs, and EXPERIENCE.md makes automated coverage the only proof.
+  expect(save.parentElement).not.toBe(discard.parentElement);
+  // Structural, not merely visual: the rule between the edit commands and the
+  // run/discard commands has to be reportable. EXPERIENCE.md makes automated
+  // coverage the only proof.
   expect(within(region).getByRole("separator")).toBeInTheDocument();
+  // The version and lifecycle state sit beside the title as one readable line.
+  expect(within(region).getByText("Working draft · v3")).toBeInTheDocument();
   await expectAxeClean(container);
 });
 
@@ -427,12 +435,12 @@ it("keeps the Draft commands discontinuous from Send itself (UX-DR35)", async ()
   );
 
   const send = screen.getByRole("button", { name: /^send$/i });
-  const revise = screen.getByRole("button", { name: "Revise proposal" });
-  const reject = screen.getByRole("button", { name: "Reject proposal" });
+  const save = screen.getByRole("button", { name: "Save changes" });
+  const discard = screen.getByRole("button", { name: "Discard draft" });
   const run = screen.getByRole("button", { name: "Run optimization" });
   const region = screen.getByRole("region", { name: "Draft proposal" });
 
-  for (const command of [revise, reject, run]) {
+  for (const command of [save, discard, run]) {
     expect(command).not.toBe(send);
     expect(command).not.toHaveAccessibleName(send.textContent ?? "");
     // The draft commands live inside the Draft region; Send does not. Being in
@@ -481,26 +489,194 @@ it("associates the real disabled composer controls with a polite outage alert", 
   await expectAxeClean(container);
 });
 
-it("announces stale Draft state and explains why revision is disabled", async () => {
+it("announces stale Draft state and explains why saving is disabled", async () => {
   mockProposal(true);
   const { DraftCard } = await import("@/features/chat/DraftCard");
-  render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
 
   expect(screen.getByRole("status", { name: "Draft is stale" })).toHaveTextContent(
     "The scenario version changed",
   );
-  const revise = screen.getByRole("button", { name: "Revise proposal" });
+  expect(screen.getByText("Working draft · out of date")).toBeInTheDocument();
+  const save = screen.getByRole("button", { name: "Save changes" });
   const run = screen.getByRole("button", { name: "Run optimization" });
-  expect(revise).toBeDisabled();
-  expect(revise).toHaveAccessibleDescription(/scenario version changed/i);
+  expect(save).toBeDisabled();
+  expect(save).toHaveAccessibleDescription(/scenario version changed/i);
   expect(run).toBeDisabled();
   expect(run).toHaveAccessibleDescription(/refresh.*before running/i);
   expect(screen.getByRole("button", { name: "Refresh proposal" })).toBeInTheDocument();
   // The described, disabled control must be the real submit control, not a
   // screen-reader-only decoy standing in for one that was never rendered.
-  expect(revise.className).not.toMatch(/sr-only/);
-  // Rejection stays available while stale: it changes no baseline.
-  expect(screen.getByRole("button", { name: "Reject proposal" })).toBeEnabled();
+  expect(save.className).not.toMatch(/sr-only/);
+  // Discard stays available while stale: it changes no baseline.
+  expect(screen.getByRole("button", { name: "Discard draft" })).toBeEnabled();
+  await expectAxeClean(container);
+});
+
+it("associates validation errors with the affected control and keeps the draft accessible", async () => {
+  mockProposal();
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  const hours = screen.getByRole("spinbutton", { name: "Maximum hours" });
+  await userEvent.clear(hours);
+  await userEvent.type(hours, "99");
+  expect(hours).toHaveAttribute("aria-invalid", "true");
+  const message = document.getElementById(hours.getAttribute("aria-describedby")!);
+  expect(message).toHaveTextContent(/at most 56/);
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Run optimization" })).toHaveAccessibleDescription(
+    /Save or cancel your changes first/,
+  );
+  await expectAxeClean(container);
+});
+
+it("announces 'Saved as vN' through a polite live region", async () => {
+  mockProposal();
+  const mutate = vi.fn();
+  vi.mocked(reviseHooks.useReviseProposal).mockReturnValue({ mutate, reset: vi.fn(), isPending: false } as never);
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  const hours = screen.getByRole("spinbutton", { name: "Maximum hours" });
+  await userEvent.clear(hours);
+  await userEvent.type(hours, "36");
+  await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+  const { act } = await import("@testing-library/react");
+  const [, options] = mutate.mock.calls.at(-1)!;
+  mockProposal(false, { version_ordinal: 4, resource_version: 2 });
+  act(() => options.onSuccess({ ...accessibleProposal, version_ordinal: 4 }));
+
+  const saved = await screen.findByText("Saved as v4");
+  expect(saved).toHaveAttribute("aria-live", "polite");
+  expect(saved).toHaveAttribute("role", "status");
+  await expectAxeClean(container);
+});
+
+it("announces the changed-under-you notice through a polite live region with a Load control", async () => {
+  mockProposal();
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { rowsFromProposal } = await import("@/features/chat/draftEdits");
+  const buffer = {
+    baseVersionId: "99999999-9999-4999-8999-999999999999",
+    rows: rowsFromProposal(accessibleProposal as never).map((row) => ({
+      ...row, input: { ...row.input, max_hours: 33 },
+    })),
+  };
+  const { container } = render(
+    <DraftCard buffer={buffer} onBufferChange={vi.fn()} proposalId={accessibleProposal.proposal_id} />,
+  );
+
+  const notice = screen.getByText(/This draft changed to v3\. Your edits were not saved\./);
+  expect(notice).toHaveAttribute("aria-live", "polite");
+  expect(notice).toHaveAttribute("role", "status");
+  expect(screen.getByRole("button", { name: "Load v3" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await expectAxeClean(container);
+});
+
+it("names the discard confirmation and its two choices distinctly, without a browser dialog", async () => {
+  mockProposal();
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  await userEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+  const group = screen.getByRole("group", { name: "Confirm discard" });
+  expect(group).toHaveTextContent("Discard this draft? It can't be restored.");
+  const discard = within(group).getByRole("button", { name: "Discard" });
+  const keep = within(group).getByRole("button", { name: "Keep" });
+  expect(discard).toHaveAttribute("data-variant", "destructive");
+  expect(keep).not.toHaveAttribute("data-variant", "destructive");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await expectAxeClean(container);
+});
+
+// AC7 "covers every new control" (code review of story-5.11): every input kind,
+// the two-input lock row with paired errors, an ENABLED Remove per row, and the
+// timeline's "Earlier version" line -- not only the one-row max-hours fixture.
+const multiKindConstraints = [
+  { kind: "set_min_workers_per_task" as const, resolved_entities: [], n: 2,
+    description: "Require at least 2 workers on Picking.", schema_version: "1" },
+  { kind: "scale_demand" as const, resolved_entities: [], factor: 1.5,
+    description: "Scale Picking demand by 1.5.", schema_version: "1" },
+  { kind: "set_max_hours" as const, resolved_entities: [], max_hours: 40,
+    description: "Cap CONTACT-9 at 40 hours per week.", schema_version: "1" },
+  { kind: "lock_worker_shift" as const, resolved_entities: [], start_minute: 60, end_minute: 480,
+    description: "Lock CONTACT-9 from minute 60 to 480.", schema_version: "1" },
+  { kind: "exclude_worker_from_task" as const, resolved_entities: [],
+    description: "Exclude CONTACT-9 from Picking.", schema_version: "1" },
+];
+
+it("names every input kind and every enabled Remove control distinctly, and stays axe clean", async () => {
+  mockProposal(false, { constraints: multiKindConstraints });
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  for (const name of ["Minimum workers", "Demand factor", "Maximum hours", "Start minute", "End minute"]) {
+    expect(screen.getByRole("spinbutton", { name })).toBeEnabled();
+  }
+  for (const constraint of multiKindConstraints) {
+    expect(screen.getByRole("group", { name: constraint.description })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: `Remove ${constraint.description}` })).toBeEnabled();
+  }
+  await expectAxeClean(container);
+});
+
+it("pairs each lock-row error with its own input and stays axe clean", async () => {
+  mockProposal(false, { constraints: [multiKindConstraints[3]] });
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  const start = screen.getByRole("spinbutton", { name: "Start minute" });
+  const end = screen.getByRole("spinbutton", { name: "End minute" });
+  await userEvent.clear(start);
+  await userEvent.type(start, "-5");
+  await userEvent.clear(end);
+  await userEvent.type(end, "1.5");
+  for (const input of [start, end]) {
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(document.getElementById(input.getAttribute("aria-describedby")!)).toBeInTheDocument();
+  }
+  expect(start.getAttribute("aria-describedby")).not.toBe(end.getAttribute("aria-describedby"));
+  await expectAxeClean(container);
+});
+
+it("keeps the timeline's 'Earlier version of this draft' line axe clean", async () => {
+  mockProposal();
+  const { ActivityTimeline } = await import("@/features/chat/ActivityTimeline");
+  const draft = (index: number, summary: string) => ({
+    ...dialogueBase,
+    activity_id: `cccccccc-cccc-4ccc-8ccc-${String(index).padStart(12, "0")}`,
+    activity_type: "draft" as const,
+    sequence: String(index),
+    proposal_id: accessibleProposal.proposal_id,
+    proposal_version_id: `dddddddd-dddd-4ddd-8ddd-${String(index).padStart(12, "0")}`,
+    consequence_summary: summary,
+  });
+  const { container } = render(
+    <ActivityTimeline navigate={vi.fn()} items={[draft(1, "Cap at 40."), draft(2, "Cap at 36.")] as never} />,
+  );
+
+  expect(screen.getByText(/Earlier version of this draft/)).toBeInTheDocument();
+  expect(screen.getAllByRole("region", { name: "Draft proposal" })).toHaveLength(1);
+  await expectAxeClean(container);
+});
+
+it.each([
+  ["Discarded", { state: "rejected", ended_by: "planner" }],
+  ["Discarded by assistant", { state: "rejected", ended_by: "assistant" }],
+  ["Replaced by a newer draft", { state: "rejected", ended_by: "system" }],
+  ["Applied to baseline — v2 promoted", { state: "applied", ended_by: "system", applied_version_ordinal: 2 }],
+])("renders the ended state %s read-only and accessible", async (line, overrides) => {
+  mockProposal(false, overrides);
+  const { DraftCard } = await import("@/features/chat/DraftCard");
+  const { container } = render(<DraftCard proposalId={accessibleProposal.proposal_id} />);
+
+  const region = screen.getByRole("region", { name: "Draft proposal" });
+  expect(within(region).getByText(line)).toBeInTheDocument();
+  expect(within(region).queryByRole("button")).not.toBeInTheDocument();
+  expect(within(region).queryByRole("spinbutton")).not.toBeInTheDocument();
+  await expectAxeClean(container);
 });
 
 it("announces the queued run identity and literal status through a polite live region", async () => {

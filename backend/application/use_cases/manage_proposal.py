@@ -8,6 +8,7 @@ from pydantic import TypeAdapter
 from application.contracts.canonical import contract_digest
 from application.contracts.proposal import (
     DraftConstraintProposalV1,
+    ProposalEndedByV1,
     ProposalV1,
     ProposalViewV1,
 )
@@ -46,6 +47,10 @@ class RejectedProposalError(ProposalCommandError):
     pass
 
 
+class AppliedProposalError(ProposalCommandError):
+    """The draft was promoted to baseline; it is read-only from then on (AD-9)."""
+
+
 class ProjectionUnavailableError(ProposalCommandError):
     """The proposal row is readable but its scenario projection is not.
 
@@ -54,12 +59,33 @@ class ProjectionUnavailableError(ProposalCommandError):
     """
 
 
-def _view(proposal: ProposalV1, current_version_id: UUID) -> ProposalViewV1:
+def _view(
+    proposal: ProposalV1,
+    current_version_id: UUID,
+    *,
+    version_ordinal: int | None,
+    ended_by: ProposalEndedByV1 | None = None,
+    applied_version_ordinal: int | None = None,
+) -> ProposalViewV1:
     return ProposalViewV1(
         proposal=proposal,
         current_scenario_version_id=current_version_id,
         stale=proposal.scenario_version_id != current_version_id,
+        version_ordinal=version_ordinal,
+        ended_by=ended_by,
+        applied_version_ordinal=applied_version_ordinal,
     )
+
+
+def _refuse_if_ended(proposal: ProposalV1, *, action: str) -> None:
+    """An ended draft refuses every command, and this check comes BEFORE the
+    scenario-staleness and resource-version checks: `mark_applied` bumps the
+    resource version, so checking it first would answer `stale_*` for a draft
+    whose real, permanent state is `applied` (Story 5.11 C5)."""
+    if proposal.state == "rejected":
+        raise RejectedProposalError(f"a rejected proposal cannot be {action}")
+    if proposal.state == "applied":
+        raise AppliedProposalError(f"an applied proposal cannot be {action}")
 
 
 def _max_constraints() -> int:
@@ -83,7 +109,13 @@ def get_proposal(
         raise ProjectionUnavailableError(
             "the proposal's scenario projection could not be read"
         )
-    return _view(record.proposal, overview.scenario_version_id)
+    return _view(
+        record.proposal,
+        overview.scenario_version_id,
+        version_ordinal=record.version_ordinal,
+        ended_by=record.ended_by,
+        applied_version_ordinal=record.applied_version_ordinal,
+    )
 
 
 def _operation(proposal_id: UUID, command: str) -> str:
@@ -139,7 +171,15 @@ def _replay_or_conflict(
     # Recompute drift against the CURRENT projection rather than replaying the
     # `stale` flag captured at first execution (AD-14: cached data is never
     # authority). A replay after a scenario reimport must still read as stale.
-    return _view(replayed.proposal, current_version_id)
+    # A replay answers "what did my command do": it keeps the stored lifecycle
+    # fields and recomputes only `stale`.
+    return _view(
+        replayed.proposal,
+        current_version_id,
+        version_ordinal=replayed.version_ordinal,
+        ended_by=replayed.ended_by,
+        applied_version_ordinal=replayed.applied_version_ordinal,
+    )
 
 
 def _current_for_command(repository, projection_reader, connection, proposal_id):
@@ -194,10 +234,9 @@ def revise_proposal(
     if replay is not None:
         return replay
     current = record.proposal
+    _refuse_if_ended(current, action="revised")
     if current.scenario_version_id != overview.scenario_version_id:
         raise StaleProposalError("proposal is stale against the governed scenario version")
-    if current.state == "rejected":
-        raise RejectedProposalError("a rejected proposal cannot be revised")
     if expected_resource_version != current.resource_version:
         raise StaleResourceVersionError(expected_resource_version, current.resource_version)
 
@@ -225,7 +264,9 @@ def revise_proposal(
             "resource_version": current.resource_version + 1,
         }
     )
-    result = _view(revised, overview.scenario_version_id)
+    result = _view(
+        revised, overview.scenario_version_id, version_ordinal=record.version_ordinal + 1
+    )
     repository.append_revision(
         connection,
         proposal=revised,
@@ -273,14 +314,18 @@ def reject_proposal(
     if replay is not None:
         return replay
     current = record.proposal
-    if current.state == "rejected":
-        raise RejectedProposalError("proposal is already rejected")
+    _refuse_if_ended(current, action="rejected again")
     if expected_resource_version != current.resource_version:
         raise StaleResourceVersionError(expected_resource_version, current.resource_version)
     rejected = ProposalV1(
         **{**current.__dict__, "state": "rejected", "resource_version": current.resource_version + 1}
     )
-    result = _view(rejected, overview.scenario_version_id)
+    result = _view(
+        rejected,
+        overview.scenario_version_id,
+        version_ordinal=record.version_ordinal,
+        ended_by="planner",
+    )
     repository.reject(
         connection,
         proposal=rejected,
@@ -295,7 +340,7 @@ def reject_proposal(
 
 
 __all__ = [
-    "IdempotencyKeyConflictError", "ProjectionUnavailableError", "ProposalCommandError",
+    "AppliedProposalError", "IdempotencyKeyConflictError", "ProjectionUnavailableError", "ProposalCommandError",
     "RejectedProposalError", "StaleProposalError", "StaleResourceVersionError",
     "get_proposal", "reject_proposal", "revise_proposal",
 ]

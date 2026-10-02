@@ -44,6 +44,8 @@ describe("useDecideApproval", () => {
       ["conversation-timeline"],
       ["scheduleRunResult"],
       ["scenario-projection"],
+      // Story 5.11: a promotion marks the draft `applied` inside TX2.
+      ["proposal"],
     ]) expect(invalidate).toHaveBeenCalledWith({ queryKey });
   });
 });

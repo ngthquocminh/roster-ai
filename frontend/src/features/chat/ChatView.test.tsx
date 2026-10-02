@@ -224,6 +224,57 @@ describe("ChatView", () => {
   });
 
   it.each([
+    ["agent_queued", true],
+    ["agent_running", true],
+    ["agent_completed", false],
+    ["agent_failed", false],
+    [null, false],
+  ])("tells the live Draft card an agent turn is in flight only for %s (C7)", (status, inFlight) => {
+    // The composer's own `isPending` is NOT the signal: sending resolves when the
+    // message is ACCEPTED, and the turn executes afterwards. The timeline's
+    // `latest_agent_run_status` is the in-flight fact already on the page.
+    mockTimeline.mockReturnValue({
+      data: {
+        conversation_id: NEWER,
+        resource_version: 3,
+        latest_agent_run_status: status,
+        items: [activity("11111111-1111-1111-1111-111111111111", "Saved request", "1"), draftActivity()],
+        limit: 200,
+        has_more: false,
+      },
+      error: null, isError: false, isPending: false, refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.queryAllByText("Wait for the assistant to finish")).toHaveLength(inFlight ? 1 : 0);
+    expect(screen.getByRole("button", { name: "Run optimization" }).hasAttribute("disabled")).toBe(inFlight);
+    expect(screen.getByRole("button", { name: "Discard draft" }).hasAttribute("disabled")).toBe(inFlight);
+  });
+
+  it("keeps the timeline (and its unsaved Draft edits) mounted when a background refetch fails", () => {
+    // TanStack v5 sets `isError` on a failed refetch while keeping `data`.
+    // Swapping the timeline out would unmount it and drop the edit buffers it
+    // owns (C8; code review of story-5.11).
+    mockTimeline.mockReturnValue({
+      data: {
+        conversation_id: NEWER,
+        resource_version: 3,
+        latest_agent_run_status: "agent_completed",
+        items: [activity("11111111-1111-1111-1111-111111111111", "Saved request", "1"), draftActivity()],
+        limit: 200,
+        has_more: false,
+      },
+      error: { status: 503 }, isError: true, isPending: false, refetch: vi.fn(),
+    });
+
+    renderChat(`/scenarios/${SCENARIO}?conversation=${NEWER}`);
+
+    expect(screen.getByRole("region", { name: "Draft proposal" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it.each([
     ["pending", { data: undefined, error: null, isError: false, isPending: true }],
     ["errored", { data: undefined, error: { status: 503 }, isError: true, isPending: false }],
   ])("keeps durable history and the composer available while availability is %s", (_state, query) => {

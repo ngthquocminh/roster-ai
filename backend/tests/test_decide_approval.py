@@ -62,6 +62,11 @@ class Audit:
     def __init__(self): self.items = []
     def append(self, _c, envelope): self.items.append(envelope)
 
+class Proposals:
+    """TX2's last write (Story 5.11): records the call; zero rows is normal."""
+    def __init__(self, changed=False): self.calls = []; self.changed = changed
+    def mark_applied(self, _c, **kw): self.calls.append(kw); return self.changed
+
 class Conversations:
     def __init__(self): self.items = []
     def append_approval_request_activity(self, _c, **kw): self.items.append(("event", kw)); return None
@@ -77,7 +82,7 @@ def pending(*, agent_run_id=None, baseline=None):
     return runs, approvals, audit, conversations, command
 
 def decide(runs, approvals, audit, conversations, command, *, decision="reject", now=NOW, baseline=None, enabled=True, memberships=None, telemetry=None):
-    return decide_approval(None, command=DecideApprovalCommandV1(site_id=command.site_id, actor_id=command.actor_id, approval_id=approvals.binding.approval_id, decision=decision, expected_resource_version=approvals.binding.resource_version, request_id=uuid4()), approvals=approvals, schedule_runs=runs, baselines=Baselines(baseline), baseline_writer=BaselineWriter(), memberships=memberships or Memberships(), audit_writer=audit, conversations=conversations, scheduling_baseline_enabled=enabled, clock=lambda: now, telemetry=telemetry)
+    return decide_approval(None, command=DecideApprovalCommandV1(site_id=command.site_id, actor_id=command.actor_id, approval_id=approvals.binding.approval_id, decision=decision, expected_resource_version=approvals.binding.resource_version, request_id=uuid4()), approvals=approvals, schedule_runs=runs, baselines=Baselines(baseline), baseline_writer=BaselineWriter(), memberships=memberships or Memberships(), audit_writer=audit, conversations=conversations, proposals=Proposals(), scheduling_baseline_enabled=enabled, clock=lambda: now, telemetry=telemetry)
 
 
 @pytest.mark.parametrize("decision", ["approve", "reject"])

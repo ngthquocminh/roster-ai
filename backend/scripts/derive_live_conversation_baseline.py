@@ -1,7 +1,7 @@
 """Derive `backend/evals/baselines/live-conversations.json` (Story 5.8 AC1).
 
-The baseline is a PROJECTION of one measurement -- the committed Story 5.7
-evidence -- not a second, independent one. It is ordinary tracked config, so it
+The baseline is a PROJECTION of one measurement -- the committed evidence file
+named by `SOURCE_EVIDENCE` -- not a second, independent one. It is ordinary tracked config, so it
 deliberately lives outside `evidence/`: membership in the NFR27 regime is
 decided by `evidence/**/*.json` location alone (`tests/test_evidence_convention
 .py::_evidence_files`), and writing it here is what keeps it out. The
@@ -17,7 +17,7 @@ Usage::
     cd backend
     uv run --frozen python scripts/derive_live_conversation_baseline.py
 
-Re-run it whenever the Story 5.7 evidence is regenerated; the source digest
+Re-run it whenever that evidence is regenerated; the source digest
 covers the WHOLE evidence file, so any regeneration requires re-deriving.
 """
 from __future__ import annotations
@@ -40,7 +40,7 @@ from evals.live_conversations.configuration import (  # noqa: E402
 from scripts.evidence_binding import REPO_ROOT, dataset_file_digest  # noqa: E402
 
 #: The one measurement this baseline projects.
-SOURCE_EVIDENCE = REPO_ROOT / "evidence" / "story-5.7" / "live-conversation-journeys.json"
+SOURCE_EVIDENCE = REPO_ROOT / "evidence" / "story-5.12" / "live-conversation-journeys.json"
 
 #: Tracked config, NOT evidence. See the module docstring.
 BASELINE_PATH = BACKEND_ROOT / "evals" / "baselines" / "live-conversations.json"
@@ -57,7 +57,7 @@ REQUIRED_REPETITIONS = 3
 def derive_baseline(
     source: Path = SOURCE_EVIDENCE, *, override_file: Path = DEFAULT_OVERRIDE_FILE
 ) -> dict:
-    """Build the baseline document from a committed Story 5.7 evidence file."""
+    """Build the baseline document from a committed live-conversation evidence file."""
     evidence = json.loads(Path(source).read_text(encoding="utf-8"))
     _ensure_source_is_clean(evidence, source=source)
     configuration = evidence["measured_configuration"]
@@ -68,8 +68,9 @@ def derive_baseline(
     return {
         "schema_version": BASELINE_SCHEMA_VERSION,
         "note": (
-            "A projection of the committed Story 5.7 measurement, not a second "
-            "measurement. Tracked config, deliberately outside evidence/."
+            "A projection of the committed live-conversation measurement named by "
+            "source_evidence_path, not a second measurement. Tracked config, "
+            "deliberately outside evidence/."
         ),
         "source_evidence_path": Path(source)
         .resolve()

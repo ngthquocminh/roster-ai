@@ -54,6 +54,17 @@ def test_scheduling_draft_settings_are_operator_owned_and_enabled_by_default(mon
     assert settings.scheduling_draft_max_constraints == 6
 
 
+def test_scheduling_draft_discard_flag_defaults_on_and_is_operator_owned(monkeypatch) -> None:
+    monkeypatch.delenv("SCHEDULING_DRAFT_DISCARD_ENABLED", raising=False)
+    assert default_settings().scheduling_draft_discard_enabled is True
+    monkeypatch.setenv("SCHEDULING_DRAFT_DISCARD_ENABLED", "false")
+    assert default_settings().scheduling_draft_discard_enabled is False
+    # F5: an operator flag, never an approval-rule input.
+    from application.capabilities.registry import PolicyInputsV1
+    from dataclasses import fields
+    assert "scheduling_draft_discard_enabled" not in {f.name for f in fields(PolicyInputsV1)}
+
+
 def test_governed_solver_settings_are_positive_and_application_owned(monkeypatch) -> None:
     for name in (
         "SOLVER_ENGINE_NAME", "SOLVER_SEED", "SOLVER_NUM_SEARCH_WORKERS",

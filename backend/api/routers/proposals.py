@@ -16,6 +16,7 @@ from application.ports.proposal import ProposalRepository
 from application.ports.scenario_projection import ScenarioProjectionReader
 from application.ports.session import ResolvedSession
 from application.use_cases.manage_proposal import (
+    AppliedProposalError,
     IdempotencyKeyConflictError,
     ProjectionUnavailableError,
     ProposalCommandError,
@@ -53,6 +54,9 @@ def _out(value: ProposalViewV1) -> ProposalOut:
         **proposal.__dict__,
         current_scenario_version_id=value.current_scenario_version_id,
         stale=value.stale,
+        version_ordinal=value.version_ordinal,
+        ended_by=value.ended_by,
+        applied_version_ordinal=value.applied_version_ordinal,
     )
 
 
@@ -81,8 +85,16 @@ def _command_problem(exc: ProposalCommandError) -> JSONResponse:
         )
     if isinstance(exc, RejectedProposalError):
         return problem_response(
-            status=409, code="proposal_rejected", title="Proposal is rejected",
+            status=409, code="rejected_proposal", title="Proposal is rejected",
             detail="The rejected proposal cannot accept this command.",
+        )
+    if isinstance(exc, AppliedProposalError):
+        return problem_response(
+            status=409, code="applied_proposal", title="Draft was applied",
+            detail=(
+                "This draft was applied to the baseline and cannot be changed. "
+                "Describe the change again to start a new draft."
+            ),
         )
     if isinstance(exc, ProjectionUnavailableError):
         return problem_response(

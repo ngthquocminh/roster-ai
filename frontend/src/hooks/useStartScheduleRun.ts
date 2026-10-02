@@ -4,6 +4,7 @@ import {
   startScheduleRun,
   type ScheduleRunStart,
 } from "@/api/scheduleRuns";
+import { proposalKey } from "@/hooks/useProposal";
 import { scheduleRunsKey } from "@/hooks/useScheduleRuns";
 import { createIdempotencyKeyHolder } from "@/lib/idempotency";
 
@@ -27,10 +28,16 @@ export function useStartScheduleRun() {
       // whole prefix is invalidated rather than plumbed through.
       void queryClient.invalidateQueries({ queryKey: scheduleRunsKey() });
     },
-    onError: () => {
+    onError: (_error, body) => {
       // Deliberately does NOT settle: the next attempt reuses the same key so a
       // command that succeeded behind a lost response replays instead of
       // colliding on the resource version.
+      //
+      // Re-read the draft: a run refused as `applied_proposal` or
+      // `rejected_proposal` means the card is showing a state that has ended
+      // (spec 1: the card re-reads the proposal after any command; code review
+      // of story-5.11).
+      void queryClient.invalidateQueries({ queryKey: proposalKey(body.proposal_id) });
     },
   });
 }

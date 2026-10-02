@@ -1219,3 +1219,181 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: none (B:10 agent fix, 2026-09-29)
   summary: The agent cannot say when, or by whom, the current baseline was approved; the workflow snapshot carries no approval decision.
   evidence: `load_workflow_context` (`backend/application/use_cases/conversation_workflow_context.py`) reads drafts, runs and the baseline version, but no approval record. The agent now points the planner to Runs → the run → Debug details → Decision provenance, which shows the time. Adding the decision (outcome and time) via the approval repository (`list_for_schedule_run`) is a new data path, and a time in prose must pass the grounding gate.
+
+## Deferred from: brainstorming of the draft lifecycle design (2026-09-28)
+
+- **Draft undo / restore.** The planner asks the agent to remove or change a constraint
+  instead. The design is already worked out in
+  `docs/superpowers/specs/2026-09-28-draft-lifecycle-design.md` section 6: each version
+  stores `undo_target_ordinal` and `origin`; an undo copies the current version's target
+  and inherits that target's own target, so repeated undo walks back instead of toggling
+  (a naive "restore previous version" makes the second undo a redo). Always append-only,
+  never move `current_version_id` backwards, because runs pin versions. **Deferred reason:
+  Minh chose to keep undo out of the first cut; removal through chat covers the need.**
+  **Owner: open.**
+
+- **Draft card extras: restore control, re-activating a discarded draft, version diff, and
+  a full editor (add or retarget constraints).** **Deferred reason: the planner reviews the
+  full constraint list on the card, and structural edits go through chat, where the agent
+  resolves names to real IDs.** **Owner: open.**
+
+- **Merging unsaved card edits with a concurrent assistant update.** When the draft
+  changes under a planner's unsaved edits, the card shows "This draft changed to vN" and
+  Load vN drops the local edits (spec §3.2). **Deferred reason: rare once card controls
+  are disabled during an in-flight turn; a merge UI is not worth building first.**
+  **Owner: open.**
+
+## Deferred from: Story 5.11 creation (2026-09-30)
+
+- **Baseline staleness of a working draft is invisible until Run.** `ProposalViewV1.stale`
+  compares scenario versions only, while `create_run_snapshot` also refuses when the
+  proposal's `expected_baseline_schedule_version` no longer matches the current baseline
+  (Story 5.11 C14). A working draft left baseline-stale by another conversation's promotion
+  therefore shows no "out of date" state, and is refused on Run with `stale_proposal`.
+  The planner-revise path still copies the old pin; an agent `updated` version re-pins at
+  tool time. **Deferred reason: not part of the lifecycle's ACs; fixing it changes what
+  `stale` means for every reader.** **Owner: open.**
+
+- **Most `SCHEDULING_*_ENABLED` flags are undocumented.** Only `SCHEDULING_BASELINE_ENABLED`
+  (and, from Story 5.11, `SCHEDULING_DRAFT_DISCARD_ENABLED`) appears in
+  `docs/CONFIGURATION.md`; none appears in `backend/.env.example` except the new one, as a
+  commented line (Story 5.11 C19). **Deferred reason: documenting the rest is unrelated to
+  the draft lifecycle.** **Owner: open.**
+
+- **For Story 5.12: `behavioral_digest` does not hash instructions.** It covers model,
+  judge, reasoning effort and the env override file only
+  (`backend/evals/live_conversations/configuration.py`), so sprint-change-proposal
+  2026-09-30 section 2.2's "these instruction changes move the `behavioral_digest`" is
+  inaccurate (Story 5.11 C15). Default CI is unaffected by the instruction rewrite. Story
+  5.12's reason to re-measure scenarios A-D stands on its own (behaviour changed), and the
+  proposal's wording should be corrected there. **Owner: Story 5.12.**
+  **Closed by Story 5.12 (2026-10-01):** recorded as that story's F7 correction (completion
+  notes) and in `docs/TESTING.md` ("The agent instructions and `scenarios.json` are not in
+  `behavioral_digest`"); A-E were re-measured deliberately (129/129, `evidence/story-5.12/`).
+  The approved spec and proposal are left as written.
+
+## Deferred from: Story 5.11 implementation (2026-09-30)
+
+- **`scheduling_draft_discard`'s error vocabulary carries its base code.** The conformance
+  suite requires `manifest.errors` to equal every code the module can raise, so
+  `draft_discard_failed` (the base class code, never raised on its own) is declared beside
+  the three the story names (`no_working_draft`, `draft_changed_this_turn`,
+  `budget_exhausted`). **Deferred reason: harmless, and the same shape as
+  `scheduling_draft`'s `draft_failed`; removing it means reshaping the conformance rule.**
+  **Owner: open.**
+
+- **A draft turn still has no model prose channel.** `DraftProposalV1` carries only
+  `draft_id`, so "Created a draft (v1)" / "Updated your draft (now v3)" wording comes from
+  the card's badge, not from the assistant (Story 5.11 C6). The instructions ask for the
+  reported outcome and version only when the assistant mentions the draft in a prose answer.
+  **Deferred reason: adding a prose field to the draft output is a contract change outside
+  this story.** **Owner: open.**
+
+- **A discard rides only an `agent_completed` finalize.** Decision 8 names the three `_finish`
+  call sites; the two `agent_cancelled` sites handle suspended turns, which bind no discard
+  (Decision 7), and a completed-but-unusable turn ends `agent_failed` and applies nothing
+  (`api/routers/conversations.py`, the `discard=` argument). **Deferred reason: this is the
+  reading Decision 7 implies ("nothing persists from a failed turn"); no call site loses a
+  discard it bound.** **Owner: open.**
+
+- **`tests/compose_proof.py` ends an earlier working draft before drafting again.** The
+  proof drafts twice in one conversation, which the partial unique index now forbids; it
+  mirrors discard-then-draft (`end_by_assistant`, then `create_draft`). **Deferred reason:
+  test-harness shape only; production has no second create path.** **Owner: open.**
+
+- **`DraftCard` takes optional `buffer`/`onBufferChange`/`agentTurnInFlight` props.** Without
+  them it keeps a local buffer, so it still renders standalone (tests, state matrix); the
+  timeline always passes them (Decision 14). **Deferred reason: the optional path is a
+  rendering convenience; revisit if a second caller appears.** **Owner: open.**
+
+- **UX-DR35 outline buttons got distinct border colours.** Cancel, Keep, Load and Refresh are
+  all outline buttons, so each got its own border colour to satisfy `stateMatrix`'s
+  merged-treatment rule. **Deferred reason: a visual-design call the story did not make;
+  revisit with the next design pass.** **Owner: open.**
+
+## Deferred from: code review of 5-11-keep-one-working-draft-per-conversation (2026-10-01)
+
+- **A degraded snapshot plus a full-list draft update drops constraints.** When
+  `load_workflow_context` raises `ValueError` the turn proceeds with no context
+  (`backend/api/routers/conversations.py:375-389`), so the model cannot see the working draft's
+  constraints, yet `scheduling_draft` still resolves `updated` and replaces the full constraint
+  list with whatever the model sent. **Deferred reason: the degrade path (dangling baseline
+  pointer, oversized snapshot) is rare, and the fix (refuse `updated` without a snapshot, or
+  observe through the snapshot read) is a design choice.** **Owner: open.**
+
+- **A Draft card that remounts mid-command forgets the command.** Mutation state and the
+  Idempotency-Key live in `DraftCard` (`frontend/src/features/chat/DraftCard.tsx:130`); a newer
+  `draft` activity arriving while Save/Run/Discard is pending moves the live card to a new
+  instance with `isPending=false` and a new key. **Deferred reason: needs the mutations lifted
+  to the timeline like the buffers; the trigger (send a message while a card command is
+  pending) is narrow.** **Owner: open.**
+
+- **Focus after a confirmed Discard and after removing a row falls to `<body>`.** Only Keep
+  restores focus; rows are index-keyed (`DraftCard.tsx:341,421`). **Deferred reason: needs a
+  focus-target decision (badge? next row?).** **Owner: open.**
+
+- **Edited rows announce the old description; a draft ending with unsaved edits drops them
+  silently.** Group label and Remove name read `row.description` from the server version; the
+  ended branch ignores the buffer and the timeline never deletes its entry (`DraftCard.tsx:342,407`).
+  **Deferred reason: low impact; revisit with the next card pass.** **Owner: open.**
+
+- **Ended-state transitions are not announced.** Spec §3.4 says the ended state is announced;
+  Decision 14 makes the badge (not a live region) the accessible text (`DraftCard.tsx:283`).
+  **Deferred reason: reconcile spec and story wording first.** **Owner: open.**
+
+## Deferred from: Story 5.12 implementation (2026-10-01)
+
+- **A-D checks that grade wording, not action.** Minh's rule from Story 5.12 applies to every
+  test: grade the right tool, the right arguments and a result not invented, not how the reply
+  is worded. All of these passed 129/129, so none fails today; the risk is a future false fail,
+  or a wrong action that passes. In `backend/evals/live_conversations/scenarios.json`:
+  - **D:1 `long_walkthrough`, D:2 `is_brief`**: length and style. Drop them and keep
+    `states_scenario_fact` (an invented fact).
+  - **A:6 `off_subject`**: topic, not truth. Drop it; `grounds_worker_count` checks the number.
+  - **B:10 `identifies_by_origin`, `locates_decision_record`**: grade explanation quality, and
+    do not check that the stated location is true. The planner asked where the record is, so
+    answering is the requested result. Reword to "does the reply state a location that is not
+    where the record is", or drop. **Needs Minh's call.**
+  - **C:10 `says_ready`**: checks the word "ready" appears, never that the demonstration tool
+    ran. Add `tool_called` for the demonstration capability. Tool telemetry labels carry no
+    arguments (`backend/agent/capability_tools.py`, `capability_name`/`fact_group`/
+    `failure_reason`), so "once" would need the tool result.
+  - **B:7, C:12** ("run it", "run and approve it yourself"): the right action is that **no**
+    run or approval is created this turn, which code can check from the tool log or the run
+    list. Today only judges grade them. Add a code check; keep the "claims it ran" judges.
+
+  Any edit changes A-D's grading, so it needs a re-measurement: a recorded 3-repetition run
+  (about USD 0.10 at Story 5.12's rates) and a re-derived baseline, following
+  `docs/EVIDENCE-CONVENTION.md`. **Deferred reason: no failure today, and the edits need a
+  paid re-measurement; bundle them with the next story that re-measures.** **Owner: open
+  (Minh decides B:10).**
+
+- **A repeated "undo that" toggles instead of walking back.** The one-step undo re-sends
+  `working_draft.previous_version`, the version before the latest
+  (`backend/application/use_cases/conversation_workflow_context.py`). After one undo the
+  latest version is the restored one, so a second undo re-sends the version just undone. The
+  design for walking back (each version stores `undo_target_ordinal`; an undo inherits its
+  target's target) is in the draft lifecycle spec §6. Scenario E tests a single undo only.
+  **Deferred reason: one-step undo is what E:4 needed; walking back needs the version schema
+  change §6 describes.** **Owner: open.**
+
+## Deferred from: code review of 5-12-prove-the-draft-lifecycle-in-live-conversations (2026-10-02)
+
+- **A repeated "undo that" toggles; an unchanged or empty `previous_version` is not detected.**
+  Already recorded under "Deferred from: Story 5.12 implementation" (spec §6 has the fix);
+  the review re-found it (Blind and Edge Case) and adds that `previous_version` may be an
+  empty constraint list or equal to the working list. **Deferred reason: one-step undo is what
+  E:4 needed.** **Owner: open.**
+
+- **`get_version_at` fails the workflow-context load on a legacy payload.** A
+  `ProposalV1` validation error on the older version propagates out of
+  `load_workflow_context` (`backend/adapters/postgres/proposal.py`,
+  `backend/application/use_cases/conversation_workflow_context.py`). The current-version read
+  has the same exposure. **Deferred reason: no legacy payloads exist; matters when the
+  proposal schema next changes.** **Owner: open.**
+
+- **Hardcoded 129 / 43 / 5 in the drop-check and reporting tests.** They have no single
+  source, the `green_report` docstring calls the digest edit "a no-op" while the code still
+  performs it, and one test lists E:4 as partial to reach the floor's arithmetic
+  (`backend/tests/test_live_conversation_drop_check.py`). **Deferred reason: no wrong behavior,
+  and every re-derivation already needs a hand edit.** **Owner: open.**
