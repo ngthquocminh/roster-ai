@@ -1376,3 +1376,24 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   target's target) is in the draft lifecycle spec §6. Scenario E tests a single undo only.
   **Deferred reason: one-step undo is what E:4 needed; walking back needs the version schema
   change §6 describes.** **Owner: open.**
+
+## Deferred from: code review of 5-12-prove-the-draft-lifecycle-in-live-conversations (2026-10-02)
+
+- **A repeated "undo that" toggles; an unchanged or empty `previous_version` is not detected.**
+  Already recorded under "Deferred from: Story 5.12 implementation" (spec §6 has the fix);
+  the review re-found it (Blind and Edge Case) and adds that `previous_version` may be an
+  empty constraint list or equal to the working list. **Deferred reason: one-step undo is what
+  E:4 needed.** **Owner: open.**
+
+- **`get_version_at` fails the workflow-context load on a legacy payload.** A
+  `ProposalV1` validation error on the older version propagates out of
+  `load_workflow_context` (`backend/adapters/postgres/proposal.py`,
+  `backend/application/use_cases/conversation_workflow_context.py`). The current-version read
+  has the same exposure. **Deferred reason: no legacy payloads exist; matters when the
+  proposal schema next changes.** **Owner: open.**
+
+- **Hardcoded 129 / 43 / 5 in the drop-check and reporting tests.** They have no single
+  source, the `green_report` docstring calls the digest edit "a no-op" while the code still
+  performs it, and one test lists E:4 as partial to reach the floor's arithmetic
+  (`backend/tests/test_live_conversation_drop_check.py`). **Deferred reason: no wrong behavior,
+  and every re-derivation already needs a hand edit.** **Owner: open.**

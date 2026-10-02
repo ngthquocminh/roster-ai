@@ -4,7 +4,7 @@ baseline_commit: 3d747f7 (Story 5.11 merged; story created at 8a85f4f, re-verifi
 depends_on: 5-11-keep-one-working-draft-per-conversation (done; merged into feat/draft-lifecycle)
 ---
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -147,6 +147,8 @@ resolves templates only). Each turn's `obligation` is a one-sentence restatement
 Every E turn except E:4 and E:6 sets `requires_persisted_draft: true`. Judge wording is
 **initial**; Task 6 validates it before any paid run.
 
+> **Amended in review (2026-10-02):** B:1's `names_schedule` became a `tool_called` check (`reads_overview`); the Task 8 notes record Minh's approval. D1's four check kinds became five.
+
 | Turn | `user` | `expect` |
 |---|---|---|
 | E:1 | In a draft, keep Priya Nair off the Main Pick task. | `activity_is: draft`; `draft_has` `exclude_worker_from_task` worker Priya, task Main Pick; `draft_constraint_count: 1`; `draft_state_is: active` |
@@ -181,6 +183,8 @@ tolerated. Graded as:
 - `mentions_none` `says_undid`: `["undid", "reverted the draft", "rolled back the draft",
   "restored the previous version"]`.
 
+> **Amended in review (2026-10-02):** E:4 is graded by action with `when`-gated checks (draft branch vs prose branch). Minh resolved the D5 stop condition on 2026-10-02; see the Dev Agent Record and the design spec's "Amended by Story 5.12" notes.
+
 On a re-add, F5 means the reply is a draft activity whose prose is empty, so `handles_undo` decides
 from `facts.draft`. **Stop condition:** if Task 6's offline replay cannot separate a correct re-add
 from a re-add of the wrong constraint (both must fall outside the 0.30–0.70 band, on the right
@@ -193,6 +197,8 @@ event log. B:12's `claims_unhappened` judge reads `facts.events` and last scored
 (handover "Gotchas"), and no E turn summarizes the conversation. Changing that input would risk a
 regression on B:12 for no grading gain.
 *Does not cover:* a future summary turn after a discard, which would need a discard event first.
+
+> **Overridden by Minh (2026-10-02):** `capture_draft_ended` appends an applied-draft event and the run event names the run id; see the Dev Agent Record.
 
 **D7 — Drop-check floor for 129 turns: `AGGREGATE_FLOOR = 120`.** This is the same method as the
 existing constant (F8): the historical 3/90 failure rate scaled to 129 turns gives λ 4.3, and
@@ -225,6 +231,8 @@ rule, or an existing check kind's semantics, or before rewording a judge questio
 part of this story.
 *Does not cover:* reliability flakes with no false claim. Those go through `--accept-finding`, and
 only with Minh's explicit approval of the exact turn.
+
+> **Used in review (2026-10-02):** the undo rule and `working_draft.previous_version` (model-view change, approved by Minh) and the `draft_output_without_draft` retry in `agent/runtime.py` were made under this Decision; see the Dev Agent Record.
 
 **D10 — Dataset identity stays; binding prose follows the scenario set.** `scenarios.json` keeps
 `schema_version` "2" (the loader requires it), `case_id` and `case_version`, because the dataset
@@ -316,6 +324,20 @@ Phases are ordered. Do not start a phase before the previous one's exit conditio
   - [x] `handover-live-eval-per-turn-expectations.md`: a short dated update pointing at this story.
   - [x] `deferred-work.md`: close 5.11's "For Story 5.12: `behavioral_digest` does not hash instructions" entry, citing this story's F7 correction.
   - [x] `sprint-status.yaml`: the story's status when it is finished (via code review).
+
+### Review Findings
+
+Code review 2026-10-02, baseline `3d747f7..4faebfd`. Chunked: backend code, tests, `scenarios.json`
+and the baseline went to three reviewers (Blind, Edge Case, Acceptance); the evidence JSON was
+checked mechanically. No `decision-needed`, no `high`. Mutations M1 and M20 re-run: both reddened
+for the stated reason, tree reverted clean.
+
+- [x] [Review][Patch] `validate_expectation` line has a run of embedded spaces from a scripted edit; split it into two lines [backend/evals/live_conversations/expectations.py:180]
+- [x] [Review][Patch] `draft_state_is` loads `active/<ended_by>` (and `applied/planner`-style pairs that cannot occur); refuse an `ended_by` on `active` so an authored check cannot be unpassable [backend/evals/live_conversations/expectations.py:178-182]
+- [x] [Review][Patch] The story's frozen D4/D5/D6/D9 text still contradicts the code (E:4 graded by action with a `when` field, `Bindings.events` extended, `tool_called` as a fifth check kind, `previous_version` in the model view, the `draft_output_without_draft` retry). The dev record and the design spec carry Minh's overrides; add one-line pointers in those Decisions so a reader of D5/D6/D9 is not misled [5-12-prove-the-draft-lifecycle-in-live-conversations.md:90-243]
+- [x] [Review][Defer] A repeated "undo that" toggles between two versions; an undo that leaves the list unchanged, or a `previous_version` with no constraints, is not detected [backend/application/use_cases/conversation_workflow_context.py:41-52] — deferred, already in the ledger from the 5.12 implementation (spec §6 has the fix)
+- [x] [Review][Defer] `get_version_at` validates the older payload with `ProposalV1`; a legacy version that fails validation would fail the whole workflow-context load [backend/adapters/postgres/proposal.py:151-161] — deferred, same exposure the current-version read already has; matters only when the proposal schema changes
+- [x] [Review][Defer] The literals 129, 43 and 5 are repeated across the drop-check and reporting tests, the `green_report` docstring calls the digest edit a no-op while the code still makes it, and one test adds E:4 to its partial list only to land on the floor's arithmetic [backend/tests/test_live_conversation_drop_check.py] — deferred, maintenance cost with no wrong behavior; the floor comment already says a re-derivation needs a hand edit
 
 ## Dev Notes
 
@@ -583,6 +605,7 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 | M27 run event: run id dropped | `test_the_run_event_names_the_run_a_summary_may_cite` | green | red |
 | M28 snapshot: `previous_version` not added | `test_the_working_draft_carries_the_version_before_its_latest` | green | red |
 | M29 snapshot: reads the latest version, not the one before | same | green | red |
+| M30 loader: `active/<ended_by>` accepted (code review patch) | `test_a_malformed_expectation_is_refused_at_load` (`active/planner`) | green | red |
 | M30 adapter: `get_version_at` ordinal filter dropped | `test_each_version_of_a_draft_is_readable_by_its_ordinal` | green | red |
 
 ### File List

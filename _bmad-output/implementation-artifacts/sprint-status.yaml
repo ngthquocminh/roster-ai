@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2733,7 +2733,7 @@ development_status:
   # stale evidence and E coverage; four check kinds, not two (E:3/E:5 need a count, E:7 a
   # new-proposal check); E:4 accepts a clarification or a re-add (spec contradiction, D5);
   # floor 120 for 129 turns (lambda 4.3, 1.29%); discard:invoke is live-required, covered only by E:6.
-  5-12-prove-the-draft-lifecycle-in-live-conversations: review
+  5-12-prove-the-draft-lifecycle-in-live-conversations: done
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog

@@ -177,7 +177,9 @@ def validate_expectation(expectation: Expectation, present: set[str] | None = No
         raise ValueError(f'{where}: when must be one of {sorted(WHEN)}')
     if expectation.check == 'draft_state_is':
         state, _, ended_by = str(expectation.value).partition('/')
-        if state not in DRAFT_STATES or (ended_by and ended_by not in DRAFT_ENDED_BY)                 or str(expectation.value).endswith('/'):
+        if (state not in DRAFT_STATES or (ended_by and ended_by not in DRAFT_ENDED_BY)
+                or (state == 'active' and ended_by)  # an active draft has no ender
+                or str(expectation.value).endswith('/')):
             raise ValueError(f'{where}: draft_state_is takes <state>[/<ended_by>] with state in '
                              f'{sorted(DRAFT_STATES)} and ended_by in {sorted(DRAFT_ENDED_BY)}')
     if expectation.check == 'draft_constraint_count' and (

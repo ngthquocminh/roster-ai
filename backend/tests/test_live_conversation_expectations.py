@@ -91,6 +91,7 @@ def _e(**raw):
     ({'check': 'draft_state_is', 'value': 'deleted'}, 'state in'),
     ({'check': 'draft_state_is', 'value': 'rejected/user'}, 'ended_by in'),
     ({'check': 'draft_state_is', 'value': 'rejected/'}, 'state in'),
+    ({'check': 'draft_state_is', 'value': 'active/planner'}, 'ended_by in'),
     ({'check': 'draft_state_is'}, "needs \\['value'\\]"),
     ({'check': 'draft_state_is', 'value': 'active', 'turn': 1}, 'does not take'),
     ({'check': 'draft_updates_turn'}, "needs \\['turn'\\]"),
