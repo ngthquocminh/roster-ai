@@ -544,6 +544,12 @@ Claude Opus 5.5 (`claude-opus-5-5`)
   entry closed.
 - **Final counts (HEAD before the step-4 commit):** backend default suite 2861 passed / 2 skipped
   (PostgreSQL 18); Vitest 94 files / 784 tests passed.
+- **Spec amended, per Minh (2026-10-02):** `docs/superpowers/specs/2026-09-28-draft-lifecycle-design.md`
+  D6, §4 and §5.2 carry marked "Amended by Story 5.12" notes: the one-step undo through
+  `previous_version`, E:4 graded by action, and the `behavioral_digest` correction. The
+  original text is kept beside each note. F16 is unchanged: it records what 5.11 shipped at `3d747f7`.
+  `deferred-work.md` gains "Deferred from: Story 5.12 implementation": the A-D wording-check
+  list, and a repeated undo toggling instead of walking back (spec §6 has the fix).
 #### Mutation table (every mutation reverted; tree verified clean after each batch)
 
 | Mutation applied to real code | Guard that should redden | Before | After |
@@ -611,6 +617,7 @@ Claude Opus 5.5 (`claude-opus-5-5`)
 - `README.md`
 - `_bmad-output/implementation-artifacts/handover-live-eval-per-turn-expectations.md`
 - `_bmad-output/implementation-artifacts/deferred-work.md`
+- `docs/superpowers/specs/2026-09-28-draft-lifecycle-design.md` (amendment notes)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ### Change Log

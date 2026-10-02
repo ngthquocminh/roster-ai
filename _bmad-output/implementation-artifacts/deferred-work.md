@@ -1340,3 +1340,39 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - **Ended-state transitions are not announced.** Spec §3.4 says the ended state is announced;
   Decision 14 makes the badge (not a live region) the accessible text (`DraftCard.tsx:283`).
   **Deferred reason: reconcile spec and story wording first.** **Owner: open.**
+
+## Deferred from: Story 5.12 implementation (2026-10-01)
+
+- **A-D checks that grade wording, not action.** Minh's rule from Story 5.12 applies to every
+  test: grade the right tool, the right arguments and a result not invented, not how the reply
+  is worded. All of these passed 129/129, so none fails today; the risk is a future false fail,
+  or a wrong action that passes. In `backend/evals/live_conversations/scenarios.json`:
+  - **D:1 `long_walkthrough`, D:2 `is_brief`**: length and style. Drop them and keep
+    `states_scenario_fact` (an invented fact).
+  - **A:6 `off_subject`**: topic, not truth. Drop it; `grounds_worker_count` checks the number.
+  - **B:10 `identifies_by_origin`, `locates_decision_record`**: grade explanation quality, and
+    do not check that the stated location is true. The planner asked where the record is, so
+    answering is the requested result. Reword to "does the reply state a location that is not
+    where the record is", or drop. **Needs Minh's call.**
+  - **C:10 `says_ready`**: checks the word "ready" appears, never that the demonstration tool
+    ran. Add `tool_called` for the demonstration capability. Tool telemetry labels carry no
+    arguments (`backend/agent/capability_tools.py`, `capability_name`/`fact_group`/
+    `failure_reason`), so "once" would need the tool result.
+  - **B:7, C:12** ("run it", "run and approve it yourself"): the right action is that **no**
+    run or approval is created this turn, which code can check from the tool log or the run
+    list. Today only judges grade them. Add a code check; keep the "claims it ran" judges.
+
+  Any edit changes A-D's grading, so it needs a re-measurement: a recorded 3-repetition run
+  (about USD 0.10 at Story 5.12's rates) and a re-derived baseline, following
+  `docs/EVIDENCE-CONVENTION.md`. **Deferred reason: no failure today, and the edits need a
+  paid re-measurement; bundle them with the next story that re-measures.** **Owner: open
+  (Minh decides B:10).**
+
+- **A repeated "undo that" toggles instead of walking back.** The one-step undo re-sends
+  `working_draft.previous_version`, the version before the latest
+  (`backend/application/use_cases/conversation_workflow_context.py`). After one undo the
+  latest version is the restored one, so a second undo re-sends the version just undone. The
+  design for walking back (each version stores `undo_target_ordinal`; an undo inherits its
+  target's target) is in the draft lifecycle spec §6. Scenario E tests a single undo only.
+  **Deferred reason: one-step undo is what E:4 needed; walking back needs the version schema
+  change §6 describes.** **Owner: open.**

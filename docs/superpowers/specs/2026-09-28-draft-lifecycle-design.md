@@ -5,6 +5,9 @@ Revised 2026-09-30 against `main` at `ba8c706` (live eval graded by per-turn exp
 draft-id rebinding, baseline-answer instructions), then again after a 14-point spec review
 checked against the code. The review's main correction: a conversation is pinned to one
 scenario version, which removes the `superseded` state entirely (§1, "Staleness").
+Amended 2026-10-01 by Story 5.12 after live runs: a one-step undo (D6, §4), E:4's grading
+(§5.2), and the `behavioral_digest` claim (§5.2). Each amendment is marked in place; the
+original text is kept beside it.
 
 ## Problem
 
@@ -40,7 +43,7 @@ constraints remain soft.
 | D3 | Card edit scope | **Edit values + remove constraints.** Adding or retargeting goes through chat. |
 | D4 | How the agent reaches the working draft | **Server resolves it** (option A). `scheduling_draft` keeps its input — the full constraint list, no draft id. |
 | D5 | Agent discard | **Yes**, new capability `scheduling_draft_discard`, used only on explicit request. |
-| D6 | Undo / restore | **Deferred.** The planner asks to remove or change a constraint instead. |
+| D6 | Undo / restore | **One-step undo by the agent; the full undo stays deferred (§6).** *Amended by Story 5.12:* the snapshot's `working_draft.previous_version` carries the constraints of the version before the latest, and "undo that" re-sends exactly that list as a new version. A second undo re-sends the version just undone, so it toggles instead of walking back; §6's `undo_target_ordinal` design is the fix. (Was: "Deferred. The planner asks to remove or change a constraint instead.") |
 | D7 | Version diff on the card | **Not built.** The card lists every constraint; the planner reviews it before running. |
 | D8 | Concurrent change during a turn | **The turn loses.** Finalize re-checks the working draft it observed; if anything changed, the turn's draft change is not applied and the turn ends with a visible "draft changed" outcome (§2.2). |
 
@@ -364,6 +367,14 @@ In `agent/scheduling_instructions.py`:
   drafting its constraints again.
 - "Undo": no undo tool exists. If the request names a constraint, remove or change that
   constraint; otherwise ask which one. Never claim an undo happened.
+  *Amended by Story 5.12:* live E:4 read this as "remove another constraint" (twice), and,
+  once told to reverse the change, rebuilt the earlier list from the chat and dropped the
+  30-hour cap in 2 of 5 runs, since history renders a past draft only as its consequence
+  line. Shipped instead: "Undo that" reverses the planner's previous change by calling
+  `scheduling_draft` with exactly the constraints in `working_draft.previous_version`
+  (a new version, not a restore); with no `previous_version`, or for an earlier change, ask
+  which change to reverse. Never claim the draft was reverted or restored to an earlier
+  version. Commits `81722bb`, `54e3550`, `70594bf`.
 - Update workflow stage 2 ("Draft (you)") to match. Stage 3 stays planner-only.
 - Tool routing gains "Discarding the working draft on explicit request:
   scheduling_draft_discard, only."
@@ -434,6 +445,7 @@ Changes:
   2. add a constraint — `draft_updates_turn: 1`
   3. remove one — `draft_updates_turn: 1`, `draft_has` the survivor only
   4. "undo that" — no draft change; `mentions_none` of a claimed undo plus a Jev yes/no question (clarifies, or restores by re-adding the named constraint)
+     *Amended by Story 5.12:* graded by action, per Minh's rule (right tool, right arguments, a result not invented). With `when: draft`, code checks the saved draft (`draft_updates_turn: 1`, the exclusion back, the cap kept, 2 constraints); with `when: not_draft`, a judge checks that the reply asks which change to reverse and claims none. A Jev question cannot tell a correct re-add from a wrong one on a draft reply, which has no prose.
   5. "start over with just Z" — `draft_updates_turn: 1` (replace, not discard)
   6. "throw this draft away" — `draft_state_is: rejected/assistant`
   7. new request — `activity_is` draft with a new `proposal_id`, `draft_state_is: active`
@@ -441,7 +453,10 @@ Changes:
   `REQUIRED_SCENARIOS` in `cases.py` becomes `{'A': 6, 'B': 12, 'C': 12, 'D': 6, 'E': 7}`.
 - **Baseline.** Today `total_executed` is 108 (36 turns × 3 repetitions). With E it becomes
   129 (43 × 3). The §4 instruction changes move `behavioral_digest`, so A-D are
-  re-measured too. Re-derive `backend/evals/baselines/live-conversations.json` and the
+  re-measured too. *Amended by Story 5.12:* they do not. `behavioral_digest` covers the
+  models, reasoning effort and the override's environment maps, not the instructions or
+  `scenarios.json`. A-D were still re-measured, because their behaviour changed and the
+  evidence had to bind current code (129/129, `evidence/story-5.12/`). Re-derive `backend/evals/baselines/live-conversations.json` and the
   drop-check floor following `docs/EVIDENCE-CONVENTION.md`: commit code, measure, generate
   through `backend/scripts/evidence_binding.py` and
   `derive_live_conversation_baseline.py`, commit evidence separately. Do not hand-edit the
