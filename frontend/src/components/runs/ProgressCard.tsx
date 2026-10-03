@@ -22,21 +22,11 @@ type ProgressRun = Pick<ScheduleRunSummary, "status"> & { created_at?: string | 
  * not repeated; and with no copy button left there is no focusable control
  * inside the live region.
  */
-export function ProgressCard({
-  run,
-  showAccepted = true,
-}: Readonly<{
-  run: ProgressRun;
-  /** The Runs table already has an Accepted column; repeating it under the
-   *  badge only adds noise there. */
-  showAccepted?: boolean;
-}>) {
+export function ProgressCard({ run }: Readonly<{ run: ProgressRun }>) {
   return (
     <div className="flex flex-col gap-1 text-sm" role="status">
       <RunStatusBadge status={run.status} />
-      {showAccepted ? (
-        <p className="text-muted-foreground">{run.created_at ? `Accepted ${formatTimestamp(run.created_at)}` : "Accepted time not recorded"}</p>
-      ) : null}
+      <p className="text-muted-foreground">{run.created_at ? `Accepted ${formatTimestamp(run.created_at)}` : "Accepted time not recorded"}</p>
     </div>
   );
 }

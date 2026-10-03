@@ -31,8 +31,8 @@ export function CandidateScheduleTable({ assignments, scenarioId }: Readonly<{ a
   const rows = sorted.slice(current * SCHEDULE_PAGE_SIZE, (current + 1) * SCHEDULE_PAGE_SIZE);
 
   return (
-    <section aria-labelledby="candidate-schedule-heading" className="border-t pt-6">
-      <h3 className="text-lg font-semibold" id="candidate-schedule-heading">Candidate schedule</h3>
+    <section aria-labelledby="candidate-schedule-heading" className="rounded-xl border p-4">
+      <h3 className="font-semibold" id="candidate-schedule-heading">Candidate schedule</h3>
       {sorted.length === 0 ? <p className="mt-2 text-sm">No assignments</p> : (
         <>
           <Table className="mt-3">

@@ -118,7 +118,7 @@ export function ScenarioWorkspace() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="px-6 py-8">
       {query.isError ? (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">
           {/* EXPERIENCE.md:122 Scenario Data row — the approved stale label for

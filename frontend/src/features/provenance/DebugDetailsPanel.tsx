@@ -17,7 +17,7 @@ export function DebugDetailsPanel({ runId, scenarioId, evidenceRefs }: Readonly<
   const provenance = useRunProvenance(runId, open);
 
   return (
-    <Collapsible className="border-t pt-4" onOpenChange={setOpen} open={open}>
+    <Collapsible className="rounded-xl border p-4" onOpenChange={setOpen} open={open}>
       <CollapsibleTrigger asChild>
         {/* `whitespace-normal`/`h-auto` override the button's nowrap: at 200% zoom
             the one-line label pushed the chevron past the viewport (WCAG 1.4.10).

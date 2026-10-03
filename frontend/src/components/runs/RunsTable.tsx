@@ -76,15 +76,12 @@ function CancelButton({ run }: Readonly<{ run: ScheduleRunSummary }>) {
   const cancellation = useCancelScheduleRun(run.schedule_run_id);
   return (
     <div className="flex flex-col items-start gap-1">
-      {/* Outline with a red label, not the solid destructive fill: Cancel acts
-          immediately with no confirmation step, so it should not be the
-          loudest control on the page. */}
       <Button
-        className="min-h-11 border-destructive/40 text-destructive hover:text-destructive"
+        className="min-h-11"
         disabled={cancellation.isPending}
         onClick={() => cancellation.mutate({ expected_resource_version: run.resource_version })}
         type="button"
-        variant="outline"
+        variant="destructive"
       >
         Cancel
       </Button>
@@ -141,7 +138,7 @@ function RetryButton({ run }: Readonly<{ run: ScheduleRunSummary }>) {
             .finally(() => setReading(false));
         }}
         type="button"
-        variant="ghost"
+        variant="secondary"
       >
         Retry
       </Button>
@@ -185,7 +182,7 @@ function StatusCell({ run }: Readonly<{ run: ScheduleRunSummary }>) {
   // AC3: non-terminal runs render as static "In progress"-style text with a
   // timestamp (ProgressCard), never a percentage/ETA/spinner. Terminal runs
   // render their literal status alone.
-  if (NON_TERMINAL.has(run.status)) return <ProgressCard run={run} showAccepted={false} />;
+  if (NON_TERMINAL.has(run.status)) return <ProgressCard run={run} />;
   return <RunStatusBadge status={run.status} />;
 }
 
@@ -243,9 +240,9 @@ export function RunsTable({
             <TableHead scope="col">Status</TableHead>
             <TableHead scope="col">Accepted</TableHead>
             <TableHead scope="col">Updated</TableHead>
-            <TableHead scope="col"><span className="whitespace-nowrap">Scenario version</span></TableHead>
-            <TableHead scope="col"><span className="whitespace-nowrap">Proposal version</span></TableHead>
-            <TableHead scope="col"><span className="whitespace-nowrap">Baseline version</span></TableHead>
+            <TableHead scope="col">Scenario version</TableHead>
+            <TableHead scope="col">Proposal version</TableHead>
+            <TableHead scope="col">Baseline version</TableHead>
             <TableHead scope="col">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -254,12 +251,12 @@ export function RunsTable({
             <TableRow key={run.schedule_run_id}>
               <TableCell><IdentifierCopyButton identifierType="Run ID" value={run.schedule_run_id} /></TableCell>
               <TableCell><StatusCell run={run} /></TableCell>
-              <TableCell><span className="whitespace-nowrap">{formatTimestamp(run.created_at)}</span></TableCell>
+              <TableCell>{formatTimestamp(run.created_at)}</TableCell>
               {/* AC1's "updated time": the newest event on the run's stream,
                   falling back server-side to created_at. Deliberately NOT
                   finished_at, which is null for every non-terminal run --
                   exactly the rows a planner opens this table to monitor. */}
-              <TableCell><span className="whitespace-nowrap">{formatTimestamp(run.updated_at)}</span></TableCell>
+              <TableCell>{formatTimestamp(run.updated_at)}</TableCell>
               <TableCell><IdentifierCopyButton identifierType="Scenario version" value={run.scenario_version_id} /></TableCell>
               <TableCell>{run.proposal_version}</TableCell>
               {/* Trap 4: Story 3.1 Decision 7 -- baseline stays None today.

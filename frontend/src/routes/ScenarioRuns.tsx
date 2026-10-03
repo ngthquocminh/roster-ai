@@ -49,7 +49,7 @@ export function ScenarioRuns() {
   const staleAfterFailedRefetch = failed && Boolean(query.data);
 
   return (
-    <section aria-labelledby="scenario-runs-heading" className="mt-6 space-y-4" data-scenario-id={scenarioId}>
+    <section aria-labelledby="scenario-runs-heading" className="mx-auto mt-6 max-w-6xl space-y-4" data-scenario-id={scenarioId}>
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-xl font-semibold" id="scenario-runs-heading">Runs</h2>
         {/* Run state changes are planner-initiated today -- start and cancel

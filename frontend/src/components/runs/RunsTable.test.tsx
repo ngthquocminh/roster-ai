@@ -106,11 +106,6 @@ describe("RunsTable", () => {
     expect(within(rows[1]).getByText("run-b")).toBeInTheDocument();
   });
 
-  it("does not repeat the accepted time under an in-progress badge", () => {
-    renderTable([run({ status: "solver_running" })]);
-    expect(screen.queryByText(/^Accepted /)).not.toBeInTheDocument();
-  });
-
   it("reads status verbatim from the run record, never recomputed (Trap 7)", () => {
     renderTable([run({ status: "solver_infeasible" })]);
     expect(screen.getByLabelText("Infeasible")).toBeInTheDocument();

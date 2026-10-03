@@ -51,7 +51,7 @@ export function ScenarioDataView({ scenarioId, selectedVersion }: Readonly<{ sce
         onValueChange={controls.changeGroup}
       >
         <div className="mt-4 overflow-x-auto pb-2">
-          <TabsList className="min-w-max group-data-horizontal/tabs:h-auto" variant="line">
+          <TabsList className="min-w-max" variant="line">
             {groups.map(([slug, label]) => <TabsTrigger className="min-h-11 px-3 data-active:text-primary data-active:after:bg-primary" key={slug} value={slug}>{label}</TabsTrigger>)}
           </TabsList>
         </div>
