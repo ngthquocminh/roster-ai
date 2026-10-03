@@ -8,8 +8,8 @@ from application.use_cases.conversation_workflow_context import CANDIDATE_ASSIGN
 from evals.live_conversations.facts import read_group, verify_claim
 from evals.live_conversations.http_client import ApplicationConversation
 from evals.live_conversations.expectations import (
-    Bindings, TurnContext, apply_answers, evaluate, mentioned, verdict_from_checks, visible_lines,
-    visible_text,
+    Bindings, TurnContext, apply_answers, evaluate, mentioned, reading_lines, verdict_from_checks,
+    visible_lines, visible_text,
 )
 from evals.live_conversations.jev_judge import ask_yes_no, is_typesafe_judge, judge_turn_jev
 from evals.live_conversations.judge import PAYLOAD_STRUCTURE_KEYS, judge_turn
@@ -289,7 +289,9 @@ def execute_prefix(*, app: ApplicationConversation, case, endpoint, isolation_id
                                    ('proposal_id', 'state', 'ended_by', 'version_ordinal')}
                 verified['newest_draft_state'] = draft_state
             visible = visible_activity(activity)
-            reply_lines[index] = visible_lines(visible)
+            # Reading lines keep a verified name on its sentence's line; the
+            # per-segment lines would split a pair a later turn checks (B:4).
+            reply_lines[index] = reading_lines(activity) or visible_lines(visible)
             # Raw fact-tag syntax the planner can see is broken output on any
             # turn, whatever the turn asked (live run ad89854, B:2).
             if '<claim' in visible_text(visible) or '</claim' in visible_text(visible):

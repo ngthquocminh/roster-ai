@@ -440,6 +440,25 @@ def test_pair_checks():
                           _ctx(_reply(''), reply_lines={3: ['arjun patel']}), bindings)
 
 
+def test_a_pair_named_in_one_sentence_passes_when_each_name_is_its_own_segment():
+    """Live B:3 on the baseline-summary change: the assistant wrapped both names as
+    verified fact segments, and per-segment lines read them as two lone names."""
+    assignments = [{'worker_id': 'w1', 'task_id': 't1'}]
+    reply = {'activity_type': 'agent_response', 'response': {'segments': [
+        {'kind': 'fact', 'text': 'Priya Nair', 'field': 'name', 'value': 'w1'},
+        {'kind': 'prose', 'text': ' is assigned to '},
+        {'kind': 'fact', 'text': 'Main Pick | Order Picker M02', 'field': 'name', 'value': 't1'},
+        {'kind': 'prose', 'text': '.'}]}}
+    assert code_check(_e(check='names_assigned_pair'), _ctx(reply, assignments=assignments), Bindings())
+    # Names on different lines are still not a pair.
+    split = {'activity_type': 'agent_response', 'response': {'segments': [
+        {'kind': 'fact', 'text': 'Priya Nair', 'field': 'name', 'value': 'w1'},
+        {'kind': 'prose', 'text': '\n'},
+        {'kind': 'fact', 'text': 'Main Pick | Order Picker M02', 'field': 'name', 'value': 't1'}]}}
+    assert not code_check(_e(check='names_assigned_pair'), _ctx(split, assignments=assignments),
+                          Bindings())
+
+
 def test_a_pair_must_be_named_together_not_anywhere_in_a_list():
     assignments = [{'worker_id': 'w1', 'task_id': 't1'}]
     listing = _reply('Workers: Priya Nair, Arjun Patel\n'
