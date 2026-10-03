@@ -31,14 +31,14 @@ export function ComparisonSummary({ comparison }: Readonly<{ comparison: Compari
   const baselineObjectives = new Map(baseline?.objective_components ?? []);
 
   return (
-    <section aria-labelledby="comparison-heading" className="space-y-5">
-      <h3 className="text-xl font-semibold" id="comparison-heading">Comparison with baseline</h3>
+    <section aria-labelledby="comparison-heading" className="space-y-6 border-t pt-6">
+      <h3 className="text-lg font-semibold" id="comparison-heading">Comparison with baseline</h3>
 
       {comparison.stale ? <InlineAlert title="Historical comparison" description={`Expected baseline ${comparison.expected_baseline_schedule_version ?? "none"}; current baseline ${comparison.current_baseline_schedule_version ?? "none"}. The frozen numbers remain visible below.`} /> : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border p-4" aria-labelledby="assignment-diff-heading">
-          <h4 className="font-semibold" id="assignment-diff-heading">Assignment changes</h4>
+      <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
+        <section aria-labelledby="assignment-diff-heading">
+          <h4 className="text-sm font-semibold" id="assignment-diff-heading">Assignment changes</h4>
           {comparison.assignment_diff ? <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <IdList label="Workers added" values={comparison.assignment_diff.added_worker_ids} />
             <IdList label="Workers removed" values={comparison.assignment_diff.removed_worker_ids} />
@@ -49,9 +49,9 @@ export function ComparisonSummary({ comparison }: Readonly<{ comparison: Compari
           </dl> : <p className="mt-3 text-sm text-muted-foreground">No baseline exists, so assignment changes are not computed.</p>}
         </section>
 
-        <section className="rounded-xl border p-4" aria-labelledby="metric-delta-heading">
-          <h4 className="font-semibold" id="metric-delta-heading">Metric deltas</h4>
-          <dl className="mt-3 grid gap-2 text-sm">
+        <section aria-labelledby="metric-delta-heading">
+          <h4 className="text-sm font-semibold" id="metric-delta-heading">Metric deltas</h4>
+          <dl className="mt-3 text-sm [&>div]:flex [&>div]:justify-between [&>div]:gap-4 [&>div]:border-b [&>div]:py-1.5 [&>div:last-child]:border-b-0 [&_dd]:font-medium [&_dd]:tabular-nums [&_dt]:text-muted-foreground">
             <div><dt>Coverage required delta</dt><dd>{delta(sum(candidate.interval_coverage_required_minutes), sum(baseline?.interval_coverage_required_minutes))}</dd></div>
             <div><dt>Coverage served delta</dt><dd>{delta(sum(candidate.interval_coverage_served_minutes), sum(baseline?.interval_coverage_served_minutes))}</dd></div>
             <div><dt>Overtime delta</dt><dd>{delta(candidate.overtime_minutes, baseline?.overtime_minutes ?? null)}</dd></div>
@@ -61,12 +61,12 @@ export function ComparisonSummary({ comparison }: Readonly<{ comparison: Compari
         </section>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border p-4"><h4 className="font-semibold">Candidate constraints</h4><ul className="mt-2 list-disc pl-5 text-sm">{comparison.candidate_constraint_results.length ? comparison.candidate_constraint_results.map((item) => <li key={item.constraint_id}>{item.constraint_type}: {item.satisfied ? "Satisfied" : "Not satisfied"}</li>) : <li>Not computed</li>}</ul></section>
-        <section className="rounded-xl border p-4"><h4 className="font-semibold">Baseline hard constraints</h4><ul className="mt-2 list-disc pl-5 text-sm">{baseline === null ? <li>No baseline exists.</li> : comparison.baseline_hard_constraint_results.length ? comparison.baseline_hard_constraint_results.map((item) => <li key={item.constraint_id}>{item.constraint_type}: {item.satisfied ? "Satisfied" : "Not satisfied"}</li>) : <li>Not computed</li>}</ul></section>
+      <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
+        <section><h4 className="text-sm font-semibold">Candidate constraints</h4><ul className="mt-2 list-disc pl-5 text-sm">{comparison.candidate_constraint_results.length ? comparison.candidate_constraint_results.map((item) => <li key={item.constraint_id}>{item.constraint_type}: {item.satisfied ? "Satisfied" : "Not satisfied"}</li>) : <li>Not computed</li>}</ul></section>
+        <section><h4 className="text-sm font-semibold">Baseline hard constraints</h4><ul className="mt-2 list-disc pl-5 text-sm">{baseline === null ? <li>No baseline exists.</li> : comparison.baseline_hard_constraint_results.length ? comparison.baseline_hard_constraint_results.map((item) => <li key={item.constraint_id}>{item.constraint_type}: {item.satisfied ? "Satisfied" : "Not satisfied"}</li>) : <li>Not computed</li>}</ul></section>
       </div>
 
-      <section className="rounded-xl border p-4"><h4 className="font-semibold">Warnings</h4><ul className="mt-2 list-disc pl-5 text-sm">{comparison.warnings.length ? comparison.warnings.map((warning) => <li key={warning}>{warning}</li>) : <li>None</li>}</ul></section>
+      <section><h4 className="text-sm font-semibold">Warnings</h4><ul className="mt-2 list-disc pl-5 text-sm">{comparison.warnings.length ? comparison.warnings.map((warning) => <li key={warning}>{warning}</li>) : <li>None</li>}</ul></section>
     </section>
   );
 }
