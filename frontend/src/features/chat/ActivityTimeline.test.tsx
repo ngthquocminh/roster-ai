@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The panel reads the LIVE binding over the network, which is its own unit's
@@ -377,7 +377,7 @@ describe("ActivityTimeline", () => {
     expect(screen.getByText("and")).toBeInTheDocument();
   });
 
-  it("collapses a markdown-style bullet list's embedded newlines instead of breaking the flex-wrap layout", () => {
+  it("renders a markdown-style bullet list as a real list, with the fact chips inside the items", () => {
     const ref = agentResponse.response.segments[1].evidence_refs![0];
     const taskList = {
       ...agentResponse,
@@ -406,10 +406,64 @@ describe("ActivityTimeline", () => {
     };
     render(<ActivityTimeline navigate={vi.fn()} items={[taskList]} />);
 
-    expect(screen.getByText("Tasks: -")).toBeInTheDocument();
-    expect(screen.getByText("-")).toBeInTheDocument();
-    // Never a raw, unnormalized newline in the rendered prose text.
-    expect(document.body.innerHTML).not.toMatch(/Tasks:\\n/);
+    const list = screen.getByRole("list", { name: "" });
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent("Chiller Putaway | Forklift C01");
+    expect(items[1]).toHaveTextContent("Chiller Pick | Order Picker C02");
+    expect(screen.getByText("Tasks:")).toBeInTheDocument();
+    // No bare "-" is left behind, and the markers are consumed by the list.
+    expect(screen.queryByText("-")).not.toBeInTheDocument();
+  });
+
+  it("renders **bold** and keeps line breaks, without touching underscores in identifiers", () => {
+    const answer = {
+      ...agentResponse,
+      activity_id: "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          {
+            schema_version: "1", kind: "prose" as const,
+            text: "Your draft is **v1** for sample_tiny_input_more_tm.\nIt has not changed the baseline.",
+          },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[answer]} />);
+
+    const bold = screen.getByText("v1");
+    expect(bold.tagName).toBe("STRONG");
+    expect(document.body.textContent).not.toContain("**");
+    expect(document.body.textContent).toContain("sample_tiny_input_more_tm");
+    // A single newline in the answer is a visible line break, not collapsed.
+    expect(document.querySelector('[aria-label="ShiftMind response"] br')).not.toBeNull();
+  });
+
+  it("does not repeat a unit the verified claim already renders", () => {
+    const ref = agentResponse.response.segments[1].evidence_refs![0];
+    const answer = {
+      ...agentResponse,
+      activity_id: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      response: {
+        ...agentResponse.response,
+        segments: [
+          { schema_version: "1", kind: "prose" as const, text: "There are " },
+          {
+            schema_version: "1", kind: "claim" as const, metric: "worker_count" as const,
+            arguments: { schema_version: "1" }, result_id: "r1", value: 22, unit: "workers" as const,
+            verdict: "supported" as const, failure: null, evidence_refs: [ref],
+          },
+          { schema_version: "1", kind: "prose" as const, text: " workers in the scenario." },
+        ],
+      },
+    };
+    render(<ActivityTimeline navigate={vi.fn()} items={[answer]} />);
+
+    const text = screen.getByLabelText("ShiftMind response").textContent ?? "";
+    expect(text).toContain("22 workers");
+    expect(text).toContain("in the scenario.");
+    expect(text).not.toMatch(/workers\s*workers/);
   });
 
   it("marks a fact whose wording the record does not support, keeping its text and record link", () => {

@@ -44,3 +44,9 @@ it("renders 'Accepted time not recorded' rather than a formatted null timestamp"
   render(<ProgressCard run={{ status: "solver_running", created_at: null }} />);
   expect(screen.getByText("Accepted time not recorded")).toBeInTheDocument();
 });
+
+it("omits the accepted line when the host table already shows it", () => {
+  render(<ProgressCard run={run()} showAccepted={false} />);
+  expect(screen.getByText("In progress")).toBeInTheDocument();
+  expect(screen.queryByText(/Accepted/)).not.toBeInTheDocument();
+});

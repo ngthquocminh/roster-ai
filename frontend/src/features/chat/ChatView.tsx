@@ -211,7 +211,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
           onClick={() => start.mutate()}
           ref={newConversationRef}
           type="button"
-          variant="outline"
+          variant={selectedId ? "outline" : "default"}
         >
           New conversation
         </Button>
@@ -290,11 +290,21 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
 
       {selectedId ? (
         <div className="space-y-4">
-          {pinned ? (
-            <p className="font-mono text-xs text-muted-foreground">
-              Pinned scenario version {pinned.scenario_version_id}
-            </p>
-          ) : null}
+          {/* One quiet meta line: which version this thread is pinned to, and
+              where the latest agent run stands. */}
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-xs text-muted-foreground">
+            {pinned ? (
+              <p className="font-mono">Pinned scenario version {pinned.scenario_version_id}</p>
+            ) : null}
+            {timeline.data?.latest_agent_run_status ? (
+              <p>
+                {runStatusLabel(timeline.data.latest_agent_run_status)}
+                {timeline.data.latest_agent_run_status === "agent_cancelled" && timeline.data.latest_agent_run_status_reason
+                  ? ` — ${CANCELLATION_REASONS[timeline.data.latest_agent_run_status_reason] ?? timeline.data.latest_agent_run_status_reason}`
+                  : ""}
+              </p>
+            ) : null}
+          </div>
           {timeline.isPending ? (
             <div aria-label="Restoring conversation" className="space-y-2" role="status">
               {[0, 1, 2].map((row) => (
@@ -316,6 +326,15 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
               {/* Only rendered once something has actually gone wrong; a
                   healthy stream shows no banner at all. */}
               {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
+              {stream.updatesAreDelayed ? (
+                // AC2 requires the fallback to be LABELLED. Silent polling
+                // would leave the planner believing they are seeing live
+                // activity when they are not.
+                <p className="text-xs text-muted-foreground" role="status">
+                  Live updates are unavailable. This conversation is refreshing on a
+                  delay.
+                </p>
+              ) : null}
               <ActivityTimeline
                 // The in-flight fact already on the page is the timeline's own
                 // `latest_agent_run_status`. `mutation.isPending` is NOT it: the
@@ -325,27 +344,10 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
                 items={stream.items}
                 navigate={navigate}
               />
-              {stream.updatesAreDelayed ? (
-                // AC2 requires the fallback to be LABELLED. Silent polling
-                // would leave the planner believing they are seeing live
-                // activity when they are not.
-                <p className="text-sm text-muted-foreground" role="status">
-                  Live updates are unavailable. This conversation is refreshing on a
-                  delay.
-                </p>
-              ) : null}
               {timeline.data.has_more ? (
                 <p className="text-xs text-muted-foreground">
                   Showing the most recent {timeline.data.limit} activities. Earlier
                   activity is not displayed.
-                </p>
-              ) : null}
-              {timeline.data.latest_agent_run_status ? (
-                <p className="text-sm text-muted-foreground">
-                  {runStatusLabel(timeline.data.latest_agent_run_status)}
-                  {timeline.data.latest_agent_run_status === "agent_cancelled" && timeline.data.latest_agent_run_status_reason
-                    ? ` — ${CANCELLATION_REASONS[timeline.data.latest_agent_run_status_reason] ?? timeline.data.latest_agent_run_status_reason}`
-                    : ""}
                 </p>
               ) : null}
             </>
@@ -358,7 +360,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
           />
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
+        <p className="py-10 text-center text-sm text-muted-foreground">
           Start a new conversation about this scenario—for example, ask about coverage,
           demand, or constraints.
         </p>

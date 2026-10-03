@@ -11,14 +11,14 @@ function Bar({ label, value, max, text }: Readonly<{ label: string; value: numbe
   return (
     <li className="grid grid-cols-[6.5rem_1fr_auto] items-center gap-3 text-sm">
       <span className="truncate">{label}</span>
-      <span aria-hidden="true" className="h-3 rounded bg-muted"><span className="block h-3 rounded bg-primary" style={{ width: `${width}%` }} /></span>
+      <span aria-hidden="true" className="h-1.5 rounded-full bg-muted"><span className="block h-1.5 rounded-full bg-foreground/80" style={{ width: `${width}%` }} /></span>
       <span className="tabular-nums text-muted-foreground">{text}</span>
     </li>
   );
 }
 
 function Kpi({ label, value }: Readonly<{ label: string; value: string }>) {
-  return <div className="rounded-xl border p-4"><dt className="text-sm text-muted-foreground">{label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd></div>;
+  return <div className="lg:border-l lg:pl-4 lg:first:border-l-0 lg:first:pl-0"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd></div>;
 }
 
 export function RunOverview({ candidate, candidateVersionId, baselineVersion, stale, onRequestApproval, requestPending, requestError, pendingApproval, approvalsUnavailable = false }: Readonly<{
@@ -40,17 +40,17 @@ export function RunOverview({ candidate, candidateVersionId, baselineVersion, st
   const maxBucket = Math.max(0, ...coverage.buckets.map((b) => b.count));
 
   return (
-    <section aria-labelledby="run-overview-heading" className="space-y-4">
+    <section aria-labelledby="run-overview-heading" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
-          <h3 className="text-xl font-semibold" id="run-overview-heading">Schedule overview</h3>
+          <h3 className="text-lg font-semibold" id="run-overview-heading">Schedule overview</h3>
           <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
             <div className="flex items-center gap-2"><dt className="text-muted-foreground">Candidate version</dt><dd><IdentifierCopyButton identifierType="candidate version" value={candidateVersionId} /></dd></div>
             <div className="flex items-center gap-2"><dt className="text-muted-foreground">Baseline version</dt><dd>{baselineVersion ? <IdentifierCopyButton identifierType="baseline version" value={baselineVersion} /> : "No baseline version"}</dd></div>
           </dl>
         </div>
         <div className="space-y-1">
-          <Button className="min-h-11" disabled={stale || pendingApproval || requestPending} onClick={onRequestApproval} type="button" variant="outline">Request approval</Button>
+          <Button className="min-h-11" disabled={stale || pendingApproval || requestPending} onClick={onRequestApproval} type="button">Request approval</Button>
           {stale ? <p className="text-xs text-muted-foreground">Comparison is stale — refresh before requesting approval.</p> : null}
           {/* Text, never colour alone (EXPERIENCE.md Accessibility Floor); the
               unknown case says so rather than borrowing the pending copy —
@@ -62,7 +62,7 @@ export function RunOverview({ candidate, candidateVersionId, baselineVersion, st
         </div>
       </div>
 
-      <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-5 border-y py-5 md:grid-cols-3 lg:grid-cols-6">
         <Kpi label="Coverage" value={formatPct(coverage.coveragePct)} />
         <Kpi label="Under-served intervals" value={`${coverage.unresolvedCount} / ${coverage.intervalCount}`} />
         <Kpi label="Assignments" value={String(metrics.assignment_count)} />
@@ -71,9 +71,9 @@ export function RunOverview({ candidate, candidateVersionId, baselineVersion, st
         <Kpi label="Overtime" value={formatHours(metrics.overtime_minutes)} />
       </dl>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section aria-labelledby="coverage-by-function-heading" className="rounded-xl border p-4">
-          <h4 className="font-semibold" id="coverage-by-function-heading">Coverage by function</h4>
+      <div className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
+        <section aria-labelledby="coverage-by-function-heading">
+          <h4 className="text-sm font-semibold" id="coverage-by-function-heading">Coverage by function</h4>
           {coverage.byFunction.length ? (
             <ul aria-label="Coverage by function" className="mt-3 space-y-2">
               {coverage.byFunction.map((f) => <Bar key={f.name} label={f.name} max={100} text={`${formatPct(f.pct)} · ${formatHours(f.servedMinutes)} of ${formatHours(f.requiredMinutes)}`} value={f.pct ?? 0} />)}
@@ -81,8 +81,8 @@ export function RunOverview({ candidate, candidateVersionId, baselineVersion, st
           ) : <p className="mt-3 text-sm text-muted-foreground">No demand to cover.</p>}
         </section>
 
-        <section aria-labelledby="hours-by-day-heading" className="rounded-xl border p-4">
-          <h4 className="font-semibold" id="hours-by-day-heading">Scheduled hours by day</h4>
+        <section aria-labelledby="hours-by-day-heading">
+          <h4 className="text-sm font-semibold" id="hours-by-day-heading">Scheduled hours by day</h4>
           {days.length ? (
             <ul aria-label="Scheduled hours by day" className="mt-3 space-y-2">
               {days.map((d) => <Bar key={d.day} label={`Day ${d.day}`} max={maxDayHours} text={`${d.hours.toFixed(1)} h`} value={d.hours} />)}
@@ -91,8 +91,8 @@ export function RunOverview({ candidate, candidateVersionId, baselineVersion, st
         </section>
       </div>
 
-      <section aria-labelledby="unresolved-gaps-heading" className="rounded-xl border p-4">
-        <h4 className="font-semibold" id="unresolved-gaps-heading">Unresolved gaps</h4>
+      <section aria-labelledby="unresolved-gaps-heading" className="border-t pt-6">
+        <h4 className="text-sm font-semibold" id="unresolved-gaps-heading">Unresolved gaps</h4>
         {coverage.unresolvedCount === 0 ? (
           <p className="mt-2 text-sm">No unresolved gaps — all {coverage.intervalCount} demand intervals are fully covered.</p>
         ) : (

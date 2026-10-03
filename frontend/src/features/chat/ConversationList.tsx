@@ -90,7 +90,7 @@ export function ConversationList({
       {/* Single row, no wrap: overflow scrolls horizontally instead of
           growing the list downward. */}
       <ul
-        className="scrollbar-thin flex flex-nowrap gap-2 overflow-x-auto"
+        className="scrollbar-thin flex flex-nowrap gap-2 overflow-x-auto pb-2"
         onWheel={handleWheel}
         ref={listRef}
         tabIndex={-1}
@@ -99,22 +99,29 @@ export function ConversationList({
           const isSelected = selectedId === conversation.id;
           const shortId = conversation.id.slice(0, 8);
           return (
-            <li className="flex shrink-0 items-center gap-1" key={conversation.id}>
+            <li
+              className={`flex shrink-0 items-center rounded-full border transition-colors ${
+                isSelected
+                  ? "border-foreground/30 bg-muted text-foreground"
+                  : "border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              }`}
+              key={conversation.id}
+            >
               {/* Select and archive are SIBLING controls, never nested — a
                   button inside a button is invalid and would also merge
                   their accessible names. */}
               <Button
                 aria-current={isSelected ? "page" : undefined}
-                className="min-h-11 font-mono text-xs whitespace-nowrap"
+                className="min-h-11 rounded-full pr-1 pl-4 text-sm whitespace-nowrap text-inherit hover:bg-transparent"
                 onClick={() => onSelect(conversation.id)}
                 type="button"
-                variant={isSelected ? "secondary" : "ghost"}
+                variant="ghost"
               >
                 {label(conversation)}
               </Button>
               <Button
                 aria-label={`Archive conversation ${shortId}`}
-                className="min-h-11 min-w-11"
+                className="min-h-11 min-w-11 rounded-full text-muted-foreground hover:bg-transparent hover:text-destructive"
                 disabled={archivingIds.has(conversation.id)}
                 onClick={(event) => {
                   triggerRef.current = event.currentTarget;
@@ -124,7 +131,7 @@ export function ConversationList({
                 type="button"
                 variant="ghost"
               >
-                <X aria-hidden="true" />
+                <X aria-hidden="true" className="size-3.5" />
               </Button>
             </li>
           );

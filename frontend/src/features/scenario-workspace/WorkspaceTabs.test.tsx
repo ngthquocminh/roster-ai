@@ -30,3 +30,18 @@ it("renders ordered real routes, active semantics, and an explained disabled res
   expect(screen.getByText("Results", { selector: "[aria-disabled='true']" })).toBeInTheDocument();
   expect(screen.getByText("Results unavailable: select a run.")).toBeVisible();
 });
+
+it("makes Results the active tab, and Runs inactive, while a run's results are open", () => {
+  const runId = "run-1";
+  render(
+    <MemoryRouter initialEntries={[`/scenarios/${scenarioId}/runs/${runId}`]}>
+      <WorkspaceTabs scenarioId={scenarioId} />
+    </MemoryRouter>,
+  );
+
+  const results = screen.getByRole("link", { name: "Results" });
+  expect(results).toHaveAttribute("href", `/scenarios/${scenarioId}/runs/${runId}`);
+  expect(results).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("link", { name: "Runs" })).not.toHaveAttribute("aria-current");
+  expect(screen.queryByText("Results unavailable: select a run.")).not.toBeInTheDocument();
+});

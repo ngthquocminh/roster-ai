@@ -1,3 +1,4 @@
+import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 
@@ -19,56 +20,40 @@ export function ScenarioVersionContext({
     context.baseline_schedule_version ?? "Not established";
 
   return (
-    <section
-      aria-labelledby="scenario-context-heading"
-      className="rounded-lg border bg-card p-4"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Scenario
-          </p>
-          <h1
-            className="mt-1 break-words text-2xl font-semibold outline-none"
-            id="scenario-context-heading"
-            ref={headingRef}
-            tabIndex={-1}
-          >
-            {context.scenario_name}
-          </h1>
-        </div>
+    <section aria-labelledby="scenario-context-heading">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <h1
+          className="min-w-0 break-words text-2xl font-semibold outline-none"
+          id="scenario-context-heading"
+          ref={headingRef}
+          tabIndex={-1}
+        >
+          {context.scenario_name}
+        </h1>
         <Link
-          className="inline-flex min-h-11 items-center rounded-lg border px-3 text-sm font-medium outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="-mr-2 inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
           to="/"
         >
+          <ChevronLeft aria-hidden="true" className="size-4" />
           Change scenario
         </Link>
       </div>
-      <dl className="mt-4 grid gap-4 sm:grid-cols-3">
-        <div className="min-w-0">
-          <dt className="text-xs text-muted-foreground">Scenario ID</dt>
-          <dd
-            className="mt-1 break-all font-mono text-xs"
-            title={context.scenario_id}
-          >
+      <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <dt className="text-muted-foreground">Scenario ID</dt>
+          <dd className="min-w-0 break-all font-mono" title={context.scenario_id}>
             {context.scenario_id}
           </dd>
         </div>
-        <div className="min-w-0">
-          <dt className="text-xs text-muted-foreground">Fixture version</dt>
-          <dd
-            className="mt-1 break-all font-mono text-xs"
-            title={context.fixture_version}
-          >
+        <div className="flex min-w-0 items-baseline gap-2">
+          <dt className="text-muted-foreground">Fixture version</dt>
+          <dd className="min-w-0 break-all font-mono" title={context.fixture_version}>
             {context.fixture_version}
           </dd>
         </div>
-        <div className="min-w-0">
-          <dt className="text-xs text-muted-foreground">Baseline version</dt>
-          <dd
-            className="mt-1 break-all font-mono text-xs"
-            title={baselineVersion}
-          >
+        <div className="flex min-w-0 items-baseline gap-2">
+          <dt className="text-muted-foreground">Baseline version</dt>
+          <dd className="min-w-0 break-all font-mono" title={baselineVersion}>
             {baselineVersion}
           </dd>
         </div>
