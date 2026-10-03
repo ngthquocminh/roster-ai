@@ -36,7 +36,7 @@ export function ScenarioResults() {
   }, [runId]);
 
   return (
-    <section aria-labelledby="scenario-results-heading" className="mx-auto mt-6 max-w-6xl space-y-5" data-run-id={runId} data-scenario-id={scenarioId}>
+    <section aria-labelledby="scenario-results-heading" className="mt-6 space-y-5" data-run-id={runId} data-scenario-id={scenarioId}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-semibold outline-none" id="scenario-results-heading" ref={headingRef} tabIndex={-1}>Results</h2>
         <Button disabled={query.isFetching} onClick={() => { void query.refetch(); }} type="button" variant="outline">{query.isFetching ? "Refreshing…" : "Refresh"}</Button>
