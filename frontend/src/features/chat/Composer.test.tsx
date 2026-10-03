@@ -76,4 +76,15 @@ describe("Composer", () => {
     resolve(undefined);
     await waitFor(() => expect(box).toHaveValue(""));
   });
+
+  it("names the field 'Message' for assistive tech and keeps the keyboard hint sentence", () => {
+    renderComposer(vi.fn());
+    const box = screen.getByRole("textbox", { name: "Message" });
+    // The label is screen-reader-only, so a placeholder cannot be the only name.
+    expect(screen.getByText("Message", { selector: "label" })).toHaveClass("sr-only");
+    expect(box).toHaveAttribute("placeholder");
+    expect(
+      screen.getByText("Enter inserts a new line. Ctrl+Enter or Command+Enter sends."),
+    ).toBeVisible();
+  });
 });

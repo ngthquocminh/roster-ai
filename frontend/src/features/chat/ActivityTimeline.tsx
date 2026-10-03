@@ -1,10 +1,11 @@
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import type { Timeline } from "@/api/conversations";
 import { EmptyState } from "@/components/primitives/EmptyState";
 import { EvidenceLink, VerifiedMark } from "@/components/primitives/EvidenceLink";
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { StatusBadge } from "@/components/primitives/StatusBadge";
+import { AgentText, slotToken, stripRepeatedUnit } from "./AgentText";
 import { DraftCard } from "./DraftCard";
 import type { EditBuffer } from "./draftEdits";
 import { ApprovalDecisionPanel } from "@/features/approvals/ApprovalDecisionPanel";
@@ -35,20 +36,6 @@ function fieldOrRange(reference: Claim["evidence_refs"][number]): string | undef
       : undefined;
   if (reference.field && range) return `${reference.field}, ${range}`;
   return reference.field ?? range;
-}
-
-// The model sometimes writes a markdown-style bullet list ("Tasks:\n\n- ",
-// then "\n- " before each further item). The parent `<p>` is
-// `whitespace-pre-wrap` (so a genuinely multi-paragraph answer keeps its
-// blank lines) and `flex flex-wrap` (so fact/claim segments sit inline beside
-// prose) -- combined, an embedded newline forces a line break INSIDE this one
-// flex item's own box, which visually detaches a bare "-" from the item it
-// was meant to introduce. Collapsing internal whitespace runs to a single
-// space (gap-2 already supplies the visible spacing between flex children)
-// fixes the wrap without touching the sibling `<p>`s that still need
-// pre-wrap (planner messages, clarification questions).
-function normalizeProseText(text: string): string {
-  return text.replace(/\s*\n\s*/g, " ").trim();
 }
 
 // A claim renders no prose of its own and the gate forbids numerals in prose,
@@ -263,20 +250,36 @@ function AgentResponse({ item, navigate }: Readonly<{ item: AgentResponse; navig
       </div>
     );
   }
+  // Prose keeps the model's own newlines and markdown; each fact/claim becomes
+  // a slot referenced by token so it renders inline, inside lists and bold
+  // spans too. A claim that renders its own unit swallows a unit word the model
+  // repeated straight after the placeholder.
+  const slots: ReactNode[] = [];
+  let source = "";
+  let repeatedUnit: string | null = null;
+  item.response.segments.forEach((segment, index) => {
+    if (segment.kind === "prose") {
+      source += repeatedUnit ? stripRepeatedUnit(segment.text, repeatedUnit) : segment.text;
+      repeatedUnit = null;
+      return;
+    }
+    repeatedUnit =
+      segment.kind === "claim" && segment.verdict !== "failed" && segment.evidence_refs.length > 0
+        ? (segment.unit ?? null)
+        : null;
+    slots.push(
+      segment.kind === "fact" ? (
+        <FactSegment fact={segment} item={item} navigate={navigate} segmentIndex={index} />
+      ) : (
+        <ClaimSegment claim={segment} item={item} navigate={navigate} segmentIndex={index} />
+      ),
+    );
+    source += slotToken(slots.length - 1);
+  });
   return (
     <div aria-label="ShiftMind response" className="space-y-2">
       <p className="text-xs font-medium text-muted-foreground">ShiftMind</p>
-      <p className="flex flex-wrap items-center gap-2 text-sm whitespace-pre-wrap">
-        {item.response.segments.map((segment, index) =>
-          segment.kind === "prose" ? (
-            <span key={`prose-${index}`}>{normalizeProseText(segment.text)}</span>
-          ) : segment.kind === "fact" ? (
-            <FactSegment fact={segment} item={item} key={`fact-${index}`} navigate={navigate} segmentIndex={index} />
-          ) : (
-            <ClaimSegment claim={segment} item={item} key={`claim-${segment.result_id}-${index}`} navigate={navigate} segmentIndex={index} />
-          ),
-        )}
-      </p>
+      <AgentText slots={slots} source={source} />
     </div>
   );
 }
@@ -407,9 +410,9 @@ function ActivityContent({
   switch (item.activity_type) {
     case "planner_message":
       return (
-        <div aria-label="Planner message">
-          <p className="text-xs font-medium text-muted-foreground">You</p>
-          <p className="text-sm whitespace-pre-wrap">{item.text}</p>
+        <div aria-label="Planner message" className="max-w-[80%] rounded-2xl bg-muted px-4 py-2.5">
+          <p className="sr-only">You</p>
+          <p className="text-sm break-words whitespace-pre-wrap">{item.text}</p>
         </div>
       );
     case "agent_response":
@@ -472,6 +475,18 @@ function ActivityContent({
   }
 }
 
+// Messages read as a conversation (yours right-aligned in a bubble, ShiftMind's
+// as plain text); drafts and approvals already render their own card, so a
+// second border here only nested boxes. Everything else (clarifications,
+// terminal outcomes, history lines) keeps the bordered card.
+const CARD_ITEM_CLASS = "rounded-lg border bg-card p-3";
+const ITEM_CLASS: Partial<Record<Activity["activity_type"], string>> = {
+  planner_message: "flex justify-end",
+  agent_response: "",
+  draft: "",
+  approval_request: "",
+};
+
 // `navigate` is REQUIRED: activation writes the origin to storage before it
 // navigates, so an omitted navigate left a live origin behind that the next
 // ChatView mount would consume and use to move focus after nothing happened.
@@ -526,10 +541,10 @@ export function ActivityTimeline({
     );
   }
   return (
-    <ol aria-label="Conversation activity" className="space-y-3">
+    <ol aria-label="Conversation activity" className="space-y-5">
       {unique.map((item, index) => (
         <li
-          className="rounded-lg border bg-card p-3"
+          className={ITEM_CLASS[item.activity_type] ?? CARD_ITEM_CLASS}
           data-activity-id={item.activity_id}
           key={item.activity_id}
         >

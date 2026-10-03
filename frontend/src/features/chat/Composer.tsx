@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { InlineAlert } from "@/components/primitives/InlineAlert";
@@ -33,6 +33,15 @@ export function Composer({
   // this disable as the sole double-submit defence, so the latch has to be
   // synchronous.
   const inFlight = useRef(false);
+  const box = useRef<HTMLTextAreaElement>(null);
+
+  // Grow with the draft (capped), and shrink back when it is cleared on send.
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 192)}px`;
+  }, [draft]);
 
   const submit = async () => {
     const text = draft.trim();
@@ -54,23 +63,6 @@ export function Composer({
 
   return (
     <div className="space-y-2">
-      <label className="text-sm font-medium" htmlFor="chat-composer">
-        Message
-      </label>
-      <textarea
-        aria-describedby={disabledReason}
-        className="min-h-24 w-full rounded-lg border bg-background p-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        id="chat-composer"
-        disabled={Boolean(disabledReason)}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-        value={draft}
-      />
       {failed ? (
         <InlineAlert
           action={
@@ -83,20 +75,45 @@ export function Composer({
           variant="destructive"
         />
       ) : null}
-      <div className="flex justify-end">
-        <Button
+      {/* One rounded box holds the field and its actions. The visible label is
+          screen-reader-only (a placeholder is not a label); the focus ring
+          moves to the box so keyboard focus stays clearly visible. */}
+      <div className="rounded-2xl border bg-background p-3 transition-shadow focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+        <label className="sr-only" htmlFor="chat-composer">
+          Message
+        </label>
+        <textarea
           aria-describedby={disabledReason}
-          className="min-h-11"
-          disabled={!draft.trim() || isPending || Boolean(disabledReason)}
-          onClick={() => void submit()}
-          type="button"
-        >
-          Send
-        </Button>
+          className="max-h-48 min-h-12 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          id="chat-composer"
+          disabled={Boolean(disabledReason)}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+          placeholder="Ask about coverage, demand, or constraints…"
+          ref={box}
+          rows={2}
+          value={draft}
+        />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="text-xs text-muted-foreground">
+            Enter inserts a new line. Ctrl+Enter or Command+Enter sends.
+          </p>
+          <Button
+            aria-describedby={disabledReason}
+            className="min-h-11"
+            disabled={!draft.trim() || isPending || Boolean(disabledReason)}
+            onClick={() => void submit()}
+            type="button"
+          >
+            Send
+          </Button>
+        </div>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Enter inserts a new line. Ctrl+Enter or Command+Enter sends.
-      </p>
     </div>
   );
 }
