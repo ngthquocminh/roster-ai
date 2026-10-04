@@ -28,6 +28,9 @@ vi.mock("@/hooks/useScenarioContext", () => ({
 }));
 vi.mock("@/api/scheduleRuns");
 vi.mock("@/api/proposals");
+// The workspace docks the chat panel beside every tab; ChatView's own network
+// hooks are ChatView.test's concern, not this one's.
+vi.mock("@/features/chat/ChatView", () => ({ ChatView: () => <p>Chat view</p> }));
 
 import { getProposal } from "@/api/proposals";
 import { listScheduleRuns, startScheduleRun } from "@/api/scheduleRuns";
@@ -158,13 +161,10 @@ it("keeps the route back to Chat's Run optimization control open when the list f
 
   // The list failed and says so...
   expect(await screen.findByText("Couldn't load this content.")).toBeInTheDocument();
-  // ...but the workspace shell and every tab survive it, so manual Run
-  // optimization stays one click away in Chat.
+  // ...but the workspace shell, every tab and the chat panel survive it, so
+  // manual Run optimization stays reachable in Chat.
   expect(screen.getByRole("navigation", { name: "Scenario workspace" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
-    "href",
-    `/scenarios/${scenarioId}`,
-  );
+  expect(screen.getByRole("complementary", { name: "Chat panel" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Scenario Data" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Runs" })).toBeInTheDocument();
   // Trap 2: the persistent scenario context is not torn down either.
@@ -193,5 +193,5 @@ it("keeps the same navigation open when the scenario simply has no runs yet", as
   renderRunsTab();
 
   expect(await screen.findByText("No runs yet for this scenario.")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Chat" })).toBeInTheDocument();
+  expect(screen.getByRole("complementary", { name: "Chat panel" })).toBeInTheDocument();
 });

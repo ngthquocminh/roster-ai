@@ -14,12 +14,11 @@ it("renders ordered real routes, active semantics, and an explained disabled res
   );
 
   const navigation = screen.getByRole("navigation", { name: "Scenario workspace" });
+  // No Chat tab: chat is the workspace's side panel.
   expect(within(navigation).getAllByRole("link").map((link) => link.textContent)).toEqual([
-    "Chat",
     "Scenario Data",
     "Runs",
   ]);
-  expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute("href", `/scenarios/${scenarioId}`);
   const active = screen.getByRole("link", { name: "Scenario Data" });
   expect(active).toHaveAttribute("href", `/scenarios/${scenarioId}/data`);
   expect(active).toHaveAttribute("aria-current", "page");

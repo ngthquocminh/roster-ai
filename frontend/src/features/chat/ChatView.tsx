@@ -98,13 +98,27 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const context = useScenarioContext(scenarioId);
   const conversations = useConversations(scenarioId);
   const availability = useAgentAvailability(scenarioId);
-  // Selection lives in the URL, not component state: switching workspace tabs
-  // unmounts this view, and `useState` would silently drop the planner back
-  // onto the newest conversation — posting their next message into a different
-  // conversation than the one they were reading (AC2).
+  // The URL wins so deep links and Return to claim select their conversation
+  // (AC2). The panel stays mounted across workspace tabs, but tab and Evidence
+  // navigation drop `?conversation=`, so the last choice is also remembered
+  // here; otherwise the panel would fall back to "nothing selected" exactly
+  // when the planner opens the evidence beside it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedId = searchParams.get("conversation") ?? "";
+  const [remembered, setRemembered] = useState("");
+  const urlConversation = searchParams.get("conversation") || null;
+  const requestedId = urlConversation ?? remembered;
   const items = conversations.data?.items ?? [];
+  // A URL-selected conversation becomes the remembered one, so dropping the
+  // param later keeps that thread rather than reverting to an older choice.
+  // Only a listed one: an archived or foreign id must not overwrite the
+  // planner's last valid thread.
+  if (
+    urlConversation !== null
+    && urlConversation !== remembered
+    && items.some((c) => c.id === urlConversation)
+  ) {
+    setRemembered(urlConversation);
+  }
   const selectedId = items.some((c) => c.id === requestedId) ? requestedId : "";
   const stream = useConversationStream(selectedId);
   const timeline = stream.timeline;
@@ -129,13 +143,16 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
     // Spend the token ONLY once the target is actually present. An errored,
     // empty, or window-truncated timeline renders no Evidence link, and
     // consuming there lost the restoration permanently with no retry.
-    if (!node) return;
+    // A collapsed chat panel keeps this view mounted but `hidden`; focus would
+    // silently fail there, so the token waits until the panel is shown.
+    if (!node || node.closest("[hidden]")) return;
     if (stored === origin) forgetOrigin();
     restored.current = elementId;
     node.focus();
   }, [selectedId, stateOrigin, timeline.isError, timeline.isPending, stream.items]);
 
   const select = (id: string) => {
+    setRemembered(id);
     const next = new URLSearchParams(searchParams);
     next.set("conversation", id);
     setSearchParams(next, { replace: true });

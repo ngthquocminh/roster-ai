@@ -1415,3 +1415,13 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   and facts, not wording: the reply names the baseline's counts from `baseline_summary`, does
   not claim no run exists, and does not mention drafts or runs unprompted. **Deferred reason:
   Minh scoped this change to the existing dataset, one repetition.** **Owner: open.**
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-chat-side-panel.md`
+  summary: The narrow-viewport chat drawer is not a modal: no focus trap, no `aria-modal`, no focus move on open, its floating toggle can cover bottom-right page content, and the toggle sits last in the tab order.
+  evidence: Raised by both review layers; `ChatPanel.tsx` closes on Escape and on navigation, but EXPERIENCE.md treats phone as read-only triage, so a full dialog pattern was left out under simple-first.
+- source_spec: `_bmad-output/implementation-artifacts/spec-chat-side-panel.md`
+  summary: Return to claim now lands on Scenario Data's overview (via the index redirect), so the evidence the planner was reading is replaced; with a persistent panel it could keep the current page and just set `?conversation=`.
+  evidence: `EvidenceTargetPanel.tsx:140` still navigates to `/scenarios/:id?conversation=…`; changing that contract was an Ask First boundary in the spec.
+- source_spec: `_bmad-output/implementation-artifacts/spec-chat-side-panel.md`
+  summary: `ScenarioDataParity.test.tsx` takes ~108s alone and hit the 60s per-test timeout once under full-suite load.
+  evidence: Full `vitest run` on 2026-10-04 failed only "renders every demand contract cell across all pages for sample_tiny_input" by timeout; the file passes 14/14 when run alone and references no chat code.

@@ -13,6 +13,11 @@ vi.mock("@/hooks/useFixtureCatalogue", () => ({
 vi.mock("@/hooks/useScenarioContext", () => ({
   useScenarioContext: vi.fn(),
 }));
+// The workspace mounts the chat panel on every scenario route; its network
+// hooks are ChatView.test's concern, not the route tree's.
+vi.mock("@/features/chat/ChatView", () => ({
+  ChatView: ({ scenarioId }: { scenarioId: string }) => <p>Chat for {scenarioId}</p>,
+}));
 vi.mock("@/hooks/useScenarioProjection", () => ({
   useScenarioOverview: vi.fn(), useWorkAreasAndTasks: vi.fn(), useWorkers: vi.fn(),
   useDemand: vi.fn(), useBaselineAssignments: vi.fn(), useLocks: vi.fn(),
@@ -155,8 +160,17 @@ describe("governed route tree", () => {
     expect(
       screen.getByRole("heading", { name: "Fixture A" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(scenarioId)).toBeInTheDocument();
+    // The index now lands on Scenario Data, whose overview repeats the id.
+    expect(screen.getAllByText(scenarioId).length).toBeGreaterThan(0);
     expect(mockContext).toHaveBeenCalledWith(scenarioId);
+  });
+
+  it("lands the old Chat URL on Scenario Data with the chat panel beside it", () => {
+    const { memoryRouter } = renderAt(`/scenarios/${scenarioId}`);
+
+    expect(memoryRouter.state.location.pathname).toBe(`/scenarios/${scenarioId}/data`);
+    expect(screen.getByRole("complementary", { name: "Chat panel" })).toBeInTheDocument();
+    expect(screen.getByText(`Chat for ${scenarioId}`)).toBeInTheDocument();
   });
 
   it("mounts Scenario Data and the Runs/Results peer routes", () => {

@@ -7,6 +7,9 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/hooks/useScenarioContext", () => ({ useScenarioContext: vi.fn() }));
 vi.mock("@/api/scheduleRuns");
 vi.mock("@/api/provenance");
+// The workspace docks the chat panel beside every tab; ChatView's own network
+// hooks are ChatView.test's concern, not this one's.
+vi.mock("@/features/chat/ChatView", () => ({ ChatView: () => <p>Chat view</p> }));
 vi.mock("@/hooks/useScenarioProjection", () => ({
   useWorkerNameMap: () => ({ data: new Map([["W1", "Alice"]]) }),
   useTaskNameMap: () => ({ data: new Map([["T1", "Picking"]]) }),
@@ -46,7 +49,7 @@ it("keeps the workspace shell and peer tabs available when Results fetch fails",
 
   expect(await screen.findByText("Couldn't load this content.")).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "Scenario workspace" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute("href", `/scenarios/${scenarioId}`);
+  expect(screen.getByRole("complementary", { name: "Chat panel" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Scenario Data" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Runs" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Fixture A" })).toBeInTheDocument();
