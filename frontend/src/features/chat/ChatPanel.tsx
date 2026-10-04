@@ -59,7 +59,7 @@ export function ChatPanel({ scenarioId }: Readonly<{ scenarioId: string }>) {
   urlConversationRef.current = urlConversation;
 
   const [narrow, setNarrow] = useState(isNarrowViewport);
-  // A link naming a conversation (an old Chat URL, Return to claim) opens the
+  // A link naming a conversation (an old Chat URL or a shared deep link) opens the
   // panel from the FIRST render: ChatView's focus restoration runs before any
   // effect here could expand it, and focusing inside `hidden` silently fails.
   const [expanded, setExpanded] = useState(

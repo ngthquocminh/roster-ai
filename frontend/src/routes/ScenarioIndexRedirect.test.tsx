@@ -31,7 +31,7 @@ it("sends the old Chat URL to Scenario Data, keeping the search and history stat
 
   render(<RouterProvider router={router} />);
 
-  // Return to claim lands here: the conversation and the evidence origin must
+  // An old Chat link lands here: the conversation and any evidence origin must
   // both reach the chat panel.
   expect(router.state.location.pathname).toBe(`/scenarios/${SCENARIO}/data`);
   expect(screen.getByText(`Data ?conversation=c1 {"evidenceOrigin":"o"}`)).toBeInTheDocument();

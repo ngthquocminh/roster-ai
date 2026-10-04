@@ -1,6 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
+import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/useEvidenceRecord", () => ({ useEvidenceRecord: vi.fn() }));
@@ -107,28 +106,6 @@ it("keeps the workspace selected version and renders a mismatch instead of retar
   expect(evidenceHighlights(container)).toHaveLength(0);
 });
 
-it("returns to the byte-identical conversation in the unchanged scenario", async () => {
-  vi.mocked(useEvidenceRecord).mockReturnValue({
-    data: { record_id: "demand-1", family: "outbound", task_id: "pick", area_id: null, start_minute: 510, end_minute: 960, amount: 12, unit: "headcount" },
-    dataUpdatedAt: Date.now(), error: null, isError: false, isPending: false, isSuccess: true, refetch: vi.fn(),
-  } as never);
-  const origin: EvidenceOrigin = {
-    conversationId: "conversation%2Fliteral",
-    activityId: "activity-1",
-    segmentIndex: 0,
-    refIndex: 0,
-  };
-  const router = createMemoryRouter([
-    { path: "*", element: <EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /> },
-  ], { initialEntries: ["/scenarios/scenario-a/data?group=demand"] });
-  render(<RouterProvider router={router} />);
-
-  await userEvent.click(screen.getByRole("button", { name: "Return to claim" }));
-
-  await waitFor(() => expect(router.state.location.pathname).toBe("/scenarios/scenario-a"));
-  expect(router.state.location.search).toBe("?conversation=conversation%252Fliteral");
-});
-
 it("renders missing evidence with retry and marks the origin unavailable", () => {
   const origin: EvidenceOrigin = { conversationId: "conversation-1", activityId: "activity-1", segmentIndex: 0, refIndex: 0 };
   vi.mocked(useEvidenceRecord).mockReturnValue({
@@ -138,7 +115,6 @@ it("renders missing evidence with retry and marks the origin unavailable", () =>
 
   expect(screen.getByRole("alert")).toHaveTextContent("Missing evidence");
   expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Return to claim" })).toBeInTheDocument();
   expect(isEvidenceUnavailable(origin)).toBe(true);
   expect(evidenceHighlights(container)).toHaveLength(0);
 });
@@ -172,7 +148,6 @@ it("labels cached evidence stale without discarding the record it already holds"
   const staleMessage = screen.getByText(/^Stale — last verified at/);
   expect(staleMessage).toHaveAttribute("role", "status");
   expect(staleMessage).not.toContainElement(screen.getByRole("button", { name: "Retry" }));
-  expect(screen.getByRole("button", { name: "Return to claim" })).toBeInTheDocument();
   expect(evidenceHighlights(container)).toHaveLength(1);
   expect(screen.getByRole("button", { name: "Copy Record ID demand-1" })).toBeInTheDocument();
   // The whole panel must not become an assertive live region.
@@ -190,7 +165,6 @@ it("states a terminal unclassified failure instead of rendering nothing", () => 
 
   expect(screen.getByRole("alert")).toHaveTextContent("Evidence unavailable");
   expect(screen.getByRole("alert")).toHaveTextContent("No current or similar record was substituted.");
-  expect(screen.getByRole("button", { name: "Return to claim" })).toBeInTheDocument();
   expect(evidenceHighlights(container)).toHaveLength(0);
   expect(container).not.toBeEmptyDOMElement();
 });
