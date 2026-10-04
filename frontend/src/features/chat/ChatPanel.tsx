@@ -94,8 +94,19 @@ export function ChatPanel({ scenarioId }: Readonly<{ scenarioId: string }>) {
     if (narrow) setExpanded(false);
   }, [currentPage, narrow]);
 
+  // The toggle lives in ChatView's title row while expanded and on the rail
+  // while collapsed, so each switch swaps the element. Focus follows it once
+  // the new one is committed, or a keyboard user would drop to <body>.
+  const refocusToggle = useRef(false);
+  useEffect(() => {
+    if (!refocusToggle.current) return;
+    refocusToggle.current = false;
+    toggleRef.current?.focus();
+  }, [expanded]);
+
   const toggle = () => {
     const next = !expanded;
+    refocusToggle.current = true;
     setExpanded(next);
     // The drawer's open state is transient; only the desktop choice persists.
     if (!narrow) storeExpanded(next);
@@ -103,9 +114,31 @@ export function ChatPanel({ scenarioId }: Readonly<{ scenarioId: string }>) {
 
   const closeDrawerOnEscape = (event: KeyboardEvent) => {
     if (!narrow || !expanded || event.key !== "Escape") return;
+    refocusToggle.current = true;
     setExpanded(false);
-    toggleRef.current?.focus();
   };
+
+  const toggleButton = (
+    <Button
+      aria-controls={bodyId}
+      aria-expanded={expanded}
+      aria-label={expanded ? "Collapse chat" : "Expand chat"}
+      className={cn("min-h-11 min-w-11", expanded ? "" : "rounded-full shadow-lg lg:rounded-lg lg:shadow-none")}
+      onClick={toggle}
+      ref={toggleRef}
+      type="button"
+      variant={expanded ? "ghost" : "outline"}
+    >
+      {expanded ? (
+        <PanelRightClose aria-hidden="true" />
+      ) : (
+        <>
+          <MessageSquare aria-hidden="true" className="lg:hidden" />
+          <PanelRightOpen aria-hidden="true" className="hidden lg:block" />
+        </>
+      )}
+    </Button>
+  );
 
   return (
     <aside
@@ -118,33 +151,14 @@ export function ChatPanel({ scenarioId }: Readonly<{ scenarioId: string }>) {
       )}
       onKeyDown={closeDrawerOnEscape}
     >
-      <div className={cn("flex items-center", expanded ? "justify-end px-2 pt-2" : "lg:pt-2")}>
-        <Button
-          aria-controls={bodyId}
-          aria-expanded={expanded}
-          aria-label={expanded ? "Collapse chat" : "Expand chat"}
-          className={cn("min-h-11 min-w-11", expanded ? "" : "rounded-full shadow-lg lg:rounded-lg lg:shadow-none")}
-          onClick={toggle}
-          ref={toggleRef}
-          type="button"
-          variant={expanded ? "ghost" : "outline"}
-        >
-          {expanded ? (
-            <PanelRightClose aria-hidden="true" />
-          ) : (
-            <>
-              <MessageSquare aria-hidden="true" className="lg:hidden" />
-              <PanelRightOpen aria-hidden="true" className="hidden lg:block" />
-            </>
-          )}
-        </Button>
-      </div>
+      {expanded ? null : <div className="lg:pt-2">{toggleButton}</div>}
       <div
-        className="min-h-0 flex-1 overflow-y-auto px-4 pb-4"
+        className="flex min-h-0 flex-1 flex-col px-4 pt-3 pb-4"
         hidden={!expanded}
         id={bodyId}
       >
-        <ChatView scenarioId={scenarioId} />
+        {/* Title, New conversation and the collapse toggle share one row. */}
+        <ChatView headerActions={expanded ? toggleButton : null} scenarioId={scenarioId} />
       </div>
     </aside>
   );

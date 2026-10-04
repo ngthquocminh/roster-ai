@@ -122,8 +122,11 @@ export function ScenarioWorkspace() {
   // the h-16 app bar, each scrolling on its own, so the chat never scrolls
   // away while the planner reads data beside it.
   return (
-    <div className="lg:flex lg:h-[calc(100vh-4rem)]">
-      <div className="lg:min-w-0 lg:flex-1 lg:overflow-y-auto">
+    // `overflow-hidden` + `relative` scroll column: absolutely positioned
+    // sr-only text deep in a long table otherwise resolves against the page
+    // and stretches it, adding a page-level scrollbar beside this one.
+    <div className="lg:flex lg:h-[calc(100vh-4rem)] lg:overflow-hidden">
+      <div className="lg:relative lg:min-w-0 lg:flex-1 lg:overflow-y-auto">
         <main className="mx-auto max-w-6xl px-6 py-8">
           {query.isError ? (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">

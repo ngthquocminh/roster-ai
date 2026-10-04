@@ -1,15 +1,20 @@
 import { render, screen } from "@testing-library/react";
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./ChatView", () => ({
-  ChatView: ({ scenarioId }: { scenarioId: string }) => (
-    <label>
-      Draft for {scenarioId}
-      <input />
-    </label>
+  // Renders `headerActions` like the real title row does: the expanded
+  // panel's collapse toggle lives there.
+  ChatView: ({ scenarioId, headerActions }: { scenarioId: string; headerActions?: ReactNode }) => (
+    <>
+      {headerActions}
+      <label>
+        Draft for {scenarioId}
+        <input />
+      </label>
+    </>
   ),
 }));
 
@@ -75,6 +80,16 @@ describe("ChatPanel", () => {
     await userEvent.click(expand);
     expect(screen.getByLabelText(`Draft for ${SCENARIO}`)).toBe(draft);
     expect(localStorage.getItem(STORAGE_KEY)).toBe("true");
+  });
+
+  it("keeps keyboard focus on the toggle as it moves between title row and rail", async () => {
+    renderPanel();
+
+    await userEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
+    expect(screen.getByRole("button", { name: "Expand chat" })).toHaveFocus();
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand chat" }));
+    expect(screen.getByRole("button", { name: "Collapse chat" })).toHaveFocus();
   });
 
   it("restores a stored collapsed state", () => {

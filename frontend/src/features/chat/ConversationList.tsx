@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { MessageSquare, X } from "lucide-react";
 import type { Conversation } from "@/api/conversations";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,6 +23,11 @@ function label(conversation: Conversation): string {
   return `Conversation ${conversation.id.slice(0, 8)}`;
 }
 
+/** Fraction of each wheel step applied to the strip; a full step jumped ~3 tabs. */
+const WHEEL_DAMPING = 0.35;
+/** DOM_DELTA_LINE wheels (Firefox) report lines, not pixels. */
+const LINE_HEIGHT_PX = 16;
+
 export function ConversationList({
   conversations,
   selectedId,
@@ -45,8 +50,31 @@ export function ConversationList({
   const [confirming, setConfirming] = useState<Conversation | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
+  const hasConversations = conversations.length > 0;
 
-  if (!conversations.length) return null;
+  // A vertical wheel gesture over the horizontally-scrolling strip scrolls the
+  // strip instead, and ONLY the strip. A native listener, not React's
+  // `onWheel`: React registers wheel listeners as passive, so its
+  // `preventDefault()` was ignored and the panel/page scrolled along with it.
+  // At either end the gesture is released so the page can still scroll.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY === 0 || list.scrollWidth <= list.clientWidth) return;
+      const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? LINE_HEIGHT_PX : 1;
+      const delta = event.deltaY * unit * WHEEL_DAMPING;
+      const atStart = list.scrollLeft <= 0;
+      const atEnd = list.scrollLeft + list.clientWidth >= list.scrollWidth - 1;
+      if ((delta < 0 && atStart) || (delta > 0 && atEnd)) return;
+      event.preventDefault();
+      list.scrollLeft += delta;
+    };
+    list.addEventListener("wheel", handleWheel, { passive: false });
+    return () => list.removeEventListener("wheel", handleWheel);
+  }, [hasConversations]);
+
+  if (!hasConversations) return null;
 
   const restoreFocus = () => {
     setTimeout(() => {
@@ -75,23 +103,13 @@ export function ConversationList({
     setConfirming(null);
   };
 
-  // A vertical wheel gesture over a horizontally-scrolling row does nothing
-  // by default (the row has no vertical overflow, so the page scrolls
-  // instead). Redirect the delta onto scrollLeft so the mouse wheel scrolls
-  // the tab strip the way a trackpad's horizontal swipe already does.
-  const handleWheel = (event: React.WheelEvent<HTMLUListElement>) => {
-    if (event.deltaY === 0) return;
-    event.currentTarget.scrollLeft += event.deltaY;
-    event.preventDefault();
-  };
-
   return (
     <nav aria-label="Conversations">
-      {/* Single row, no wrap: overflow scrolls horizontally instead of
-          growing the list downward. */}
+      {/* Browser-style tab strip: one row, no wrap, overflow scrolls
+          horizontally. The selected tab sits on the strip's baseline (-mb-px
+          covers the border) so it reads as attached to the content below. */}
       <ul
-        className="scrollbar-thin flex flex-nowrap gap-2 overflow-x-auto pb-2"
-        onWheel={handleWheel}
+        className="scrollbar-thin flex flex-nowrap items-end gap-0.5 overflow-x-auto overflow-y-hidden border-b border-border px-1"
         ref={listRef}
         tabIndex={-1}
       >
@@ -100,10 +118,10 @@ export function ConversationList({
           const shortId = conversation.id.slice(0, 8);
           return (
             <li
-              className={`flex shrink-0 items-center rounded-full border transition-colors ${
+              className={`-mb-px flex max-w-56 shrink-0 items-center rounded-t-lg border border-b-0 pr-0.5 transition-colors ${
                 isSelected
-                  ? "border-foreground/30 bg-muted text-foreground"
-                  : "border-border text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  ? "border-border bg-background text-foreground"
+                  : "border-transparent bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
               key={conversation.id}
             >
@@ -112,16 +130,17 @@ export function ConversationList({
                   their accessible names. */}
               <Button
                 aria-current={isSelected ? "page" : undefined}
-                className="min-h-11 rounded-full pr-1 pl-4 text-sm whitespace-nowrap text-inherit hover:bg-transparent"
+                className="min-h-11 min-w-0 justify-start gap-2 rounded-none rounded-tl-lg pr-1 pl-3 text-sm whitespace-nowrap text-inherit hover:bg-transparent"
                 onClick={() => onSelect(conversation.id)}
                 type="button"
                 variant="ghost"
               >
-                {label(conversation)}
+                <MessageSquare aria-hidden="true" className="size-3.5 shrink-0" />
+                <span className="truncate">{label(conversation)}</span>
               </Button>
               <Button
                 aria-label={`Archive conversation ${shortId}`}
-                className="min-h-11 min-w-11 rounded-full text-muted-foreground hover:bg-transparent hover:text-destructive"
+                className="group/close min-h-11 min-w-9 rounded-full text-muted-foreground hover:bg-transparent hover:text-foreground"
                 disabled={archivingIds.has(conversation.id)}
                 onClick={(event) => {
                   triggerRef.current = event.currentTarget;
@@ -131,7 +150,11 @@ export function ConversationList({
                 type="button"
                 variant="ghost"
               >
-                <X aria-hidden="true" className="size-3.5" />
+                {/* Chrome-like close: a small round hover chip inside a
+                    full-height hit target. */}
+                <span className="flex size-5 items-center justify-center rounded-full group-hover/close:bg-foreground/10">
+                  <X aria-hidden="true" className="size-3.5" />
+                </span>
               </Button>
             </li>
           );

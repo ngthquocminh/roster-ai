@@ -99,13 +99,15 @@ export function Composer({
           rows={2}
           value={draft}
         />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <p className="text-xs text-muted-foreground">
+        {/* No wrap: in the narrow chat panel a wrapping row dropped Send below
+            the hint on the left. The hint shrinks instead; Send stays put. */}
+        <div className="mt-2 flex items-center justify-between gap-3 border-t border-border/60 pt-2">
+          <p className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground">
             Enter inserts a new line. Ctrl+Enter or Command+Enter sends.
           </p>
           <Button
             aria-describedby={disabledReason}
-            className="min-h-11"
+            className="min-h-11 shrink-0 px-5"
             disabled={!draft.trim() || isPending || Boolean(disabledReason)}
             onClick={() => void submit()}
             type="button"
