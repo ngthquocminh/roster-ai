@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 
@@ -46,7 +47,7 @@ it("waits for the exact record, then renders and focuses one named highlight", a
 
   const { container } = render(
     <MemoryRouter>
-      <EvidenceTargetPanel scenarioId="scenario-a" target={target} />
+      <EvidenceTargetPanel onClose={vi.fn()} scenarioId="scenario-a" target={target} />
     </MemoryRouter>,
   );
 
@@ -58,7 +59,21 @@ it("waits for the exact record, then renders and focuses one named highlight", a
   expect(screen.getByRole("button", { name: "Copy Record ID demand-1" })).toBeInTheDocument();
   expect(screen.getByText("Day 1, 08:30–16:00")).toBeInTheDocument();
   expect(screen.getByText("Targeted field").nextElementSibling).toHaveTextContent("amount");
+  // Close, never a navigation back: the chat panel already shows the claim.
   expect(screen.queryByRole("button", { name: "Return to claim" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Close evidence" })).toBeInTheDocument();
+});
+
+it("calls onClose from the Close evidence control", async () => {
+  vi.mocked(useEvidenceRecord).mockReturnValue({
+    data: { record_id: "demand-1", amount: 12 }, dataUpdatedAt: Date.now(), error: null, isError: false, isPending: false, isSuccess: true, refetch: vi.fn(),
+  } as never);
+  const onClose = vi.fn();
+  render(<MemoryRouter><EvidenceTargetPanel onClose={onClose} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+
+  await userEvent.click(screen.getByRole("button", { name: "Close evidence" }));
+
+  expect(onClose).toHaveBeenCalledTimes(1);
 });
 
 it("renders a shape-matched skeleton without an empty highlight while loading", () => {
@@ -72,7 +87,7 @@ it("renders a shape-matched skeleton without an empty highlight while loading", 
   } as never);
   const { container } = render(
     <MemoryRouter>
-      <EvidenceTargetPanel scenarioId="scenario-a" target={target} />
+      <EvidenceTargetPanel onClose={vi.fn()} scenarioId="scenario-a" target={target} />
     </MemoryRouter>,
   );
 
@@ -92,6 +107,7 @@ it("keeps the workspace selected version and renders a mismatch instead of retar
   const { container } = render(
     <MemoryRouter>
       <EvidenceTargetPanel
+        onClose={vi.fn()}
         scenarioId="scenario-a"
         selectedVersion="22222222-2222-4222-8222-222222222222"
         target={target}
@@ -101,6 +117,7 @@ it("keeps the workspace selected version and renders a mismatch instead of retar
 
   const alert = screen.getByRole("alert");
   expect(alert).toHaveTextContent("Version mismatch");
+  expect(screen.getByRole("button", { name: "Close evidence" })).toBeInTheDocument();
   expect(alert).toHaveTextContent(target.version);
   expect(alert).toHaveTextContent("22222222-2222-4222-8222-222222222222");
   expect(evidenceHighlights(container)).toHaveLength(0);
@@ -111,10 +128,11 @@ it("renders missing evidence with retry and marks the origin unavailable", () =>
   vi.mocked(useEvidenceRecord).mockReturnValue({
     data: undefined, error: { code: "evidence_not_found", status: 404 }, isError: true, isPending: false, isSuccess: false, refetch: vi.fn(),
   } as never);
-  const { container } = render(<MemoryRouter><EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+  const { container } = render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
 
   expect(screen.getByRole("alert")).toHaveTextContent("Missing evidence");
   expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Close evidence" })).toBeInTheDocument();
   expect(isEvidenceUnavailable(origin)).toBe(true);
   expect(evidenceHighlights(container)).toHaveLength(0);
 });
@@ -124,7 +142,7 @@ it("uses byte-identical non-disclosing unauthorized copy for either server detai
     vi.mocked(useEvidenceRecord).mockReturnValue({
       data: undefined, error: { code: "resource_not_found", detail, status: 404 }, isError: true, isPending: false, isSuccess: false, refetch: vi.fn(),
     } as never);
-    return render(<MemoryRouter><EvidenceTargetPanel scenarioId="scenario-a" target={target} /></MemoryRouter>);
+    return render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} scenarioId="scenario-a" target={target} /></MemoryRouter>);
   };
   const first = renderUnauthorized("record exists");
   const firstText = screen.getByRole("alert").textContent;
@@ -132,6 +150,7 @@ it("uses byte-identical non-disclosing unauthorized copy for either server detai
   renderUnauthorized("record absent");
 
   expect(screen.getByRole("alert")).toHaveTextContent("Evidence is not available to this session.");
+  expect(screen.getByRole("button", { name: "Close evidence" })).toBeInTheDocument();
   expect(screen.getByRole("alert").textContent).toBe(firstText);
   expect(screen.getByRole("alert")).not.toHaveTextContent(/exists|absent/);
 });
@@ -141,7 +160,7 @@ it("labels cached evidence stale without discarding the record it already holds"
   vi.mocked(useEvidenceRecord).mockReturnValue({
     data: { record_id: "demand-1", amount: 12 }, dataUpdatedAt: Date.parse("2026-08-15T01:02:03Z"), error: { status: 503 }, isError: true, isPending: false, isSuccess: false, refetch: vi.fn(),
   } as never);
-  const { container } = render(<MemoryRouter><EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+  const { container } = render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
 
   // ScenarioWorkspace.tsx:118-137's approved pattern: only the message is a live
   // region, the control sits outside it, and the content stays on screen.
@@ -161,10 +180,11 @@ it("states a terminal unclassified failure instead of rendering nothing", () => 
     // `code` at all. `retry: false` makes this terminal, not transient.
     data: undefined, dataUpdatedAt: 0, error: { status: 500 }, isError: true, isPending: false, isSuccess: false, refetch: vi.fn(),
   } as never);
-  const { container } = render(<MemoryRouter><EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+  const { container } = render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
 
   expect(screen.getByRole("alert")).toHaveTextContent("Evidence unavailable");
   expect(screen.getByRole("alert")).toHaveTextContent("No current or similar record was substituted.");
+  expect(screen.getByRole("button", { name: "Close evidence" })).toBeInTheDocument();
   expect(evidenceHighlights(container)).toHaveLength(0);
   expect(container).not.toBeEmptyDOMElement();
 });
@@ -176,7 +196,7 @@ it("branches on the RFC 7807 code even when a cached record is still present", (
     // has since been deleted, while TanStack still holds the old data.
     data: { record_id: "demand-1" }, dataUpdatedAt: Date.now(), error: { code: "evidence_not_found", status: 404 }, isError: true, isPending: false, isSuccess: false, refetch: vi.fn(),
   } as never);
-  const { container } = render(<MemoryRouter><EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+  const { container } = render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
 
   // Decision 5: the code wins over the presence of cached data. Showing "Stale"
   // here contradicted the timeline, which marks the same claim unavailable.
@@ -191,14 +211,14 @@ it("clears the unavailable mark when a retry resolves the cited record", async (
   vi.mocked(useEvidenceRecord).mockReturnValue({
     data: undefined, dataUpdatedAt: 0, error: { code: "evidence_not_found", status: 404 }, isError: true, isPending: false, isSuccess: false, refetch: vi.fn(),
   } as never);
-  const first = render(<MemoryRouter><EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+  const first = render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
   expect(isEvidenceUnavailable(origin)).toBe(true);
   first.unmount();
 
   vi.mocked(useEvidenceRecord).mockReturnValue({
     data: { record_id: "demand-1", amount: 12 }, dataUpdatedAt: Date.now(), error: null, isError: false, isPending: false, isSuccess: true, refetch: vi.fn(),
   } as never);
-  render(<MemoryRouter><EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+  render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
 
   // Otherwise the timeline keeps a red "Evidence unavailable" beside a link
   // that now works, for the rest of the session.

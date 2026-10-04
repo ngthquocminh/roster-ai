@@ -45,7 +45,7 @@ it("focuses one fully named exact target only after resolution and is axe clean"
     data: { record_id: "demand-1", family: "outbound", task_id: "pick", area_id: null, start_minute: 510, end_minute: 960, amount: 12, unit: "headcount" },
     dataUpdatedAt: Date.now(), error: null, isError: false, isPending: false, isSuccess: true, refetch: vi.fn(),
   } as never);
-  const { container } = render(<MemoryRouter><EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
+  const { container } = render(<MemoryRouter><EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} /></MemoryRouter>);
 
   const region = screen.getByRole("region", {
     name: `Evidence target: Demand demand-1, amount, 510–960 minutes, cited version ${target.version}`,
@@ -99,7 +99,7 @@ describe.each([
     } as never);
     const { container } = render(
       <MemoryRouter>
-        <EvidenceTargetPanel origin={origin} scenarioId="scenario-a" selectedVersion="22222222-2222-4222-8222-222222222222" target={target} />
+        <EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" selectedVersion="22222222-2222-4222-8222-222222222222" target={target} />
       </MemoryRouter>,
     );
 
@@ -119,7 +119,7 @@ it("keeps the stale record rendered under a polite status banner and stays axe c
   } as never);
   const { container } = render(
     <MemoryRouter>
-      <EvidenceTargetPanel origin={origin} scenarioId="scenario-a" target={target} />
+      <EvidenceTargetPanel onClose={vi.fn()} origin={origin} scenarioId="scenario-a" target={target} />
     </MemoryRouter>,
   );
 

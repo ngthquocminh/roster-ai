@@ -73,11 +73,14 @@ function RecordFields({ record }: Readonly<{ record: object }>) {
 }
 
 export function EvidenceTargetPanel({
+  onClose,
   origin,
   scenarioId,
   selectedVersion,
   target,
 }: Readonly<{
+  /** Dismisses the evidence and leaves the planner on the surface beneath it. */
+  onClose: () => void;
   origin?: EvidenceOrigin;
   scenarioId: string;
   selectedVersion?: string;
@@ -128,9 +131,15 @@ export function EvidenceTargetPanel({
     else if (query.isSuccess) unmarkEvidenceUnavailable(origin);
   }, [errorCode, origin, query.isError, query.isSuccess]);
 
-  // No "Return to claim" control: the chat is a side panel that stays open
-  // beside this evidence, so the originating claim is already on screen
-  // (browser Back still refocuses it via ChatView's origin restoration).
+  // Close, not "Return to claim": the chat is a side panel that stays open
+  // beside this evidence, so the originating claim is already on screen. What
+  // the planner needs is to dismiss the evidence. Offered in every settled
+  // state, including the failures, so no exception is a dead end.
+  const closeControl = (
+    <Button className="min-h-11" onClick={onClose} type="button" variant="outline">
+      Close evidence
+    </Button>
+  );
 
   const retryControl = (
     <Button className="min-h-11" onClick={() => { void query.refetch(); }} type="button" variant="outline">
@@ -155,6 +164,7 @@ export function EvidenceTargetPanel({
     return (
       <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
         <InlineAlert
+          action={closeControl}
           description={`The cited version ${target.version} does not match the selected version ${selectedVersion ?? "unknown"}. No current or similar record was substituted.`}
           title="Version mismatch"
           variant="destructive"
@@ -167,7 +177,7 @@ export function EvidenceTargetPanel({
     return (
       <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
         <InlineAlert
-          action={retryControl}
+          action={<div className="flex flex-wrap gap-3">{retryControl}{closeControl}</div>}
           description={`The locator ${groupLabel} ${target.record}${detail ? `, ${detail}` : ""} could not resolve in the exact cited version ${target.version}. No current or similar record was substituted.`}
           title="Missing evidence"
           variant="destructive"
@@ -182,6 +192,7 @@ export function EvidenceTargetPanel({
     return (
       <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
         <InlineAlert
+          action={closeControl}
           description="Evidence is not available to this session."
           title="Unauthorized"
           variant="destructive"
@@ -202,6 +213,8 @@ export function EvidenceTargetPanel({
       <span className="text-sm" role="status">
         Stale — last verified at {formatTimestamp(new Date(query.dataUpdatedAt).toISOString())}
       </span>
+      {/* Retry only: the record below is still rendered and carries its own
+          Close evidence, so repeating it here would duplicate the control. */}
       {retryControl}
     </div>
   ) : null;
@@ -213,7 +226,7 @@ export function EvidenceTargetPanel({
     return (
       <div className="mt-4 outline-none" ref={regionRef} tabIndex={-1}>
         <InlineAlert
-          action={retryControl}
+          action={<div className="flex flex-wrap gap-3">{retryControl}{closeControl}</div>}
           description={`The cited evidence could not be loaded${errorCode ? ` (${errorCode})` : ""}. No current or similar record was substituted.`}
           title="Evidence unavailable"
           variant="destructive"
@@ -235,6 +248,7 @@ export function EvidenceTargetPanel({
             <div><dt className="text-xs text-muted-foreground">Cited version</dt><dd className="break-all font-mono text-xs">{target.version}</dd></div>
           </dl>
         </div>
+        {closeControl}
       </div>
       <RecordFields record={record} />
     </EvidenceHighlight>
