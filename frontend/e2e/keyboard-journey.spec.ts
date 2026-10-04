@@ -99,7 +99,7 @@ test("completes the Gate A Scenario Data journey with keyboard only", async ({ c
   expect(await page.evaluate(() => document.activeElement !== document.body)).toBe(true);
 });
 
-test("jumps to exact evidence and returns to the invoking link with keyboard only", async ({ page }) => {
+test("jumps to exact evidence and closes it with keyboard only", async ({ page }) => {
   await installApiStubs(page);
   await page.goto(`/scenarios/${SCENARIO_ID}?conversation=${CONVERSATION_ID}`);
 
@@ -115,11 +115,22 @@ test("jumps to exact evidence and returns to the invoking link with keyboard onl
   await expect(page).toHaveURL(new RegExp(`/scenarios/${SCENARIO_ID}/data\\?`));
   expect(new URL(page.url()).searchParams.get("record")).toBe(EVIDENCE_RECORD_ID);
 
-  const returnToClaim = page.getByRole("button", { name: "Return to claim" });
-  await tabTo(page, returnToClaim);
-  await expectKeyboardFocus(returnToClaim);
+  // Chat is a side panel beside the evidence, so the invoking claim never left
+  // the screen; the planner dismisses the evidence rather than navigating back.
+  await expect(evidence).toBeVisible();
+  const closeEvidence = page.getByRole("button", { name: "Close evidence" });
+  await tabTo(page, closeEvidence);
+  await expectKeyboardFocus(closeEvidence);
   await page.keyboard.press("Enter");
 
-  await expect(page).toHaveURL(`/scenarios/${SCENARIO_ID}?conversation=${CONVERSATION_ID}`);
-  await expectKeyboardFocus(evidence);
+  // Only the locator is dropped: the cited group stays selected, focus lands on
+  // the Scenario Data heading instead of <body>, and the claim is still shown.
+  await expect(target).toHaveCount(0);
+  const params = new URL(page.url()).searchParams;
+  expect(params.get("group")).toBe("demand");
+  expect(params.get("record")).toBeNull();
+  // A programmatic focus target (tabIndex=-1), like the workspace's terminal
+  // headings — so focus is asserted, not a Tab-reachable focus ring.
+  await expect(page.getByRole("heading", { level: 2, name: "Scenario Data" })).toBeFocused();
+  await expect(evidence).toBeVisible();
 });

@@ -1425,3 +1425,6 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-chat-side-panel.md`
   summary: `ScenarioDataParity.test.tsx` takes ~108s alone and hit the 60s per-test timeout once under full-suite load.
   evidence: Full `vitest run` on 2026-10-04 failed only "renders every demand contract cell across all pages for sample_tiny_input" by timeout; the file passes 14/14 when run alone and references no chat code.
+- source_spec: `_bmad-output/implementation-artifacts/spec-chat-side-panel.md`
+  summary: EXPERIENCE.md still specifies "Return to claim" (~9 places: component table row, keyboard/focus rules, evidence failure rules for version mismatch / missing / unauthorized, accessibility notes, and the walkthrough) although the shipped control is now "Close evidence".
+  evidence: Commit 304578c replaced Return to claim with Close evidence because the chat is a side panel beside the evidence; `grep -n "Return to claim" _bmad-output/planning-artifacts/ux-designs/ux-ShiftMind-2026-07-22/EXPERIENCE.md` lists the stale lines.

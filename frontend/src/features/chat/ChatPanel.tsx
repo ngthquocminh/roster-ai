@@ -140,13 +140,17 @@ export function ChatPanel({ scenarioId }: Readonly<{ scenarioId: string }>) {
     </Button>
   );
 
+  // Docked width is `min(420px, 35%)`, not a fixed 420px: when the workspace
+  // is tight (a small desktop, or 200% zoom that keeps the lg layout) the
+  // panel yields, instead of squeezing the content's label/value grids to a
+  // zero-width value column.
   return (
     <aside
       aria-label="Chat panel"
       className={cn(
         "z-40 flex flex-col bg-background lg:static lg:z-auto lg:h-full lg:shrink-0 lg:border-l lg:border-border lg:shadow-none",
         expanded
-          ? "fixed inset-y-0 right-0 w-full max-w-md border-l border-border shadow-xl lg:w-[420px] lg:max-w-none"
+          ? "fixed inset-y-0 right-0 w-full max-w-md border-l border-border shadow-xl lg:w-[min(420px,35%)] lg:max-w-none"
           : "fixed right-4 bottom-4 lg:w-12 lg:items-center",
       )}
       onKeyDown={closeDrawerOnEscape}

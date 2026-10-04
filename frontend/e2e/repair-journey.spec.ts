@@ -24,9 +24,12 @@ test("completes draft, run, reconnect, comparison, and exact evidence targeting"
   });
   await expect(evidenceTarget).toBeFocused();
   expect(new URL(page.url()).searchParams.get("record")).toBe(EVIDENCE_RECORD_ID);
-  await page.getByRole("button", { name: "Return to claim" }).click();
-  await expect(page).toHaveURL(chatUrl);
-  await expect(evidence).toBeFocused();
+  // The chat panel stays beside the evidence; closing it keeps the claim on
+  // screen and the composer usable without navigating back.
+  await expect(evidence).toBeVisible();
+  await page.getByRole("button", { name: "Close evidence" }).click();
+  await expect(evidenceTarget).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get("record")).toBeNull();
 
   await page.getByRole("textbox", { name: "Message" }).fill("Create a reversible repair draft.");
   await page.getByRole("button", { name: "Send" }).click();
