@@ -53,6 +53,22 @@ it("forces the cited group and composes the resolved target above its grid", asy
   expect(evidenceHighlights(container)).toHaveLength(1);
 });
 
+it("closes the evidence onto its group, keeping filters and the chat's conversation", async () => {
+  vi.mocked(useEvidenceRecord).mockReturnValue({
+    ...state,
+    data: { record_id: "d1", family: "outbound", task_id: "t1", area_id: null, start_minute: 0, end_minute: 30, amount: 1, unit: "volume" },
+    isSuccess: true,
+  } as never);
+  renderView("/data?group=demand&record=d1&version=11111111-1111-4111-8111-111111111111&field=amount&start=0&end=30&conversation=c1");
+
+  fireEvent.click(screen.getByRole("button", { name: "Close evidence" }));
+
+  expect(screen.getByTestId("location")).toHaveTextContent("?group=demand&conversation=c1");
+  expect(screen.queryByRole("region", { name: /Evidence target/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "Demand" })).toHaveAttribute("aria-selected", "true");
+  await waitFor(() => expect(screen.getByRole("heading", { name: "Scenario Data" })).toHaveFocus());
+});
+
 it("keeps the workspace scenario and selected version when the citation names another version", async () => {
   vi.mocked(useEvidenceRecord).mockReturnValue({
     ...state, data: undefined, isError: true, isSuccess: false,

@@ -1,10 +1,10 @@
+import { useRef } from "react";
 import { useLocation, useSearchParams } from "react-router";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EvidenceTargetPanel } from "@/features/evidence/EvidenceTargetPanel";
 import { EVIDENCE_GROUP_TO_TAB, readTarget } from "@/features/evidence/locator";
 import type { EvidenceOrigin } from "@/features/evidence/origin";
-import type { ComponentType } from "react";
 import { COLUMNS_BY_GROUP, type ScenarioDataListGroup } from "./columns";
 import { ColumnChooser } from "./ColumnChooser";
 import { FilterBar } from "./FilterBar";
@@ -18,6 +18,10 @@ import { WorkAreasAndTasksPanel } from "./groups/WorkAreasAndTasksPanel";
 import { WorkersPanel } from "./groups/WorkersPanel";
 import { useGroupControls, type GroupControls } from "./useGroupControls";
 import { useColumnVisibility } from "./useColumnVisibility";
+import type { ComponentType } from "react";
+
+/** The evidence locator's own params; closing evidence removes only these. */
+const EVIDENCE_PARAMS = ["record", "version", "field", "start", "end"] as const;
 
 const groups = [
   ["overview", "Overview", OverviewPanel],
@@ -31,7 +35,8 @@ const groups = [
 const knownGroups = new Set<string>(groups.map(([slug]) => slug));
 
 export function ScenarioDataView({ scenarioId, selectedVersion }: Readonly<{ scenarioId: string; selectedVersion?: string }>) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const location = useLocation();
   const target = readTarget(searchParams);
   const origin = (location.state as { evidenceOrigin?: EvidenceOrigin } | null)?.evidenceOrigin;
@@ -42,10 +47,21 @@ export function ScenarioDataView({ scenarioId, selectedVersion }: Readonly<{ sce
   const controls = useGroupControls(controlGroup);
   const columns = COLUMNS_BY_GROUP[controlGroup];
   const visibility = useColumnVisibility(controlGroup, columns, searchParams.get("field") ?? undefined);
+
+  // Keeps the group the evidence opened (and any filters, and the chat's
+  // `?conversation=`), so the planner stays on the table they were shown.
+  // Focus moves to the heading: the focused evidence region is about to unmount.
+  const closeEvidence = () => {
+    const next = new URLSearchParams(searchParams);
+    if (target) next.set("group", EVIDENCE_GROUP_TO_TAB[target.group]);
+    for (const key of EVIDENCE_PARAMS) next.delete(key);
+    setSearchParams(next, { replace: true });
+    headingRef.current?.focus();
+  };
   return (
     <section aria-labelledby="scenario-data-heading" className="mt-6">
-      <h2 className="text-xl font-semibold" id="scenario-data-heading">Scenario Data</h2>
-      {target ? <EvidenceTargetPanel origin={origin} scenarioId={scenarioId} selectedVersion={selectedVersion} target={target} /> : null}
+      <h2 className="text-xl font-semibold outline-none" id="scenario-data-heading" ref={headingRef} tabIndex={-1}>Scenario Data</h2>
+      {target ? <EvidenceTargetPanel onClose={closeEvidence} origin={origin} scenarioId={scenarioId} selectedVersion={selectedVersion} target={target} /> : null}
       <Tabs
         value={selected}
         onValueChange={controls.changeGroup}

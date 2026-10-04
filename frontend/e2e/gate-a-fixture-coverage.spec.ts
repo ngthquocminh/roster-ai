@@ -16,9 +16,19 @@ test("keeps the workers table axe-clean and contained-scroll intact with a dense
   const status = page.getByRole("status").filter({ hasText: "Showing" });
   await expect(status).toContainText("22");
 
+  // The table region contains horizontal overflow only. Vertical scrolling
+  // belongs to the workspace column (the one scrollbar beside the chat panel):
+  // a second, nested vertical scroller inside the table was removed with the
+  // docked chat panel.
   const region = page.getByRole("region", { name: "Workers" });
-  const overflowsVertically = await region.evaluate((element) => element.scrollHeight > element.clientHeight);
-  expect(overflowsVertically).toBe(true);
+  const nestedVerticalScroll = await region.evaluate((element) => element.scrollHeight > element.clientHeight);
+  expect(nestedVerticalScroll).toBe(false);
+  const columnScrolls = await region.evaluate((element) => {
+    let node = element.parentElement;
+    while (node && getComputedStyle(node).overflowY !== "auto") node = node.parentElement;
+    return node !== null && node.scrollHeight > node.clientHeight;
+  });
+  expect(columnScrolls).toBe(true);
 
   // The AC constraint is no *page-level horizontal* scroll (the table region owns its own scroll
   // instead) — page-level vertical scroll from surrounding chrome (heading, filters) is expected

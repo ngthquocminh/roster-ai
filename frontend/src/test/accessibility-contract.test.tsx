@@ -192,7 +192,6 @@ it("preserves heading hierarchy and keyboard reading order through Scenario Data
 
   const order = [
     screen.getByRole("link", { name: "Change scenario" }),
-    screen.getByRole("link", { name: "Chat" }),
     screen.getByRole("link", { name: "Scenario Data" }),
     screen.getByRole("link", { name: "Runs" }),
     screen.getByRole("tab", { name: "Demand" }),

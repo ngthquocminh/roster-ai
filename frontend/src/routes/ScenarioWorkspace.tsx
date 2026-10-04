@@ -3,6 +3,7 @@ import { Link, Outlet, useParams } from "react-router";
 
 import { InlineAlert } from "@/components/primitives/InlineAlert";
 import { Button } from "@/components/ui/button";
+import { ChatPanel } from "@/features/chat/ChatPanel";
 import { ScenarioVersionContext } from "@/features/scenario-workspace/ScenarioVersionContext";
 import { WorkspaceTabs } from "@/features/scenario-workspace/WorkspaceTabs";
 import { useRedirectOnUnauthorized } from "@/hooks/useRedirectOnUnauthorized";
@@ -117,33 +118,46 @@ export function ScenarioWorkspace() {
     return null;
   }
 
+  // Desktop: the workspace content and the chat panel share the viewport below
+  // the h-16 app bar, each scrolling on its own, so the chat never scrolls
+  // away while the planner reads data beside it.
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
-      {query.isError ? (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">
-          {/* EXPERIENCE.md:122 Scenario Data row — the approved stale label for
-              a surface in this workspace. Only the message is a live region;
-              the control stays outside it. */}
-          <span className="text-sm" role="status">
-            Stale — last verified at {formatTimestamp(
-              new Date(query.dataUpdatedAt).toISOString(),
-            )}
-          </span>
-          <Button
-            className="min-h-11"
-            onClick={() => {
-              void query.refetch();
-            }}
-            type="button"
-            variant="outline"
-          >
-            Retry
-          </Button>
-        </div>
-      ) : null}
-      <ScenarioVersionContext context={query.data} />
-      <WorkspaceTabs scenarioId={scenarioId} />
-      <Outlet context={{ scenarioVersionId: query.data.scenario_version_id }} />
-    </main>
+    // `overflow-hidden` + `relative` scroll column: absolutely positioned
+    // sr-only text deep in a long table otherwise resolves against the page
+    // and stretches it, adding a page-level scrollbar beside this one.
+    <div className="lg:flex lg:h-[calc(100vh-4rem)] lg:overflow-hidden">
+      <div className="lg:relative lg:min-w-0 lg:flex-1 lg:overflow-y-auto">
+        <main className="mx-auto max-w-6xl px-6 py-8">
+          {query.isError ? (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 px-3 py-2">
+              {/* EXPERIENCE.md:122 Scenario Data row — the approved stale label for
+                  a surface in this workspace. Only the message is a live region;
+                  the control stays outside it. */}
+              <span className="text-sm" role="status">
+                Stale — last verified at {formatTimestamp(
+                  new Date(query.dataUpdatedAt).toISOString(),
+                )}
+              </span>
+              <Button
+                className="min-h-11"
+                onClick={() => {
+                  void query.refetch();
+                }}
+                type="button"
+                variant="outline"
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          <ScenarioVersionContext context={query.data} />
+          <WorkspaceTabs scenarioId={scenarioId} />
+          <Outlet context={{ scenarioVersionId: query.data.scenario_version_id }} />
+        </main>
+      </div>
+      {/* Keyed so a scenario switch starts a fresh chat: remembered
+          conversation, restoration and archive state are per scenario. */}
+      <ChatPanel key={scenarioId} scenarioId={scenarioId} />
+    </div>
   );
 }

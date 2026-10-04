@@ -436,6 +436,39 @@ describe("ChatView", () => {
     );
   });
 
+  it("keeps the chosen conversation when a later navigation drops it from the URL", async () => {
+    // The side panel stays mounted across workspace tabs, and tab and Evidence
+    // links do not carry `?conversation=`.
+    const router = renderChat();
+    await userEvent.click(
+      screen.getByRole("button", { name: `Conversation ${OLDER.slice(0, 8)}` }),
+    );
+    await waitFor(() => expect(router.state.location.search).toContain(`conversation=${OLDER}`));
+
+    await act(() => router.navigate(`/scenarios/${SCENARIO}`));
+
+    expect(router.state.location.search).toBe("");
+    expect(screen.getByRole("button", { current: "page" })).toHaveTextContent(
+      `Conversation ${OLDER.slice(0, 8)}`,
+    );
+  });
+
+  it("does not let an unlisted URL id overwrite the remembered conversation", async () => {
+    const router = renderChat();
+    await userEvent.click(
+      screen.getByRole("button", { name: `Conversation ${OLDER.slice(0, 8)}` }),
+    );
+    await waitFor(() => expect(router.state.location.search).toContain(`conversation=${OLDER}`));
+
+    await act(() => router.navigate(`/scenarios/${SCENARIO}?conversation=not-a-listed-id`));
+    expect(screen.queryByRole("button", { current: "page" })).not.toBeInTheDocument();
+
+    await act(() => router.navigate(`/scenarios/${SCENARIO}`));
+    expect(screen.getByRole("button", { current: "page" })).toHaveTextContent(
+      `Conversation ${OLDER.slice(0, 8)}`,
+    );
+  });
+
   it("archives a conversation only after the confirm dialog is accepted", async () => {
     renderChat(`/scenarios/${SCENARIO}?conversation=${OLDER}`);
 

@@ -4,8 +4,8 @@ import { AppBar } from "@/components/layout/AppBar";
 import { RootErrorBoundary } from "@/components/layout/RootErrorBoundary";
 import { FixtureCatalogue } from "@/routes/FixtureCatalogue";
 import { RequireSession } from "@/routes/RequireSession";
-import { ScenarioChat } from "@/routes/ScenarioChat";
 import { ScenarioData } from "@/routes/ScenarioData";
+import { ScenarioIndexRedirect } from "@/routes/ScenarioIndexRedirect";
 import { ScenarioResults } from "@/routes/ScenarioResults";
 import { ScenarioRuns } from "@/routes/ScenarioRuns";
 import { ScenarioWorkspace } from "@/routes/ScenarioWorkspace";
@@ -60,7 +60,7 @@ export const routes: RouteObject[] = [
             path: "scenarios/:scenarioId",
             Component: ScenarioWorkspace,
             children: [
-              { index: true, Component: ScenarioChat },
+              { index: true, Component: ScenarioIndexRedirect },
               { path: "data", Component: ScenarioData },
               { path: "runs", Component: ScenarioRuns },
               { path: "runs/:runId", Component: ScenarioResults },

@@ -23,9 +23,7 @@ export function WorkspaceTabs({ scenarioId }: WorkspaceTabsProps) {
       className="mt-3 overflow-x-auto border-b border-border"
     >
       <div className="flex min-w-max items-start whitespace-nowrap">
-        <NavLink className={linkClass} end to={`/scenarios/${scenarioId}`}>
-          Chat
-        </NavLink>
+        {/* No Chat tab: chat is the workspace's side panel (ChatPanel). */}
         <NavLink className={linkClass} to={`/scenarios/${scenarioId}/data`}>
           Scenario Data
         </NavLink>

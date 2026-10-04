@@ -44,6 +44,32 @@ describe("ConversationList", () => {
     expect(list.className).not.toContain("flex-wrap");
   });
 
+  it("turns a vertical wheel into a damped horizontal scroll that does not reach the page", () => {
+    renderList();
+    const list = screen.getByRole("list");
+    Object.defineProperty(list, "scrollWidth", { configurable: true, value: 1000 });
+    Object.defineProperty(list, "clientWidth", { configurable: true, value: 300 });
+
+    const wheel = new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true });
+    list.dispatchEvent(wheel);
+
+    // Cancelled, so the panel/page does not scroll too; and slower than 1:1.
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(list.scrollLeft).toBeCloseTo(35);
+  });
+
+  it("releases the wheel to the page once the strip is at its end", () => {
+    renderList();
+    const list = screen.getByRole("list");
+    Object.defineProperty(list, "scrollWidth", { configurable: true, value: 1000 });
+    Object.defineProperty(list, "clientWidth", { configurable: true, value: 300 });
+
+    const up = new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true });
+    list.dispatchEvent(up);
+
+    expect(up.defaultPrevented).toBe(false);
+  });
+
   it("keeps the archive affix a sibling of the select tab, not nested inside it", () => {
     renderList();
 

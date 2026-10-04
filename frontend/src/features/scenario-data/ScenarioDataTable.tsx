@@ -29,7 +29,7 @@ export function ScenarioDataEmptyRow({ columnCount }: Readonly<{ columnCount: nu
 
 export function ScenarioDataTable({ caption, children, isBusy = false }: Readonly<{ caption: string; children: ReactNode; isBusy?: boolean }>) {
   return (
-    <div aria-busy={isBusy || undefined} aria-label={caption} className={cn("max-h-[65vh] overflow-auto rounded-md border [&_[data-slot=table-container]]:overflow-visible", isBusy && "opacity-60")} role="region" tabIndex={0}>
+    <div aria-busy={isBusy || undefined} aria-label={caption} className={cn("relative overflow-x-auto rounded-md border [&_[data-slot=table-container]]:overflow-visible", isBusy && "opacity-60")} role="region" tabIndex={0}>
       <Table className="min-w-max [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-muted">
         <TableCaption className="sr-only">{caption}</TableCaption>
         {children}

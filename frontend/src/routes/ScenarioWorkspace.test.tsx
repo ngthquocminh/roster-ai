@@ -9,6 +9,13 @@ import { beforeEach, expect, it, vi } from "vitest";
 vi.mock("@/hooks/useScenarioContext", () => ({
   useScenarioContext: vi.fn(),
 }));
+// ChatPanel's own behaviour is covered by ChatPanel.test; here it only has to
+// be mounted beside the content once the context is loaded.
+vi.mock("@/features/chat/ChatPanel", () => ({
+  ChatPanel: ({ scenarioId }: { scenarioId: string }) => (
+    <aside aria-label="Chat panel">Chat for {scenarioId}</aside>
+  ),
+}));
 
 import { useScenarioContext } from "@/hooks/useScenarioContext";
 import { ScenarioWorkspace } from "./ScenarioWorkspace";
@@ -35,7 +42,7 @@ function renderWorkspace() {
       {
         path: "/scenarios/:scenarioId",
         Component: ScenarioWorkspace,
-        children: [{ index: true, element: <p>Chat route content</p> }],
+        children: [{ index: true, element: <p>Index route content</p> }],
       },
       { path: "/signin", element: <p>Sign in surface</p> },
       { path: "/", element: <p>Catalogue surface</p> },
@@ -69,14 +76,15 @@ it("renders persistent context, workspace navigation, and child content", () => 
   renderWorkspace();
 
   expect(screen.getByRole("heading", { name: "Fixture A" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  // Chat is the side panel now, not a tab.
+  expect(screen.queryByRole("link", { name: "Chat" })).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Scenario Data" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Runs" })).toBeInTheDocument();
   expect(screen.getByText("Results", { selector: "[aria-disabled='true']" })).toBeInTheDocument();
-  expect(screen.getByText("Chat route content")).toBeInTheDocument();
+  expect(screen.getByText("Index route content")).toBeInTheDocument();
+  expect(screen.getByRole("complementary", { name: "Chat panel" })).toHaveTextContent(
+    `Chat for ${scenarioId}`,
+  );
 });
 
 it("offers no scenario-switching affordance beyond the catalogue return link", () => {

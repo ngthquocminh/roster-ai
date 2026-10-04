@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { createConversation } from "@/api/conversations";
@@ -91,20 +91,41 @@ function ErrorState({
   );
 }
 
-export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
+export function ChatView({
+  scenarioId,
+  headerActions,
+}: Readonly<{
+  scenarioId: string;
+  /** Extra controls for the end of the title row (the side panel's collapse toggle). */
+  headerActions?: ReactNode;
+}>) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
   const context = useScenarioContext(scenarioId);
   const conversations = useConversations(scenarioId);
   const availability = useAgentAvailability(scenarioId);
-  // Selection lives in the URL, not component state: switching workspace tabs
-  // unmounts this view, and `useState` would silently drop the planner back
-  // onto the newest conversation — posting their next message into a different
-  // conversation than the one they were reading (AC2).
+  // The URL wins so deep links and Return to claim select their conversation
+  // (AC2). The panel stays mounted across workspace tabs, but tab and Evidence
+  // navigation drop `?conversation=`, so the last choice is also remembered
+  // here; otherwise the panel would fall back to "nothing selected" exactly
+  // when the planner opens the evidence beside it.
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedId = searchParams.get("conversation") ?? "";
+  const [remembered, setRemembered] = useState("");
+  const urlConversation = searchParams.get("conversation") || null;
+  const requestedId = urlConversation ?? remembered;
   const items = conversations.data?.items ?? [];
+  // A URL-selected conversation becomes the remembered one, so dropping the
+  // param later keeps that thread rather than reverting to an older choice.
+  // Only a listed one: an archived or foreign id must not overwrite the
+  // planner's last valid thread.
+  if (
+    urlConversation !== null
+    && urlConversation !== remembered
+    && items.some((c) => c.id === urlConversation)
+  ) {
+    setRemembered(urlConversation);
+  }
   const selectedId = items.some((c) => c.id === requestedId) ? requestedId : "";
   const stream = useConversationStream(selectedId);
   const timeline = stream.timeline;
@@ -129,13 +150,16 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
     // Spend the token ONLY once the target is actually present. An errored,
     // empty, or window-truncated timeline renders no Evidence link, and
     // consuming there lost the restoration permanently with no retry.
-    if (!node) return;
+    // A collapsed chat panel keeps this view mounted but `hidden`; focus would
+    // silently fail there, so the token waits until the panel is shown.
+    if (!node || node.closest("[hidden]")) return;
     if (stored === origin) forgetOrigin();
     restored.current = elementId;
     node.focus();
   }, [selectedId, stateOrigin, timeline.isError, timeline.isPending, stream.items]);
 
   const select = (id: string) => {
+    setRemembered(id);
     const next = new URLSearchParams(searchParams);
     next.set("conversation", id);
     setSearchParams(next, { replace: true });
@@ -199,22 +223,27 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
   const agentUnavailable = availability.data?.available === false;
 
   return (
-    <section aria-labelledby="chat-title" className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    // A full-height column: the title row, alerts, conversation tabs, meta
+    // line and composer keep their size; only the activity list scrolls.
+    <section aria-labelledby="chat-title" className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
         {/* h2, not h1: the workspace shell already owns the page heading. */}
         <h2 className="text-lg font-medium" id="chat-title">
           Chat
         </h2>
-        <Button
-          className="min-h-11"
-          disabled={start.isPending || !context.data}
-          onClick={() => start.mutate()}
-          ref={newConversationRef}
-          type="button"
-          variant={selectedId ? "outline" : "default"}
-        >
-          New conversation
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            className="min-h-11"
+            disabled={start.isPending || !context.data}
+            onClick={() => start.mutate()}
+            ref={newConversationRef}
+            type="button"
+            variant={selectedId ? "outline" : "default"}
+          >
+            New conversation
+          </Button>
+          {headerActions}
+        </div>
       </div>
 
       {start.isError ? (
@@ -289,7 +318,7 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
       )}
 
       {selectedId ? (
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
           {/* One quiet meta line: which version this thread is pinned to, and
               where the latest agent run stands. */}
           <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-xs text-muted-foreground">
@@ -305,53 +334,63 @@ export function ChatView({ scenarioId }: Readonly<{ scenarioId: string }>) {
               </p>
             ) : null}
           </div>
-          {timeline.isPending ? (
-            <div aria-label="Restoring conversation" className="space-y-2" role="status">
-              {[0, 1, 2].map((row) => (
-                <Skeleton className="h-16 w-full" key={row} />
-              ))}
-            </div>
-          ) : timeline.isError && timeline.data === undefined ? (
-            <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} scenarioId={scenarioId} />
-          ) : (
-            <>
-              {/* A failed BACKGROUND refetch keeps its data (TanStack v5 sets
-                  `isError` anyway). Swapping the timeline out for the error
-                  would unmount it and drop every unsaved Draft card edit it
-                  owns (C8), so the error is shown above it instead (code review
-                  of story-5.11). */}
-              {timeline.isError ? (
-                <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} scenarioId={scenarioId} />
-              ) : null}
-              {/* Only rendered once something has actually gone wrong; a
-                  healthy stream shows no banner at all. */}
-              {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
-              {stream.updatesAreDelayed ? (
-                // AC2 requires the fallback to be LABELLED. Silent polling
-                // would leave the planner believing they are seeing live
-                // activity when they are not.
-                <p className="text-xs text-muted-foreground" role="status">
-                  Live updates are unavailable. This conversation is refreshing on a
-                  delay.
-                </p>
-              ) : null}
-              <ActivityTimeline
-                // The in-flight fact already on the page is the timeline's own
-                // `latest_agent_run_status`. `mutation.isPending` is NOT it: the
-                // send resolves when the message is ACCEPTED and the agent turn
-                // executes afterwards, so it is false for the whole turn (C7).
-                agentTurnInFlight={isAgentTurnInFlight(timeline.data.latest_agent_run_status)}
-                items={stream.items}
-                navigate={navigate}
-              />
-              {timeline.data.has_more ? (
-                <p className="text-xs text-muted-foreground">
-                  Showing the most recent {timeline.data.limit} activities. Earlier
-                  activity is not displayed.
-                </p>
-              ) : null}
-            </>
-          )}
+          {/* The one scrolling part of the chat. `relative` keeps the
+              timeline's sr-only text positioned inside this box; otherwise it
+              is placed against the page and stretches the document. */}
+          <div
+            aria-label="Conversation activity"
+            className="relative min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+            role="region"
+            tabIndex={0}
+          >
+            {timeline.isPending ? (
+              <div aria-label="Restoring conversation" className="space-y-2" role="status">
+                {[0, 1, 2].map((row) => (
+                  <Skeleton className="h-16 w-full" key={row} />
+                ))}
+              </div>
+            ) : timeline.isError && timeline.data === undefined ? (
+              <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} scenarioId={scenarioId} />
+            ) : (
+              <>
+                {/* A failed BACKGROUND refetch keeps its data (TanStack v5 sets
+                    `isError` anyway). Swapping the timeline out for the error
+                    would unmount it and drop every unsaved Draft card edit it
+                    owns (C8), so the error is shown above it instead (code review
+                    of story-5.11). */}
+                {timeline.isError ? (
+                  <ErrorState error={timeline.error} onRetry={() => void timeline.refetch()} scenarioId={scenarioId} />
+                ) : null}
+                {/* Only rendered once something has actually gone wrong; a
+                    healthy stream shows no banner at all. */}
+                {stream.connection ? <ReconnectBanner state={stream.connection} /> : null}
+                {stream.updatesAreDelayed ? (
+                  // AC2 requires the fallback to be LABELLED. Silent polling
+                  // would leave the planner believing they are seeing live
+                  // activity when they are not.
+                  <p className="text-xs text-muted-foreground" role="status">
+                    Live updates are unavailable. This conversation is refreshing on a
+                    delay.
+                  </p>
+                ) : null}
+                <ActivityTimeline
+                  // The in-flight fact already on the page is the timeline's own
+                  // `latest_agent_run_status`. `mutation.isPending` is NOT it: the
+                  // send resolves when the message is ACCEPTED and the agent turn
+                  // executes afterwards, so it is false for the whole turn (C7).
+                  agentTurnInFlight={isAgentTurnInFlight(timeline.data.latest_agent_run_status)}
+                  items={stream.items}
+                  navigate={navigate}
+                />
+                {timeline.data.has_more ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing the most recent {timeline.data.limit} activities. Earlier
+                    activity is not displayed.
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
           <Composer
             disabledReason={agentUnavailable ? AGENT_UNAVAILABLE_DESCRIPTION_ID : undefined}
             isPending={mutation.isPending}
