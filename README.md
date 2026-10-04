@@ -84,6 +84,27 @@ The backend is a hexagonal modular monolith with separate API and worker process
 
 The boundary is deliberate rather than total: `agent_run` does not pin the model or instruction hash, and hidden reasoning is discarded. Failures can be localized, but provider wording cannot be reproduced.
 
+## How an agent turn works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/agent-turn-dark.svg">
+  <img alt="ShiftMind agent turn: a planner message goes to the Jev turn router, which picks scheduling, direct or out_of_scope; the run ends in one typed output — answer, clarification, draft, refusal or approval-gated call — each with its own application-side handling, or in a failed run with fixed copy; every path is persisted and streamed to the chat." src="docs/assets/agent-turn-light.svg">
+</picture>
+
+*One turn, from the planner's message to the reply they see.*
+
+1. **Route.** Before the model runs, Jev answers one `choice` question: is the message `scheduling`, `direct` (greeting, thanks, how-to) or `out_of_scope`? A special route is taken only at probability ≥ 0.85; a router error, timeout or missing key falls back to `scheduling`. Special routes get no tools and a narrower output set, so a misroute can weaken an answer but never add capability.
+2. **Run.** On `scheduling`, the PydanticAI agent calls its granted capability tools; their results become the turn's trusted evidence. Output validators force a corrective retry when an answer tags a claim with no evidence, malforms a claim tag, or states a quantity without one.
+3. **Handle the typed output.** The application, not the model, decides what each one means:
+   - **Answer** — the grounding gate checks every `<claim>` tag against the trusted tool results and fails closed per claim. Jev then scores each fact's wording against its record and flags (never strips or retries) one scoring below 0.5.
+   - **Clarification** — its options are bound to real scenario IDs.
+   - **Draft** — its identity comes from the trusted tool result, not the model's prose.
+   - **Refusal** — a closed reason plus bounded copy; on `out_of_scope` the copy is fixed.
+   - **Approval-gated call** — the turn suspends into an exact-action approval request.
+4. **Fail safely.** A timeout, exhausted budget, provider error, invalid output or capability error becomes fixed planner copy, never raw model text. A draft already saved in the turn is still returned.
+
+Every path ends as a persisted activity streamed to the planner's chat.
+
 ## Solver
 
 ShiftMind uses a solve-and-lock strategy because CP-SAT does not provide the required lexicographic objective directly:
