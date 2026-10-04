@@ -84,7 +84,7 @@ export function Composer({
         </label>
         <textarea
           aria-describedby={disabledReason}
-          className="max-h-48 min-h-12 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          className="max-h-48 min-h-12 w-full resize-none bg-transparent text-right text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           id="chat-composer"
           disabled={Boolean(disabledReason)}
           onChange={(event) => setDraft(event.target.value)}

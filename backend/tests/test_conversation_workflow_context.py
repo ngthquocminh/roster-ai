@@ -5,11 +5,11 @@ from uuid import UUID
 
 from application.contracts.activity import DraftActivityV1
 from application.contracts.proposal import ProposalV1
-from application.contracts.schedule_version import ScheduleVersionV1
-from application.contracts.scenario_projection import AssignmentV1, TaskV1, WorkerV1
+from application.contracts.schedule_version import ConstraintResultV1, MetricSetV1, ScheduleVersionV1
+from application.contracts.scenario_projection import AssignmentV1, TaskV1
 from application.ports.proposal import ProposalRecordV1
 from application.ports.schedule_run import ScheduleRunPageV1, ScheduleRunSummaryV1
-from application.ports.scenario_projection import TaskPageV1, WorkerPageV1
+from application.ports.scenario_projection import TaskPageV1
 from application.use_cases.conversation_workflow_context import load_workflow_context
 from tests.test_execute_turn_use_case import NOW, _deps
 
@@ -76,52 +76,28 @@ def test_no_draft_still_reports_current_baseline_state():
     text = load_workflow_context(None, claimed=claimed, proposals=proposals, runs=runs,
                                  baselines=baselines).parts[0].text
     assert '"baseline_schedule_version": null' in text
-    assert '"baseline_assignments": []' in text
+    assert '"baseline_summary": null' in text
     assert f'"current_scenario_version_id": "{claimed.scenario_version_id}"' in text
 
 
-def test_baseline_snapshot_joins_assignment_to_worker_and_task_labels():
+def test_baseline_snapshot_summarises_the_whole_baseline_and_lists_no_assignments():
     claimed, proposals, runs, baselines, *_ = setup_context()
     claimed.history = ()
-    assignment = AssignmentV1('a1', 'w1', 't1', 's1', 0, 60)
-    schedule = ScheduleVersionV1(schedule_version_id=UUID(int=30), scenario_id=claimed.scenario_id,
-        scenario_version_id=claimed.scenario_version_id, assignments=(assignment,))
-    baselines.get = lambda *a: SimpleNamespace(schedule_version_id=schedule.schedule_version_id)
-    runs.get_version = lambda *a, **k: schedule
-    worker = WorkerV1('w1', 'w1', 'Mika', 'FT', 'G1', 'E1', 38, (), ())
-    task = TaskV1('t1', 't1', 'Packing', 'Outbound', 'area', 'Area', None)
-    projection = SimpleNamespace(
-        get_workers=lambda *a: WorkerPageV1(claimed.scenario_id, claimed.scenario_version_id,
-            claimed.site_id, (worker,), None, 1, 1),
-        get_tasks=lambda *a: TaskPageV1(claimed.scenario_id, claimed.scenario_version_id,
-            claimed.site_id, (task,), None, 1, 1))
-    text = load_workflow_context(None, claimed=claimed, proposals=proposals, runs=runs,
-        baselines=baselines, projection=projection).parts[0].text
-    assert '"worker_name": "Mika"' in text
-    assert '"task_name": "Packing"' in text
-    assert '"task_function": "Outbound"' in text
-
-
-def test_baseline_snapshot_is_limited_to_ten_assignments_and_marks_truncation():
-    claimed, proposals, runs, baselines, *_ = setup_context()
-    claimed.history = ()
-    assignments = tuple(AssignmentV1(f'a{index}', 'w1', 't1', 's1', index, index + 1)
-                        for index in range(11))
-    schedule = ScheduleVersionV1(schedule_version_id=UUID(int=31), scenario_id=claimed.scenario_id,
-        scenario_version_id=claimed.scenario_version_id, assignments=assignments)
-    baselines.get = lambda *a: SimpleNamespace(schedule_version_id=schedule.schedule_version_id)
-    runs.get_version = lambda *a, **k: schedule
-    worker = WorkerV1('w1', 'w1', 'Mika', 'FT', 'G1', 'E1', 38, (), ())
-    task = TaskV1('t1', 't1', 'Packing', 'Outbound', 'area', 'Area', None)
-    projection = SimpleNamespace(
-        get_workers=lambda *a: WorkerPageV1(claimed.scenario_id, claimed.scenario_version_id,
-            claimed.site_id, (worker,), None, 1, 1),
-        get_tasks=lambda *a: TaskPageV1(claimed.scenario_id, claimed.scenario_version_id,
-            claimed.site_id, (task,), None, 1, 1))
-    text = load_workflow_context(None, claimed=claimed, proposals=proposals, runs=runs,
-        baselines=baselines, projection=projection).parts[0].text
-    assert text.count('"assignment_id":') == 10
-    assert '"baseline_assignments_truncated": true' in text
+    projection = _with_baseline(claimed, runs, baselines, assignment_count=11)
+    text = _load(claimed, proposals, runs, baselines, projection)
+    summary = _facts(text)['baseline_summary']
+    assert summary['applies_to_this_scenario_version'] is True
+    assert summary['assignment_count'] == 11
+    assert summary['workers_scheduled'] == 1 and summary['tasks_staffed'] == 1
+    assert summary['staffed_minutes'] == 11
+    assert summary['by_function'] == [
+        {'function': 'Outbound', 'assignment_count': 11, 'staffed_minutes': 11}]
+    assert summary['total_cost'] == 120.5 and summary['overtime_minutes'] == 30.0
+    assert summary['solver_objective_components'] == {'unmet_minutes': 0.0}
+    assert summary['hard_constraints'] == {'checked': 2, 'violated': ['max_shifts_per_day']}
+    assert summary['soft_constraints'] == [{'constraint_type': 'set_max_hours', 'satisfied': True,
+        'measured_value': 14.5, 'limit': 16.0, 'unit': 'hours'}]
+    assert '"assignment_id"' not in text and 'baseline_assignments' not in text
 
 
 # --- the loader's truncation and fail-closed branches --------------------------
@@ -137,74 +113,84 @@ def _draft_activity(claimed, index):
         consequence_summary='c')
 
 
+def _facts(text):
+    return json.loads(text[text.index('\n') + 1:])
+
+
 def _load(claimed, proposals, runs, baselines, projection=None):
     return load_workflow_context(None, claimed=claimed, proposals=proposals, runs=runs,
                                  baselines=baselines, projection=projection).parts[0].text
 
 
 def _with_baseline(claimed, runs, baselines, *, assignment_count=1, schedule_scenario_id=None,
-                   workers=True, tasks=True, more_workers=False):
+                   tasks=True, task_pages=1):
     assignments = tuple(AssignmentV1(f'a{i}', 'w1', 't1', 's1', i, i + 1) for i in range(assignment_count))
     schedule = ScheduleVersionV1(schedule_version_id=UUID(int=40),
         scenario_id=schedule_scenario_id or claimed.scenario_id,
-        scenario_version_id=claimed.scenario_version_id, assignments=assignments)
+        scenario_version_id=claimed.scenario_version_id, assignments=assignments,
+        feasible_solver_status='FEASIBLE',
+        metrics=MetricSetV1(total_cost=120.5, overtime_minutes=30.0,
+                            objective_components=(('unmet_minutes', 0.0),)),
+        constraint_results=(
+            ConstraintResultV1('c1', 'one_shift_per_window', 'hard', True),
+            ConstraintResultV1('c2', 'max_shifts_per_day', 'hard', False),
+            ConstraintResultV1('c3', 'set_max_hours', 'soft', True, 14.5, 16.0, 'hours')))
     baselines.get = lambda *a: SimpleNamespace(schedule_version_id=schedule.schedule_version_id)
     runs.get_version = lambda *a, **k: schedule
-    worker = WorkerV1('w1', 'w1', 'Mika', 'FT', 'G1', 'E1', 38, (), ())
     task = TaskV1('t1', 't1', 'Packing', 'Outbound', 'area', 'Area', None)
-    return SimpleNamespace(
-        get_workers=lambda *a: (WorkerPageV1(claimed.scenario_id, claimed.scenario_version_id,
-            claimed.site_id, (worker,), 'next' if more_workers else None, 1, 1) if workers else None),
-        get_tasks=lambda *a: (TaskPageV1(claimed.scenario_id, claimed.scenario_version_id,
-            claimed.site_id, (task,), None, 1, 1) if tasks else None))
+    filler = TaskV1('t2', 't2', 'Other', 'Pick', 'area', 'Area', None)
+
+    def get_tasks(_connection, _scenario_id, query):
+        # Pages of one task each; the last page has no cursor.
+        index = query.cursor
+        item = task if index == 0 else filler
+        return TaskPageV1(claimed.scenario_id, claimed.scenario_version_id, claimed.site_id,
+                          (item,), index + 1 if index + 1 < task_pages else None, task_pages, task_pages)
+
+    return SimpleNamespace(get_tasks=get_tasks if tasks else (lambda *a: None))
 
 
-def test_exactly_ten_baseline_assignments_are_not_reported_as_truncated():
-    claimed, proposals, runs, baselines, *_ = setup_context()
-    claimed.history = ()
-    projection = _with_baseline(claimed, runs, baselines, assignment_count=10)
-    text = _load(claimed, proposals, runs, baselines, projection)
-    assert text.count('"assignment_id":') == 10
-    assert '"baseline_assignments_truncated": false' in text
-
-
-def test_an_unfinished_label_page_marks_the_baseline_snapshot_truncated():
-    claimed, proposals, runs, baselines, *_ = setup_context()
-    claimed.history = ()
-    projection = _with_baseline(claimed, runs, baselines, more_workers=True)
-    assert '"baseline_assignments_truncated": true' in _load(claimed, proposals, runs, baselines, projection)
-
-
-def test_an_assignment_whose_worker_or_task_is_unknown_keeps_its_ids_and_no_names():
+def test_a_task_the_projection_does_not_know_is_reported_as_function_unknown():
     claimed, proposals, runs, baselines, *_ = setup_context()
     claimed.history = ()
     projection = _with_baseline(claimed, runs, baselines)
-    projection.get_workers = lambda *a: WorkerPageV1(claimed.scenario_id, claimed.scenario_version_id,
+    projection.get_tasks = lambda *a: TaskPageV1(claimed.scenario_id, claimed.scenario_version_id,
         claimed.site_id, (), None, 0, 0)
-    text = _load(claimed, proposals, runs, baselines, projection)
-    assert '"worker_id": "w1"' in text and '"worker_name": null' in text
+    summary = _facts(_load(claimed, proposals, runs, baselines, projection))['baseline_summary']
+    assert summary['by_function'][0]['function'] == 'unknown'
 
 
-def test_a_baseline_from_another_scenario_contributes_no_assignments():
+def test_task_functions_are_read_across_every_page_of_tasks():
+    claimed, proposals, runs, baselines, *_ = setup_context()
+    claimed.history = ()
+    projection = _with_baseline(claimed, runs, baselines, task_pages=2)
+    # Re-point the only assignment at the task that lives on page two.
+    schedule = runs.get_version()
+    runs.get_version = lambda *a, **k: replace(schedule,
+        assignments=(AssignmentV1('a0', 'w1', 't2', 's1', 0, 1),))
+    summary = _facts(_load(claimed, proposals, runs, baselines, projection))['baseline_summary']
+    assert summary['by_function'][0]['function'] == 'Pick'
+
+
+def test_a_baseline_from_another_scenario_is_reported_as_not_applying():
     claimed, proposals, runs, baselines, *_ = setup_context()
     claimed.history = ()
     _with_baseline(claimed, runs, baselines, schedule_scenario_id=UUID(int=999))
     # No projection is passed: a foreign baseline must not even need one.
-    text = _load(claimed, proposals, runs, baselines, projection=None)
-    assert '"baseline_assignments": []' in text
+    facts = _facts(_load(claimed, proposals, runs, baselines, projection=None))
+    assert facts['baseline_schedule_version'] is not None
+    assert facts['baseline_summary'] == {'applies_to_this_scenario_version': False}
 
 
 @pytest.mark.parametrize('breakage,message', [
     ('dangling', 'baseline schedule unavailable'),
     ('no_projection', 'projection reader required'),
-    ('no_workers', 'baseline labels unavailable'),
     ('no_tasks', 'baseline labels unavailable'),
 ])
 def test_a_baseline_the_loader_cannot_describe_fails_closed_with_a_value_error(breakage, message):
     claimed, proposals, runs, baselines, *_ = setup_context()
     claimed.history = ()
-    projection = _with_baseline(claimed, runs, baselines, workers=breakage != 'no_workers',
-                                tasks=breakage != 'no_tasks')
+    projection = _with_baseline(claimed, runs, baselines, tasks=breakage != 'no_tasks')
     if breakage == 'dangling':
         runs.get_version = lambda *a, **k: None
     if breakage == 'no_projection':
@@ -281,11 +267,6 @@ def test_an_unfinished_run_page_is_reported_as_truncated():
 
 
 # --- Story 5.11: the working draft and the ended drafts (Decision 12) ----------
-
-
-def _facts(text):
-    import json
-    return json.loads(text[text.index('\n') + 1:])
 
 
 def test_no_working_draft_reads_null_and_a_working_draft_reads_its_version_ordinal():

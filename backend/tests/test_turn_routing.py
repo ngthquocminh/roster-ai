@@ -51,9 +51,11 @@ from tests.test_conversations_api import (  # noqa: F401  (conversation_client i
 #: ad89854, A:6), when a named family was required in metric arguments (9b8dad2, C:3), and
 #: for Story 5.11's one-working-draft rewrite (Revising a draft, the discard section, the
 #: Tool routing line, "Saying what the baseline is now" step 2), and for Story 5.12's undo
-#: rule (reverse the previous change; live smoke E:4 read "undo" as removing another constraint).
+#: rule (reverse the previous change; live smoke E:4 read "undo" as removing another constraint),
+#: and for the baseline_summary snapshot (no 10-row baseline preview; a scenario or baseline
+#: summary no longer mentions drafts or runs; an empty runs list never means "no run exists").
 #: Any other prompt edit must re-pin here, deliberately.
-TODAYS_PROMPT_SHA256 = "c862407d37f6636f675cef43e489839ef52b86becc8c2a6c1e8ea32f5696a7c0"
+TODAYS_PROMPT_SHA256 = "8c16c2ac644d9bfa6366d1c58189dcd788a420cb9c073e9fe3c3530096f6c258"
 
 
 # --- prompt split ------------------------------------------------------------

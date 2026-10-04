@@ -1397,3 +1397,21 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   performs it, and one test lists E:4 as partial to reach the floor's arithmetic
   (`backend/tests/test_live_conversation_drop_check.py`). **Deferred reason: no wrong behavior,
   and every re-derivation already needs a hand edit.** **Owner: open.**
+
+## Deferred from: baseline summary in the workflow snapshot (2026-10-04)
+
+- **No live scenario covers a summary asked in a fresh conversation on a scenario that
+  already has runs and a baseline from another conversation.** That is the bug this change
+  fixed: the assistant answered "summary me the current scenario" with "no working draft and
+  no optimization run", and "summary me the current result" with a partial 10-of-125 assignment
+  list, because the snapshot's runs list holds only the current conversation's runs
+  (`backend/application/use_cases/conversation_workflow_context.py`). The unit tests
+  (`backend/tests/test_conversation_workflow_context.py`) pin the snapshot shape, and the
+  prompt now forbids mentioning drafts or runs in a scenario or baseline summary, but no live
+  turn checks the assistant's wording. Authoring it needs a scenario that promotes a baseline
+  in one conversation, then opens a second conversation on the same scenario version and asks
+  three turns: "summary me the current scenario", "summary me the current result", and
+  "how many optimization runs are there?" (that last answer must not say none). Grade actions
+  and facts, not wording: the reply names the baseline's counts from `baseline_summary`, does
+  not claim no run exists, and does not mention drafts or runs unprompted. **Deferred reason:
+  Minh scoped this change to the existing dataset, one repetition.** **Owner: open.**

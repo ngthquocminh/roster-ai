@@ -649,7 +649,10 @@ def code_check(expectation: Expectation, ctx: TurnContext, bindings: Bindings) -
     if check == 'draft_preserves_locks':
         return ctx.draft is not None and _lock_ids(ctx.draft.get('preserved_locks')) == _lock_ids(ctx.locks)
     if check == 'names_assigned_pair':
-        lines = ctx.lines
+        # Reading lines, not `ctx.lines`: a verified name is its own segment, and
+        # `visible_lines` put each segment on a line of its own, so a reply naming
+        # the pair in one sentence read as two lone names.
+        lines = reading_lines(ctx.activity) or ctx.lines
         return any(_pair_on_one_line(ctx.workers_by_id.get(row.get('worker_id')),
                                      ctx.tasks_by_id.get(row.get('task_id')), lines)
                    for row in ctx.assignments)
