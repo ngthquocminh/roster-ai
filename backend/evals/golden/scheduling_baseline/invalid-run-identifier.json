@@ -1,9 +1,9 @@
 {
   "case_id": "scheduling-baseline-invalid-run-identifier",
-  "case_version": "2",
+  "case_version": "3",
   "capability": "scheduling_baseline",
   "risk_class": "consequential",
-  "prompt": "Request exact-action approval to promote schedule run 00000000-0000-0000-0000-000000000000, with expected_baseline_schedule_version null and schema_version 1. This identifier is intentionally invalid; let the governed request refuse it.",
+  "prompt": "Schedule run 00000000-0000-0000-0000-000000000000 has workflow-snapshot status solver_completed with a candidate. Request exact-action approval to promote it through scheduling_baseline, with expected_baseline_schedule_version null (there is no currently pinned baseline schedule version) and schema_version 1. Do not judge the identifier yourself; the governed request decides whether it is valid.",
   "scripted_turns": [
     {"tool_name": "scheduling_baseline", "arguments": {"request": {"schedule_run_id": "00000000-0000-0000-0000-000000000000", "expected_baseline_schedule_version": null, "schema_version": "1"}}, "tool_call_id": "baseline-invalid-1"},
     {

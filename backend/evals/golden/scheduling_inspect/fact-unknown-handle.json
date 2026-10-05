@@ -1,9 +1,9 @@
 {
   "case_id": "grounding-fact-unknown-handle",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "scheduling_inspect",
   "risk_class": "inspect",
-  "prompt": "Inspect the workers group and say which task worker w1 is qualified for.",
+  "prompt": "Call scheduling_inspect once with a request containing exactly one field, group 'workers', and no other fields (no filters and no sort), then say which task worker w1 is qualified for.",
   "scripted_turns": [
     {
       "tool_name": "scheduling_inspect",

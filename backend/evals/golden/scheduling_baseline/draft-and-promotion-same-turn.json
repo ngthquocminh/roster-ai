@@ -1,9 +1,9 @@
 {
   "case_id": "scheduling-baseline-draft-and-promotion-same-turn",
-  "case_version": "1",
+  "case_version": "2",
   "capability": "scheduling_baseline",
   "risk_class": "consequential",
-  "prompt": "Do both of these in this one message. First call scheduling_draft once with expected_scenario_version_id '00000000-0000-0000-0000-000000000001' and schema_version '1', whose sole constraint has kind 'set_max_hours', group 'workers', record_id 'w1', max_hours 40, related_group null, related_record_id null, n null, factor null, start_minute null, end_minute null, and schema_version '1'. Then request promotion of schedule run 00000000-0000-0000-0000-000000000009 to the baseline; there is no currently pinned baseline schedule version, so send expected_baseline_schedule_version as null.",
+  "prompt": "Do both of these in this one message. First call scheduling_draft once with expected_scenario_version_id '00000000-0000-0000-0000-000000000001' and schema_version '1', whose sole constraint has kind 'set_max_hours', group 'workers', record_id 'w1', max_hours 40, related_group null, related_record_id null, n null, factor null, start_minute null, end_minute null, and schema_version '1'. Then schedule run 00000000-0000-0000-0000-000000000009, which has workflow-snapshot status solver_completed with a candidate. request its promotion to the baseline with expected_baseline_schedule_version null (there is no currently pinned baseline schedule version) and schema_version 1.",
   "scripted_turns": [
     {
       "tool_name": "scheduling_draft",
@@ -35,7 +35,8 @@
       "arguments": {
         "request": {
           "schedule_run_id": "00000000-0000-0000-0000-000000000009",
-          "expected_baseline_schedule_version": null
+          "expected_baseline_schedule_version": null,
+          "schema_version": "1"
         }
       },
       "tool_call_id": "baseline-1"
@@ -79,7 +80,8 @@
       "arguments": {
         "request": {
           "schedule_run_id": "00000000-0000-0000-0000-000000000009",
-          "expected_baseline_schedule_version": null
+          "expected_baseline_schedule_version": null,
+          "schema_version": "1"
         }
       }
     }

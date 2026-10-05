@@ -1325,6 +1325,32 @@ def test_report_generator_refuses_a_case_naming_an_uninstalled_capability() -> N
         _runtime_for_case(orphan, installed_modules())
 
 
+@pytest.mark.parametrize(
+    ("group", "getter", "filter_name", "value", "expected_ids"),
+    [
+        ("workers", "get_workers", "contact_id", "w1", {"w1"}),
+        ("assignments", "get_baseline_assignments", "worker_id", "w1", None),
+    ],
+)
+def test_every_advertised_eval_fixture_filter_is_implemented(
+    group, getter, filter_name, value, expected_ids
+) -> None:
+    """Story 5.13 Task 8: `get_query_keys` advertised `contact_id` (workers) and
+    `worker_id` (assignments) while the reader implemented neither, so a live
+    model that used an advertised filter crashed the turn with a raw KeyError
+    the production reader never raises. Mutation: drop either filter => the
+    page call raises KeyError again."""
+    reader = FixtureProjectionReader()
+    assert filter_name in reader.get_query_keys(group).filter_keys
+    page = getattr(reader, getter)(
+        object(), FIXTURE_IDENTITY, GroupQueryV1(filters=((filter_name, value),))
+    )
+    key = "contact_id" if group == "workers" else "worker_id"
+    assert page.items and all(getattr(item, key) == value for item in page.items)
+    if expected_ids is not None:
+        assert {item.contact_id for item in page.items} == expected_ids
+
+
 def test_eval_fixture_demand_window_filters_match_the_projection_contract() -> None:
     """The live golden prompt must not be rejected solely by fixture drift.
 
