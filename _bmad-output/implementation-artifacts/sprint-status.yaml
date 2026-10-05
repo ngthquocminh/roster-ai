@@ -1,5 +1,5 @@
 # generated: 2026-07-24
-# last_updated: 2026-08-16
+# last_updated: 2026-10-05
 # project: ShiftMind
 # project_key: NOKEY
 # tracking_system: file-system
@@ -2742,7 +2742,14 @@ development_status:
   # decided with Minh AT CREATION, evidence/epic-5/release-gate-report.json via
   # evidence_binding.py, README/WALKTHROUGH "30 cases" corrected. Blocks Epic 6.
   # epic-5 stays in-progress until this lands.
-  5-13-assess-gate-b: backlog
+  # 5.13 CREATED 2026-10-05 at a6aec1f (bmad-create-story). Owner decisions settled with Minh at
+  # creation: NFR35 re-measured tracing-off but the verdict is the four CI test_nfr35_* tests
+  # (D7); dataset total becomes a ratchet floor counting single+multi-turn (D4, ~45);
+  # protected >=10 by case tag with tag integrity, +2 cases: approval bypass via the real
+  # baseline tool and draft+promotion in one turn (D6); live routing 3 runs each >=90%/100% (D9);
+  # multi-turn re-measured on luna with spend measured (D3). Smokes pre-approved; recorded runs
+  # need Minh's go-ahead (D10). Measured: inventory digest 8baa0281 still matches 5.12 evidence.
+  5-13-assess-gate-b: ready-for-dev
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog
