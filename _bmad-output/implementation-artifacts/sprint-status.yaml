@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-10-02
+last_updated: 2026-10-05
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2517,6 +2517,8 @@ development_status:
   5-3a-make-a-real-solve-reach-a-candidate: done
   5-4-publish-the-portfolio-walkthrough: done
   epic-5-retrospective: done
+  # 2026-10-05: second retrospective held for Stories 5.5-5.12 (epic-5-retro-2026-10-05.md).
+  # Gate B still not assessed; epic-5 stays in-progress until the "Assess Gate B" story lands.
   # 5.5 created 2026-09-10 from the Epic 5 retrospective's action item 1 (sprint-status action_items,
   # epic "5"). Corrective, not part of the original portfolio sequence -- makes the live-eval suite
   # actually pass before Gate B's dataset-floor decision can be made. See
@@ -2905,7 +2907,14 @@ action_items:
   - epic: "4"
     action: "A1 -- Tighten the demonstrated-red rule to name its own failure mode: the red must come from mutating code that is ALREADY GREEN; a missing-import or first-draft red does not count. The Dev Agent Record must carry a mutation table (mutation | guard | before | after) before a story reaches review. Ship as a bmad-dev-story fact, same pattern as 2cf598f."
     owner: "Dev / review"
-    status: in-progress
+    status: done
+    # CLOSED 2026-10-05 at the Epic 5 second-half retrospective (epic-5-retro-2026-10-05.md §2).
+    # The strengthened dev-side check below never shipped, and 6 of 8 stories (5.5-5.12) raised
+    # missing-rows or cannot-go-red at review -- but every one was patch-grade and every one was
+    # caught by the paired reviewer re-run; none got past review. Minh's decision: the two-step
+    # system (dev table + reviewer re-run) IS the mechanism; both custom facts stay unchanged and
+    # the "zero findings at review" done-when below is retired. Reopen only if a weak guard gets
+    # past review into merged code.
     # SHIPPED 2026-09-03, commit c4f5de1. Three facts: two on bmad-dev-story
     # (demonstrated red is defined as green -> mutate FINISHED code -> observe the
     # expected failure -> restore; and the Dev Agent Record must carry a mutation
@@ -2935,6 +2944,13 @@ action_items:
     action: "A2 -- Own the cross-document undefined-term problem at the spine/ADR tier. No bmad-create-story fact can reach epics.md, the architecture spine or ADR-4, where the undefined word originates. TWO live instances: (i) Story 4.3's unsettled resumed-turn suspension question; (ii) agent_cancelled -- three inbound AD-7 edges, no definition, and the single edge with a producer means the opposite of the other two. Fix AD-7's edge label in the same change: it still reads 'rejected or expired' though EAD-5 carries three reasons including approval_stale."
     owner: "Minh + Winston"
     status: in-progress
+    # 2026-10-05 -- TRIGGER FIRED IN STORY 5.7 AND WAS MISSED. Commit 9c2957c
+    # (api/routers/conversations.py) lands a suspended call with no approval path as
+    # agent_running -> agent_cancelled, status_reason NULL, so
+    # adapters/postgres/conversation.py:60 ("Approval outcomes are the only path into
+    # agent_cancelled") is now false. Folded into Epic 5 second-half retro action 2 (the
+    # hygiene quick-dev): define agent_cancelled, fix that comment and AD-7's label, and settle
+    # or route half (i). Mark done when that lands. See epic-5-retro-2026-10-05.md §3.
     # 2026-09-03 -- THE EPIC-5-BLOCKING HALF IS DONE. A third instance was found while
     # building Story 5.0 and is now fixed at the tier that owns it: EAD-8 asserted that
     # the pre-promotion empty-baseline comparison was "honest" when the rendering makes
@@ -3128,3 +3144,23 @@ action_items:
     status: open
     # Done when: both ALLOWED_LEAKS entries for these ports are deleted and
     # test_every_allowed_leak_still_exists_and_still_leaks no longer names them.
+    # 2026-10-05: not addressed in 5.5-5.12. Re-sized at the second-half retro: sibling ports
+    # already type the parameter `connection: Any` (application/ports/approval.py), so this is
+    # a type-annotation change, not an abstraction. Folded into the 2026-10-05 action 2 below,
+    # with the third leak (scenario_catalogue.py). Closes when that lands.
+
+  # Committed during the Epic 5 second-half retrospective (2026-10-05), Stories 5.5-5.12.
+  # Full record: _bmad-output/implementation-artifacts/epic-5-retro-2026-10-05.md
+  - epic: "5"
+    action: "Story 'Assess Gate B': build a gate_b_checks.py aggregator mirroring Gate A; re-measure single-turn live routing on all 29 live-eligible golden cases; settle the dataset floor per the epics.md caveat (add a case only where it tests behaviour no case covers yet, otherwise lower the threshold with a recorded rationale -- never pad); decide whether the August NFR35 evidence stands or is re-measured; emit evidence/epic-5/release-gate-report.json through evidence_binding.py; correct '30 cases' in README.md and docs/WALKTHROUGH.md. The floor rationale and the NFR35 call are owner decisions settled with Minh at story creation, not at review."
+    owner: "Minh"
+    status: open
+    # Done when: the report exists and Gate B is assessed (passed, or not passed with named
+    # failing rows). Blocks Epic 6. The story is not yet in epics.md -- add it there before
+    # create-story (correct-course or a direct epics edit).
+  - epic: "5"
+    action: "Quick-dev hygiene bundle, no behaviour change: (a) define agent_cancelled ('a run that stopped without failing: an approval outcome, or a suspended call with no approval path'), fix adapters/postgres/conversation.py:60 and AD-7's edge label (add stale), and settle or route A2 half (i); (b) type connection as Any in application/ports/membership.py, site_baseline.py and scenario_catalogue.py and delete all three ALLOWED_LEAKS entries; (c) pin AGENT_RUNTIME_MODEL=deterministic in backend/conftest.py for the default session and close the 5.5/5.6 ledger entries."
+    owner: "Minh"
+    status: open
+    # Done when: ALLOWED_LEAKS is empty, Epic 4 A2 and the 09-10 SQLAlchemy action are marked
+    # done, and the default suite passes with a real .env present.
