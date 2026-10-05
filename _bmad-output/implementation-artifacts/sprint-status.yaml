@@ -2943,7 +2943,17 @@ action_items:
   - epic: "4"
     action: "A2 -- Own the cross-document undefined-term problem at the spine/ADR tier. No bmad-create-story fact can reach epics.md, the architecture spine or ADR-4, where the undefined word originates. TWO live instances: (i) Story 4.3's unsettled resumed-turn suspension question; (ii) agent_cancelled -- three inbound AD-7 edges, no definition, and the single edge with a producer means the opposite of the other two. Fix AD-7's edge label in the same change: it still reads 'rejected or expired' though EAD-5 carries three reasons including approval_stale."
     owner: "Minh + Winston"
-    status: in-progress
+    status: done
+    # DONE 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md). (ii) agent_cancelled is defined on
+    # AD-7 ("a run that stopped without failing: an approval outcome, or a suspended call with no
+    # approval path"), the edge label now reads "rejected, expired or stale", and
+    # adapters/postgres/conversation.py's false comment is corrected. (i) is NOT settled by 5.7:
+    # its terminal landing is on the first-turn route (conversations.py), while the resumed-turn
+    # question lives on approvals.py (ResumedTurnSuspendedError -> agent_failed, Story 4.3 option A,
+    # unreachable today via RESUME_WITHHELD_CAPABILITIES). It is recorded as an open note under
+    # EAD-5 in architecture-epic-4-2026-08-27/ARCHITECTURE-SPINE.md, owner Winston, check point:
+    # the first story that gives a second capability an approval path or shrinks
+    # RESUME_WITHHELD_CAPABILITIES. That owner and check point satisfy A2's done-when.
     # 2026-10-05 -- TRIGGER FIRED IN STORY 5.7 AND WAS MISSED. Commit 9c2957c
     # (api/routers/conversations.py) lands a suspended call with no approval path as
     # agent_running -> agent_cancelled, status_reason NULL, so
@@ -3141,7 +3151,9 @@ action_items:
   - epic: "5"
     action: "Create a story giving application/ports/membership.py and site_baseline.py a persistence-free connection abstraction, closing the AD-1 SQLAlchemy leak (deferred-work.md:868-879), and deleting both ALLOWED_LEAKS entries."
     owner: "Minh"
-    status: open
+    status: done
+    # DONE 2026-10-05 via the hygiene bundle below: all three ports type `connection: Any` and
+    # ALLOWED_LEAKS is empty. (Original condition follows.)
     # Done when: both ALLOWED_LEAKS entries for these ports are deleted and
     # test_every_allowed_leak_still_exists_and_still_leaks no longer names them.
     # 2026-10-05: not addressed in 5.5-5.12. Re-sized at the second-half retro: sibling ports
@@ -3161,6 +3173,9 @@ action_items:
   - epic: "5"
     action: "Quick-dev hygiene bundle, no behaviour change: (a) define agent_cancelled ('a run that stopped without failing: an approval outcome, or a suspended call with no approval path'), fix adapters/postgres/conversation.py:60 and AD-7's edge label (add stale), and settle or route A2 half (i); (b) type connection as Any in application/ports/membership.py, site_baseline.py and scenario_catalogue.py and delete all three ALLOWED_LEAKS entries; (c) pin AGENT_RUNTIME_MODEL=deterministic in backend/conftest.py for the default session and close the 5.5/5.6 ledger entries."
     owner: "Minh"
-    status: open
+    status: done
+    # DONE 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md): ALLOWED_LEAKS is empty, Epic 4 A2 and
+    # the 09-10 SQLAlchemy action are marked done, and the default suite passes with the agent
+    # runtime variables leaked from the environment (conftest.py pytest_configure pin).
     # Done when: ALLOWED_LEAKS is empty, Epic 4 A2 and the 09-10 SQLAlchemy action are marked
     # done, and the default suite passes with a real .env present.

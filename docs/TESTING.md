@@ -170,6 +170,12 @@ It deliberately does **not** load `LLM_PROVIDER` / `LLM_MODEL` from `.env`, so
 the default (non-`live`) suite always runs against the keyless `stub`
 provider regardless of a developer's local configuration.
 
+The same holds for the agent runtime: unless the `-m` expression selects `live`,
+`conftest.py` pins `AGENT_RUNTIME_MODEL=deterministic` and clears
+`AGENT_RUNTIME_API_KEY` (`pytest_configure`), so a real `backend/.env` cannot
+redden the default suite. `tests/test_agent_runtime_env_isolation.py` guards the
+pin; `pytest -m live` leaves the real values alone.
+
 ### Agent evaluation harness (golden datasets, `backend/evals/`)
 
 The chat/agent surface (`backend/agent/`, `backend/application/use_cases/

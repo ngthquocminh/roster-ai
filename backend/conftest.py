@@ -1,5 +1,6 @@
 """Make the backend package root importable when running pytest from anywhere."""
 import os
+import re
 import sys
 import warnings
 from contextlib import contextmanager
@@ -61,6 +62,33 @@ os.environ["GROUNDING_TIER1_MODE"] = "off"
 # The turn router shares that key resolution, so the keyless suite pins it off
 # too; routing tests build explicit settings and a stub or mock transport.
 os.environ["AGENT_ROUTER_MODE"] = "off"
+
+
+def _selects_live(markexpr: str) -> bool:
+    """True when the `-m` expression can select `live`-marked tests.
+
+    `not live` (the `addopts` default) does not; `live` and `live or x` do. An
+    empty expression (`-m ""`) drops `addopts`' filter, so live tests run too.
+    """
+    if not (markexpr or "").strip():
+        return True
+    return re.search(r"\blive\b", re.sub(r"\bnot\s+live\b", "", markexpr or "")) is not None
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Pin the agent runtime to the keyless double for the default session.
+
+    `settings.py` runs `load_dotenv(backend/.env)` at import, so a developer's
+    real `AGENT_RUNTIME_MODEL` / `AGENT_RUNTIME_API_KEY` otherwise reach
+    `default_settings()` and redden every test that expects `deterministic`
+    (and flip `_HAS_LIVE_AGENT`). Decided here, not at import, because only the
+    parsed `-m` expression says whether this is a live session: a live run
+    leaves the real values alone.
+    """
+    if _selects_live(config.getoption("markexpr")):
+        return
+    os.environ["AGENT_RUNTIME_MODEL"] = "deterministic"
+    os.environ.pop("AGENT_RUNTIME_API_KEY", None)
 
 
 @contextmanager

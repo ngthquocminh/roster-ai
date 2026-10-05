@@ -230,7 +230,9 @@ Surfaced while amending Story 2.7's Decision 2 (`sprint-change-proposal-2026-08-
 - `.github/workflows` is still absent, so every "normal CI" guarantee in this story — AC1's zero-network default suite, Task 8's "fails CI if any file under `backend/evals/golden/` does not validate" — is enforced only by whoever remembers to run pytest locally. Pre-existing (noted in the story-1.11 review above, in the `requires_git` entry); the exposure grows as Epic 2+ adds gates that assume CI executes them.
 ## Deferred from: story-2-3 creation (2026-08-10)
 
-- **`ScenarioCatalogueReader` leaks SQLAlchemy into the application layer — the one open AD-1 violation in `backend/application/**`.** `from sqlalchemy import Connection` at [backend/application/ports/scenario_catalogue.py:9] is a top-level runtime import, and `Connection` then appears in the Protocol's own signatures (`list_fixture_versions(self, connection: Connection)`, `get_scenario_context(self, connection: Connection, ...)` — lines 38-48). AD-1/AR1 name SQLAlchemy explicitly: *"Domain and application code must not import FastAPI, PydanticAI, SQLAlchemy, Cognito, S3, Logfire, or concrete model providers."* Nothing is broken at runtime; the cost is that the seam does not swap (a non-SQLAlchemy implementation cannot satisfy the contract honestly, and stubs drag the driver in through the type), and — more practically — this single line is what prevents `sqlalchemy` being added to `FORBIDDEN_ROOT_MODULES` and turning AD-1 from prose into a test that can go red for the whole layer.
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `scenario_catalogue.py` now types `connection: Any` (tier 2 below, as the Epic 5 second-half retro re-sized it), its `ALLOWED_LEAKS` entry is deleted, and `ALLOWED_LEAKS` is empty. Tier 3 (a port that takes no connection) was not done and is not owed by this entry.
+
+  ORIGINAL: **`ScenarioCatalogueReader` leaks SQLAlchemy into the application layer — the one open AD-1 violation in `backend/application/**`.** `from sqlalchemy import Connection` at [backend/application/ports/scenario_catalogue.py:9] is a top-level runtime import, and `Connection` then appears in the Protocol's own signatures (`list_fixture_versions(self, connection: Connection)`, `get_scenario_context(self, connection: Connection, ...)` — lines 38-48). AD-1/AR1 name SQLAlchemy explicitly: *"Domain and application code must not import FastAPI, PydanticAI, SQLAlchemy, Cognito, S3, Logfire, or concrete model providers."* Nothing is broken at runtime; the cost is that the seam does not swap (a non-SQLAlchemy implementation cannot satisfy the contract honestly, and stubs drag the driver in through the type), and — more practically — this single line is what prevents `sqlalchemy` being added to `FORBIDDEN_ROOT_MODULES` and turning AD-1 from prose into a test that can go red for the whole layer.
 
   The newer port written for Stories 1.4/1.5 already made the opposite choice: [backend/application/ports/scenario_projection.py:104] types the same runtime object as `connection: Any`, keeping the vendor name out of the layer.
 
@@ -865,7 +867,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the first story that needs to document the legacy surface, or the
   legacy-route flag cutover in `docs/GATE-A-RUNBOOK.md`.
 
-- **Two application ports leak SQLAlchemy into the application layer, now tracked.**
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `membership.py` and `site_baseline.py` now type `connection: Any`, matching `approval.py`; both `ALLOWED_LEAKS` entries are deleted.
+
+  ORIGINAL: **Two application ports leak SQLAlchemy into the application layer, now tracked.**
   `backend/application/ports/membership.py:7` and `site_baseline.py:9` import
   `from sqlalchemy import Connection`, which AD-1 forbids by name
   (`ARCHITECTURE-SPINE.md:52`). They were neither swept nor allow-listed until the
@@ -902,7 +906,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 
 ## Deferred from: code review of story-5.5 (2026-09-11)
 
-- **A local `.env` with a real `AGENT_RUNTIME_MODEL` set leaks into ordinary test runs.**
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `backend/conftest.py` `pytest_configure` pins `AGENT_RUNTIME_MODEL=deterministic` and clears `AGENT_RUNTIME_API_KEY` for every session whose `-m` expression does not select `live`; `tests/test_agent_runtime_env_isolation.py` guards it. (Observed at closure: with a fake model and key exported, the named suites stayed green even without the pin, and `test_agent_deterministic_model.py` already deletes the variable itself, so the dedicated guard test is the proof, not those suites.)
+
+  ORIGINAL: **A local `.env` with a real `AGENT_RUNTIME_MODEL` set leaks into ordinary test runs.**
   `backend/settings.py:313`'s `default_settings()` reads `AGENT_RUNTIME_MODEL` straight from the
   process environment with no test-time override, so a developer's local `.env` — set to a real
   provider for Story 5.5's live testing — makes `test_agent_deterministic_model.py` and
@@ -959,7 +965,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the first multi-turn case that needs padding < `HISTORY_MESSAGE_BOUND`;
   pad to a clean message boundary or reject the combination at load.
 
-- **`.env` `AGENT_RUNTIME_MODEL` / `AGENT_RUNTIME_API_KEY` leak into the default suite (pre-existing,
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `backend/conftest.py` `pytest_configure` pins `AGENT_RUNTIME_MODEL=deterministic` and clears `AGENT_RUNTIME_API_KEY` for every session whose `-m` expression does not select `live`; `tests/test_agent_runtime_env_isolation.py` guards it. (Observed at closure: with a fake model and key exported, the named suites stayed green even without the pin, and `test_agent_deterministic_model.py` already deletes the variable itself, so the dedicated guard test is the proof, not those suites.)
+
+  ORIGINAL: **`.env` `AGENT_RUNTIME_MODEL` / `AGENT_RUNTIME_API_KEY` leak into the default suite (pre-existing,
   now load-bearing).** Already ledgered at Story 5.5; Story 5.6's "0 regressions" figure was reached by
   deselecting the leaked `test_execute_turn_emits_claim_to_finalize_telemetry` failure, and
   `_HAS_LIVE_AGENT` is computed from `.env` contents.
