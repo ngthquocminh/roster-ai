@@ -2736,6 +2736,13 @@ development_status:
   # new-proposal check); E:4 accepts a clarification or a re-add (spec contradiction, D5);
   # floor 120 for 129 turns (lambda 4.3, 1.29%); discard:invoke is live-required, covered only by E:6.
   5-12-prove-the-draft-lifecycle-in-live-conversations: done
+  # 5.13 added 2026-10-05 by sprint-change-proposal-2026-10-05.md, from the 2026-10-05 retro's
+  # action 1. Closing story of Epic 5: gate_b_checks.py aggregator, live single-turn routing
+  # re-measured as bound evidence (paid; Minh's go-ahead), dataset floor (c) and NFR35 (d)
+  # decided with Minh AT CREATION, evidence/epic-5/release-gate-report.json via
+  # evidence_binding.py, README/WALKTHROUGH "30 cases" corrected. Blocks Epic 6.
+  # epic-5 stays in-progress until this lands.
+  5-13-assess-gate-b: backlog
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog
@@ -3168,8 +3175,9 @@ action_items:
     owner: "Minh"
     status: open
     # Done when: the report exists and Gate B is assessed (passed, or not passed with named
-    # failing rows). Blocks Epic 6. The story is not yet in epics.md -- add it there before
-    # create-story (correct-course or a direct epics edit).
+    # failing rows). Blocks Epic 6.
+    # 2026-10-05: added to epics.md as Story 5.13 (sprint-change-proposal-2026-10-05.md);
+    # 5-13-assess-gate-b is backlog. Status stays open until the report lands.
   - epic: "5"
     action: "Quick-dev hygiene bundle, no behaviour change: (a) define agent_cancelled ('a run that stopped without failing: an approval outcome, or a suspended call with no approval path'), fix adapters/postgres/conversation.py:60 and AD-7's edge label (add stale), and settle or route A2 half (i); (b) type connection as Any in application/ports/membership.py, site_baseline.py and scenario_catalogue.py and delete all three ALLOWED_LEAKS entries; (c) pin AGENT_RUNTIME_MODEL=deterministic in backend/conftest.py for the default session and close the 5.5/5.6 ledger entries."
     owner: "Minh"
