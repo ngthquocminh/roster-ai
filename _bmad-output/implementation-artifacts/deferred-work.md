@@ -919,7 +919,14 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the next story doing live-provider work, or a dedicated conftest fixture
   that pins `AGENT_RUNTIME_MODEL=deterministic` for the default test session regardless of `.env`.
 
-- **`generate_live_diagnostics` has no committed CLI entry point.** `backend/evals/report.py`'s
+- **CLOSED 2026-10-05 (Story 5.13 Task 2):** superseded rather than wired. `backend/evals/live_golden_routing.py`
+  is the scripted live single-turn path, with a CLI (`uv run --frozen python -m evals.live_golden_routing`):
+  it builds the configured model through the production factory, records per-case routing,
+  grounding and policy verdicts (redacted: names, counts and closed-vocabulary classifications only),
+  usage and cost, and writes version-bound evidence. Its `--runs 1 --allow-dirty --output …` form is
+  the diagnosis run this entry asked for. `generate_live_diagnostics` stays as the redacted JSONL helper.
+
+  ORIGINAL: **`generate_live_diagnostics` has no committed CLI entry point.** `backend/evals/report.py`'s
   `main()` still only calls `generate_demonstration_report`; the new live-diagnostics function
   (`report.py:149-205`) was only exercised ad hoc during Story 5.5's own dev session per its Debug
   Log, and is otherwise reachable only from `test_live_diagnostics_flushes_one_result_per_case`

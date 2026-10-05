@@ -48,10 +48,15 @@ from evals.fixture_projection import FIXTURE_IDENTITY, FixtureProjectionReader
 # granted (default: the tag itself). `scheduling_draft_discard` is granted beside
 # `scheduling_draft` because its negative "start over is not discard" routing case
 # is meaningless unless BOTH tools are offered -- with discard alone the model has
-# nothing else to route to (Story 5.11 C11).
+# nothing else to route to (Story 5.11 C11). `scheduling_baseline` is granted
+# beside `scheduling_draft` for the same reason: its draft-and-promotion-in-one-
+# turn case proves the `draft_changed_this_turn` guard, which cannot fire unless
+# the draft tool actually ran first (Story 5.13 D6). Production grants all six
+# together, so the wider grant is closer to the shipped surface, not further.
 EVAL_TAG_GRANTS: dict[str, tuple[str, ...]] = {
     "demonstration": ("shiftmind_demonstration",),
     "scheduling_draft_discard": ("scheduling_draft_discard", "scheduling_draft"),
+    "scheduling_baseline": ("scheduling_baseline", "scheduling_draft"),
 }
 
 
@@ -382,6 +387,60 @@ def generate_live_diagnostics(
                         pass
 
 
+@dataclass(frozen=True)
+class CaseVerdictParts:
+    """The three evaluator verdicts one case outcome is scored by, kept apart.
+
+    `_evaluate_case` folds them into one verdict, which is the right shape for
+    the authoritative report. Story 5.13's live routing measurement needs the
+    ROUTING verdict alone (D9: NFR28's Tool routing row is a routing rate), so
+    the parts are computed once, here, and the fold is derived from them.
+    `grounding` is None when the case carries no grounding oracle.
+    """
+
+    routing: EvalVerdict
+    grounding: EvalVerdict | None
+    policy: EvalVerdict
+    outcome: AgentRunOutcomeV1
+
+
+def evaluate_case_parts(
+    case: GoldenCase,
+    runtime: PydanticAIAgentRuntime,
+    outcome: AgentRunOutcomeV1,
+    results: list[object],
+    *,
+    run_source: str,
+) -> CaseVerdictParts:
+    """Score one case's outcome by routing, grounding and policy separately.
+
+    Returns the resolved outcome too, because a draft case's citation binding
+    mutates it before grounding can see the real text.
+    """
+    routing = ToolRoutingEvaluator(run_source=run_source).evaluate(case, outcome)
+    # A draft case cites a trusted result rather than authoring one, so the
+    # dataset has to drive the same citation binding the request path uses.
+    # Without this the case would assert an empty visible text and prove
+    # nothing about DraftProposalV1 or outcome_visible_text's draft branch.
+    if outcome.draft is not None:
+        outcome = resolve_draft_citation(
+            outcome,
+            trusted_results_by_citation(results, runtime._deps.evidence_registry),
+        )
+    grounding: EvalVerdict | None = None
+    if case.expected_grounding_outcome:
+        outcome = ground_case_outcome(
+            case, outcome, runtime._deps, tuple(results), run_source=run_source
+        )
+        grounding = GroundingEvaluator(run_source=run_source).evaluate(case, outcome)
+    policy = PolicyOutcomeEvaluator(runtime=runtime, run_source=run_source).evaluate(
+        case, outcome
+    )
+    return CaseVerdictParts(
+        routing=routing, grounding=grounding, policy=policy, outcome=outcome
+    )
+
+
 def _evaluate_case(
     case: GoldenCase,
     runtime: PydanticAIAgentRuntime,
@@ -394,25 +453,11 @@ def _evaluate_case(
 
     Extracted from `generate_demonstration_report`'s loop so a live run scores a
     case by the exact same rule an authoritative double run does -- only
-    `run_source` (and therefore `EvalVerdict.authoritative`) differs. Returns the
-    resolved outcome alongside the verdict because a draft case's citation
-    binding mutates it before grounding can see the real text.
+    `run_source` (and therefore `EvalVerdict.authoritative`) differs.
     """
-    routing = ToolRoutingEvaluator(run_source=run_source).evaluate(case, outcome)
-    # A draft case cites a trusted result rather than authoring one, so the
-    # dataset has to drive the same citation binding the request path uses.
-    # Without this the case would assert an empty visible text and prove
-    # nothing about DraftProposalV1 or outcome_visible_text's draft branch.
-    if outcome.draft is not None:
-        outcome = resolve_draft_citation(
-            outcome,
-            trusted_results_by_citation(results, runtime._deps.evidence_registry),
-        )
-    if case.expected_grounding_outcome:
-        outcome = ground_case_outcome(
-            case, outcome, runtime._deps, tuple(results), run_source=run_source
-        )
-        grounding = GroundingEvaluator(run_source=run_source).evaluate(case, outcome)
+    parts = evaluate_case_parts(case, runtime, outcome, results, run_source=run_source)
+    routing, grounding, policy = parts.routing, parts.grounding, parts.policy
+    if grounding is not None:
         verdict = EvalVerdict(
             passed=routing.passed and grounding.passed,
             reason=f"routing: {routing.reason}; grounding: {grounding.reason}",
@@ -420,15 +465,12 @@ def _evaluate_case(
         )
     else:
         verdict = routing
-    policy = PolicyOutcomeEvaluator(runtime=runtime, run_source=run_source).evaluate(
-        case, outcome
-    )
     verdict = EvalVerdict(
         passed=verdict.passed and policy.passed,
         reason=f"{verdict.reason}; policy: {policy.reason}",
         run_source=run_source,
     )
-    return verdict, outcome
+    return verdict, parts.outcome
 
 
 # Fixed identity of the working draft a `seeded_working_draft` case starts with.
@@ -470,6 +512,7 @@ def runtime_for_modules(
     sink: list | None = None,
     *,
     model: object | None = None,
+    settings: object | None = None,
 ) -> PydanticAIAgentRuntime:
     """Build a runtime granting EXACTLY `modules` -- no tag filtering.
 
@@ -480,12 +523,27 @@ def runtime_for_modules(
     `model` defaults to the case's deterministic double; passing one (a real
     provider model) is how a live run reuses this same capability/deps/
     answer_type wiring instead of duplicating it.
+
+    `settings`, when given, builds the runtime through the production factory
+    (`create_agent_runtime`), so its per-turn budget, retries and reasoning
+    effort are the configured ones rather than `AgentRuntimeConfig()`'s
+    defaults (Story 5.13 D9). Omitted, behaviour is unchanged.
     """
+    selected_model = model if model is not None else build_model_double(case)
+    deps = _report_deps(sink, seeded_working_draft=case.seeded_working_draft)
+    answer_type = GroundedAnswerV2 if _needs_named_output_tools(case) else None
+    if settings is not None:
+        from agent.runtime import create_agent_runtime
+
+        return create_agent_runtime(
+            settings=settings, model=selected_model, capabilities=modules,
+            deps=deps, answer_type=answer_type,
+        )
     return PydanticAIAgentRuntime(
-        model=model if model is not None else build_model_double(case),
+        model=selected_model,
         capabilities=modules,
-        deps=_report_deps(sink, seeded_working_draft=case.seeded_working_draft),
-        answer_type=GroundedAnswerV2 if _needs_named_output_tools(case) else None,
+        deps=deps,
+        answer_type=answer_type,
     )
 
 
@@ -533,6 +591,7 @@ def _runtime_for_case(
     sink: list | None = None,
     *,
     model: object | None = None,
+    settings: object | None = None,
 ) -> PydanticAIAgentRuntime:
     """Grant a case exactly the modules its `capability` tag names."""
     wanted = granted_capability_names(case)
@@ -546,7 +605,7 @@ def _runtime_for_case(
             f"case {case.case_id!r} names capability {case.capability!r}, "
             f"which no supplied module provides"
         )
-    return runtime_for_modules(case, selected, sink, model=model)
+    return runtime_for_modules(case, selected, sink, model=model, settings=settings)
 
 
 def _run_runtime_case(
@@ -1025,6 +1084,7 @@ def _iter_turn_evaluations(
     *,
     model: object | None = None,
     run_source: str = "double",
+    settings: object | None = None,
 ) -> Iterator[TurnEvaluation]:
     outcomes: list[AgentRunOutcomeV1] = []
     for index, turn in enumerate(case.turns):
@@ -1076,15 +1136,27 @@ def _iter_turn_evaluations(
             turn_model = build_multi_turn_double(
                 turn, label=f"{case.case_id}[{index}]", history_response_offset=offset
             )
-        runtime = PydanticAIAgentRuntime(
-            model=turn_model, capabilities=granted, deps=deps,
-            # Code review 2026-09-14 (patch): was hardcoded `None`, making
-            # `expected_outcome: "clarify"/"refuse"` and a scripted
-            # `response_data` turn unreachable through this runner.
-            answer_type=(
-                GroundedAnswerV2 if _needs_named_output_tools_for_turn(turn) else None
-            ),
+        # Code review 2026-09-14 (patch): was hardcoded `None`, making
+        # `expected_outcome: "clarify"/"refuse"` and a scripted
+        # `response_data` turn unreachable through this runner.
+        answer_type = (
+            GroundedAnswerV2 if _needs_named_output_tools_for_turn(turn) else None
         )
+        if settings is not None:
+            # Story 5.13 D3: a live run on the pinned release configuration
+            # takes its per-turn budget, retries and reasoning effort from the
+            # production factory, not from `AgentRuntimeConfig()`'s defaults.
+            from agent.runtime import create_agent_runtime
+
+            runtime = create_agent_runtime(
+                settings=settings, model=turn_model, capabilities=granted,
+                deps=deps, answer_type=answer_type,
+            )
+        else:
+            runtime = PydanticAIAgentRuntime(
+                model=turn_model, capabilities=granted, deps=deps,
+                answer_type=answer_type,
+            )
         failure_code: str | None = None
         try:
             outcome = execute_turn(
@@ -1416,6 +1488,7 @@ def run_bounded_live_multi_turn_suite(
     input_usd_per_mtok: float = 0.0,
     output_usd_per_mtok: float = 0.0,
     exception: LiveReadinessExceptionV1 | None = None,
+    settings: object | None = None,
 ) -> dict[str, object]:
     """The explicit, bounded live counterpart of the deterministic CI suite.
 
@@ -1467,7 +1540,7 @@ def run_bounded_live_multi_turn_suite(
             case_complete = False
             try:
                 for turn_eval in _iter_turn_evaluations(
-                    case, installed, model=model, run_source="live"
+                    case, installed, model=model, run_source="live", settings=settings
                 ):
                     usage = turn_eval.outcome.usage
                     if usage is not None:
@@ -1582,6 +1655,7 @@ def generate_bounded_live_multi_turn_report(
     input_usd_per_mtok: float = 0.0,
     output_usd_per_mtok: float = 0.0,
     exception: LiveReadinessExceptionV1 | None = None,
+    settings: object | None = None,
 ) -> dict[str, object]:
     """The documented explicit command for Story 5.6's live suite (Task 3/5).
 
@@ -1601,7 +1675,7 @@ def generate_bounded_live_multi_turn_report(
     suite_result = run_bounded_live_multi_turn_suite(
         cases, model=model, budget=budget, model_name=model_name,
         input_usd_per_mtok=input_usd_per_mtok, output_usd_per_mtok=output_usd_per_mtok,
-        exception=exception,
+        exception=exception, settings=settings,
     )
     exercised_names = sorted(
         {
@@ -1638,6 +1712,150 @@ def generate_bounded_live_multi_turn_report(
     return suite_result
 
 
+# ---------------------------------------------------------------------------
+# Story 5.13 D3: the recorded multi-turn live measurement Gate B reads.
+#
+# Three bounded runs on the pinned release configuration, every case passing in
+# every run, spend measured. One evidence file carries all three runs and one
+# verdict key, `live_multi_turn`, which the Gate B registry reads.
+# ---------------------------------------------------------------------------
+
+MULTI_TURN_VERDICT_KEY = "live_multi_turn"
+MULTI_TURN_REQUIRED_RUNS = 3
+
+
+def multi_turn_verdict_reasons(
+    runs: Sequence[Mapping[str, object]], *, required_runs: int = MULTI_TURN_REQUIRED_RUNS
+) -> list[str]:
+    """Every reason the recorded runs cannot support a `passed` verdict."""
+    reasons: list[str] = []
+    if len(runs) < required_runs:
+        reasons.append("fewer_than_required_runs")
+    if any(run.get("stopped_reason") is not None for run in runs):
+        reasons.append("run_incomplete")
+    if any(
+        not run.get("results") or not all(item.get("passed") for item in run["results"])
+        for run in runs
+    ):
+        reasons.append("case_failed")
+    if any(not run.get("spend_measured") for run in runs):
+        reasons.append("spend_not_measured")
+    codes = {json.dumps(run.get("code"), sort_keys=True) for run in runs}
+    if len(codes) > 1 or any(run.get("code") is None for run in runs):
+        reasons.append("runs_disagree_on_code")
+    if any((run.get("code") or {}).get("working_tree_dirty", True) for run in runs):
+        reasons.append("clean_version_binding_missing")
+    return reasons
+
+
+def generate_live_multi_turn_evidence(
+    output_path: Path,
+    *,
+    model: object,
+    model_name: str,
+    budget: LiveSuiteBudgetV1,
+    configuration: Mapping[str, object],
+    runs: int = MULTI_TURN_REQUIRED_RUNS,
+    settings: object | None = None,
+    input_usd_per_mtok: float = 0.0,
+    output_usd_per_mtok: float = 0.0,
+    golden_dir: Path | None = None,
+    repo_root: Path = REPO_ROOT,
+    allow_dirty: bool = False,
+    exception: LiveReadinessExceptionV1 | None = None,
+) -> dict[str, object]:
+    """Resolve the code binding, run the bounded suite `runs` times, write once.
+
+    The binding is resolved BEFORE the first run and refuses a dirty tree, so
+    no run is paid for that the evidence could not bind (F14). Each run records
+    the tree it started on; runs on different code block the verdict.
+    """
+    from scripts.evidence_binding import resolve_code_binding
+
+    if runs < 1:
+        raise ValueError("at least one run is required")
+    exemptions = frozenset({str(output_path), str(Path(str(output_path) + ".tmp"))})
+    code, _ = resolve_code_binding(repo_root, allow_dirty=allow_dirty, ignore_paths=exemptions)
+    selected_golden_dir = (
+        Path(golden_dir)
+        if golden_dir is not None
+        else repo_root / "backend" / "evals" / "golden_multi_turn"
+    )
+    cases = load_multi_turn_cases(selected_golden_dir)
+    recorded: list[dict[str, object]] = []
+    for index in range(1, runs + 1):
+        run_code, _ = resolve_code_binding(repo_root, allow_dirty=True, ignore_paths=exemptions)
+        result = run_bounded_live_multi_turn_suite(
+            cases, model=model, budget=budget, model_name=model_name,
+            input_usd_per_mtok=input_usd_per_mtok, output_usd_per_mtok=output_usd_per_mtok,
+            settings=settings,
+        )
+        result["run_index"] = index
+        result["code"] = run_code
+        recorded.append(result)
+    now = datetime.now(timezone.utc)
+    reasons = multi_turn_verdict_reasons(recorded)
+    if not reasons:
+        verdict = "passed"
+    elif exception is not None and exception.is_valid(now=now):
+        verdict = "excepted"
+    else:
+        verdict = "blocked"
+    exercised_names = sorted(
+        {name for case in cases for turn in case.turns for name in turn.capabilities}
+    )
+    by_name = {module.manifest.capability_name: module for module in installed_modules()}
+    report: dict[str, object] = {
+        "report_type": "evaluation-harness-multi-turn-live-recorded",
+        "report_version": "1",
+        "story": "5.13",
+        "generated_at": now.isoformat(),
+        "model": model_name,
+        "measured_configuration": dict(configuration),
+        "authoritative": False,
+        "required_runs": MULTI_TURN_REQUIRED_RUNS,
+        "rule": "every release-eligible case passes in every recorded run; spend measured",
+        "runs": recorded,
+        "spend_measured": bool(recorded) and all(run.get("spend_measured") for run in recorded),
+        "total_spend_usd": round(
+            sum(float(run["usage"]["spend_usd"]) for run in recorded), 6  # type: ignore[index]
+        ),
+        "blocking_reasons": reasons,
+        MULTI_TURN_VERDICT_KEY: verdict,
+        "exception": (
+            None
+            if exception is None
+            else {**asdict(exception), "expires_at": exception.expires_at.isoformat(),
+                  "valid_at_generation": exception.is_valid(now=now)}
+        ),
+    }
+    report["version_bindings"] = resolve_bindings(
+        {
+            **MULTI_TURN_BINDINGS,
+            "model": model_name,
+            "tool": ", ".join(
+                f"{name}@{by_name[name].manifest.capability_version}"
+                for name in exercised_names
+                if name in by_name
+            ),
+        },
+        repo_root=repo_root,
+        fixtures=_multi_turn_scenario_specs_for_cases(cases),
+        dataset_files=sorted(selected_golden_dir.rglob("*.json")),
+        allow_dirty=allow_dirty,
+        code_binding=code,
+        ignore_paths=exemptions,
+    )
+    destination = Path(output_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(str(destination) + ".tmp")
+    staging.write_text(
+        json.dumps(report, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
+    )
+    staging.replace(destination)
+    return report
+
+
 def _multi_turn_scenario_specs_for_cases(
     cases: Sequence[MultiTurnGoldenCase],
 ) -> tuple[_ScenarioSpec, ...]:
@@ -1665,6 +1883,7 @@ if __name__ == "__main__":
 
 __all__ = [
     "CaseEvaluation",
+    "CaseVerdictParts",
     "DEMONSTRATION_BINDINGS",
     "LiveReadinessExceptionV1",
     "LiveSuiteBudgetV1",
@@ -1673,6 +1892,9 @@ __all__ = [
     "TurnEvaluation",
     "build_evaluation_report",
     "build_multi_turn_evaluation_report",
+    "generate_live_multi_turn_evidence",
+    "multi_turn_verdict_reasons",
+    "evaluate_case_parts",
     "generate_bounded_live_multi_turn_report",
     "generate_demonstration_report",
     "generate_live_diagnostics",

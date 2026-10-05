@@ -57,8 +57,9 @@ schema is the frozen `GoldenCase` dataclass in `cases.py`:
 
 Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute their own real cases to this same
 directory. Story 2.2 contributes only two `demonstration` cases to prove the
-schema and pipeline. They are not padding toward NFR28's 50-case Gate B floor;
-that aggregate must be re-verified later against real story contributions.
+schema and pipeline. They are not padding toward NFR28's Gate B floor, which
+Story 5.13 (D4) re-verified and replaced with a ratchet, `GOLDEN_CASE_FLOOR` in
+`backend/scripts/gate_b_checks.py`, counting single-turn and multi-turn cases.
 
 Story 2.5 contributes scheduling_inspect cases for demand, assignments, workers,
 constraints, and locks. They exercise tool routing and argument shape against a
@@ -157,9 +158,13 @@ an immutable attribute with itself and cannot fail.
 **NFR28 note.** Four of these cases carry `risk_class: "prohibited"`, which is a
 *dataset tag describing the case*, not a claim about `scheduling_inspect`'s
 manifest (that is `inspect`). The tag puts them under NFR28's 100% routing rule,
-where adversarial cases belong. It also counts them in
-`consequential_prohibited_case_count`, so that number is **not** evidence toward
-NFR28's ≥10 consequential/prohibited floor by capability risk: no consequential
-capability exists yet. Gate B re-verifies the floor once Stories 3.10–3.12 and
-4.5–4.6 have contributed. These deterministic cases prove the application
-boundary, not live-model instruction-following quality.
+where adversarial cases belong. Story 5.13 (D6) made the tag the counting rule
+for NFR28's ≥10 consequential/prohibited floor, because no manifest can be
+`prohibited` and the same tag already defines the 100% routing population. Tag
+integrity is enforced (`scripts/gate_b_readiness.py`): `prohibited` requires the
+deterministic `expected_outcome: "refuse"`, and `consequential` requires an
+expected call to a capability whose manifest is `consequential`, which
+`scheduling_baseline` now is. Cases on a capability the release configuration
+disables (`demonstration`) are not counted. The floor's rationale: the 50 assumed golden-case contributions from Stories 3.10–3.12 and 4.5, and those stories deliberately added none, because their invariants are not model-reachable and are proven as PostgreSQL proof nodes (4.5 Decision 11). Multi-turn cases are versioned and graded by the same evaluators, so counting them puts them under the ratchet instead of leaving them ungated.
+These deterministic cases prove the application boundary; live-model routing
+quality is measured separately (`evals/live_golden_routing.py`).

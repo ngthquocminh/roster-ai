@@ -5,7 +5,7 @@ depends_on: 5-12-prove-the-draft-lifecycle-in-live-conversations (done)
 blocks: epic-6 (Gate C builds on Gate B's report)
 ---
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -313,52 +313,52 @@ Phases are ordered. Do not start a phase until the previous phase's exit conditi
 
 ### Phase A — keyless code (no spend)
 
-- [ ] **Task 0 — Starting point** (all ACs)
-  - [ ] Confirm HEAD descends from `a6aec1f`. Re-check F3's digest equality and F7's counts. A mismatch means stop and ask.
-  - [ ] Record the starting counts. At creation, at `a6aec1f`, `tests/test_evaluation_harness.py`, `tests/test_gate_a_readiness.py` and `tests/test_live_conversation_*.py` gave 683 passed / 2 deselected. Run the full default suite once with Docker PostgreSQL up and record it.
+- [x] **Task 0 — Starting point** (all ACs)
+  - [x] Confirm HEAD descends from `a6aec1f`. Re-check F3's digest equality and F7's counts. A mismatch means stop and ask.
+  - [x] Record the starting counts. At creation, at `a6aec1f`, `tests/test_evaluation_harness.py`, `tests/test_gate_a_readiness.py` and `tests/test_live_conversation_*.py` gave 683 passed / 2 deselected. Run the full default suite once with Docker PostgreSQL up and record it.
 
-- [ ] **Task 1 — Two new golden cases** (AC3; per D6)
-  - [ ] `evals/golden/scheduling_baseline/approval-bypass-real-tool.json` and `…/draft-and-promotion-same-turn.json`. Use `approval-required.json` and `scheduling_draft_discard/after-draft-same-turn.json` as the patterns. Put every argument literally in the prompt (5.5's root cause).
-  - [ ] Deterministic harness green. Update the pinned counts that break. `test_seed_cases_*` and the per-capability floor test must stay green.
+- [x] **Task 1 — Two new golden cases** (AC3; per D6)
+  - [x] `evals/golden/scheduling_baseline/approval-bypass-real-tool.json` and `…/draft-and-promotion-same-turn.json`. Use `approval-required.json` and `scheduling_draft_discard/after-draft-same-turn.json` as the patterns. Put every argument literally in the prompt (5.5's root cause).
+  - [x] Deterministic harness green. Update the pinned counts that break. `test_seed_cases_*` and the per-capability floor test must stay green.
 
-- [ ] **Task 2 — `evals/live_golden_routing.py`** (AC2; per D9, D8, F4–F6, F16)
-  - [ ] Write the generator and its CLI. Model construction must match the production factory. Add per-case routing, grounding and policy fields, per-run percentages, usage and cost, a spend ceiling, and `resolve_bindings` with `code_binding` from the run (F14).
-  - [ ] Keyless unit tests with a scripted model:
+- [x] **Task 2 — `evals/live_golden_routing.py`** (AC2; per D9, D8, F4–F6, F16)
+  - [x] Write the generator and its CLI. Model construction must match the production factory. Add per-case routing, grounding and policy fields, per-run percentages, usage and cost, a spend ceiling, and `resolve_bindings` with `code_binding` from the run (F14).
+  - [x] Keyless unit tests with a scripted model:
     - percentages over the D5 population;
     - `demonstration` reported but not counted;
     - the verdict is blocked when any run is below a threshold, when fewer than 3 runs exist, or when runs disagree on code;
     - cost accounting;
     - redaction (no prompt text or provider payloads, per AD-16's exclusions).
-  - [ ] Close `deferred-work.md`'s "`generate_live_diagnostics` has no committed CLI entry point" entry, pointing at this generator.
+  - [x] Close `deferred-work.md`'s "`generate_live_diagnostics` has no committed CLI entry point" entry, pointing at this generator.
 
-- [ ] **Task 3 — Multi-turn generator wiring** (D3; F15)
-  - [ ] Give `generate_bounded_live_multi_turn_report` a CLI entry point, or extend the existing one. It passes `reasoning_effort` and the override's rates so that `spend_measured` is true, and its default output is `evidence/story-5.13/live-multi-turn-evaluation.json`. Add a keyless test proving that rates make `spend_measured` true.
+- [x] **Task 3 — Multi-turn generator wiring** (D3; F15)
+  - [x] Give `generate_bounded_live_multi_turn_report` a CLI entry point, or extend the existing one. It passes `reasoning_effort` and the override's rates so that `spend_measured` is true, and its default output is `evidence/story-5.13/live-multi-turn-evaluation.json`. Add a keyless test proving that rates make `spend_measured` true.
 
-- [ ] **Task 4 — `gate_b_checks.py` registry** (AC1; per D1, D2, D4–D6, D12, D13)
-  - [ ] Rows, checks and `GOLDEN_CASE_FLOOR` (with its rationale comment). Add `validate_registry()`.
-  - [ ] Add the in-process `computed` checks: dataset count ≥ floor, per-capability ≥4 on allowed capabilities, protected ≥10 with tag integrity, and inventory and behavioural-digest freshness.
-  - [ ] The NFR35 row registers the four `test_nfr35_*` tests (D7). The blocking-regressions categories follow D13.
+- [x] **Task 4 — `gate_b_checks.py` registry** (AC1; per D1, D2, D4–D6, D12, D13)
+  - [x] Rows, checks and `GOLDEN_CASE_FLOOR` (with its rationale comment). Add `validate_registry()`.
+  - [x] Add the in-process `computed` checks: dataset count ≥ floor, per-capability ≥4 on allowed capabilities, protected ≥10 with tag integrity, and inventory and behavioural-digest freshness.
+  - [x] The NFR35 row registers the four `test_nfr35_*` tests (D7). The blocking-regressions categories follow D13.
 
-- [ ] **Task 5 — `gate_b_readiness.py`** (AC1, AC5; per D2, D12, D14; F13)
-  - [ ] `build_report` and `main` with the same flags as Gate A (`--pytest-xml`, `--vitest-xml`, `--playwright-xml`, `--output`, `--allow-dirty`, `--code-from`). Add `--postgres-xml` for the NFR35 row's `-m postgres -s` run.
-  - [ ] Atomic write, own-output exemption, self-audit.
+- [x] **Task 5 — `gate_b_readiness.py`** (AC1, AC5; per D2, D12, D14; F13)
+  - [x] `build_report` and `main` with the same flags as Gate A (`--pytest-xml`, `--vitest-xml`, `--playwright-xml`, `--output`, `--allow-dirty`, `--code-from`). Add `--postgres-xml` for the NFR35 row's `-m postgres -s` run.
+  - [x] Atomic write, own-output exemption, self-audit.
 
-- [ ] **Task 6 — `tests/test_gate_b_readiness.py`** (AC1)
-  - [ ] Mirror `test_gate_a_readiness.py`. The registry must be valid. Every row needs at least one check, and every blocking-regression category needs one too.
-  - [ ] Anti-rot: every registered file exists, and the evidence set is deliberate.
-  - [ ] Each of these fails loudly: an unregistered row, a missing evidence file, an unreadable or absent verdict key, a stale inventory digest, a skipped NFR35 test, and a registered test file absent from the XML.
-  - [ ] Tag integrity rejects a `consequential` case whose expected calls do not include a consequential capability, and a `prohibited` case that does not refuse.
-  - [ ] The floor test goes red when a case is deleted.
-  - [ ] `main` refuses to report success over its own unbound output.
-  - [ ] Record a mutation table: every guard above reddens for its stated reason, and the tree is reverted clean after each mutation (Epic 4 A1: the reviewer re-runs it).
+- [x] **Task 6 — `tests/test_gate_b_readiness.py`** (AC1)
+  - [x] Mirror `test_gate_a_readiness.py`. The registry must be valid. Every row needs at least one check, and every blocking-regression category needs one too.
+  - [x] Anti-rot: every registered file exists, and the evidence set is deliberate.
+  - [x] Each of these fails loudly: an unregistered row, a missing evidence file, an unreadable or absent verdict key, a stale inventory digest, a skipped NFR35 test, and a registered test file absent from the XML.
+  - [x] Tag integrity rejects a `consequential` case whose expected calls do not include a consequential capability, and a `prohibited` case that does not refuse.
+  - [x] The floor test goes red when a case is deleted.
+  - [x] `main` refuses to report success over its own unbound output.
+  - [x] Record a mutation table: every guard above reddens for its stated reason, and the tree is reverted clean after each mutation (Epic 4 A1: the reviewer re-runs it).
 
-- [ ] **Task 7 — Planning-doc and README amendments for D4–D6, D8** (AC3)
-  - [ ] Rewrite the Golden dataset size row and caveat in `epics.md`. Point the Tool routing row's owner at this story's evidence.
-  - [ ] `prd.md` §7 (the `[ASSUMPTION]` at line ~310) and the assumptions list (~403).
-  - [ ] `requirements-inventory.md` NFR28.
-  - [ ] The NFR28 note in `evals/README.md`, and its line 60 ("50-case Gate B floor").
-  - [ ] Use the same rationale sentence everywhere (D4). Do not paraphrase it differently per file.
-  - [ ] Exit: the default suite is green. Commit the code (evidence step 1).
+- [x] **Task 7 — Planning-doc and README amendments for D4–D6, D8** (AC3)
+  - [x] Rewrite the Golden dataset size row and caveat in `epics.md`. Point the Tool routing row's owner at this story's evidence.
+  - [x] `prd.md` §7 (the `[ASSUMPTION]` at line ~310) and the assumptions list (~403).
+  - [x] `requirements-inventory.md` NFR28.
+  - [x] The NFR28 note in `evals/README.md`, and its line 60 ("50-case Gate B floor").
+  - [x] Use the same rationale sentence everywhere (D4). Do not paraphrase it differently per file.
+  - [x] Exit: the default suite is green. Commit the code (evidence step 1).
 
 ### Phase B — cheap validation (smoke runs approved at creation, D10)
 
@@ -490,14 +490,108 @@ Patterns to copy:
 
 ### Agent Model Used
 
+Claude Code (bmad-dev-story), cloud sandbox, 2026-10-05.
+
 ### Debug Log References
+
+- **Task 0 starting point.** HEAD `5146d46` descends from `a6aec1f`. F3 re-checked: `capability_inventory()['digest']` = `8baa0281…` (141 operations) equals the 5.12 evidence's `inventory_digest`. F7 re-checked: 37 single-turn (demonstration 2, baseline 4, compute 4, draft 4, draft_discard 4, inspect 14, optimize 5) + 6 multi-turn. Full default suite at `5146d46`, Docker PostgreSQL 18.6, full (unshallowed) clone: **2870 passed, 1 skipped, 10 deselected**.
+- **Sandbox environment.** Docker Hub returned 429 on `postgres:18`; the identical image was pulled from `mirror.gcr.io/library/postgres:18` and tagged `postgres:18`. The clone was shallow, so `git fetch --unshallow` was run first (the 5.12 gotcha).
+- **Task 1 first run passed for the wrong reason.** With only `scheduling_baseline` granted, the same-turn case's scripted `scheduling_draft` call reached no tool, `draft_turn.drafted` stayed false, and the turn *suspended*. The routing evaluator still matched both calls. Fixed at the root: `EVAL_TAG_GRANTS["scheduling_baseline"]` now also grants `scheduling_draft` (the 5.11 C11 precedent). The case now completes with the draft and no promotion. Mutation C2 proves it.
+- **Architecture guard.** `test_every_eval_model_builder_disables_live_requests_at_module_scope` reddened on the new generator (it imports `pydantic_ai.models`). Fixed by setting `models.ALLOW_MODEL_REQUESTS = False` at module scope, as `report.py` does.
+- **Phase A exit.** Full default suite after the code: **2949 passed, 2 skipped, 10 deselected, 0 failed**. The second skip is `test_evidence_binding.py:617` ("binding realism check needs a clean tree"), which goes away once the code is committed. CI's `--max-skipped 1` therefore holds on a clean checkout.
+
+### Implementation Plan (Phase A)
+
+- `evals/release_configuration.py` (NEW) derives D5's allowed set from `Settings` field **defaults**: policy name = settings field. It also reads the tracked compose override (environment, prices). The generators apply the override, skipping `TELEMETRY_ONLY_KEYS`, before building settings.
+- `evals/report.py`:
+  - `evaluate_case_parts` returns routing, grounding and policy separately, and `_evaluate_case` folds them exactly as before.
+  - `runtime_for_modules`, `_runtime_for_case` and `_iter_turn_evaluations` accept `settings=` to build through `create_agent_runtime` (configured budget, retries, effort). Omitting it changes nothing.
+  - `generate_live_multi_turn_evidence` runs N bounded passes, resolves `code` before the first paid call, and writes one evidence file. Its verdict key is `live_multi_turn`: `passed`, `excepted` or `blocked`.
+- `evals/live_golden_routing.py` (NEW) is the D9 generator and CLI. It writes verdict key `tool_routing`. A failing pass is never retried.
+- `evals/live_multi_turn.py` (NEW) is the D3 CLI. It is a module beside `report.py` rather than a change to `report.main()`, whose positional interface is documented and used.
+- `scripts/gate_b_checks.py` (NEW) is the registry.
+  - It holds 7 rows and 42 checks: 19 imported from Gate A by name, 5 computed, 3 evidence-backed of its own, and 15 JUnit-backed of its own.
+  - It sets `GOLDEN_CASE_FLOOR = 45` with the D4 rationale.
+- `scripts/gate_b_readiness.py` (NEW) builds the D14 report.
+  - It reuses Gate A's `_evidence_result` for imported evidence, so Gate A's manual-gate rule still applies. It also reuses `_xml_provenance`, `_validate_supplied_bindings` and `junit_ingest`.
+  - D12 freshness: `code_ancestor_staleness` diffs the evidence's commit against the Gate B commit over `LIVE_FRESHNESS_PATHS`. The live-conversation inventory and behavioural digests are computed checks.
+  - D8: `deterministic_regression_coverage` is reported, labelled, and decides nothing.
+  - An `excepted` verdict counts only with a complete, unexpired exception, and only on rows that declare an `exception_value`. The live-conversation row declares none (AD-16).
+- D13 category mapping, recorded in each check's description:
+  - 5.2 content minimization → isolation. It keeps content and secrets inside the trust boundary.
+  - 5.11 draft lifecycle → idempotency. Its commands are versioned and replay-safe.
+  - 2.7 `test_conversations_postgres.py` → isolation. It tests cross-site read and write denial.
+
+### Mutation table (Phase A guards)
+
+Each mutation was applied to finished product code, the named guard was run, and the file was restored byte-for-byte. Afterwards `git status` was identical to before and the tracked product code had no diff. Runner: `scratchpad/mutate.py`, 32 rows, all red.
+
+| # | Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|---|
+| G1 | `GATE_B_ROWS` title "Tool routing" → "Tool routing (live)" | `test_every_gate_b_row_of_the_release_gate_table_is_registered` | green | red: the epics.md row is unregistered |
+| G2 | missing evidence file returns `("passed", True)` | `test_a_missing_evidence_file_blocks_its_row` | green | red `('passed', True) == ('missing', False)` |
+| G3 | absent verdict key falls back to a top-level `passed: true` | `test_an_absent_verdict_key_is_missing_even_beside_a_passed_flag` | green | red `'passed' == 'missing'` |
+| G4 | inventory-digest comparison always passes | `test_a_stale_inventory_digest_makes_the_live_conversation_row_missing` | green | red `'passed' == 'missing'` |
+| G5 | the named-case "skipped" branch is deleted | `test_a_skipped_nfr35_test_blocks_the_nfr35_row` | green | red `'passed' == 'skipped'` |
+| G6 | `file_outcomes(strict=False)` hard-coded | `test_a_registered_test_file_absent_from_the_xml_fails_loudly` | green | red: DID NOT RAISE |
+| G7 | consequential tag-integrity clause disabled | `test_tag_integrity_rejects_a_consequential_case_without_a_consequential_call` | green | red `assert []` |
+| G8 | prohibited integrity reads the live outcome first | `test_tag_integrity_reads_the_deterministic_outcome_not_the_live_one` | green | red: "tagged prohibited but…" |
+| G9 | prohibited tag-integrity clause disabled | `test_tag_integrity_rejects_a_prohibited_case_that_does_not_refuse` | green | red `assert []` |
+| G10 | `main`'s self-audit return removed | `test_main_refuses_to_report_success_over_its_own_unbound_output` | green | red `0 == 1` |
+| G11 | `merge-base --is-ancestor` check disabled | `test_a_commit_that_is_not_an_ancestor_is_stale` | green | red `assert None` |
+| G12 | changed-live-paths branch disabled | `test_an_ancestor_before_a_live_path_change_is_stale` | green | red `assert None` |
+| G13 | `_exception_problems` returns `[]` | `test_an_incomplete_or_expired_exception_does_not_waive` | green | red `'excepted' == 'failed'` |
+| G14 | `exception_value="excepted"` added to the live-conversation check | `test_the_live_conversation_row_accepts_no_exception` | green | red `'excepted' is None` |
+| G15 | behavioural-digest comparison always passes | `test_a_behavioural_digest_mismatch_makes_the_row_missing` | green | red `'passed' == 'missing'` |
+| G16 | Playwright required-project downgrade removed | `test_a_playwright_check_needs_every_claimed_browser` | green | red `'passed' == 'missing'` |
+| G17 | per-capability shortfall ignored | `test_a_capability_below_four_cases_fails_its_floor` | green | red `'passed' == 'failed'` |
+| G18 | stale evidence keeps its `excepted` result | `test_stale_passed_evidence_is_missing_and_drops_its_exception` | green | red `'excepted' == 'missing'` |
+| G19 | floor comparison always passes | `test_the_floor_check_goes_red_when_a_case_is_deleted` | green | red `'passed' == 'failed'` |
+| G20 | an NFR35 case absent from the postgres XML is not "missing" | `test_an_nfr35_test_absent_from_the_postgres_run_is_missing` | green | red `'passed' == 'missing'` |
+| L1 | every case `counted: True` (demonstration included) | `test_demonstration_is_reported_but_never_counted` | green | red `True is False` |
+| L2 | `routing_passed` folds in grounding and policy | `test_routing_alone_decides_a_case` | green | red `False is True` (first draft of this guard stayed **green**: its case's grounding also passed, so it could not tell. Fixed by giving the case a live evidence oracle the double never cites.) |
+| L3 | fewer-than-three-runs reason removed | `test_verdict_blocks_for_each_reason[fewer_than_required_runs]` | green | red |
+| L4 | thresholds judged on the best run, not each run | `test_verdict_blocks_for_each_reason[overall_below_threshold]` | green | red |
+| L5 | runs-disagree-on-code reason removed | `test_verdict_blocks_for_each_reason[runs_disagree_on_code]` | green | red |
+| L6 | per-case cost not added to the pass total | `test_cost_is_accounted_per_case_at_the_given_rates` | green | red (approx mismatch) |
+| L7 | spend-ceiling stop removed | `test_the_spend_ceiling_stops_the_pass_and_marks_it_incomplete` | green | red `None == 'spend_ceiling_reached'` |
+| L8 | the case prompt is persisted in each record | `test_the_report_persists_no_prompt_argument_or_reply_content` | green | red |
+| L9 | multi-turn evidence drops the override rates | `test_override_rates_make_multi_turn_spend_measured` | green | red (KeyError: rates never reached the suite) |
+| L10 | an unmeasured (`None`) protected percentage passes | `test_verdict_blocks_for_each_reason[protected_below_threshold]` | green | red |
+| L11 | the multi-turn `case_failed` reason removed | `test_multi_turn_verdict_blocks_for_each_reason[case_failed]` | green | red |
+| C1 | `scheduling_baseline`'s `draft_changed_this_turn` guard removed | `test_all_version_controlled_golden_cases_pass_deterministically` (the new same-turn case) | green | red `'suspended' == 'completed'` |
+| C2 | the `scheduling_baseline` → `scheduling_draft` eval grant removed | same | green | red `'suspended' == 'completed'` |
+
+No guard was found that cannot be mutated.
 
 ### Completion Notes List
 
 - Story created with the ultimate context engine analysis: a comprehensive developer guide. Owner decisions D3–D10 were settled with Minh on 2026-10-05.
+- **Phase A (Tasks 0–7) complete.** It adds two D6 golden cases, the live single-turn routing generator, the recorded multi-turn generator, and the Gate B registry, readiness builder and tests. It also carries the D4–D6 wording in epics.md (NFR28 line, the Golden dataset size and Tool routing rows, the caveat), prd.md §7 and the assumptions list, requirements-inventory.md NFR28, and evals/README.md. One rationale sentence is used verbatim everywhere.
+- Dataset at the code commit: 39 single-turn + 6 multi-turn = **45** (`GOLDEN_CASE_FLOOR`). Every allowed capability has ≥4 cases (baseline 6, compute 4, draft 4, draft_discard 4, inspect 14, optimize 5). Protected cases on allowed capabilities: **10**. Tag-integrity violations: 0.
+- Live-eligible population: 31 cases (29 counted plus 2 `demonstration`, informational).
 
 ### File List
+
+- `backend/evals/golden/scheduling_baseline/approval-bypass-real-tool.json` (NEW)
+- `backend/evals/golden/scheduling_baseline/draft-and-promotion-same-turn.json` (NEW)
+- `backend/evals/release_configuration.py` (NEW)
+- `backend/evals/live_golden_routing.py` (NEW)
+- `backend/evals/live_multi_turn.py` (NEW)
+- `backend/evals/report.py`
+- `backend/evals/README.md`
+- `backend/scripts/gate_b_checks.py` (NEW)
+- `backend/scripts/gate_b_readiness.py` (NEW)
+- `backend/tests/test_gate_b_readiness.py` (NEW)
+- `backend/tests/test_live_golden_routing.py` (NEW)
+- `_bmad-output/planning-artifacts/epics.md`
+- `_bmad-output/planning-artifacts/prds/prd-ShiftMind-2026-07-21/prd.md`
+- `_bmad-output/planning-artifacts/requirements-inventory.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- `_bmad-output/implementation-artifacts/5-13-assess-gate-b.md`
 
 ### Change Log
 
 - 2026-10-05: Story created (bmad-create-story). Status: ready-for-dev.
+- 2026-10-05: Phase A (Tasks 0–7) implemented. Status: in-progress.
