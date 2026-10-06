@@ -77,6 +77,7 @@ from evals.evaluators import (
     ToolRoutingEvaluator,
 )
 from application.use_cases import execute_turn as execute_turn_module
+from application.use_cases.conversation_workflow_context import workflow_context_message
 from application.use_cases.execute_turn import execute_turn, rehydrate_history, resolve_draft_citation
 from evals.grounding import ground_case_outcome
 from application.use_cases.execute_turn import failed_outcome_for_exception, outcome_visible_text
@@ -611,8 +612,15 @@ def _runtime_for_case(
 def _run_runtime_case(
     runtime: PydanticAIAgentRuntime, case: GoldenCase
 ) -> AgentRunOutcomeV1:
+    # A case's workflow snapshot reaches the model the way `execute_turn` sends
+    # production's: one system message appended to the owned history.
+    history = (
+        AgentTurnV1()
+        if case.workflow_snapshot is None
+        else AgentTurnV1(messages=(workflow_context_message(dict(case.workflow_snapshot)),))
+    )
     try:
-        return runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt))
+        return runtime.run_turn(AgentTurnRequestV1(prompt=case.prompt, history=history))
     except Exception as exc:  # the production route has the same finalization rule
         return failed_outcome_for_exception(exc)
 

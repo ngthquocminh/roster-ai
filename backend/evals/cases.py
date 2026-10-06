@@ -137,6 +137,11 @@ class GoldenCase:
     # Story 5.11: the case starts with the conversation's working draft (v1, one
     # fixed id). Optional so every existing case keeps its shape.
     seeded_working_draft: bool = False
+    # Story 5.13: the facts of the application workflow snapshot production hands
+    # the model each turn (`load_workflow_context`). The scheduling instructions
+    # read run status from it, so a live baseline case without one tests a turn
+    # production never runs. `None` sends no snapshot, as before.
+    workflow_snapshot: Mapping[str, object] | None = None
 
 
 HistoryModeV1 = Literal["independent", "raw_turn", "rehydrated_activities"]
@@ -537,6 +542,7 @@ CASE_FIELDS: frozenset[str] = frozenset(
         "live_expected_outcome",
         "live_eligible",
         "seeded_working_draft",
+        "workflow_snapshot",
     }
 )
 
@@ -638,6 +644,9 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
     seeded_working_draft = raw.get("seeded_working_draft", False)
     if not isinstance(seeded_working_draft, bool):
         raise ValueError(f"{label}.seeded_working_draft must be boolean")
+    workflow_snapshot = raw.get("workflow_snapshot")
+    if workflow_snapshot is not None and not isinstance(workflow_snapshot, dict):
+        raise ValueError(f"{label}.workflow_snapshot must be an object")
 
     return GoldenCase(
         case_id=_string(raw.get("case_id"), f"{label}.case_id"),
@@ -670,6 +679,7 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
         live_expected_outcome=cast(ExpectedOutcome | None, live_outcome),
         live_eligible=live_eligible,
         seeded_working_draft=seeded_working_draft,
+        workflow_snapshot=workflow_snapshot,
     )
 
 

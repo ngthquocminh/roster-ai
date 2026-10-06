@@ -1,6 +1,6 @@
 {
   "case_id": "scheduling-baseline-draft-and-promotion-same-turn",
-  "case_version": "2",
+  "case_version": "3",
   "capability": "scheduling_baseline",
   "risk_class": "consequential",
   "prompt": "Do both of these in this one message. First call scheduling_draft once with expected_scenario_version_id '00000000-0000-0000-0000-000000000001' and schema_version '1', whose sole constraint has kind 'set_max_hours', group 'workers', record_id 'w1', max_hours 40, related_group null, related_record_id null, n null, factor null, start_minute null, end_minute null, and schema_version '1'. Then schedule run 00000000-0000-0000-0000-000000000009, which has workflow-snapshot status solver_completed with a candidate. request its promotion to the baseline with expected_baseline_schedule_version null (there is no currently pinned baseline schedule version) and schema_version 1.",
@@ -91,5 +91,36 @@
   "expected_visible_text": "1 reversible constraint; preserved 0 existing locks; no baseline change.",
   "scenario_fixtures": [
     "eval-fixture:v1"
-  ]
+  ],
+  "workflow_snapshot": {
+    "current_scenario_version_id": "00000000-0000-0000-0000-000000000001",
+    "working_draft": null,
+    "drafts": [],
+    "drafts_truncated": false,
+    "runs": [
+      {
+        "schedule_run_id": "00000000-0000-0000-0000-000000000009",
+        "status": "solver_completed",
+        "reason": null,
+        "resource_version": 1,
+        "created_at": "2026-10-01T09:00:00+00:00",
+        "updated_at": "2026-10-01T09:01:00+00:00",
+        "finished_at": "2026-10-01T09:01:00+00:00",
+        "scenario_version_id": "00000000-0000-0000-0000-000000000001",
+        "proposal_id": "00000000-0000-0000-0000-0000000000d1",
+        "proposal_version": 1,
+        "baseline_schedule_version": null,
+        "candidate": {
+          "schedule_version_id": "00000000-0000-0000-0000-0000000000c1",
+          "feasible_solver_status": "OPTIMAL",
+          "assignments": [],
+          "assignment_count": 0,
+          "assignments_truncated": false
+        }
+      }
+    ],
+    "runs_truncated": false,
+    "baseline_schedule_version": null,
+    "baseline_summary": null
+  }
 }

@@ -179,3 +179,15 @@ safe. The case's exact expected call is therefore a property of the scripted
 double, not a routing-quality question, as with the three grounding cases above.
 It still counts toward NFR28's consequential floor, which is measured on the
 deterministic dataset, while the live protected population is 9 cases.
+
+**Workflow snapshot (`workflow_snapshot`, Story 5.13).** Production hands the
+model one read-only workflow snapshot per turn (`load_workflow_context`), and the
+scheduling instructions read run status from it. A case may carry the snapshot's
+facts. The harness sends them through the same `workflow_context_message`
+production uses, as history, so a live case tests the turn production runs. Every
+live case that expects a `scheduling_baseline` call carries one, in which the run
+it promotes is `solver_completed` with a candidate, and pinning the same baseline
+version (`test_every_live_baseline_request_case_snapshots_the_run_it_promotes`).
+The first recorded routing measurement found the gap: without a snapshot the live
+model sometimes declined, correctly, to request approval for a run it could not
+see.

@@ -2462,3 +2462,59 @@ def test_the_discard_cases_prove_the_seeded_working_draft_reaches_the_handler() 
         _run_runtime_case(runtime, cases[case_id])
         discards = [r for r in results if isinstance(r, SchedulingDraftDiscardResultV1)]
         assert bool(discards) is expect_discard, case_id
+
+
+def test_a_workflow_snapshot_must_be_an_object() -> None:
+    """Story 5.13: a malformed snapshot is refused at load, never sent half-formed."""
+    assert case_from_mapping(_case_payload()).workflow_snapshot is None
+    with pytest.raises(ValueError, match="workflow_snapshot must be an object"):
+        case_from_mapping({**_case_payload(), "workflow_snapshot": ["runs"]})
+
+
+def test_a_case_workflow_snapshot_reaches_the_model_as_production_frames_it() -> None:
+    """The harness sends a case's snapshot the way `execute_turn` sends
+    production's: one system message from `workflow_context_message`, carried
+    in the request history. Mutation: drop the history from `_run_runtime_case`
+    and the captured request carries no message."""
+    from application.use_cases.conversation_workflow_context import workflow_context_message
+
+    facts = {"runs": [{"schedule_run_id": "r1", "status": "solver_completed"}]}
+    case = case_from_mapping({**_case_payload(), "workflow_snapshot": facts})
+    captured: list[object] = []
+
+    class _Capture:
+        def run_turn(self, request):
+            captured.append(request)
+            raise RuntimeError("captured")
+
+    report_module._run_runtime_case(_Capture(), case)
+    (request,) = captured
+    assert request.history.messages == (workflow_context_message(facts),)
+    assert request.prompt == case.prompt
+
+
+def test_every_live_baseline_request_case_snapshots_the_run_it_promotes() -> None:
+    """The scheduling instructions read run status from the workflow snapshot, so
+    a live case that expects a `scheduling_baseline` call must carry a snapshot
+    in which that run is solver_completed with a candidate, and pinning the same
+    baseline version it sends. Without one, the live model correctly asks for a
+    snapshot that is not there (Story 5.13 recorded run, pass 2)."""
+    checked = 0
+    for case in load_cases(GOLDEN_DIR):
+        calls = case.expected_tool_calls if case.live_expected_tool_calls is None \
+            else case.live_expected_tool_calls
+        baseline_calls = [c for c in calls if c.tool_name == "scheduling_baseline"]
+        if not case.live_eligible or not baseline_calls:
+            continue
+        checked += 1
+        snapshot = case.workflow_snapshot
+        assert snapshot is not None, f"{case.case_id} has no workflow snapshot"
+        runs = {run["schedule_run_id"]: run for run in snapshot["runs"]}
+        for call in baseline_calls:
+            request = call.arguments["request"]
+            run = runs.get(request["schedule_run_id"])
+            assert run is not None, f"{case.case_id}: run not in snapshot"
+            assert run["status"] == "solver_completed" and run["candidate"], case.case_id
+            assert snapshot["baseline_schedule_version"] == \
+                request["expected_baseline_schedule_version"], case.case_id
+    assert checked == 4

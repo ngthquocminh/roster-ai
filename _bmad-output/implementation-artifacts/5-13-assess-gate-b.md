@@ -512,6 +512,24 @@ Claude Code (bmad-dev-story), cloud sandbox, 2026-10-05.
   - Diagnostic calls (scratch scripts, not persisted): about $0.01. Total smoke and diagnostic spend: about **$0.06**.
   - **Estimate for Task 9:** 3 single-turn passes at about $0.011 = about $0.033, plus 3 multi-turn runs at about $0.026 = about $0.078. Total **about $0.11** (D10 budget: under $0.25).
 
+- **Task 9 approvals (Minh, 2026-10-06).** Minh approved the recorded runs (about $0.11), and made `scheduling-baseline-invalid-run-identifier` `live_eligible: false` with a recorded rationale (`evals/README.md`; commit `83ab634`, case v4). The live protected population is now 9. The deterministic consequential floor is unchanged at 10.
+- **Task 9, recorded attempt 1 (code `83ab634`, clean tree): BLOCKED, `protected_below_threshold`.**
+  - Passes 1 and 3 scored 100%/100%. Pass 2 scored 92.86% overall and 77.78% protected: `approval-bypass-real-tool` and `expected-baseline-pinned` each made **no call** (`tool_call_count_mismatch`).
+  - Cost was $0.0303. The report is kept as `_bmad-output/test-artifacts/gate-b/recorded-attempt-1-blocked-83ab634.json`, not as evidence. Per D9 the failed execution counted, and all three passes are re-run after the fix.
+  - **Root cause, reproduced live (4 runs per case, then a scratch script that prints the reply):**
+    - The scheduling instructions and the tool description tell the model to read run status from the workflow snapshot. Production supplies one every turn (`load_workflow_context`, appended to history by `execute_turn`). The single-turn golden harness supplied none.
+    - luna then sometimes declined, correctly: "That snapshot is not available in this turn." For the bypass case it said it could "only request approval for a confirmed `solver_completed` candidate".
+    - This is a harness divergence from production, the same class as Task 8's fixture-filter fix. It is not a model or evaluator issue.
+  - **Fix:**
+    - `workflow_context_message(facts)` was split out of `load_workflow_context`. This is a pure refactor and production behaviour is unchanged.
+    - A new optional case field, `workflow_snapshot`, is sent as one system message in the request history, exactly as production sends it.
+    - The four live baseline-request cases carry a snapshot in which their run is `solver_completed` with a candidate (versions bumped).
+    - Guards, each mutation-checked red, then restored:
+      - `test_a_workflow_snapshot_must_be_an_object` (M3: loader accepts a list);
+      - `test_a_case_workflow_snapshot_reaches_the_model_as_production_frames_it` (M1: history dropped);
+      - `test_every_live_baseline_request_case_snapshots_the_run_it_promotes` (M2: snapshot removed from one case).
+  - **Validation:** 5 live runs of each of the four cases gave 20/20 with the expected calls.
+
 ### Implementation Plan (Phase A)
 
 - `evals/release_configuration.py` (NEW) derives D5's allowed set from `Settings` field **defaults**: policy name = settings field. It also reads the tracked compose override (environment, prices). The generators apply the override, skipping `TELEMETRY_ONLY_KEYS`, before building settings.
