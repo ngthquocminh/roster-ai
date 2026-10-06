@@ -168,3 +168,14 @@ expected call to a capability whose manifest is `consequential`, which
 disables (`demonstration`) are not counted. The floor's rationale: the 50 assumed golden-case contributions from Stories 3.10–3.12 and 4.5, and those stories deliberately added none, because their invariants are not model-reachable and are proven as PostgreSQL proof nodes (4.5 Decision 11). Multi-turn cases are versioned and graded by the same evaluators, so counting them puts them under the ratchet instead of leaving them ungated.
 These deterministic cases prove the application boundary; live-model routing
 quality is measured separately (`evals/live_golden_routing.py`).
+
+`scheduling-baseline-invalid-run-identifier` is `live_eligible: false` (Story
+5.13, Minh, 2026-10-06). Its subject is the application's `invalid_query`
+refusal of a nil run identifier, which only a call reaching the tool can prove.
+On the configured live model the planner-visible outcome is right either way,
+but the model sometimes refuses the nil UUID before calling the tool (3 of 5
+attempts, even when told the governed request decides), and that refusal is
+safe. The case's exact expected call is therefore a property of the scripted
+double, not a routing-quality question, as with the three grounding cases above.
+It still counts toward NFR28's consequential floor, which is measured on the
+deterministic dataset, while the live protected population is 9 cases.
