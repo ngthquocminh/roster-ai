@@ -559,3 +559,29 @@ def test_main_exits_non_zero_when_gate_b_did_not_pass(tmp_path: Path, monkeypatc
     ])
     assert exit_code == 1
     assert "live_golden_routing (tool_routing)" in capsys.readouterr().out
+
+
+def test_a_live_marked_test_is_not_expected_in_the_default_run(tmp_path) -> None:
+    """`-m "not live"` deselects live tests on every ordinary run (NFR26), so
+    they are not missing coverage. Story 5.13's real report was blocked on the
+    two live tests in test_evaluation_harness.py. Mutation: make `_is_live_marked`
+    return False and both assertions redden."""
+    from scripts.junit_ingest import declared_pytest_cases
+
+    module = tmp_path / "test_mixed.py"
+    module.write_text(
+        "import pytest\n"
+        "def test_plain():\n    pass\n"
+        "@pytest.mark.postgres\ndef test_other_mark():\n    pass\n"
+        "@pytest.mark.live\ndef test_live():\n    pass\n"
+        "@pytest.mark.live(reason='x')\ndef test_live_call():\n    pass\n"
+        "@pytest.mark.live\nclass TestLive:\n    def test_inside(self):\n        pass\n"
+        "class TestPlain:\n    @pytest.mark.live\n    def test_method_live(self):\n        pass\n"
+        "    def test_method(self):\n        pass\n",
+        encoding="utf-8",
+    )
+    assert declared_pytest_cases(module) == ("test_method", "test_other_mark", "test_plain")
+
+    harness = declared_pytest_cases(REPO_ROOT / "backend/tests/test_evaluation_harness.py")
+    assert "test_golden_cases_against_live_agent_are_non_authoritative" not in harness
+    assert "test_live_multi_turn_suite_is_bounded_and_non_authoritative" not in harness
