@@ -83,9 +83,13 @@
 
 Surfaced while amending Story 2.7's Decision 2 (`sprint-change-proposal-2026-08-13.md`). None of these is caused by that amendment, and none is fixed by it. They are recorded together because they are one gap seen from three sides: **the harness evaluates the plumbing, not the model.** Story 2.7's grounding gate is a structural invariant — every rendered number is application-computed, from an immutable version, with a locator — and it is enforced per request. Whether the model chose the *right* metric for the question asked, and whether its prose fairly characterises the number beside it, are statistical properties that only an evaluation layer can measure. That layer has targets but no instrument.
 
-- **The live-model evaluation path is declared and entirely unimplemented.** `RunSource = Literal["double", "live"]` [backend/evals/evaluators.py:12] and `EvalVerdict.authoritative` already encodes NFR26's "never the sole release evidence" by admitting only `"double"`. But the string `"live"` appears **nowhere else in `backend/evals/`** — there is no live runner, no gating, no budget. The seam was cut and never used, so no evidence in this repository has ever been produced by a real model. **Owner/revisit trigger:** the first story that needs a claim about real-model behaviour rather than harness behaviour — realistically Gate B, where NFR28's routing floor is meant to be reported.
+- **CLOSED 2026-10-06 (Story 5.13, D9):** the live path exists and is gated. `backend/evals/live_golden_routing.py` measures every live-eligible golden case on the configured model under a settings budget and spend ceiling, and writes bound evidence (`evidence/story-5.13/live-golden-routing.json`, verdict key `tool_routing`), which `scripts/gate_b_checks.py` reads. `backend/evals/live_multi_turn.py` does the same for the multi-turn suite (D3).
 
-- **NFR28's "≥90% overall tool routing" currently describes the dataset, not the model.** Every golden case drives a deterministic double whose turns are *authored* (`ScriptedModelTurn`, [backend/evals/cases.py:33-43]), so the routing a case exercises is the routing its writer wrote down. `ToolRoutingEvaluator` then asserts exact equality against that same authored expectation [backend/evals/evaluators.py:38-93]. This is sound regression coverage and is exactly what NFR26 asks normal CI to be — but a ≥90% pass rate computed this way is a property of the case files, and reporting it as a model-quality measure would overclaim. **Owner/revisit trigger:** shares an owner with the live-run entry above; whoever implements the live path must also state which of NFR28's two numbers each run source is entitled to report.
+  ORIGINAL: - **The live-model evaluation path is declared and entirely unimplemented.** `RunSource = Literal["double", "live"]` [backend/evals/evaluators.py:12] and `EvalVerdict.authoritative` already encodes NFR26's "never the sole release evidence" by admitting only `"double"`. But the string `"live"` appears **nowhere else in `backend/evals/`** — there is no live runner, no gating, no budget. The seam was cut and never used, so no evidence in this repository has ever been produced by a real model. **Owner/revisit trigger:** the first story that needs a claim about real-model behaviour rather than harness behaviour — realistically Gate B, where NFR28's routing floor is meant to be reported.
+
+- **CLOSED 2026-10-06 (Story 5.13, D8):** the two numbers are now separated. Gate B's Tool routing row reports only the live percentages from `live-golden-routing.json`. The deterministic routing pass rate is labelled `deterministic_regression_coverage` in the Gate B report: regression coverage of the authored cases, and never a model-quality measure.
+
+  ORIGINAL: - **NFR28's "≥90% overall tool routing" currently describes the dataset, not the model.** Every golden case drives a deterministic double whose turns are *authored* (`ScriptedModelTurn`, [backend/evals/cases.py:33-43]), so the routing a case exercises is the routing its writer wrote down. `ToolRoutingEvaluator` then asserts exact equality against that same authored expectation [backend/evals/evaluators.py:38-93]. This is sound regression coverage and is exactly what NFR26 asks normal CI to be — but a ≥90% pass rate computed this way is a property of the case files, and reporting it as a model-quality measure would overclaim. **Owner/revisit trigger:** shares an owner with the live-run entry above; whoever implements the live path must also state which of NFR28's two numbers each run source is entitled to report.
 
 - ~~**No evaluator assesses whether visible prose is faithful to the computed claims.**~~ **CLOSED 2026-08-15 (Story 2.9):** `PolicyOutcomeEvaluator` now judges allow/refuse/clarify against the owned outcome variant, and the report combines that verdict with exact `expected_visible_state` and `expected_visible_text` comparisons derived through the same `outcome_visible_text()` function used by the product. A visible-state or visible-copy drift now makes the generated report fail rather than leaving either required `GoldenCase` field unread.
 
@@ -954,6 +958,11 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the next story touching `scheduling_compute` golden cases or
   `fixture_projection.py`'s `DEMAND` tuple, or the Gate B dataset-floor decision this story's Open
   Question already flags as owed.
+  **RE-ROUTED 2026-10-06 (Story 5.13, D11):** Gate B assessed the dataset floor without fixing this.
+  The case's *routing* (a `scheduling_compute` call with the right arguments) is correct whatever the
+  unit tag says, so it stays in the live routing population. The Gate B report lists it under
+  `honest_gaps`. Trigger now: the next story touching `scheduling_compute` golden cases or
+  `fixture_projection.py`'s `DEMAND` tuple.
 
 ## Deferred from: code review of 5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity (2026-09-14)
 
@@ -1443,3 +1452,19 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-chat-side-panel.md`
   summary: EXPERIENCE.md still specifies "Return to claim" (~9 places: component table row, keyboard/focus rules, evidence failure rules for version mismatch / missing / unauthorized, accessibility notes, and the walkthrough) although the shipped control is now "Close evidence".
   evidence: Commit 304578c replaced Return to claim with Close evidence because the chat is a side panel beside the evidence; `grep -n "Return to claim" _bmad-output/planning-artifacts/ux-designs/ux-ShiftMind-2026-07-22/EXPERIENCE.md` lists the stale lines.
+
+## Deferred from: Story 5.13 (Assess Gate B), 2026-10-06
+
+- **NFR35 has never been measured with request tracing on.** All four NFR35 files (re-measured at
+  `bd929c5`) and every CI run are keyless, and Story 5.9's OpenTelemetry tracing installs only when
+  `LOGFIRE_TOKEN` is set (`adapters/telemetry/spans.py`). So the published numbers do not cover a
+  deployment that exports traces. Gate B's NFR35 verdict comes from the four CI threshold tests (D7),
+  which run keyless too. NFR17 keeps hosted latency out of scope, so this is not a Gate B gap.
+  **Owner/revisit trigger:** the first hosted measurement, or Story 6.4.
+- **The 1.4/1.5 NFR35 tests time around `TestClient.get`, not from server-side request receipt.** The
+  canonical protocol (requirements-inventory.md, NFR35) says the two read measures run "from request
+  receipt to response completion", but `test_nfr35_projection_initial_windows_meet_two_second_threshold`
+  and `test_nfr35_exact_evidence_targets_meet_two_second_threshold` start the clock in the test. That
+  over-counts slightly, which is the safe direction, and the Gate B report records it under
+  `honest_gaps`. **Owner/revisit trigger:** the next story that changes an NFR35 test or its
+  threshold.

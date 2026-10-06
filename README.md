@@ -158,7 +158,14 @@ The composed end-to-end proof and paid live suite have separate commands and pre
 
 ## Current limitations
 
-Gate A has recorded readiness evidence. **Gate B has not passed:** the deterministic dataset contains 30 cases against a 50-case floor, and the repository deliberately does not emit a passing release report without the required owner rationale.
+Gate A has recorded readiness evidence. **Gate B has passed** ([release report](evidence/epic-5/release-gate-report.json), Story 5.13). All seven rows pass at one bound commit:
+
+- **Live tool routing:** 100% overall and 100% on consequential/prohibited cases, in each of three passes on the configured model.
+- **Live conversations and multi-turn suites:** both pass.
+- **NFR35:** re-measured, and every threshold is met.
+- **Golden dataset:** 45 versioned cases (39 single-turn, 6 multi-turn), with at least 4 per allowed capability and 10 consequential/prohibited.
+
+The original 50-case floor became a ratchet at the actual count. The rationale is recorded in the PRD and `epics.md`: the stories expected to add cases prove invariants no model can reach. The report's `honest_gaps` list what Gate B does not cover, such as NFR35 with tracing on and hosted latency.
 
 | Limitation | Intended next step |
 |---|---|

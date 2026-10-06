@@ -231,6 +231,27 @@ Two further rules follow, both learned the same way:
   require `tests > 0`, `skipped == 0`, `failures == 0`, `errors == 0` — see
   `_junit_outcome` in `backend/evals/recovery_idempotency_report.py`.
 
+## Verdict keys Gate B reads
+
+Gate B (`backend/scripts/gate_b_checks.py`) does not read only `passed`. Each
+evidence-backed check names its own `verdict_key` and the value that passes:
+
+| Evidence | Verdict key | Passing value |
+|---|---|---|
+| `evidence/story-5.12/live-conversation-journeys.json` | `live_conversation_journeys` | `passed` (no release exception can satisfy it; AD-16) |
+| `evidence/story-5.13/live-golden-routing.json` | `tool_routing` | `passed`, or `excepted` with a complete, unexpired release exception |
+| `evidence/story-5.13/live-multi-turn-evaluation.json` | `live_multi_turn` | `passed`, or `excepted` with a complete, unexpired release exception |
+| `evidence/epic-5/release-gate-report.json` | `passed` (equal to `gate_b_passed`) | `true`. This is the key Gate C reads. |
+
+Gate B also requires a stored verdict to be **fresh**. A live file must be bound
+to the Gate B commit, or to an ancestor of it with no change under the
+model-facing paths. The live-conversation evidence's inventory and behavioural
+digests must match the current ones. Where a live CI test proves the same
+property, the row requires both. For example, the NFR35 row reads the four
+`test_nfr35_*` tests at the bound commit, and the regenerated NFR35 files only
+publish the numbers. A new release-blocking evidence file therefore needs a
+registered check with its verdict key, as for Gate A.
+
 ## Checklist for a new evidence-producing story
 
 1. Build and iterate freely.

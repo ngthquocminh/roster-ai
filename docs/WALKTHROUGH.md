@@ -85,7 +85,13 @@ Fourteen bound evidence artifacts exist. Each was generated through `backend/scr
 - [State semantics and accessibility](../evidence/story-4.6/state-semantics-and-accessibility.json)
 - [Content minimization report](../evidence/story-5.2/content-minimization-report.json)
 
-Gate B's checklist is in [`epics.md`](../_bmad-output/planning-artifacts/epics.md). The aggregate release report is specified as `evidence/epic-5/release-gate-report.json`, but it is an Evaluation/QA-owner step after this story: the dataset currently has 30 cases against its 50-case floor, which requires recorded owner rationale rather than a fabricated report. **Gate B has not passed.**
+Gate B's checklist is in [`epics.md`](../_bmad-output/planning-artifacts/epics.md). Story 5.13 assessed it and wrote the [release report](../evidence/epic-5/release-gate-report.json). **Gate B has passed**, with all seven rows passing at one bound commit.
+
+- **Golden dataset:** 45 versioned cases (39 single-turn, 6 multi-turn), with at least 4 per allowed capability and 10 consequential/prohibited.
+- **Live tool routing:** 100% in each of three passes on the configured model ([evidence](../evidence/story-5.13/live-golden-routing.json)).
+- **NFR35:** re-measured, and every threshold is met.
+
+The original 50-case floor is now a ratchet at the actual count. The recorded rationale: the stories it assumed would add cases (3.10–3.12, 4.5) prove invariants that no model can reach, as PostgreSQL proof nodes. The report's `honest_gaps` name what Gate B does not cover.
 
 ## Limitations
 

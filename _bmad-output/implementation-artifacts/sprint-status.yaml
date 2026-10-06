@@ -2749,7 +2749,11 @@ development_status:
   # baseline tool and draft+promotion in one turn (D6); live routing 3 runs each >=90%/100% (D9);
   # multi-turn re-measured on luna with spend measured (D3). Smokes pre-approved; recorded runs
   # need Minh's go-ahead (D10). Measured: inventory digest 8baa0281 still matches 5.12 evidence.
-  5-13-assess-gate-b: in-progress
+  # 2026-10-06: Gate B ASSESSED AND PASSED (evidence/epic-5/release-gate-report.json, code 1b46f24,
+  # evidence b6bc0c5): all seven rows passed, no exceptions. Live routing 3x 100%/100% (luna),
+  # multi-turn 3x 6/6, NFR35 re-measured, dataset 45/45. Story to review; epic-5 moves to done
+  # when 5.13 passes code review.
+  5-13-assess-gate-b: review
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog
@@ -3180,7 +3184,9 @@ action_items:
   - epic: "5"
     action: "Story 'Assess Gate B': build a gate_b_checks.py aggregator mirroring Gate A; re-measure single-turn live routing on all 29 live-eligible golden cases; settle the dataset floor per the epics.md caveat (add a case only where it tests behaviour no case covers yet, otherwise lower the threshold with a recorded rationale -- never pad); decide whether the August NFR35 evidence stands or is re-measured; emit evidence/epic-5/release-gate-report.json through evidence_binding.py; correct '30 cases' in README.md and docs/WALKTHROUGH.md. The floor rationale and the NFR35 call are owner decisions settled with Minh at story creation, not at review."
     owner: "Minh"
-    status: open
+    status: done
+    # DONE 2026-10-06: evidence/epic-5/release-gate-report.json exists; Gate B assessed as PASSED
+    # (Story 5.13, code 1b46f24). Epic 6 is unblocked once 5.13 passes review.
     # Done when: the report exists and Gate B is assessed (passed, or not passed with named
     # failing rows). Blocks Epic 6.
     # 2026-10-05: added to epics.md as Story 5.13 (sprint-change-proposal-2026-10-05.md);

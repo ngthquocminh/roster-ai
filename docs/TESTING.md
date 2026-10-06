@@ -124,6 +124,66 @@ What leaves (addendum §6, channel 2): only those four text fields plus identifi
 
 Tests: `tests/test_live_eval_publication.py` (publisher subprocess against a local OTLP server), the `live_eval`/`evals` policy units in `tests/test_trace_export_boundary.py`, and the one-file/dev-pin guards in `tests/architecture/test_trace_export_boundaries.py`.
 
+## Gate B release report — Story 5.13
+
+Gate B's rows live in `_bmad-output/planning-artifacts/epics.md` § Release Gate.
+`backend/scripts/gate_b_checks.py` registers each row's proof, and
+`backend/scripts/gate_b_readiness.py` writes `evidence/epic-5/release-gate-report.json`.
+No row is decided by a stored flag alone (Story 5.13 D2). Live rows read bound
+evidence, and deterministic rows read JUnit XML from a run at the bound commit.
+
+### Recorded live measurements (paid; owner's go-ahead)
+
+Both run on the configured release model with the tracked
+`evals/live_conversations/compose.override.yml` applied. They need a clean tree,
+and they refuse a deterministic or keyless model.
+
+```bash
+cd backend
+# Tool routing: three passes over every live-eligible golden case. Each pass
+# must reach >=90% overall and 100% consequential/prohibited.
+uv run --frozen python -m evals.live_golden_routing --runs 3
+# Multi-turn readiness: three runs, every case must pass, spend measured.
+uv run --frozen python -m evals.live_multi_turn --runs 3
+```
+
+They write `evidence/story-5.13/live-golden-routing.json` (verdict key
+`tool_routing`) and `evidence/story-5.13/live-multi-turn-evaluation.json`
+(`live_multi_turn`). The routing report keeps no prompt, argument or reply text.
+To see why a case failed, re-run it locally and read the reply. Never loosen an
+evaluator.
+
+### Producing the report
+
+Every input comes from one clean code commit. Writing evidence dirties the tree,
+so run the suites first, then generate:
+
+```bash
+git status --porcelain                                    # must be empty
+cd backend
+uv run --frozen pytest -m postgres -s -q --junitxml=$OUT/postgres.xml | tee $OUT/postgres.log
+uv run --frozen pytest -q --junitxml=$OUT/pytest.xml
+cd ../frontend                                            # needs frontend/.env (copy .env.example)
+npm run build
+npx vitest run --reporter=junit --outputFile=$OUT/vitest.xml
+PLAYWRIGHT_JUNIT_OUTPUT_NAME=$OUT/playwright.xml npx playwright test --reporter=junit
+cd ../backend
+uv run --frozen python scripts/gate_b_readiness.py --pytest-xml $OUT/pytest.xml \
+  --postgres-xml $OUT/postgres.xml --vitest-xml $OUT/vitest.xml \
+  --playwright-xml $OUT/playwright.xml
+```
+
+- **NFR35.** The NFR35 row's verdict is the four `test_nfr35_*_threshold` tests in
+  `postgres.xml`. The four NFR35 evidence files publish the numbers. Regenerate them
+  from `postgres.log` with `scripts/regenerate_evidence.py` (keep only its 1.4/1.5
+  output), `scripts/generate_sse_replay_evidence.py` and
+  `scripts/generate_run_event_latency_evidence.py`. Run each on a clean tree, and
+  restore the tree between them.
+- **Browsers.** Playwright needs both `chromium` and `msedge`; Gate A's imported
+  browser checks require both.
+- **Exit code.** A not-passed report is still a valid result. The script exits
+  non-zero, and the report names each failing row.
+
 ## Backend (pytest)
 
 **Runner:** `pytest`, configured in `backend/pyproject.toml`.
@@ -161,7 +221,8 @@ this marker. To run them:
 
 ```bash
 cd backend
-uv run pytest -m live          # requires GEMINI_API_KEY and/or OPENROUTER_API_KEY
+uv run pytest -m live          # provider tests need GEMINI_API_KEY / OPENROUTER_API_KEY;
+                               # the golden live tests need AGENT_RUNTIME_MODEL and AGENT_RUNTIME_API_KEY
 ```
 
 `backend/conftest.py` surfaces only `GEMINI_API_KEY` / `OPENROUTER_API_KEY`

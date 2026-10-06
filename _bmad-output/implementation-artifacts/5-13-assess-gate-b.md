@@ -5,7 +5,7 @@ depends_on: 5-12-prove-the-draft-lifecycle-in-live-conversations (done)
 blocks: epic-6 (Gate C builds on Gate B's report)
 ---
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -369,27 +369,27 @@ Phases are ordered. Do not start a phase until the previous phase's exit conditi
 
 ### Phase C — recorded measurement (paid; Minh's go-ahead required)
 
-- [ ] **Task 9 — STOP: ask Minh, then measure the live rows** (AC2, D3, D9, D10)
-  - [ ] Get one approval covering 3 single-turn passes and 3 multi-turn runs, with the Task 8 estimate.
-  - [ ] Clean tree. Run the passes, generate `evidence/story-5.13/live-golden-routing.json` and `…/live-multi-turn-evaluation.json`, and commit the evidence separately.
+- [x] **Task 9 — STOP: ask Minh, then measure the live rows** (AC2, D3, D9, D10)
+  - [x] Get one approval covering 3 single-turn passes and 3 multi-turn runs, with the Task 8 estimate.
+  - [x] Clean tree. Run the passes, generate `evidence/story-5.13/live-golden-routing.json` and `…/live-multi-turn-evaluation.json`, and commit the evidence separately.
 
-- [ ] **Task 10 — NFR35 re-measurement** (AC4; per D7; F12)
-  - [ ] Clean tree, Docker PostgreSQL 18. Run `pytest -m postgres -s` once with `--junitxml`, keeping the XML for Task 11. Then run the three regeneration scripts and commit the four regenerated files separately.
-  - [ ] Add the tracing-on ledger entry (D7).
+- [x] **Task 10 — NFR35 re-measurement** (AC4; per D7; F12)
+  - [x] Clean tree, Docker PostgreSQL 18. Run `pytest -m postgres -s` once with `--junitxml`, keeping the XML for Task 11. Then run the three regeneration scripts and commit the four regenerated files separately.
+  - [x] Add the tracing-on ledger entry (D7).
 
-- [ ] **Task 11 — Emit the Gate B report** (AC5; per D14)
-  - [ ] Produce JUnit XML at the Gate B code commit: default pytest, `-m postgres` (Task 10's), Vitest and Playwright. Run `gate_b_readiness.py`.
-  - [ ] Commit `evidence/epic-5/release-gate-report.json` separately. If Gate B did not pass, the report names every failing row, and the story still completes (AC5). Raise any routing to correct-course with Minh.
+- [x] **Task 11 — Emit the Gate B report** (AC5; per D14)
+  - [x] Produce JUnit XML at the Gate B code commit: default pytest, `-m postgres` (Task 10's), Vitest and Playwright. Run `gate_b_readiness.py`.
+  - [x] Commit `evidence/epic-5/release-gate-report.json` separately. If Gate B did not pass, the report names every failing row, and the story still completes (AC5). Raise any routing to correct-course with Minh.
 
-- [ ] **Task 12 — Docs and tracking** (AC6)
-  - [ ] Update `README.md` (Current limitations, about line 161) and `docs/WALKTHROUGH.md` (about line 88) with the actual counts and the outcome, linking the report.
-  - [ ] In `docs/TESTING.md`, add the new generator commands, the Gate B command, and replace the stale "requires GEMINI_API_KEY and/or OPENROUTER_API_KEY" note (about line 164).
-  - [ ] In `docs/EVIDENCE-CONVENTION.md`, add a short "verdict keys Gate B reads" note beside the Gate A section.
-  - [ ] `deferred-work.md` updates:
+- [x] **Task 12 — Docs and tracking** (AC6)
+  - [x] Update `README.md` (Current limitations, about line 161) and `docs/WALKTHROUGH.md` (about line 88) with the actual counts and the outcome, linking the report.
+  - [x] In `docs/TESTING.md`, add the new generator commands, the Gate B command, and replace the stale "requires GEMINI_API_KEY and/or OPENROUTER_API_KEY" note (about line 164).
+  - [x] In `docs/EVIDENCE-CONVENTION.md`, add a short "verdict keys Gate B reads" note beside the Gate A section.
+  - [x] `deferred-work.md` updates:
     - Close the "live-model evaluation path is declared and entirely unimplemented" and "NFR28's ≥90%… describes the dataset, not the model" entries, citing D8/D9.
     - Re-route `grounding-supported` (D11).
     - Add a revisit trigger to every new deferral (team agreement 3).
-  - [ ] In `sprint-status.yaml`, mark retro action 1 done when the report lands. `epic-5` moves to `done` only if Gate B passed.
+  - [x] In `sprint-status.yaml`, mark retro action 1 done when the report lands. `epic-5` moves to `done` only if Gate B passed.
 
 ## Dev Notes
 
@@ -530,6 +530,29 @@ Claude Code (bmad-dev-story), cloud sandbox, 2026-10-05.
       - `test_every_live_baseline_request_case_snapshots_the_run_it_promotes` (M2: snapshot removed from one case).
   - **Validation:** 5 live runs of each of the four cases gave 20/20 with the expected calls.
 
+- **Task 9, recorded attempt 2 (code `e8cb369`, clean tree): PASSED.**
+  - Single-turn: `tool_routing: passed`. All three passes scored **100% overall and 100% protected**, for $0.0303.
+  - Multi-turn: `live_multi_turn: passed`. Three runs, 6/6 cases each, spend measured, $0.0718.
+  - Both are evidence-only commit `142a007`. To keep the multi-turn run on a clean tree, the routing file was set aside during it.
+  - **Total live spend in this story:** smoke and diagnostics about $0.07, blocked attempt $0.030, recorded runs $0.102. That is about **$0.20**, inside D10's $0.25. The recorded runs alone came to $0.13 against the $0.11 estimate, because the routing measurement ran twice.
+- **Task 10/11 found three issues on the way to one bound commit.** Each was fixed at its source, never by editing evidence.
+  - (a) `regenerate_evidence.py` carried 1.4/1.5's `environment` block forward verbatim, so numbers re-measured on Linux read "Windows / Python 3.10.9". The 2.4/3.5 generators also hard-coded "Docker Desktop". Fixed in `bd929c5`: `apply_fresh_measurements()` re-reads the platform. Guard `test_fresh_nfr35_measurements_carry_this_machines_platform`, mutation-checked.
+  - (b) The first real report was blocked by `pytest_case_coverage`. `declared_pytest_cases` counted `test_evaluation_harness.py`'s two `@pytest.mark.live` tests as missing, though `-m "not live"` deselects them by design. Fixed in `1b46f24`: live-marked functions and classes are not expected. Guard `test_a_live_marked_test_is_not_expected_in_the_default_run`, mutation-checked. Gate A is unaffected, because no Gate A file has a live test. The Phase A tests used synthetic XML, which is why this was not caught earlier.
+  - (c) Sandbox environment only, with no repo change:
+    - The detached worktree had no `frontend/.env`, which is git-ignored, so the build threw `VITE_API_BASE_URL is not set`. The fix was to copy `.env.example`.
+    - The repo's Playwright 1.62.1 expects headless-shell build 1234, so the expected path was linked to the preinstalled 1194 shell.
+    - Microsoft Edge 154 was installed from packages.microsoft.com for the `msedge` project.
+    - The first Playwright run showed 31 failures and 48 errors, all from these causes. The rerun was 80/80.
+  - `regenerate_evidence.py` also rewrites the bindings of 1.9 and 1.10 without re-measuring them. Only its 1.4/1.5 output was kept, because relabelling un-re-run results with a new commit would misstate them.
+- **Gate B measurement (code `1b46f24`, detached worktree, clean tree throughout):**
+  - Inputs: `-m postgres -s` 208 passed; default pytest **2969 passed, 1 skipped** (the known `tasks` projection skip, inside CI's ceiling of 1); Vitest **813/813**; Playwright **80/80** (chromium and msedge).
+  - NFR35 regenerated with tracing off (D7). Maximums: group-window 39.6 ms, evidence target 59.3 ms, SSE replay 209.4 ms, first run event 18.1 ms. (Commit `b6bc0c5`'s message quotes the `bd929c5` run's numbers by mistake; the committed files hold these.)
+  - `gate_b_readiness.py --code-from …story-1.4…` returned **`gate_b_passed: true`**:
+    - all seven rows passed;
+    - `blocking: []`, no release exceptions, no binding override;
+    - dataset 39 + 6 = 45 against `GOLDEN_CASE_FLOOR` 45; per-capability shortfalls none; protected 10; tag-integrity violations 0.
+  - Evidence commit `b6bc0c5`.
+
 ### Implementation Plan (Phase A)
 
 - `evals/release_configuration.py` (NEW) derives D5's allowed set from `Settings` field **defaults**: policy name = settings field. It also reads the tracked compose override (environment, prices). The generators apply the override, skipping `TELEMETRY_ONLY_KEYS`, before building settings.
@@ -597,6 +620,22 @@ Each mutation was applied to finished product code, the named guard was run, and
 No guard was found that cannot be mutated.
 
 ### Completion Notes List
+- **Gate B assessed: PASSED** (`evidence/epic-5/release-gate-report.json`, code `1b46f24`). AC1–AC6 are met:
+  - AC1: registry, readiness test and loud failures.
+  - AC2: live routing three times at 100%/100%, with Minh's go-ahead.
+  - AC3: ratchet floor 45, per-capability by exemption, protected by two new cases.
+  - AC4: re-measured; the verdict comes from CI tests.
+  - AC5: report generated and committed separately, no exceptions.
+  - AC6: README and WALKTHROUGH updated.
+- Owner decision added at Task 9 (Minh, 2026-10-06): `scheduling-baseline-invalid-run-identifier` is deterministic-only live. The live protected population is 9, and the deterministic protected floor is 10.
+- Root-cause fixes beyond Phase A:
+  - the golden harness now sends the workflow snapshot production sends (`e8cb369`);
+  - NFR35 re-measurement records the measuring machine (`bd929c5`);
+  - live-marked tests are not expected in the default run (`1b46f24`).
+- Ledger:
+  - two NFR28 entries closed (D8/D9);
+  - `grounding-supported` re-routed (D11);
+  - two new deferrals with triggers: NFR35 with tracing on, and the 1.4/1.5 client-side clock.
 
 - Story created with the ultimate context engine analysis: a comprehensive developer guide. Owner decisions D3–D10 were settled with Minh on 2026-10-05.
 - **Phase A (Tasks 0–7) complete.** It adds two D6 golden cases, the live single-turn routing generator, the recorded multi-turn generator, and the Gate B registry, readiness builder and tests. It also carries the D4–D6 wording in epics.md (NFR28 line, the Golden dataset size and Tool routing rows, the caveat), prd.md §7 and the assumptions list, requirements-inventory.md NFR28, and evals/README.md. One rationale sentence is used verbatim everywhere.
@@ -604,6 +643,16 @@ No guard was found that cannot be mutated.
 - Live-eligible population: 31 cases (29 counted plus 2 `demonstration`, informational).
 
 ### File List
+- `backend/application/use_cases/conversation_workflow_context.py` (Task 9: `workflow_context_message`)
+- `backend/evals/cases.py` (Task 9: `workflow_snapshot`)
+- `backend/evals/golden/scheduling_baseline/{approval-required,expected-baseline-pinned,approval-bypass-real-tool,draft-and-promotion-same-turn,invalid-run-identifier}.json` (Task 9)
+- `backend/scripts/regenerate_evidence.py`, `backend/scripts/generate_sse_replay_evidence.py`, `backend/scripts/generate_run_event_latency_evidence.py` (Task 10)
+- `backend/scripts/junit_ingest.py` (Task 11)
+- `backend/tests/test_evidence_binding.py` (Task 10)
+- `evidence/story-5.13/live-golden-routing.json`, `evidence/story-5.13/live-multi-turn-evaluation.json` (NEW, generated)
+- `evidence/story-1.4/…`, `story-1.5/…`, `story-2.4/…`, `story-3.5/…` NFR35 files (regenerated)
+- `evidence/epic-5/release-gate-report.json` (NEW, generated)
+- `README.md`, `docs/WALKTHROUGH.md`, `docs/TESTING.md`, `docs/EVIDENCE-CONVENTION.md` (Task 12)
 
 - `backend/evals/golden/scheduling_baseline/approval-bypass-real-tool.json` (NEW)
 - `backend/evals/golden/scheduling_baseline/draft-and-promotion-same-turn.json` (NEW)
@@ -633,3 +682,5 @@ No guard was found that cannot be mutated.
 - 2026-10-05: Story created (bmad-create-story). Status: ready-for-dev.
 - 2026-10-05: Phase A (Tasks 0–7) implemented. Status: in-progress.
 - 2026-10-05: Task 8 smoke runs. Fixed four root causes in the eval double and 17 golden cases. One owner decision is open (invalid-run-identifier live expectation).
+- 2026-10-06: Task 9: Minh's go-ahead and the nil-UUID decision. Attempt 1 was blocked, and the root cause (missing workflow snapshot) was fixed. Attempt 2 passed.
+- 2026-10-06: Tasks 10–12: NFR35 re-measured, Gate B report emitted (**passed**), docs and ledger updated. Status: review.
