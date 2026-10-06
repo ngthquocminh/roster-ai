@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import re
 import sys
 from datetime import date
@@ -135,6 +136,16 @@ def baseline_commit_for(relative: str, repo_root: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def measurement_platform() -> dict[str, str]:
+    """The platform fields an NFR35 environment block records, read live."""
+    return {
+        "operating_system": platform.platform(),
+        "processor": platform.processor(),
+        "python": platform.python_version(),
+        "database": "PostgreSQL 18 in Docker",
+    }
+
+
 def parse_measurements(log_text: str, relative: str) -> list[Any] | None:
     """Pull one story's NFR35 measurements out of a captured pytest run."""
     marker = _MEASUREMENT_MARKERS.get(relative)
@@ -144,6 +155,34 @@ def parse_measurements(log_text: str, relative: str) -> list[Any] | None:
     if match is None:
         return None
     return json.loads(match.group(1))
+
+
+def apply_fresh_measurements(
+    document: dict[str, Any], relative: str, log_text: str
+) -> list[str]:
+    """Replace one file's NFR35 numbers from a captured run. Returns notes.
+
+    Fresh numbers describe THIS machine, so the environment block's platform is
+    re-read with them. Carrying the old platform forward would label them with
+    the one they replaced (Story 5.13 found 1.4/1.5 re-measured on Linux still
+    reading Windows).
+    """
+    notes: list[str] = []
+    fresh = parse_measurements(log_text, relative)
+    if not fresh:
+        return notes
+    document["measurements"] = fresh
+    durations = [
+        m["duration_ms"] for m in fresh if isinstance(m, dict) and "duration_ms" in m
+    ]
+    if durations:
+        document["maximum_duration_ms"] = max(durations)
+    notes.append(f"{len(fresh)} measurements re-read from the run")
+    environment = document.get("environment")
+    if isinstance(environment, dict):
+        environment.update(measurement_platform())
+        notes.append("environment platform re-read from this machine")
+    return notes
 
 
 def regenerate(
@@ -194,16 +233,7 @@ def regenerate(
             entry.append("code_versions realigned with version_bindings.code")
 
         if measurements_log:
-            fresh = parse_measurements(measurements_log, relative)
-            if fresh:
-                document["measurements"] = fresh
-                durations = [
-                    m["duration_ms"] for m in fresh if isinstance(m, dict)
-                    and "duration_ms" in m
-                ]
-                if durations:
-                    document["maximum_duration_ms"] = max(durations)
-                entry.append(f"{len(fresh)} measurements re-read from the run")
+            entry.extend(apply_fresh_measurements(document, relative, measurements_log))
 
         staging = path.with_suffix(path.suffix + ".tmp")
         staging.write_text(

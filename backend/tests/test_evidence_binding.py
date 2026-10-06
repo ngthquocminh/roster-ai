@@ -755,3 +755,29 @@ def test_code_that_changed_between_the_two_commits_is_never_papered_over(tmp_pat
     with pytest.raises(ValueError, match="code changed between"):
         nearest_code_commit(tmp_path, new)
     assert old != new
+
+
+def test_fresh_nfr35_measurements_carry_this_machines_platform() -> None:
+    """Re-measured numbers describe the machine that measured them. Story 5.13
+    found 1.4/1.5 re-measured on Linux still labelled Windows, because the
+    environment block was carried forward verbatim. Mutation: drop the
+    `environment.update(...)` and the stale platform survives."""
+    from scripts.regenerate_evidence import apply_fresh_measurements, measurement_platform
+
+    document = {
+        "measurements": [{"run": 1, "duration_ms": 900.0}],
+        "maximum_duration_ms": 900.0,
+        "environment": {"description": "kept", "operating_system": "Stale OS 1.0",
+                        "python": "3.10.9", "processor": "old", "database": "old"},
+    }
+    log = 'x.... NFR35_MEASUREMENTS=[{"run": 1, "duration_ms": 12.5}]\n'
+    notes = apply_fresh_measurements(
+        document, "evidence/story-1.4/nfr35-scenario-data-load.json", log)
+    assert document["maximum_duration_ms"] == 12.5
+    assert document["environment"] == {"description": "kept", **measurement_platform()}
+    assert len(notes) == 2
+
+    untouched = {"environment": {"operating_system": "Stale OS 1.0"}}
+    assert apply_fresh_measurements(
+        untouched, "evidence/story-1.4/nfr35-scenario-data-load.json", "no marker") == []
+    assert untouched["environment"]["operating_system"] == "Stale OS 1.0"
