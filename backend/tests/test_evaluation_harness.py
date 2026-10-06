@@ -1280,6 +1280,9 @@ def test_every_golden_case_field_is_read_by_evaluation_or_reporting() -> None:
             eval_root / "evaluators.py",
             eval_root / "grounding.py",
             eval_root / "report.py",
+            # `live_forbidden_claims` is live-only and read here; that it changes
+            # a verdict is proven in test_live_golden_routing.py.
+            eval_root / "live_golden_routing.py",
         )
     )
     unread = {

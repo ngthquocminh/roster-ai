@@ -78,12 +78,22 @@ def override_environment(
     environ: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """The override's `environment` for `service`, substitutions resolved."""
+    source = os.environ if environ is None else environ
+    return {
+        key: resolve_compose_value(value, source)
+        for key, value in _override_block(override_file, service).items()
+    }
+
+
+def _override_block(override_file: Path = OVERRIDE_FILE, service: str = "api") -> dict[str, str]:
+    """The override's raw `environment` mapping for `service`, unsubstituted."""
     import yaml  # dev-group, test-only -- see backend/pyproject.toml
 
     document = yaml.safe_load(Path(override_file).read_text(encoding="utf-8")) or {}
     block = ((document.get("services") or {}).get(service) or {}).get("environment") or {}
-    source = os.environ if environ is None else environ
-    return {key: resolve_compose_value(str(value), source) for key, value in block.items()}
+    if not isinstance(block, dict):
+        raise ValueError(f"{override_file}: services.{service}.environment must be a mapping")
+    return {str(key): str(value) for key, value in block.items()}
 
 
 @dataclass(frozen=True)
@@ -116,11 +126,14 @@ def override_price_rates(override_file: Path = OVERRIDE_FILE) -> PriceRatesV1:
 
 
 def apply_override_environment(override_file: Path = OVERRIDE_FILE) -> dict[str, str]:
-    """Export the override's `api` environment into this process.
+    """Export the override's `api` environment into this process, as compose would.
 
-    An explicitly exported variable wins, exactly as compose's own `${VAR:-x}`
-    would let it; a key the operator did not export takes the override's value.
-    Returns what was applied so the caller can record it.
+    Compose applies a literal value unconditionally; only a `${VAR:-x}` value
+    lets a non-empty exported variable win (and replaces an empty one with the
+    default). Letting every export win, as this once did, ran a configuration
+    other than the `override_sha256` the evidence records (Story 5.13 review).
+    Returns every key applied; `replaced_exports` lists the ones whose exported
+    value the override replaced, so the caller can record them.
 
     The telemetry-only keys (`configuration.TELEMETRY_ONLY_KEYS`) are skipped:
     they change what a trace exporter or the tier-1 shadow scorer receives,
@@ -129,19 +142,35 @@ def apply_override_environment(override_file: Path = OVERRIDE_FILE) -> dict[str,
     from evals.live_conversations.configuration import TELEMETRY_ONLY_KEYS
 
     applied: dict[str, str] = {}
-    for key, value in override_environment(override_file).items():
+    for key, raw in _override_block(override_file).items():
         if key in TELEMETRY_ONLY_KEYS:
             continue
-        if key not in os.environ:
-            os.environ[key] = value
-            applied[key] = value
+        value = resolve_compose_value(raw, os.environ)
+        os.environ[key] = value
+        applied[key] = value
     return applied
+
+
+def replaced_exports(
+    override_file: Path = OVERRIDE_FILE, environ: Mapping[str, str] | None = None
+) -> list[str]:
+    """Keys an exported value has that applying the override would replace."""
+    from evals.live_conversations.configuration import TELEMETRY_ONLY_KEYS
+
+    source = os.environ if environ is None else environ
+    return sorted(
+        key for key, raw in _override_block(override_file).items()
+        if key not in TELEMETRY_ONLY_KEYS
+        and key in source
+        and source[key] != resolve_compose_value(raw, source)
+    )
 
 
 __all__ = [
     "OVERRIDE_FILE",
     "PriceRatesV1",
     "apply_override_environment",
+    "replaced_exports",
     "override_environment",
     "override_price_rates",
     "release_allowed_capabilities",

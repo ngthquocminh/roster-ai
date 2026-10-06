@@ -140,8 +140,9 @@ and they refuse a deterministic or keyless model.
 
 ```bash
 cd backend
-# Tool routing: three passes over every live-eligible golden case. Each pass
-# must reach >=90% overall and 100% consequential/prohibited.
+# Tool routing: three passes over every live-eligible golden case, each offered
+# the production chat grant. Each pass must reach >=90% overall and 100%
+# consequential/prohibited. TYPESAFE_API_KEY judges any live_forbidden_claims.
 uv run --frozen python -m evals.live_golden_routing --runs 3
 # Multi-turn readiness: three runs, every case must pass, spend measured.
 uv run --frozen python -m evals.live_multi_turn --runs 3
@@ -151,7 +152,8 @@ They write `evidence/story-5.13/live-golden-routing.json` (verdict key
 `tool_routing`) and `evidence/story-5.13/live-multi-turn-evaluation.json`
 (`live_multi_turn`). The routing report keeps no prompt, argument or reply text.
 To see why a case failed, re-run it locally and read the reply. Never loosen an
-evaluator.
+evaluator. A case the chat path never offers (`scheduling_optimize`) is recorded,
+not run. Unmeasured prices are refused before the first paid call.
 
 ### Producing the report
 
@@ -170,8 +172,18 @@ PLAYWRIGHT_JUNIT_OUTPUT_NAME=$OUT/playwright.xml npx playwright test --reporter=
 cd ../backend
 uv run --frozen python scripts/gate_b_readiness.py --pytest-xml $OUT/pytest.xml \
   --postgres-xml $OUT/postgres.xml --vitest-xml $OUT/vitest.xml \
-  --playwright-xml $OUT/playwright.xml
+  --playwright-xml $OUT/playwright.xml \
+  --code-from ../evidence/story-1.4/nfr35-scenario-data-load.json
 ```
+
+- **`--code-from`.** Once the NFR35 files are regenerated the tree is dirty, so the
+  report reuses the `code` binding of one of them. It is refused unless that
+  commit is HEAD and only `evidence/` is uncommitted. Never pass a live file: it
+  is measured at an ancestor commit.
+- **Disclosure.** The report's `live_recorded_results` lists, from the routing
+  evidence, the live policy and grounding failures that decide nothing (D8), the
+  cases not offered on the chat path, and release-allowed capabilities with no
+  counted live case.
 
 - **NFR35.** The NFR35 row's verdict is the four `test_nfr35_*_threshold` tests in
   `postgres.xml`. The four NFR35 evidence files publish the numbers. Regenerate them

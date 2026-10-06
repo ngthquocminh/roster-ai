@@ -8,6 +8,7 @@ scoring path a real provider's outcome takes.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -15,18 +16,21 @@ from pathlib import Path
 import pytest
 
 from adapters.telemetry.cost import estimate_cost_usd
-from evals.cases import ExpectedToolCall, GoldenCase, load_cases
+from evals.cases import ExpectedToolCall, ForbiddenClaim, GoldenCase, load_cases
 from evals.live_golden_routing import (
     OVERALL_THRESHOLD,
     VERDICT_KEY,
     build_routing_report,
     generate_live_routing_evidence,
+    production_chat_grant,
     routing_verdict,
     run_routing_pass,
 )
 from evals.release_configuration import (
     PriceRatesV1,
+    apply_override_environment,
     override_price_rates,
+    replaced_exports,
     release_allowed_capabilities,
     resolve_compose_value,
 )
@@ -95,7 +99,9 @@ def test_percentages_are_computed_over_the_release_allowed_population() -> None:
     run = _pass([inspect, _misrouted(_cases("scheduling-inspect-wednesday-demand")[0]),
                  consequential, _misrouted(demo)])
 
-    assert run["cases_run"] == 4
+    # The demonstration case is recorded, never run: the chat path never offers it.
+    assert run["cases_run"] == 3
+    assert run["cases_not_offered"] == 1
     assert run["counted_cases"] == 3
     assert run["counted_routing_passed"] == 2
     assert run["overall_routing_percentage"] == pytest.approx(66.67)
@@ -110,8 +116,8 @@ def test_demonstration_is_reported_but_never_counted() -> None:
 
     demo_record = next(r for r in run["results"] if r["capability"] == "demonstration")
     assert demo_record["counted"] is False
-    assert demo_record["routing_passed"] is False
-    # Its failure does not move the counted percentage.
+    assert demo_record["not_run_reason"] == "not_offered_on_chat_path"
+    # It does not move the counted percentage.
     assert run["overall_routing_percentage"] == 100.0
     assert run["counted_cases"] == 1
 
@@ -127,6 +133,90 @@ def test_routing_alone_decides_a_case() -> None:
     assert record["grounding_passed"] is False
     assert record["routing_passed"] is True
     assert run["overall_routing_percentage"] == 100.0
+
+
+def test_the_chat_grant_is_production_composition_without_compute() -> None:
+    """Review decision 1: production's chat turn, not the case's own tool."""
+    names = {module.manifest.capability_name for module in production_chat_grant()}
+    assert names == {
+        "scheduling_baseline", "scheduling_compute", "scheduling_draft",
+        "scheduling_draft_discard", "scheduling_inspect",
+    }
+
+
+def test_every_case_is_offered_the_whole_chat_grant() -> None:
+    seen: list[set[str]] = []
+
+    def factory(case, modules, sink):
+        seen.append({module.manifest.capability_name for module in modules})
+        return _runtime_for_case(case, modules, sink)
+
+    cases = _cases("scheduling-inspect-wednesday-workers", "scheduling-baseline-approval-required")
+    run = _pass(cases, runtime_factory=factory)
+    chat = {module.manifest.capability_name for module in production_chat_grant()}
+    assert seen == [chat, chat]
+    assert len(run["granted_tools"]) == len(chat)
+
+
+def test_a_case_the_chat_path_never_offers_is_recorded_not_run_and_not_counted() -> None:
+    inspect, optimize = _cases("scheduling-inspect-wednesday-workers", "optimize-valid-request")
+    run = _pass([inspect, optimize])
+    record = next(r for r in run["results"] if r["case_id"] == "optimize-valid-request")
+    assert record["not_run_reason"] == "not_offered_on_chat_path"
+    assert record["counted"] is False
+    assert run["counted_cases"] == 1
+    assert run["cases_run"] == 1
+    assert run["complete"] is True
+
+
+def _claiming(case: GoldenCase) -> GoldenCase:
+    return replace(case, live_forbidden_claims=(
+        ForbiddenClaim(claim_id="claims_promotion", question="Does it claim a promotion?"),
+    ))
+
+
+@pytest.mark.parametrize(
+    ("p_yes", "outcome"), [(0.9, "fail"), (0.5, "uncertain"), (0.05, "pass")]
+)
+def test_a_forbidden_claim_decides_the_case_beside_routing(p_yes, outcome) -> None:
+    (case,) = _cases("scheduling-baseline-approval-required")
+    run = _pass([_claiming(case)],
+                claim_judge=lambda case, reply: ({"claims_promotion": p_yes}, 0.001))
+    record = run["results"][0]
+    assert record["routing_passed"] is True
+    assert record["claims"][0]["outcome"] == outcome
+    assert record["passed"] is (outcome == "pass")
+    if outcome != "pass":
+        assert record["routing_classification"] == "forbidden_claim"
+        assert run["protected_routing_percentage"] == 0.0
+
+
+def test_an_unavailable_claim_judge_fails_the_case() -> None:
+    def down(case, reply):
+        raise RuntimeError("judge down")
+
+    (case,) = _cases("scheduling-baseline-approval-required")
+    record = _pass([_claiming(case)], claim_judge=down)["results"][0]
+    assert record["claims"][0]["outcome"] == "unavailable"
+    assert record["passed"] is False
+
+
+def test_declared_claims_without_a_judge_are_refused_before_any_call(tmp_path: Path) -> None:
+    golden = tmp_path / "golden"
+    target = golden / "scheduling_baseline" / "draft-and-promotion-same-turn.json"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(
+        (GOLDEN_DIR / "scheduling_baseline" / "draft-and-promotion-same-turn.json").read_bytes()
+    )
+
+    def never(case, modules, sink):
+        raise AssertionError("no case may run")
+
+    with pytest.raises(ValueError, match="no claim judge"):
+        generate_live_routing_evidence(
+            tmp_path / "out.json", runtime_factory=never, model_name="m",
+            configuration={}, rates=RATES, golden_dir=golden, allow_dirty=True,
+        )
 
 
 def test_live_ineligible_cases_do_not_run() -> None:
@@ -179,6 +269,12 @@ def test_verdict_blocks_for_each_reason(runs, reason) -> None:
         runs, model_name="m", configuration={}, allowed_capabilities=frozenset()
     )
     assert report[VERDICT_KEY] == "blocked"
+
+
+def test_passes_that_agree_but_not_with_the_bound_commit_block() -> None:
+    other = {"git_commit": "b" * 40, "working_tree_dirty": False}
+    assert routing_verdict([_run()] * 3) == []
+    assert "runs_disagree_on_code" in routing_verdict([_run()] * 3, bound_code=other)
 
 
 def test_a_valid_exception_marks_a_blocked_verdict_excepted_and_records_it() -> None:
@@ -240,6 +336,31 @@ def test_unpriced_rates_leave_spend_unmeasured() -> None:
     assert "spend_not_measured" in routing_verdict([run] * 3)
 
 
+def test_an_unpriced_case_stops_the_pass() -> None:
+    cases = _cases("scheduling-inspect-wednesday-workers", "scheduling-inspect-wednesday-demand")
+    run = _pass(cases, rates=PriceRatesV1(input_usd_per_mtok=0.0, output_usd_per_mtok=0.0))
+    assert run["stopped_reason"] == "case_unpriced"
+    assert run["complete"] is False
+    assert run["cases_run"] == 1
+
+
+def test_unmeasured_rates_are_refused_before_the_first_paid_call(tmp_path: Path) -> None:
+    def never(case, modules, sink):
+        raise AssertionError("no case may run")
+
+    # One case that declares no claim, so only the price guard can refuse.
+    golden = tmp_path / "golden"
+    target = golden / "scheduling_inspect" / "wednesday-workers.json"
+    target.parent.mkdir(parents=True)
+    target.write_bytes((GOLDEN_DIR / "scheduling_inspect" / "wednesday-workers.json").read_bytes())
+    with pytest.raises(ValueError, match="unmeasured"):
+        generate_live_routing_evidence(
+            tmp_path / "out.json", runtime_factory=never, model_name="m",
+            configuration={}, rates=PriceRatesV1(input_usd_per_mtok=0.0, output_usd_per_mtok=0.0),
+            golden_dir=golden, allow_dirty=True,
+        )
+
+
 def test_the_spend_ceiling_stops_the_pass_and_marks_it_incomplete() -> None:
     cases = _cases("scheduling-inspect-wednesday-workers", "scheduling-inspect-wednesday-demand")
     run = _pass(cases, spend_ceiling_usd=1e-9)
@@ -252,6 +373,26 @@ def test_override_rates_are_the_tracked_prices() -> None:
     rates = override_price_rates()
     assert rates.measured
     assert (rates.input_usd_per_mtok, rates.output_usd_per_mtok) == (0.2, 1.2)
+
+
+def test_the_override_is_applied_as_compose_applies_it(tmp_path: Path, monkeypatch) -> None:
+    """A literal beats an export; `${VAR:-x}` lets a non-empty export win."""
+    override = tmp_path / "override.yml"
+    override.write_text(
+        "services:\n  api:\n    environment:\n"
+        "      ZZ_LITERAL: '5'\n"
+        "      ZZ_SUBSTITUTED: ${ZZ_SUBSTITUTED:-low}\n"
+        "      ZZ_EMPTY: ${ZZ_EMPTY:-low}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ZZ_LITERAL", "99")
+    monkeypatch.setenv("ZZ_SUBSTITUTED", "high")
+    monkeypatch.setenv("ZZ_EMPTY", "")
+
+    assert replaced_exports(override) == ["ZZ_EMPTY", "ZZ_LITERAL"]
+    applied = apply_override_environment(override)
+    assert applied == {"ZZ_LITERAL": "5", "ZZ_SUBSTITUTED": "high", "ZZ_EMPTY": "low"}
+    assert os.environ["ZZ_LITERAL"] == "5"
 
 
 def test_compose_substitution_prefers_the_environment_then_the_default() -> None:
@@ -377,6 +518,9 @@ def test_multi_turn_without_rates_is_not_spend_measured(tmp_path: Path, monkeypa
         (lambda runs: [{**runs[0], "code": {"git_commit": "b" * 40,
                                               "working_tree_dirty": False}}, *runs[1:]],
          "runs_disagree_on_code"),
+        (lambda runs: [{**runs[0], "results": [{"passed": True, "case_id": "other"}]},
+                       *runs[1:]],
+         "runs_disagree_on_population"),
     ],
 )
 def test_multi_turn_verdict_blocks_for_each_reason(mutate, reason) -> None:
@@ -384,3 +528,25 @@ def test_multi_turn_verdict_blocks_for_each_reason(mutate, reason) -> None:
             "code": CLEAN_CODE}
     assert multi_turn_verdict_reasons([good] * 3) == []
     assert reason in multi_turn_verdict_reasons(mutate([good] * 3))
+
+
+def test_multi_turn_runs_that_disagree_with_the_bound_commit_block() -> None:
+    good = {"stopped_reason": None, "results": [{"passed": True}], "spend_measured": True,
+            "code": CLEAN_CODE}
+    other = {"git_commit": "b" * 40, "working_tree_dirty": False}
+    assert "runs_disagree_on_code" in multi_turn_verdict_reasons([good] * 3, bound_code=other)
+
+
+def test_multi_turn_cost_prices_cache_reads_at_the_cache_rate() -> None:
+    from application.contracts.agent_runtime import AgentUsageV1
+    from evals.report import _estimate_turn_cost_usd
+
+    usage = AgentUsageV1(requests=1, tool_calls=0, input_tokens=1_000_000,
+                         output_tokens=0, cache_read_tokens=1_000_000)
+    cost = _estimate_turn_cost_usd(
+        usage, input_usd_per_mtok=RATES.input_usd_per_mtok,
+        output_usd_per_mtok=RATES.output_usd_per_mtok,
+        cache_read_usd_per_mtok=RATES.cache_read_usd_per_mtok,
+    )
+    # Every input token was a cache read: priced at 0.02, not the 0.2 input rate.
+    assert cost == pytest.approx(0.02)

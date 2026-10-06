@@ -66,12 +66,18 @@ PROTECTED_CASE_FLOOR = 10
 PROTECTED_RISK_CLASSES = ("consequential", "prohibited")
 
 #: D12 — code paths whose change between a live measurement and the Gate B
-#: commit makes that measurement stale.
+#: commit makes that measurement stale. Widened at the Story 5.13 review: D12's
+#: first list (agent, capabilities, golden cases) missed code that changes what
+#: the model sees or how a case is graded. `e8cb369` changed live outcomes from
+#: `application/use_cases/` (the workflow-context message), outside that list.
+#: The `backend/evals/` pathspec covers the harness, evaluators, fixture
+#: projection, generators and the tracked compose override.
 LIVE_FRESHNESS_PATHS = (
     "backend/agent/",
     "backend/application/capabilities/",
-    "backend/evals/golden/",
-    "backend/evals/golden_multi_turn/",
+    "backend/application/use_cases/",
+    "backend/evals/",
+    "backend/settings.py",
 )
 
 

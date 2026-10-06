@@ -1477,14 +1477,25 @@ def _readiness_verdict(
 
 
 def _estimate_turn_cost_usd(
-    usage: AgentUsageV1 | None, *, input_usd_per_mtok: float, output_usd_per_mtok: float
+    usage: AgentUsageV1 | None,
+    *,
+    input_usd_per_mtok: float,
+    output_usd_per_mtok: float,
+    cache_read_usd_per_mtok: float = 0.0,
+    cache_write_usd_per_mtok: float = 0.0,
 ) -> float:
-    if usage is None:
-        return 0.0
-    return (
-        (usage.input_tokens or 0) / 1_000_000 * input_usd_per_mtok
-        + (usage.output_tokens or 0) / 1_000_000 * output_usd_per_mtok
+    """The single-turn generator's formula (`estimate_cost_usd`), cache-aware.
+
+    Story 5.13 review: this once priced every input token, cache reads
+    included, at the input rate, so the two live generators disagreed on spend.
+    """
+    from adapters.telemetry.cost import estimate_cost_usd
+
+    cost, _basis = estimate_cost_usd(
+        usage, input_usd_per_mtok, output_usd_per_mtok,
+        cache_read_usd_per_mtok, cache_write_usd_per_mtok,
     )
+    return 0.0 if cost is None else cost
 
 
 def run_bounded_live_multi_turn_suite(
@@ -1497,6 +1508,8 @@ def run_bounded_live_multi_turn_suite(
     output_usd_per_mtok: float = 0.0,
     exception: LiveReadinessExceptionV1 | None = None,
     settings: object | None = None,
+    cache_read_usd_per_mtok: float = 0.0,
+    cache_write_usd_per_mtok: float = 0.0,
 ) -> dict[str, object]:
     """The explicit, bounded live counterpart of the deterministic CI suite.
 
@@ -1558,6 +1571,8 @@ def run_bounded_live_multi_turn_suite(
                     totals["spend_usd"] += _estimate_turn_cost_usd(
                         usage, input_usd_per_mtok=input_usd_per_mtok,
                         output_usd_per_mtok=output_usd_per_mtok,
+                        cache_read_usd_per_mtok=cache_read_usd_per_mtok,
+                        cache_write_usd_per_mtok=cache_write_usd_per_mtok,
                     )
                     turn_records.append({
                         "turn_index": turn_eval.turn_index,
@@ -1733,9 +1748,16 @@ MULTI_TURN_REQUIRED_RUNS = 3
 
 
 def multi_turn_verdict_reasons(
-    runs: Sequence[Mapping[str, object]], *, required_runs: int = MULTI_TURN_REQUIRED_RUNS
+    runs: Sequence[Mapping[str, object]],
+    *,
+    required_runs: int = MULTI_TURN_REQUIRED_RUNS,
+    bound_code: Mapping[str, object] | None = None,
 ) -> list[str]:
-    """Every reason the recorded runs cannot support a `passed` verdict."""
+    """Every reason the recorded runs cannot support a `passed` verdict.
+
+    Mirrors `live_golden_routing.routing_verdict`: runs must agree on the case
+    population, and with `bound_code` (the commit the evidence will name).
+    """
     reasons: list[str] = []
     if len(runs) < required_runs:
         reasons.append("fewer_than_required_runs")
@@ -1749,10 +1771,21 @@ def multi_turn_verdict_reasons(
     if any(not run.get("spend_measured") for run in runs):
         reasons.append("spend_not_measured")
     codes = {json.dumps(run.get("code"), sort_keys=True) for run in runs}
+    if bound_code is not None:
+        codes.add(json.dumps(dict(bound_code), sort_keys=True))
     if len(codes) > 1 or any(run.get("code") is None for run in runs):
         reasons.append("runs_disagree_on_code")
     if any((run.get("code") or {}).get("working_tree_dirty", True) for run in runs):
         reasons.append("clean_version_binding_missing")
+    populations = {
+        tuple(sorted(
+            (str(item.get("case_id")), str(item.get("case_version")))
+            for item in run.get("results") or ()  # type: ignore[union-attr]
+        ))
+        for run in runs
+    }
+    if len(populations) > 1:
+        reasons.append("runs_disagree_on_population")
     return reasons
 
 
@@ -1767,6 +1800,8 @@ def generate_live_multi_turn_evidence(
     settings: object | None = None,
     input_usd_per_mtok: float = 0.0,
     output_usd_per_mtok: float = 0.0,
+    cache_read_usd_per_mtok: float = 0.0,
+    cache_write_usd_per_mtok: float = 0.0,
     golden_dir: Path | None = None,
     repo_root: Path = REPO_ROOT,
     allow_dirty: bool = False,
@@ -1796,13 +1831,15 @@ def generate_live_multi_turn_evidence(
         result = run_bounded_live_multi_turn_suite(
             cases, model=model, budget=budget, model_name=model_name,
             input_usd_per_mtok=input_usd_per_mtok, output_usd_per_mtok=output_usd_per_mtok,
+            cache_read_usd_per_mtok=cache_read_usd_per_mtok,
+            cache_write_usd_per_mtok=cache_write_usd_per_mtok,
             settings=settings,
         )
         result["run_index"] = index
         result["code"] = run_code
         recorded.append(result)
     now = datetime.now(timezone.utc)
-    reasons = multi_turn_verdict_reasons(recorded)
+    reasons = multi_turn_verdict_reasons(recorded, bound_code=code)
     if not reasons:
         verdict = "passed"
     elif exception is not None and exception.is_valid(now=now):
@@ -1822,7 +1859,7 @@ def generate_live_multi_turn_evidence(
         "measured_configuration": dict(configuration),
         "authoritative": False,
         "required_runs": MULTI_TURN_REQUIRED_RUNS,
-        "rule": "every release-eligible case passes in every recorded run; spend measured",
+        "rule": "every live-eligible case passes in every recorded run; spend measured",
         "runs": recorded,
         "spend_measured": bool(recorded) and all(run.get("spend_measured") for run in recorded),
         "total_spend_usd": round(

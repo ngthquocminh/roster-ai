@@ -68,6 +68,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         settings=settings,
         input_usd_per_mtok=rates.input_usd_per_mtok,
         output_usd_per_mtok=rates.output_usd_per_mtok,
+        cache_read_usd_per_mtok=rates.cache_read_usd_per_mtok,
+        cache_write_usd_per_mtok=rates.cache_write_usd_per_mtok,
         allow_dirty=args.allow_dirty,
         exception=exception,
     )

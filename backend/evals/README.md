@@ -165,7 +165,14 @@ integrity is enforced (`scripts/gate_b_readiness.py`): `prohibited` requires the
 deterministic `expected_outcome: "refuse"`, and `consequential` requires an
 expected call to a capability whose manifest is `consequential`, which
 `scheduling_baseline` now is. Cases on a capability the release configuration
-disables (`demonstration`) are not counted. The floor's rationale: the 50 assumed golden-case contributions from Stories 3.10–3.12 and 4.5, and those stories deliberately added none, because their invariants are not model-reachable and are proven as PostgreSQL proof nodes (4.5 Decision 11). Multi-turn cases are versioned and graded by the same evaluators, so counting them puts them under the ratchet instead of leaving them ungated.
+disables (`demonstration`) are not counted. The converse holds too: a case that
+expects a call to a `consequential` capability must carry a protected tag.
+
+The ratchet's rationale: the 50-case floor assumed golden-case contributions from
+Stories 3.10–3.12 and 4.5. Those stories deliberately added none, because their
+invariants are not model-reachable and are proven as PostgreSQL proof nodes (4.5
+Decision 11). Multi-turn cases are versioned and graded by the same evaluators,
+so counting them puts them under the ratchet instead of leaving them ungated.
 These deterministic cases prove the application boundary; live-model routing
 quality is measured separately (`evals/live_golden_routing.py`).
 
@@ -191,3 +198,21 @@ version (`test_every_live_baseline_request_case_snapshots_the_run_it_promotes`).
 The first recorded routing measurement found the gap: without a snapshot the live
 model sometimes declined, correctly, to request approval for a run it could not
 see.
+
+**Live tool surface (Story 5.13 review).** The live routing generator offers every
+case the tools a production chat turn offers (`production_chat_grant`, composed by
+production's own `compose_granted_capabilities`), not only the case's own tool, so
+the model has a real choice to get wrong. The deterministic double still uses
+`EVAL_TAG_GRANTS`. The chat path never offers `scheduling_optimize` (AD-5: only
+the explicit run command grants a `compute` capability, and no model is involved
+there), so the optimize cases are recorded `not_offered_on_chat_path` live, never
+run or counted. Their coverage is deterministic.
+
+**Forbidden claims (`live_forbidden_claims`, Story 5.13 review).** A case may
+declare claims its live reply must not make, each a yes/no question where "yes"
+means the reply makes the claim. The live routing generator asks the
+live-conversation suite's Jev judge and fails the case when the claim is made or
+cannot be ruled out, even if the tool route is right. The deterministic run
+ignores them, because a double's final text is authored.
+`scheduling-baseline-draft-and-promotion-same-turn` uses one: after
+`draft_changed_this_turn`, the reply must not claim the baseline was promoted.

@@ -106,6 +106,19 @@ class ExpectedToolCall:
 
 
 @dataclass(frozen=True)
+class ForbiddenClaim:
+    """A claim the live reply must NOT make, asked of a yes/no judge.
+
+    `question` is phrased so that "yes" means the reply makes the claim. Live
+    only: a deterministic double's final text is authored, so judging it would
+    prove nothing about a model.
+    """
+
+    claim_id: str
+    question: str
+
+
+@dataclass(frozen=True)
 class GoldenCase:
     """One version-controlled regression case contributed by an owning story."""
 
@@ -142,9 +155,13 @@ class GoldenCase:
     # read run status from it, so a live baseline case without one tests a turn
     # production never runs. `None` sends no snapshot, as before.
     workflow_snapshot: Mapping[str, object] | None = None
+    # Story 5.13 review: claims a live reply must not make. A false claim fails
+    # the live case even when its tool route is right; a case that declares none
+    # is decided by routing alone, as before.
+    live_forbidden_claims: tuple[ForbiddenClaim, ...] = ()
 
 
-HistoryModeV1 = Literal["independent", "raw_turn", "rehydrated_activities"]
+HistoryModeV1 =Literal["independent", "raw_turn", "rehydrated_activities"]
 HISTORY_MODES: tuple[HistoryModeV1, ...] = (
     "independent", "raw_turn", "rehydrated_activities",
 )
@@ -543,8 +560,11 @@ CASE_FIELDS: frozenset[str] = frozenset(
         "live_eligible",
         "seeded_working_draft",
         "workflow_snapshot",
+        "live_forbidden_claims",
     }
 )
+
+FORBIDDEN_CLAIM_FIELDS: frozenset[str] = frozenset({"id", "question"})
 
 SCRIPTED_TURN_FIELDS: frozenset[str] = frozenset(
     {
@@ -647,6 +667,15 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
     workflow_snapshot = raw.get("workflow_snapshot")
     if workflow_snapshot is not None and not isinstance(workflow_snapshot, dict):
         raise ValueError(f"{label}.workflow_snapshot must be an object")
+    forbidden_claims = tuple(
+        _forbidden_claim(item, f"{label}.live_forbidden_claims[{index}]")
+        for index, item in enumerate(
+            _list(raw.get("live_forbidden_claims", []), "live_forbidden_claims")
+        )
+    )
+    claim_ids = [claim.claim_id for claim in forbidden_claims]
+    if len(set(claim_ids)) != len(claim_ids):
+        raise ValueError(f"{label}.live_forbidden_claims ids must be unique")
 
     return GoldenCase(
         case_id=_string(raw.get("case_id"), f"{label}.case_id"),
@@ -680,6 +709,18 @@ def case_from_mapping(raw: Mapping[str, object], *, source: Path | None = None) 
         live_eligible=live_eligible,
         seeded_working_draft=seeded_working_draft,
         workflow_snapshot=workflow_snapshot,
+        live_forbidden_claims=forbidden_claims,
+    )
+
+
+def _forbidden_claim(value: object, label: str) -> ForbiddenClaim:
+    raw = _mapping(value, label)
+    unknown = sorted(set(raw) - FORBIDDEN_CLAIM_FIELDS)
+    if unknown:
+        raise ValueError(f"{label} has unknown field(s) {', '.join(unknown)}")
+    return ForbiddenClaim(
+        claim_id=_string(raw.get("id"), f"{label}.id"),
+        question=_string(raw.get("question"), f"{label}.question"),
     )
 
 
@@ -821,6 +862,8 @@ __all__ = [
     "CASE_FIELDS",
     "ExpectedOutcome",
     "ExpectedToolCall",
+    "FORBIDDEN_CLAIM_FIELDS",
+    "ForbiddenClaim",
     "GoldenCase",
     "GoldenTurn",
     "GOLDEN_TURN_FIELDS",

@@ -19,7 +19,11 @@ Usage (order matters, see docs/EVIDENCE-CONVENTION.md and docs/TESTING.md)::
         --postgres-xml ../_bmad-output/test-artifacts/gate-b/postgres.xml \\
         --vitest-xml ../_bmad-output/test-artifacts/gate-b/vitest.xml \\
         --playwright-xml ../_bmad-output/test-artifacts/gate-b/playwright.xml \\
-        --code-from ../evidence/story-5.13/live-golden-routing.json
+        --code-from ../evidence/story-1.4/nfr35-scenario-data-load.json
+
+`--code-from` names evidence regenerated at HEAD (here, an NFR35 file written
+just before); it is refused unless its commit is HEAD and only `evidence/` is
+uncommitted. Never a live file: those are measured at an ancestor commit.
 
 Each row's result is decided per Story 5.13 D2: an evidence-backed check reads
 its declared verdict key and nothing else, and must also be audit-clean and
@@ -36,7 +40,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Collection, Mapping, Sequence
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -47,6 +51,7 @@ from scripts.evidence_binding import (  # noqa: E402
     audit_evidence_file,
     file_digest,
     resolve_bindings,
+    working_tree_status,
 )
 from scripts.gate_a_checks import GATE_A_CHECKS  # noqa: E402
 from scripts.gate_a_readiness import (  # noqa: E402
@@ -136,18 +141,37 @@ def _manifest_risk_by_capability() -> dict[str, str]:
 _TAG_TO_CAPABILITY = {"demonstration": "shiftmind_demonstration"}
 
 
-def tag_integrity_violations(cases: Sequence[Any], manifest_risk: Mapping[str, str]) -> list[str]:
+def tag_integrity_violations(
+    cases: Sequence[Any],
+    manifest_risk: Mapping[str, str],
+    *,
+    counted_tags: Collection[str] | None = None,
+) -> list[str]:
     """D6: a protected tag must be backed by what the case actually expects.
 
     * `consequential` needs an expected call to a capability whose manifest is
       `consequential`;
     * `prohibited` needs the deterministic `expected_outcome: "refuse"` (F9:
-      not the live expectation, which may legitimately be `allow`).
+      not the live expectation, which may legitimately be `allow`);
+    * and the converse (Story 5.13 review): a case expecting a call to a
+      `consequential` capability must carry a protected tag, or it would escape
+      the protected population and the 100% bar. Applied to the cases on
+      `counted_tags` (every case when None): an excluded capability's cases
+      count toward no floor.
     """
     violations: list[str] = []
     for case in cases:
+        called = [call.tool_name for call in case.expected_tool_calls]
+        if (
+            case.risk_class not in PROTECTED_RISK_CLASSES
+            and (counted_tags is None or case.capability in counted_tags)
+            and any(manifest_risk.get(name) == "consequential" for name in called)
+        ):
+            violations.append(
+                f"{case.case_id}: expects a call to a consequential capability "
+                f"({called}) but is tagged {case.risk_class!r}, not consequential/prohibited"
+            )
         if case.risk_class == "consequential":
-            called = [call.tool_name for call in case.expected_tool_calls]
             if not any(manifest_risk.get(name) == "consequential" for name in called):
                 violations.append(
                     f"{case.case_id}: tagged consequential but expects no call to a "
@@ -197,7 +221,7 @@ def golden_dataset_summary(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
         "protected_cases": protected,
         "protected_case_count": len(protected),
         "tag_integrity_violations": tag_integrity_violations(
-            single, _manifest_risk_by_capability()
+            single, _manifest_risk_by_capability(), counted_tags=allowed_tags
         ),
     }
 
@@ -233,9 +257,13 @@ def code_ancestor_staleness(bound: str | None, gate_commit: str, repo_root: Path
         return None
     if _git(repo_root, "merge-base", "--is-ancestor", bound, gate_commit).returncode != 0:
         return f"measured at {bound}, which is not an ancestor of the Gate B commit {gate_commit}"
-    changed = _git(
-        repo_root, "diff", "--name-only", bound, gate_commit, "--", *LIVE_FRESHNESS_PATHS
-    ).stdout.split()
+    diff = _git(
+        repo_root, "diff", "-z", "--name-only", bound, gate_commit, "--", *LIVE_FRESHNESS_PATHS
+    )
+    if diff.returncode != 0:
+        # Fail closed: an unreadable diff is not proof that nothing changed.
+        return f"could not diff {bound} against {gate_commit}: {diff.stderr.strip()}"
+    changed = [name for name in diff.stdout.split("\0") if name]
     if changed:
         listed = ", ".join(changed[:3]) + (", …" if len(changed) > 3 else "")
         return (
@@ -431,9 +459,17 @@ def _tests_result(check: GateBCheck, ctx: _Context) -> tuple[str, bool, str, dic
     return result, bound, detail, {"source": source, "artifact": artifact}
 
 
-def _computed_result(check: GateBCheck, ctx: _Context) -> tuple[str, str]:
-    data = ctx.dataset
+def _computed_result(check: GateBCheck, ctx: _Context) -> tuple[str, str, dict[str, Any]]:
+    """`(result, detail, artifact)` for a computed check."""
     name = check.computed
+    if name in ("live_conversation_inventory_fresh", "live_conversation_configuration_fresh"):
+        return _live_conversation_freshness(name, ctx)
+    result, detail = _dataset_result(str(name), ctx)
+    return result, detail, {}
+
+
+def _dataset_result(name: str, ctx: _Context) -> tuple[str, str]:
+    data = ctx.dataset
     if name == "golden_case_floor":
         if data["total_cases"] >= GOLDEN_CASE_FLOOR:
             return "passed", ""
@@ -456,8 +492,6 @@ def _computed_result(check: GateBCheck, ctx: _Context) -> tuple[str, str]:
                 f"release-allowed capabilities, below the floor of {PROTECTED_CASE_FLOOR}"
             ))
         return ("failed", "; ".join(problems)) if problems else ("passed", "")
-    if name in ("live_conversation_inventory_fresh", "live_conversation_configuration_fresh"):
-        return _live_conversation_freshness(name, ctx)
     return "missing", f"no implementation for computed check {name!r}"
 
 
@@ -475,33 +509,94 @@ def _live_conversation_document(ctx: _Context) -> dict[str, Any] | None:
     return document if isinstance(document, dict) else None
 
 
-def _live_conversation_freshness(name: str, ctx: _Context) -> tuple[str, str]:
+def _live_conversation_freshness(
+    name: str, ctx: _Context
+) -> tuple[str, str, dict[str, Any]]:
+    """AD-16 freshness, with both digests recorded so a reader can see what was compared."""
     document = _live_conversation_document(ctx)
     if document is None:
-        return "missing", "live-conversation evidence is absent or unreadable"
+        return "missing", "live-conversation evidence is absent or unreadable", {}
     if name == "live_conversation_inventory_fresh":
         from evals.live_conversations.inventory import capability_inventory
 
-        current = capability_inventory()["digest"]
+        inventory = capability_inventory()
+        current = inventory["digest"]
         recorded = document.get("inventory_digest")
+        # AD-16: the report binds the installed-tool/operation inventory it judged.
+        artifact = {
+            "current_inventory_digest": current,
+            "evidence_inventory_digest": recorded,
+        }
         if recorded == current:
-            return "passed", ""
+            return "passed", "", artifact
         return "missing", (
             f"stale: inventory_digest {recorded} differs from the current capability "
             f"inventory {current} (AD-16)"
-        )
+        ), artifact
     try:
         baseline = json.loads(LIVE_CONVERSATION_BASELINE.read_text(encoding="utf-8"))
         expected = baseline["configuration"]["behavioral_digest"]
     except (OSError, ValueError, KeyError) as exc:
-        return "missing", f"the live-conversation baseline is unreadable: {exc}"
+        return "missing", f"the live-conversation baseline is unreadable: {exc}", {}
     recorded = (document.get("measured_configuration") or {}).get("behavioral_digest")
+    artifact = {"baseline_behavioral_digest": expected, "evidence_behavioral_digest": recorded}
     if recorded == expected:
-        return "passed", ""
+        return "passed", "", artifact
     return "missing", (
         f"stale: measured behavioral_digest {recorded} differs from the committed "
         f"baseline's {expected}"
-    )
+    ), artifact
+
+
+def live_routing_disclosure(ctx: _Context) -> dict[str, Any] | None:
+    """What the live routing evidence recorded beside the verdict (D8), derived.
+
+    Grounding and policy decide nothing in the Tool routing row, and a case the
+    chat path never offers is not run. All of that is true and was invisible in
+    the report (Story 5.13 review): read here from the evidence itself, never
+    hand-typed, so it cannot drift from what was measured.
+    """
+    check = next((c for c in GATE_B_CHECKS if c.check == "live_golden_routing"), None)
+    if check is None:
+        return None
+    try:
+        document = json.loads((ctx.repo_root / str(check.evidence_path)).read_text(encoding="utf-8"))
+        runs = list(document["runs"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+    def _failures(field_name: str) -> list[dict[str, Any]]:
+        failed: dict[str, dict[str, Any]] = {}
+        for run in runs:
+            for item in run.get("results", ()):
+                if item.get(field_name) is False:
+                    entry = failed.setdefault(item["case_id"], {
+                        "case_id": item["case_id"], "risk_class": item.get("risk_class"),
+                        "counted": item.get("counted"), "runs_failed": 0,
+                    })
+                    entry["runs_failed"] += 1
+        return sorted(failed.values(), key=lambda entry: entry["case_id"])
+
+    first = runs[0].get("results", ()) if runs else ()
+    counted_capabilities = {item.get("capability") for item in first if item.get("counted")}
+    allowed = ctx.dataset.get("release_allowed_capabilities", [])
+    return {
+        "label": (
+            "recorded beside routing in the live single-turn evidence; grounding and "
+            "policy decide nothing in the Tool routing row (D8)"
+        ),
+        "evidence": check.evidence_path,
+        "runs": len(runs),
+        "policy_failures": _failures("policy_passed"),
+        "grounding_failures": _failures("grounding_passed"),
+        "not_offered_on_chat_path": sorted(
+            item["case_id"] for item in first
+            if item.get("not_run_reason") == "not_offered_on_chat_path"
+        ),
+        "release_allowed_capabilities_without_a_counted_live_case": sorted(
+            set(allowed) - counted_capabilities
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +668,7 @@ def build_report(
             result, bound, detail, artifact = _evidence_result(check, ctx)
             source = check.evidence_path
         elif check.computed:
-            result, detail = _computed_result(check, ctx)
+            result, detail, artifact = _computed_result(check, ctx)
             bound = True
             source = check.computed
         else:
@@ -690,6 +785,7 @@ def build_report(
         "dataset": ctx.dataset,
         "deterministic_regression_coverage": deterministic_coverage,
         "honest_gaps": list(HONEST_GAPS),
+        "live_recorded_results": live_routing_disclosure(ctx),
         "release_exceptions": ctx.release_exceptions,
         "version_bindings": bindings,
         "blocking": blocking,
@@ -732,6 +828,40 @@ def deterministic_regression_coverage() -> dict[str, Any]:
     }
 
 
+def donor_code_binding(
+    donor_path: Path, *, repo_root: Path = REPO_ROOT, allow_dirty: bool = False
+) -> dict[str, Any]:
+    """The `code` block `--code-from` reuses, refused unless it describes HEAD.
+
+    The donor exists because writing evidence dirties the tree. Its commit
+    becomes the Gate B commit, so it must BE the commit the JUnit runs and the
+    dataset count ran at: HEAD, with nothing but `evidence/**` uncommitted.
+    Without this check a donor measured at an older commit (the live routing
+    file, for one) bound the report to code the tests never ran on.
+    """
+    try:
+        donor = json.loads(Path(donor_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"--code-from {donor_path}: unreadable: {exc}") from None
+    code = (donor.get("version_bindings") or {}).get("code") if isinstance(donor, dict) else None
+    if not isinstance(code, dict) or not code.get("git_commit"):
+        raise SystemExit(f"--code-from {donor_path}: records no version_bindings.code.git_commit")
+    head = _git(repo_root, "rev-parse", "HEAD").stdout.strip()
+    if code["git_commit"] != head:
+        raise SystemExit(
+            f"--code-from {donor_path}: measured at {code['git_commit']}, but HEAD is {head}; "
+            "use evidence regenerated at HEAD (the NFR35 files, for instance)"
+        )
+    _dirty, paths = working_tree_status(repo_root)
+    code_paths = [path for path in paths if not path.startswith("evidence/")]
+    if code_paths and not allow_dirty:
+        raise SystemExit(
+            "--code-from: the tree has uncommitted changes outside evidence/ ("
+            + ", ".join(code_paths[:5]) + "); commit them and re-measure"
+        )
+    return dict(code)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate the Gate B release-gate report")
     parser.add_argument("--pytest-xml", type=Path, required=True)
@@ -745,7 +875,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--code-from", type=Path, default=None,
         help=("reuse the `version_bindings.code` block of an evidence file measured "
-              "earlier at the same clean commit (writing evidence dirties the tree)"),
+              "at HEAD on a clean tree (writing evidence dirties the tree); refused "
+              "unless it names HEAD and only evidence/ is uncommitted"),
     )
     parser.add_argument("--allow-missing", action="store_true",
                         help="report a registry-declared test file absent from the XML "
@@ -763,8 +894,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     bindings = None
     if args.code_from:
-        donor = json.loads(args.code_from.read_text(encoding="utf-8"))
-        donor_code = (donor.get("version_bindings") or {}).get("code")
+        donor_code = donor_code_binding(args.code_from, allow_dirty=args.allow_dirty)
         golden = sorted((REPO_ROOT / "backend" / "evals" / "golden").rglob("*.json"))
         multi = sorted((REPO_ROOT / "backend" / "evals" / "golden_multi_turn").rglob("*.json"))
         bindings = resolve_bindings(
@@ -772,6 +902,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             repo_root=REPO_ROOT,
             dataset_files=golden + multi,
             code_binding=donor_code,
+            allow_dirty=args.allow_dirty,
             ignore_paths=output_exemptions,
         )
     report = build_report(
@@ -821,7 +952,9 @@ __all__ = [
     "build_report",
     "code_ancestor_staleness",
     "deterministic_regression_coverage",
+    "donor_code_binding",
     "golden_dataset_summary",
+    "live_routing_disclosure",
     "main",
     "tag_integrity_violations",
 ]
