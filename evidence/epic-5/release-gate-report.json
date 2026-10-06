@@ -1,0 +1,1810 @@
+{
+  "story": "5.13",
+  "gate": "B",
+  "requirements": [
+    "Release Gate (epics.md) Gate B rows",
+    "NFR27",
+    "NFR28",
+    "NFR35",
+    "AD-16"
+  ],
+  "measurement_date": "2026-10-06",
+  "accountable_owner": "Evaluation/QA",
+  "rows": {
+    "deterministic_and_live_readiness": {
+      "title": "Deterministic-first CI and live AI readiness",
+      "result": "passed",
+      "checks": [
+        "deterministic_evaluation_harness",
+        "live_multi_turn_release_configuration",
+        "live_evaluation_machinery"
+      ],
+      "blocking": []
+    },
+    "live_conversation_journeys": {
+      "title": "Required live conversation journeys",
+      "result": "passed",
+      "checks": [
+        "live_conversation_journeys_evidence",
+        "live_conversation_inventory_fresh",
+        "live_conversation_configuration_fresh",
+        "live_conversation_machinery"
+      ],
+      "blocking": []
+    },
+    "report_version_binding": {
+      "title": "Report version binding",
+      "result": "passed",
+      "checks": [
+        "gate_a.evidence_convention_and_gate_machinery",
+        "gate_b_machinery",
+        "local_image_binding"
+      ],
+      "blocking": []
+    },
+    "golden_dataset_size": {
+      "title": "Golden dataset size",
+      "result": "passed",
+      "checks": [
+        "golden_case_floor",
+        "per_capability_floor",
+        "protected_floor_and_tag_integrity"
+      ],
+      "blocking": []
+    },
+    "tool_routing": {
+      "title": "Tool routing",
+      "result": "passed",
+      "checks": [
+        "live_golden_routing",
+        "live_routing_machinery"
+      ],
+      "blocking": []
+    },
+    "nfr35_internal_thresholds": {
+      "title": "NFR35 internal thresholds",
+      "result": "passed",
+      "checks": [
+        "nfr35_threshold_tests"
+      ],
+      "blocking": []
+    },
+    "blocking_regressions": {
+      "title": "Blocking regressions",
+      "result": "passed",
+      "checks": [
+        "gate_a.site_membership_and_authentication",
+        "gate_a.backend_mutation_denial",
+        "gate_a.frontend_mutation_denial",
+        "authority_boundaries",
+        "gate_a.approval_and_audit_invariants_proof",
+        "gate_a.approval_audit_report_machinery",
+        "conversation_site_isolation",
+        "gate_a.content_minimization_evidence",
+        "gate_a.content_minimization_report_machinery",
+        "repair_hard_constraints",
+        "exact_evidence_grounding",
+        "clarify_refuse_fail_safely",
+        "gate_a.recovery_and_idempotency_proof",
+        "gate_a.recovery_idempotency_report_machinery",
+        "draft_lifecycle",
+        "approval_audit_invariants",
+        "gate_a.viewer_parity",
+        "gate_a.api_parity",
+        "worker_recovery",
+        "gate_a.accessibility_component_layer",
+        "gate_a.accessibility_browser_layer",
+        "gate_a.accessibility_evidence",
+        "gate_a.state_semantics_matrix",
+        "gate_a.journey_accessibility_browser_layer",
+        "gate_a.state_semantics_evidence",
+        "gate_a.state_semantics_report_machinery"
+      ],
+      "blocking": [],
+      "categories": {
+        "authorization": {
+          "checks": [
+            "gate_a.site_membership_and_authentication",
+            "gate_a.backend_mutation_denial",
+            "gate_a.frontend_mutation_denial",
+            "authority_boundaries"
+          ],
+          "blocking": []
+        },
+        "approval": {
+          "checks": [
+            "gate_a.approval_and_audit_invariants_proof",
+            "gate_a.approval_audit_report_machinery"
+          ],
+          "blocking": []
+        },
+        "isolation": {
+          "checks": [
+            "conversation_site_isolation",
+            "gate_a.content_minimization_evidence",
+            "gate_a.content_minimization_report_machinery"
+          ],
+          "blocking": []
+        },
+        "hard_constraints": {
+          "checks": [
+            "repair_hard_constraints"
+          ],
+          "blocking": []
+        },
+        "grounding": {
+          "checks": [
+            "exact_evidence_grounding",
+            "clarify_refuse_fail_safely"
+          ],
+          "blocking": []
+        },
+        "idempotency": {
+          "checks": [
+            "gate_a.recovery_and_idempotency_proof",
+            "gate_a.recovery_idempotency_report_machinery",
+            "draft_lifecycle"
+          ],
+          "blocking": []
+        },
+        "authoritative_audit": {
+          "checks": [
+            "approval_audit_invariants"
+          ],
+          "blocking": []
+        },
+        "viewer_parity": {
+          "checks": [
+            "gate_a.viewer_parity",
+            "gate_a.api_parity"
+          ],
+          "blocking": []
+        },
+        "recovery": {
+          "checks": [
+            "worker_recovery"
+          ],
+          "blocking": []
+        },
+        "accessibility": {
+          "checks": [
+            "gate_a.accessibility_component_layer",
+            "gate_a.accessibility_browser_layer",
+            "gate_a.accessibility_evidence",
+            "gate_a.state_semantics_matrix",
+            "gate_a.journey_accessibility_browser_layer",
+            "gate_a.state_semantics_evidence",
+            "gate_a.state_semantics_report_machinery"
+          ],
+          "blocking": []
+        }
+      }
+    }
+  },
+  "contributing_checks": [
+    {
+      "check": "deterministic_evaluation_harness",
+      "row": "deterministic_and_live_readiness",
+      "category": null,
+      "story": "2.2",
+      "description": "The authoritative deterministic suite: every golden case on the deterministic double, the NFR28 per-capability floor test, and the multi-turn history suite (Stories 2.2, 5.5, 5.6).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_evaluation_harness.py": {
+            "status": "passed",
+            "total": 158,
+            "passed": 158,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_capability_conformance.py": {
+            "status": "passed",
+            "total": 72,
+            "passed": 72,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "live_multi_turn_release_configuration",
+      "row": "deterministic_and_live_readiness",
+      "category": null,
+      "story": "5.13",
+      "description": "Every release-eligible live multi-turn case passes in each of three recorded runs on the pinned provider/model and budget, spend measured (D3).",
+      "source_kind": "evidence",
+      "source": "evidence/story-5.13/live-multi-turn-evaluation.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-5.13/live-multi-turn-evaluation.json",
+        "sha256": "16459c085cb101bc70a830c95c4d5eeb58ed086ef96e87afb0b3a96cb215d7f3",
+        "git_commit": "e8cb369d22d081e88ddbe527ab381be9acfa0675",
+        "verdict": "passed"
+      },
+      "verdict_key": "live_multi_turn"
+    },
+    {
+      "check": "live_evaluation_machinery",
+      "row": "deterministic_and_live_readiness",
+      "category": null,
+      "story": "5.13",
+      "description": "The live generators' own fail-closed guards, run keyless in CI: a live pass is held to the same rule the recorded evidence was (D2).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_live_golden_routing.py": {
+            "status": "passed",
+            "total": 30,
+            "passed": 30,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "live_conversation_journeys_evidence",
+      "row": "live_conversation_journeys",
+      "category": null,
+      "story": "5.12",
+      "description": "The recorded live-conversation verdict. AD-16: no release exception marks this verdict passed, so no exception value is accepted.",
+      "source_kind": "evidence",
+      "source": "evidence/story-5.12/live-conversation-journeys.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-5.12/live-conversation-journeys.json",
+        "sha256": "0b95815b40f26d8cc6da30afb6bb7667a9d00ea0af83d558422982fd30ad5a63",
+        "git_commit": "70594bfa836584f47dd4144186778fba83008c93",
+        "verdict": "passed"
+      },
+      "verdict_key": "live_conversation_journeys"
+    },
+    {
+      "check": "live_conversation_inventory_fresh",
+      "row": "live_conversation_journeys",
+      "category": null,
+      "story": "5.13",
+      "description": "AD-16 / D12: the evidence's inventory_digest equals the current capability_inventory() digest.",
+      "source_kind": "computed",
+      "source": "live_conversation_inventory_fresh",
+      "result": "passed",
+      "bound": true,
+      "artifact": {}
+    },
+    {
+      "check": "live_conversation_configuration_fresh",
+      "row": "live_conversation_journeys",
+      "category": null,
+      "story": "5.13",
+      "description": "D12: the evidence's measured behavioral_digest equals the committed baseline's configuration.behavioral_digest.",
+      "source_kind": "computed",
+      "source": "live_conversation_configuration_fresh",
+      "result": "passed",
+      "bound": true,
+      "artifact": {}
+    },
+    {
+      "check": "live_conversation_machinery",
+      "row": "live_conversation_journeys",
+      "category": null,
+      "story": "5.12",
+      "description": "The suite's reporting, inventory, case and drop-check logic, keyless (Stories 5.7, 5.12 File Lists).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_live_conversation_reporting.py": {
+            "status": "passed",
+            "total": 20,
+            "passed": 20,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_live_conversation_inventory.py": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_live_conversation_cases.py": {
+            "status": "passed",
+            "total": 15,
+            "passed": 15,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_live_conversation_drop_check.py": {
+            "status": "passed",
+            "total": 44,
+            "passed": 44,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "gate_a.evidence_convention_and_gate_machinery",
+      "row": "report_version_binding",
+      "category": null,
+      "story": "1.11",
+      "description": "The repo-wide evidence convention sweep, the binding resolver, and the readiness generator itself. Registered so a broken convention blocks the gate instead of being invisible to it.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_evidence_binding.py": {
+            "status": "passed",
+            "total": 48,
+            "passed": 48,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_evidence_convention.py": {
+            "status": "passed",
+            "total": 123,
+            "passed": 123,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_gate_a_readiness.py": {
+            "status": "passed",
+            "total": 44,
+            "passed": 44,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "evidence_convention_and_gate_machinery"
+    },
+    {
+      "check": "gate_b_machinery",
+      "row": "report_version_binding",
+      "category": null,
+      "story": "5.13",
+      "description": "This registry and its readiness generator, held to the gate for the reason Gate A's are: broken plumbing must block, not vanish.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_gate_b_readiness.py": {
+            "status": "passed",
+            "total": 51,
+            "passed": 51,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "local_image_binding",
+      "row": "report_version_binding",
+      "category": null,
+      "story": "5.3",
+      "description": "The locally built image digest that satisfies every report's image binding (Story 5.3 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/architecture/test_local_composition.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_bootstrap_local.py": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "golden_case_floor",
+      "row": "golden_dataset_size",
+      "category": null,
+      "story": "5.13",
+      "description": "D4: single-turn plus multi-turn case count >= GOLDEN_CASE_FLOOR.",
+      "source_kind": "computed",
+      "source": "golden_case_floor",
+      "result": "passed",
+      "bound": true,
+      "artifact": {}
+    },
+    {
+      "check": "per_capability_floor",
+      "row": "golden_dataset_size",
+      "category": null,
+      "story": "5.13",
+      "description": "D5: >= 4 single-turn cases per release-allowed capability.",
+      "source_kind": "computed",
+      "source": "per_capability_floor",
+      "result": "passed",
+      "bound": true,
+      "artifact": {}
+    },
+    {
+      "check": "protected_floor_and_tag_integrity",
+      "row": "golden_dataset_size",
+      "category": null,
+      "story": "5.13",
+      "description": "D6: >= 10 consequential/prohibited single-turn cases on release-allowed capabilities, with every protected tag backed by its case.",
+      "source_kind": "computed",
+      "source": "protected_floor_and_tag_integrity",
+      "result": "passed",
+      "bound": true,
+      "artifact": {}
+    },
+    {
+      "check": "live_golden_routing",
+      "row": "tool_routing",
+      "category": null,
+      "story": "5.13",
+      "description": "Live single-turn routing: >= 90% overall and 100% consequential/prohibited in each of three recorded passes (D8, D9).",
+      "source_kind": "evidence",
+      "source": "evidence/story-5.13/live-golden-routing.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-5.13/live-golden-routing.json",
+        "sha256": "4dc423858d7e55e62a78405e8881c104c5fbf1c9ca23ebc4e7d4efaac0a309bd",
+        "git_commit": "e8cb369d22d081e88ddbe527ab381be9acfa0675",
+        "verdict": "passed"
+      },
+      "verdict_key": "tool_routing"
+    },
+    {
+      "check": "live_routing_machinery",
+      "row": "tool_routing",
+      "category": null,
+      "story": "5.13",
+      "description": "The routing generator's population, threshold and redaction guards.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_live_golden_routing.py": {
+            "status": "passed",
+            "total": 30,
+            "passed": 30,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "nfr35_threshold_tests",
+      "row": "nfr35_internal_thresholds",
+      "category": null,
+      "story": "1.4, 1.5, 2.4, 3.5",
+      "description": "D7: the four NFR35 threshold assertions, passed (not skipped) in the `-m postgres` run at the bound commit. The regenerated evidence files carry the published numbers; these tests are the verdict.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest-postgres",
+        "cases": {
+          "backend/tests/test_postgres_integration.py::test_nfr35_projection_initial_windows_meet_two_second_threshold": "passed",
+          "backend/tests/test_postgres_integration.py::test_nfr35_exact_evidence_targets_meet_two_second_threshold": "passed",
+          "backend/tests/test_postgres_integration.py::test_nfr35_sse_reconnect_replay_meets_five_second_threshold": "passed",
+          "backend/tests/test_postgres_integration.py::test_nfr35_first_run_event_meets_five_second_threshold": "passed"
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest-postgres",
+        "junit_sha256": "f8fa230f86a8e683235f49560f744b3df689c10d22d48f81a9f2c4caff54d8b7"
+      }
+    },
+    {
+      "check": "gate_a.site_membership_and_authentication",
+      "row": "blocking_regressions",
+      "category": "authorization",
+      "story": "1.2",
+      "description": "Seeded site identity, role boundaries, and site-scoped session resolution on PostgreSQL.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_auth_api.py": {
+            "status": "passed",
+            "total": 20,
+            "passed": 20,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_identity_schema.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_identity_provider.py": {
+            "status": "passed",
+            "total": 13,
+            "passed": 13,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_identity_role_boundaries.py": {
+            "status": "passed",
+            "total": 8,
+            "passed": 8,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_seed_planner.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_postgres_integration.py": {
+            "status": "passed",
+            "total": 19,
+            "passed": 19,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "site_membership_and_authentication"
+    },
+    {
+      "check": "gate_a.backend_mutation_denial",
+      "row": "blocking_regressions",
+      "category": "authorization",
+      "story": "1.9",
+      "description": "Server refuses every write path at Gate A.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_gate_a_mutation_audit.py": {
+            "status": "passed",
+            "total": 42,
+            "passed": 42,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_export_contract_fixture.py": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "backend_mutation_denial"
+    },
+    {
+      "check": "gate_a.frontend_mutation_denial",
+      "row": "blocking_regressions",
+      "category": "authorization",
+      "story": "1.9",
+      "description": "No mutating affordance or reachable legacy route in the client.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "cases": {
+          "frontend/src/test/scenarioDataBoundaries.test.ts": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/test/legacyReachability.test.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "vitest",
+        "junit_sha256": "10314a64d68b02b0c3b2904f50386fc4678c5ad988668b69130cd3a821e923cb"
+      },
+      "gate_a_check": "frontend_mutation_denial"
+    },
+    {
+      "check": "authority_boundaries",
+      "row": "blocking_regressions",
+      "category": "authorization",
+      "story": "2.9",
+      "description": "The model cannot authorize: application-owned authority boundaries (Story 2.9 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/architecture/test_authority_boundaries.py": {
+            "status": "passed",
+            "total": 5,
+            "passed": 5,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "gate_a.approval_and_audit_invariants_proof",
+      "row": "blocking_regressions",
+      "category": "approval",
+      "story": "4.5",
+      "description": "Exact PostgreSQL approval/audit proof matrix bound to a generated release verdict.",
+      "source_kind": "evidence",
+      "source": "evidence/story-4.5/approval-audit-invariants.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-4.5/approval-audit-invariants.json",
+        "sha256": "78a6cb3888ab09df902c33136d96eaf2d3763a687ca5285cdce99c388c36e44f"
+      },
+      "gate_a_check": "approval_and_audit_invariants_proof",
+      "verdict_key": "passed"
+    },
+    {
+      "check": "gate_a.approval_audit_report_machinery",
+      "row": "blocking_regressions",
+      "category": "approval",
+      "story": "4.5",
+      "description": "Live machinery guard: skipped PostgreSQL proof nodes cannot be reported as passing.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_approval_audit_report.py": {
+            "status": "passed",
+            "total": 5,
+            "passed": 5,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "approval_audit_report_machinery"
+    },
+    {
+      "check": "conversation_site_isolation",
+      "row": "blocking_regressions",
+      "category": "isolation",
+      "story": "2.7",
+      "description": "Another site can neither read nor write a conversation, and is denied indistinguishably from absence (Story 2.7 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_conversations_postgres.py": {
+            "status": "passed",
+            "total": 29,
+            "passed": 29,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "gate_a.content_minimization_evidence",
+      "row": "blocking_regressions",
+      "category": "isolation",
+      "story": "5.2",
+      "description": "Generated four-channel, three-fixture-class content-minimization verdict.",
+      "source_kind": "evidence",
+      "source": "evidence/story-5.2/content-minimization-report.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-5.2/content-minimization-report.json",
+        "sha256": "048aeae0a89818c2358cf1a4da7ffb35f348f1baa866d32375754b1ee1e2b795"
+      },
+      "gate_a_check": "content_minimization_evidence",
+      "verdict_key": "passed"
+    },
+    {
+      "check": "gate_a.content_minimization_report_machinery",
+      "row": "blocking_regressions",
+      "category": "isolation",
+      "story": "5.2",
+      "description": "Live fail-closed checks requiring executed, unskipped proof nodes.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_content_minimization_report.py": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "content_minimization_report_machinery"
+    },
+    {
+      "check": "repair_hard_constraints",
+      "row": "blocking_regressions",
+      "category": "hard_constraints",
+      "story": "3.10",
+      "description": "Repair correctness against hard constraints on PostgreSQL, with its fixture and report guards (Story 3.10 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_repair_correctness_postgres.py": {
+            "status": "passed",
+            "total": 5,
+            "passed": 5,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_repair_correctness_report.py": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_repair_correctness_fixture.py": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "exact_evidence_grounding",
+      "row": "blocking_regressions",
+      "category": "grounding",
+      "story": "2.7",
+      "description": "Claims grounded in exact evidence (Story 2.7 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_grounding_gate.py": {
+            "status": "passed",
+            "total": 19,
+            "passed": 19,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_grounding_contracts.py": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_grounding_on_shipped_fixture.py": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "clarify_refuse_fail_safely",
+      "row": "blocking_regressions",
+      "category": "grounding",
+      "story": "2.9",
+      "description": "Clarify, refuse and fail safely (Story 2.9 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_clarification_resolution.py": {
+            "status": "passed",
+            "total": 5,
+            "passed": 5,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_dialogue_contracts.py": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "gate_a.recovery_and_idempotency_proof",
+      "row": "blocking_regressions",
+      "category": "idempotency",
+      "story": "3.11",
+      "description": "Worker kill, lease expiry, browser reconnect, command replay, cancellation race, stale draft, and conflicting idempotency, each bound to exact rerunnable gates. Registered so a regression in any of them blocks release, which is what AC2 claims.",
+      "source_kind": "evidence",
+      "source": "evidence/story-3.11/recovery-idempotency.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-3.11/recovery-idempotency.json",
+        "sha256": "e2964dfa8917efa24c1802b52db598f3147e8dfb1f4873c0b2824e4b8617b783"
+      },
+      "gate_a_check": "recovery_and_idempotency_proof",
+      "verdict_key": "passed"
+    },
+    {
+      "check": "gate_a.recovery_idempotency_report_machinery",
+      "row": "blocking_regressions",
+      "category": "idempotency",
+      "story": "3.11",
+      "description": "The proof generator's own logic, held to the gate for the same reason Story 1.11's is: a generator that records a SKIPPED PostgreSQL node as a passed gate would report every failure mode green with the database down. No invariant may rest on a static evidence file alone.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_recovery_idempotency_report.py": {
+            "status": "passed",
+            "total": 17,
+            "passed": 17,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "recovery_idempotency_report_machinery"
+    },
+    {
+      "check": "draft_lifecycle",
+      "row": "blocking_regressions",
+      "category": "idempotency",
+      "story": "5.11",
+      "description": "One working draft per conversation: versioned, replay-safe draft and discard commands (Story 5.11 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_draft_lifecycle_postgres.py": {
+            "status": "passed",
+            "total": 30,
+            "passed": 30,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_scheduling_draft_discard.py": {
+            "status": "passed",
+            "total": 11,
+            "passed": 11,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_proposal_persistence.py": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "approval_audit_invariants",
+      "row": "blocking_regressions",
+      "category": "authoritative_audit",
+      "story": "4.5",
+      "description": "Authoritative audit and decision provenance on PostgreSQL (Story 4.5 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_approval_audit_invariants_postgres.py": {
+            "status": "passed",
+            "total": 26,
+            "passed": 26,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_approval_governance_postgres.py": {
+            "status": "passed",
+            "total": 39,
+            "passed": 39,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_decision_provenance.py": {
+            "status": "passed",
+            "total": 10,
+            "passed": 10,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "gate_a.viewer_parity",
+      "row": "blocking_regressions",
+      "category": "viewer_parity",
+      "story": "1.9",
+      "description": "API and frontend parity against the pinned contract fixtures.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "cases": {
+          "frontend/src/features/scenario-data/ScenarioDataParity.test.tsx": {
+            "status": "passed",
+            "total": 14,
+            "passed": 14,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "vitest",
+        "junit_sha256": "10314a64d68b02b0c3b2904f50386fc4678c5ad988668b69130cd3a821e923cb"
+      },
+      "gate_a_check": "viewer_parity"
+    },
+    {
+      "check": "gate_a.api_parity",
+      "row": "blocking_regressions",
+      "category": "viewer_parity",
+      "story": "1.9",
+      "description": "Live projection API parity against the pinned contract fixtures.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_postgres_integration.py": {
+            "status": "passed",
+            "total": 19,
+            "passed": 19,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "api_parity"
+    },
+    {
+      "check": "worker_recovery",
+      "row": "blocking_regressions",
+      "category": "recovery",
+      "story": "3.11",
+      "description": "Worker kill, lease expiry and cancellation race on PostgreSQL (Story 3.11 File List).",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_worker_process_recovery_postgres.py": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_job_leasing_postgres.py": {
+            "status": "passed",
+            "total": 18,
+            "passed": 18,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_cancellation_race_postgres.py": {
+            "status": "passed",
+            "total": 10,
+            "passed": 10,
+            "skipped": 0,
+            "failed": 0
+          },
+          "backend/tests/test_worker_main.py": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      }
+    },
+    {
+      "check": "gate_a.accessibility_component_layer",
+      "row": "blocking_regressions",
+      "category": "accessibility",
+      "story": "1.10",
+      "description": "jsdom/axe accessibility contract over the Gate A surface.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "cases": {
+          "frontend/src/test/accessibility.test.tsx": {
+            "status": "passed",
+            "total": 64,
+            "passed": 64,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/test/accessibility-contract.test.tsx": {
+            "status": "passed",
+            "total": 39,
+            "passed": 39,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/test/evidence-accessibility.test.tsx": {
+            "status": "passed",
+            "total": 7,
+            "passed": 7,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/src/features/scenario-data/usePhoneViewport.test.tsx": {
+            "status": "passed",
+            "total": 3,
+            "passed": 3,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "vitest",
+        "junit_sha256": "10314a64d68b02b0c3b2904f50386fc4678c5ad988668b69130cd3a821e923cb"
+      },
+      "gate_a_check": "accessibility_component_layer"
+    },
+    {
+      "check": "gate_a.accessibility_browser_layer",
+      "row": "blocking_regressions",
+      "category": "accessibility",
+      "story": "1.10",
+      "description": "Real-browser zoom, reflow, text spacing, touch targets, keyboard journey, and reduced motion on Chromium and Edge.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "playwright",
+        "cases": {
+          "frontend/e2e/accessibility.spec.ts": {
+            "status": "passed",
+            "total": 26,
+            "passed": 26,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/gate-a-fixture-coverage.spec.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/harness.spec.ts": {
+            "status": "passed",
+            "total": 2,
+            "passed": 2,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/keyboard-journey.spec.ts": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/layout-accessibility.spec.ts": {
+            "status": "passed",
+            "total": 20,
+            "passed": 20,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/reduced-motion.spec.ts": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/repair-journey-accessibility.spec.ts": {
+            "status": "passed",
+            "total": 4,
+            "passed": 4,
+            "skipped": 0,
+            "failed": 0
+          },
+          "frontend/e2e/responsive.spec.ts": {
+            "status": "passed",
+            "total": 8,
+            "passed": 8,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "playwright",
+        "junit_sha256": "c50a6cac263088ad82e1f6210b1b27131fadaba87cb6db0f48da50577cbbd439"
+      },
+      "gate_a_check": "accessibility_browser_layer"
+    },
+    {
+      "check": "gate_a.accessibility_evidence",
+      "row": "blocking_regressions",
+      "category": "accessibility",
+      "story": "1.10",
+      "description": "Recorded accessibility evidence from automated coverage. Manual assistive-technology verification is explicitly descoped for this portfolio MVP (see EXPERIENCE.md's Accessibility Floor and docs/GATE-A-RUNBOOK.md).",
+      "source_kind": "evidence",
+      "source": "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-1.10/scenario-data-accessibility-and-responsiveness.json",
+        "sha256": "9fc73a3f3224560da443ae8b8fca32c12fa318e92e0a7a05dbf710a390dceec1"
+      },
+      "gate_a_check": "accessibility_evidence",
+      "verdict_key": "passed",
+      "detail": "drift: contract artifact sample_tiny_input has changed since it was measured; contract artifact sample_tiny_input_more_tm has changed since it was measured"
+    },
+    {
+      "check": "gate_a.state_semantics_matrix",
+      "row": "blocking_regressions",
+      "category": "accessibility",
+      "story": "4.6",
+      "description": "Enumerable component-layer state semantics and WCAG proof.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "vitest",
+        "cases": {
+          "frontend/src/test/stateMatrix.test.tsx": {
+            "status": "passed",
+            "total": 70,
+            "passed": 70,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "vitest",
+        "junit_sha256": "10314a64d68b02b0c3b2904f50386fc4678c5ad988668b69130cd3a821e923cb"
+      },
+      "gate_a_check": "state_semantics_matrix"
+    },
+    {
+      "check": "gate_a.journey_accessibility_browser_layer",
+      "row": "blocking_regressions",
+      "category": "accessibility",
+      "story": "4.6",
+      "description": "Desktop Chat, Runs, and Results proof across zoom, spacing, motion, and axe.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "playwright",
+        "cases": {
+          "frontend/e2e/journey-accessibility.spec.ts": {
+            "status": "passed",
+            "total": 6,
+            "passed": 6,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "playwright",
+        "junit_sha256": "c50a6cac263088ad82e1f6210b1b27131fadaba87cb6db0f48da50577cbbd439"
+      },
+      "gate_a_check": "journey_accessibility_browser_layer"
+    },
+    {
+      "check": "gate_a.state_semantics_evidence",
+      "row": "blocking_regressions",
+      "category": "accessibility",
+      "story": "4.6",
+      "description": "Clean-tree state matrix and browser measurement bound through NFR27.",
+      "source_kind": "evidence",
+      "source": "evidence/story-4.6/state-semantics-and-accessibility.json",
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "evidence": "evidence/story-4.6/state-semantics-and-accessibility.json",
+        "sha256": "18215bf9267a4210487e3cd4958e909192d6877e82afd01464e643e7d0872b22"
+      },
+      "gate_a_check": "state_semantics_evidence",
+      "verdict_key": "passed",
+      "detail": "drift: contract artifact sample_tiny_input has changed since it was measured; contract artifact sample_tiny_input_more_tm has changed since it was measured"
+    },
+    {
+      "check": "gate_a.state_semantics_report_machinery",
+      "row": "blocking_regressions",
+      "category": "accessibility",
+      "story": "4.6",
+      "description": "Live fail-closed generator guards for skipped, absent, and unbound reports.",
+      "source_kind": "tests",
+      "source": {
+        "runner": "pytest",
+        "cases": {
+          "backend/tests/test_state_semantics_evidence.py": {
+            "status": "passed",
+            "total": 12,
+            "passed": 12,
+            "skipped": 0,
+            "failed": 0
+          }
+        }
+      },
+      "result": "passed",
+      "bound": true,
+      "artifact": {
+        "runner": "pytest",
+        "junit_sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+      },
+      "gate_a_check": "state_semantics_report_machinery"
+    }
+  ],
+  "test_evidence": {
+    "pytest": {
+      "junit_xml": "/tmp/claude-0/-home-user-roster-ai/92a6c8d8-758c-5b97-b1b6-38051e02c85e/scratchpad/gateb3/pytest.xml",
+      "cases": 2970,
+      "run_started": "2026-10-06T01:08:18.126856+00:00",
+      "sha256": "10a1705a540bb7947929b1b49df148ba9be6c1cb3d9e13c4c113dc94594ab9df"
+    },
+    "pytest-postgres": {
+      "junit_xml": "/tmp/claude-0/-home-user-roster-ai/92a6c8d8-758c-5b97-b1b6-38051e02c85e/scratchpad/gateb3/postgres.xml",
+      "cases": 208,
+      "run_started": "2026-10-06T01:05:52.511374+00:00",
+      "sha256": "f8fa230f86a8e683235f49560f744b3df689c10d22d48f81a9f2c4caff54d8b7"
+    },
+    "vitest": {
+      "junit_xml": "/tmp/claude-0/-home-user-roster-ai/92a6c8d8-758c-5b97-b1b6-38051e02c85e/scratchpad/gateb3/vitest.xml",
+      "cases": 813,
+      "run_started": "2026-10-06T01:15:44.823Z",
+      "sha256": "10314a64d68b02b0c3b2904f50386fc4678c5ad988668b69130cd3a821e923cb"
+    },
+    "playwright": {
+      "junit_xml": "/tmp/claude-0/-home-user-roster-ai/92a6c8d8-758c-5b97-b1b6-38051e02c85e/scratchpad/gateb3/playwright.xml",
+      "cases": 80,
+      "run_started": "2026-10-06T01:15:46.750Z",
+      "sha256": "c50a6cac263088ad82e1f6210b1b27131fadaba87cb6db0f48da50577cbbd439"
+    }
+  },
+  "dataset": {
+    "single_turn_cases": 39,
+    "multi_turn_cases": 6,
+    "total_cases": 45,
+    "golden_case_floor": 45,
+    "release_allowed_capabilities": [
+      "scheduling_baseline",
+      "scheduling_compute",
+      "scheduling_draft",
+      "scheduling_draft_discard",
+      "scheduling_inspect",
+      "scheduling_optimize"
+    ],
+    "per_capability_floor": 4,
+    "per_capability": {
+      "scheduling_baseline": 6,
+      "scheduling_compute": 4,
+      "scheduling_draft": 4,
+      "scheduling_draft_discard": 4,
+      "scheduling_inspect": 14,
+      "scheduling_optimize": 5
+    },
+    "per_capability_shortfalls": [],
+    "excluded_capabilities": [
+      "demonstration"
+    ],
+    "protected_case_floor": 10,
+    "protected_cases": [
+      "scheduling-baseline-approval-bypass-real-tool",
+      "scheduling-baseline-approval-required",
+      "scheduling-baseline-draft-and-promotion-same-turn",
+      "scheduling-baseline-expected-baseline-pinned",
+      "scheduling-baseline-injection-chat-text",
+      "scheduling-baseline-invalid-run-identifier",
+      "scheduling-inspect-injection-chat-text",
+      "scheduling-inspect-injection-fixture-field",
+      "scheduling-inspect-injection-tool-output",
+      "scheduling-inspect-refuse-unsupported-request"
+    ],
+    "protected_case_count": 10,
+    "tag_integrity_violations": []
+  },
+  "deterministic_regression_coverage": {
+    "label": "regression coverage of the authored golden cases on the deterministic double; not a model-quality measure and not the Tool routing verdict (D8)",
+    "authoritative_case_count": 39,
+    "passed": 39,
+    "failed": 0,
+    "live_results_excluded": 0,
+    "tool_routing_percentage": 100.0,
+    "consequential_prohibited_case_count": 11,
+    "consequential_prohibited_passed": 11,
+    "consequential_prohibited_tool_routing_percentage": 100.0
+  },
+  "honest_gaps": [
+    "NFR35 with tracing on is unmeasured: every measurement and CI run is keyless (LOGFIRE_TOKEN unset), so Story 5.9's tracing is not installed (D7; deferred-work.md, revisit at the first hosted measurement or Story 6.4).",
+    "NFR35 1.4/1.5 tests time around TestClient.get (client-side clock), not the protocol's server-side request receipt (D7).",
+    "Hosted latency (NFR17) is not a Gate B row and is not measured here.",
+    "grounding-supported (scheduling_compute) grounds in fixture rows d-outbound-0/1 tagged unit=headcount, which docs/DOMAIN-MODEL.md §1 forbids (outbound is always volume). It is an eval-projection defect, not a production one; its routing verdict is unaffected and its grounding half stays as measured (D11).",
+    "Blocking-regressions categories are assigned by judgement; whether a registered file is topically relevant to its category is not machine-checked (D13).",
+    "Consequential behaviour with no model-facing surface (Story 4.5's stale, expired and replayed approvals) is proven by PostgreSQL proof nodes, not golden cases, so it is outside the dataset floors (D6)."
+  ],
+  "release_exceptions": [],
+  "version_bindings": {
+    "dataset": {
+      "kind": "version-controlled golden evaluation dataset",
+      "case_count": 45,
+      "case_versions": {
+        "demonstration-repeat-once": "1",
+        "demonstration-repeat-with-approval": "2",
+        "draft-discard-after-draft-same-turn": "1",
+        "draft-discard-no-working-draft": "1",
+        "draft-discard-start-over-is-not-discard": "1",
+        "draft-discard-valid": "1",
+        "draft-out-of-range-argument": "3",
+        "draft-stale-version": "3",
+        "draft-unresolvable-entity": "3",
+        "draft-valid-multi": "2",
+        "grounding-fact-supported": "2",
+        "grounding-fact-unknown-handle": "2",
+        "grounding-fact-value-mismatch": "2",
+        "grounding-missing-evidence": "5",
+        "grounding-supported": "5",
+        "grounding-untagged-numerals": "1",
+        "grounding-version-mismatch": "6",
+        "multi-turn-dependent-call-missing-antecedent": "1",
+        "multi-turn-dependent-call-stale-antecedent": "1",
+        "multi-turn-dependent-call-success": "1",
+        "multi-turn-dependent-call-truncated-antecedent": "1",
+        "multi-turn-dependent-call-unauthorized-antecedent": "1",
+        "multi-turn-long-history-window": "1",
+        "optimize-idempotency-key-boundary": "3",
+        "optimize-refuse-invalid-request": "2",
+        "optimize-replay-request": "2",
+        "optimize-valid-request": "2",
+        "optimize-version-bound-request": "2",
+        "scheduling-baseline-approval-bypass-real-tool": "3",
+        "scheduling-baseline-approval-required": "4",
+        "scheduling-baseline-draft-and-promotion-same-turn": "3",
+        "scheduling-baseline-expected-baseline-pinned": "4",
+        "scheduling-baseline-injection-chat-text": "2",
+        "scheduling-baseline-invalid-run-identifier": "4",
+        "scheduling-inspect-clarify-worker-ambiguity": "2",
+        "scheduling-inspect-injection-chat-text": "2",
+        "scheduling-inspect-injection-fixture-field": "4",
+        "scheduling-inspect-injection-tool-output": "4",
+        "scheduling-inspect-provider-failure": "4",
+        "scheduling-inspect-refuse-unsupported-request": "1",
+        "scheduling-inspect-wednesday-assignments": "3",
+        "scheduling-inspect-wednesday-constraints": "3",
+        "scheduling-inspect-wednesday-demand": "3",
+        "scheduling-inspect-wednesday-locks": "3",
+        "scheduling-inspect-wednesday-workers": "3"
+      },
+      "capability_distribution": {
+        "demonstration": 2,
+        "scheduling_baseline": 6,
+        "scheduling_compute": 4,
+        "scheduling_draft": 5,
+        "scheduling_draft_discard": 4,
+        "scheduling_inspect": 15,
+        "scheduling_inspect+scheduling_draft": 4,
+        "scheduling_optimize": 5
+      },
+      "risk_class_distribution": {
+        "compute": 5,
+        "consequential": 6,
+        "draft": 13,
+        "inspect": 16,
+        "prohibited": 5
+      },
+      "files": {
+        "backend/evals/golden/demonstration/repeat-once.json": {
+          "case_id": "demonstration-repeat-once",
+          "case_version": "1",
+          "sha256": "aae4e2c2bd7d43984ede7260e00294a7f78899bac81da688e550d244b0ccc9a2"
+        },
+        "backend/evals/golden/demonstration/repeat-with-approval.json": {
+          "case_id": "demonstration-repeat-with-approval",
+          "case_version": "2",
+          "sha256": "2ae6df6cfa91e411c7936b786b639f884efe38dbd1eba2193de1a8cfe3372858"
+        },
+        "backend/evals/golden/scheduling_baseline/approval-bypass-real-tool.json": {
+          "case_id": "scheduling-baseline-approval-bypass-real-tool",
+          "case_version": "3",
+          "sha256": "c31a7a4434dcf6d0845a15dd3834bea9f824b40e08c87fb7260eb25c61944212"
+        },
+        "backend/evals/golden/scheduling_baseline/approval-required.json": {
+          "case_id": "scheduling-baseline-approval-required",
+          "case_version": "4",
+          "sha256": "080ab62c7095823df5a7a1f55a2245b0ab0bcae8da27eebabb869fcb07f582d3"
+        },
+        "backend/evals/golden/scheduling_baseline/draft-and-promotion-same-turn.json": {
+          "case_id": "scheduling-baseline-draft-and-promotion-same-turn",
+          "case_version": "3",
+          "sha256": "40ddc2ee848f896c9ac8e296b7d8c5b759a6b8a2709a550e4e159a64267022b7"
+        },
+        "backend/evals/golden/scheduling_baseline/expected-baseline-pinned.json": {
+          "case_id": "scheduling-baseline-expected-baseline-pinned",
+          "case_version": "4",
+          "sha256": "b5b28638caf42412eca4eb216873637f65e0b46e82e42f461fee2dc5a25f6d5b"
+        },
+        "backend/evals/golden/scheduling_baseline/injection-chat-text.json": {
+          "case_id": "scheduling-baseline-injection-chat-text",
+          "case_version": "2",
+          "sha256": "2e5811791cb201bf434cc5658ce3f028d90c3b3088452667555f2d6a405494c0"
+        },
+        "backend/evals/golden/scheduling_baseline/invalid-run-identifier.json": {
+          "case_id": "scheduling-baseline-invalid-run-identifier",
+          "case_version": "4",
+          "sha256": "5c3bedf7711f6089be34a361e12ec3fb6f50df03c2be979424a7e427106bccf2"
+        },
+        "backend/evals/golden/scheduling_compute/missing-evidence.json": {
+          "case_id": "grounding-missing-evidence",
+          "case_version": "5",
+          "sha256": "1a378353179d7ff8dce01b97b1cdb687bd0d5cd502b322df31aa62246c04b5d1"
+        },
+        "backend/evals/golden/scheduling_compute/supported.json": {
+          "case_id": "grounding-supported",
+          "case_version": "5",
+          "sha256": "6d0f2423b8d5a79263b4e4bf769145f841a163b028f1e60d606937ab1bf300da"
+        },
+        "backend/evals/golden/scheduling_compute/untagged-numerals.json": {
+          "case_id": "grounding-untagged-numerals",
+          "case_version": "1",
+          "sha256": "497f315f1c174a6b51f18c70f33e4329222f5da5f25bb0d4dfeb583d0b36fbcb"
+        },
+        "backend/evals/golden/scheduling_compute/version-mismatch.json": {
+          "case_id": "grounding-version-mismatch",
+          "case_version": "6",
+          "sha256": "29a378e0c0bfc72d648db8131405bb910fc0d1695d25a73bc8eca7c6658bfd9b"
+        },
+        "backend/evals/golden/scheduling_draft/out-of-range-argument.json": {
+          "case_id": "draft-out-of-range-argument",
+          "case_version": "3",
+          "sha256": "cfa5b8ee79c80b9f7c018c2878620d3863d7a354fcc2093000200fbd3e2e559f"
+        },
+        "backend/evals/golden/scheduling_draft/stale-version.json": {
+          "case_id": "draft-stale-version",
+          "case_version": "3",
+          "sha256": "f50b13e7b91500aa37cfcdc5a84b4da43a4d9df69e1197d0479a726b52ed2029"
+        },
+        "backend/evals/golden/scheduling_draft/unresolvable-entity.json": {
+          "case_id": "draft-unresolvable-entity",
+          "case_version": "3",
+          "sha256": "1c9d693540bbad0a51de32ba02d1705280553d0fc2233461dec5367099691c52"
+        },
+        "backend/evals/golden/scheduling_draft/valid.json": {
+          "case_id": "draft-valid-multi",
+          "case_version": "2",
+          "sha256": "5325edf8c9e87e53e0ad6056a5e9757f4ea71b2697d670d9633b4ee0cc4187fd"
+        },
+        "backend/evals/golden/scheduling_draft_discard/after-draft-same-turn.json": {
+          "case_id": "draft-discard-after-draft-same-turn",
+          "case_version": "1",
+          "sha256": "0ad82b90f725eb450f30d850dd39849188170c2d236e086da1863e1b9093bfef"
+        },
+        "backend/evals/golden/scheduling_draft_discard/no-working-draft.json": {
+          "case_id": "draft-discard-no-working-draft",
+          "case_version": "1",
+          "sha256": "80583dddd701e58d1e4aeb072ed0d3be3172d0bb0fcce0d259f04e2b86fe8f53"
+        },
+        "backend/evals/golden/scheduling_draft_discard/start-over-is-not-discard.json": {
+          "case_id": "draft-discard-start-over-is-not-discard",
+          "case_version": "1",
+          "sha256": "a4b0bf3050f20ffa7d7711905b9da8914227739251c08cdbfb52158782b19415"
+        },
+        "backend/evals/golden/scheduling_draft_discard/valid.json": {
+          "case_id": "draft-discard-valid",
+          "case_version": "1",
+          "sha256": "7b962b2e11bf98a7f48a9c6a5b0f2924099b2ccf3a45540bdf7c612ab292e0b3"
+        },
+        "backend/evals/golden/scheduling_inspect/clarify-worker-ambiguity.json": {
+          "case_id": "scheduling-inspect-clarify-worker-ambiguity",
+          "case_version": "2",
+          "sha256": "37e60e1fb97287c2f404ccc7f529dc7994b27498ec4e43cf6196523d869e0198"
+        },
+        "backend/evals/golden/scheduling_inspect/fact-supported.json": {
+          "case_id": "grounding-fact-supported",
+          "case_version": "2",
+          "sha256": "dc3d46074b9f3b5df62cf591251a47f222a1d918629a55ebde68f41c86f9df5e"
+        },
+        "backend/evals/golden/scheduling_inspect/fact-unknown-handle.json": {
+          "case_id": "grounding-fact-unknown-handle",
+          "case_version": "2",
+          "sha256": "10caba07dc78b6d2ce8b0559d6a7b9e81ed99f30ab6f8304c47c416a4e96037f"
+        },
+        "backend/evals/golden/scheduling_inspect/fact-value-mismatch.json": {
+          "case_id": "grounding-fact-value-mismatch",
+          "case_version": "2",
+          "sha256": "03c4cee6a4e356081a7ea1c9fba3f9e92766ede2d64c27b5da1070c81ac00c6e"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-chat-text.json": {
+          "case_id": "scheduling-inspect-injection-chat-text",
+          "case_version": "2",
+          "sha256": "9d78e6cc90d5e13b3d59e3ee85cc259a260c5e80fe5e169a541c121b45c9d13b"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-fixture-field.json": {
+          "case_id": "scheduling-inspect-injection-fixture-field",
+          "case_version": "4",
+          "sha256": "2621d909e167603c33addae073fbb3c202cd129985c3e3115a2ce63c0b9cef3a"
+        },
+        "backend/evals/golden/scheduling_inspect/injection-tool-output.json": {
+          "case_id": "scheduling-inspect-injection-tool-output",
+          "case_version": "4",
+          "sha256": "d899a68b503ce8cb9a2403bfcdd3cb986754b4bd4770092d9cedf55909b97e53"
+        },
+        "backend/evals/golden/scheduling_inspect/provider-failure.json": {
+          "case_id": "scheduling-inspect-provider-failure",
+          "case_version": "4",
+          "sha256": "2ec37cd2676fd3180a40d0a9a59747c173ecba89bfe280351ff83f36da408a17"
+        },
+        "backend/evals/golden/scheduling_inspect/refuse-unsupported-request.json": {
+          "case_id": "scheduling-inspect-refuse-unsupported-request",
+          "case_version": "1",
+          "sha256": "c8eedc386e20cac95518b79ec967696850e67d14f23188a02c668a987e5145d5"
+        },
+        "backend/evals/golden/scheduling_inspect/wednesday-assignments.json": {
+          "case_id": "scheduling-inspect-wednesday-assignments",
+          "case_version": "3",
+          "sha256": "e5a4bd2b452159da00e5c6000949ce318b302c3264046fdf21677520f5e8cc84"
+        },
+        "backend/evals/golden/scheduling_inspect/wednesday-constraints.json": {
+          "case_id": "scheduling-inspect-wednesday-constraints",
+          "case_version": "3",
+          "sha256": "dfa95d81bcfad629e5cc511611fb060debe6634e7ea972f47217c76877b27c13"
+        },
+        "backend/evals/golden/scheduling_inspect/wednesday-demand.json": {
+          "case_id": "scheduling-inspect-wednesday-demand",
+          "case_version": "3",
+          "sha256": "4499e7802bf84b63065bda9eb947a889d8f18aead11a17ba78c299bea44fe36f"
+        },
+        "backend/evals/golden/scheduling_inspect/wednesday-locks.json": {
+          "case_id": "scheduling-inspect-wednesday-locks",
+          "case_version": "3",
+          "sha256": "e1702e51e9ff4c1d24c03f5515171ac6c26d6c730ecacecc2e6c5a224756bc45"
+        },
+        "backend/evals/golden/scheduling_inspect/wednesday-workers.json": {
+          "case_id": "scheduling-inspect-wednesday-workers",
+          "case_version": "3",
+          "sha256": "2db47c10d6fb88c0b2347e74a9d5be6ace3e6ce04bac42b358b74470fcc4da71"
+        },
+        "backend/evals/golden/scheduling_optimize/key-boundary.json": {
+          "case_id": "optimize-idempotency-key-boundary",
+          "case_version": "3",
+          "sha256": "4487cf4a2544ed1b99da1fbc563d83e02d1aeb16f081e8adcfcef64115856e5a"
+        },
+        "backend/evals/golden/scheduling_optimize/refuse-invalid-request.json": {
+          "case_id": "optimize-refuse-invalid-request",
+          "case_version": "2",
+          "sha256": "8ec5f362622919ba2e4edef5270751cb86fbe0b72e84de98807e709ae9461bb4"
+        },
+        "backend/evals/golden/scheduling_optimize/replay.json": {
+          "case_id": "optimize-replay-request",
+          "case_version": "2",
+          "sha256": "417a06271f0eed3c5c2f04001fd853c4099e9e34adb6b63d5825aecbf4aa065d"
+        },
+        "backend/evals/golden/scheduling_optimize/valid.json": {
+          "case_id": "optimize-valid-request",
+          "case_version": "2",
+          "sha256": "6696a48381fb4dcbd0e2633a23a66413fd1e8c726e14c1217a2c6fabcee16fb2"
+        },
+        "backend/evals/golden/scheduling_optimize/version-bound.json": {
+          "case_id": "optimize-version-bound-request",
+          "case_version": "2",
+          "sha256": "a1fef25dab13ec9bc0363edb6ece904c1cab1e11c70517b193369a2e44326982"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-missing-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-missing-antecedent",
+          "case_version": "1",
+          "sha256": "1b736861bdede4238aa49c7e333a67da16d72d3e1b2f340f1f9f10b4b6b52343"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-stale-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-stale-antecedent",
+          "case_version": "1",
+          "sha256": "126fe76e1ecca54690656cb92236bbd461fef153a40c4cbc0ba968e6ace23722"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-success.json": {
+          "case_id": "multi-turn-dependent-call-success",
+          "case_version": "1",
+          "sha256": "306ab3efa986e6148920d09890e14f1bb859385e2e0608caa7bf137e0fd52387"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-truncated-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-truncated-antecedent",
+          "case_version": "1",
+          "sha256": "b04bb62b761c83d1078a6b8f965b31b4792a6517ec06267c59885c9c3ae4dfcc"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/dependent-call-unauthorized-antecedent.json": {
+          "case_id": "multi-turn-dependent-call-unauthorized-antecedent",
+          "case_version": "1",
+          "sha256": "c2ddbba0a1c19c7384aa19eeb1e788bc483afa557073e1717c793b4330e2c4a4"
+        },
+        "backend/evals/golden_multi_turn/history_and_tools/long-history-window.json": {
+          "case_id": "multi-turn-long-history-window",
+          "case_version": "1",
+          "sha256": "16be0a93c6b4cd2d0f530e72ba828e1205f65e391d173e719fb85b21309d8070"
+        }
+      }
+    },
+    "evaluator": "pytest, Vitest and Playwright results read from JUnit XML; live single-turn routing and multi-turn evidence read by verdict key; in-process dataset-floor and freshness checks (scripts/gate_b_checks.py)",
+    "model": "deterministic double for every JUnit-backed check; the live models are bound in each registered live evidence file",
+    "prompt": "versioned golden prompts; live prompts bound in each live evidence file",
+    "tool": "every installed capability module (application/capabilities/installed.py)",
+    "policy": "Release Gate table, Gate B rows (epics.md); NFR28 floors amended by Story 5.13 D4-D6; AD-16 live-conversation verdict; NFR27 bindings",
+    "application": "local backend and frontend source tree at the bound commit",
+    "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
+    "solver": "OR-Tools CP-SAT as exercised by the registered PostgreSQL proof suites",
+    "code": {
+      "git_commit": "1b46f24e8f86d57ec9513a4d40e455dbeeeaa7d7",
+      "working_tree_dirty": false
+    },
+    "image": {
+      "api": "local source tree",
+      "web": "local source tree",
+      "database": "postgres:18"
+    },
+    "schema_version": "a8b9c0d1e2f3"
+  },
+  "blocking": [],
+  "gate_b_passed": true,
+  "passed": true
+}
