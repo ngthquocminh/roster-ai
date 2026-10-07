@@ -69,7 +69,7 @@ DECLARED_BINDINGS: dict[str, str] = {
     "prompt": "not applicable — no model invocation",
     "tool": (
         "in-process ASGI driver over the real FastAPI app (both http middleware "
-        "layers active), PostgreSQL 18 in Docker Desktop"
+        "layers active), PostgreSQL 18 in Docker"
     ),
     "policy": (
         "NFR35/AD-26: reconnect replay to current state completes within "
@@ -119,7 +119,7 @@ def build_document(
             "operating_system": platform.platform(),
             "processor": platform.processor(),
             "python": platform.python_version(),
-            "database": "PostgreSQL 18 in Docker Desktop",
+            "database": "PostgreSQL 18 in Docker",
             "network_transit": "none; in-process ASGI application driver",
         },
         "protocol": {

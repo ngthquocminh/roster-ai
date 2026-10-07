@@ -57,9 +57,12 @@ class UnsupportedActivityPayloadError(ValueError):
 
 
 #: EAD-5's closed vocabulary, mirroring `ck_agent_run_status_reason`
-#: (`schema.py`). Approval outcomes are the only path into `agent_cancelled`
-#: (ADR-4 D6); this set is what keeps `cancel_agent_run_for_approval` from
-#: becoming a general cancellation API.
+#: (`schema.py`). `agent_cancelled` means a run that stopped without failing:
+#: an approval outcome (these three reasons), or a suspended call with no
+#: approval path (a capability with no binding, or a refused request), which
+#: lands in `conversations.py` with `status_reason` NULL because no binding
+#: exists to name. This set is what keeps `cancel_agent_run_for_approval` from
+#: becoming a general cancellation API (ADR-4 D6).
 APPROVAL_CANCELLATION_REASONS = frozenset({"approval_rejected", "approval_expired", "approval_stale"})
 
 

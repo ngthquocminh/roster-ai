@@ -126,7 +126,7 @@ NFR26: Normal CI must be deterministic-first; live-provider tests are explicit, 
 
 NFR27: Every evaluation report must bind dataset, evaluator, model, prompt, tool, policy, application, scenario, solver, code, and image versions.
 
-NFR28: The initial golden dataset is assumed to contain at least 50 versioned cases, at least four per allowed capability, and at least ten consequential/prohibited cases; it must achieve at least 90% overall tool routing and 100% consequential/prohibited routing.
+NFR28: The golden dataset contains at least `GOLDEN_CASE_FLOOR` versioned golden cases, single-turn plus multi-turn (45 at Gate B: 39 + 6), a ratchet that may rise as cases are added and fall only with a reviewed, recorded reason; at least four single-turn cases per capability allowed in the release configuration (the `demonstration` harness module is exempt); and at least ten single-turn consequential/prohibited cases on allowed capabilities, counted by case tag with tag integrity enforced; it must achieve at least 90% overall tool routing and 100% consequential/prohibited routing. (Floor amended 2026-10-05 by Story 5.13 D4–D6: the 50 assumed golden-case contributions from Stories 3.10–3.12 and 4.5, and those stories deliberately added none, because their invariants are not model-reachable and are proven as PostgreSQL proof nodes (4.5 Decision 11). Multi-turn cases are versioned and graded by the same evaluators, so counting them puts them under the ratchet instead of leaving them ungated.)
 
 NFR29: Any regression in authorization, approval, isolation, hard constraints, grounding, idempotency, authoritative audit, viewer parity, recovery, accessibility, backup/restore, or rollback must block release regardless of aggregate helpfulness.
 
@@ -330,7 +330,7 @@ The complete planner journey runs reproducibly on any developer machine from one
 
 **FRs covered:** none new (makes the FR1–FR24 outcomes reproducible and legible outside the author's machine)
 
-**Implementation notes:** This is the portfolio milestone and completes Gate B. It delivers run instrumentation (tokens, cost, latency, budget outcomes, run-ID correlation), content and secret minimization with adversarial fixtures, a one-command reproducible environment whose locally built image digest satisfies every evaluation report's image binding, and the walkthrough that makes the system judgeable by a reader. NFR10's telemetry independence is already proven by Story 3.9; NFR35's thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and measured on CI per AD-26. Stories 5.9–5.10 (added 2026-09-24, sprint-change-proposal-2026-09-24) export sanitized full-request-path traces and live-evaluation results to Logfire; neither is a Gate B criterion. Stories 5.11–5.12 (added 2026-09-30, sprint-change-proposal-2026-09-30) give each conversation one working draft and re-prove live conversations against it; 5.12's measurement replaces Story 5.7's as the source of the live-conversation baseline.
+**Implementation notes:** This is the portfolio milestone and completes Gate B. It delivers run instrumentation (tokens, cost, latency, budget outcomes, run-ID correlation), content and secret minimization with adversarial fixtures, a one-command reproducible environment whose locally built image digest satisfies every evaluation report's image binding, and the walkthrough that makes the system judgeable by a reader. NFR10's telemetry independence is already proven by Story 3.9; NFR35's thresholds are owned by Stories 1.4, 1.5, 2.4, and 3.5 and measured on CI per AD-26. Stories 5.9–5.10 (added 2026-09-24, sprint-change-proposal-2026-09-24) export sanitized full-request-path traces and live-evaluation results to Logfire; neither is a Gate B criterion. Stories 5.11–5.12 (added 2026-09-30, sprint-change-proposal-2026-09-30) give each conversation one working draft and re-prove live conversations against it; 5.12's measurement replaces Story 5.7's as the source of the live-conversation baseline. Story 5.13 (added 2026-10-05, sprint-change-proposal-2026-10-05) assesses Gate B and emits `evidence/epic-5/release-gate-report.json`. It is the epic's closing story and blocks Epic 6.
 
 ### Epic 6: Reliable Hosted Planner Workspace
 
@@ -340,7 +340,7 @@ The planner can sign in to the hosted ShiftMind workspace and trust it: reproduc
 
 **Implementation notes:** Sequenced after the Epic 5 portfolio milestone and completes Gate C. Delivers AWS Terraform provisioning, Cognito/ECS/RDS/object-storage boundaries, health-gated immutable deployment including the SSE-through-CloudFront/ALB proof, a smoke-level hosted re-proof of the security/parity/mutation-denial invariants, backups, and a documented rollback path. It hardens an already complete and demonstrable planner workflow; nothing in Epics 1–5 depends on it.
 
-> **No release-evaluation epic.** Release evaluation and capability-module conformance are not a separate late epic. Each is a definition of done attached to the epic it protects: the evaluation harness and FR23 conformance live in Epic 2 (Stories 2.2 and 2.6, beside the registry they validate), per-slice evaluation suites live in each epic's own proof stories, Story 4.6 proves the completed workflow's state semantics and accessibility, and the aggregate release-blocking thresholds are held in the Release Gate section at the end of this document rather than in a story. Epic 6 is a deployment epic, not a release-evaluation epic, and this principle is unchanged by its addition.
+> **No release-evaluation epic.** Release evaluation and capability-module conformance are not a separate late epic. Each is a definition of done attached to the epic it protects: the evaluation harness and FR23 conformance live in Epic 2 (Stories 2.2 and 2.6, beside the registry they validate), per-slice evaluation suites live in each epic's own proof stories, Story 4.6 proves the completed workflow's state semantics and accessibility, and the aggregate release-blocking thresholds are held in the Release Gate section at the end of this document rather than in a story. Epic 6 is a deployment epic, not a release-evaluation epic, and this principle is unchanged by its addition. Story 5.13 (added 2026-10-05) owns the act of assessing Gate B; the thresholds themselves remain in the Release Gate section.
 
 ## Epic 1: Inspectable Single-Site Scenario Workspace
 
@@ -1699,6 +1699,44 @@ So that the lifecycle holds with the configured model, not only in deterministic
 **Then** `evidence/story-5.12/live-conversation-journeys.json` is generated through `backend/scripts/evidence_binding.py` and committed separately from the code, and `backend/evals/baselines/live-conversations.json` and the drop-check floor are re-derived from it with `derive_live_conversation_baseline.py` (129 executed turns)
 **And** no counted run makes a false claim, including a claimed undo. Missing, partial or stale evidence blocks Gate B's `live_conversation_journeys` row. (Gate B, EVIDENCE-CONVENTION)
 
+### Story 5.13: Assess Gate B [Technical Enabler]
+
+**Inserted 2026-10-05** by `sprint-change-proposal-2026-10-05.md`, from the Epic 5 second-half retrospective's action 1 (`epic-5-retro-2026-10-05.md` §4, §6). It is Epic 5's closing story and blocks Epic 6: Gate C builds on Gate B's report. It owns the act of assessing Gate B. The thresholds stay in the Release Gate table below.
+
+As the Evaluation/QA owner,
+I want every Gate B row evaluated at one bound commit and persisted as one report,
+So that the portfolio milestone is either claimed on evidence or not claimed, with the failing rows named.
+
+**Decisions settled with Minh at story creation, not at review:** (c) the dataset floor and (d) NFR35, below. The story is not `ready-for-dev` until both are recorded.
+
+**Acceptance Criteria:**
+
+**Given** the Gate B rows in the Release Gate table
+**When** `backend/scripts/gate_b_checks.py` is built, mirroring `gate_a_checks.py`
+**Then** every row is registered with the evidence file or test suite that proves it and the verdict key read from it, and a readiness test fails loudly on an unregistered row, a missing file, or an unreadable verdict. (Release Gate; EVIDENCE-CONVENTION "a verdict key the gate can read")
+
+**Given** Minh's go-ahead for the paid run, after a one-case smoke and a cost estimate
+**When** single-turn live routing runs on every `live_eligible` golden case (29 at creation) against the configured provider
+**Then** a version-bound live-routing report is generated through `backend/scripts/evidence_binding.py`, and the Tool routing row is evaluated from it: at least 90% overall and 100% on consequential/prohibited cases. (Gate B: Deterministic-first CI and live AI readiness; Tool routing)
+
+**Given** the golden dataset's measured shortfalls at creation (37 single-turn cases against 50; `demonstration` 2 of 4; consequential + prohibited 9 of 10)
+**When** decision (c) is applied
+**Then** each shortfall is closed either by a case that tests behaviour no existing case covers, or by a lowered threshold with a recorded rationale, never by padding
+**And** a lowered threshold is updated consistently in this document's Gate B row and caveat and in the PRD's golden-dataset assumption (`prd.md` §7 and the assumptions list). (Dataset-threshold caveat; PRD §7)
+
+**Given** the NFR35 evidence from Stories 1.4, 1.5, 2.4, and 3.5
+**When** decision (d) is applied
+**Then** either the August evidence stands, with a recorded rationale for why later request-path changes (5.9 tracing, 5.11 draft lifecycle) do not affect the four measured paths, or the four thresholds are re-measured under the canonical protocol on the CI reference environment. (NFR35, AD-26)
+
+**Given** every row evaluated
+**When** the report is emitted
+**Then** `evidence/epic-5/release-gate-report.json` is generated through `evidence_binding.py` after the code commit and committed separately, and it records Gate B as passed, or as not passed with each failing row and its artifact versions named
+**And** a live failure is not hidden behind a release exception unless that exception records owner, rationale, scope, expiry, and user-facing limitation. (Release Gate; EVIDENCE-CONVENTION)
+
+**Given** the reader-facing docs
+**When** the report is committed
+**Then** `README.md` (Current limitations) and `docs/WALKTHROUGH.md` (Gate B paragraph) state the actual case count and the assessed Gate B outcome, linking the report.
+
 ## Epic 6: Reliable Hosted Planner Workspace
 
 The planner can sign in to the hosted ShiftMind workspace and trust it: it is reproducibly deployed from reviewed infrastructure code, diagnosable without privacy leaks, and its invariants hold through the real edge, load-balancer, and database topology.
@@ -1817,9 +1855,9 @@ So that a hosted failure or unhealthy image cannot destroy durable work.
 
 ## Release Gate (Definition of Done)
 
-Release evaluation is not an epic or story. Each epic proves its own slice through its own proof stories on the Story 2.2 harness, and this checklist holds only the aggregate thresholds that no single story can measure.
+Release evaluation is not an epic. Each epic proves its own slice through its own proof stories on the Story 2.2 harness, and this checklist holds only the aggregate thresholds that no single story can measure. The thresholds live here and nowhere else. A gate's *assessment* may be owned by a story (Gate B: Story 5.13, added 2026-10-05) so that someone is accountable for doing it, but that story evaluates these rows. It does not restate or redefine them.
 
-**Gate B — the portfolio milestone.** After Epic 5's stories pass, the Evaluation/QA owner evaluates the Gate B rows below as Epic 5's final definition of done and persists `evidence/epic-5/release-gate-report.json`. Every Gate B threshold is measurable locally on the CI reference environment; none requires hosted infrastructure.
+**Gate B — the portfolio milestone.** After Epic 5's stories pass, the Evaluation/QA owner (Story 5.13) evaluates the Gate B rows below as Epic 5's final definition of done and persists `evidence/epic-5/release-gate-report.json`. Every Gate B threshold is measurable locally on the CI reference environment; none requires hosted infrastructure.
 
 **Gate C — hosted.** After Epic 6's stories pass, the same owner evaluates the Gate C rows and persists `evidence/epic-6/hosted-gate-report.json`.
 
@@ -1828,14 +1866,14 @@ Release evaluation is not an epic or story. Each epic proves its own slice throu
 | Deterministic-first CI and live AI readiness | B | Deterministic evidence is mandatory and authoritative for safety and correctness. For the pinned release provider/model configuration, every release-eligible live scenario must also pass under its explicit application-owned budget. A live pass is necessary but never sufficient: it cannot satisfy, weaken, or replace a deterministic gate. A live failure blocks the AI feature unless an explicit, time-bounded release exception records owner, rationale, scope, expiry, and user-facing limitation. | Stories 2.2, 5.5, 5.6 |
 | Required live conversation journeys | B | Story 5.7 (right-sized 2026-09-17), extended by Story 5.12: the scenarios fixed by `REQUIRED_SCENARIOS` (A–E: 6, 12, 12, 6, 7 user turns); every installed tool and supported operation; real persisted draft/solver/candidate/approval/baseline effects; one clean run per scenario plus three repetitions with per-turn pass rates on the same configured stack; no false claim or wrong fact/effect in any counted run. Missing, skipped, failed, partial, or stale evidence blocks. Deterministic results and the preceding row's exception mechanism cannot satisfy or waive this verdict. | Stories 5.7, 5.12; Gate B requires `live_conversation_journeys` |
 | Report version binding | B | Every evaluation report binds dataset, evaluator, model, prompt, tool, policy, application, scenario, solver, code, and image versions; the image binding is satisfied by Story 5.3's locally built digest. | Stories 2.2, 5.3 |
-| Golden dataset size | B | At least 50 versioned cases, at least four per allowed capability, and at least ten consequential/prohibited cases; case count may later change only from reviewed failure diversity. | Stories 2.9, 3.10–3.12, and 4.5–4.6 contribute; Gate B measures |
-| Tool routing | B | At least 90% overall and 100% for consequential/prohibited cases. | Gate B |
+| Golden dataset size | B | At least `GOLDEN_CASE_FLOOR` versioned golden cases, single-turn plus multi-turn (45 at Gate B: 39 + 6), a ratchet that may rise as cases are added and fall only with a reviewed, recorded reason; at least four single-turn cases per capability allowed in the release configuration (the `demonstration` harness module is exempt); and at least ten single-turn consequential/prohibited cases on allowed capabilities, counted by case tag with tag integrity enforced. Amended 2026-10-05 (Story 5.13 D4–D6); see the caveat below. | Stories 2.2, 2.5–2.9, 5.5, 5.6, 5.11 and 5.13 contribute; Gate B measures (`backend/scripts/gate_b_checks.py`) |
+| Tool routing | B | At least 90% overall and 100% for consequential/prohibited cases. | Story 5.13 (Gate B): live single-turn routing, three recorded passes, `evidence/story-5.13/live-golden-routing.json` (`tool_routing`) |
 | NFR35 internal thresholds | B | All four timing thresholds met under the canonical protocol on the CI reference environment (AD-26). | Stories 1.4, 1.5, 2.4, 3.5 |
 | Blocking regressions | B | Any regression in authorization, approval, isolation, hard constraints, grounding, idempotency, authoritative audit, viewer parity, recovery, or accessibility blocks release regardless of aggregate helpfulness, and the failure names the exact gate and artifact versions. | Every proof story; Gate B confirms |
 | Hosted invariants and parity | C | Hosted smoke invariants, viewer/agent parity, and mutation denial pass through the deployed topology. | Story 6.4 |
 | Backup and rollback | C | Automated backups are configured and the rollback procedure is documented and exercised. | Story 6.5 |
 
-> **Dataset-threshold caveat.** The 50-case floor was set when thirteen Epic 5 stories were expected to contribute cases. The hosted stories now in Epic 6 contribute infrastructure assertions rather than agent-behavior cases, so the floor must be re-verified against the actual contribution of Stories 2.9, 3.10–3.12, and 4.5–4.6 when Epic 2's harness lands. If it does not hold, lower the threshold with a recorded rationale — never pad the dataset to reach it.
+> **Dataset-threshold caveat (resolved 2026-10-05, Story 5.13 D4–D6).** The 50-case floor was set when thirteen Epic 5 stories were expected to contribute cases, and it did not hold. It was lowered to a ratchet with this recorded rationale: the 50 assumed golden-case contributions from Stories 3.10–3.12 and 4.5, and those stories deliberately added none, because their invariants are not model-reachable and are proven as PostgreSQL proof nodes (4.5 Decision 11). Multi-turn cases are versioned and graded by the same evaluators, so counting them puts them under the ratchet instead of leaving them ungated. The per-capability floor exempts the `demonstration` harness module, which the release configuration disables. The protected floor was closed by two cases that test behaviour no other case covered (an approval-bypass attempt through the real `scheduling_baseline` tool, and a draft plus promotion in one turn), never by padding.
 
 ## Story Map
 
@@ -1845,9 +1883,9 @@ Release evaluation is not an epic or story. Each epic proves its own slice throu
 | 2 - Grounded Conversational Investigation | 2.1 AgentRuntime boundary [TE] - 2.2 Evaluation harness [TE] - 2.3 Durable conversations - 2.4 Live event replay - 2.5 Governed inspect capability - 2.6 Governed capability module [TE] - 2.7 Evidence grounding - 2.8 Evidence jump/return - 2.9 Clarify/refuse/fail safely |
 | 3 - Governed and Recoverable Schedule Repair | 3.1 Reversible draft - 3.2 Deterministic candidate [TE] - 3.3 Job leasing/fencing [TE] - 3.4 Cancellation command [TE] - 3.5 Literal run state/replay [TE] - 3.6 Explicit bounded optimization - 3.7 Monitor/cancel/reopen runs - 3.8 Candidate/baseline comparison - 3.9 Model-outage continuity - 3.10 Repair correctness - 3.11 Recovery and idempotency - 3.12 Repair browser journey |
 | 4 - Exact Baseline Decision and Decision Record | 4.1 Request approval - 4.2 Review and decide - 4.3 Atomic promotion with audit - 4.4 Decision provenance - 4.5 Approval and audit invariants - 4.6 State semantics and automated accessibility |
-| 5 - Demonstrable Local Planner Workspace | 5.0 Real baseline comparison - 5.1 Run instrumentation - 5.2 Content/secret leak prevention - 5.3 One-command reproducible run [TE] - 5.3a Real solve to candidate [TE] - 5.4 Portfolio walkthrough - 5.5 Live golden routing (corrective story artifact) - 5.6 Multi-turn history evaluation - 5.7 Natural live conversations through baseline promotion - 5.9 Full-stack Logfire tracing - 5.10 Live-eval results in Logfire - 5.11 One working draft per conversation - 5.12 Live draft-lifecycle proof |
+| 5 - Demonstrable Local Planner Workspace | 5.0 Real baseline comparison - 5.1 Run instrumentation - 5.2 Content/secret leak prevention - 5.3 One-command reproducible run [TE] - 5.3a Real solve to candidate [TE] - 5.4 Portfolio walkthrough - 5.5 Live golden routing (corrective story artifact) - 5.6 Multi-turn history evaluation - 5.7 Natural live conversations through baseline promotion - 5.9 Full-stack Logfire tracing - 5.10 Live-eval results in Logfire - 5.11 One working draft per conversation - 5.12 Live draft-lifecycle proof - 5.13 Assess Gate B [TE] |
 | 6 - Reliable Hosted Planner Workspace | 6.1 AWS edge/identity/network [TE] - 6.2 AWS data/runtime [TE] - 6.3 Immutable deploys [TE] - 6.4 Hosted invariants/parity/mutation denial - 6.5 Backups and rollback |
 
-47 stories across 6 epics. Blocking dependencies are backward-only: 1 -> 2 -> 3 -> 4 -> 5 -> 6. Epic 5 is the portfolio milestone (Gate B) and is complete without Epic 6; Epic 6 adds the hosted proof (Gate C).
+57 stories across 6 epics. Blocking dependencies are backward-only: 1 -> 2 -> 3 -> 4 -> 5 -> 6. Epic 5 is the portfolio milestone (Gate B) and is complete without Epic 6; Epic 6 adds the hosted proof (Gate C).
 
 No story depends on a later story to complete its own acceptance boundary. Where a service contract necessarily precedes the surface that consumes it, the story is labelled `[TE]`, carries a platform persona, and states its non-planner-visible outcome explicitly: Stories 1.4/1.5 precede the Story 1.7 workspace and Story 2.8 evidence navigation; Stories 3.2–3.5 precede the Story 3.6 run control and the Story 3.7 Runs workspace. Story 2.5 is complete for FR5 and the scheduling inspect capability alone, and Story 2.6 wholly owns FR23. Story 3.1 delivers a complete draft without a Run optimization placeholder; Story 3.6 introduces the run control and command together; Story 3.7 makes the Story 3.4 cancellation command reachable. Story 3.5 independently owns optimization progress/recovery behavior; Story 4.1 independently owns approval-required behavior.

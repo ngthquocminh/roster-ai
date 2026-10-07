@@ -86,6 +86,7 @@ Dependencies point inward. Adapters may translate owned contracts; they may not 
 - **Binds:** FR-12, FR-13, FR-16, FR-18 and every workflow-status UI
 - **Prevents:** one ambiguous run enum creating impossible approval, cancellation, or candidate states
 - **Rule:** `AgentRun`, `ScheduleRun`, and `ApprovalRequest` use the separate closed graphs below; adapters may project a combined timeline but never merge their stored status types. Only feasible `ScheduleRun.completed` can reference a candidate `ScheduleVersion`. Application configuration—not the model—sets maximum iterations, model/tool calls, tokens, retries, wall time, site concurrency, and solver duration. Wall-time exhaustion becomes `timed_out`; other limit exhaustion becomes `failed` with stable `budget_exhausted` reason. Both persist and emit once without implicit retry.
+- **Amendment (2026-10-05, Epic 5 retro action 2):** `agent_cancelled` means *a run that stopped without failing*: an approval outcome (rejected, expired, or stale, carrying the matching `agent_run.status_reason`), or a suspended call with no approval path (a capability with no approval binding, or a request policy refused), which lands with `status_reason` NULL because no binding exists to name. It never means user-initiated cancellation (ADR-4 D6) and adds no status or reason. The `approval_required` edge label read "rejected or expired" before EAD-5 added `approval_stale`.
 
 ```mermaid
 stateDiagram-v2
@@ -97,7 +98,7 @@ stateDiagram-v2
       agent_queued --> agent_failed
       agent_running --> approval_required
       approval_required --> agent_running: decision recorded
-      approval_required --> agent_cancelled: rejected or expired
+      approval_required --> agent_cancelled: rejected, expired or stale
       agent_running --> agent_completed
       agent_running --> agent_timed_out
       agent_running --> agent_cancelled

@@ -10,9 +10,9 @@ The rule is enforced mechanically rather than by convention: the suites in
 `backend/tests/architecture/` sweep the domain and application packages for
 forbidden imports, and any exception must be named in `ALLOWED_LEAKS`, which a
 companion test asserts still exists and still leaks — so a suppression cannot
-outlive the violation it covers. Three ports under `backend/application/ports/`
-currently import SQLAlchemy's `Connection` and are recorded there; closing them
-is tracked in the deferred-work ledger.
+outlive the violation it covers. `ALLOWED_LEAKS` is currently empty: the ports
+under `backend/application/ports/` type the driver handle as `connection: Any`
+rather than importing SQLAlchemy's `Connection`.
 
 Authority is deliberately divided three ways:
 

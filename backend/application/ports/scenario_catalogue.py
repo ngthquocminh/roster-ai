@@ -3,10 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
-
-from sqlalchemy import Connection
 
 
 @dataclass(frozen=True)
@@ -43,11 +41,11 @@ class ScenarioContext:
 class ScenarioCatalogueReader(Protocol):
     def list_fixture_versions(
         self,
-        connection: Connection,
+        connection: Any,
     ) -> tuple[FixtureCatalogueEntry, ...]: ...
 
     def get_scenario_context(
         self,
-        connection: Connection,
+        connection: Any,
         scenario_id: UUID,
     ) -> ScenarioContext | None: ...

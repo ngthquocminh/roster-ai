@@ -83,9 +83,13 @@
 
 Surfaced while amending Story 2.7's Decision 2 (`sprint-change-proposal-2026-08-13.md`). None of these is caused by that amendment, and none is fixed by it. They are recorded together because they are one gap seen from three sides: **the harness evaluates the plumbing, not the model.** Story 2.7's grounding gate is a structural invariant — every rendered number is application-computed, from an immutable version, with a locator — and it is enforced per request. Whether the model chose the *right* metric for the question asked, and whether its prose fairly characterises the number beside it, are statistical properties that only an evaluation layer can measure. That layer has targets but no instrument.
 
-- **The live-model evaluation path is declared and entirely unimplemented.** `RunSource = Literal["double", "live"]` [backend/evals/evaluators.py:12] and `EvalVerdict.authoritative` already encodes NFR26's "never the sole release evidence" by admitting only `"double"`. But the string `"live"` appears **nowhere else in `backend/evals/`** — there is no live runner, no gating, no budget. The seam was cut and never used, so no evidence in this repository has ever been produced by a real model. **Owner/revisit trigger:** the first story that needs a claim about real-model behaviour rather than harness behaviour — realistically Gate B, where NFR28's routing floor is meant to be reported.
+- **CLOSED 2026-10-06 (Story 5.13, D9):** the live path exists and is gated. `backend/evals/live_golden_routing.py` measures every live-eligible golden case on the configured model under a settings budget and spend ceiling, and writes bound evidence (`evidence/story-5.13/live-golden-routing.json`, verdict key `tool_routing`), which `scripts/gate_b_checks.py` reads. `backend/evals/live_multi_turn.py` does the same for the multi-turn suite (D3).
 
-- **NFR28's "≥90% overall tool routing" currently describes the dataset, not the model.** Every golden case drives a deterministic double whose turns are *authored* (`ScriptedModelTurn`, [backend/evals/cases.py:33-43]), so the routing a case exercises is the routing its writer wrote down. `ToolRoutingEvaluator` then asserts exact equality against that same authored expectation [backend/evals/evaluators.py:38-93]. This is sound regression coverage and is exactly what NFR26 asks normal CI to be — but a ≥90% pass rate computed this way is a property of the case files, and reporting it as a model-quality measure would overclaim. **Owner/revisit trigger:** shares an owner with the live-run entry above; whoever implements the live path must also state which of NFR28's two numbers each run source is entitled to report.
+  ORIGINAL: - **The live-model evaluation path is declared and entirely unimplemented.** `RunSource = Literal["double", "live"]` [backend/evals/evaluators.py:12] and `EvalVerdict.authoritative` already encodes NFR26's "never the sole release evidence" by admitting only `"double"`. But the string `"live"` appears **nowhere else in `backend/evals/`** — there is no live runner, no gating, no budget. The seam was cut and never used, so no evidence in this repository has ever been produced by a real model. **Owner/revisit trigger:** the first story that needs a claim about real-model behaviour rather than harness behaviour — realistically Gate B, where NFR28's routing floor is meant to be reported.
+
+- **CLOSED 2026-10-06 (Story 5.13, D8):** the two numbers are now separated. Gate B's Tool routing row reports only the live percentages from `live-golden-routing.json`. The deterministic routing pass rate is labelled `deterministic_regression_coverage` in the Gate B report: regression coverage of the authored cases, and never a model-quality measure.
+
+  ORIGINAL: - **NFR28's "≥90% overall tool routing" currently describes the dataset, not the model.** Every golden case drives a deterministic double whose turns are *authored* (`ScriptedModelTurn`, [backend/evals/cases.py:33-43]), so the routing a case exercises is the routing its writer wrote down. `ToolRoutingEvaluator` then asserts exact equality against that same authored expectation [backend/evals/evaluators.py:38-93]. This is sound regression coverage and is exactly what NFR26 asks normal CI to be — but a ≥90% pass rate computed this way is a property of the case files, and reporting it as a model-quality measure would overclaim. **Owner/revisit trigger:** shares an owner with the live-run entry above; whoever implements the live path must also state which of NFR28's two numbers each run source is entitled to report.
 
 - ~~**No evaluator assesses whether visible prose is faithful to the computed claims.**~~ **CLOSED 2026-08-15 (Story 2.9):** `PolicyOutcomeEvaluator` now judges allow/refuse/clarify against the owned outcome variant, and the report combines that verdict with exact `expected_visible_state` and `expected_visible_text` comparisons derived through the same `outcome_visible_text()` function used by the product. A visible-state or visible-copy drift now makes the generated report fail rather than leaving either required `GoldenCase` field unread.
 
@@ -230,7 +234,9 @@ Surfaced while amending Story 2.7's Decision 2 (`sprint-change-proposal-2026-08-
 - `.github/workflows` is still absent, so every "normal CI" guarantee in this story — AC1's zero-network default suite, Task 8's "fails CI if any file under `backend/evals/golden/` does not validate" — is enforced only by whoever remembers to run pytest locally. Pre-existing (noted in the story-1.11 review above, in the `requires_git` entry); the exposure grows as Epic 2+ adds gates that assume CI executes them.
 ## Deferred from: story-2-3 creation (2026-08-10)
 
-- **`ScenarioCatalogueReader` leaks SQLAlchemy into the application layer — the one open AD-1 violation in `backend/application/**`.** `from sqlalchemy import Connection` at [backend/application/ports/scenario_catalogue.py:9] is a top-level runtime import, and `Connection` then appears in the Protocol's own signatures (`list_fixture_versions(self, connection: Connection)`, `get_scenario_context(self, connection: Connection, ...)` — lines 38-48). AD-1/AR1 name SQLAlchemy explicitly: *"Domain and application code must not import FastAPI, PydanticAI, SQLAlchemy, Cognito, S3, Logfire, or concrete model providers."* Nothing is broken at runtime; the cost is that the seam does not swap (a non-SQLAlchemy implementation cannot satisfy the contract honestly, and stubs drag the driver in through the type), and — more practically — this single line is what prevents `sqlalchemy` being added to `FORBIDDEN_ROOT_MODULES` and turning AD-1 from prose into a test that can go red for the whole layer.
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `scenario_catalogue.py` now types `connection: Any` (tier 2 below, as the Epic 5 second-half retro re-sized it), its `ALLOWED_LEAKS` entry is deleted, and `ALLOWED_LEAKS` is empty. Tier 3 (a port that takes no connection) was not done and is not owed by this entry.
+
+  ORIGINAL: **`ScenarioCatalogueReader` leaks SQLAlchemy into the application layer — the one open AD-1 violation in `backend/application/**`.** `from sqlalchemy import Connection` at [backend/application/ports/scenario_catalogue.py:9] is a top-level runtime import, and `Connection` then appears in the Protocol's own signatures (`list_fixture_versions(self, connection: Connection)`, `get_scenario_context(self, connection: Connection, ...)` — lines 38-48). AD-1/AR1 name SQLAlchemy explicitly: *"Domain and application code must not import FastAPI, PydanticAI, SQLAlchemy, Cognito, S3, Logfire, or concrete model providers."* Nothing is broken at runtime; the cost is that the seam does not swap (a non-SQLAlchemy implementation cannot satisfy the contract honestly, and stubs drag the driver in through the type), and — more practically — this single line is what prevents `sqlalchemy` being added to `FORBIDDEN_ROOT_MODULES` and turning AD-1 from prose into a test that can go red for the whole layer.
 
   The newer port written for Stories 1.4/1.5 already made the opposite choice: [backend/application/ports/scenario_projection.py:104] types the same runtime object as `connection: Any`, keeping the vendor name out of the layer.
 
@@ -865,7 +871,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the first story that needs to document the legacy surface, or the
   legacy-route flag cutover in `docs/GATE-A-RUNBOOK.md`.
 
-- **Two application ports leak SQLAlchemy into the application layer, now tracked.**
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `membership.py` and `site_baseline.py` now type `connection: Any`, matching `approval.py`; both `ALLOWED_LEAKS` entries are deleted.
+
+  ORIGINAL: **Two application ports leak SQLAlchemy into the application layer, now tracked.**
   `backend/application/ports/membership.py:7` and `site_baseline.py:9` import
   `from sqlalchemy import Connection`, which AD-1 forbids by name
   (`ARCHITECTURE-SPINE.md:52`). They were neither swept nor allow-listed until the
@@ -902,7 +910,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 
 ## Deferred from: code review of story-5.5 (2026-09-11)
 
-- **A local `.env` with a real `AGENT_RUNTIME_MODEL` set leaks into ordinary test runs.**
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `backend/conftest.py` `pytest_configure` pins `AGENT_RUNTIME_MODEL=deterministic` and clears `AGENT_RUNTIME_API_KEY` for every session whose `-m` expression does not select `live`; `tests/test_agent_runtime_env_isolation.py` guards it. (Observed at closure: with a fake model and key exported, the named suites stayed green even without the pin, and `test_agent_deterministic_model.py` already deletes the variable itself, so the dedicated guard test is the proof, not those suites.)
+
+  ORIGINAL: **A local `.env` with a real `AGENT_RUNTIME_MODEL` set leaks into ordinary test runs.**
   `backend/settings.py:313`'s `default_settings()` reads `AGENT_RUNTIME_MODEL` straight from the
   process environment with no test-time override, so a developer's local `.env` — set to a real
   provider for Story 5.5's live testing — makes `test_agent_deterministic_model.py` and
@@ -913,7 +923,14 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the next story doing live-provider work, or a dedicated conftest fixture
   that pins `AGENT_RUNTIME_MODEL=deterministic` for the default test session regardless of `.env`.
 
-- **`generate_live_diagnostics` has no committed CLI entry point.** `backend/evals/report.py`'s
+- **CLOSED 2026-10-05 (Story 5.13 Task 2):** superseded rather than wired. `backend/evals/live_golden_routing.py`
+  is the scripted live single-turn path, with a CLI (`uv run --frozen python -m evals.live_golden_routing`):
+  it builds the configured model through the production factory, records per-case routing,
+  grounding and policy verdicts (redacted: names, counts and closed-vocabulary classifications only),
+  usage and cost, and writes version-bound evidence. Its `--runs 1 --allow-dirty --output …` form is
+  the diagnosis run this entry asked for. `generate_live_diagnostics` stays as the redacted JSONL helper.
+
+  ORIGINAL: **`generate_live_diagnostics` has no committed CLI entry point.** `backend/evals/report.py`'s
   `main()` still only calls `generate_demonstration_report`; the new live-diagnostics function
   (`report.py:149-205`) was only exercised ad hoc during Story 5.5's own dev session per its Debug
   Log, and is otherwise reachable only from `test_live_diagnostics_flushes_one_result_per_case`
@@ -941,6 +958,11 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the next story touching `scheduling_compute` golden cases or
   `fixture_projection.py`'s `DEMAND` tuple, or the Gate B dataset-floor decision this story's Open
   Question already flags as owed.
+  **RE-ROUTED 2026-10-06 (Story 5.13, D11):** Gate B assessed the dataset floor without fixing this.
+  The case's *routing* (a `scheduling_compute` call with the right arguments) is correct whatever the
+  unit tag says, so it stays in the live routing population. The Gate B report lists it under
+  `honest_gaps`. Trigger now: the next story touching `scheduling_compute` golden cases or
+  `fixture_projection.py`'s `DEMAND` tuple.
 
 ## Deferred from: code review of 5-6-evaluate-real-provider-multi-turn-history-and-tool-continuity (2026-09-14)
 
@@ -959,7 +981,9 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   **Owner/revisit trigger:** the first multi-turn case that needs padding < `HISTORY_MESSAGE_BOUND`;
   pad to a clean message boundary or reject the combination at load.
 
-- **`.env` `AGENT_RUNTIME_MODEL` / `AGENT_RUNTIME_API_KEY` leak into the default suite (pre-existing,
+- **CLOSED 2026-10-05 (spec-epic-5-retro-hygiene-bundle.md):** `backend/conftest.py` `pytest_configure` pins `AGENT_RUNTIME_MODEL=deterministic` and clears `AGENT_RUNTIME_API_KEY` for every session whose `-m` expression does not select `live`; `tests/test_agent_runtime_env_isolation.py` guards it. (Observed at closure: with a fake model and key exported, the named suites stayed green even without the pin, and `test_agent_deterministic_model.py` already deletes the variable itself, so the dedicated guard test is the proof, not those suites.)
+
+  ORIGINAL: **`.env` `AGENT_RUNTIME_MODEL` / `AGENT_RUNTIME_API_KEY` leak into the default suite (pre-existing,
   now load-bearing).** Already ledgered at Story 5.5; Story 5.6's "0 regressions" figure was reached by
   deselecting the leaked `test_execute_turn_emits_claim_to_finalize_telemetry` failure, and
   `_HAS_LIVE_AGENT` is computed from `.env` contents.
@@ -1428,3 +1452,53 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
 - source_spec: `_bmad-output/implementation-artifacts/spec-chat-side-panel.md`
   summary: EXPERIENCE.md still specifies "Return to claim" (~9 places: component table row, keyboard/focus rules, evidence failure rules for version mismatch / missing / unauthorized, accessibility notes, and the walkthrough) although the shipped control is now "Close evidence".
   evidence: Commit 304578c replaced Return to claim with Close evidence because the chat is a side panel beside the evidence; `grep -n "Return to claim" _bmad-output/planning-artifacts/ux-designs/ux-ShiftMind-2026-07-22/EXPERIENCE.md` lists the stale lines.
+
+## Deferred from: Story 5.13 (Assess Gate B), 2026-10-06
+
+- **NFR35 has never been measured with request tracing on.** All four NFR35 files (re-measured at
+  `bd929c5`) and every CI run are keyless, and Story 5.9's OpenTelemetry tracing installs only when
+  `LOGFIRE_TOKEN` is set (`adapters/telemetry/spans.py`). So the published numbers do not cover a
+  deployment that exports traces. Gate B's NFR35 verdict comes from the four CI threshold tests (D7),
+  which run keyless too. NFR17 keeps hosted latency out of scope, so this is not a Gate B gap.
+  **Owner/revisit trigger:** the first hosted measurement, or Story 6.4.
+- **The 1.4/1.5 NFR35 tests time around `TestClient.get`, not from server-side request receipt.** The
+  canonical protocol (requirements-inventory.md, NFR35) says the two read measures run "from request
+  receipt to response completion", but `test_nfr35_projection_initial_windows_meet_two_second_threshold`
+  and `test_nfr35_exact_evidence_targets_meet_two_second_threshold` start the clock in the test. That
+  over-counts slightly, which is the safe direction, and the Gate B report records it under
+  `honest_gaps`. **Owner/revisit trigger:** the next story that changes an NFR35 test or its
+  threshold.
+
+## Deferred from: code review of 5-13-assess-gate-b (2026-10-06)
+
+- **Gate A drift accepted as passed inside Gate B.** Gate B reuses Gate A's `_evidence_result`,
+  which passes `gate_a.accessibility_evidence` and `gate_a.state_semantics_evidence` with
+  "drift: contract artifact sample_tiny_input has changed since it was measured". JUnit checks
+  back both categories, so no row rests on the flag alone. **Deferred reason: Gate A's rule,
+  pre-existing.** **Owner/revisit trigger:** the next re-measurement of either Gate A file.
+
+- **Override prices are not tied to a named model.** `compose.override.yml` pins prices but no
+  model, so an exported `AGENT_RUNTIME_MODEL` is priced at luna's rates with `spend_measured: true`.
+  **Deferred reason: the override is under `evals/live_conversations/**`, frozen in 5.13.**
+  **Owner/revisit trigger:** the next model or price change in the override.
+
+- **NFR35 regeneration stamps the regenerating machine's platform.** `apply_fresh_measurements`
+  re-reads `platform` where `regenerate_evidence.py` runs, not where `postgres.log` was captured
+  (`backend/scripts/regenerate_evidence.py`). Consistent for the 5.13 run. **Deferred reason:
+  only wrong when the log and the script run on different machines.** **Owner/revisit trigger:**
+  the first NFR35 measurement taken in CI.
+
+- **`workflow_snapshot` shape is unvalidated.** `evals/cases.py` checks only "is a dict", so drift
+  from `load_workflow_context`'s shape is undetected, and an oversize snapshot raises before
+  `_run_runtime_case`'s `try`. **Deferred reason: latent.** **Owner/revisit trigger:** the next
+  change to the workflow-context message.
+
+- **No minimum live protected population in `routing_verdict`.** After the Task 9 owner decision
+  it is 9, and further `live_eligible: false` flips would shrink it silently.
+  **Deferred reason: owner-settled population.** **Owner/revisit trigger:** the next
+  `live_eligible` flip on a protected case.
+
+- **`_is_live_marked` misses module-level `pytestmark` and `from pytest import mark` forms**
+  (`backend/scripts/junit_ingest.py`). Such tests stay "expected" and block spuriously.
+  **Deferred reason: fails closed; no such test exists.** **Owner/revisit trigger:** the first
+  live test marked that way.

@@ -112,8 +112,17 @@ _FILTERS = {
         "start_minute_gte": lambda item, value: item.start_minute >= value,
         "end_minute_lte": lambda item, value: item.end_minute <= value,
     },
-    "assignments": {"task_id": lambda item, value: item.task_id == value},
+    # Every filter `_KEYS` advertises must be implemented here, with the
+    # production reader's semantics (adapters/postgres/scenario_projection.py
+    # WORKER_FILTERS / ASSIGNMENT_FILTERS). `contact_id` and `worker_id` were
+    # advertised but missing, so a live model that used them crashed the turn
+    # with a raw KeyError the request path never produces (Story 5.13 Task 8).
+    "assignments": {
+        "worker_id": lambda item, value: item.worker_id == value,
+        "task_id": lambda item, value: item.task_id == value,
+    },
     "workers": {
+        "contact_id": lambda item, value: item.contact_id == value,
         "qualified_task_id": lambda item, value: any(
             qualification.task_id == value for qualification in item.qualifications
         )

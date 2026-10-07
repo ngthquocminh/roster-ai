@@ -264,6 +264,12 @@ def declared_pytest_cases(module_path: Path) -> tuple[str, ...]:
     simply absent, indistinguishable from a case that never existed. The source
     can, so the expected set is recovered by parsing rather than by trusting a
     hand-maintained list in the registry.
+
+    A test decorated ``@pytest.mark.live`` is not expected. ``pyproject.toml``'s
+    ``-m "not live"`` default deselects it on every ordinary run by design
+    (NFR26, rule 3 above), and its result reaches a gate through its own bound
+    evidence instead. Story 5.13 found Gate B blocked on exactly this: a
+    registered file holding both deterministic and live tests.
     """
     try:
         tree = ast.parse(module_path.read_text(encoding="utf-8"))
@@ -272,14 +278,27 @@ def declared_pytest_cases(module_path: Path) -> tuple[str, ...]:
     names: list[str] = []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("test_"):
+            if node.name.startswith("test_") and not _is_live_marked(node):
                 names.append(node.name)
-        elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+        elif (isinstance(node, ast.ClassDef) and node.name.startswith("Test")
+              and not _is_live_marked(node)):
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    if item.name.startswith("test_"):
+                    if item.name.startswith("test_") and not _is_live_marked(item):
                         names.append(item.name)
     return tuple(sorted(names))
+
+
+def _is_live_marked(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> bool:
+    """True for a ``@pytest.mark.live`` (or ``@pytest.mark.live(...)``) decorator."""
+    for decorator in node.decorator_list:
+        target = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if (isinstance(target, ast.Attribute) and target.attr == "live"
+                and isinstance(target.value, ast.Attribute) and target.value.attr == "mark"
+                and isinstance(target.value.value, ast.Name)
+                and target.value.value.id == "pytest"):
+            return True
+    return False
 
 
 def missing_pytest_cases(

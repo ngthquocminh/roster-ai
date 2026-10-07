@@ -1,7 +1,7 @@
 {
   "story": "2.4",
   "requirement": "NFR35",
-  "measurement_date": "2026-08-11",
+  "measurement_date": "2026-10-07",
   "fixture": {
     "name": "sample_tiny_input_more_tm.json",
     "version": "v1"
@@ -11,7 +11,7 @@
     "operating_system": "Windows-10-10.0.26200-SP0",
     "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
     "python": "3.10.9",
-    "database": "PostgreSQL 18 in Docker Desktop",
+    "database": "PostgreSQL 18 in Docker",
     "network_transit": "none; in-process ASGI application driver"
   },
   "protocol": {
@@ -28,7 +28,7 @@
     "last_event_id": "absent; the stalest possible cursor, replaying the entire backlog from sequence 0"
   },
   "code_versions": {
-    "git_commit": "d2789a77c8322aeb554d3aab117b1b222bb4ff8f",
+    "git_commit": "6b66aabb5e14171dcffde0e13938688e28e92e44",
     "working_tree_dirty": false,
     "api_image": "local source tree",
     "database_image": "postgres:18"
@@ -39,44 +39,44 @@
       "endpoint": "/api/v1/conversations/{conversation_id}/events",
       "replay_backlog_events": 200,
       "last_event_id": "absent (replay from sequence 0)",
-      "duration_ms": 48.454
+      "duration_ms": 249.796
     },
     {
       "run": 2,
       "endpoint": "/api/v1/conversations/{conversation_id}/events",
       "replay_backlog_events": 200,
       "last_event_id": "absent (replay from sequence 0)",
-      "duration_ms": 44.92
+      "duration_ms": 251.02
     },
     {
       "run": 3,
       "endpoint": "/api/v1/conversations/{conversation_id}/events",
       "replay_backlog_events": 200,
       "last_event_id": "absent (replay from sequence 0)",
-      "duration_ms": 41.978
+      "duration_ms": 265.01
     }
   ],
-  "maximum_duration_ms": 48.454,
+  "maximum_duration_ms": 265.01,
   "passed": true,
   "version_bindings": {
     "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
     "evaluator": "pytest, @pytest.mark.postgres test_nfr35_sse_reconnect_replay_meets_five_second_threshold",
     "model": "not applicable — no model invocation",
     "prompt": "not applicable — no model invocation",
-    "tool": "in-process ASGI driver over the real FastAPI app (both http middleware layers active), PostgreSQL 18 in Docker Desktop",
+    "tool": "in-process ASGI driver over the real FastAPI app (both http middleware layers active), PostgreSQL 18 in Docker",
     "policy": "NFR35/AD-26: reconnect replay to current state completes within 5000 ms; a miss blocks implementation acceptance of Story 2.4",
     "application": "local backend source tree",
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "git_commit": "d2789a77c8322aeb554d3aab117b1b222bb4ff8f",
+      "git_commit": "6b66aabb5e14171dcffde0e13938688e28e92e44",
       "working_tree_dirty": false
     },
     "image": {
-      "api": "local source tree",
-      "web": "local source tree",
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959",
       "database": "postgres:18"
     },
-    "schema_version": "a4f92d7c8e31"
+    "schema_version": "a8b9c0d1e2f3"
   }
 }

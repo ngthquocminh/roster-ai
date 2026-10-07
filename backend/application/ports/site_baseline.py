@@ -3,10 +3,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
-
-from sqlalchemy import Connection
 
 
 @dataclass(frozen=True)
@@ -17,13 +15,13 @@ class SiteBaselineV1:
 
 
 class SiteBaselineReader(Protocol):
-    def get(self, connection: Connection, site_id: UUID) -> SiteBaselineV1 | None: ...
+    def get(self, connection: Any, site_id: UUID) -> SiteBaselineV1 | None: ...
 
 
 class SiteBaselineWriter(Protocol):
     def promote(
         self,
-        connection: Connection,
+        connection: Any,
         *,
         site_id: UUID,
         schedule_version_id: UUID,

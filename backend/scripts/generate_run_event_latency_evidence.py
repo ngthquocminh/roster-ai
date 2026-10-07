@@ -39,7 +39,7 @@ DECLARED_BINDINGS: dict[str, str] = {
     "prompt": "not applicable — no model invocation",
     "tool": (
         "direct committed enqueue_compute bundle plus in-process ASGI driver "
-        "over the real FastAPI app and PostgreSQL 18 in Docker Desktop"
+        "over the real FastAPI app and PostgreSQL 18 in Docker"
     ),
     "policy": (
         "NFR35/AD-26: the first persisted schedule-run event reaches the "
@@ -84,7 +84,7 @@ def build_document(
             "operating_system": platform.platform(),
             "processor": platform.processor(),
             "python": platform.python_version(),
-            "database": "PostgreSQL 18 in Docker Desktop",
+            "database": "PostgreSQL 18 in Docker",
             "network_transit": "none; in-process ASGI application driver",
         },
         "protocol": {

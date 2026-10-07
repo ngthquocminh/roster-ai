@@ -42,15 +42,12 @@ SWEPT_PACKAGES = (
     BACKEND_ROOT / "application/ports",
 )
 
-# Known, ticketed AD-1 violations outside this guard's coverage. Tracked in
-# `_bmad-output/implementation-artifacts/deferred-work.md` under "Deferred
-# from: story-2-3 creation (2026-08-10)", whose definition of done is deleting
-# the entry here — so it is a real, greppable value rather than a comment.
-ALLOWED_LEAKS = {
-    "application/ports/scenario_catalogue.py": "deferred-work.md story-2-3 creation (2026-08-10)",
-    "application/ports/membership.py": "deferred-work.md story-5-4 review (2026-09-09)",
-    "application/ports/site_baseline.py": "deferred-work.md story-5-4 review (2026-09-09)",
-}
+# Known, ticketed AD-1 violations: module path -> the deferred-work.md entry that
+# owns it, whose definition of done is deleting the entry here — so it is a real,
+# greppable value rather than a comment. Empty since 2026-10-05, when the last
+# three ports (scenario_catalogue, membership, site_baseline) typed `connection`
+# as `Any`; any new entry needs a ledger item first.
+ALLOWED_LEAKS: dict[str, str] = {}
 
 
 def forbidden_imports(source: str) -> set[str]:
