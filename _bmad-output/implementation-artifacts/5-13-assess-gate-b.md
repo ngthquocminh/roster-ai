@@ -5,7 +5,7 @@ depends_on: 5-12-prove-the-draft-lifecycle-in-live-conversations (done)
 blocks: epic-6 (Gate C builds on Gate B's report)
 ---
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -391,6 +391,35 @@ Phases are ordered. Do not start a phase until the previous phase's exit conditi
     - Add a revisit trigger to every new deferral (team agreement 3).
   - [x] In `sprint-status.yaml`, mark retro action 1 done when the report lands. `epic-5` moves to `done` only if Gate B passed.
 
+### Review Findings
+
+Code review 2026-10-06 (Blind Hunter, Edge Case Hunter, Acceptance Auditor). The reviewer independently mutated G12/G18 and L4; all went red for the stated reason. Totals: 2 decision (both resolved to patch), 13 patch, 6 defer, 17 dismissed. All 15 patches applied 2026-10-06/07 (`cacad32`, `341ad4b`, `6b66aab`); Gate B re-assessed and passed (`5126e14`).
+
+- [x] [Review][Patch] (resolved from Decision, Minh 2026-10-06: re-measure with the production six-tool grant) Live routing is measured on a narrowed per-case tool grant — `_runtime_for_case` offers each live case only its own tool (two for baseline/discard via `EVAL_TAG_GRANTS`), while production offers all six. Wrong-tool selection is therefore almost unmeasurable, the evidence's `tool` binding lists the union of grants (reads as "all six offered"), and neither `honest_gaps`, README nor WALKTHROUGH discloses it. Options: re-measure with the production grant, or keep and disclose. [backend/evals/report.py:56, backend/evals/live_golden_routing.py:557]
+- [x] [Review][Patch] (resolved from Decision, Minh 2026-10-06: add an opt-in `live_forbidden_claims` Jev yes/no check that fails the case on a false claim) D6 case (3)'s stated purpose ("the golden case proves the model does not claim a promotion") is verified by nothing live — the deterministic final text is authored, D9 decides on routing only, `PolicyOutcomeEvaluator` checks allow/refuse/clarify, and `evaluators.py` is on the do-not-touch list. Options: add a recorded live prose check for this case, or disclose and leave false-claim grading to the live-conversation suite. [backend/evals/golden/scheduling_baseline/draft-and-promotion-same-turn.json]
+- [x] [Review][Patch] `--code-from` never checks the donor commit is HEAD or that the current tree is clean apart from `evidence/**`, so the report can bind a commit the JUnit runs and the dataset count did not run at; it also drops `--allow-dirty` and tracebacks on a malformed donor. The docstring's example donor (the live routing file at `e8cb369`) would do exactly that, and `docs/TESTING.md` omits the flag. [backend/scripts/gate_b_readiness.py:765]
+- [x] [Review][Patch] `LIVE_FRESHNESS_PATHS` omits code that changes what the model sees or how a case is graded — `backend/application/use_cases/` (`e8cb369` changed live outcomes from there), the `backend/evals/` harness, evaluators, fixture projection and override, and `backend/settings.py`. Widening it makes the current live evidence stale if any patch touches those paths (re-measure ≈ $0.10). [backend/scripts/gate_b_checks.py:70]
+- [x] [Review][Patch] Live non-routing results are recorded but undisclosed: in all three passes 9 cases fail policy or grounding (3 `prohibited`: baseline-injection-chat-text, inspect-injection-chat-text, inspect-refuse-unsupported-request), and `scheduling_draft_discard` has zero live-eligible cases. Compute both into the report from the routing evidence (not hand-typed gaps) and qualify README/WALKTHROUGH's "100% on consequential/prohibited" as routing. [backend/scripts/gate_b_readiness.py:105, README.md:164]
+- [x] [Review][Patch] The routing spend ceiling never trips when rates are unmeasured or a case is unpriced (`cost is None` adds nothing); refuse before the first paid call when `rates.measured` is false, and stop on an unpriced case. [backend/evals/live_golden_routing.py:182]
+- [x] [Review][Patch] `apply_override_environment` lets any exported variable beat the override's literal values (compose applies literals unconditionally), while the evidence records `override_sha256` as measured; apply literals, honour only `${VAR:-x}`, and record shadowed keys. [backend/evals/release_configuration.py:135]
+- [x] [Review][Patch] The report does not record the capability-inventory digest it judged freshness against (AD-16 "bind the current installed-tool/operation inventory"); write the current and evidence digests into the check's artifact. [backend/scripts/gate_b_readiness.py:478]
+- [x] [Review][Patch] `multi_turn_verdict_reasons` lacks `runs_disagree_on_population`, and the multi-turn CLI drops the override's cache-read rate. [backend/evals/report.py:1735, backend/evals/live_multi_turn.py:66]
+- [x] [Review][Patch] Both live generators check that passes agree with each other, but never with the pre-run `code` they bind. [backend/evals/live_golden_routing.py:415]
+- [x] [Review][Patch] `code_ancestor_staleness` ignores `git diff`'s return code, so a git error reads as fresh; also split names with `-z`. [backend/scripts/gate_b_readiness.py:236]
+- [x] [Review][Patch] Tag integrity is one-directional: a case expecting a call to a `consequential`-manifest capability but tagged otherwise escapes the protected population (latent today). [backend/scripts/gate_b_readiness.py:139]
+- [x] [Review][Patch] `GENERATED_BY_STORY_5_13` still exempts the two Story 5.13 live files from existing, though both are committed. [backend/tests/test_gate_b_readiness.py]
+- [x] [Review][Patch] `started_at` is stamped when the pass ends. [backend/evals/live_golden_routing.py:256]
+- [x] [Review][Patch] Doc and record drift: WALKTHROUGH "Fourteen bound evidence artifacts"; Completion Notes "31 cases (29 counted)" vs evidence 30/28/9; README/WALKTHROUGH "at one bound commit" while live evidence is at ancestor `e8cb369`; the floor-rationale sentence in `evals/README.md` is broken. [docs/WALKTHROUGH.md:57]
+- [x] [Review][Patch] (found while applying decision 1; Minh 2026-10-06: mirror the chat path, do not count) The production chat path never offers `scheduling_optimize` (AD-5: `compose_granted_capabilities` drops `compute` capabilities without `explicit_run_request`, which only the model-free run command sets), yet 5 of the 28 counted live cases expected it. They are now recorded `not_offered_on_chat_path`, not run, not counted (23 counted). [backend/evals/live_golden_routing.py]
+- [x] [Review][Patch] (found while re-assessing) Since `evidence/epic-5/release-gate-report.json` exists it sorts first in `evidence/**`, so `test_contract_drift_is_reported_but_does_not_unbind` skipped on every run, putting the default suite at two skips, over CI's `--max-skipped 1`. It now uses the first file that records digests. [backend/tests/test_evidence_convention.py]
+- [x] [Review][Patch] (found while re-assessing) A `--code-from` donor must also be accepted at `nearest_code_commit(HEAD)`, or no report could be generated after an evidence- or docs-only commit. [backend/scripts/gate_b_readiness.py]
+- [x] [Review][Defer] Gate A's `_evidence_result` silently passes `gate_a.accessibility_evidence` and `gate_a.state_semantics_evidence` with "drift: contract artifact sample_tiny_input has changed" [backend/scripts/gate_a_readiness.py] — deferred, pre-existing
+- [x] [Review][Defer] Override prices are not tied to a named model; an exported `AGENT_RUNTIME_MODEL` is priced at luna's rates [backend/evals/live_conversations/compose.override.yml] — deferred, file frozen this story
+- [x] [Review][Defer] NFR35 regeneration stamps the regenerating machine's platform, not the measuring one's (consistent today) [backend/scripts/regenerate_evidence.py:183] — deferred, only bites cross-machine
+- [x] [Review][Defer] `workflow_snapshot` is checked only for being a dict; an oversize snapshot raises before `_run_runtime_case`'s `try` [backend/evals/cases.py:647] — deferred, latent
+- [x] [Review][Defer] `routing_verdict` has no minimum live protected population (9 after the Task 9 owner decision) [backend/evals/live_golden_routing.py:277] — deferred, owner-settled population
+- [x] [Review][Defer] `_is_live_marked` misses module-level `pytestmark` and `from pytest import mark` forms [backend/scripts/junit_ingest.py:292] — deferred, fails closed
+
 ## Dev Notes
 
 ### Files touched (UPDATE unless marked NEW)
@@ -619,8 +648,36 @@ Each mutation was applied to finished product code, the named guard was run, and
 
 No guard was found that cannot be mutated.
 
+### Mutation table (code-review patches, 2026-10-06)
+
+Same protocol: each mutation applied to the patched product code, the named test run, and the file restored byte-for-byte (`scratchpad/mutate_review.py`, 20 rows, all red). The reviewer also independently re-ran G12, G18 and L4 before the patches: all red for the stated reason.
+
+| # | Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|---|
+| R1 | `production_chat_grant` returns every installed module | `test_the_chat_grant_is_production_composition_without_compute` | green | red: optimize and demonstration in the grant |
+| R2 | each case offered only its own tool again | `test_every_case_is_offered_the_whole_chat_grant` | green | red: per-case tool sets |
+| R3 | the not-offered branch removed | `test_a_case_the_chat_path_never_offers_is_recorded_not_run_and_not_counted` | green | red `KeyError: 'not_run_reason'` |
+| R4 | `passed` = routing alone | `test_a_forbidden_claim_decides_the_case_beside_routing` | green | red `True is ('fail' == 'pass')` |
+| R5 | an uncertain claim counts as a pass | same, `[0.5-uncertain]` | green | red `'pass' == 'uncertain'` |
+| R6 | an unavailable judge leaves `claims_passed` None | `test_an_unavailable_claim_judge_fails_the_case` | green | red `True is False` |
+| R7 | the no-judge refusal removed | `test_declared_claims_without_a_judge_are_refused_before_any_call` | green | red: DID NOT RAISE |
+| R8 | the unmeasured-price refusal removed | `test_unmeasured_rates_are_refused_before_the_first_paid_call` | green | red: DID NOT RAISE (first run reddened via the claim refusal; the test was narrowed to one claim-free case and re-run) |
+| R9 | an unpriced case no longer stops the pass | `test_an_unpriced_case_stops_the_pass` | green | red `None == 'case_unpriced'` |
+| R10 | routing ignores the bound commit | `test_passes_that_agree_but_not_with_the_bound_commit_block` | green | red `'runs_disagree_on_code' in []` |
+| R11 | multi-turn population check removed | `test_multi_turn_verdict_blocks_for_each_reason[runs_disagree_on_population]` | green | red |
+| R12 | multi-turn ignores the bound commit | `test_multi_turn_runs_that_disagree_with_the_bound_commit_block` | green | red |
+| R13 | multi-turn cache rates dropped | `test_multi_turn_cost_prices_cache_reads_at_the_cache_rate` | green | red `0.0 == 0.02` |
+| R14 | an export beats an override literal again | `test_the_override_is_applied_as_compose_applies_it` | green | red: `ZZ_EMPTY` stays empty |
+| R15 | the donor-commit check removed | `test_a_donor_measured_at_another_commit_is_refused` | green | red (on a dirty tree via the dirty-tree refusal; on a clean tree DID NOT RAISE) |
+| R16 | a failed `git diff` reads as fresh | `test_a_failed_diff_is_stale_not_fresh` | green | red `assert None` |
+| R17 | converse tag-integrity clause disabled | `test_tag_integrity_rejects_a_consequential_call_under_an_unprotected_tag` | green | red `assert []` |
+| R18 | inventory digest dropped from the artifact | `test_the_inventory_freshness_check_records_both_digests` | green | red `KeyError` |
+| R19 | policy failures not disclosed | `test_live_recorded_results_are_derived_from_the_routing_evidence` | green | red `[] == [...]` |
+| R20 | freshness paths back to D12's first list | `test_a_change_to_what_the_model_sees_or_how_it_is_graded_is_stale` | green | red `assert None` |
+
 ### Completion Notes List
-- **Gate B assessed: PASSED** (`evidence/epic-5/release-gate-report.json`, code `1b46f24`). AC1–AC6 are met:
+- **Gate B re-assessed after code review: PASSED** (`evidence/epic-5/release-gate-report.json`, code `6b66aab`, evidence `5126e14`). Live routing re-measured on the production chat grant at `cacad32` (`b33305a`): 30 eligible, 23 run and counted, 9 protected, 7 not offered on the chat path; 100%/100% in each of three passes, $0.027. Multi-turn 3/3 passed, $0.011. NFR35 maxima 62.3 / 51.1 / 265.0 / 21.1 ms (Windows 11, Docker PostgreSQL 18).
+- **Gate B first assessed: PASSED** (code `1b46f24`). AC1–AC6 are met:
   - AC1: registry, readiness test and loud failures.
   - AC2: live routing three times at 100%/100%, with Minh's go-ahead.
   - AC3: ratchet floor 45, per-capability by exemption, protected by two new cases.
@@ -640,7 +697,7 @@ No guard was found that cannot be mutated.
 - Story created with the ultimate context engine analysis: a comprehensive developer guide. Owner decisions D3–D10 were settled with Minh on 2026-10-05.
 - **Phase A (Tasks 0–7) complete.** It adds two D6 golden cases, the live single-turn routing generator, the recorded multi-turn generator, and the Gate B registry, readiness builder and tests. It also carries the D4–D6 wording in epics.md (NFR28 line, the Golden dataset size and Tool routing rows, the caveat), prd.md §7 and the assumptions list, requirements-inventory.md NFR28, and evals/README.md. One rationale sentence is used verbatim everywhere.
 - Dataset at the code commit: 39 single-turn + 6 multi-turn = **45** (`GOLDEN_CASE_FLOOR`). Every allowed capability has ≥4 cases (baseline 6, compute 4, draft 4, draft_discard 4, inspect 14, optimize 5). Protected cases on allowed capabilities: **10**. Tag-integrity violations: 0.
-- Live-eligible population: 31 cases (29 counted plus 2 `demonstration`, informational).
+- Live-eligible population at the first assessment: 30 cases (28 counted, 9 protected, plus 2 `demonstration`, informational). After review: 23 counted (the 5 optimize cases are not offered on the chat path).
 
 ### File List
 - `backend/application/use_cases/conversation_workflow_context.py` (Task 9: `workflow_context_message`)
@@ -649,6 +706,7 @@ No guard was found that cannot be mutated.
 - `backend/scripts/regenerate_evidence.py`, `backend/scripts/generate_sse_replay_evidence.py`, `backend/scripts/generate_run_event_latency_evidence.py` (Task 10)
 - `backend/scripts/junit_ingest.py` (Task 11)
 - `backend/tests/test_evidence_binding.py` (Task 10)
+- Code review: `backend/evals/{cases,live_golden_routing,live_multi_turn,release_configuration,report}.py`, `backend/scripts/{gate_b_checks,gate_b_readiness}.py`, `backend/tests/{test_live_golden_routing,test_gate_b_readiness,test_evaluation_harness,test_evidence_convention}.py`, `backend/evals/golden/scheduling_baseline/draft-and-promotion-same-turn.json` (v4)
 - `evidence/story-5.13/live-golden-routing.json`, `evidence/story-5.13/live-multi-turn-evaluation.json` (NEW, generated)
 - `evidence/story-1.4/…`, `story-1.5/…`, `story-2.4/…`, `story-3.5/…` NFR35 files (regenerated)
 - `evidence/epic-5/release-gate-report.json` (NEW, generated)
@@ -684,3 +742,4 @@ No guard was found that cannot be mutated.
 - 2026-10-05: Task 8 smoke runs. Fixed four root causes in the eval double and 17 golden cases. One owner decision is open (invalid-run-identifier live expectation).
 - 2026-10-06: Task 9: Minh's go-ahead and the nil-UUID decision. Attempt 1 was blocked, and the root cause (missing workflow snapshot) was fixed. Attempt 2 passed.
 - 2026-10-06: Tasks 10–12: NFR35 re-measured, Gate B report emitted (**passed**), docs and ledger updated. Status: review.
+- 2026-10-06/07: Code review (2 decisions, 15 patches, 6 deferred). Live routing re-measured on the production chat grant with a forbidden-claim check; Gate B re-assessed and **passed** at `6b66aab`. Status: done.

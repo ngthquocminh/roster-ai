@@ -54,7 +54,7 @@ feature either way: that comes from Story 5.7's separate live suite (AD-16;
 
 ## Evidence and gates
 
-Fourteen bound evidence artifacts exist. Each was generated through `backend/scripts/evidence_binding.py` against a measured run, per [`EVIDENCE-CONVENTION.md`](EVIDENCE-CONVENTION.md) — none was hand-written.
+Twenty bound evidence artifacts exist under `evidence/`; the ones below are the gate-relevant reports. Each was generated through `backend/scripts/evidence_binding.py` against a measured run, per [`EVIDENCE-CONVENTION.md`](EVIDENCE-CONVENTION.md) — none was hand-written.
 
 **Gate A**
 
@@ -85,10 +85,10 @@ Fourteen bound evidence artifacts exist. Each was generated through `backend/scr
 - [State semantics and accessibility](../evidence/story-4.6/state-semantics-and-accessibility.json)
 - [Content minimization report](../evidence/story-5.2/content-minimization-report.json)
 
-Gate B's checklist is in [`epics.md`](../_bmad-output/planning-artifacts/epics.md). Story 5.13 assessed it and wrote the [release report](../evidence/epic-5/release-gate-report.json). **Gate B has passed**, with all seven rows passing at one bound commit.
+Gate B's checklist is in [`epics.md`](../_bmad-output/planning-artifacts/epics.md). Story 5.13 assessed it and wrote the [release report](../evidence/epic-5/release-gate-report.json). **Gate B has passed**: all seven rows pass, with the report bound to one code commit and the live evidence measured at an ancestor with no model-facing change since.
 
 - **Golden dataset:** 45 versioned cases (39 single-turn, 6 multi-turn), with at least 4 per allowed capability and 10 consequential/prohibited.
-- **Live tool routing:** 100% in each of three passes on the configured model ([evidence](../evidence/story-5.13/live-golden-routing.json)).
+- **Live tool routing:** 100% overall and on consequential/prohibited cases, in each of three passes on the configured model, with every case offered the production chat tools ([evidence](../evidence/story-5.13/live-golden-routing.json)). The report's `live_recorded_results` list what was recorded beside routing without deciding it.
 - **NFR35:** re-measured, and every threshold is met.
 
 The original 50-case floor is now a ratchet at the actual count. The recorded rationale: the stories it assumed would add cases (3.10–3.12, 4.5) prove invariants that no model can reach, as PostgreSQL proof nodes. The report's `honest_gaps` name what Gate B does not cover.

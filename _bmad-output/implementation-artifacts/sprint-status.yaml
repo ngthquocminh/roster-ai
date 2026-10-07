@@ -1,5 +1,5 @@
 # generated: 2026-07-24
-# last_updated: 2026-10-05
+# last_updated: 2026-10-07
 # project: ShiftMind
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-10-05
+last_updated: 2026-10-07
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2185,7 +2185,9 @@ development_status:
   # added to make the live-eval suite (now fixed and functional; measured 3/30 identically against
   # two models) actually pass before the dataset-floor/release-gate-report decision is made. See
   # epic-5-retro-2026-09-10.md.
-  epic-5: in-progress
+  # 2026-10-07: every Epic 5 story is done and Gate B passed (5.13, re-assessed after code
+  # review at 6b66aab). Epic 5 closed.
+  epic-5: done
   # 5.0 inserted 2026-09-03 by sprint-change-proposal-2026-09-03.md, from Epic 4
   # retrospective action A3(i). Corrective prerequisite, NOT part of the portfolio
   # sequence -- numbered 5-0 so 5.1-5.4 keep their keys. Fires the Epic 4 spine's
@@ -2753,7 +2755,10 @@ development_status:
   # evidence b6bc0c5): all seven rows passed, no exceptions. Live routing 3x 100%/100% (luna),
   # multi-turn 3x 6/6, NFR35 re-measured, dataset 45/45. Story to review; epic-5 moves to done
   # when 5.13 passes code review.
-  5-13-assess-gate-b: review
+  # 2026-10-07: code review done (2 decisions, 15 patches, 6 deferred). Live routing
+  # re-measured on the production chat grant (23 counted; optimize not offered on chat).
+  # Gate B re-assessed and PASSED at 6b66aab (evidence 5126e14). Story done.
+  5-13-assess-gate-b: done
 
   # Epic 6: Reliable Hosted Planner Workspace (Gate C, sequenced after the portfolio milestone)
   epic-6: backlog

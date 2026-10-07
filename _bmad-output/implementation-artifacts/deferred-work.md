@@ -1468,3 +1468,37 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   over-counts slightly, which is the safe direction, and the Gate B report records it under
   `honest_gaps`. **Owner/revisit trigger:** the next story that changes an NFR35 test or its
   threshold.
+
+## Deferred from: code review of 5-13-assess-gate-b (2026-10-06)
+
+- **Gate A drift accepted as passed inside Gate B.** Gate B reuses Gate A's `_evidence_result`,
+  which passes `gate_a.accessibility_evidence` and `gate_a.state_semantics_evidence` with
+  "drift: contract artifact sample_tiny_input has changed since it was measured". JUnit checks
+  back both categories, so no row rests on the flag alone. **Deferred reason: Gate A's rule,
+  pre-existing.** **Owner/revisit trigger:** the next re-measurement of either Gate A file.
+
+- **Override prices are not tied to a named model.** `compose.override.yml` pins prices but no
+  model, so an exported `AGENT_RUNTIME_MODEL` is priced at luna's rates with `spend_measured: true`.
+  **Deferred reason: the override is under `evals/live_conversations/**`, frozen in 5.13.**
+  **Owner/revisit trigger:** the next model or price change in the override.
+
+- **NFR35 regeneration stamps the regenerating machine's platform.** `apply_fresh_measurements`
+  re-reads `platform` where `regenerate_evidence.py` runs, not where `postgres.log` was captured
+  (`backend/scripts/regenerate_evidence.py`). Consistent for the 5.13 run. **Deferred reason:
+  only wrong when the log and the script run on different machines.** **Owner/revisit trigger:**
+  the first NFR35 measurement taken in CI.
+
+- **`workflow_snapshot` shape is unvalidated.** `evals/cases.py` checks only "is a dict", so drift
+  from `load_workflow_context`'s shape is undetected, and an oversize snapshot raises before
+  `_run_runtime_case`'s `try`. **Deferred reason: latent.** **Owner/revisit trigger:** the next
+  change to the workflow-context message.
+
+- **No minimum live protected population in `routing_verdict`.** After the Task 9 owner decision
+  it is 9, and further `live_eligible: false` flips would shrink it silently.
+  **Deferred reason: owner-settled population.** **Owner/revisit trigger:** the next
+  `live_eligible` flip on a protected case.
+
+- **`_is_live_marked` misses module-level `pytestmark` and `from pytest import mark` forms**
+  (`backend/scripts/junit_ingest.py`). Such tests stay "expected" and block spuriously.
+  **Deferred reason: fails closed; no such test exists.** **Owner/revisit trigger:** the first
+  live test marked that way.
