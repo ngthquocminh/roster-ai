@@ -271,10 +271,12 @@ def test_contract_drift_is_reported_but_does_not_unbind(tmp_path):
     treating a mismatch as a violation would unbind historical evidence every
     time a contract fixture is regenerated.
     """
-    source = EVIDENCE_FILES[0]
+    # The first file that records digests, not the first file: since Story 5.13
+    # committed evidence/epic-5/release-gate-report.json (no digests) it sorts
+    # first, and taking EVIDENCE_FILES[0] skipped this test on every run.
+    assert EVIDENCE_FILES_WITH_DIGESTS, "no evidence file records contract digests"
+    source = EVIDENCE_FILES_WITH_DIGESTS[0]
     document = json.loads(source.read_text(encoding="utf-8"))
-    if not isinstance(document.get("contract_digests"), dict):
-        pytest.skip("this evidence file records no contract digests")
 
     forged = dict(document)
     digests = dict(document["contract_digests"])
