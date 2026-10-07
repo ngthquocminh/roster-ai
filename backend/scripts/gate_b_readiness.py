@@ -50,6 +50,7 @@ from scripts.evidence_binding import (  # noqa: E402
     REPO_ROOT,
     audit_evidence_file,
     file_digest,
+    nearest_code_commit,
     resolve_bindings,
     working_tree_status,
 )
@@ -834,10 +835,11 @@ def donor_code_binding(
     """The `code` block `--code-from` reuses, refused unless it describes HEAD.
 
     The donor exists because writing evidence dirties the tree. Its commit
-    becomes the Gate B commit, so it must BE the commit the JUnit runs and the
-    dataset count ran at: HEAD, with nothing but `evidence/**` uncommitted.
-    Without this check a donor measured at an older commit (the live routing
-    file, for one) bound the report to code the tests never ran on.
+    becomes the Gate B commit, so it must BE the code the JUnit runs and the
+    dataset count ran at: HEAD, or `nearest_code_commit(HEAD)` when HEAD is a
+    docs- or evidence-only commit (provably the same code), with nothing but
+    `evidence/**` uncommitted. Without this check a donor measured at an older
+    commit bound the report to code the tests never ran on.
     """
     try:
         donor = json.loads(Path(donor_path).read_text(encoding="utf-8"))
@@ -847,10 +849,15 @@ def donor_code_binding(
     if not isinstance(code, dict) or not code.get("git_commit"):
         raise SystemExit(f"--code-from {donor_path}: records no version_bindings.code.git_commit")
     head = _git(repo_root, "rev-parse", "HEAD").stdout.strip()
-    if code["git_commit"] != head:
+    try:
+        code_head = nearest_code_commit(repo_root, head)
+    except ValueError as exc:
+        raise SystemExit(f"--code-from: {exc}") from None
+    if code["git_commit"] not in (head, code_head):
         raise SystemExit(
-            f"--code-from {donor_path}: measured at {code['git_commit']}, but HEAD is {head}; "
-            "use evidence regenerated at HEAD (the NFR35 files, for instance)"
+            f"--code-from {donor_path}: measured at {code['git_commit']}, but HEAD is {head}"
+            + (f" (code commit {code_head})" if code_head != head else "")
+            + "; use evidence regenerated at HEAD (the NFR35 files, for instance)"
         )
     _dirty, paths = working_tree_status(repo_root)
     code_paths = [path for path in paths if not path.startswith("evidence/")]

@@ -595,7 +595,10 @@ def test_a_live_marked_test_is_not_expected_in_the_default_run(tmp_path) -> None
 # --------------------------------------------------------------------------- review patches
 
 
-def test_a_donor_measured_at_another_commit_is_refused(tmp_path: Path) -> None:
+def test_a_donor_measured_at_another_commit_is_refused(tmp_path: Path, monkeypatch) -> None:
+    # HEAD is its own nearest code commit here, so HEAD~1 is genuinely other code.
+    head = _git("rev-parse", "HEAD")
+    monkeypatch.setattr(gate_b_readiness, "nearest_code_commit", lambda root, commit: head)
     donor = _write(tmp_path, {"version_bindings": {"code": {
         "git_commit": _git("rev-parse", "HEAD~1"), "working_tree_dirty": False}}})
     with pytest.raises(SystemExit, match="but HEAD is"):
@@ -669,3 +672,14 @@ def test_a_change_to_what_the_model_sees_or_how_it_is_graded_is_stale(commit: st
     """Story 5.13 review: e8cb369 changed live outcomes from application/use_cases/."""
     stale = gate_b_readiness.code_ancestor_staleness(_git("rev-parse", f"{commit}^"), commit, REPO_ROOT)
     assert stale and "changed" in stale
+
+
+def test_a_donor_at_the_nearest_code_commit_of_a_docs_only_head_is_accepted(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """HEAD may be a story-record or evidence commit; its code is the nearest code commit's."""
+    parent = _git("rev-parse", "HEAD~1")
+    monkeypatch.setattr(gate_b_readiness, "nearest_code_commit", lambda root, commit: parent)
+    donor = _write(tmp_path, {"version_bindings": {"code": {
+        "git_commit": parent, "working_tree_dirty": False}}})
+    assert gate_b_readiness.donor_code_binding(donor, allow_dirty=True)["git_commit"] == parent
