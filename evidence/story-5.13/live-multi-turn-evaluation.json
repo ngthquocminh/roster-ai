@@ -2,7 +2,7 @@
   "authoritative": false,
   "blocking_reasons": [],
   "exception": null,
-  "generated_at": "2026-10-06T00:42:25.998186+00:00",
+  "generated_at": "2026-10-07T01:16:40.409852+00:00",
   "live_multi_turn": "passed",
   "measured_configuration": {
     "agent_model": "openrouter:openai/gpt-5.6-luna",
@@ -25,6 +25,7 @@
       "AGENT_RUNTIME_TOTAL_TOKENS_LIMIT",
       "DEMONSTRATION_ENABLED"
     ],
+    "override_replaced_exports": [],
     "override_sha256": "42d9c0c4bd8ef5105945f1a317839d89e86fcd228f937502d87d1b6e37bfdb88",
     "reasoning_effort": "low"
   },
@@ -32,7 +33,7 @@
   "report_type": "evaluation-harness-multi-turn-live-recorded",
   "report_version": "1",
   "required_runs": 3,
-  "rule": "every release-eligible case passes in every recorded run; spend measured",
+  "rule": "every live-eligible case passes in every recorded run; spend measured",
   "runs": [
     {
       "authoritative": false,
@@ -48,11 +49,11 @@
       "cases_considered": 6,
       "cases_run": 6,
       "code": {
-        "git_commit": "e8cb369d22d081e88ddbe527ab381be9acfa0675",
+        "git_commit": "cacad32d814d2c535793e8c297158147ef061265",
         "working_tree_dirty": false
       },
       "exception": null,
-      "generated_at": "2026-10-06T00:41:02.065430+00:00",
+      "generated_at": "2026-10-07T01:15:09.888294+00:00",
       "model": "openrouter:openai/gpt-5.6-luna",
       "opt_in": true,
       "readiness": "eligible",
@@ -244,10 +245,10 @@
       "spend_measured": true,
       "stopped_reason": null,
       "usage": {
-        "elapsed_seconds": 41.33837148199996,
-        "requests": 21,
-        "spend_usd": 0.023986200000000006,
-        "tokens": 112996,
+        "elapsed_seconds": 47.702988200006075,
+        "requests": 22,
+        "spend_usd": 0.00336682,
+        "tokens": 117978,
         "tool_calls": 7
       }
     },
@@ -265,11 +266,11 @@
       "cases_considered": 6,
       "cases_run": 6,
       "code": {
-        "git_commit": "e8cb369d22d081e88ddbe527ab381be9acfa0675",
+        "git_commit": "cacad32d814d2c535793e8c297158147ef061265",
         "working_tree_dirty": false
       },
       "exception": null,
-      "generated_at": "2026-10-06T00:41:49.066557+00:00",
+      "generated_at": "2026-10-07T01:15:54.777825+00:00",
       "model": "openrouter:openai/gpt-5.6-luna",
       "opt_in": true,
       "readiness": "eligible",
@@ -461,10 +462,10 @@
       "spend_measured": true,
       "stopped_reason": null,
       "usage": {
-        "elapsed_seconds": 46.990833606000024,
+        "elapsed_seconds": 44.8310921999946,
         "requests": 22,
-        "spend_usd": 0.025280600000000004,
-        "tokens": 118653,
+        "spend_usd": 0.0037513199999999994,
+        "tokens": 118059,
         "tool_calls": 7
       }
     },
@@ -482,11 +483,11 @@
       "cases_considered": 6,
       "cases_run": 6,
       "code": {
-        "git_commit": "e8cb369d22d081e88ddbe527ab381be9acfa0675",
+        "git_commit": "cacad32d814d2c535793e8c297158147ef061265",
         "working_tree_dirty": false
       },
       "exception": null,
-      "generated_at": "2026-10-06T00:42:25.998013+00:00",
+      "generated_at": "2026-10-07T01:16:40.409852+00:00",
       "model": "openrouter:openai/gpt-5.6-luna",
       "opt_in": true,
       "readiness": "eligible",
@@ -678,21 +679,21 @@
       "spend_measured": true,
       "stopped_reason": null,
       "usage": {
-        "elapsed_seconds": 36.918626727000174,
-        "requests": 20,
-        "spend_usd": 0.0225606,
-        "tokens": 107068,
+        "elapsed_seconds": 45.56355279999843,
+        "requests": 23,
+        "spend_usd": 0.0038559600000000007,
+        "tokens": 122889,
         "tool_calls": 7
       }
     }
   ],
   "spend_measured": true,
   "story": "5.13",
-  "total_spend_usd": 0.071827,
+  "total_spend_usd": 0.010974,
   "version_bindings": {
     "application": "ShiftMind Story 5.6 multi-turn evaluation (execute_turn + rehydrate_history)",
     "code": {
-      "git_commit": "e8cb369d22d081e88ddbe527ab381be9acfa0675",
+      "git_commit": "cacad32d814d2c535793e8c297158147ef061265",
       "working_tree_dirty": false
     },
     "dataset": {
@@ -750,9 +751,9 @@
     },
     "evaluator": "ToolRoutingEvaluator + PolicyOutcomeEvaluator v1, applied per turn",
     "image": {
-      "api": "local source tree",
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
       "database": "postgres:18",
-      "web": "local source tree"
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959"
     },
     "model": "openrouter:openai/gpt-5.6-luna",
     "policy": "AD-5 risk tags; only double-sourced verdicts are authoritative",
