@@ -1743,6 +1743,8 @@ The planner can sign in to the hosted ShiftMind workspace and trust it: it is re
 
 **Sequenced after the Epic 5 portfolio milestone.** Nothing in Epics 1–5 depends on this epic; it adds the hosted trust proof to an already complete and demonstrable system. Gate C is this epic's boundary, distinct from Gate B, which Epic 5 completes.
 
+**Branch and purpose (decided 2026-10-07).** Epic 6 is a practice deployment to AWS, built on the `epic-6/aws-hosting` branch from the `v0.5` tag (Epics 1–5, Gate B passed). It does not merge to `main` unless Minh decides otherwise. Gate B stays the portfolio milestone: the `main` claim does not depend on Gate C. No story text changed; this records scope and where the work lives.
+
 ### Story 6.1: Provision AWS Edge, Identity, and Network Boundaries [Technical Enabler]
 
 As a portfolio operator,
