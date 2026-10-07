@@ -1,7 +1,7 @@
 {
   "story": "1.5",
   "requirement": "NFR35",
-  "measurement_date": "2026-10-06",
+  "measurement_date": "2026-10-07",
   "fixture": {
     "name": "sample_tiny_input_more_tm.json",
     "version": "v1",
@@ -11,9 +11,9 @@
   },
   "environment": {
     "description": "Equivalent local developer reference environment; FastAPI TestClient with a local Docker PostgreSQL connection pool",
-    "operating_system": "Linux-6.18.44-fc-v70-x86_64-with-glibc2.39",
-    "processor": "x86_64",
-    "python": "3.11.15",
+    "operating_system": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "python": "3.10.9",
     "database": "PostgreSQL 18 in Docker",
     "network_transit": "none; in-process ASGI TestClient"
   },
@@ -27,7 +27,7 @@
     "window": "exact demand targets at normalized indexes 0 and 1546; deepest target is outside the default limit=50 window"
   },
   "code_versions": {
-    "git_commit": "1b46f24e8f86d57ec9513a4d40e455dbeeeaa7d7",
+    "git_commit": "6b66aabb5e14171dcffde0e13938688e28e92e44",
     "working_tree_dirty": false,
     "api_image": "local source tree",
     "database_image": "postgres:18"
@@ -38,45 +38,45 @@
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0",
       "normalized_index": 0,
       "position": "shallow",
-      "duration_ms": 35.502
+      "duration_ms": 51.099
     },
     {
       "run": 1,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5",
       "normalized_index": 1546,
       "position": "deepest",
-      "duration_ms": 35.765
+      "duration_ms": 45.777
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0",
       "normalized_index": 0,
       "position": "shallow",
-      "duration_ms": 43.773
+      "duration_ms": 49.663
     },
     {
       "run": 2,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5",
       "normalized_index": 1546,
       "position": "deepest",
-      "duration_ms": 59.266
+      "duration_ms": 50.267
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/outbound:0",
       "normalized_index": 0,
       "position": "shallow",
-      "duration_ms": 34.668
+      "duration_ms": 46.309
     },
     {
       "run": 3,
       "endpoint": "/api/v1/scenarios/{scenario_id}/projection/demand/indirect:5",
       "normalized_index": 1546,
       "position": "deepest",
-      "duration_ms": 33.21
+      "duration_ms": 47.497
     }
   ],
-  "maximum_duration_ms": 59.266,
+  "maximum_duration_ms": 51.099,
   "passed": true,
   "version_bindings": {
     "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
@@ -89,12 +89,12 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — no solver run",
     "code": {
-      "git_commit": "1b46f24e8f86d57ec9513a4d40e455dbeeeaa7d7",
+      "git_commit": "6b66aabb5e14171dcffde0e13938688e28e92e44",
       "working_tree_dirty": false
     },
     "image": {
-      "api": "local source tree",
-      "web": "local source tree",
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959",
       "database": "postgres:18"
     },
     "schema_version": "a8b9c0d1e2f3"

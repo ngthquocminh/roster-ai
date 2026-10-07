@@ -1,16 +1,16 @@
 {
   "story": "3.5",
   "requirement": "NFR35",
-  "measurement_date": "2026-10-06",
+  "measurement_date": "2026-10-07",
   "fixture": {
     "name": "sample_tiny_input_more_tm.json",
     "version": "v1"
   },
   "environment": {
     "description": "Equivalent local developer reference environment; in-process ASGI client boundary with a local Docker PostgreSQL pool",
-    "operating_system": "Linux-6.18.44-fc-v70-x86_64-with-glibc2.39",
-    "processor": "x86_64",
-    "python": "3.11.15",
+    "operating_system": "Windows-10-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 141 Stepping 1, GenuineIntel",
+    "python": "3.10.9",
     "database": "PostgreSQL 18 in Docker",
     "network_transit": "none; in-process ASGI application driver"
   },
@@ -26,7 +26,7 @@
     "first_event": "run.queued.v1"
   },
   "code_versions": {
-    "git_commit": "1b46f24e8f86d57ec9513a4d40e455dbeeeaa7d7",
+    "git_commit": "6b66aabb5e14171dcffde0e13938688e28e92e44",
     "working_tree_dirty": false,
     "api_image": "local source tree",
     "database_image": "postgres:18"
@@ -36,22 +36,22 @@
       "run": 1,
       "endpoint": "/api/v1/schedule-runs/{run_id}/events",
       "event": "run.queued.v1",
-      "duration_ms": 14.447
+      "duration_ms": 19.862
     },
     {
       "run": 2,
       "endpoint": "/api/v1/schedule-runs/{run_id}/events",
       "event": "run.queued.v1",
-      "duration_ms": 18.111
+      "duration_ms": 19.156
     },
     {
       "run": 3,
       "endpoint": "/api/v1/schedule-runs/{run_id}/events",
       "event": "run.queued.v1",
-      "duration_ms": 14.084
+      "duration_ms": 21.108
     }
   ],
-  "maximum_duration_ms": 18.111,
+  "maximum_duration_ms": 21.108,
   "passed": true,
   "version_bindings": {
     "dataset": "2 governed fixtures (sample_tiny_input:v1, sample_tiny_input_more_tm:v1); contract sha256 digests recorded alongside",
@@ -64,12 +64,12 @@
     "scenario": "sample_tiny_input:v1 and sample_tiny_input_more_tm:v1",
     "solver": "not applicable — the queued event precedes solver execution",
     "code": {
-      "git_commit": "1b46f24e8f86d57ec9513a4d40e455dbeeeaa7d7",
+      "git_commit": "6b66aabb5e14171dcffde0e13938688e28e92e44",
       "working_tree_dirty": false
     },
     "image": {
-      "api": "local source tree",
-      "web": "local source tree",
+      "api": "sha256:b0ca05af1f731507fba32c0266cad2dba36b2e84b74c769b7dd35d81e33a824a",
+      "web": "sha256:92f94d47206a86e459cde15ffa4666959fe90acb24d3e63d38808e3cfee24959",
       "database": "postgres:18"
     },
     "schema_version": "a8b9c0d1e2f3"
