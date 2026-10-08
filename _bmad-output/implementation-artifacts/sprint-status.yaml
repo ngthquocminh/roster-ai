@@ -2765,7 +2765,7 @@ development_status:
   # 2026-10-07: Story 6-1 created, ready-for-dev. Practice deployment on epic-6/aws-hosting.
   # D1 scopes AC2's RDS/secrets/logs clauses to 6.2 (no resource exists in 6.1). Task 8 is a
   # real-account plan/apply/smoke run with Minh's AWS credentials.
-  6-1-provision-aws-edge-identity-and-network-boundaries: ready-for-dev
+  6-1-provision-aws-edge-identity-and-network-boundaries: in-progress
   6-2-provision-aws-data-and-least-privilege-runtime: backlog
   6-3-deploy-immutable-api-worker-and-web-releases: backlog
   6-4-prove-hosted-invariants-parity-and-mutation-denial: backlog

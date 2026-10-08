@@ -5,7 +5,7 @@ depends_on: 5-13-assess-gate-b (done)
 blocks: 6-2-provision-aws-data-and-least-privilege-runtime ("Given the completed private network and identity boundary")
 ---
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -231,50 +231,50 @@ approximate monthly idle cost of what 6.1 creates, and teardown order. A row is 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — Tooling and repo hygiene** (AC1; D10)
-  - [ ] Install Terraform 1.15.x and AWS CLI v2 locally. Neither is installed on this machine at
+- [x] **Task 1 — Tooling and repo hygiene** (AC1; D10)
+  - [x] Install Terraform 1.15.x and AWS CLI v2 locally. Neither is installed on this machine at
         creation; use `winget install Hashicorp.Terraform` / `winget install Amazon.AWSCLI`. Record both
         versions in Completion Notes.
-  - [ ] Extend `.gitignore` with `.terraform/`, `*.tfstate`, `*.tfstate.*`, `*.tfplan`, `tfplan`,
+  - [x] Extend `.gitignore` with `.terraform/`, `*.tfstate`, `*.tfstate.*`, `*.tfplan`, `tfplan`,
         `*.tfvars` (with `!*.tfvars.example`), `backend.hcl` and `crash.log`. `.terraform.lock.hcl` stays tracked (D10).
 
-- [ ] **Task 2 — State bootstrap root** `infra/terraform/bootstrap/` (AC1, AC2; D7)
-  - [ ] Create the state bucket per D7, outputting its name. Add `terraform.tfvars.example`.
+- [x] **Task 2 — State bootstrap root** `infra/terraform/bootstrap/` (AC1, AC2; D7)
+  - [x] Create the state bucket per D7, outputting its name. Add `terraform.tfvars.example`.
 
-- [ ] **Task 3 — `modules/network`** (AC1, AC2; D5, D2)
-  - [ ] Build the VPC, IGW, three subnet tiers ×2 AZs, the NAT gateway, route tables and the S3 gateway
+- [x] **Task 3 — `modules/network`** (AC1, AC2; D5, D2)
+  - [x] Build the VPC, IGW, three subnet tiers ×2 AZs, the NAT gateway, route tables and the S3 gateway
         endpoint, all per D5.
-  - [ ] Build the security groups and rules per D5. Look up the CloudFront origin-facing prefix list with
+  - [x] Build the security groups and rules per D5. Look up the CloudFront origin-facing prefix list with
         `data "aws_ec2_managed_prefix_list"` by name.
         The prefix list counts as roughly 55 rules against the SG rule quota, so keep `alb` to that one
         ingress rule.
-  - [ ] Outputs: VPC ID, subnet ID lists per tier, the four SG IDs, and the route table IDs.
-  - [ ] `tests/network.tftest.hcl` with `mock_provider "aws"` (supply `override_data` for the prefix list
+  - [x] Outputs: VPC ID, subnet ID lists per tier, the four SG IDs, and the route table IDs.
+  - [x] `tests/network.tftest.hcl` with `mock_provider "aws"` (supply `override_data` for the prefix list
         `id`). Assert: data route tables contain no `0.0.0.0/0` route; no subnet has
         `map_public_ip_on_launch = true`; `worker` has zero ingress rules; `api` ingress sources only `alb`'s
         SG; `alb` ingress is only 443 from the prefix list; `data` ingress is only 5432 from `api`/`worker`;
         the default SG has no rules. (AC2 second clause)
 
-- [ ] **Task 4 — `modules/edge`** (AC1, AC2; D2, D3, D4)
-  - [ ] Declare `configuration_aliases = [aws.us_east_1]` in `versions.tf`.
-  - [ ] Build both ACM certificates with DNS validation records and `aws_acm_certificate_validation`.
+- [x] **Task 4 — `modules/edge`** (AC1, AC2; D2, D3, D4)
+  - [x] Declare `configuration_aliases = [aws.us_east_1]` in `versions.tf`.
+  - [x] Build both ACM certificates with DNS validation records and `aws_acm_certificate_validation`.
         CloudFront and the listener must consume the *validated* ARNs. (D3)
-  - [ ] Build the SPA bucket: all four BPA flags, `BucketOwnerEnforced`, explicit SSE-S3 (`AES256`), and
+  - [x] Build the SPA bucket: all four BPA flags, `BucketOwnerEnforced`, explicit SSE-S3 (`AES256`), and
         an OAC with `signing_behavior = "always"` and `signing_protocol = "sigv4"`. The bucket policy
         grants `s3:GetObject` only to `cloudfront.amazonaws.com` with `AWS:SourceArn` equal to the
         distribution ARN, and denies `aws:SecureTransport = false`.
-  - [ ] Build the internal ALB, HTTPS listener (`ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"`) and
+  - [x] Build the internal ALB, HTTPS listener (`ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"`) and
         target group per D4. Add the Route 53 alias `origin.<app_domain>` → ALB. (D2)
-  - [ ] Add `aws_cloudfront_vpc_origin` per D2, and the CloudFront Function per D4 (source in
+  - [x] Add `aws_cloudfront_vpc_origin` per D2, and the CloudFront Function per D4 (source in
         `modules/edge/spa-rewrite.js`, loaded with `file()`).
-  - [ ] Build the distribution per D4: aliases `[app_domain]`, `minimum_protocol_version = "TLSv1.2_2021"`,
+  - [x] Build the distribution per D4: aliases `[app_domain]`, `minimum_protocol_version = "TLSv1.2_2021"`,
         `ssl_support_method = "sni-only"`, `http_version = "http2and3"`, `is_ipv6_enabled = true`,
         `price_class = "PriceClass_200"`, `default_root_object = "index.html"`. Look up managed policies
         with `data "aws_cloudfront_cache_policy"` / `data "aws_cloudfront_origin_request_policy"` by name
         (`Managed-CachingOptimized`, `Managed-CachingDisabled`, `Managed-AllViewerExceptHostHeader`).
         **Verify these names against current AWS docs; do not hardcode policy IDs.**
-  - [ ] Add Route 53 A and AAAA aliases from `<app_domain>` to the distribution.
-  - [ ] `tests/edge.tftest.hcl` with `mock_provider "aws"` and `mock_provider "aws" { alias = "us_east_1" }`.
+  - [x] Add Route 53 A and AAAA aliases from `<app_domain>` to the distribution.
+  - [x] `tests/edge.tftest.hcl` with `mock_provider "aws"` and `mock_provider "aws" { alias = "us_east_1" }`.
         Pass both through `providers = {…}` in each `run`, and use `override_data` for the policy lookups.
         Assert:
         viewer min protocol `TLSv1.2_2021`; no behavior allows `allow-all`; VPC origin `https-only`
@@ -284,32 +284,32 @@ approximate monthly idle cost of what 6.1 creates, and teardown order. A row is 
         and `response_completion_timeout` is null or 0; the distribution has **zero** `custom_error_response`
         blocks; the SPA bucket has all four BPA flags and SSE; OAC is `sigv4`/`always`. (AC2 first clause, D4)
 
-- [ ] **Task 5 — `modules/identity`** (AC1; D6)
-  - [ ] Build the user pool, prefix domain, managed login branding, app client and planner user per D6.
+- [x] **Task 5 — `modules/identity`** (AC1; D6)
+  - [x] Build the user pool, prefix domain, managed login branding, app client and planner user per D6.
         Expose the outputs D6 lists, with `oidc_client_secret` marked `sensitive`.
-  - [ ] `tests/identity.tftest.hcl`. Assert: `allow_admin_create_user_only == true`;
+  - [x] `tests/identity.tftest.hcl`. Assert: `allow_admin_create_user_only == true`;
         `allowed_oauth_flows == ["code"]`; scopes are exactly `openid` and `email`; the callback list is
         exactly `["https://<app_domain>/api/v1/auth/callback"]` for a test `app_domain`;
         `generate_secret == true`; `supported_identity_providers == ["COGNITO"]`; the issuer output has no
         trailing slash. (AC1 "public sign-up disabled"; F2, F3)
 
-- [ ] **Task 6 — Env root `infra/terraform/envs/portfolio/`** (AC1; D3, D7, D9, D10)
-  - [ ] `versions.tf` (D10), `providers.tf` (default + `us_east_1` alias, `default_tags` per D9),
+- [x] **Task 6 — Env root `infra/terraform/envs/portfolio/`** (AC1; D3, D7, D9, D10)
+  - [x] `versions.tf` (D10), `providers.tf` (default + `us_east_1` alias, `default_tags` per D9),
         `backend.tf` (D7, partial), `variables.tf` (`region`, `environment`, `availability_zones`,
         `app_domain`, `hosted_zone_name`, `cognito_domain_prefix`, `planner_email`, `vpc_cidr`), the
         `data "aws_route53_zone"` lookup (D3), the module wiring, and `outputs.tf`, which re-exports
         D6's outputs plus `app_url`, `alb_arn`, `api_target_group_arn` and the SG/subnet IDs that 6.2/6.3 consume.
-  - [ ] Commit `terraform.tfvars.example` and `backend.hcl.example`. Real values stay gitignored.
-  - [ ] `tests/portfolio.tftest.hcl`: a mocked plan of the whole root. Assert the wiring: the CloudFront
+  - [x] Commit `terraform.tfvars.example` and `backend.hcl.example`. Real values stay gitignored.
+  - [x] `tests/portfolio.tftest.hcl`: a mocked plan of the whole root. Assert the wiring: the CloudFront
         alias equals `app_domain`; the Cognito callback host equals `app_domain`; the ALB subnets are the
         network module's app subnets.
-  - [ ] Generate multi-platform lock files for `bootstrap/` and `envs/portfolio/` (D10).
+  - [x] Generate multi-platform lock files for `bootstrap/` and `envs/portfolio/` (D10).
 
-- [ ] **Task 7 — CI** (AC1; D8a)
-  - [ ] Add `--runner terraform` to `.github/scripts/assert_counts.py`. It parses the final
+- [x] **Task 7 — CI** (AC1; D8a)
+  - [x] Add `--runner terraform` to `.github/scripts/assert_counts.py`. It parses the final
         `Success! N passed, M failed.` / `Failure! …` line, and its tests or docstring follow the script's
         existing pattern.
-  - [ ] Add `.github/workflows/infra.yml` per D8a. Use `hashicorp/setup-terraform` pinned to the D10
+  - [x] Add `.github/workflows/infra.yml` per D8a. Use `hashicorp/setup-terraform` pinned to the D10
         version and `permissions: contents: read`, with no AWS credentials and no `id-token`.
         Set a `--min-passed` floor per test directory equal to the count measured at implementation.
 
@@ -317,7 +317,7 @@ approximate monthly idle cost of what 6.1 creates, and teardown order. A row is 
       with Minh's AWS credentials. The developer prepares everything and records the results.
   - [ ] Bootstrap, then `init` with backend config, then `plan -out`, `show`, and `apply tfplan`. Then
         `plan -detailed-exitcode` must exit 0. (D8b)
-  - [ ] Write `infra/scripts/smoke-edge.sh`. It reads its inputs from `terraform output -json`, uploads a
+  - [x] Write `infra/scripts/smoke-edge.sh`. It reads its inputs from `terraform output -json`, uploads a
         throwaway `index.html` placeholder to the SPA bucket (6.3 replaces it), and asserts:
         1. `https://<app_domain>/` → 200 with the placeholder body, and `curl --tls-max 1.1` fails the handshake.
         2. `http://<app_domain>/` → 301 to https.
@@ -338,11 +338,11 @@ approximate monthly idle cost of what 6.1 creates, and teardown order. A row is 
   - [ ] Leave the environment applied for 6.2 unless Minh says to tear it down. Record the date it was
         applied.
 
-- [ ] **Task 9 — Documentation** (AC1; D11)
-  - [ ] Write `docs/AWS-RUNBOOK.md` per D11. Measure the idle cost from the AWS pricing pages at
+- [x] **Task 9 — Documentation** (AC1; D11)
+  - [x] Write `docs/AWS-RUNBOOK.md` per D11. Measure the idle cost from the AWS pricing pages at
         implementation rather than copying a figure from this story.
-  - [ ] Add a `.claude/CLAUDE.md` "Where the truth lives" row for it.
-  - [ ] Record AC2's 6.2-dependent clauses as open, in Completion Notes (D1).
+  - [x] Add a `.claude/CLAUDE.md` "Where the truth lives" row for it.
+  - [x] Record AC2's 6.2-dependent clauses as open, in Completion Notes (D1).
 
 ## Dev Notes
 
@@ -460,8 +460,242 @@ for orientation only. Task 9 measures it properly.
 
 ### Agent Model Used
 
+Claude Sonnet 5.5 (`claude-sonnet-5-5`), via `bmad-dev-story`, 2026-10-07.
+
+### Implementation Plan
+
+Followed the story's task order. Each module was built from the Decisions (D1–D11), given a
+`mock_provider` test suite, then mutation-checked against its own guards before the next one.
+Offline proof only: this machine has no AWS credentials, so Task 8's real plan, apply and smoke
+are **not done** (see Completion Notes → Open).
+
 ### Debug Log References
+
+- `hashicorp/aws` provider download failed three times locally with `releases.hashicorp.com: read`
+  (a transient network error, not a configuration problem). `infra.yml`'s `terraform init` step
+  retries up to three times; a shared `TF_PLUGIN_CACHE_DIR` avoids repeat downloads.
+- A mocked data source's `id` is always null (`override_data` and `mock_data` honour every other
+  attribute, verified with a throwaway test). `modules/edge` therefore asserts the managed policy
+  *names*, and `smoke-edge.sh` item 11 proves the attached policy IDs on the live distribution.
+- `terraform validate` on `modules/edge` alone fails with a misleading "provider configuration
+  removed from state" error because of `configuration_aliases`. It is validated through
+  `envs/portfolio`, and `infra.yml` skips the standalone validate for that one module.
+- `for_each` over `aws_acm_certificate.domain_validation_options` cannot be planned under a mock
+  (the whole set is unknown). Each certificate has exactly one name, so the validation records are
+  single resources using `one(...)`.
+- A literal backspace character got into `assert_counts.py` through a `\b` in a patch script and
+  made the new regex never match. Found by running the runner against real `terraform test` logs;
+  removed. The `Write`/`Edit` tools and `printf` were used for the later files.
 
 ### Completion Notes List
 
+**Measured versions (2026-10-07).** Terraform **1.15.9** (newest 1.15.x; `winget` installs 1.16.5,
+so 1.15.9 is in `~/bin`, first on `PATH`). AWS CLI **2.37.10**. `hashicorp/aws` **6.67.0**, the newest
+6.x, constrained `~> 6.67`. The lock files carry hashes for `linux_amd64`, `windows_amd64` and
+`darwin_arm64`.
+
+**Offline results.**
+
+| Suite | Passed | Floor in `infra.yml` |
+|---|---|---|
+| `bootstrap` | 3 | 3 |
+| `modules/network` | 10 | 10 |
+| `modules/edge` | 9 | 9 |
+| `modules/identity` | 5 | 5 |
+| `envs/portfolio` | 7 | 7 |
+
+`terraform fmt -check -recursive`, `init -backend=false` and `validate` pass for every root and module
+except `modules/edge` (validated through `envs/portfolio`). Backend default suite after the change:
+**3001 passed, 2 skipped, 10 deselected** (one skip is the evidence-binding check that needs a clean
+tree, expected with uncommitted files; the other is the permanent `test_scheduling_inspect.py` skip).
+No application code changed.
+
+**Mutation table** (D8 / persistent fact). Every mutation was applied to finished product code with
+`scratchpad/mutate.py`, observed failing for the stated reason, and restored; the suite was green again
+afterwards and `git status` showed only the intended files. "Before" is the suite result with the real
+code, "after" the result with the mutation.
+
+| # | Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|---|
+| **bootstrap** | | | | |
+| B1 | `restrict_public_buckets` true→false | `state_bucket_is_private_versioned_and_encrypted` | 3/3 | 2 pass, 1 fail |
+| B2 | `block_public_acls` true→false | same | 3/3 | 2/1 |
+| B3 | ownership `BucketOwnerEnforced`→`ObjectWriter` | same | 3/3 | 2/1 |
+| B4 | versioning `Enabled`→`Suspended` | same | 3/3 | 2/1 |
+| B5 | SSE `AES256`→`aws:kms` | same | 3/3 | 2/1 |
+| B6 | `aws:SecureTransport` condition `false`→`true` | `state_bucket_policy_denies_plaintext_transport` | 3/3 | 2/1 |
+| B7 | policy `Deny`→`Allow` | same | 3/3 | 2/1 |
+| B8 | bucket-name validation loosened (`\|.*`) | `bucket_name_validation_rejects_uppercase` | 3/3 | 2/1 |
+| **modules/network** | | | | |
+| N1 | add a `data` entry (route to NAT) to `default_routes` | `data_tier_has_no_internet_route` | 10/10 | 9/1 |
+| N2 | app subnet `map_public_ip_on_launch` false→true | `no_subnet_assigns_public_ips` | 10/10 | 9/1 |
+| N3 | add a worker ingress rule (port 22 from api) | `worker_has_no_ingress_rule` | 10/10 | 9/1 |
+| N4 | `api_from_alb` source SG alb→worker | `api_ingress_comes_only_from_the_alb` | 10/10 | 9/1 |
+| N5 | ALB ingress port 443→80 | `alb_ingress_is_only_443_from_the_cloudfront_prefix_list` | 10/10 | 9/1 |
+| N6 | ALB ingress source prefix list→api SG | same | 10/10 | 9/1 |
+| N7 | `data_from_api` port 5432→3306 | `data_ingress_is_only_5432_from_api_and_worker` | 10/10 | 9/1 |
+| N8 | add an egress rule to the data SG | `data_has_no_egress_and_default_sg_has_no_rules` | 10/10 | 9/1 |
+| N9 | inline ingress rule on `aws_default_security_group` | same | 10/10 | 9/1 |
+| N10 | S3 endpoint `route_table_ids` drops the data table | `s3_gateway_endpoint_is_on_app_and_data_tables` | 10/10 | 9/1 |
+| N11 | `worker_https_out` port 443→22 | `workloads_egress_only_443_and_5432` | 10/10 | 9/1 |
+| **modules/edge** | | | | |
+| E1 | viewer min TLS `TLSv1.2_2021`→`TLSv1` | `viewer_tls_is_1_2_and_no_behavior_allows_plain_http` | 9/9 | 8/1 |
+| E2 | SPA behavior `redirect-to-https`→`allow-all` | same | 9/9 | 8/1 |
+| E3 | `/api/*` `https-only`→`allow-all` | same + `api_behavior_streams_and_forwards_everything` | 9/9 | 7/2 |
+| E4 | VPC origin `https-only`→`http-only` | `vpc_origin_is_https_only_tls_1_2` | 9/9 | 8/1 |
+| E5 | VPC origin TLS `TLSv1.2`→`TLSv1.1` | same | 9/9 | 8/1 |
+| E6 | ALB `internal` true→false | `alb_is_internal_https_only_with_a_long_idle_timeout` | 9/9 | 8/1 |
+| E7 | ALB `idle_timeout` 60→10 | same | 9/9 | 8/1 |
+| E8 | add an `http`:80 entry to `local.listeners` | same | 9/9 | 8/1 |
+| E9 | listener `ssl_policy`→`ELBSecurityPolicy-2016-08` | same | 9/9 | 8/1 |
+| E10 | health-check path `/health`→`/` | same | 9/9 | 8/1 |
+| E11 | drop `PATCH` from `/api/*` methods | `api_behavior_streams_and_forwards_everything` | 9/9 | 8/1 |
+| E12 | `/api/*` `compress` false→true | same | 9/9 | 8/1 |
+| E13 | add a `function_association` to `/api/*` | same | 9/9 | 8/1 |
+| E14 | `origin_read_timeout` 60→10 | `api_origin_timeouts_allow_sse_and_are_not_capped` | 9/9 | 8/1 |
+| E15 | set `response_completion_timeout = 120` on the API origin | same | 9/9 | 8/1 |
+| E16 | API origin domain → `aws_lb.this.dns_name` | same | 9/9 | 8/1 |
+| E17 | add a `custom_error_response` | `spa_rewrite_is_on_the_default_behavior_and_errors_are_not_rewritten` | 9/9 | 8/1 |
+| E18 | rewrite JS `=== -1`→`!== -1` | same | 9/9 | 8/1 |
+| E19 | SPA `block_public_policy` true→false | `spa_bucket_is_private_encrypted_and_oac_signed` | 9/9 | 8/1 |
+| E20 | OAC `signing_behavior` `always`→`no-override` | same | 9/9 | 8/1 |
+| E21 | SPA SSE `AES256`→`aws:kms` | same | 9/9 | 8/1 |
+| E22 | bucket policy `AWS:SourceArn`→`"*"` | `spa_bucket_policy_grants_only_this_distribution_and_denies_plaintext` | 9/9 | 8/1 |
+| E23 | `aws:SecureTransport` condition `false`→`true` | same | 9/9 | 8/1 |
+| E24 | Allow action `s3:GetObject`→`s3:*` | same | 9/9 | 8/1 |
+| E25 | origin certificate validation `DNS`→`EMAIL` | `dns_and_certificates_are_wired_to_the_zone` | 9/9 | 8/1 |
+| E26 | `AAAA` alias type→`A` | same | 9/9 | 8/1 |
+| **modules/identity** | | | | |
+| I1 | `allow_admin_create_user_only` true→false | `sign_up_is_closed_and_passwords_are_long` | 5/5 | 4/1 |
+| I2 | password minimum 12→8 | same | 5/5 | 4/1 |
+| I3 | `deletion_protection` `INACTIVE`→`ACTIVE` | same | 5/5 | 4/1 |
+| I4 | `generate_secret` true→false | `bff_client_is_confidential_code_flow_with_exact_callback` | 5/5 | 4/1 |
+| I5 | add the `implicit` OAuth flow | same | 5/5 | 4/1 |
+| I6 | add the `profile` scope | same | 5/5 | 4/1 |
+| I7 | add a second callback URL | same | 5/5 | 4/1 |
+| I8 | callback path `/api/v1/auth/callback`→`/auth/callback` | same | 5/5 | 4/1 |
+| I9 | add `Google` to supported IdPs | same | 5/5 | 4/1 |
+| I10 | `prevent_user_existence_errors` `ENABLED`→`LEGACY` | same | 5/5 | 4/1 |
+| I11 | `managed_login_version` 2→1 | `managed_login_v2_has_a_branding_style` | 5/5 | 4/1 |
+| I12 | `use_cognito_provided_values` true→false | same | 5/5 | 4/1 |
+| I13 | `user_pool_tier` `ESSENTIALS`→`LITE` | same | 5/5 | 4/1 |
+| I14 | add `SMS` to `desired_delivery_mediums` | `planner_is_emailed_a_temporary_password_and_never_has_one_in_code` | 5/5 | 4/1 |
+| I15 | set a `temporary_password` | same | 5/5 | 4/1 |
+| I16 | planner `email_verified` true→false | same | 5/5 | 4/1 |
+| I17 | issuer output gains a trailing slash | `outputs_match_what_the_adapter_expects` | 5/5 | 4/1 |
+| **envs/portfolio** | | | | |
+| R1 | edge module gets `hosted_zone_name` as `app_domain` | `edge_and_identity_agree_on_the_app_domain` | 7/7 | 6/1 |
+| R2 | identity module gets `hosted_zone_name` as `app_domain` | same | 7/7 | 6/1 |
+| R3 | ALB subnets → `module.network.public_subnet_ids` | `alb_sits_in_the_network_modules_app_subnets` | 7/7 | 6/1 |
+| R4 | default AZ `…b`→`…c` | `default_availability_zones_are_the_first_two_of_the_region` | 7/7 | 6/1 |
+| R5 | ignore the `availability_zones` override | `availability_zones_can_be_overridden` | 7/7 | 6/1 |
+| R6 | name prefix drops the environment | `resources_are_named_from_the_environment` | 7/7 | 6/1 |
+| R7 | drop the `ManagedBy` default tag | same | 7/7 | 6/1 |
+| R8 | `app_domain` regex loosened (`\|.*`) | `app_domain_must_be_a_dns_name` | 7/7 | 6/1 |
+| R9 | identity `region` → `"us-east-1"` | `oidc_outputs_follow_the_adapter_contract` | 7/7 | 6/1 |
+| R10 | `oidc_client_secret` output loses `sensitive = true` | **Terraform itself**: plan fails with "Output refers to sensitive values" (0 pass, 1 fail, 6 skipped). `terraform validate` alone does *not* catch it | 7/7 | error |
+| **assert_counts.py `--runner terraform`** | | | | |
+| T1 | parser ignores the log and returns `{"passed": 99}` | the `Failure! 4 passed, 1 failed` log must exit 1 | exit 1 | exit 0 (so the scenario detects it); restored |
+| **smoke-edge.sh** (stubbed `terraform`, `aws`, `curl`, `dig`) | | | | |
+| S1–S13 | one deliberate break per check: no redirect, TLS 1.1 accepted, no SPA rewrite, missing asset rewritten, ALB cert 502, CloudFront 403, origin reachable, bucket readable, trailing-slash issuer, `redirect_mismatch`, sign-up open, wrong managed policy, public origin IP | the matching check, and only that one | 15 PASS / 0 FAIL | 14 PASS / 1 FAIL each |
+
+Two first attempts did not count because they errored in configuration rather than failing an
+assertion (removing the ALB prefix list; SSE `AES128`). Each was redone with a valid mutation.
+
+**Guards that cannot be mutated offline (an honest gap, kept):**
+
+- *Which managed policy ID a behavior consumes.* Mock data-source `id` is null, so a swap between two
+  policies cannot be observed. `smoke-edge.sh` item 11 covers it on the real distribution.
+- *"CloudFront and the listener consume the **validated** certificate ARN".* The mocked
+  `aws_acm_certificate_validation` echoes the certificate ARN, so using the unvalidated ARN looks
+  identical offline. Real apply would race, not fail deterministically.
+- *"No port-80 listener".* The test iterates every entry in `aws_lb_listener.this`; a second listener
+  declared as a separate resource would not be seen. The ALB security group (443 only) is a second line.
+- *The CloudFront certificate being in us-east-1.* The mock has no region; AWS rejects it at apply.
+- *`smoke-edge.sh` against real `curl`/AWS.* The stubs prove the script's logic, not curl's behavior
+  (for example `--tls-max` on a Schannel build, handled with an `openssl` fallback but unexercised).
+
+**Deviations from the story text, each small and recorded here.**
+
+1. `aws_lb_listener` is a `for_each` over `local.listeners` (one `https` entry) instead of a single
+   named resource, so the "no port-80 listener" assertion has something to iterate.
+2. ACM validation records are single resources using `one(domain_validation_options)`, not the usual
+   `for_each` (see Debug Log). Equivalent for a single-name certificate.
+3. Extra module outputs, so the env-root test can reach what it asserts through `module.x.<output>`:
+   `edge.distribution_aliases`, `edge.alb_subnet_ids`, `identity.callback_urls`.
+4. `bootstrap/` got its own `tests/bootstrap.tftest.hcl` (3 runs). The story listed tests only for the
+   modules and the env root; the state bucket's TLS-only policy is an invariant worth a guard.
+5. `smoke-edge.sh` gained item 11 (live managed-policy IDs) to close the mock gap above, and refuses to
+   overwrite a non-placeholder `index.html` (`SMOKE_OVERWRITE_INDEX=1` forces it).
+6. `infra.yml` also triggers on `.github/scripts/assert_counts.py` changes, and its init step retries.
+7. SPA bucket has `force_destroy = true` and the target group `deregistration_delay = 30`, so teardown
+   of a practice environment does not stall (AD-17: teardown must work).
+8. `.gitignore` also ignores `infra/terraform/modules/**/.terraform.lock.hcl`: only the roots commit a
+   lock file (D10), and module-level `init` generates one for testing.
+9. The smoke script is invoked as `bash infra/scripts/smoke-edge.sh`, not by path, because a Windows
+   checkout does not carry the executable bit.
+
+**AC2: clauses still open until Story 6.2 (D1).** "RDS requires TLS" and the RDS/logs/secrets halves of
+"encryption at rest" have no resource to bind in 6.1, and no placeholder RDS or secret was created to
+tick them. 6.1 meets AC2 for every resource it creates: the SPA bucket (BPA, SSE-S3, TLS-only policy,
+OAC), the state bucket (BPA, SSE-S3, versioning, TLS-only policy), CloudFront (TLS 1.2 floor,
+HTTPS-only to the origin), the ALB (HTTPS-only listener, TLS 1.2+ policy) and the security groups (ALB
+443 from the CloudFront prefix list only, API 8000 from the ALB only, the worker with no ingress rule at
+all). It also builds the private data subnets (no default route) and the `data` security group RDS will
+use.
+
+**Open: Task 8 (AC1's "reviewed plan" and "no console-only resource", and the edge smoke).** Not done.
+This machine has no AWS credentials, profile or environment variables
+(`aws sts get-caller-identity` → `NoCredentials`), and the run needs inputs only Minh holds. To run it
+with his credentials:
+
+1. ~~An AWS account profile~~ **Done 2026-10-08.** An IAM Identity Center profile
+   (`AdministratorAccess-<account-id>`, region `ap-southeast-1`) is configured and
+   `aws sts get-caller-identity` succeeds. The account was empty: only the default VPC, no `shiftmind`
+   buckets, no hosted zones, no registered domains.
+2. A registered domain with a **public Route 53 hosted zone** already delegated. Terraform needs
+   `hosted_zone_name` and `app_domain` (a name inside that zone).
+3. `planner_email` (Cognito mails the temporary password there) and a globally unique
+   `cognito_domain_prefix`.
+4. His go-ahead to apply: roughly US$65.6/month idle (see the runbook) and a 20–30 minute first apply.
+
+**Paused 2026-10-08 on item 2 (the domain).** Minh is preparing a domain and its public hosted zone;
+items 3 and 4 and the apply wait on it. Nothing is deployed and nothing is costing money. Everything
+else in the story is finished.
+
+Then follow `docs/AWS-RUNBOOK.md` §1–3: bootstrap, `plan -out` / `show` / `apply tfplan`,
+`plan -detailed-exitcode` (must exit 0), and `bash infra/scripts/smoke-edge.sh`. Paste the smoke output,
+the exit code and the apply date into this section. Risks worth reading in the first plan, none of them
+verifiable offline: the CloudFront VPC origin's `http_port = 80` (required by the API, no such listener
+exists), `aws_cognito_user.planner.sub` being populated when the username is an email under
+`username_attributes`, the `Managed-*` policy names resolving, an AZ that VPC origins do not support, and
+`managed_login_version = 2` with `use_cognito_provided_values = true`.
+
 ### File List
+
+New:
+
+- `infra/terraform/bootstrap/{versions.tf, main.tf, variables.tf, outputs.tf, terraform.tfvars.example, .terraform.lock.hcl, tests/bootstrap.tftest.hcl}`
+- `infra/terraform/modules/network/{versions.tf, main.tf, security_groups.tf, variables.tf, outputs.tf, tests/network.tftest.hcl}`
+- `infra/terraform/modules/edge/{versions.tf, certificates.tf, spa_bucket.tf, alb.tf, cloudfront.tf, dns.tf, spa-rewrite.js, variables.tf, outputs.tf, tests/edge.tftest.hcl}`
+- `infra/terraform/modules/identity/{versions.tf, main.tf, variables.tf, outputs.tf, tests/identity.tftest.hcl}`
+- `infra/terraform/envs/portfolio/{versions.tf, providers.tf, backend.tf, main.tf, variables.tf, outputs.tf, terraform.tfvars.example, backend.hcl.example, .terraform.lock.hcl, tests/portfolio.tftest.hcl}`
+- `infra/scripts/smoke-edge.sh`
+- `.github/workflows/infra.yml`
+- `docs/AWS-RUNBOOK.md`
+
+Modified:
+
+- `.github/scripts/assert_counts.py` (adds the `terraform` runner; existing runners unchanged)
+- `.gitignore` (Terraform state, plans, tfvars, backend config, module lock files)
+- `.claude/CLAUDE.md` (one table row)
+- `docs/TESTING.md` (an "Infrastructure" section)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (story → in-progress)
+- `_bmad-output/implementation-artifacts/6-1-provision-aws-edge-identity-and-network-boundaries.md` (this record)
+
+### Change Log
+
+- 2026-10-07: Built the offline half of Story 6.1: state bootstrap, network, edge and identity modules,
+  the `envs/portfolio` root, 34 `terraform test` runs (all mutation-checked), the `terraform` runner in
+  `assert_counts.py`, `infra.yml`, `smoke-edge.sh`, and `docs/AWS-RUNBOOK.md`. Task 8 (real plan, apply and
+  smoke) is open pending AWS access; the story stays `in-progress`.
