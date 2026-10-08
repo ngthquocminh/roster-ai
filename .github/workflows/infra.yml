@@ -1,0 +1,148 @@
+# ShiftMind infrastructure CI (Story 6.1 D8a). Separate from ci.yml so that file's
+# triggers, jobs and floors stay untouched; this one also runs on `epic-6/**`
+# pushes, which ci.yml (push: main only) would not.
+#
+# Everything here is OFFLINE: no AWS credentials, no `id-token`. `terraform test`
+# uses `mock_provider "aws"`, so it proves configuration INTENT (TLS floors,
+# security-group shape, Block Public Access, the CloudFront behaviors). That AWS
+# accepted it is proved by the operator-run plan/apply/smoke in
+# docs/AWS-RUNBOOK.md, not here.
+#
+# `terraform init` still downloads the real provider plugin, so the job needs
+# network access to the registry but no credentials.
+#
+# Recorded baselines, measured with Terraform 1.15.9 and hashicorp/aws 6.67.0
+# (2026-10-07). Pass counts are floors and skips are capped at zero, exactly as
+# in ci.yml: a run that errors makes every later run in its file `skip`, so a
+# silent skip is the failure being guarded against.
+#   bootstrap            3 passed
+#   modules/network     10 passed
+#   modules/edge         9 passed
+#   modules/identity     5 passed
+#   envs/portfolio       7 passed
+
+name: Infra
+
+on:
+  push:
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+      - ".github/scripts/assert_counts.py"
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+      - ".github/scripts/assert_counts.py"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # D10: the newest 1.15.x at implementation; required_version is "~> 1.15.0".
+  TERRAFORM_VERSION: "1.15.9"
+  # One shared plugin cache so the AWS provider (large) downloads once per job.
+  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  fmt:
+    name: Terraform fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          # The wrapper rewrites stdout, which assert_counts.py parses.
+          terraform_wrapper: false
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive -diff infra/terraform
+
+  validate-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: bootstrap
+            dir: infra/terraform/bootstrap
+            min_passed: 3
+            validate: true
+          - name: modules/network
+            dir: infra/terraform/modules/network
+            min_passed: 10
+            validate: true
+          # modules/edge declares `configuration_aliases = [aws.us_east_1]`, which a
+          # standalone `terraform validate` rejects with a misleading "provider
+          # configuration removed from state" error. It is validated as part of
+          # envs/portfolio, which instantiates it with both providers.
+          - name: modules/edge
+            dir: infra/terraform/modules/edge
+            min_passed: 9
+            validate: false
+          - name: modules/identity
+            dir: infra/terraform/modules/identity
+            min_passed: 5
+            validate: true
+          - name: envs/portfolio
+            dir: infra/terraform/envs/portfolio
+            min_passed: 7
+            validate: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Create the provider plugin cache
+        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+      - name: terraform init
+        working-directory: ${{ matrix.dir }}
+        # -backend=false: the S3 backend needs credentials and a bucket this job
+        # does not have. Roots use their committed .terraform.lock.hcl.
+        # Bounded retry: the ~130 MB provider download from the registry has
+        # failed transiently ("releases.hashicorp.com: read") during development,
+        # and that is not a signal about the configuration. Three failures in a
+        # row still fail the job.
+        run: |
+          for attempt in 1 2 3; do
+            terraform init -backend=false -input=false && exit 0
+            echo "terraform init failed (attempt ${attempt}/3); retrying" >&2
+            sleep 5
+          done
+          exit 1
+
+      - name: terraform validate
+        if: matrix.validate
+        working-directory: ${{ matrix.dir }}
+        run: terraform validate
+
+      - name: terraform test
+        working-directory: ${{ matrix.dir }}
+        run: |
+          set -o pipefail
+          terraform test -no-color 2>&1 | tee "$RUNNER_TEMP/terraform-test.log"
+
+      - name: Assert terraform test proved something
+        run: |
+          python3 .github/scripts/assert_counts.py \
+            --runner terraform --log "$RUNNER_TEMP/terraform-test.log" \
+            --label "terraform test ${{ matrix.name }}" \
+            --min-passed ${{ matrix.min_passed }} --max-skipped 0

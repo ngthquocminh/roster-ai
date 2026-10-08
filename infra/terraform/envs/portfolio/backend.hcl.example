@@ -1,0 +1,5 @@
+# Copy to backend.hcl (gitignored). Values come from the bootstrap root's outputs:
+#   terraform -chdir=../../bootstrap output
+bucket = "shiftmind-tfstate-123456789012"
+key    = "portfolio/terraform.tfstate"
+region = "ap-southeast-1"

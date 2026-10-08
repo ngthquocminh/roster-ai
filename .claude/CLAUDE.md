@@ -15,6 +15,7 @@ it, and OR-Tools CP-SAT alone builds the schedule. What it is and how it works:
 | Env vars and settings | `docs/CONFIGURATION.md` |
 | Test suites, live eval, mocking convention | `docs/TESTING.md` |
 | Demand family/unit rules | `docs/DOMAIN-MODEL.md` |
+| AWS hosting: bootstrap, plan/apply, smoke, cost, teardown (Epic 6) | `docs/AWS-RUNBOOK.md` |
 | Stack and versions | `backend/pyproject.toml`, `frontend/package.json` |
 | Superseded v0.3/v0.4 design (SQLite, `LLMProvider`) | `docs/archive/` (historical only, do not follow) |
 
