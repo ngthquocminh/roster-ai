@@ -1502,3 +1502,38 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   (`backend/scripts/junit_ingest.py`). Such tests stay "expected" and block spuriously.
   **Deferred reason: fails closed; no such test exists.** **Owner/revisit trigger:** the first
   live test marked that way.
+
+## Deferred from: code review of 6-1-provision-aws-edge-identity-and-network-boundaries (2026-10-09)
+
+- **`index.html` is cached at the edge for up to 24 h.** The default behavior uses
+  `Managed-CachingOptimized` (`infra/terraform/modules/edge/cloudfront.tf`), so a new SPA build
+  (and the smoke's placeholder) stays cached until it is invalidated. **Deferred reason: the SPA
+  publish does not exist yet.** **Owner/revisit trigger:** Story 6.3's SPA publish must invalidate
+  `/index.html` or give it a no-cache policy.
+
+- **The BFF client keeps Cognito's default `explicit_auth_flows`** (`ALLOW_USER_SRP_AUTH`,
+  `ALLOW_CUSTOM_AUTH`, `ALLOW_REFRESH_TOKEN_AUTH`; `infra/terraform/modules/identity/main.tf`).
+  Direct `InitiateAuth` needs the client secret's `SECRET_HASH`, so exposure is low, but
+  `identity.tftest.hcl`'s "only the authorization-code flow" message overclaims. **Deferred reason:
+  pinning `["ALLOW_REFRESH_TOKEN_AUTH"]` can only be proven safe by a real sign-in.**
+  **Owner/revisit trigger:** Story 6.3's first sign-in.
+
+- **No `logout_urls` on the BFF client.** `CognitoOidcProvider.end_session_url`
+  (`backend/adapters/cognito/oidc.py`) sends `logout_uri=<app_base_url>` when discovery publishes
+  `end_session_endpoint`; an unregistered logout URI would fail. **Deferred reason: sign-out
+  needs the deployed API.** **Owner/revisit trigger:** Story 6.3 sign-out.
+
+- **Inputs that fail at apply rather than plan** (`infra/terraform/envs/portfolio/variables.tf`,
+  `infra/terraform/bootstrap/variables.tf`): `environment` length/charset (ALB/target-group names
+  cap at 32 chars), `cognito_domain_prefix` reserved words, `planner_email` format, `app_domain`
+  inside `hosted_zone_name` and at most 57 chars (for `origin.<app_domain>` on ACM), `vpc_cidr`
+  outside RFC 1918, a bucket name with dots. **Deferred reason: one operator with a known-good
+  tfvars; the environment is already applied.** **Owner/revisit trigger:** a second environment.
+
+- **The state bucket keeps every noncurrent version forever** (`infra/terraform/bootstrap/main.tf`),
+  including old Cognito client secrets after a rotation. **Deferred reason: no rotation planned in
+  Epic 6.** **Owner/revisit trigger:** the first client-secret rotation.
+
+- **`infra.yml`'s test matrix is hand-listed** (`.github/workflows/infra.yml`), so a new directory
+  with `tests/*.tftest.hcl` would never run in CI and the workflow stays green. **Deferred reason:
+  no new module yet.** **Owner/revisit trigger:** Story 6.2 adding a module.

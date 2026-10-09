@@ -5,7 +5,7 @@ depends_on: 5-13-assess-gate-b (done)
 blocks: 6-2-provision-aws-data-and-least-privilege-runtime ("Given the completed private network and identity boundary")
 ---
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -344,6 +344,31 @@ approximate monthly idle cost of what 6.1 creates, and teardown order. A row is 
   - [x] Add a `.claude/CLAUDE.md` "Where the truth lives" row for it.
   - [x] Record AC2's 6.2-dependent clauses as open, in Completion Notes (D1).
 
+### Review Findings
+
+Code review 2026-10-09 (Blind Hunter, Edge Case Hunter, Acceptance Auditor; diff `11da75a..ecbb642`).
+Reviewer mutation check: table rows N4 and E15 re-run on a clean worktree and reddened as recorded;
+two new mutations stayed green (worker SG inline `ingress {}` → network 10/10; SPA plaintext-deny
+narrowed to `s3:ListBucket` on the bucket ARN → edge 9/9). Neither contradicts a table row.
+
+- [x] [Review][Patch] Smoke 1b passes without proving the TLS floor: any curl exit other than 0/4 counts as "refused", including DNS/connect/timeout (6/7/28) and a client that will not offer TLS 1.1 itself (Windows Schannel, OpenSSL 3 at default security level), where the `openssl -tls1_1` fallback also fails locally. Require server-side evidence (a protocol-version/handshake alert from the server) and report "could not probe" as FAIL [infra/scripts/smoke-edge.sh:102]
+- [x] [Review][Patch] AC2 network guards are blind to inline blocks and second resources: `worker_has_no_ingress_rule` and `data_tier_has_no_internet_route` scan only `aws_vpc_security_group_ingress_rule.this` / `aws_route.default`. An inline `ingress {}` on `aws_security_group.worker` or a separate `aws_route` to the data table stays green, and nothing in the smoke checks it live. Assert the SGs' inline `ingress` is empty, add a live smoke item (worker SG has zero ingress rules; data route table has no `0.0.0.0/0`), and record the separate-resource blind spot in the test header and "Guards that cannot be mutated offline" [infra/terraform/modules/network/tests/network.tftest.hcl:81]
+- [x] [Review][Patch] Cognito user pool is case-sensitive: no `username_configuration`, so the API default `CaseSensitive = true` applies and is immutable. Add `username_configuration { case_sensitive = false }` plus an assertion. Applying it REPLACES the live pool (new pool ID, issuer, client ID/secret, planner `sub`; planner re-emailed), so do it before 6.2 consumes those outputs [infra/terraform/modules/identity/main.tf:9]
+- [x] [Review][Patch] Plaintext-deny guards check only Effect and Condition: narrowing the Deny to `s3:ListBucket` on the bucket ARN stays green. Assert Principal `*`, Action `s3:*` and Resource covering both the bucket and `/*`, in edge and bootstrap [infra/terraform/modules/edge/tests/edge.tftest.hcl:373]
+- [x] [Review][Patch] Smoke: a missing Terraform output is not fatal (`out()` exits 1 inside `$(...)` with no `set -e`), and check 9 accepts any 200/302 without `redirect_mismatch`, so an empty `client_id` can pass. Exit 2 on a failed `out`, and require check 9's `Location` to point at the hosted `/login` page [infra/scripts/smoke-edge.sh:62]
+- [x] [Review][Patch] Smoke checks 4/5 compare only the status code, so a CloudFront-generated 503 passes as "reaches the ALB". Capture headers and require `server: awselb` [infra/scripts/smoke-edge.sh:127]
+- [x] [Review][Patch] Smoke's clobber guard treats any read error as "no index.html" (`2>/dev/null || true`), so throttling or a Get-denied role leads to overwriting a real SPA. Use `head-object` and proceed only on a 404 [infra/scripts/smoke-edge.sh:87]
+- [x] [Review][Patch] Module CI runs resolve the newest `~> 6.67` provider on every run (module lock files are gitignored), so the recorded floors can drift with no repo change. Copy `envs/portfolio/.terraform.lock.hcl` into each module before `init`. Also drop or fix the `TF_PLUGIN_CACHE_DIR` comment: each matrix job is a fresh runner with no `actions/cache`, so the cache saves nothing [.github/workflows/infra.yml:116]
+- [x] [Review][Patch] Runbook corrections. Teardown: the CloudFront-managed `CloudFront-VPCOrigins-Service-SG`/ENIs are cleaned up asynchronously, so a VPC `DependencyViolation` means wait and re-apply; also give the command to empty the versioned state bucket. Planner: the temporary password expires after 7 days (`admin-create-user --message-action RESEND`). Diagram: `origin.<app_domain>` is a public record with private addresses, not a "private A record". "Only place with `provider` blocks" is wrong: bootstrap has one (also the `providers.tf` comment) [docs/AWS-RUNBOOK.md:17]
+- [x] [Review][Patch] Story record accuracy: "34 runs (all mutation-checked)" is not true (`az_count_is_validated` has no row). The deviations list omits "no `override_data` on the policy lookups" and "`modules/edge` skips standalone `validate`". The File List still says `sprint-status.yaml (story → in-progress)`. Deviation 10 contains a literal CR character inside the backticks [this file, Dev Agent Record]
+- [x] [Review][Patch] `.gitignore` does not cover `*.tfvars.json` / `*.auto.tfvars.json`, which Terraform auto-loads [.gitignore]
+- [x] [Review][Defer] `index.html` is served under `Managed-CachingOptimized` (24 h default TTL), and the smoke placeholder stays cached at the edge. The SPA publish must invalidate `/index.html` (or give it a no-cache policy) [infra/terraform/modules/edge/cloudfront.tf:77] — deferred, belongs to Story 6.3's SPA publish
+- [x] [Review][Defer] BFF client keeps Cognito's default `explicit_auth_flows` (SRP, CUSTOM, REFRESH). It is gated by the client secret, but the test message "only the authorization-code flow" overclaims. Pin `["ALLOW_REFRESH_TOKEN_AUTH"]` [infra/terraform/modules/identity/main.tf:42] — deferred to Story 6.3, whose first real sign-in proves managed login still works
+- [x] [Review][Defer] No `logout_urls` on the BFF client; `CognitoOidcProvider.end_session_url` sends `logout_uri=<app_base_url>` if discovery publishes `end_session_endpoint` [infra/terraform/modules/identity/main.tf:42] — deferred to Story 6.3 (sign-out)
+- [x] [Review][Defer] Inputs that fail at apply rather than plan: `environment` length/charset (ALB/TG 32-char names), `cognito_domain_prefix` (reserved words), `planner_email` format, `app_domain` inside `hosted_zone_name` and ≤57 chars, `vpc_cidr` RFC 1918, bootstrap bucket name with dots [infra/terraform/envs/portfolio/variables.tf] — deferred, single operator with a known-good tfvars
+- [x] [Review][Defer] State bucket keeps every noncurrent version forever, including old Cognito client secrets after rotation; no lifecycle expiry [infra/terraform/bootstrap/main.tf] — deferred, no rotation planned in Epic 6
+- [x] [Review][Defer] `infra.yml`'s matrix is hand-listed; a new `tests/*.tftest.hcl` directory would never run in CI [.github/workflows/infra.yml:76] — deferred, revisit when 6.2 adds modules
+
 ## Dev Notes
 
 ### Files
@@ -474,7 +499,8 @@ Notes → Task 8).
 
 - `hashicorp/aws` provider download failed three times locally with `releases.hashicorp.com: read`
   (a transient network error, not a configuration problem). `infra.yml`'s `terraform init` step
-  retries up to three times; a shared `TF_PLUGIN_CACHE_DIR` avoids repeat downloads.
+  retries up to three times. (A `TF_PLUGIN_CACHE_DIR` was also set, and removed at review: each
+  matrix job is a fresh runner with no `actions/cache`, so it saved nothing.)
 - A mocked data source's `id` is always null (`override_data` and `mock_data` honour every other
   attribute, verified with a throwaway test). `modules/edge` therefore asserts the managed policy
   *names*, and `smoke-edge.sh` item 11 proves the attached policy IDs on the live distribution.
@@ -527,6 +553,8 @@ code, "after" the result with the mutation.
 | B6 | `aws:SecureTransport` condition `false`→`true` | `state_bucket_policy_denies_plaintext_transport` | 3/3 | 2/1 |
 | B7 | policy `Deny`→`Allow` | same | 3/3 | 2/1 |
 | B8 | bucket-name validation loosened (`\|.*`) | `bucket_name_validation_rejects_uppercase` | 3/3 | 2/1 |
+| B9 | plaintext Deny action `s3:*`→`s3:GetObject` (review) | `state_bucket_policy_denies_plaintext_transport` | 3/3 | 2/1 |
+| B10 | plaintext Deny principal `*`→one account (review) | same | 3/3 | 2/1 |
 | **modules/network** | | | | |
 | N1 | add a `data` entry (route to NAT) to `default_routes` | `data_tier_has_no_internet_route` | 10/10 | 9/1 |
 | N2 | app subnet `map_public_ip_on_launch` false→true | `no_subnet_assigns_public_ips` | 10/10 | 9/1 |
@@ -539,6 +567,9 @@ code, "after" the result with the mutation.
 | N9 | inline ingress rule on `aws_default_security_group` | same | 10/10 | 9/1 |
 | N10 | S3 endpoint `route_table_ids` drops the data table | `s3_gateway_endpoint_is_on_app_and_data_tables` | 10/10 | 9/1 |
 | N11 | `worker_https_out` port 443→22 | `workloads_egress_only_443_and_5432` | 10/10 | 9/1 |
+| N12 | AZ-count validation `== 2`→`>= 1` (added at review: no row before) | `az_count_is_validated` ("Missing expected failure") | 10/10 | 9/1 |
+| N13 | inline `ingress {}` 22 from `0.0.0.0/0` on `aws_security_group.worker` (review; green 10/10 before the fix) | `worker_has_no_ingress_rule` + `data_has_no_egress_and_default_sg_has_no_rules` | 10/10 | 8/2 |
+| N14 | inline `egress {}` 443 on `aws_security_group.data` (review) | `data_has_no_egress_and_default_sg_has_no_rules` | 10/10 | 9/1 |
 | **modules/edge** | | | | |
 | E1 | viewer min TLS `TLSv1.2_2021`→`TLSv1` | `viewer_tls_is_1_2_and_no_behavior_allows_plain_http` | 9/9 | 8/1 |
 | E2 | SPA behavior `redirect-to-https`→`allow-all` | same | 9/9 | 8/1 |
@@ -566,6 +597,8 @@ code, "after" the result with the mutation.
 | E24 | Allow action `s3:GetObject`→`s3:*` | same | 9/9 | 8/1 |
 | E25 | origin certificate validation `DNS`→`EMAIL` | `dns_and_certificates_are_wired_to_the_zone` | 9/9 | 8/1 |
 | E26 | `AAAA` alias type→`A` | same | 9/9 | 8/1 |
+| E27 | SPA plaintext Deny action `s3:*`→`s3:ListBucket` (review; green 9/9 before the fix) | `spa_bucket_policy_grants_only_this_distribution_and_denies_plaintext` | 9/9 | 8/1 |
+| E28 | SPA plaintext Deny resource → bucket ARN only (review) | same | 9/9 | 8/1 |
 | **modules/identity** | | | | |
 | I1 | `allow_admin_create_user_only` true→false | `sign_up_is_closed_and_passwords_are_long` | 5/5 | 4/1 |
 | I2 | password minimum 12→8 | same | 5/5 | 4/1 |
@@ -584,6 +617,7 @@ code, "after" the result with the mutation.
 | I15 | set a `temporary_password` | same | 5/5 | 4/1 |
 | I16 | planner `email_verified` true→false | same | 5/5 | 4/1 |
 | I17 | issuer output gains a trailing slash | `outputs_match_what_the_adapter_expects` | 5/5 | 4/1 |
+| I18 | `username_configuration.case_sensitive` false→true (review) | `sign_up_is_closed_and_passwords_are_long` | 5/5 | 4/1 |
 | **envs/portfolio** | | | | |
 | R1 | edge module gets `hosted_zone_name` as `app_domain` | `edge_and_identity_agree_on_the_app_domain` | 7/7 | 6/1 |
 | R2 | identity module gets `hosted_zone_name` as `app_domain` | same | 7/7 | 6/1 |
@@ -599,6 +633,15 @@ code, "after" the result with the mutation.
 | T1 | parser ignores the log and returns `{"passed": 99}` | the `Failure! 4 passed, 1 failed` log must exit 1 | exit 1 | exit 0 (so the scenario detects it); restored |
 | **smoke-edge.sh** (stubbed `terraform`, `aws`, `curl`, `dig`) | | | | |
 | S1–S13 | one deliberate break per check: no redirect, TLS 1.1 accepted, no SPA rewrite, missing asset rewritten, ALB cert 502, CloudFront 403, origin reachable, bucket readable, trailing-slash issuer, `redirect_mismatch`, sign-up open, wrong managed policy, public origin IP | the matching check, and only that one | 15 PASS / 0 FAIL | 14 PASS / 1 FAIL each |
+| **smoke-edge.sh after review** (new stub harness: `terraform`, `aws`, `curl`, `openssl`, `dig`) | | | | |
+| S14 | client cannot offer TLS 1.1 (`no protocols available`) — PASSED before the fix | 1b | 16/0 | 15/1 |
+| S15 | server accepts TLS 1.1 | 1b | 16/0 | 15/1 |
+| S16 | the 503 comes from CloudFront, not the ALB (`Server: CloudFront`) | 4 and 5 | 16/0 | 14/2 |
+| S17 | authorize 302 to `/error?error=invalid_request` (bad client) — PASSED before the fix | 9 | 16/0 | 15/1 |
+| S18 | authorize 302 to `redirect_mismatch` | 9 | 16/0 | 15/1 |
+| S19 | live worker SG has an ingress rule | 12 | 16/0 | 15/1 |
+| S20 | live data route table has `0.0.0.0/0` → NAT | 12 | 16/0 | 15/1 |
+| S21–S23 | `head-object` throttled; real SPA present; a missing `terraform output` | setup guard | 16/0 | exit 2 (FATAL) each; an absent `index.html` (404) proceeds, 16/0 |
 
 Two first attempts did not count because they errored in configuration rather than failing an
 assertion (removing the ALB prefix list; SSE `AES128`). Each was redone with a valid mutation.
@@ -613,6 +656,11 @@ assertion (removing the ALB prefix list; SSE `AES128`). Each was redone with a v
 - *"No port-80 listener".* The test iterates every entry in `aws_lb_listener.this`; a second listener
   declared as a separate resource would not be seen. The ALB security group (443 only) is a second line.
 - *The CloudFront certificate being in us-east-1.* The mock has no region; AWS rejects it at apply.
+- *"Worker has no ingress rule" / "data tier has no internet route" against a SEPARATE resource*
+  (found at review). The network runs see the module's rule/route maps and, since the review, any
+  inline `ingress`/`egress`/`route` block, but not a second `aws_vpc_security_group_ingress_rule` or
+  `aws_route` declared on its own. `smoke-edge.sh` check 12 reads the live worker SG and data route
+  table instead.
 - *`smoke-edge.sh` against real `curl`/AWS.* Closed on 2026-10-09 by the real run (Task 8): it passed
   15/15 after one fix the stubs could not have found (a CR from Windows Python in check 9).
 
@@ -635,7 +683,14 @@ assertion (removing the ALB prefix list; SSE `AES128`). Each was redone with a v
    lock file (D10), and module-level `init` generates one for testing.
 9. The smoke script is invoked as `bash infra/scripts/smoke-edge.sh`, not by path, because a Windows
    checkout does not carry the executable bit.
-10. `smoke-edge.sh` strips `` from the output of its Python helpers (found by the first real run).
+10. `smoke-edge.sh` strips carriage returns (`tr -d '\r'`) from the output of its Python helpers
+    (found by the first real run).
+11. Task 4 asked for `override_data` on the managed-policy lookups; the edge test has none. A mocked
+    data source's `id` is null whatever the override says (Debug Log), so the test asserts the looked-up
+    *names* and `smoke-edge.sh` item 11 proves the live IDs. (Recorded at review.)
+12. D8a runs `validate` for every root and module; `infra.yml` skips the standalone `validate` of
+    `modules/edge`, which `configuration_aliases` makes fail spuriously. It is validated through
+    `envs/portfolio`. (Recorded at review.)
 
 **AC2: clauses still open until Story 6.2 (D1).** "RDS requires TLS" and the RDS/logs/secrets halves of
 "encryption at rest" have no resource to bind in 6.1, and no placeholder RDS or secret was created to
@@ -728,15 +783,31 @@ Modified:
 - `.gitignore` (Terraform state, plans, tfvars, backend config, module lock files)
 - `.claude/CLAUDE.md` (one table row)
 - `docs/TESTING.md` (an "Infrastructure" section)
-- `_bmad-output/implementation-artifacts/sprint-status.yaml` (story → in-progress)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (story status)
+- `_bmad-output/implementation-artifacts/deferred-work.md` (code-review deferrals)
 - `_bmad-output/implementation-artifacts/6-1-provision-aws-edge-identity-and-network-boundaries.md` (this record)
 
 ### Change Log
 
 - 2026-10-07: Built the offline half of Story 6.1: state bootstrap, network, edge and identity modules,
-  the `envs/portfolio` root, 34 `terraform test` runs (all mutation-checked), the `terraform` runner in
+  the `envs/portfolio` root, 34 `terraform test` runs (33 mutation-checked then; the 34th,
+  `az_count_is_validated`, at review as N12), the `terraform` runner in
   `assert_counts.py`, `infra.yml`, `smoke-edge.sh`, and `docs/AWS-RUNBOOK.md`. (Task 8, the real plan, apply and
   smoke, was done afterwards; see the next entry.)
 - 2026-10-09: Task 8 done. Bootstrapped the state bucket, applied the reviewed plan (62 added, no drift on
   the follow-up `plan -detailed-exitcode`), and ran the edge smoke against `<app_domain>`: 15 passed. Fixed
   a Windows CR bug in `smoke-edge.sh` that the first run exposed. All tasks complete; status -> review.
+- 2026-10-09: Code review (3 layers + reviewer mutations). Applied all 11 patch findings: the server-side
+  TLS 1.1 proof, `Server: awselb` attribution, a `/login`-only check 9, fatal missing outputs and a
+  404-only clobber guard in `smoke-edge.sh`, plus its live check 12; inline-rule and full plaintext-Deny
+  assertions; a case-insensitive Cognito pool; module CI pinned to the roots' lock file; runbook and
+  record corrections. Mutation rows N12-N14, B9-B10, E27-E28, I18, S14-S23 added.
+- 2026-10-09: Review fixes applied live, with Minh's approval. Reviewed plan: **5 to add, 0 to change,
+  5 to destroy**, all replacements in `module.identity` forced by `case_sensitive = false`. Applied
+  the saved plan (`Apply complete! Resources: 5 added, 0 changed, 5 destroyed.`), and the follow-up
+  `plan -detailed-exitcode` exited **0** ("No changes"). New pool `<user_pool_id>`:
+  `UsernameConfiguration.CaseSensitive = false`; the planner is `FORCE_CHANGE_PASSWORD`, email
+  verified, and its `sub` equals the `planner_subject` output (`<planner_sub>`). It was emailed a new
+  temporary password, and the old pool's issuer, client and `sub` no longer exist. The revised smoke
+  passed live: **16 passed, 0 failed, exit 0** (checks 1b with a server alert, 4/5 with
+  `Server: awselb`, 9 to `/login`, and the new 12 all included). Status -> done.
