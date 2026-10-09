@@ -690,7 +690,7 @@ rather than folded in.
 
 - **`docs/API.md` still describes the legacy surface and omits most of `/api/v1`.** Story 5.3 corrected only the setup/configuration documents required to start the composition; rewriting the large API reference would bury the composition diff. **Owner/revisit trigger: the next API documentation story or the first externally published API contract.**
 
-- **The local image-digest manifest is write-only.** `scripts.record_image_digests` records content-addressed backend/web image IDs and `resolve_bindings()` consumes them during generation, but no independent process verifies that a stored `.build/image-digests.json` still names the images currently tagged locally. Adding that requirement to committed evidence audit is forbidden because it would violate monotonicity. **Owner/revisit trigger: the first registry-backed image pipeline**, where registry provenance can be verified during generation without making old committed reports depend on mutable local Docker state.
+- **RE-POINTED 2026-10-09 by Story 6.2 (D10): owner is now Story 6.4, whose report binds image versions; 6.2 creates the registry (ECR, IMMUTABLE tags) but no report reads it yet.** **The local image-digest manifest is write-only.** `scripts.record_image_digests` records content-addressed backend/web image IDs and `resolve_bindings()` consumes them during generation, but no independent process verifies that a stored `.build/image-digests.json` still names the images currently tagged locally. Adding that requirement to committed evidence audit is forbidden because it would violate monotonicity. **Owner/revisit trigger: the first registry-backed image pipeline**, where registry provenance can be verified during generation without making old committed reports depend on mutable local Docker state.
 
 - **`TestModel` proves keyless deterministic runtime behavior but not meaningful Wednesday-coverage prose.** It synthesizes schema-shaped values and cannot reliably name governed fixture records or make behavioral claims. Story 5.3 therefore keeps the production runtime seam unchanged and separates agent-run termination from deterministic application/worker claims. **Recommended Story 5.4 split:** bind behavioral walkthrough claims to deterministic application/evaluation evidence; capture any illustrative prose from an explicitly configured live-provider run and label it illustrative, never release evidence. Reject a runtime-selectable scripted model added only to make the transcript look convincing.
 
@@ -714,7 +714,7 @@ rather than folded in.
 
 - **The `postgres` healthcheck can report ready against initdb's temporary socket server on a first start.** `pg_isready -U rosterai -d rosterai` (`docker-compose.yml:10-15`) omits `-h 127.0.0.1` and declares no `start_period`, so on an empty volume it can succeed before the TCP listener accepts connections, and `bootstrap` starts against a database that is not yet reachable. **Deferred reason: pre-existing and explicitly preserved.** Story 5.3's files-being-modified table requires the healthcheck stay verbatim because `.github/workflows/ci.yml:40-47` depends on it. The race became load-bearing only now that `bootstrap` gates the whole stack behind it. **Owner/revisit trigger: the first observed bootstrap failure on a cold volume, or Epic 6's hosted composition**, whichever comes first.
 
-- **Container base images are tag-pinned, not digest-pinned.** `Dockerfile:1-2` uses `ghcr.io/astral-sh/uv:0.10.8` and `python:3.12-slim`; `frontend/Dockerfile:1,10` uses `node:22-bookworm-slim` and `nginx:1.29-alpine`. AC2's "tested constraints and lockfiles pin each used dependency version" is satisfied for Python and npm packages (`uv sync --frozen`, `npm ci`) but not for the bases, so the recorded image digest is not reproducible from reviewed code alone. The existing write-only-manifest entry covers staleness of `.build/image-digests.json` only and does not name this. **Deferred reason: belongs with the registry pipeline.** Digest-pinning bases without a registry to resolve them against trades one unverifiable value for another. **Owner/revisit trigger: Epic 6's ECR work under AD-17**, where base digests can be pinned and verified together.
+- **CLOSED 2026-10-09 by Story 6.2 (D10): all four `FROM` lines are `<tag>@sha256:<index digest>`, guarded by `test_every_container_base_is_pinned_by_tag_and_digest` (`backend/tests/architecture/test_local_composition.py`) and verified to resolve by a local build and by `backend-image.yml`'s registry build.** ~~**Container base images are tag-pinned, not digest-pinned.**~~ `Dockerfile:1-2` uses `ghcr.io/astral-sh/uv:0.10.8` and `python:3.12-slim`; `frontend/Dockerfile:1,10` uses `node:22-bookworm-slim` and `nginx:1.29-alpine`. AC2's "tested constraints and lockfiles pin each used dependency version" is satisfied for Python and npm packages (`uv sync --frozen`, `npm ci`) but not for the bases, so the recorded image digest is not reproducible from reviewed code alone. The existing write-only-manifest entry covers staleness of `.build/image-digests.json` only and does not name this. **Deferred reason: belongs with the registry pipeline.** Digest-pinning bases without a registry to resolve them against trades one unverifiable value for another. **Owner/revisit trigger: Epic 6's ECR work under AD-17**, where base digests can be pinned and verified together.
 
 - **Story 5.3's commit 4 no longer matches its message, and commit 5 carries more than the regenerated report.** `docs(story-5.3): reconcile the ledger` was amended to add code (strict 64-hex SHA-256 validation in the digest recorder plus its regression test) so that `resolve_bindings()` would accept it under the convention's "the recorded commit touches at least one code file" rule; `evidence(gate-a): refresh after story 5.3` also carries the story file and `sprint-status.yaml`. Both are disclosed in the Dev Agent Record's Debug Log. **Deferred reason: history is already written and the binding is valid.** The substantive half - that the added validation guards the recorder but not `resolve_image_binding`, which is the path reaching committed evidence - is raised as a patch in the story's Review Findings. **Owner/revisit trigger: the next story whose commit plan ends in a docs-only commit** - plan for the code-touching rule up front rather than amending afterwards.
 
@@ -1534,6 +1534,48 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   including old Cognito client secrets after a rotation. **Deferred reason: no rotation planned in
   Epic 6.** **Owner/revisit trigger:** the first client-secret rotation.
 
-- **`infra.yml`'s test matrix is hand-listed** (`.github/workflows/infra.yml`), so a new directory
+- **CLOSED 2026-10-09 by Story 6.2 (D13a): `infra.yml`'s `matrix-coverage` job runs `.github/scripts/check_infra_matrix.py`, which fails when a directory with `tests/*.tftest.hcl` is missing from the matrix (or a matrix entry has no tests).** ~~**`infra.yml`'s test matrix is hand-listed**~~ (`.github/workflows/infra.yml`), so a new directory
   with `tests/*.tftest.hcl` would never run in CI and the workflow stays green. **Deferred reason:
   no new module yet.** **Owner/revisit trigger:** Story 6.2 adding a module.
+
+## Deferred from: implementation of 6-2-provision-aws-data-and-least-privilege-runtime (2026-10-09)
+
+- **The API and the worker share one database login, `shiftmind_login`** (`backend/settings.py`,
+  migration `5e2a4c9d1f70`). Their IAM task and execution roles are separate (Story 6.2 D8), but
+  their database grants are not: the worker's `SET ROLE shiftmind_lease` is open to the API's
+  credential too. **Deferred reason: splitting needs a second login, a second URL secret and a
+  settings change that 6.2 forbids; AC2 asks for separate task roles, which exist.**
+  **Owner/revisit trigger:** Story 6.3's task definitions, or the first finding that the API used a
+  lease function.
+
+- **Clients encrypt to RDS but do not verify its certificate** (`sslmode=require`, both URL secrets
+  in `infra/terraform/modules/data/secrets.tf`). `verify-full` needs the RDS CA bundle in the image
+  and `sslrootcert` in the URL. **Deferred reason: the network path is private (data subnets, SG to
+  SG), and the bundle is an image change better made with 6.3's runtime image work.**
+  **Owner/revisit trigger:** Story 6.3, or any path to RDS that leaves the VPC.
+
+- **The first evidence writer needs an `aws:SourceVpce` condition** (`infra/terraform/modules/data/
+  evidence_bucket.tf`). Today no runtime principal can reach the bucket, so the create-only Denies
+  are the whole policy. **Deferred reason: no producer exists (F9: no AWS SDK in the backend).**
+  **Owner/revisit trigger:** the first story that grants an application role `s3:PutObject` on the
+  evidence bucket. It adds the grant, the gateway-endpoint condition, and a smoke check.
+
+- **The `portfolio` environment has no required reviewers** (`docs/AWS-RUNBOOK.md`, GitHub deploy
+  identity). The deploy role can only push one ECR repository, so an unreviewed run can at worst
+  publish an image nobody deploys. **Deferred reason: reviewers matter once the role can deploy.**
+  **Owner/revisit trigger:** Story 6.3, in the same change that widens `<prefix>-github-deploy`.
+
+- **GitHub OIDC provider ownership.** Story 6.2 creates the account's
+  `token.actions.githubusercontent.com` provider unless `github_oidc_provider_arn` names an existing
+  one, in which case it only looks it up. **Deferred reason: an account holds one provider per URL;
+  if another project later adopts it, a teardown of this stack would delete it from under them.**
+  **Owner/revisit trigger:** any second workload in the account using GitHub OIDC. Set
+  `github_oidc_provider_arn` before the next apply so this stack stops owning it.
+
+- **A URL secret replaced without `db_credentials_version` moving would carry a password the
+  database does not have** (`infra/terraform/modules/data/secrets.tf`). The instance being replaced
+  is handled by `replace_triggered_by`. A renamed or out-of-band-deleted secret is not, because
+  write-only values are re-sent only on a version change. **Deferred reason: no supported path
+  renames a secret, and the runbook's fix (bump the version) is one line.**
+  **Owner/revisit trigger:** the first observed `login_uses_the_rotated_password` failure after an
+  apply.

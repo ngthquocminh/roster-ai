@@ -5,7 +5,7 @@ depends_on: 6-1-provision-aws-edge-identity-and-network-boundaries (done; enviro
 blocks: 6-3-deploy-immutable-api-worker-and-web-releases
 ---
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -449,7 +449,7 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
 ### Phase A: offline (no AWS writes)
 
 - [ ] **Task 1 — Baseline and measurements** (all ACs)
-  - [ ] Branch per the header. Re-derive the test baselines before changing anything. Record each
+  - [x] Branch per the header. Re-derive the test baselines before changing anything. Record each
         suite's **total and split**, because 3.12's review showed the pass/skip split moves with the
         environment while the total stays stable. The suites:
         - backend default `pytest -q`;
@@ -457,7 +457,7 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
         - frontend `vitest`;
         - every `terraform test` directory;
         - `alembic check` from the repo root.
-  - [ ] Run the F14 measurement and pick D6's branch. Record the Terraform version and the exact error,
+  - [x] Run the F14 measurement and pick D6's branch. Record the Terraform version and the exact error,
         if any.
   - [ ] Read-only AWS checks, with Minh's SSO session. Record each result:
         - `aws iam list-open-id-connect-providers` (D9's branch);
@@ -466,53 +466,53 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
         - `aws rds describe-engine-default-parameters --db-parameter-group-family postgres18` for
           `rds.force_ssl` (its default, and whether it applies immediately or only after a reboot);
         - `aws ce list-cost-allocation-tags --tag-keys Project Environment`.
-  - [ ] Check whether `hashicorp/aws` has a newer 6.x than 6.67. If one is adopted, re-lock every root
+  - [x] Check whether `hashicorp/aws` has a newer 6.x than 6.67. If one is adopted, re-lock every root
         for all three platforms (6.1 D10). Otherwise keep `~> 6.67`.
 
-- [ ] **Task 2 — RDS-compatible role model** (AC2; D2)
-  - [ ] Make the `5e2a4c9d1f70` edits and the comment edits (D2.1, D2.3). Write the new head
+- [x] **Task 2 — RDS-compatible role model** (AC2; D2)
+  - [x] Make the `5e2a4c9d1f70` edits and the comment edits (D2.1, D2.3). Write the new head
         migration (D2.2).
-  - [ ] Update `test_identity_role_boundaries.py`. The owner test now also asserts
+  - [x] Update `test_identity_role_boundaries.py`. The owner test now also asserts
         `rolbypassrls = false`, and the docstrings change.
-  - [ ] Add a postgres test that every `relrowsecurity` table has its owner-exempt policy. Inject a
+  - [x] Add a postgres test that every `relrowsecurity` table has its owner-exempt policy. Inject a
         synthetic violation (a throwaway RLS table with no policy) and observe it red.
-  - [ ] Run the full default and `-m postgres` suites. `test_identity_store_completes_full_lifecycle_under_the_restricted_role`
+  - [x] Run the full default and `-m postgres` suites. `test_identity_store_completes_full_lifecycle_under_the_restricted_role`
         and the leasing tests must stay green; they are the functional proof of the owner-exempt
         policies. Record any test that enumerates `pg_policies` or pins the alembic head, and update it.
-  - [ ] `alembic check` from the repo root: zero operations, exactly one new migration file.
+  - [x] `alembic check` from the repo root: zero operations, exactly one new migration file.
 
-- [ ] **Task 3 — Hosted bootstrap and privilege checks** (AC2; D3, D4)
-  - [ ] `backend/scripts/check_db_privileges.py` per D4, and `backend/scripts/bootstrap_hosted.py` per
+- [x] **Task 3 — Hosted bootstrap and privilege checks** (AC2; D3, D4)
+  - [x] `backend/scripts/check_db_privileges.py` per D4, and `backend/scripts/bootstrap_hosted.py` per
         D3. Absolute imports, full type hints, `hide_parameters=True`.
-  - [ ] Unit tests (default suite, no DB) for the refusal rules and for the JSON line never containing
+  - [x] Unit tests (default suite, no DB) for the refusal rules and for the JSON line never containing
         the URL, password or host.
-  - [ ] A postgres test that runs `run_checks` against the governed test DB, where every check
+  - [x] A postgres test that runs `run_checks` against the governed test DB, where every check
         passes; the TLS check is not requested. Then inject one synthetic violation per check family
         and observe it fail. Inject each one either inside a transaction the test rolls back
         (`run_checks` must then run on that connection) or on throwaway objects the test drops. For
         example: `GRANT shiftmind_owner TO shiftmind_lease`, or an RLS table without its policy.
         Roles are cluster-global, so nothing may outlive the test.
-  - [ ] Write `infra/scripts/bootstrap-nonsuperuser.sh` per D13(b). Run it locally against a throwaway
+  - [x] Write `infra/scripts/bootstrap-nonsuperuser.sh` per D13(b). Run it locally against a throwaway
         `postgres:18.4` container. Record the failures it surfaces before D2 is complete; that is the
         RDS-compatibility evidence, and each one goes in the Debug Log.
 
-- [ ] **Task 4 — Image pins and credential guards** (AC2, AC3; D9, D10, D13a)
-  - [ ] Pin the four `FROM` lines (D10). Build both images locally to prove the pins resolve, and
+- [x] **Task 4 — Image pins and credential guards** (AC2, AC3; D9, D10, D13a)
+  - [x] Pin the four `FROM` lines (D10). Build both images locally to prove the pins resolve, and
         record the digests.
-  - [ ] Add the two guards to `backend/tests/architecture/` with synthetic violations: the `FROM`
+  - [x] Add the two guards to `backend/tests/architecture/` with synthetic violations: the `FROM`
         digest guard, extending `test_local_composition.py`, and a new `test_deploy_credentials.py`.
 
-- [ ] **Task 5 — `modules/network`: the migrator security group** (AC1; D12)
-  - [ ] Add the security group and its rules. Add `migrator_security_group_id` to the outputs.
-  - [ ] Update `tests/network.tftest.hcl`:
+- [x] **Task 5 — `modules/network`: the migrator security group** (AC1; D12)
+  - [x] Add the security group and its rules. Add `migrator_security_group_id` to the outputs.
+  - [x] Update `tests/network.tftest.hcl`:
         - `migrator` has zero ingress rules and no inline `ingress`;
         - its egress is only 443 and 5432-to-`data`;
         - `data` ingress sources are exactly {`api`, `worker`, `migrator`} on 5432.
 
-- [ ] **Task 6 — `modules/data`** (AC1, AC2; D5, D6, D7)
-  - [ ] Build RDS, its parameter and subnet groups, the two DB URL secrets, and the evidence bucket
+- [x] **Task 6 — `modules/data`** (AC1, AC2; D5, D6, D7)
+  - [x] Build RDS, its parameter and subnet groups, the two DB URL secrets, and the evidence bucket
         with its policy.
-  - [ ] Write `tests/data.tftest.hcl`. Assert:
+  - [x] Write `tests/data.tftest.hcl`. Assert:
         - `publicly_accessible == false`, `storage_encrypted == true`, `multi_az == false`, engine
           `18.4`;
         - `auto_minor_version_upgrade == false`;
@@ -530,15 +530,15 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
           conditions. Assert the full set, so that narrowing an action or a resource reddens (the 6.1
           review finding).
 
-- [ ] **Task 7 — `modules/runtime`** (AC1, AC2, AC3; D1, D6, D8, D10, D11)
-  - [ ] Build:
+- [x] **Task 7 — `modules/runtime`** (AC1, AC2, AC3; D1, D6, D8, D10, D11)
+  - [x] Build:
         - the ECR repository and its lifecycle;
         - the three log groups;
         - the ECS cluster (no Container Insights);
         - the two task roles and three execution roles, with their inline policies;
         - the `oidc-client-secret` and `csrf-secret` secrets;
         - the `migrate` task definition (`count` follows the digest).
-  - [ ] Write `tests/runtime.tftest.hcl`. Assert:
+  - [x] Write `tests/runtime.tftest.hcl`. Assert:
         - the repository is `IMMUTABLE` with scan on push;
         - every log group has retention 30;
         - the task roles have no policies of any kind;
@@ -552,9 +552,9 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
         - with `backend_image_digest = null` there is no task definition, and a malformed digest fails
           validation (`expect_failures`).
 
-- [ ] **Task 8 — `modules/github_oidc`** (AC2; D9)
-  - [ ] Build the provider (or the lookup) and the deploy role.
-  - [ ] Write `tests/github_oidc.tftest.hcl`. Assert:
+- [x] **Task 8 — `modules/github_oidc`** (AC2; D9)
+  - [x] Build the provider (or the lookup) and the deploy role.
+  - [x] Write `tests/github_oidc.tftest.hcl`. Assert:
         - the trust uses `StringEquals` on both `aud` and `sub`, and `sub` is exactly
           `repo:<repo>:environment:<env>` for test inputs;
         - no `StringLike` appears;
@@ -562,8 +562,8 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
           `GetAuthorizationToken` on `*`;
         - with `github_oidc_provider_arn` set, no provider resource exists.
 
-- [ ] **Task 9 — Env root** (AC1; D1, D11)
-  - [ ] Wire the four modules. New variables:
+- [x] **Task 9 — Env root** (AC1; D1, D11)
+  - [x] Wire the four modules. New variables:
         - `db_instance_class`, `db_credentials_version` (default `1`);
         - `backend_image_digest` (default `null`);
         - `github_repository`, `github_environment`, `github_oidc_provider_arn` (default `null`);
@@ -573,25 +573,25 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
         evidence bucket, repository URL, cluster name, task definition ARN, role ARNs, secret ARNs,
         log group names, `migrator_security_group_id`, `github_deploy_role_arn`). Mark nothing
         sensitive that is not.
-  - [ ] Update `terraform.tfvars.example` with placeholders only (F19).
-  - [ ] Extend `tests/portfolio.tftest.hcl`:
+  - [x] Update `terraform.tfvars.example` with placeholders only (F19).
+  - [x] Extend `tests/portfolio.tftest.hcl`:
         - RDS receives `module.network.data_subnet_ids` and `data_security_group_id`;
         - the migrate task definition's environment carries `module.identity.planner_subject`;
         - the `oidc-client-secret` value comes from `module.identity`;
         - the budget is account-wide (no `cost_filter`);
         - both cost tags are `Active`.
-  - [ ] Re-lock if Task 1 changed the provider.
+  - [x] Re-lock if Task 1 changed the provider.
 
-- [ ] **Task 10 — CI** (AC2; D9, D13)
-  - [ ] Extend `infra.yml`:
+- [x] **Task 10 — CI** (AC2; D9, D13)
+  - [x] Extend `infra.yml`:
         - add the new module directories with `--min-passed` floors equal to the measured counts;
         - add the matrix-coverage step;
         - add the non-superuser bootstrap job, with its own floor on the verdict's check count;
         - extend the `paths` (D13b).
-  - [ ] Add `.github/workflows/backend-image.yml` per D9. Use `permissions: contents: read` at the top,
+  - [x] Add `.github/workflows/backend-image.yml` per D9. Use `permissions: contents: read` at the top,
         and `id-token: write` only on the two jobs. Do not echo the role ARN, the registry host or the
         account ID.
-  - [ ] **Checkpoint (report, not a pause).** Report the Phase A results. The report must contain:
+  - [x] **Checkpoint (report, not a pause).** Report the Phase A results. The report must contain:
         - every terraform suite's count;
         - the backend totals and split;
         - the bootstrap-nonsuperuser result, plus the list of failures it surfaced before D2;
@@ -686,7 +686,7 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
 - [ ] **Task 13 — Documentation and ledger** (D14)
   - [ ] Update the runbook, `CONFIGURATION.md` and `TESTING.md` per D14. Measure the idle cost from
         the AWS price lists for `ap-southeast-1`; do not copy a figure from this story.
-  - [ ] In `deferred-work.md`:
+  - [x] In `deferred-work.md`:
         - **close** `:717` (D10) and `:1537-1539` (D13a);
         - **re-point** `:693` to Story 6.4 (D10);
         - **add** entries for:
@@ -845,12 +845,240 @@ it.
 
 ### Agent Model Used
 
+Claude Opus 5.5 (`claude-opus-5-5`), Claude Code, 2026-10-09.
+
 ### Debug Log References
+
+**Task 1 baselines** (clean worktree at `6a96c38`, Docker PostgreSQL up, Terraform 1.15.9, hashicorp/aws 6.67.0):
+- backend default `pytest -q`: 3002 passed, 1 skipped, 10 deselected (total 3013)
+- `pytest -m postgres`: 208 passed, 2805 deselected
+- frontend vitest: 96 files, 813 passed
+- terraform test: bootstrap 3, modules/network 10, modules/edge 9, modules/identity 5, envs/portfolio 7
+- `alembic check` (repo root): no new upgrade operations
+
+**F14 measured (D6's branch).** Terraform 1.15.9:
+- An ephemeral `aws_secretsmanager_random_password` under `mock_provider "aws"` fails with
+  `Error: No ephemeral resource types in mock providers` ("The provider mocking mechanism does
+  not yet support ephemeral resource types").
+- D6's fallback fails the same way. A `modules/credentials` module with `override_module` still
+  evaluates the ephemeral resource and raises the identical error, and so does putting that
+  module behind `count = 0`.
+- `override_resource` on an ephemeral target is rejected: `Invalid override target`.
+- Ephemeral **input variables** set to literals do work in module tests.
+- A test file in a root that contains ephemeral resources passes when each `run` swaps in a
+  different module with `module { source = ... }`.
+- Operator-supplied ephemeral variables are ruled out: the provider's `all of
+  secret_string_wo,secret_string_wo_version must be specified` validation means every later plan
+  (6.3's included) would have to re-supply the passwords.
+
+D6's stop-and-report branch therefore fired. It was reported to Minh, who chose **D6-amended**:
+- `envs/portfolio` holds the providers, `default_tags`, the three ephemeral resources, `moved.tf`
+  and one `module "stack"`;
+- `modules/stack` holds 6.1's wiring, plus data/runtime/github_oidc and `cost.tf`;
+- the env-root tests target `modules/stack`.
+
+Nothing generated is in state or a plan file. Consequences, recorded:
+1. `cost.tf` lives in `modules/stack`, not the env root.
+2. The 6.1 assertion on the root's `default_tags` cannot be loaded offline (honest gap; the
+   `both_cost_tags_are_active` run pins the tag keys).
+3. `terraform validate` in `envs/portfolio` reports `missing provider ...aws.us_east_1` while
+   validating the module-swapping test file (`terraform test` runs it cleanly), so CI uses
+   `terraform validate -no-tests` there.
+
+**Task 1 other results.**
+- `hashicorp/aws` 6.68.0 exists; it is **not adopted**. `~> 6.67` stays, the lock stays 6.67.0,
+  and no re-lock is needed.
+- The read-only AWS checks are **pending**: the SSO token had expired, and they need Minh's login.
+  D5's class is provisionally `db.t4g.micro` and `force_ssl_apply_method` defaults to `immediate`;
+  both are confirmed before Apply 1.
+
+**RDS-compatibility evidence (Task 3, before D2 was complete)**, from `bootstrap-nonsuperuser.sh`
+against a fresh `postgres:18.4`:
+1. HEAD's chain fails at `5e2a4c9d1f70`: `InsufficientPrivilege: permission denied to create role.
+   DETAIL: Only roles with the BYPASSRLS attribute may create roles with the BYPASSRLS
+   attribute.` (F2, observed).
+2. With D2.1 only (no head migration), the whole chain migrates, then seeding fails:
+   `new row violates row-level security policy for table "site"` (F6, observed).
+
+With full D2, both runs pass: 9/9 checks; run 1 `planner_created=True` with fixtures created 2/2;
+run 2 `planner_created=False` with 0/2 created. No other historical migration needed a change.
+
+**Regressions surfaced and fixed (Task 2/3):**
+- `test_evidence_binding.py::test_schema_version_walks_the_migration_graph_to_the_single_head`
+  pins the head; it now pins `0b1c2d3e4f5a`.
+- `test_telemetry_boundaries.py::test_no_production_module_builds_a_solver_path_on_the_privileged_dsn`:
+  `scripts/bootstrap_hosted.py` joined `_PRIVILEGED_DSN_ALLOWLIST` beside `bootstrap_local.py`.
+- `test_trace_export_boundaries.py::test_sql_passed_to_sqlalchemy_is_always_a_literal`:
+  `check_db_privileges.py` was refactored so every `text()` takes a literal.
+
+No test enumerates `pg_policies`.
+
+**Image pins (Task 4).** Index digests were resolved with `docker buildx imagetools inspect`
+(2026-10-09):
+
+| Base | Digest |
+|---|---|
+| `uv:0.10.8` | `sha256:88234bc9…fafd2a` |
+| `python:3.12-slim` | `sha256:05cda977…800b0d6f` |
+| `node:22-bookworm-slim` | `sha256:c3de60bf…a017978392` |
+| `nginx:1.29-alpine` | `sha256:56168782…9b830de` |
+
+Both images built locally from the pinned bases (image IDs `sha256:aa23850c…` api,
+`sha256:6472ed92…` web).
+
+**Terraform 1.15 panic found while mutating.** A FAILED assertion that references whole
+`aws_iam_role` objects panics (`unexpected error marshalling value: value has marks`): those
+objects carry the provider's deprecated `managed_policy_arns`/`inline_policy`. The guard went red
+at the right run, but a crash is not a clean failure, so `runtime.tftest.hcl` now references
+role attributes only. The task-role "no managed/inline policy" assertion was dropped; a separately
+declared attachment was invisible to it anyway. `smoke-data.sh` check 11 owns it live.
+
+**Machine note.** One full default run during the session was killed by Claude Code for low
+system memory, not by a test. One earlier `-m postgres` run, which overlapped Docker bootstrap
+runs, failed 3 timing-sensitive `test_trace_export_failure_independence` cases. They passed alone
+(21/21), and in the quiet full run below.
 
 ### Completion Notes List
 
+**Phase A is complete except for the items that need AWS** (Task 1's read-only checks and Task 13's
+measured idle cost). Phase B (Task 11) and the live simulation row of Task 12 have not started.
+
+**Phase A checkpoint (Task 10):**
+
+| Suite | Before | After |
+|---|---|---|
+| terraform bootstrap / network / edge / identity | 3 / 10 / 9 / 5 | 3 / **11** / 9 / 5 |
+| terraform data / runtime / github_oidc (new) | — | **9 / 13 / 6** |
+| terraform envs/portfolio | 7 | **12** (runs target `modules/stack`) |
+| backend `-m postgres` | 208 passed | **226 passed** (+18 `test_db_privileges_postgres.py`) |
+| backend default | 3002 passed, 1 skipped | 3036 passed, 3 failed, 2 skipped → the 3 fixed (above); affected files re-run green (201 passed). The extra skip is `test_evidence_binding.py:617` "needs a clean tree" (uncommitted work), environmental |
+| vitest | 813 | unchanged (no frontend source touched) |
+| `alembic check` | clean | clean; exactly one new revision, `0b1c2d3e4f5a` (head) |
+| `bootstrap-nonsuperuser.sh` | fails (two pre-D2 failures above) | PASS twice, 9 checks |
+
+**Mutation table (Task 12, offline part).** Every mutation was applied to finished code by a
+scratch harness, run against its guard, and restored byte-for-byte. All suites were then re-run
+green, as above.
+- "Before" is the guard's green result on the same command: terraform `Success! N passed`, pytest
+  all passed, non-superuser `exit 0, checks=9`.
+- Rows marked † first errored in configuration (a Terraform panic, exit 11) and are recorded as
+  not counting; their redo is the row that counts. This follows 6.1's convention.
+
+| # | Mutation applied to real code | Guard that should redden | Before | After |
+|---|---|---|---|---|
+| M1 | `NOBYPASSRLS` → `BYPASSRLS` on `shiftmind_owner` in `5e2a4c9d1f70` | `bootstrap-nonsuperuser.sh` | exit 0, 9 checks | exit 1, `checks=0`; output names BYPASSRLS (CREATE ROLE refused) |
+| M2 | drop `GRANT shiftmind_owner TO CURRENT_USER` in `5e2a4c9d1f70` | `bootstrap-nonsuperuser.sh` | exit 0 | exit 1, `must be able to SET ROLE "shiftmind_owner"` at `CREATE SCHEMA ... AUTHORIZATION` |
+| M3a | `0b1c2d3e4f5a` skips `membership` | `test_identity_role_boundaries.py` (identity lifecycle) | 8 passed | 1 failed, 7 passed |
+| M3b | same | `bootstrap-nonsuperuser.sh` | exit 0 | exit 1, `stage=bootstrap ProgrammingError` (seeding membership) |
+| M4 | `0b1c2d3e4f5a` skips `job_queue` | `test_job_leasing_postgres.py` | 18 passed | 14 failed, 4 passed |
+| M5 | head migration also `GRANT shiftmind_owner TO shiftmind_login` | D4 via `bootstrap-nonsuperuser.sh` | exit 0 | exit 1; output names `runtime_roles_cannot_reach_privileged_roles` |
+| M6 | `0b1c2d3e4f5a` enumerates `public` only (job_queue uncovered) | `test_db_privileges_postgres.py` | 18 passed | 13 failed, 5 passed |
+| M7 | `bootstrap_hosted` skips the rotation | `bootstrap-nonsuperuser.sh` | exit 0 | exit 1; output names `login_uses_the_rotated_password` |
+| C1 | `runtime_roles_are_not_privileged` ignores `rolinherit` | `test_db_privileges_postgres.py` [login INHERIT] | 18 passed | 1 failed |
+| C2 | owner check ignores `rolbypassrls` | same [owner BYPASSRLS] | 18 passed | 1 failed |
+| C3 | forced-RLS check accepts ENABLE without FORCE | same [NO FORCE] | 18 passed | 1 failed |
+| C4 | owner-exempt check accepts any role list | same [widened policy] | 18 passed | 1 failed |
+| C5 | `redact()` is a no-op | `test_bootstrap_hosted.py` | 10 passed | 2 failed |
+| C6 | `validate_login_url` accepts the initial password | `test_bootstrap_hosted.py` | 10 passed | 2 failed |
+| P1 | `nginx` base back to a bare tag | `test_every_container_base_is_pinned_by_tag_and_digest` | 6 passed | 1 failed |
+| P2 | `aws_iam_user` + `aws_iam_access_key` in `github_oidc/main.tf` | `test_no_terraform_file_declares_an_iam_user_or_access_key` | 4 passed | 1 failed |
+| P3 | `AWS_ACCESS_KEY_ID` env in `backend-image.yml` | `test_no_workflow_references_a_static_aws_key` | 4 passed | 1 failed |
+| P4 | drop `replace_triggered_by` from `database_url` version | `test_url_secrets_are_rewritten_when_the_instance_is_replaced` | 4 passed | 1 failed |
+| P5 | add an evidence `aws_s3_bucket_lifecycle_configuration` | `test_evidence_bucket_has_no_lifecycle_rule` | 4 passed | 1 failed |
+| P6 | rename `modules/data`'s matrix `dir` | `check_infra_matrix.py` | exit 0 | exit 1 (missing + stale) |
+| N1 | ingress rule on `migrator` | network `migrator_has_no_ingress_...` | 11 passed | assertion failed |
+| N2 | `data_from_migrator` sourced from `worker` | network `data_ingress_is_only_5432_from_api_worker_and_migrator` | 11 passed | assertion failed |
+| N3 | migrator 5432 egress to 0.0.0.0/0 | network `migrator_has_no_ingress_...` | 11 passed | assertion failed |
+| D1 | `publicly_accessible = true` | data `rds_is_private_encrypted_and_pinned` | 9 passed | assertion failed |
+| D2 | `auto_minor_version_upgrade = true` | same | 9 passed | assertion failed |
+| D3 | backup retention 1 | data `rds_backups_and_teardown_values` | 9 passed | assertion failed |
+| D4 | extra SG on the instance | data `rds_sits_only_in_the_data_tier` | 9 passed | assertion failed |
+| D5 | `rds.force_ssl = 0` | data `rds_requires_tls` | 9 passed | assertion failed |
+| D6† | database-url as plain `secret_string` | data `credentials_are_write_only` | 9 passed | Terraform panic (exit 11): **does not count** |
+| D6b | master password as stored `password` | data `credentials_are_write_only` | 9 passed | assertion failed |
+| D7 | DenyDelete narrowed to `DeleteObject` | data `evidence_policy_is_exactly_the_three_denies` | 9 passed | assertion failed |
+| D8 | DenyOverwrite loses `s3:ObjectCreationOperation` | same | 9 passed | assertion failed |
+| D9 | versioning `Suspended` | data `evidence_bucket_is_private_encrypted_and_versioned` | 9 passed | assertion failed |
+| D10 | recovery window 7 on database-url | data `secrets_are_named_and_immediately_deletable` | 9 passed | assertion failed |
+| R1 | `MUTABLE` tags | runtime `repository_is_immutable_and_scanned` | 13 passed | assertion failed |
+| R2 | retention 14 | runtime `log_groups_retain_30_days` | 13 passed | assertion failed |
+| R3 | worker-exec also reads csrf-secret | runtime `execution_roles_read_exactly_their_own_secrets` | 13 passed | assertion failed |
+| R4† | `managed_policy_arns = [AdministratorAccess]` on task roles | runtime `task_roles_have_no_policies` | 13 passed | panic: **does not count** (assertion since removed, see Debug Log) |
+| R4b | api's execution policy attached to the api TASK role | runtime `task_roles_have_no_policies` | 13 passed | assertion failed (after the attribute-only rewrite) |
+| R5 | logs on `Resource "*"` | runtime `no_wildcards_outside_ecr_authorization` | 13 passed | assertion failed |
+| R6† | drop `aws:SourceAccount` | runtime `every_trust_is_ecs_tasks_from_this_account` | 13 passed | panic: **does not count** |
+| R6b | trust `ec2.amazonaws.com` | same | 13 passed | assertion failed (after rewrite) |
+| R7 | drop `--require-tls` | runtime `migrate_task_runs_a_digest_with_tls_and_no_task_role` | 13 passed | assertion failed |
+| R8 | image by `:latest` tag | same | 13 passed | assertion failed |
+| R9 | digest regex `^sha256:` only | runtime `a_short_digest_is_rejected` | 13 passed | 12 passed, 1 failed |
+| R10 | task definition `count = 1` | runtime `no_task_definition_without_a_digest` | 13 passed | assertion failed |
+| R11 | csrf-secret as plain `secret_string` | runtime `csrf_secret_is_write_only_and_oidc_is_plain` | 13 passed | assertion failed |
+| R12 | keep 30 images | runtime `repository_is_immutable_and_scanned` | 13 passed | assertion failed |
+| G1 | `sub` = `repo:<repo>:*` | github_oidc `trust_is_exact_on_aud_and_sub` | 6 passed | assertion failed |
+| G2 | add `ecr:DeleteRepository` | github_oidc `permissions_are_exactly_ecr_push_to_one_repository` | 6 passed | assertion failed |
+| G3 | push on `Resource "*"` | same | 6 passed | assertion failed |
+| G4 | always create the provider | github_oidc `an_existing_provider_is_looked_up_not_managed` | 6 passed | assertion failed |
+| G5 | 12-hour sessions | github_oidc `trust_is_exact_on_aud_and_sub` | 6 passed | assertion failed |
+| S1 | RDS in the app subnets | envs/portfolio `rds_sits_in_the_network_modules_data_tier` | 12 passed | assertion failed |
+| S2 | migrate seeds a literal subject | envs/portfolio `migrate_task_seeds_the_identity_modules_planner` | 12 passed | assertion failed |
+| S3 | oidc-client-secret from a literal | envs/portfolio `oidc_client_secret_comes_from_the_identity_module` | 12 passed | assertion failed |
+| S4 | tag-filtered budget | envs/portfolio `budget_is_account_wide_with_two_alerts` | 12 passed | assertion failed |
+| S5 | forecast alert at 120% | same | 12 passed | assertion failed |
+| S6 | cost tags `Inactive` | envs/portfolio `both_cost_tags_are_active` | 12 passed | assertion failed |
+| S7 | RDS on the api SG | envs/portfolio `rds_sits_in_the_network_modules_data_tier` | 12 passed | assertion failed |
+
+The runtime R-rows were re-run after the attribute-only rewrite of `runtime.tftest.hcl`; all
+still redden.
+
+**Honest gaps:**
+- the root's `default_tags` (D6-amended, above);
+- a separately declared IAM attachment on a task role (smoke check 11 covers it live);
+- the two-sided simulation row (pointing an execution role at the wrong secret), which needs
+  Phase B.
+
+**Not done yet.**
+- Task 1's four read-only AWS checks (SSO expired).
+- Task 11 entirely.
+- Task 12's live simulation row.
+- Task 13's measured idle cost.
+
+The runbook carries no 6.2 cost figure until it is measured.
+
 ### File List
+
+New:
+- `backend/migrations/versions/0b1c2d3e4f5a_replace_owner_bypassrls_with_policies.py`
+- `backend/scripts/bootstrap_hosted.py`, `backend/scripts/check_db_privileges.py`
+- `backend/tests/test_bootstrap_hosted.py`, `backend/tests/test_db_privileges_postgres.py`
+- `backend/tests/architecture/test_deploy_credentials.py`, `backend/tests/architecture/test_infra_source_guards.py`
+- `infra/terraform/modules/data/{versions,main,secrets,evidence_bucket,variables,outputs}.tf`, `infra/terraform/modules/data/tests/data.tftest.hcl`
+- `infra/terraform/modules/runtime/{versions,ecr,logs,ecs,iam,secrets,variables,outputs}.tf`, `infra/terraform/modules/runtime/tests/runtime.tftest.hcl`
+- `infra/terraform/modules/github_oidc/{versions,main,variables,outputs}.tf`, `infra/terraform/modules/github_oidc/tests/github_oidc.tftest.hcl`
+- `infra/terraform/modules/stack/{versions,main,cost,variables,outputs}.tf`
+- `infra/terraform/envs/portfolio/moved.tf`
+- `infra/scripts/bootstrap-nonsuperuser.sh`, `infra/scripts/run-migrate.sh`, `infra/scripts/smoke-data.sh`
+- `.github/workflows/backend-image.yml`, `.github/scripts/check_infra_matrix.py`
+
+Modified:
+- `backend/migrations/versions/5e2a4c9d1f70_add_seeded_site_identity.py` (D2.1)
+- `backend/migrations/versions/a2b3c4d5e6f7_add_job_queue_and_lease_functions.py` (comment only)
+- `backend/tests/test_identity_role_boundaries.py`, `backend/tests/test_job_leasing_postgres.py` (D2.3)
+- `backend/tests/architecture/test_local_composition.py` (FROM digest guard)
+- `backend/tests/architecture/test_telemetry_boundaries.py` (privileged-DSN allowlist + `bootstrap_hosted.py`)
+- `backend/tests/test_evidence_binding.py` (head pin)
+- `Dockerfile`, `frontend/Dockerfile` (D10 pins)
+- `infra/terraform/modules/network/{security_groups,outputs}.tf`, `infra/terraform/modules/network/tests/network.tftest.hcl`
+- `infra/terraform/envs/portfolio/{main,variables,outputs,terraform.tfvars.example}.tf`, `infra/terraform/envs/portfolio/tests/portfolio.tftest.hcl`
+- `.github/workflows/infra.yml`
+- `docs/AWS-RUNBOOK.md`, `docs/CONFIGURATION.md`, `docs/TESTING.md`
+- `_bmad-output/implementation-artifacts/deferred-work.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file
 
 ### Change Log
 
 - 2026-10-09: Story created (bmad-create-story). Ultimate context engine analysis completed: comprehensive developer guide created.
+- 2026-10-09: Phase A implemented (bmad-dev-story).
+  - D6 amended after measuring F14 (Minh's decision): thin env root plus `modules/stack`.
+  - RDS-compatible role model (`0b1c2d3e4f5a`), hosted bootstrap and privilege checks, image pins,
+    the network/data/runtime/github_oidc modules, CI and docs.
+  - Mutation table for every offline guard.
+  - Phase B pending AWS access.

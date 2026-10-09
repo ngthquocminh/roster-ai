@@ -2774,7 +2774,7 @@ development_status:
   # bootstrap job proves it in CI. 6.2 also takes the ECS cluster + a one-off migrate task from
   # 6.3, so AC2's DB-role clause is proven on RDS itself. D6: passwords via ephemeral resources +
   # write-only args (nothing in state); mock support for ephemerals is measured first (fallback set).
-  6-2-provision-aws-data-and-least-privilege-runtime: ready-for-dev
+  6-2-provision-aws-data-and-least-privilege-runtime: in-progress
   6-3-deploy-immutable-api-worker-and-web-releases: backlog
   6-4-prove-hosted-invariants-parity-and-mutation-denial: backlog
   6-5-provide-backups-and-a-tested-rollback-path: backlog

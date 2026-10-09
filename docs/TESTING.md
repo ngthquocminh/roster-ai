@@ -534,6 +534,47 @@ by the operator-run plan, apply and `infra/scripts/smoke-edge.sh`
   into each module and inits with `-lockfile=readonly`: every suite runs against the
   provider version the roots pin, not the newest release.
 
+### Story 6.2 additions
+
+| Suite | Where | Proves |
+|---|---|---|
+| `modules/data` (9 runs) | `terraform test` | RDS is private, encrypted, 18.4, TLS-only, with write-only credentials; the evidence policy is **exactly** three Deny statements |
+| `modules/runtime` (13) | `terraform test` | ECR is immutable; task roles have no policy; each execution role reads **exactly** its own secrets; the migrate task runs a digest with `--require-tls` |
+| `modules/github_oidc` (6) | `terraform test` | The trust is `StringEquals` on `aud` and the exact environment `sub`; the role can only push one repository |
+| `envs/portfolio` (12) | `terraform test` | The wiring. Every run targets `modules/stack` |
+| `check_infra_matrix.py` | `infra.yml` | Every directory with `tests/*.tftest.hcl` is in the matrix |
+| `test_bootstrap_hosted.py` | default pytest | The hosted bootstrap's refusal rules; its one JSON line never carries a URL, password or host |
+| `test_db_privileges_postgres.py` | `-m postgres` | Every privilege check passes on the governed database and reddens on a synthetic violation of its own family |
+| `test_local_composition.py`, `test_deploy_credentials.py`, `test_infra_source_guards.py` | default pytest (architecture) | Container bases carry `@sha256:` digests; no IAM user, access key or static AWS key in Terraform or workflows; `replace_triggered_by` and "no evidence lifecycle rule", which `terraform test` cannot see |
+| `bootstrap-nonsuperuser.sh` | `infra.yml` job | The chain, seed, rotation and checks run under an RDS-shaped non-superuser master on a fresh PostgreSQL 18.4 cluster |
+
+Three facts measured in 6.2 shape these suites:
+
+- **`mock_provider` cannot load an ephemeral resource** (Terraform 1.15.9: "No
+  ephemeral resource types in mock providers"), not even behind `count = 0` or
+  inside an `override_module`. The three ephemeral passwords therefore live in
+  `envs/portfolio` alone, and its tests target `modules/stack` with
+  `run { module { source = "../../modules/stack" } }`. The root's own lines are
+  proved by `terraform validate -no-tests` and the live plan.
+- **Write-only values are invisible to assertions.** Tests assert the
+  `*_wo_version` attributes and that the plain `password`/`secret_string` is null.
+- **Computed attributes are random under a mock** (`kms_key_id`, a secret's
+  `policy`), so absence-of-policy is a smoke-data check, not a `terraform test` one.
+
+The non-superuser proof needs a **fresh** cluster, because roles are
+cluster-global and a `shiftmind_*` role a superuser created earlier hides exactly
+the failures it exists to find. Run it locally against a throwaway container:
+
+```bash
+docker run -d --name shiftmind-nonsuperuser -p 5433:5432 -e POSTGRES_PASSWORD=throwaway postgres:18.4
+bash infra/scripts/bootstrap-nonsuperuser.sh postgresql://postgres:throwaway@localhost:5433/postgres
+docker rm -f shiftmind-nonsuperuser
+```
+
+Migration `0b1c2d3e4f5a` makes `shiftmind_owner` `NOBYPASSRLS` **cluster-wide**.
+A local database still at an older head loses its sign-in and leasing paths until
+it is upgraded; `docker compose up` (the `bootstrap` service) does that.
+
 ## Cross-cutting principles
 
 - **Isolation:** every test is independent — no shared state between tests.
