@@ -2766,7 +2766,15 @@ development_status:
   # D1 scopes AC2's RDS/secrets/logs clauses to 6.2 (no resource exists in 6.1). Task 8 is a
   # real-account plan/apply/smoke run with Minh's AWS credentials.
   6-1-provision-aws-edge-identity-and-network-boundaries: done
-  6-2-provision-aws-data-and-least-privilege-runtime: backlog
+  # 2026-10-09: Story 6-2 created, ready-for-dev (baseline 0cd124e). Load-bearing finding at
+  # creation: the RDS master is not a superuser and CREATEROLE cannot grant BYPASSRLS (AWS + PG18
+  # docs), so the migration chain (owner created BYPASSRLS; seeding into FORCE-RLS tables) cannot
+  # run on RDS as written. D2 replaces the owner's BYPASSRLS 1:1 with owner-exempt policies and
+  # makes the migrator an INHERIT+SET member of shiftmind_owner; a fresh-cluster non-superuser
+  # bootstrap job proves it in CI. 6.2 also takes the ECS cluster + a one-off migrate task from
+  # 6.3, so AC2's DB-role clause is proven on RDS itself. D6: passwords via ephemeral resources +
+  # write-only args (nothing in state); mock support for ephemerals is measured first (fallback set).
+  6-2-provision-aws-data-and-least-privilege-runtime: ready-for-dev
   6-3-deploy-immutable-api-worker-and-web-releases: backlog
   6-4-prove-hosted-invariants-parity-and-mutation-denial: backlog
   6-5-provide-backups-and-a-tested-rollback-path: backlog
