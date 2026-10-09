@@ -143,7 +143,7 @@ else
   addrs="$(python3 -c '
 import socket, sys
 print("\n".join(sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1], 443, socket.AF_INET)})))
-' "$ORIGIN" 2>/dev/null)"
+' "$ORIGIN" 2>/dev/null | tr -d '\r')"
 fi
 if [ -z "$addrs" ]; then
   bad "6a ${ORIGIN} resolves only to RFC 1918 addresses" "no A record resolved"
@@ -166,6 +166,8 @@ check "7 the direct S3 object URL -> 403" $? "got HTTP ${code}"
 
 # --- 8/9. OIDC discovery and the exact callback --------------------------------
 curl -sS --max-time 30 -o "$WORK/oidc.json" "${ISSUER}/.well-known/openid-configuration" 2>"$WORK/err"
+# `tr -d '\r'`: Python on Windows writes CRLF, and `read -r` would keep the CR on
+# the last field (auth_endpoint), turning check 9's URL into a malformed request.
 read -r disc_issuer auth_endpoint < <(python3 -c '
 import json, sys
 try:
@@ -173,7 +175,7 @@ try:
     print(d.get("issuer", ""), d.get("authorization_endpoint", ""))
 except Exception:
     print("", "")
-' "$WORK/oidc.json")
+' "$WORK/oidc.json" | tr -d '\r')
 [ -n "$disc_issuer" ] && [ "$disc_issuer" = "$ISSUER" ]
 check "8a discovery issuer equals the oidc_issuer output exactly (F3)" $? "discovery issuer='${disc_issuer}' output='${ISSUER}'"
 [[ "$auth_endpoint" == "https://${COGNITO_DOMAIN}/"* ]]
