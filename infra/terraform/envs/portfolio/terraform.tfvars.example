@@ -8,3 +8,19 @@ planner_email         = "planner@example.com"
 
 # availability_zones = ["ap-southeast-1a", "ap-southeast-1b"]  # default: first two AZs
 # vpc_cidr           = "10.20.0.0/16"
+
+# Story 6.2 (docs/AWS-RUNBOOK.md "Data and runtime").
+db_instance_class  = "db.t4g.micro" # D5: else db.t3.micro if t4g is not orderable for 18.4
+github_repository  = "example-owner/example-repo"
+monthly_budget_usd = 100
+budget_alert_email = "alerts@example.com"
+
+# Null until the first backend image is pushed (backend-image.yml prints it).
+# backend_image_digest = "sha256:<64 hex>"
+
+# Bump to rotate the master, login and CSRF secrets (then re-run migrate).
+# db_credentials_version = 1
+
+# Set when the account ALREADY has GitHub's OIDC provider, so this stack looks
+# it up instead of owning it.
+# github_oidc_provider_arn = "arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com"

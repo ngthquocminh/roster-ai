@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 
@@ -68,3 +69,38 @@ def test_runtime_image_excludes_untracked_local_developer_state() -> None:
         if line.strip() and not line.strip().startswith("#")
     }
     assert {".env", ".env.*", "**/.env", "**/.env.*", "**/var/", "*.db"} <= ignored
+
+
+# Story 6.2 D10 / AR27: immutable digests own patch movement. A tag alone
+# (`python:3.12-slim`) re-resolves to whatever was published last.
+_PINNED_FROM = re.compile(r"^FROM\s+\S+:[^\s@]+@sha256:[0-9a-f]{64}(\s+AS\s+\S+)?\s*$", re.IGNORECASE)
+
+
+def from_lines(dockerfile: str) -> list[str]:
+    return [line.strip() for line in dockerfile.splitlines() if line.strip().upper().startswith("FROM ")]
+
+
+def unpinned_from_lines(dockerfile: str) -> list[str]:
+    return [line for line in from_lines(dockerfile) if not _PINNED_FROM.match(line)]
+
+
+def test_every_container_base_is_pinned_by_tag_and_digest() -> None:
+    for path in ("Dockerfile", "frontend/Dockerfile"):
+        dockerfile = (BACKEND_ROOT.parent / path).read_text(encoding="utf-8")
+        assert len(from_lines(dockerfile)) == 2, path
+        assert unpinned_from_lines(dockerfile) == [], path
+
+
+def test_base_digest_guard_detects_synthetic_violations() -> None:
+    digest = "0" * 64
+    assert unpinned_from_lines(
+        "FROM python:3.12-slim\n"
+        "FROM node:22@sha256:abc AS build\n"
+        f"FROM nginx@sha256:{digest}\n"
+        f"FROM python:3.12-slim@sha256:{digest}\n"
+        f"FROM ghcr.io/astral-sh/uv:0.10.8@sha256:{digest} AS uv\n"
+    ) == [
+        "FROM python:3.12-slim",
+        "FROM node:22@sha256:abc AS build",
+        f"FROM nginx@sha256:{digest}",
+    ]

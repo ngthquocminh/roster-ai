@@ -1061,8 +1061,8 @@ def test_renew_job_lease_reads_the_cancellation_flag(
 def test_renew_job_lease_refuses_a_job_belonging_to_another_site(
     governed_postgres_engine, lease_ids
 ) -> None:
-    """The function is SECURITY DEFINER and its owner carries BYPASSRLS, so
-    without an explicit site predicate any runtime session could extend another
+    """The function is SECURITY DEFINER and its owner is RLS-exempt (the
+    job_queue_owner_exempt policy), so without an explicit site predicate any runtime session could extend another
     tenant's lease given the job id and epoch."""
     job_id, _ = _queue_jobs(governed_postgres_engine, lease_ids, 1)[0]
     _only_leasable(governed_postgres_engine, job_id)

@@ -204,8 +204,9 @@ def upgrade() -> None:
           IF p_extension_seconds <= 0 THEN
             RAISE EXCEPTION 'lease extension must be positive' USING ERRCODE = '22023';
           END IF;
-          -- The owner carries BYPASSRLS, so job_queue's site-isolation policy
-          -- does NOT apply inside a definer-rights body like this one. Without
+          -- The owner is RLS-exempt (job_queue_owner_exempt, 0b1c2d3e4f5a), so
+          -- job_queue's site-isolation policy does NOT filter inside a
+          -- definer-rights body like this one. Without
           -- this predicate any holder of the caller role could extend another
           -- tenant's lease. Unset app.site_id yields NULL and matches nothing,
           -- so the function fails closed rather than open.

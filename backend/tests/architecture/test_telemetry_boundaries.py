@@ -473,6 +473,9 @@ _PRIVILEGED_DSN_ALLOWLIST = frozenset(
         "settings.py",
         "migrations/env.py",
         "scripts/bootstrap_local.py",
+        # Story 6.2: the hosted wrapper around bootstrap_local, run only by the
+        # one-off migrate task.
+        "scripts/bootstrap_hosted.py",
         "scripts/gate_a_cutover.py",
         "scripts/seed_planner.py",
     }

@@ -12,14 +12,22 @@
 # network access to the registry but no credentials.
 #
 # Recorded baselines, measured with Terraform 1.15.9 and hashicorp/aws 6.67.0
-# (2026-10-07). Pass counts are floors and skips are capped at zero, exactly as
-# in ci.yml: a run that errors makes every later run in its file `skip`, so a
-# silent skip is the failure being guarded against.
-#   bootstrap            3 passed
-#   modules/network     10 passed
-#   modules/edge         9 passed
-#   modules/identity     5 passed
-#   envs/portfolio       7 passed
+# (6.1: 2026-10-07; 6.2: 2026-10-09). Pass counts are floors and skips are
+# capped at zero, exactly as in ci.yml: a run that errors makes every later run
+# in its file `skip`, so a silent skip is the failure being guarded against.
+#   bootstrap               3 passed
+#   modules/network        11 passed   (6.2: + the migrator security group)
+#   modules/edge            9 passed
+#   modules/identity        5 passed
+#   modules/data            9 passed   (6.2)
+#   modules/runtime        13 passed   (6.2)
+#   modules/github_oidc     6 passed   (6.2)
+#   envs/portfolio         12 passed   (6.2: its runs target modules/stack)
+#
+# Story 6.2 also adds `nonsuperuser-bootstrap`, the one job here that is not
+# Terraform: the migration chain and the hosted bootstrap under an RDS-shaped,
+# non-superuser master on a fresh PostgreSQL 18.4 cluster (D13b). It is still
+# offline: no AWS, no id-token.
 
 name: Infra
 
@@ -29,11 +37,26 @@ on:
       - "infra/**"
       - ".github/workflows/infra.yml"
       - ".github/scripts/assert_counts.py"
+      - ".github/scripts/check_infra_matrix.py"
+      # What the non-superuser bootstrap job exercises (Story 6.2 D13b).
+      - "backend/migrations/**"
+      - "backend/scripts/bootstrap_hosted.py"
+      - "backend/scripts/check_db_privileges.py"
+      - "backend/scripts/bootstrap_local.py"
+      - "backend/scripts/seed_planner.py"
+      - "backend/adapters/postgres/fixture_history.py"
   pull_request:
     paths:
       - "infra/**"
       - ".github/workflows/infra.yml"
       - ".github/scripts/assert_counts.py"
+      - ".github/scripts/check_infra_matrix.py"
+      - "backend/migrations/**"
+      - "backend/scripts/bootstrap_hosted.py"
+      - "backend/scripts/check_db_privileges.py"
+      - "backend/scripts/bootstrap_local.py"
+      - "backend/scripts/seed_planner.py"
+      - "backend/adapters/postgres/fixture_history.py"
   workflow_dispatch:
 
 concurrency:
@@ -66,6 +89,19 @@ jobs:
       - name: terraform fmt -check
         run: terraform fmt -check -recursive -diff infra/terraform
 
+  # Story 6.2 D13a (closes deferred-work.md's matrix-drift entry): a directory
+  # with tests that nobody added to the matrix below would never run.
+  matrix-coverage:
+    name: Every terraform test directory is in the matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare test directories with the matrix
+        run: python3 .github/scripts/check_infra_matrix.py
+
   validate-and-test:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
@@ -81,7 +117,7 @@ jobs:
             validate: true
           - name: modules/network
             dir: infra/terraform/modules/network
-            min_passed: 10
+            min_passed: 11
             validate: true
           # modules/edge declares `configuration_aliases = [aws.us_east_1]`, which a
           # standalone `terraform validate` rejects with a misleading "provider
@@ -95,10 +131,30 @@ jobs:
             dir: infra/terraform/modules/identity
             min_passed: 5
             validate: true
+          - name: modules/data
+            dir: infra/terraform/modules/data
+            min_passed: 9
+            validate: true
+          - name: modules/runtime
+            dir: infra/terraform/modules/runtime
+            min_passed: 13
+            validate: true
+          - name: modules/github_oidc
+            dir: infra/terraform/modules/github_oidc
+            min_passed: 6
+            validate: true
+          # modules/stack has no tests of its own: envs/portfolio's runs target
+          # it with `run { module { source } }`, because the root's ephemeral
+          # passwords cannot be loaded under mock_provider (Story 6.2 F14).
+          # `-no-tests`: `terraform validate` mis-reports those module-swapping
+          # runs as missing the us_east_1 provider, while `terraform test` below
+          # loads and executes the same file cleanly. The configuration itself
+          # is still validated.
           - name: envs/portfolio
             dir: infra/terraform/envs/portfolio
-            min_passed: 7
+            min_passed: 12
             validate: true
+            validate_args: -no-tests
 
     steps:
       - uses: actions/checkout@v4
@@ -135,7 +191,7 @@ jobs:
       - name: terraform validate
         if: matrix.validate
         working-directory: ${{ matrix.dir }}
-        run: terraform validate
+        run: terraform validate ${{ matrix.validate_args }}
 
       - name: terraform test
         working-directory: ${{ matrix.dir }}
@@ -149,3 +205,48 @@ jobs:
             --runner terraform --log "$RUNNER_TEMP/terraform-test.log" \
             --label "terraform test ${{ matrix.name }}" \
             --min-passed ${{ matrix.min_passed }} --max-skipped 0
+
+  # Story 6.2 D13b. RDS's master is NOSUPERUSER, and CREATEROLE cannot grant
+  # BYPASSRLS, so the chain must migrate, seed and pass D4's checks under such
+  # a role. Roles are cluster-global, so this needs a FRESH cluster: a service
+  # of its own, never a shared one, and never a pytest marker (F17).
+  nonsuperuser-bootstrap:
+    name: Bootstrap under a non-superuser master
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        # The spine's seed and RDS's engine version (Story 6.2 F16).
+        image: postgres:18.4
+        env:
+          POSTGRES_PASSWORD: ci-throwaway
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Sync dependencies
+        working-directory: backend
+        run: uv sync --frozen --no-dev
+
+      # Two runs: the second must replay (planner_created false) and still
+      # pass. MIN_CHECKS floors the verdict's check count: 8 catalog checks
+      # plus the rotated-login probe (a CI service has no TLS to require).
+      - name: Run the hosted bootstrap twice as rds_master_sim
+        env:
+          MIN_CHECKS: "9"
+        run: bash infra/scripts/bootstrap-nonsuperuser.sh postgresql://postgres:ci-throwaway@localhost:5432/postgres

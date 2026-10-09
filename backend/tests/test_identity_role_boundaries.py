@@ -89,8 +89,9 @@ def test_shiftmind_login_and_shiftmind_runtime_cannot_assume_shiftmind_owner(
     restricted_engine,
 ) -> None:
     """shiftmind_owner's safety comes from being unreachable, not from
-    being weak (it deliberately carries BYPASSRLS) — no runtime credential
-    may ever SET ROLE into it, only the migrator (already a superuser)."""
+    being weak (it is RLS-exempt through its `<table>_owner_exempt` policies,
+    Story 6.2 D2) — no runtime credential may ever SET ROLE into it, only the
+    deployment migrator."""
     with pytest.raises(DBAPIError):
         with restricted_engine.connect() as connection:
             connection.exec_driver_sql("SET ROLE shiftmind_owner")
@@ -114,9 +115,15 @@ def test_shiftmind_owner_is_nologin_and_owns_the_auth_functions_and_tables(
 
     with postgres_engine.connect() as connection:
         owner = connection.execute(
-            text("SELECT rolname FROM pg_roles WHERE rolname = 'shiftmind_owner'")
-        ).scalar_one()
-        assert owner == "shiftmind_owner"
+            text(
+                "SELECT rolname, rolbypassrls FROM pg_roles "
+                "WHERE rolname = 'shiftmind_owner'"
+            )
+        ).one()
+        assert owner.rolname == "shiftmind_owner"
+        # D2: the RLS exemption is a policy, not the attribute the RDS
+        # master cannot grant.
+        assert owner.rolbypassrls is False
 
         table_owners = connection.execute(
             text(

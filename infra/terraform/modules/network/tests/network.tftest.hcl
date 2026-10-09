@@ -100,6 +100,38 @@ run "worker_has_no_ingress_rule" {
   }
 }
 
+run "migrator_has_no_ingress_and_egresses_only_443_and_5432_to_data" {
+  command = apply
+
+  assert {
+    condition = length([
+      for r in values(aws_vpc_security_group_ingress_rule.this) : r if r.security_group_id == aws_security_group.migrator.id
+    ]) == 0
+    error_message = "The migrator security group must have no ingress rule at all (Story 6.2 D12)."
+  }
+
+  assert {
+    condition     = length(aws_security_group.migrator.ingress) == 0 && length(aws_security_group.migrator.egress) == 0
+    error_message = "The migrator security group must declare no inline rules."
+  }
+
+  assert {
+    condition = toset([
+      for r in values(aws_vpc_security_group_egress_rule.this) :
+      "${r.from_port}-${r.to_port}-${r.cidr_ipv4 == null ? "" : r.cidr_ipv4}-${r.referenced_security_group_id == null ? "" : (r.referenced_security_group_id == aws_security_group.data.id ? "data" : "other")}"
+      if r.security_group_id == aws_security_group.migrator.id
+    ]) == toset(["443-443-0.0.0.0/0-", "5432-5432--data"])
+    error_message = "The migrator may egress only 443 to anywhere and 5432 to the data security group."
+  }
+
+  assert {
+    condition = length([
+      for r in values(aws_vpc_security_group_egress_rule.this) : r if r.security_group_id == aws_security_group.migrator.id
+    ]) == 2
+    error_message = "The migrator must have exactly two egress rules."
+  }
+}
+
 run "api_ingress_comes_only_from_the_alb" {
   command = apply
 
@@ -145,15 +177,19 @@ run "alb_ingress_is_only_443_from_the_cloudfront_prefix_list" {
   }
 }
 
-run "data_ingress_is_only_5432_from_api_and_worker" {
+run "data_ingress_is_only_5432_from_api_worker_and_migrator" {
   command = apply
 
+  # A list, not a set: a second rule from the same source would hide in a set.
   assert {
-    condition = toset([
+    condition = length([
+      for r in values(aws_vpc_security_group_ingress_rule.this) : r
+      if r.security_group_id == aws_security_group.data.id
+      ]) == 3 && toset([
       for r in values(aws_vpc_security_group_ingress_rule.this) : r.referenced_security_group_id
       if r.security_group_id == aws_security_group.data.id
-    ]) == toset([aws_security_group.api.id, aws_security_group.worker.id])
-    error_message = "The data security group must accept traffic from the api and worker security groups only."
+    ]) == toset([aws_security_group.api.id, aws_security_group.worker.id, aws_security_group.migrator.id])
+    error_message = "The data security group must accept traffic from exactly the api, worker and migrator security groups (Story 6.2 D12)."
   }
 
   assert {
@@ -178,7 +214,7 @@ run "data_has_no_egress_and_default_sg_has_no_rules" {
   # Inline blocks would bypass every for_each-based assertion in this file.
   assert {
     condition = alltrue([
-      for sg in [aws_security_group.alb, aws_security_group.api, aws_security_group.worker, aws_security_group.data] :
+      for sg in [aws_security_group.alb, aws_security_group.api, aws_security_group.worker, aws_security_group.migrator, aws_security_group.data] :
       length(sg.ingress) == 0 && length(sg.egress) == 0
     ])
     error_message = "Security-group rules must be standalone resources; no security group may declare inline ingress or egress."

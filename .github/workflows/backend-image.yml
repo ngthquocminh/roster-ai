@@ -1,0 +1,160 @@
+# Backend image publish (Story 6.2 D9), and the live proof of the deploy
+# identity. There is no long-lived AWS key anywhere: each job exchanges its
+# GitHub OIDC token for a one-hour session, and AWS accepts the exchange only
+# for a job in the `portfolio` environment of this repository.
+#
+#   oidc-denied-without-environment  the SAME role, assumed from a job with no
+#                                    environment, must be REFUSED (its token's
+#                                    sub is not ...:environment:portfolio)
+#   publish-backend-image            assumes the role, proves it can do nothing
+#                                    but push to ECR, and pushes <repo>:<sha>
+#
+# The role ARN is a repository secret (GitHub masks it), the account ID is
+# masked by configure-aws-credentials and again explicitly, and the step
+# summary carries only the image digest. The repository is public (F19).
+#
+# Setup (operator, once): docs/AWS-RUNBOOK.md "GitHub deploy identity".
+
+name: Backend image
+
+on:
+  push:
+    branches:
+      - "epic-6/**"
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "backend/**"
+      - "data/**"
+      - "alembic.ini"
+      - ".github/workflows/backend-image.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: shiftmind-portfolio-backend
+  DEPLOY_ROLE_NAME: shiftmind-portfolio-github-deploy
+
+jobs:
+  oidc-denied-without-environment:
+    name: OIDC is refused without the portfolio environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      # A missing secret would make the next step fail for the wrong reason
+      # and this job would pass having proved nothing.
+      - name: The deploy role secret is configured
+        env:
+          ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          if [ -z "$ROLE_ARN" ]; then
+            echo "AWS_DEPLOY_ROLE_ARN is not set (repository secret)" >&2
+            exit 1
+          fi
+          echo "configured"
+
+      - name: Assume the deploy role from outside the environment
+        id: assume
+        continue-on-error: true
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Require the refusal
+        env:
+          OUTCOME: ${{ steps.assume.outcome }}
+        run: |
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "FAIL: the deploy role was assumed by a job with no environment" >&2
+            exit 1
+          fi
+          echo "ok: AssumeRoleWithWebIdentity refused without environment: portfolio"
+
+  publish-backend-image:
+    name: Publish the backend image by digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: portfolio
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: The session is the deploy role
+        run: |
+          arn="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$arn" in
+            *":assumed-role/${DEPLOY_ROLE_NAME}/"*) echo "ok" ;;
+            *) echo "fail: not the deploy role" >&2; exit 1 ;;
+          esac
+
+      # Two-sided: the role can push (below), and it cannot read secrets or
+      # list buckets. A denial must be AccessDenied, not any other error.
+      - name: The role can do nothing but push to ECR
+        run: |
+          deny() {
+            if out="$("$@" 2>&1 >/dev/null)"; then
+              echo "fail: allowed: $1 $2 $3" >&2; return 1
+            fi
+            case "$out" in
+              *AccessDenied*) echo "ok: denied: $2 $3" ;;
+              *) echo "fail: $2 $3 failed for another reason" >&2; return 1 ;;
+            esac
+          }
+          deny aws secretsmanager list-secrets --max-results 1
+          deny aws s3api list-buckets
+
+      - name: Log in to ECR
+        id: registry
+        run: |
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          echo "::add-mask::$account"
+          registry="${account}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          echo "::add-mask::$registry"
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login --username AWS --password-stdin "$registry" >/dev/null
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+
+      # IMMUTABLE tags: a tag that exists cannot be pushed again, so a re-run
+      # of the same commit reports the existing digest instead of failing.
+      - name: Build and push unless this commit is already published
+        env:
+          REGISTRY: ${{ steps.registry.outputs.registry }}
+        run: |
+          image="${REGISTRY}/${ECR_REPOSITORY}:${GITHUB_SHA}"
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+               --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "already published; skipping the build"
+          else
+            docker build -f Dockerfile -t "$image" .
+            docker push "$image" >/dev/null
+          fi
+          digest="$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$GITHUB_SHA" --query 'imageDetails[0].imageDigest' --output text)"
+          case "$digest" in
+            sha256:*) ;;
+            *) echo "fail: no digest for this commit" >&2; exit 1 ;;
+          esac
+          echo "backend_image_digest: \`$digest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "$digest"

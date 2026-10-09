@@ -33,6 +33,11 @@ output "worker_security_group_id" {
   value       = aws_security_group.worker.id
 }
 
+output "migrator_security_group_id" {
+  description = "Security group of the one-off migrate task (no ingress rule)."
+  value       = aws_security_group.migrator.id
+}
+
 output "data_security_group_id" {
   description = "Security group of the data tier."
   value       = aws_security_group.data.id

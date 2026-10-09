@@ -71,16 +71,16 @@ def upgrade() -> None:
     )
     op.execute("CREATE UNIQUE INDEX uq_membership_single_active ON membership ((true)) WHERE revoked_at IS NULL")
 
-    op.execute("CREATE SCHEMA auth")
-
     # shiftmind_owner (AD-23) owns every auth.* control table and function —
     # NOLOGIN, and no runtime credential is ever granted membership in it,
-    # so the only way to act as it is the migrator (already a superuser)
-    # transiently `SET ROLE`-ing in. It carries BYPASSRLS deliberately: its
-    # SECURITY DEFINER functions must read the FORCE-RLS `membership` table
-    # before any app.site_id exists (the same circularity resolve_session
-    # solves for reads) — safety here comes from being unreachable, not
-    # from being weak, unlike the NOSUPERUSER/NOBYPASSRLS runtime roles.
+    # so the only way to act as it is the deployment migrator. Its SECURITY
+    # DEFINER functions must read the FORCE-RLS `membership` table before any
+    # app.site_id exists (the same circularity resolve_session solves for
+    # reads); that exemption is an `<table>_owner_exempt` policy TO
+    # shiftmind_owner, added by 0b1c2d3e4f5a, not the BYPASSRLS attribute.
+    # A non-superuser migrator (the RDS master) cannot grant BYPASSRLS
+    # (Story 6.2 D2), so this runs under CREATEROLE alone. Safety comes from
+    # being unreachable, not from being weak.
     op.execute(
         """
         DO $$
@@ -89,13 +89,23 @@ def upgrade() -> None:
             SELECT 1 FROM pg_roles WHERE rolname = 'shiftmind_owner'
           ) THEN
             CREATE ROLE shiftmind_owner
-              NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE BYPASSRLS;
+              NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
           END IF;
         END
         $$;
         """
     )
-    op.execute("ALTER SCHEMA auth OWNER TO shiftmind_owner")
+    # AD-23's "only the deployment migrator may SET ROLE to it", made
+    # explicit. A non-superuser CREATEROLE creator is granted the new role
+    # WITH ADMIN TRUE, SET FALSE, INHERIT FALSE; it needs SET to hand objects
+    # to the owner and INHERIT to alter and grant on owner-held tables later.
+    op.execute(
+        "GRANT shiftmind_owner TO CURRENT_USER WITH INHERIT TRUE, SET TRUE"
+    )
+    # AUTHORIZATION rather than CREATE + ALTER OWNER: a non-superuser
+    # `ALTER SCHEMA ... OWNER` would need the owner to hold CREATE on the
+    # database. a2b3c4d5e6f7 creates `workflow` the same way.
+    op.execute("CREATE SCHEMA auth AUTHORIZATION shiftmind_owner")
     # shiftmind_owner doesn't own app_user/membership (they're domain
     # tables, not auth-internal ones) but its SECURITY DEFINER functions
     # must read them, so it needs its own SELECT grant independent of

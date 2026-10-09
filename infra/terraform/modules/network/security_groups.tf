@@ -2,7 +2,8 @@
 #   alb    in 443 from the CloudFront origin-facing prefix list; out 8000 to api
 #   api    in 8000 from alb only; out 443 anywhere; out 5432 to data
 #   worker NO ingress rule at all; out 443 anywhere; out 5432 to data
-#   data   in 5432 from api and worker; no egress
+#   migrator NO ingress rule at all; out 443 anywhere; out 5432 to data (6.2 D12)
+#   data   in 5432 from api, worker and migrator; no egress
 
 # Counts as roughly 55 rules against the per-SG rule quota, so `alb` keeps this
 # as its only ingress rule.
@@ -32,6 +33,17 @@ resource "aws_security_group" "worker" {
   vpc_id      = aws_vpc.this.id
 
   tags = { Name = "${var.name_prefix}-worker" }
+}
+
+# The one-off migrate/bootstrap task (Story 6.2 D12). Egress 443 is anywhere
+# because ECR, Secrets Manager and Logs are reached through the single NAT, not
+# interface endpoints.
+resource "aws_security_group" "migrator" {
+  name        = "${var.name_prefix}-migrator"
+  description = "Migrate task: no inbound listener"
+  vpc_id      = aws_vpc.this.id
+
+  tags = { Name = "${var.name_prefix}-migrator" }
 }
 
 resource "aws_security_group" "data" {
@@ -75,6 +87,12 @@ locals {
       source_sg_id      = aws_security_group.worker.id
       prefix_list_id    = null
     }
+    data_from_migrator = {
+      security_group_id = aws_security_group.data.id
+      port              = 5432
+      source_sg_id      = aws_security_group.migrator.id
+      prefix_list_id    = null
+    }
   }
 
   egress_rules = {
@@ -104,6 +122,18 @@ locals {
     }
     worker_to_data = {
       security_group_id = aws_security_group.worker.id
+      port              = 5432
+      dest_sg_id        = aws_security_group.data.id
+      cidr              = null
+    }
+    migrator_https_out = {
+      security_group_id = aws_security_group.migrator.id
+      port              = 443
+      dest_sg_id        = null
+      cidr              = "0.0.0.0/0"
+    }
+    migrator_to_data = {
+      security_group_id = aws_security_group.migrator.id
       port              = 5432
       dest_sg_id        = aws_security_group.data.id
       cidr              = null
