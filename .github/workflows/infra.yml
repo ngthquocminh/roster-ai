@@ -46,8 +46,6 @@ permissions:
 env:
   # D10: the newest 1.15.x at implementation; required_version is "~> 1.15.0".
   TERRAFORM_VERSION: "1.15.9"
-  # One shared plugin cache so the AWS provider (large) downloads once per job.
-  TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform-plugin-cache
   TF_IN_AUTOMATION: "true"
 
 jobs:
@@ -110,20 +108,25 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
 
-      - name: Create the provider plugin cache
-        run: mkdir -p "$TF_PLUGIN_CACHE_DIR"
+      # Modules commit no lock file (.gitignore), so without this each run would
+      # resolve the newest provider release and the floors above could move with
+      # no change in this repo. Every module takes the provider the roots pin.
+      - name: Pin the module provider to the roots' lock file
+        if: startsWith(matrix.dir, 'infra/terraform/modules/')
+        run: cp infra/terraform/envs/portfolio/.terraform.lock.hcl "${{ matrix.dir }}/"
 
       - name: terraform init
         working-directory: ${{ matrix.dir }}
         # -backend=false: the S3 backend needs credentials and a bucket this job
-        # does not have. Roots use their committed .terraform.lock.hcl.
+        # does not have. -lockfile=readonly: init fails rather than silently
+        # changing the committed (or copied) lock file.
         # Bounded retry: the ~130 MB provider download from the registry has
         # failed transiently ("releases.hashicorp.com: read") during development,
         # and that is not a signal about the configuration. Three failures in a
         # row still fail the job.
         run: |
           for attempt in 1 2 3; do
-            terraform init -backend=false -input=false && exit 0
+            terraform init -backend=false -input=false -lockfile=readonly && exit 0
             echo "terraform init failed (attempt ${attempt}/3); retrying" >&2
             sleep 5
           done

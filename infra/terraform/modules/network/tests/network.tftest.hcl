@@ -2,6 +2,12 @@
 # Mock provider, no credentials. `command = apply` is deliberate: against a mock
 # it never contacts AWS, and it is the only mode in which computed IDs are
 # generated, which the SG-to-SG comparisons below need.
+#
+# Known gap a mock cannot close: these runs see the rule and route resources
+# this module declares (the for_each maps and any inline blocks), not a second,
+# separately declared `aws_vpc_security_group_ingress_rule` or `aws_route`.
+# infra/scripts/smoke-edge.sh check 12 reads the live worker security group and
+# data route table instead.
 mock_provider "aws" {}
 
 override_data {
@@ -87,6 +93,11 @@ run "worker_has_no_ingress_rule" {
     ]) == 0
     error_message = "The worker security group must have no ingress rule at all."
   }
+
+  assert {
+    condition     = length(aws_security_group.worker.ingress) == 0
+    error_message = "The worker security group must declare no inline ingress block either."
+  }
 }
 
 run "api_ingress_comes_only_from_the_alb" {
@@ -162,6 +173,15 @@ run "data_has_no_egress_and_default_sg_has_no_rules" {
       for r in values(aws_vpc_security_group_egress_rule.this) : r if r.security_group_id == aws_security_group.data.id
     ]) == 0
     error_message = "The data security group must have no egress rule."
+  }
+
+  # Inline blocks would bypass every for_each-based assertion in this file.
+  assert {
+    condition = alltrue([
+      for sg in [aws_security_group.alb, aws_security_group.api, aws_security_group.worker, aws_security_group.data] :
+      length(sg.ingress) == 0 && length(sg.egress) == 0
+    ])
+    error_message = "Security-group rules must be standalone resources; no security group may declare inline ingress or egress."
   }
 
   assert {

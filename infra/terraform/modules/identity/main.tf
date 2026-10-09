@@ -14,6 +14,13 @@ resource "aws_cognito_user_pool" "this" {
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
+  # The API default is case-SENSITIVE, unlike the console, and the setting is
+  # immutable: changing it later replaces the pool (new issuer, client secret and
+  # planner sub). Off, so `Planner@Example.com` signs in as `planner@example.com`.
+  username_configuration {
+    case_sensitive = false
+  }
+
   # ESSENTIALS is the default tier and the one managed login v2 needs; it is
   # stated so a provider default change cannot silently move the pool.
   user_pool_tier = "ESSENTIALS"

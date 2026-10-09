@@ -1,4 +1,5 @@
-# The only place `provider` blocks exist; modules receive providers from here.
+# Modules have no `provider` blocks; they receive these. (The separate bootstrap
+# root configures its own.)
 provider "aws" {
   region = var.region
 

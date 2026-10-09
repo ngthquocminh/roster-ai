@@ -44,6 +44,19 @@ run "state_bucket_policy_denies_plaintext_transport" {
     ])
     error_message = "The state bucket policy must Deny when aws:SecureTransport is false."
   }
+
+  # The Deny must cover every principal, every action, and both the bucket and its
+  # objects: a Deny narrowed to one action or to the bucket ARN alone would still
+  # carry the condition and pass the assertion above.
+  assert {
+    condition = alltrue([
+      for st in jsondecode(aws_s3_bucket_policy.state.policy).Statement :
+      st.Principal == "*" && st.Action == "s3:*" &&
+      toset(flatten([st.Resource])) == toset([aws_s3_bucket.state.arn, "${aws_s3_bucket.state.arn}/*"])
+      if st.Effect == "Deny"
+    ])
+    error_message = "The plaintext Deny must be Principal *, Action s3:*, on the bucket and every object."
+  }
 }
 
 run "bucket_name_validation_rejects_uppercase" {

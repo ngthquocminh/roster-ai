@@ -30,6 +30,9 @@
 #  10  describe-user-pool: AllowAdminCreateUserOnly is true
 #  11  the live /api/* and default behaviors use the managed cache/origin-request
 #      policies (the offline test cannot prove this: mock data-source ids are null)
+#  12  the live worker security group has no ingress rule and the data route table
+#      has no internet route (the offline test cannot see a separately declared
+#      rule or route resource)
 #
 # Exit status is 0 only if every check passed. Nothing here writes to evidence/.
 set -uo pipefail
@@ -48,26 +51,29 @@ done
 tf_json="$(terraform -chdir="$ENV_DIR" output -json)" || { echo "FATAL: terraform output failed in $ENV_DIR" >&2; exit 2; }
 
 out() {
-  # Print one terraform output by name. A missing output is a fatal setup error.
+  # Print one terraform output by name. A missing or empty output is a fatal
+  # setup error; `$(...)` cannot exit this shell, so every caller adds `|| exit 2`.
   python3 -c '
 import json, sys
 data = json.loads(sys.argv[1])
 name = sys.argv[2]
-if name not in data:
-    sys.exit(f"missing terraform output: {name}")
+if name not in data or data[name]["value"] in ("", None):
+    sys.exit(f"FATAL: missing or empty terraform output: {name}")
 print(data[name]["value"])
-' "$tf_json" "$1"
+' "$tf_json" "$1" | tr -d '\r'
 }
 
-APP="$(out app_domain)"
-ORIGIN="$(out origin_domain)"
-REGION="$(out region)"
-BUCKET="$(out spa_bucket_name)"
-DIST_ID="$(out distribution_id)"
-ISSUER="$(out oidc_issuer)"
-CLIENT_ID="$(out oidc_client_id)"
-COGNITO_DOMAIN="$(out cognito_domain)"
-POOL_ID="$(out user_pool_id)"
+APP="$(out app_domain)" || exit 2
+ORIGIN="$(out origin_domain)" || exit 2
+REGION="$(out region)" || exit 2
+BUCKET="$(out spa_bucket_name)" || exit 2
+DIST_ID="$(out distribution_id)" || exit 2
+ISSUER="$(out oidc_issuer)" || exit 2
+CLIENT_ID="$(out oidc_client_id)" || exit 2
+COGNITO_DOMAIN="$(out cognito_domain)" || exit 2
+POOL_ID="$(out user_pool_id)" || exit 2
+WORKER_SG="$(out worker_security_group_id)" || exit 2
+DATA_RT="$(out data_route_table_id)" || exit 2
 CALLBACK="https://${APP}/api/v1/auth/callback"
 
 ok()   { PASS=$((PASS + 1)); printf 'PASS  %s\n' "$1"; }
@@ -76,7 +82,14 @@ check() { # check "<name>" <condition-exit-status> "<detail on failure>"
   if [ "$2" -eq 0 ]; then ok "$1"; else bad "$1" "${3:-}"; fi
 }
 
-http_code() { curl -sS --max-time 30 -o "$WORK/body" -w '%{http_code}' "$@" 2>"$WORK/err" || echo "000"; }
+# Body, headers and stderr of the last request land in $WORK; the headers file is
+# removed first so a failed request cannot leave the previous response's behind.
+http_code() {
+  rm -f "$WORK/headers"
+  curl -sS --max-time 30 -o "$WORK/body" -D "$WORK/headers" -w '%{http_code}' "$@" 2>"$WORK/err" || echo "000"
+}
+# An ALB-generated response carries `Server: awselb/...`; CloudFront passes it through.
+from_alb() { grep -qi '^server: awselb' "$WORK/headers" 2>/dev/null; }
 
 echo "== smoke-edge: https://${APP}  (origin ${ORIGIN}, bucket ${BUCKET}, region ${REGION})"
 
@@ -84,10 +97,19 @@ echo "== smoke-edge: https://${APP}  (origin ${ORIGIN}, bucket ${BUCKET}, region
 echo "-- waiting for CloudFront distribution ${DIST_ID} to be deployed"
 aws cloudfront wait distribution-deployed --id "$DIST_ID" || { echo "FATAL: distribution not deployed" >&2; exit 2; }
 
-existing="$(aws s3 cp "s3://${BUCKET}/index.html" - 2>/dev/null || true)"
-if [ -n "$existing" ] && ! grep -q "$MARKER" <<<"$existing" && [ "${SMOKE_OVERWRITE_INDEX:-0}" != "1" ]; then
-  echo "FATAL: s3://${BUCKET}/index.html exists and is not the smoke placeholder." >&2
-  echo "       Refusing to overwrite a real SPA. Set SMOKE_OVERWRITE_INDEX=1 to force." >&2
+# Only a definite "Not Found" means there is nothing to protect. Any other read
+# failure (throttling, an expired session, a role that can Put but not Get) is
+# fatal, so it can never be mistaken for an empty bucket.
+if aws s3api head-object --bucket "$BUCKET" --key index.html >/dev/null 2>"$WORK/err"; then
+  existing="$(aws s3 cp "s3://${BUCKET}/index.html" - 2>"$WORK/err")" \
+    || { echo "FATAL: could not read the existing index.html: $(cat "$WORK/err")" >&2; exit 2; }
+  if ! grep -q "$MARKER" <<<"$existing" && [ "${SMOKE_OVERWRITE_INDEX:-0}" != "1" ]; then
+    echo "FATAL: s3://${BUCKET}/index.html exists and is not the smoke placeholder." >&2
+    echo "       Refusing to overwrite a real SPA. Set SMOKE_OVERWRITE_INDEX=1 to force." >&2
+    exit 2
+  fi
+elif ! grep -qE '\((404|NoSuchKey)\)|Not Found' "$WORK/err"; then
+  echo "FATAL: could not check s3://${BUCKET}/index.html: $(cat "$WORK/err")" >&2
   exit 2
 fi
 printf '<!doctype html><title>%s</title><p>%s</p>\n' "$MARKER" "$MARKER" \
@@ -99,15 +121,25 @@ code="$(http_code "https://${APP}/")"
 [ "$code" = "200" ] && grep -q "$MARKER" "$WORK/body"
 check "1a https://${APP}/ -> 200 with the placeholder" $? "got HTTP ${code}; $(cat "$WORK/err")"
 
-curl -sS --max-time 15 --tls-max 1.1 -o /dev/null "https://${APP}/" 2>"$WORK/err"
-rc=$?
-if [ "$rc" -eq 4 ] && command -v openssl >/dev/null 2>&1; then
-  # This curl build cannot cap the TLS version; ask openssl instead.
-  openssl s_client -connect "${APP}:443" -servername "${APP}" -tls1_1 </dev/null >"$WORK/s_client" 2>&1
-  grep -q "BEGIN CERTIFICATE\|Cipher is [A-Z]" "$WORK/s_client" && rc=0 || rc=1
+# PASS needs positive evidence that the SERVER refused: a TLS alert it sent back.
+# A failure on our side proves nothing. OpenSSL 3 will not even offer TLS 1.1 at
+# its default security level ("no protocols available"), and DNS, connect and
+# timeout errors never reach a handshake, so each of those is a FAIL, not a pass.
+if command -v openssl >/dev/null 2>&1; then
+  # @SECLEVEL=0 lets this client offer TLS 1.1, so any refusal is CloudFront's.
+  openssl s_client -connect "${APP}:443" -servername "${APP}" -tls1_1 -cipher 'DEFAULT:@SECLEVEL=0' \
+    </dev/null >"$WORK/tls11" 2>&1
+  probe="openssl"
+else
+  curl -sS --max-time 15 --tls-max 1.1 -o /dev/null "https://${APP}/" 2>"$WORK/tls11"
+  probe="curl exit $?"
 fi
-[ "$rc" -ne 0 ] && [ "$rc" -ne 4 ]
-check "1b TLS 1.1 handshake is refused" $? "the handshake succeeded or could not be probed (curl exit ${rc})"
+if grep -q "BEGIN CERTIFICATE\|Cipher is [A-Z]" "$WORK/tls11"; then
+  bad "1b TLS 1.1 handshake is refused" "the server accepted TLS 1.1 (${probe})"
+else
+  grep -qi "alert protocol version\|alert handshake failure\|TLS alert is received" "$WORK/tls11"
+  check "1b TLS 1.1 handshake is refused" $? "no server alert, so the refusal was not proven (${probe}): $(tail -n 3 "$WORK/tls11" | tr '\n' ' ')"
+fi
 
 # --- 2. HTTP redirects to HTTPS ------------------------------------------------
 code="$(curl -sS --max-time 30 -o /dev/null -w '%{http_code} %{redirect_url}' "http://${APP}/" 2>/dev/null || echo "000 ")"
@@ -128,13 +160,13 @@ code="$(http_code "https://${APP}/api/v1/auth/session")"
 if [ "$code" = "502" ]; then
   bad "4 GET /api/v1/auth/session -> 503 from the ALB" "HTTP 502: the origin certificate does not match ${ORIGIN} (D2)"
 else
-  [ "$code" = "503" ]
-  check "4 GET /api/v1/auth/session -> 503 from the ALB" $? "got HTTP ${code}"
+  [ "$code" = "503" ] && from_alb
+  check "4 GET /api/v1/auth/session -> 503 from the ALB" $? "got HTTP ${code}; Server: $(grep -i '^server:' "$WORK/headers" 2>/dev/null | tr -d '\r')"
 fi
 
 code="$(http_code -X POST -H 'content-type: application/json' -d '{}' "https://${APP}/api/v1/anything")"
-[ "$code" = "503" ]
-check "5 POST /api/v1/anything reaches the ALB (503), not a CloudFront 403" $? "got HTTP ${code}"
+[ "$code" = "503" ] && from_alb
+check "5 POST /api/v1/anything reaches the ALB (503), not a CloudFront 403" $? "got HTTP ${code}; Server: $(grep -i '^server:' "$WORK/headers" 2>/dev/null | tr -d '\r')"
 
 # --- 6. Origin name is private -------------------------------------------------
 if command -v dig >/dev/null 2>&1; then
@@ -183,11 +215,16 @@ check "8b authorization_endpoint is on the Cognito domain" $? "authorization_end
 
 if [ -n "$auth_endpoint" ]; then
   url="${auth_endpoint}?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${CALLBACK}&scope=openid+email"
-  code="$(curl -sS --max-time 30 -o "$WORK/body" -D "$WORK/headers" -w '%{http_code}' "$url" 2>/dev/null || echo "000")"
-  { [ "$code" = "200" ] || [ "$code" = "302" ]; } && ! grep -qi "redirect_mismatch" "$WORK/body" "$WORK/headers"
-  check "9 authorize URL for ${CALLBACK} is not redirect_mismatch" $? "got HTTP ${code}"
+  code="$(http_code "$url")"
+  # Cognito answers other authorize errors (bad client_id, bad scope) with a 302
+  # too, to its /error page or back to the callback, so "not redirect_mismatch"
+  # alone proves nothing. A valid request is redirected to the hosted /login page.
+  location="$(grep -i '^location:' "$WORK/headers" 2>/dev/null | tail -n 1 | tr -d '\r')"
+  [ "$code" = "302" ] && grep -Eqi "^location: (https://${COGNITO_DOMAIN})?/login\?" <<<"$location" \
+    && ! grep -qi "redirect_mismatch" <<<"$location"
+  check "9 authorize URL for ${CALLBACK} redirects to the hosted login page" $? "got HTTP ${code}; ${location}"
 else
-  bad "9 authorize URL for ${CALLBACK} is not redirect_mismatch" "no authorization_endpoint to probe"
+  bad "9 authorize URL for ${CALLBACK} redirects to the hosted login page" "no authorization_endpoint to probe"
 fi
 
 # --- 10. Public sign-up is closed ----------------------------------------------
@@ -230,6 +267,34 @@ sys.exit(1 if errors else 0)
 PY
 rc=$?
 check "11 live behaviors use the managed cache and origin-request policies" "$rc" "see the message above; $(cat "$WORK/err")"
+
+# --- 12. Live network boundary (AC2 second clause) -----------------------------
+# The offline suite sees only the rule and route resources the module declares;
+# this reads what is actually attached in AWS.
+aws ec2 describe-security-group-rules --region "$REGION" \
+  --filters "Name=group-id,Values=${WORKER_SG}" --output json >"$WORK/sg.json" 2>"$WORK/err"
+aws ec2 describe-route-tables --region "$REGION" --route-table-ids "$DATA_RT" \
+  --output json >"$WORK/rt.json" 2>>"$WORK/err"
+python3 - "$WORK/sg.json" "$WORK/rt.json" <<'PY'
+import json, sys
+
+errors = []
+rules = json.load(open(sys.argv[1]))["SecurityGroupRules"]
+ingress = [r["SecurityGroupRuleId"] for r in rules if not r["IsEgress"]]
+if ingress:
+    errors.append(f"worker security group has ingress rules: {', '.join(ingress)}")
+# Only the VPC-local route and the S3 gateway endpoint may sit in the data table.
+for route in json.load(open(sys.argv[2]))["RouteTables"][0]["Routes"]:
+    target = route.get("GatewayId", "") or route.get("NatGatewayId", "") or "other"
+    if not (target == "local" or target.startswith("vpce-")):
+        dest = route.get("DestinationCidrBlock") or route.get("DestinationIpv6CidrBlock") or route.get("DestinationPrefixListId")
+        errors.append(f"data route table routes {dest} to {target}")
+if errors:
+    print("      " + "; ".join(errors))
+sys.exit(1 if errors else 0)
+PY
+rc=$?
+check "12 live worker SG has no ingress rule and the data tier has no internet route" "$rc" "see the message above; $(cat "$WORK/err")"
 
 echo "== ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ]

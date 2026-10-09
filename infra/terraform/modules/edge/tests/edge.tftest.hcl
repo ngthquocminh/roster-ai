@@ -378,6 +378,19 @@ run "spa_bucket_policy_grants_only_this_distribution_and_denies_plaintext" {
     ])
     error_message = "The bucket policy must deny aws:SecureTransport = false."
   }
+
+  # The Deny must cover every principal, every action, and both the bucket and its
+  # objects: a Deny narrowed to one action or to the bucket ARN alone would still
+  # carry the condition and pass the assertion above.
+  assert {
+    condition = alltrue([
+      for st in jsondecode(aws_s3_bucket_policy.spa.policy).Statement :
+      st.Principal == "*" && st.Action == "s3:*" &&
+      toset(flatten([st.Resource])) == toset([aws_s3_bucket.spa.arn, "${aws_s3_bucket.spa.arn}/*"])
+      if st.Effect == "Deny"
+    ])
+    error_message = "The plaintext Deny must be Principal *, Action s3:*, on the bucket and every object."
+  }
 }
 
 run "dns_and_certificates_are_wired_to_the_zone" {

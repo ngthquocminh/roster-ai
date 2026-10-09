@@ -14,7 +14,7 @@ the operator-run proof is the plan, the apply and
 ```text
 Browser ──HTTPS (TLS 1.2+)──► CloudFront  ┬─ default ─► private S3 SPA bucket (OAC, Block Public Access)
                                           └─ /api/*  ─► VPC origin ─HTTPS─► internal ALB ─► [API tasks: Story 6.3]
-        Cognito hosted login (admin-only sign-up)        origin.<app_domain> (private A record, ACM cert)
+        Cognito hosted login (admin-only sign-up)        origin.<app_domain> (public A record → private IPs, ACM cert)
 
 VPC 10.20.0.0/16, two AZs
   public subnets ×2     internet gateway route + ONE NAT gateway, nothing else
@@ -28,7 +28,7 @@ VPC 10.20.0.0/16, two AZs
 | `modules/network` | VPC, subnets, NAT, route tables, S3 gateway endpoint, security groups |
 | `modules/edge` | Both ACM certificates, SPA bucket + OAC, internal ALB + HTTPS listener + empty API target group, CloudFront VPC origin, distribution, SPA-rewrite function, Route 53 records |
 | `modules/identity` | Cognito user pool, hosted-login domain, BFF app client, the planner user |
-| `envs/portfolio` | Wires the three modules together; the only place with `provider` blocks |
+| `envs/portfolio` | Wires the three modules together and configures their providers (modules have no `provider` blocks; `bootstrap/` has its own) |
 
 Not here yet: RDS, the evidence bucket, ECR, Secrets Manager, log groups, Budgets,
 IAM task roles and GitHub OIDC (Story 6.2); the ECS cluster, services and task
@@ -68,7 +68,9 @@ reproducible infrastructure.
    which may be newer than 1.15; install the newest 1.15.x from
    <https://releases.hashicorp.com/terraform/> instead and put it first on `PATH`.
    CI pins the same version (`TERRAFORM_VERSION` in `.github/workflows/infra.yml`).
-5. `python3` and `curl` for the smoke script.
+5. `python3`, `curl` and `openssl` for the smoke script (Git Bash ships `openssl`).
+   Without `openssl`, check 1's TLS 1.1 probe falls back to curl and passes only if
+   the server's alert is visible in curl's error.
 
 ## 1. Bootstrap the state bucket (once)
 
@@ -119,7 +121,7 @@ Then prove that nothing was fixed up in the console. This must exit `0`:
 terraform plan -detailed-exitcode                # 0 = no changes, 2 = drift, 1 = error
 ```
 
-`availability_zones` defaults to the first two AZs of the region. If the apply
+`availability_zones` defaults to `<region>a` and `<region>b`. If the apply
 rejects the VPC origin for an AZ, set `availability_zones` in `terraform.tfvars`
 to two AZs that CloudFront VPC origins support.
 
@@ -134,20 +136,23 @@ refuses to overwrite a real SPA unless `SMOKE_OVERWRITE_INDEX=1`), then asserts:
 
 | # | Check |
 |---|---|
-| 1 | `https://<app>/` returns the placeholder; a TLS 1.1 handshake is refused |
+| 1 | `https://<app>/` returns the placeholder; a TLS 1.1 handshake is refused **by the server** (its TLS alert is required; a client that cannot offer TLS 1.1 fails the check) |
 | 2 | `http://<app>/` returns 301 to https |
 | 3 | `/scenario-data` returns the placeholder (SPA rewrite); `/assets/missing.js` is **not** rewritten |
-| 4 | `GET /api/v1/auth/session` returns **503 from the ALB** (empty target group). **502 means the origin certificate does not match `origin.<app_domain>`** |
-| 5 | `POST /api/v1/anything` reaches the ALB (503), not a CloudFront 403 |
+| 4 | `GET /api/v1/auth/session` returns **503 from the ALB** (empty target group; `Server: awselb`). **502 means the origin certificate does not match `origin.<app_domain>`** |
+| 5 | `POST /api/v1/anything` reaches the ALB (503 with `Server: awselb`), not a CloudFront 403 |
 | 6 | `origin.<app_domain>` resolves only to RFC 1918 addresses, and a direct request fails |
 | 7 | The direct S3 object URL returns 403 |
 | 8 | OIDC discovery `issuer` equals the `oidc_issuer` output exactly; `authorization_endpoint` is on the Cognito domain |
-| 9 | The authorize URL for the exact BFF callback is not `redirect_mismatch` |
+| 9 | The authorize URL for the exact BFF callback redirects (302) to the hosted `/login` page; any other answer, including `redirect_mismatch`, fails |
 | 10 | `describe-user-pool` shows `AllowAdminCreateUserOnly: true` |
 | 11 | The live `/api/*` and default behaviors use the managed cache and origin-request policies |
+| 12 | The live worker security group has no ingress rule, and the data route table routes only to `local` and the S3 gateway endpoint |
 
-Item 11 exists because the offline tests cannot prove it: a mocked data source's
-`id` is always null, so `terraform test` asserts the policy *names* only.
+Items 11 and 12 exist because the offline tests cannot prove them: a mocked data
+source's `id` is always null, so `terraform test` asserts the policy *names* only,
+and a test sees only the rule and route resources its module declares, not one
+declared separately.
 
 Sign-in itself cannot be exercised yet. It needs the deployed API (Story 6.3).
 
@@ -158,6 +163,17 @@ Cognito emails a temporary password. No password exists in code, tfvars or state
 The `planner_subject` output is that user's `sub`, which Story 6.3 passes as
 `SHIFTMIND_SEED_PLANNER_SUBJECT` (`docs/CONFIGURATION.md`). It is a server-generated
 UUID known only after the user exists, which is why it is an output and not an input.
+
+The temporary password expires after **7 days** (the pool's default
+`temporary_password_validity_days`). If the first sign-in comes later, the user is
+stuck in `FORCE_CHANGE_PASSWORD`; send a fresh one without recreating the user, which
+keeps its `sub`:
+
+```bash
+aws cognito-idp admin-create-user --region <region> \
+  --user-pool-id "$(terraform output -raw user_pool_id)" \
+  --username <planner_email> --message-action RESEND
+```
 
 ## Offline checks (no AWS account)
 
@@ -206,11 +222,38 @@ terraform plan -destroy -out=tfplan && terraform show tfplan
 terraform apply tfplan
 
 # 2. The state bucket, only if you are done with the project entirely.
-#    It is versioned, so empty every version and delete marker first
-#    (`aws s3 rm --recursive` does not remove versions), then:
+#    It is versioned, and `aws s3 rm --recursive` does not remove versions, so
+#    delete every version and delete marker first, then destroy. Each
+#    delete-objects call takes at most 1000 keys; rerun the loop if the bucket
+#    ever held more than that.
 cd ../../bootstrap
+BUCKET="$(terraform output -raw state_bucket_name)"
+for kind in Versions DeleteMarkers; do
+  count="$(aws s3api list-object-versions --bucket "$BUCKET" \
+    --query "length(${kind} || \`[]\`)" --output text)"
+  [ "$count" -gt 0 ] && aws s3api delete-objects --bucket "$BUCKET" --delete \
+    "$(aws s3api list-object-versions --bucket "$BUCKET" --max-items 1000 \
+      --query "{Objects: ${kind}[].{Key: Key, VersionId: VersionId}}" --output json)"
+done
 terraform destroy
 ```
+
+**If step 1 fails with `DependencyViolation` on the VPC, a subnet or a security
+group,** it is almost always the VPC origin's leftovers. Creating a VPC origin makes
+CloudFront add a service-managed security group (`CloudFront-VPCOrigins-Service-SG`)
+and network interfaces in the VPC, which Terraform does not own, and CloudFront
+removes them asynchronously some minutes after the VPC origin is deleted. Wait,
+check that nothing is left, then plan and apply the destroy again:
+
+```bash
+aws ec2 describe-security-groups --filters Name=vpc-id,Values=<vpc_id> \
+  --query "SecurityGroups[?starts_with(GroupName, 'CloudFront-VPCOrigins')].GroupId"
+aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=<vpc_id> \
+  --query "NetworkInterfaces[].[NetworkInterfaceId,Description,Status]" --output table
+```
+
+If they are still there long after the VPC origin is gone, delete the
+CloudFront-managed group by hand; open an AWS Support case if that is refused.
 
 Leave the state bucket in place if you may redeploy: it costs almost nothing, and
 it is the only copy of the environment's state.

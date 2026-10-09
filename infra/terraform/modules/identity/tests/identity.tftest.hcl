@@ -29,6 +29,11 @@ run "sign_up_is_closed_and_passwords_are_long" {
   }
 
   assert {
+    condition     = one(aws_cognito_user_pool.this.username_configuration).case_sensitive == false
+    error_message = "Usernames must be case-insensitive; the API default is case-sensitive and immutable."
+  }
+
+  assert {
     condition     = aws_cognito_user_pool.this.deletion_protection == "INACTIVE"
     error_message = "Deletion protection must be off so teardown works (AD-17)."
   }

@@ -1,4 +1,4 @@
-# Modules never configure providers; only the env root has `provider` blocks.
+# Modules never configure providers; only the roots have `provider` blocks.
 # CloudFront requires its ACM certificate in us-east-1, hence the alias.
 terraform {
   required_version = "~> 1.15.0"

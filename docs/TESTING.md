@@ -526,6 +526,13 @@ by the operator-run plan, apply and `infra/scripts/smoke-edge.sh`
   `--max-skipped 0`.
 - `modules/edge` cannot be validated standalone (`configuration_aliases`); it is
   validated through `envs/portfolio`.
+- **A run sees only the resources its module declares.** "The worker has no ingress
+  rule" covers the module's rule map and any inline block, not a second, separately
+  declared rule resource; the same holds for routes and listeners.
+  `smoke-edge.sh` checks 11 and 12 read the live configuration instead.
+- Modules commit no lock file, so CI copies `envs/portfolio/.terraform.lock.hcl`
+  into each module and inits with `-lockfile=readonly`: every suite runs against the
+  provider version the roots pin, not the newest release.
 
 ## Cross-cutting principles
 
