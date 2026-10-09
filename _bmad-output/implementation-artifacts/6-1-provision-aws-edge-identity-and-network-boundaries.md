@@ -5,7 +5,7 @@ depends_on: 5-13-assess-gate-b (done)
 blocks: 6-2-provision-aws-data-and-least-privilege-runtime ("Given the completed private network and identity boundary")
 ---
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -313,9 +313,9 @@ approximate monthly idle cost of what 6.1 creates, and teardown order. A row is 
         version and `permissions: contents: read`, with no AWS credentials and no `id-token`.
         Set a `--min-passed` floor per test directory equal to the count measured at implementation.
 
-- [ ] **Task 8 — Real plan, apply, and edge smoke** (AC1, AC2; D8b, D8c). The operator runs this
+- [x] **Task 8 — Real plan, apply, and edge smoke** (AC1, AC2; D8b, D8c). The operator runs this
       with Minh's AWS credentials. The developer prepares everything and records the results.
-  - [ ] Bootstrap, then `init` with backend config, then `plan -out`, `show`, and `apply tfplan`. Then
+  - [x] Bootstrap, then `init` with backend config, then `plan -out`, `show`, and `apply tfplan`. Then
         `plan -detailed-exitcode` must exit 0. (D8b)
   - [x] Write `infra/scripts/smoke-edge.sh`. It reads its inputs from `terraform output -json`, uploads a
         throwaway `index.html` placeholder to the SPA bucket (6.3 replaces it), and asserts:
@@ -333,9 +333,9 @@ approximate monthly idle cost of what 6.1 creates, and teardown order. A row is 
         9. `GET <authorization_endpoint>?response_type=code&client_id=…&redirect_uri=https://<app_domain>/api/v1/auth/callback&scope=openid+email`
            → 200 or a redirect to the login page, **not** a `redirect_mismatch` error.
         10. `aws cognito-idp describe-user-pool` shows `AllowAdminCreateUserOnly: true`.
-  - [ ] Paste the smoke output, the measured Terraform and provider versions, and the
+  - [x] Paste the smoke output, the measured Terraform and provider versions, and the
         `plan -detailed-exitcode` result into Completion Notes. Do not write an `evidence/` file (D8).
-  - [ ] Leave the environment applied for 6.2 unless Minh says to tear it down. Record the date it was
+  - [x] Leave the environment applied for 6.2 unless Minh says to tear it down. Record the date it was
         applied.
 
 - [x] **Task 9 — Documentation** (AC1; D11)
@@ -466,8 +466,9 @@ Claude Sonnet 5.5 (`claude-sonnet-5-5`), via `bmad-dev-story`, 2026-10-07.
 
 Followed the story's task order. Each module was built from the Decisions (D1–D11), given a
 `mock_provider` test suite, then mutation-checked against its own guards before the next one.
-Offline proof only: this machine has no AWS credentials, so Task 8's real plan, apply and smoke
-are **not done** (see Completion Notes → Open).
+The offline half was built first (this machine had no AWS credentials at the time); Task 8's real plan,
+apply and smoke were run afterwards, on 2026-10-09, once a domain and hosted zone existed (see Completion
+Notes → Task 8).
 
 ### Debug Log References
 
@@ -612,8 +613,8 @@ assertion (removing the ALB prefix list; SSE `AES128`). Each was redone with a v
 - *"No port-80 listener".* The test iterates every entry in `aws_lb_listener.this`; a second listener
   declared as a separate resource would not be seen. The ALB security group (443 only) is a second line.
 - *The CloudFront certificate being in us-east-1.* The mock has no region; AWS rejects it at apply.
-- *`smoke-edge.sh` against real `curl`/AWS.* The stubs prove the script's logic, not curl's behavior
-  (for example `--tls-max` on a Schannel build, handled with an `openssl` fallback but unexercised).
+- *`smoke-edge.sh` against real `curl`/AWS.* Closed on 2026-10-09 by the real run (Task 8): it passed
+  15/15 after one fix the stubs could not have found (a CR from Windows Python in check 9).
 
 **Deviations from the story text, each small and recorded here.**
 
@@ -634,6 +635,7 @@ assertion (removing the ALB prefix list; SSE `AES128`). Each was redone with a v
    lock file (D10), and module-level `init` generates one for testing.
 9. The smoke script is invoked as `bash infra/scripts/smoke-edge.sh`, not by path, because a Windows
    checkout does not carry the executable bit.
+10. `smoke-edge.sh` strips `` from the output of its Python helpers (found by the first real run).
 
 **AC2: clauses still open until Story 6.2 (D1).** "RDS requires TLS" and the RDS/logs/secrets halves of
 "encryption at rest" have no resource to bind in 6.1, and no placeholder RDS or secret was created to
@@ -644,32 +646,68 @@ HTTPS-only to the origin), the ALB (HTTPS-only listener, TLS 1.2+ policy) and th
 all). It also builds the private data subnets (no default route) and the `data` security group RDS will
 use.
 
-**Open: Task 8 (AC1's "reviewed plan" and "no console-only resource", and the edge smoke).** Not done.
-This machine has no AWS credentials, profile or environment variables
-(`aws sts get-caller-identity` → `NoCredentials`), and the run needs inputs only Minh holds. To run it
-with his credentials:
+**Task 8: done 2026-10-09 (AC1's "reviewed plan" and "no console-only resource", and the edge smoke).**
+Run by Claude with Minh's go-ahead at each step, in `ap-southeast-1`, account `<account-id>`, through an
+IAM Identity Center profile (no access keys). Terraform **1.15.9**, `hashicorp/aws` **6.67.0**.
 
-1. ~~An AWS account profile~~ **Done 2026-10-08.** An IAM Identity Center profile
-   (`AdministratorAccess-<account-id>`, region `ap-southeast-1`) is configured and
-   `aws sts get-caller-identity` succeeds. The account was empty: only the default VPC, no `shiftmind`
-   buckets, no hosted zones, no registered domains.
-2. A registered domain with a **public Route 53 hosted zone** already delegated. Terraform needs
-   `hosted_zone_name` and `app_domain` (a name inside that zone).
-3. `planner_email` (Cognito mails the temporary password there) and a globally unique
-   `cognito_domain_prefix`.
-4. His go-ahead to apply: roughly US$65.6/month idle (see the runbook) and a 20–30 minute first apply.
+1. **Prerequisites.** Domain `<app_domain>` (registered at a third-party registrar). A public Route 53 hosted zone
+   was created by hand (a documented prerequisite, not a Terraform resource), and the registrar's name
+   servers were changed to the four AWS ones. Verified before applying: the TLD registry servers and
+   `8.8.8.8` / `1.1.1.1` / `9.9.9.9` all returned the AWS name servers. `app_domain` is the zone apex,
+   `<app_domain>`; the Cognito prefix is `<cognito_domain_prefix>`.
+2. **Bootstrap.** `plan -out` showed 6 to add; applied the saved plan. Checked from AWS: all four Block
+   Public Access flags, versioning `Enabled`, SSE `AES256`.
+3. **Reviewed plan.** `terraform init -backend-config=backend.hcl` (S3 backend, native lock), then
+   `terraform plan -out=tfplan`: **62 to add, 0 to change, 0 to destroy.** The live lookups all resolved
+   (hosted zone, CloudFront origin-facing prefix list, the three `Managed-*` policy names). The plan was
+   reviewed attribute by attribute from `terraform show -json` against D2-D6 before applying.
+4. **Apply.** `terraform apply tfplan` (the saved plan file), started 2026-10-09 03:34 UTC, finished
+   about 03:50 UTC: **Apply complete! 62 added, 0 changed, 0 destroyed.** No error, no retry. Slowest:
+   CloudFront VPC origin 9m13s, distribution 2m53s, ALB 2m33s, NAT gateway 1m44s.
+5. **No console-only resource.** `terraform plan -detailed-exitcode` right after: **exit 0, "No changes.
+   Your infrastructure matches the configuration."**
+6. **Smoke.** `bash infra/scripts/smoke-edge.sh`: **15 passed, 0 failed, exit 0** (output below, account ID
+   redacted). The first run was 14/1: check 9 reported `HTTP 000000`. Reproducing the same `curl` by hand
+   returned a 302 to the Cognito `/login` page (correct, not `redirect_mismatch`), so the environment was
+   right and the script was wrong: Python on Windows writes CRLF, and `read -r` kept the `\r` on the last
+   field, so the authorization URL carried a carriage return. Fixed by piping both Python outputs through
+   `tr -d '\r'`; the stubbed suite (all-good and the `redirect_mismatch` break) still passes. This is a bug
+   the stubs could not have found, which is what Layer (c) of D8 is for.
+7. **Planner.** Cognito user `<planner_email>` exists, `FORCE_CHANGE_PASSWORD`, email verified, and
+   its `sub` equals the `planner_subject` output (`<planner_sub>`); the temporary password was emailed, so
+   none exists in code, tfvars or state. First sign-in needs the API (Story 6.3).
+8. **State of the environment.** Left applied for Story 6.2, as the story says. It bills about
+   US$65.6/month (about US$2.2/day) while up: NAT gateway, ALB, public IPv4, hosted zone.
 
-**Paused 2026-10-08 on item 2 (the domain).** Minh is preparing a domain and its public hosted zone;
-items 3 and 4 and the apply wait on it. Nothing is deployed and nothing is costing money. Everything
-else in the story is finished.
+```text
+== smoke-edge: https://<app_domain>  (origin origin.<app_domain>, bucket shiftmind-portfolio-spa-<account-id>, region ap-southeast-1)
+-- waiting for CloudFront distribution <distribution_id> to be deployed
+PASS  1a https://<app_domain>/ -> 200 with the placeholder
+PASS  1b TLS 1.1 handshake is refused
+PASS  2 http://<app_domain>/ -> 301 to https
+PASS  3a /scenario-data -> 200 placeholder (SPA rewrite)
+PASS  3b /assets/missing.js -> 403/404 and not the placeholder
+PASS  4 GET /api/v1/auth/session -> 503 from the ALB
+PASS  5 POST /api/v1/anything reaches the ALB (503), not a CloudFront 403
+PASS  6a origin.<app_domain> resolves only to RFC 1918 addresses
+PASS  6b a direct request to origin.<app_domain> from this machine fails to connect
+PASS  7 the direct S3 object URL -> 403
+PASS  8a discovery issuer equals the oidc_issuer output exactly (F3)
+PASS  8b authorization_endpoint is on the Cognito domain
+PASS  9 authorize URL for https://<app_domain>/api/v1/auth/callback is not redirect_mismatch
+PASS  10 describe-user-pool: AllowAdminCreateUserOnly is true
+PASS  11 live behaviors use the managed cache and origin-request policies
+== 15 passed, 0 failed
+```
 
-Then follow `docs/AWS-RUNBOOK.md` §1–3: bootstrap, `plan -out` / `show` / `apply tfplan`,
-`plan -detailed-exitcode` (must exit 0), and `bash infra/scripts/smoke-edge.sh`. Paste the smoke output,
-the exit code and the apply date into this section. Risks worth reading in the first plan, none of them
-verifiable offline: the CloudFront VPC origin's `http_port = 80` (required by the API, no such listener
-exists), `aws_cognito_user.planner.sub` being populated when the username is an email under
-`username_attributes`, the `Managed-*` policy names resolving, an AZ that VPC origins do not support, and
-`managed_login_version = 2` with `use_cognito_provided_values = true`.
+The risks listed before the run did not materialise: the VPC origin accepted `ap-southeast-1a`/`1b`,
+`aws_cognito_user.planner.sub` populated, the `Managed-*` names resolved, and managed login v2 with
+`use_cognito_provided_values = true` applied. Handoff to 6.2: the outputs later
+stories consume (`oidc_*`, `planner_subject`, subnet and security-group IDs, `api_target_group_arn`,
+`spa_bucket_name`, `distribution_id`) are in `terraform output` of `envs/portfolio`; the client secret is
+`sensitive`.
+
+No `evidence/` file was written (D8).
 
 ### File List
 
@@ -697,5 +735,8 @@ Modified:
 
 - 2026-10-07: Built the offline half of Story 6.1: state bootstrap, network, edge and identity modules,
   the `envs/portfolio` root, 34 `terraform test` runs (all mutation-checked), the `terraform` runner in
-  `assert_counts.py`, `infra.yml`, `smoke-edge.sh`, and `docs/AWS-RUNBOOK.md`. Task 8 (real plan, apply and
-  smoke) is open pending AWS access; the story stays `in-progress`.
+  `assert_counts.py`, `infra.yml`, `smoke-edge.sh`, and `docs/AWS-RUNBOOK.md`. (Task 8, the real plan, apply and
+  smoke, was done afterwards; see the next entry.)
+- 2026-10-09: Task 8 done. Bootstrapped the state bucket, applied the reviewed plan (62 added, no drift on
+  the follow-up `plan -detailed-exitcode`), and ran the edge smoke against `<app_domain>`: 15 passed. Fixed
+  a Windows CR bug in `smoke-edge.sh` that the first run exposed. All tasks complete; status -> review.
