@@ -1,0 +1,10 @@
+# Copy to terraform.tfvars (gitignored) and fill in. See docs/AWS-RUNBOOK.md.
+region                = "ap-southeast-1"
+environment           = "portfolio"
+hosted_zone_name      = "example.com"
+app_domain            = "shiftmind.example.com"
+cognito_domain_prefix = "shiftmind-portfolio-example"
+planner_email         = "planner@example.com"
+
+# availability_zones = ["ap-southeast-1a", "ap-southeast-1b"]  # default: first two AZs
+# vpc_cidr           = "10.20.0.0/16"

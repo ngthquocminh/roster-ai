@@ -12,6 +12,9 @@ repo produce a green exit while proving nothing:
   when PostgreSQL is unreachable, so all 45 `@pytest.mark.postgres` tests turn
   into skips rather than failures.
 * A Playwright/Vitest project that fails to launch can report zero tests.
+* `terraform test` with zero `.tftest.hcl` files, or with every run skipped
+  after an earlier run errored, prints a summary and can exit without anything
+  having been asserted (`.github/workflows/infra.yml`, Story 6.1).
 
 So every suite in `.github/workflows/ci.yml` runs through this script, which
 parses the runner's own summary line and enforces a floor on passes and a
@@ -21,6 +24,7 @@ precisely the failure being guarded against.
 
 Usage:
     assert_counts.py --runner pytest --log out.txt --min-passed 864 --max-skipped 1
+    assert_counts.py --runner terraform --log tf.txt --min-passed 10
 """
 from __future__ import annotations
 
@@ -146,10 +150,28 @@ def _playwright_counts(lines: list[str]) -> dict[str, int]:
     return tally
 
 
+# `Success! 10 passed, 0 failed.` / `Failure! 0 passed, 1 failed, 8 skipped.`
+TERRAFORM_SUMMARY = re.compile(r"(?:Success|Failure)!\s+(?P<counts>\d+\s+passed.*)")
+
+
+def _terraform_counts(lines: list[str]) -> dict[str, int]:
+    """`terraform test`'s closing line. Its counts are per `run` block, not per file.
+
+    A run that errors makes every later run in the same file `skip`, so the
+    skipped ceiling matters here as much as it does for pytest.
+    """
+    for line in reversed(lines):
+        match = TERRAFORM_SUMMARY.search(_clean(line))
+        if match:
+            return _tally(match.group("counts"))
+    raise _fail("terraform", "e.g. `Success! 10 passed, 0 failed.`", lines)
+
+
 PARSERS = {
     "pytest": _pytest_counts,
     "vitest": _vitest_counts,
     "playwright": _playwright_counts,
+    "terraform": _terraform_counts,
 }
 
 

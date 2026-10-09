@@ -496,6 +496,44 @@ components need.
 
 No coverage tool is configured for the frontend.
 
+## Infrastructure (`terraform test`)
+
+Story 6.1 added Terraform under `infra/terraform/`. Each module and each root has
+its own `tests/*.tftest.hcl`, run offline with `mock_provider "aws"` and no
+credentials (`.github/workflows/infra.yml`, separate from `ci.yml`).
+
+```bash
+cd infra/terraform/modules/network
+terraform init -backend=false
+terraform test
+```
+
+What they prove is configuration **intent**: TLS 1.2 floors, security-group shape
+(the worker has no ingress rule, the data tier has no default route), Block Public
+Access, the CloudFront behaviors, the Cognito client. That AWS accepted it is proved
+by the operator-run plan, apply and `infra/scripts/smoke-edge.sh`
+([`AWS-RUNBOOK.md`](AWS-RUNBOOK.md)), not here.
+
+- Use `command = apply` against a mock. It never contacts AWS, and it is the only
+  mode in which computed IDs exist. Under `plan` they are unknown.
+- A mocked ARN must look like an ARN: the provider validates the format, so give the
+  resource a `mock_resource` default.
+- **A data source's `id` is always null under a mock** (`override_data` and
+  `mock_data` honour every other attribute). A test cannot prove which managed
+  policy a behavior consumes, only that the policy was looked up by the right name.
+- A run that errors makes every later run in its file `skip`, so the workflow
+  gates through `assert_counts.py --runner terraform` with a pass floor and
+  `--max-skipped 0`.
+- `modules/edge` cannot be validated standalone (`configuration_aliases`); it is
+  validated through `envs/portfolio`.
+- **A run sees only the resources its module declares.** "The worker has no ingress
+  rule" covers the module's rule map and any inline block, not a second, separately
+  declared rule resource; the same holds for routes and listeners.
+  `smoke-edge.sh` checks 11 and 12 read the live configuration instead.
+- Modules commit no lock file, so CI copies `envs/portfolio/.terraform.lock.hcl`
+  into each module and inits with `-lockfile=readonly`: every suite runs against the
+  provider version the roots pin, not the newest release.
+
 ## Cross-cutting principles
 
 - **Isolation:** every test is independent — no shared state between tests.
