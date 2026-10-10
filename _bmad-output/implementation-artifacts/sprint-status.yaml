@@ -1,5 +1,5 @@
 # generated: 2026-07-24
-# last_updated: 2026-10-09
+# last_updated: 2026-10-10
 # project: ShiftMind
 # project_key: NOKEY
 # tracking_system: file-system
@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-07-24
-last_updated: 2026-10-09
+last_updated: 2026-10-10
 
 # NOTE (2026-08-30): Story 4-3 created and moved to ready-for-dev. It is EPIC 4'S KEYSTONE — the
 # first and only story that moves the site baseline pointer, and the first to reach
@@ -2774,7 +2774,7 @@ development_status:
   # bootstrap job proves it in CI. 6.2 also takes the ECS cluster + a one-off migrate task from
   # 6.3, so AC2's DB-role clause is proven on RDS itself. D6: passwords via ephemeral resources +
   # write-only args (nothing in state); mock support for ephemerals is measured first (fallback set).
-  6-2-provision-aws-data-and-least-privilege-runtime: in-progress
+  6-2-provision-aws-data-and-least-privilege-runtime: review
   6-3-deploy-immutable-api-worker-and-web-releases: backlog
   6-4-prove-hosted-invariants-parity-and-mutation-denial: backlog
   6-5-provide-backups-and-a-tested-rollback-path: backlog

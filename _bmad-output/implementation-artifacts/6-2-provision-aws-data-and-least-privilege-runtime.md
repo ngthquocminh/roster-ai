@@ -5,7 +5,7 @@ depends_on: 6-1-provision-aws-edge-identity-and-network-boundaries (done; enviro
 blocks: 6-3-deploy-immutable-api-worker-and-web-releases
 ---
 
-Status: in-progress
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -448,7 +448,7 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
 
 ### Phase A: offline (no AWS writes)
 
-- [ ] **Task 1 — Baseline and measurements** (all ACs)
+- [x] **Task 1 — Baseline and measurements** (all ACs)
   - [x] Branch per the header. Re-derive the test baselines before changing anything. Record each
         suite's **total and split**, because 3.12's review showed the pass/skip split moves with the
         environment while the total stays stable. The suites:
@@ -459,7 +459,7 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
         - `alembic check` from the repo root.
   - [x] Run the F14 measurement and pick D6's branch. Record the Terraform version and the exact error,
         if any.
-  - [ ] Read-only AWS checks, with Minh's SSO session. Record each result:
+  - [x] Read-only AWS checks, with Minh's SSO session. Record each result:
         - `aws iam list-open-id-connect-providers` (D9's branch);
         - `aws rds describe-orderable-db-instance-options --engine postgres --engine-version 18.4`
           (D5's class);
@@ -599,16 +599,16 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
 
 ### Phase B: live (Minh's AWS credentials, with his go-ahead at each step)
 
-- [ ] **Task 11 — Apply, publish, bootstrap, smoke** (AC1-AC3; D13c)
-  - [ ] **Apply 1** with `backend_image_digest = null`: `plan -out`, `show`, `apply tfplan`, then
+- [x] **Task 11 — Apply, publish, bootstrap, smoke** (AC1-AC3; D13c)
+  - [x] **Apply 1** with `backend_image_digest = null`: `plan -out`, `show`, `apply tfplan`, then
         `plan -detailed-exitcode` = 0. Record the resource count and the slowest resources.
-  - [ ] GitHub setup per the runbook: the environment, its branch policy, and the repository secret
+  - [x] GitHub setup per the runbook: the environment, its branch policy, and the repository secret
         from `terraform output -raw github_deploy_role_arn`.
-  - [ ] Run the public-repo scan, then push the story branch, with Minh's go-ahead. The scan covers
+  - [x] Run the public-repo scan, then push the story branch, with Minh's go-ahead. The scan covers
         patches and messages for emails, account IDs, secrets and the hosted domain. Both
         `backend-image.yml` jobs must reach their expected outcome. Record the run URL and the digest.
-  - [ ] **Apply 2** with that digest: reviewed plan, then `plan -detailed-exitcode` = 0.
-  - [ ] Write and run `infra/scripts/run-migrate.sh`:
+  - [x] **Apply 2** with that digest: reviewed plan, then `plan -detailed-exitcode` = 0.
+  - [x] Write and run `infra/scripts/run-migrate.sh`:
         - read the terraform outputs, then `aws ecs run-task` with FARGATE, the app subnets, the
           migrator security group and `assignPublicIp=DISABLED`;
         - `wait tasks-stopped`, then require container exit code 0;
@@ -616,7 +616,7 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
           and a check-count floor.
 
         Run it **twice**. The second run must show `planner_created: false`.
-  - [ ] Write and run `infra/scripts/smoke-data.sh`. It follows the `smoke-edge.sh` conventions:
+  - [x] Write and run `infra/scripts/smoke-data.sh`. It follows the `smoke-edge.sh` conventions:
         - inputs from `terraform output -json`;
         - fatal on a missing output;
         - `tr -d '\r'` on the Python helpers' output;
@@ -658,14 +658,14 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
         13. No IAM user in the account has an active access key. `gh secret list` (repository and
             environment) holds no `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`.
         14. The budget exists with D11's notifications, and both cost tags are `Active`.
-  - [ ] Paste the run-migrate and smoke outputs, the versions, and both `-detailed-exitcode` results
+  - [x] Paste the run-migrate and smoke outputs, the versions, and both `-detailed-exitcode` results
         into Completion Notes, with the account ID and domain redacted (F19). Write no `evidence/` file
         (D13).
-  - [ ] Leave the environment applied for 6.3 unless Minh says otherwise. Record the apply date and the
+  - [x] Leave the environment applied for 6.3 unless Minh says otherwise. Record the apply date and the
         new daily cost.
 
-- [ ] **Task 12 — Mutation table** (all ACs; retro action A2)
-  - [ ] Observe every new guard failing for its stated reason, then restore it. At minimum:
+- [x] **Task 12 — Mutation table** (all ACs; retro action A2)
+  - [x] Observe every new guard failing for its stated reason, then restore it. At minimum:
         - Rows M1-M7:
           - M1: restore `BYPASSRLS` in `5e2a4c9d1f70` → the non-superuser bootstrap fails at
             `CREATE ROLE`;
@@ -683,8 +683,8 @@ non-superuser run (`docker run -d -p 5433:5432 -e POSTGRES_PASSWORD=… postgres
         Record a first attempt that errored in configuration rather than in an assertion as not
         counting, as 6.1 did.
 
-- [ ] **Task 13 — Documentation and ledger** (D14)
-  - [ ] Update the runbook, `CONFIGURATION.md` and `TESTING.md` per D14. Measure the idle cost from
+- [x] **Task 13 — Documentation and ledger** (D14)
+  - [x] Update the runbook, `CONFIGURATION.md` and `TESTING.md` per D14. Measure the idle cost from
         the AWS price lists for `ap-southeast-1`; do not copy a figure from this story.
   - [x] In `deferred-work.md`:
         - **close** `:717` (D10) and `:1537-1539` (D13a);
@@ -888,9 +888,47 @@ Nothing generated is in state or a plan file. Consequences, recorded:
 **Task 1 other results.**
 - `hashicorp/aws` 6.68.0 exists; it is **not adopted**. `~> 6.67` stays, the lock stays 6.67.0,
   and no re-lock is needed.
-- The read-only AWS checks are **pending**: the SSO token had expired, and they need Minh's login.
-  D5's class is provisionally `db.t4g.micro` and `force_ssl_apply_method` defaults to `immediate`;
-  both are confirmed before Apply 1.
+- The read-only AWS checks (run 2026-10-09, after Minh's SSO login):
+  - `list-open-id-connect-providers`: no GitHub provider, so `github_oidc_provider_arn` stays null
+    and this stack owns the provider (deferred entry added);
+  - `describe-orderable-db-instance-options`: `db.t4g.micro` with gp3 is orderable for 18.4, so D5
+    keeps it;
+  - `describe-engine-default-parameters`: `rds.force_ssl` defaults to `1`, ApplyType `dynamic`,
+    and **ApplyMethod empty**. The `immediate` default was inferred from "dynamic", and that was
+    wrong (see Phase B below);
+  - `list-cost-allocation-tags`: `Project` and `Environment` were already discovered, as `Inactive`.
+
+**Phase B findings (2026-10-10).** Each was found by a live step and fixed before it was recorded as
+passing:
+1. After Apply 1, `plan -detailed-exitcode` exited **2** with a permanent in-place diff on the
+   parameter group. `rds.force_ssl = 1` equals the postgres18 default, so AWS stores it as
+   `Source: system`, and `describe-db-parameters` reports `ApplyMethod: pending-reboot`. The
+   default became `pending-reboot` in all three variables (`492a305`), and the re-plan then exited 0
+   with nothing applied. There was nothing to reboot, because the value was already 1.
+2. `run-migrate.sh` run 1: the container exited 0, but the script could not read its log
+   stream. Git Bash had rewritten `/shiftmind/portfolio/migrate` into a Windows path (AWS:
+   `logGroupName failed to satisfy constraint`). The verdict of that same task was then read
+   directly from its stream, without re-running it: 10/10, `planner_created=True`. Fix
+   (`bc8ffd0`): `MSYS_NO_PATHCONV=1`, plus a `cygpath -m` native `$WORK`, so `aws.exe` and python
+   still resolve the probe files. The replay ran through the fixed script.
+3. `smoke-data.sh` first run: 19 passed, 2 failed, and both were reading errors:
+   - check 2 read `--source user`, which is empty for a `system` value (see 1);
+   - check 14 indexed `ThresholdType`, which AWS omits when it is the default `PERCENTAGE`.
+
+   Rewritten (`bc8ffd0`):
+   - check 2 now reads every source and also requires the instance to use the group, `in-sync`;
+   - check 14 treats a missing `ThresholdType` as `PERCENTAGE`.
+
+   Both were re-proved red offline, on doctored copies of the live responses:
+   - check 2 against a wrong group name, `pending-reboot` status and `force_ssl=0`;
+   - check 14 against `ABSOLUTE_VALUE` and a 120% threshold.
+
+   The full re-run was then 21/21.
+4. Task 12's live row harness: `simulate-custom-policy --policy-input-list file://policy.json`
+   returned `InvalidInput ... item 1 has invalid content`, because the CLI parses a JSON **object**
+   file as the list itself. Passing a JSON list holding one policy string fixed it. The control
+   run (unmutated policy) caught the broken harness: check 10 was `undetermined` and failed there
+   too. So nothing was counted until the control passed.
 
 **RDS-compatibility evidence (Task 3, before D2 was complete)**, from `bootstrap-nonsuperuser.sh`
 against a fresh `postgres:18.4`:
@@ -940,8 +978,24 @@ runs, failed 3 timing-sensitive `test_trace_export_failure_independence` cases. 
 
 ### Completion Notes List
 
-**Phase A is complete except for the items that need AWS** (Task 1's read-only checks and Task 13's
-measured idle cost). Phase B (Task 11) and the live simulation row of Task 12 have not started.
+**All tasks are complete.** Phase A finished offline on 2026-10-09; Phase B ran live on 2026-10-10 with
+Minh's go-ahead at each step. Each AC and its live proof:
+
+- **AC1**:
+  - Applies 1 and 2 provisioned the resources;
+  - smoke checks 1, 5, 7, 8, 9 and 14 cover what was provisioned;
+  - checks 3, 4 and 6 cover "reachable only from their intended boundary".
+- **AC2**:
+  - the hosted bootstrap's 10 database checks show no owned tables and no RLS bypass;
+  - `oidc-denied-without-environment` and check 13 show OIDC only, with no long-lived key;
+  - checks 10 and 11 show the task roles get only their required actions;
+  - check 6 shows evidence cannot be overwritten or deleted.
+- **AC3**:
+  - smoke check 7 shows the migrate task runs `@sha256:` from an IMMUTABLE repository;
+  - Phase A's `FROM` digest pins and guard;
+  - nothing unused was added: no services, no Container Insights.
+
+The Phase B record follows the Phase A one.
 
 **Phase A checkpoint (Task 10):**
 
@@ -1030,19 +1084,110 @@ green, as above.
 The runtime R-rows were re-run after the attribute-only rewrite of `runtime.tftest.hcl`; all
 still redden.
 
+**Live mutation row (Task 12, Phase B).** It ran read-only, so no live IAM role was changed. The
+API execution role's real inline policy was fetched. A copy had its `csrf-secret` grant re-pointed
+at `provisioning-database-url`. AWS evaluated that copy with `iam simulate-custom-policy`, inside a
+scratch copy of `smoke-data.sh` whose `exec-api-*` simulations use it, and with check 6 removed so
+no further probe objects were written.
+
+| # | Mutation | Guard | Before (control: unmutated policy, same harness) | After |
+|---|---|---|---|---|
+| L1 | api execution role's csrf grant points at `provisioning-database-url` | `smoke-data.sh` check 10 | 15 passed, 0 failed | 14 passed, 1 failed: `api-exec provisioning-database-url: allowed, want denied; api-exec csrf-secret: implicitDeny, want allowed` |
+
+A first L1 attempt errored in the harness's input (Debug Log, Phase B 4). Its control failed too, so
+it **does not count**.
+
 **Honest gaps:**
-- the root's `default_tags` (D6-amended, above);
-- a separately declared IAM attachment on a task role (smoke check 11 covers it live);
-- the two-sided simulation row (pointing an execution role at the wrong secret), which needs
-  Phase B.
+- the root's `default_tags` (D6-amended, above). The tags are present live: check 14 found both
+  cost tags `Active`, and the Resource Groups Tagging API lists 55 resources in the region carrying
+  both `Project` and `Environment`.
+- a separately declared IAM attachment on a task role. Smoke check 11 covers it live: zero attached
+  and zero inline policies.
+- smoke check 2 can no longer tell "the group declares force_ssl" from "the engine default is 1".
+  AWS reports both as `system`. Offline, `data` `rds_requires_tls` (D5 row) pins the declaration;
+  live, the bootstrap's `tls_is_required` check proves a plaintext session is refused.
 
-**Not done yet.**
-- Task 1's four read-only AWS checks (SSO expired).
-- Task 11 entirely.
-- Task 12's live simulation row.
-- Task 13's measured idle cost.
+**Phase B record (2026-10-10).** Versions:
+- Terraform 1.15.9 with hashicorp/aws 6.67.0;
+- aws-cli 2.37.10;
+- gh 2.97.0.
 
-The runbook carries no 6.2 cost figure until it is measured.
+Account ID and domain are redacted throughout.
+
+| Step | Result |
+|---|---|
+| Apply 1 (`backend_image_digest` null) | 41 added, 0 changed, 0 destroyed. Every 6.1 resource only `moved` (none updated or replaced). Slowest: `aws_db_instance` 7m17s, then the ECS cluster 11s and the budget 10s. Re-plan `-detailed-exitcode`: **2**, then **0** after the fix (Debug Log, Phase B 1) |
+| GitHub | `portfolio` environment with custom branch policy `epic-6/*`; `AWS_DEPLOY_ROLE_ARN` repository secret piped from `terraform output -raw`, never printed. The environment holds no secrets |
+| Scan, then push | 5 commits over `origin/epic-6/aws-hosting`, scanned for emails, 12-digit numbers, the domain, keys, resource IDs, ARNs with the account, and the 53 live non-sensitive output values (positive control 2/2). 0 hits; author is the noreply address |
+| CI on `492a305` | Infra run 38026207991: 11/11 jobs. Backend image run 38026208022: both jobs. The refusal job saw `Not authorized to perform sts:AssumeRoleWithWebIdentity` with the secret configured; the publish job saw `secretsmanager list-secrets` and `s3api list-buckets` **AccessDenied**. The public log has 0 account-ID and 0 domain hits; the registry is `***` |
+| Image | `backend:492a3056…`, digest `sha256:155da2db92ad5519c9dcdc63968c74600559d4f9e9e258e16ccff7ae26b2ce6e`, the same in ECR. Scan on push: 1 HIGH (zlib CVE-2026-85091, deferred) |
+| Apply 2 (digest set) | 1 added (`aws_ecs_task_definition.migrate[0]`, 2s). Re-plan `-detailed-exitcode`: **0** |
+| `run-migrate.sh` run 1 (task `92eb3e2f…`) | exit 0; the chain ran all 14 revisions to `0b1c2d3e4f5a` under the RDS master; 10/10 checks; `fixtures={'count': 2, 'created': 2}`, `planner_created=True`, `tls=required` |
+| `run-migrate.sh` replay (task `164d56bb…`) | `== PASS`; 10/10; `fixtures={'count': 2, 'created': 0}`, `planner_created=False`, `tls=required` |
+| `smoke-data.sh` | **21 passed, 0 failed** (checks 1-14; 6 and 7 have sub-checks), after the two reading fixes |
+| `smoke-edge.sh` (6.1 regression after the `moved` refactor) | 16 passed, 0 failed |
+
+run-migrate replay output, verbatim:
+```
+== run-migrate: cluster shiftmind-portfolio, log group /shiftmind/portfolio/migrate
+-- task 164d56bb145742a793d286394fad4170 started; waiting for it to stop
+-- lastStatus=STOPPED stopCode=EssentialContainerExited exitCode=0 reason=Essential container in task exited
+PASS  runtime_roles_are_not_privileged
+PASS  runtime_roles_own_nothing
+PASS  runtime_roles_cannot_reach_privileged_roles
+PASS  owner_is_unprivileged_and_unreachable
+PASS  owner_holds_the_definer_objects
+PASS  rls_is_forced_on_every_tenant_table
+PASS  every_rls_table_has_an_owner_exempt_policy
+PASS  runtime_roles_have_no_auth_table_privileges
+PASS  login_uses_the_rotated_password
+PASS  tls_is_required
+-- fixtures={'count': 2, 'created': 0} planner_created=False tls=required
+== PASS: migrate task 164d56bb145742a793d286394fad4170 exited 0 with a passing verdict
+```
+
+smoke-data output, verbatim:
+```
+== smoke-data: region ap-southeast-1, db shiftmind-portfolio-db, bucket <evidence>, repo shiftmind-portfolio-backend
+PASS  1 RDS is private, encrypted, 18.4, single-AZ, 7-day backups, data subnets and SG only
+PASS  2 the instance uses its parameter group, in-sync, with rds.force_ssl = 1
+PASS  3 the endpoint resolves only inside the data subnets and 5432 is unreachable from here
+PASS  4 data ingress is exactly 5432 from api, worker and migrator; migrator has no ingress
+PASS  5 evidence bucket: 4 BPA flags, versioning Enabled, AES256, BucketOwnerEnforced
+PASS  6a put with If-None-Match -> 200
+PASS  6b the same put again -> 412 (no overwrite)
+PASS  6c a put without the header -> 403
+PASS  6d delete-object -> 403
+PASS  6e delete-object --version-id -> 403
+PASS  6f get-object -> 200 with the probe's bytes
+PASS  7a ECR is IMMUTABLE with scan on push; the migrate image is pinned by digest
+PASS  7b the migrate task's digest exists in the repository
+PASS  8 the three log groups exist with retention 30
+PASS  9 the four secrets have an AWSCURRENT version and no resource policy
+PASS  10 simulate-principal-policy is two-sided for execution, task and deploy roles
+PASS  11 both task roles have zero attached and zero inline policies
+PASS  12 the deploy role trusts GitHub's provider with StringEquals on aud and the exact sub
+PASS  13a no IAM user has an active access key
+static AWS key secrets: none; AWS_DEPLOY_ROLE_ARN present: True
+PASS  13b GitHub holds no static AWS key, only the deploy role ARN
+PASS  14 account-wide budget with 80% ACTUAL and 100% FORECASTED; both cost tags Active
+== 21 passed, 0 failed
+```
+
+No `evidence/` file was written (D13). The smoke left its create-only probe objects under `smoke/`
+(two runs' worth), by design.
+
+**Environment and cost.** The environment was left applied for 6.3, as instructed (Apply 1
+2026-10-10). The measured idle cost (runbook table) is about US$23/month for 6.2. The total is
+about **US$88.6/month (≈ US$2.9/day)**, of which 6.1's NAT gateway and ALB are about $65. Minh
+does not accept that as the steady state. It is in `deferred-work.md` as a correct-course item,
+to settle before 6.3 adds always-on services.
+
+**Decisions taken during Phase B:**
+- `budget_alert_email` is the AWS account admin's inbox, not the planner, even though the address is
+  the same today (Minh). The variable description and the example say so.
+- `monthly_budget_usd = 100`, as planned. At about $88.6 idle, the 80% ACTUAL alert will fire late in
+  most months, as a reminder that the environment is running.
 
 ### File List
 
@@ -1071,6 +1216,9 @@ Modified:
 - `infra/terraform/envs/portfolio/{main,variables,outputs,terraform.tfvars.example}.tf`, `infra/terraform/envs/portfolio/tests/portfolio.tftest.hcl`
 - `.github/workflows/infra.yml`
 - `docs/AWS-RUNBOOK.md`, `docs/CONFIGURATION.md`, `docs/TESTING.md`
+- Phase B fixes to files listed above:
+  - `infra/terraform/modules/{data,stack}/variables.tf` and `infra/terraform/envs/portfolio/variables.tf` (`force_ssl_apply_method`, `budget_alert_email` wording);
+  - `infra/scripts/run-migrate.sh`, `infra/scripts/smoke-data.sh`.
 - `_bmad-output/implementation-artifacts/deferred-work.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file
 
 ### Change Log
@@ -1082,3 +1230,14 @@ Modified:
     the network/data/runtime/github_oidc modules, CI and docs.
   - Mutation table for every offline guard.
   - Phase B pending AWS access.
+- 2026-10-10: Phase B run live (bmad-dev-story), with Minh's go-ahead at each step.
+  - Task 1's AWS checks recorded.
+  - Apply 1 (41 added), the GitHub environment and secret, a scanned push, both CI workflows green,
+    Apply 2 (1 added), two hosted bootstraps (10/10 each) and the smoke (21/21).
+  - Fixed what the live runs exposed:
+    - the `force_ssl` apply_method default;
+    - Git Bash path conversion in the scripts;
+    - smoke checks 2 and 14 reading AWS's real responses.
+  - Live mutation row L1 recorded.
+  - Deferred: the base image's zlib CVE, and the idle cost (a correct-course before 6.3).
+  - Status → review.
