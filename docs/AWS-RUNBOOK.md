@@ -314,7 +314,7 @@ bash infra/scripts/smoke-data.sh
 | # | Check |
 |---|---|
 | 1 | RDS is not public, encrypted, 18.4, single-AZ, 7-day backups, no deletion protection, subnet group = the data subnets, only SG = `data` |
-| 2 | Its parameter group sets `rds.force_ssl = 1` |
+| 2 | It uses its own parameter group (`in-sync`), where `rds.force_ssl = 1`. AWS lists that value as `system`, because 1 is the postgres18 default |
 | 3 | The endpoint resolves only inside the data subnets, and 5432 is unreachable from the operator's machine |
 | 4 | `data` ingress is exactly 5432 from `api`, `worker` and `migrator`; `migrator` has no ingress rule |
 | 5 | Evidence bucket: four Block Public Access flags, versioning `Enabled`, `AES256`, `BucketOwnerEnforced` |

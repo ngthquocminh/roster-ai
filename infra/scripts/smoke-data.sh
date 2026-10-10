@@ -13,7 +13,7 @@
 #
 #   1  RDS: not public, encrypted, 18.4, single-AZ, 7-day backups, no deletion
 #      protection, subnet group = the data subnets, only SG = data
-#   2  its parameter group sets rds.force_ssl = 1
+#   2  it uses its parameter group (in-sync), where rds.force_ssl = 1
 #   3  the endpoint resolves only inside the data subnets, and 5432 is not
 #      reachable from this machine
 #   4  data ingress is exactly 5432 from {api, worker, migrator}; migrator has
@@ -40,11 +40,16 @@
 #
 # Exit status is 0 only if every check passed. Nothing here writes to evidence/.
 set -uo pipefail
+# Git Bash on Windows rewrites an argument that starts with `/` (the log group
+# prefix) into a Windows path. No effect on Linux or macOS.
+export MSYS_NO_PATHCONV=1
 
 ENV_DIR="${ENV_DIR:-infra/terraform/envs/portfolio}"
 PASS=0
 FAIL=0
 WORK="$(mktemp -d)"
+# With MSYS_NO_PATHCONV set, hand Windows tools (aws.exe, python) a native path.
+command -v cygpath >/dev/null 2>&1 && WORK="$(cygpath -m "$WORK")"
 trap 'rm -rf "$WORK"' EXIT
 
 for tool in python3 terraform aws; do
@@ -139,16 +144,21 @@ sys.exit(1 if errors else 0)
 PY
 
 # --- 2. TLS required -----------------------------------------------------------
-fetch params aws rds describe-db-parameters --db-parameter-group-name "$DB_PARAMS" --source user
-pycheck "2 parameter group sets rds.force_ssl = 1" <<'PY'
+# Every source, not `--source user`: 1 is the postgres18 default, so AWS lists
+# it as a `system` value even though the group declares it.
+fetch params aws rds describe-db-parameters --db-parameter-group-name "$DB_PARAMS"
+DB_PARAMS="$DB_PARAMS" pycheck "2 the instance uses its parameter group, in-sync, with rds.force_ssl = 1" <<'PY'
 import json, os, sys
+w = os.environ["WORK"]
 try:
-    params = json.load(open(f"{os.environ['WORK']}/params.json"))["Parameters"]
+    params = json.load(open(f"{w}/params.json"))["Parameters"]
+    groups = json.load(open(f"{w}/rds.json"))["DBInstances"][0]["DBParameterGroups"]
 except Exception as exc:
     sys.exit(f"could not determine: {type(exc).__name__}")
 values = [p.get("ParameterValue") for p in params if p["ParameterName"] == "rds.force_ssl"]
-print(f"rds.force_ssl={values}")
-sys.exit(0 if values == ["1"] else 1)
+attached = [(g["DBParameterGroupName"], g["ParameterApplyStatus"]) for g in groups]
+print(f"rds.force_ssl={values} groups={attached}")
+sys.exit(0 if values == ["1"] and attached == [(os.environ["DB_PARAMS"], "in-sync")] else 1)
 PY
 
 # --- 3. Endpoint is private and unreachable from here --------------------------
@@ -458,7 +468,8 @@ try:
     tags = json.load(open(f"{w}/costtags.json"))["CostAllocationTags"]
 except Exception as exc:
     sys.exit(f"could not determine: {type(exc).__name__}")
-shape = sorted((n["NotificationType"], float(n["Threshold"]), n["ThresholdType"], n["ComparisonOperator"]) for n in notes)
+# AWS omits ThresholdType when it is the default, PERCENTAGE.
+shape = sorted((n["NotificationType"], float(n["Threshold"]), n.get("ThresholdType", "PERCENTAGE"), n["ComparisonOperator"]) for n in notes)
 want = [("ACTUAL", 80.0, "PERCENTAGE", "GREATER_THAN"), ("FORECASTED", 100.0, "PERCENTAGE", "GREATER_THAN")]
 filters = budget.get("CostFilters") or budget.get("FilterExpression") or {}
 statuses = {t["TagKey"]: t["Status"] for t in tags}

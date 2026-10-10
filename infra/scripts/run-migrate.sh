@@ -16,12 +16,18 @@
 # Prints task IDs and check names only, never an ARN (they carry the account
 # ID), a URL or a host. Exit 0 only on a passing verdict. Writes no evidence/.
 set -uo pipefail
+# Git Bash on Windows rewrites an argument that starts with `/` into a Windows
+# path, which turns the log group `/shiftmind/<env>/migrate` into an invalid
+# name. No effect on Linux or macOS.
+export MSYS_NO_PATHCONV=1
 
 ENV_DIR="${ENV_DIR:-infra/terraform/envs/portfolio}"
 # 8 catalog checks + the rotated-login probe + the TLS probe.
 MIN_CHECKS="${MIN_CHECKS:-10}"
 EXPECT_PLANNER_CREATED="${EXPECT_PLANNER_CREATED:-}"
 WORK="$(mktemp -d)"
+# With MSYS_NO_PATHCONV set, hand Windows tools (aws.exe, python) a native path.
+command -v cygpath >/dev/null 2>&1 && WORK="$(cygpath -m "$WORK")"
 trap 'rm -rf "$WORK"' EXIT
 
 for tool in python3 terraform aws; do
