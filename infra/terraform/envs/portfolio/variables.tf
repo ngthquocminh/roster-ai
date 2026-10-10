@@ -100,6 +100,6 @@ variable "monthly_budget_usd" {
 }
 
 variable "budget_alert_email" {
-  description = "Where the budget's 80% actual and 100% forecasted alerts go."
+  description = "The AWS account admin's inbox for the budget's 80% actual and 100% forecasted alerts. An operator role, not the planner, even when the address is the same."
   type        = string
 }

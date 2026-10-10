@@ -406,6 +406,24 @@ line item for VPC origins. This figure is **before** Story 6.2's RDS and Story
 The NAT gateway is the largest line. If the environment is not in use, destroy it
 (below) rather than leaving it running.
 
+**Story 6.2 adds**, measured 2026-10-09 from the AWS Price List API for
+`ap-southeast-1` (on-demand, 730 hours per month):
+
+| Resource | Price | Per month, idle |
+|---|---|---|
+| RDS `db.t4g.micro`, PostgreSQL, Single-AZ | $0.025 per hour | $18.25 |
+| RDS gp3 storage, 20 GB | $0.138 per GB-month | $2.76 |
+| Secrets Manager, 4 secrets | $0.40 per secret | $1.60 |
+| ECR storage, at most 10 images (the image is 0.68 GB uncompressed; layers are shared and stored compressed) | $0.10 per GB-month | under $0.70 |
+| **6.2 total** | | **about $23** |
+
+Not counted: automated backups are free up to the provisioned 20 GB; CloudWatch Logs
+($0.03 per GB-month stored) and Secrets Manager API calls ($0.05 per 10,000) are
+near zero idle; the first two Budgets are free. The RDS endpoint is private, so it
+has no public IPv4 charge. **With 6.1 the environment idles at about $88.6 per
+month (about $2.9 per day).** After a teardown, the final snapshot keeps billing
+for its storage until it is deleted.
+
 ## Teardown
 
 Everything is destroyable: Cognito `deletion_protection` is `INACTIVE`, the ALB has
