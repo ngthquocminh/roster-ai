@@ -55,9 +55,9 @@ variable "db_instance_class" {
 }
 
 variable "force_ssl_apply_method" {
-  description = "apply_method for rds.force_ssl, as the postgres18 engine defaults report it."
+  description = "apply_method for rds.force_ssl. 1 is the postgres18 default, so AWS keeps it as a system value and reports pending-reboot; immediate would show as a change on every plan."
   type        = string
-  default     = "immediate"
+  default     = "pending-reboot"
 }
 
 variable "db_credentials_version" {
