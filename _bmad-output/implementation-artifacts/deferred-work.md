@@ -1579,3 +1579,20 @@ does not assert `solver_completed` or exercise Flow 1's approval leg.
   renames a secret, and the runbook's fix (bump the version) is one line.**
   **Owner/revisit trigger:** the first observed `login_uses_the_rotated_password` failure after an
   apply.
+
+- **ECR's scan on push reports one HIGH CVE in the backend image's base** (CVE-2026-85091, Debian
+  `zlib 1.3.dfsg+really1.3.1-1` in `python:3.12-slim`, first seen on the 6.2 Phase B image). The
+  overflow is in `gzprintf()` after a non-blocking `gzwrite()` stall, a path the backend never
+  calls. **Deferred reason: no fixed Debian package in the pinned base yet, and bumping the base
+  digest is a reviewed `FROM` change, not part of provisioning.** **Owner/revisit trigger:** the
+  next base-digest bump, or Story 6.3 before the API first serves traffic from this image.
+
+- **The hosted environment's idle cost (~US$88.6/month) is too high for a portfolio demo.**
+  Story 6.1's NAT gateway (~$46.7 with its IPv4) and internal ALB (~$18.4) are ~74% of it, and 6.2
+  adds ~$23 (RDS ~$21). The product owner accepted it to finish 6.2 but does not accept it as the
+  steady state. **Deferred reason: every real saving reverses an Epic 6 architecture decision
+  (private subnets behind NAT, the ALB origin) and needs a correct-course, not a story-local
+  change.** Options measured in the 6.2 session: tear down between demos (~$0 idle), tasks in
+  public subnets without the NAT (-$47), a lighter origin than the ALB (-$18), stopping RDS
+  (-$18, auto-restarts after 7 days). **Owner/revisit trigger:** before Story 6.3 adds the always-on
+  ECS services, which raise the idle cost further.
