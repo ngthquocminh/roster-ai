@@ -28,5 +28,5 @@ the project's private planning record, not in this repository. This document
 and the architecture tests are the public statement of the boundaries those
 decisions produced.
 
-The former v0.3/v0.4 design, including the derivation of the CP-SAT model, is
-preserved unchanged in [the archive](archive/architecture-v0.4.md).
+The CP-SAT model itself (data pipeline, domain types, variables, constraints and
+the lexicographic objective) is described in [SOLVER-MODEL.md](SOLVER-MODEL.md).

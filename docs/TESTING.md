@@ -92,7 +92,7 @@ A wrong value, unit, entity or version, a missing or unauthorized effect, or a f
 ShiftMind has two independent test suites: `pytest` for the Python backend
 (`backend/`) and `vitest` for the React/TypeScript frontend (`frontend/`).
 Neither suite makes live network calls by default — the backend drives all
-LLM-dependent tests through a stub `LLMProvider`, and the frontend mocks the
+agent tests through the deterministic model double, and the frontend mocks the
 API client at the module boundary. A small number of backend tests are tagged
 `@pytest.mark.live` and exercise a real LLM provider; they are excluded from
 the default run and require a real API key.
@@ -204,10 +204,10 @@ Run from the `backend/` directory (or prefix with `uv run` from anywhere):
 
 ```bash
 cd backend
-uv run pytest                 # default suite — stub LLM provider, no network calls
+uv run pytest                 # default suite — deterministic model double, no network calls
 uv run pytest -v              # verbose output
-uv run pytest tests/test_api.py            # single file
-uv run pytest tests/test_api.py -k health  # single test by name
+uv run pytest tests/test_cors.py           # single file
+uv run pytest tests/test_cors.py -k allowed_origin # single test by name
 ```
 
 ### Trace export proof suites (Story 5.9)
@@ -225,23 +225,18 @@ The default suite is keyless for trace export (`conftest.py` pops `LOGFIRE_TOKEN
 
 ### Live provider tests
 
-Tests marked `@pytest.mark.live` exercise a real LLM provider (Gemini or
-OpenRouter) over the network and are excluded by default via
-`addopts = "-m \"not live\""` in `backend/pyproject.toml`. Files such as
-`tests/test_gemini_provider.py` and `tests/test_openrouter_provider.py` carry
-this marker. To run them:
+Tests marked `@pytest.mark.live` exercise a real LLM provider over the network
+and are excluded by default via `addopts = "-m \"not live\""` in
+`backend/pyproject.toml`. The two golden live tests in
+`tests/test_evaluation_harness.py` carry this marker. To run them:
 
 ```bash
 cd backend
-uv run pytest -m live          # provider tests need GEMINI_API_KEY / OPENROUTER_API_KEY;
-                               # the golden live tests need AGENT_RUNTIME_MODEL and AGENT_RUNTIME_API_KEY
+uv run pytest -m live          # needs AGENT_RUNTIME_MODEL and AGENT_RUNTIME_API_KEY
 ```
 
-`backend/conftest.py` surfaces only `GEMINI_API_KEY` / `OPENROUTER_API_KEY`
+`backend/conftest.py` surfaces only `OPENROUTER_API_KEY` / `ANTHROPIC_API_KEY`
 from a local `backend/.env` so the `live` marker can detect a developer's key.
-It deliberately does **not** load `LLM_PROVIDER` / `LLM_MODEL` from `.env`, so
-the default (non-`live`) suite always runs against the keyless `stub`
-provider regardless of a developer's local configuration.
 
 The same holds for the agent runtime: unless the `-m` expression selects `live`,
 `conftest.py` pins `AGENT_RUNTIME_MODEL=deterministic` and clears
@@ -253,8 +248,7 @@ pin; `pytest -m live` leaves the real values alone.
 
 The chat/agent surface (`backend/agent/`, `backend/application/use_cases/
 execute_turn.py`) is evaluated by a SEPARATE, versioned golden-case harness in
-`backend/evals/` — distinct from the `LLMProvider`/Gemini/OpenRouter tests
-above, which cover the older constraint-parsing seam. Every golden case has a
+`backend/evals/`. Every golden case has a
 deterministic execution (a case-driven PydanticAI `FunctionModel` double,
 `backend/evals/doubles.py`) that is the **authoritative** safety/correctness
 evidence, run in the default suite with no network access:
@@ -377,9 +371,8 @@ flushed for earlier cases.
 
 All backend tests are in `backend/tests/`, named `test_*.py`, separate from
 the implementation they exercise (no co-location). Existing files include
-`test_api.py`, `test_scenarios_api.py`, `test_constraints_api.py`,
-`test_engine_small.py`, `test_llm_provider.py`, `test_gemini_provider.py`,
-and `test_openrouter_provider.py`.
+`test_scenario_catalogue_api.py`, `test_conversations_api.py`,
+`test_engine_small.py` and `test_evaluation_harness.py`.
 
 ### Writing a new backend test
 
@@ -387,22 +380,22 @@ and `test_openrouter_provider.py`.
    function in an existing file. Open with a module docstring describing
    what the file exercises.
 2. For API-level tests, reuse the `client` fixture pattern (see
-   `tests/test_scenarios_api.py`): it spins up a `TestClient` with a temp
-   SQLite database (`ROSTERAI_DB` pointed at `tmp_path`) and stubs both the
-   solver engine and the LLM provider via FastAPI's
-   `app.dependency_overrides`:
+   `tests/test_scenario_catalogue_api.py`): it spins up a `TestClient` and
+   replaces the identity store, site context and the port under test with
+   in-memory fakes through FastAPI's `app.dependency_overrides`, restoring the
+   previous overrides in a `finally`:
 
    ```python
-   app.dependency_overrides[get_engine] = lambda: StubEngine()
-   app.dependency_overrides[get_llm_provider] = lambda: StubLLMProvider()
+   app.dependency_overrides[get_identity_store] = lambda: _IdentityStore(resolved)
+   app.dependency_overrides[get_catalogue_reader] = lambda: reader
    ```
 
-3. Only stub what's expensive or non-deterministic — the real CP-SAT solver
-   (`StubEngine`) and real LLM calls (`StubLLMProvider`). Let everything else
-   run for real: the actual SQLite database (in a temp dir), real fixture
-   JSON from `data/`, and real Pydantic validation.
-4. If a test needs a real LLM provider (Gemini/OpenRouter), mark it
-   `@pytest.mark.live` so it's excluded from the default CI run.
+3. Only stub what's expensive or non-deterministic. Behaviour that depends on
+   PostgreSQL (row-level security, migrations, transactions) belongs in a
+   `@pytest.mark.postgres` test using the `fresh_postgres_database_url` or
+   `postgres_engine` fixtures from `backend/conftest.py`.
+4. If a test needs a real LLM provider, mark it `@pytest.mark.live` so it's
+   excluded from the default CI run.
 5. Assert the HTTP status code first, then the response body shape.
 
 No coverage tool is configured for the backend.
@@ -499,10 +492,10 @@ No coverage tool is configured for the frontend.
 ## Cross-cutting principles
 
 - **Isolation:** every test is independent — no shared state between tests.
-  Backend tests get a fresh temp SQLite database per test (`tmp_path`);
-  frontend mocks are reset in `beforeEach()`.
-- **No live network calls by default:** the backend stub LLM provider and
-  frontend `vi.mock()` boundary mean the default suites never touch the
+  Backend PostgreSQL tests get a fresh temporary database; frontend mocks are
+  reset in `beforeEach()`.
+- **No live network calls by default:** the backend's deterministic model
+  double and frontend `vi.mock()` boundary mean the default suites never touch the
   network. Only `pytest -m live` breaks this rule, intentionally, on request.
 - **Determinism:** no time-dependent assertions; async completion is polled
   with a timeout rather than relying on fixed sleeps.

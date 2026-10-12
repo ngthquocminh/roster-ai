@@ -15,17 +15,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
-# Surface ONLY GEMINI_API_KEY / OPENROUTER_API_KEY / ANTHROPIC_API_KEY from a local backend/.env so
-# the @pytest.mark.live gate can detect a developer's key. Deliberately do NOT
-# load LLM_PROVIDER / LLM_MODEL / OPENROUTER_MODEL from .env — the test suite
-# must observe the keyless `stub` default regardless of a developer's .env
-# (stub-only-CI invariant). A real shell env var still wins (we only set the
-# key when it is not already present).
+# Surface ONLY OPENROUTER_API_KEY / ANTHROPIC_API_KEY from a local backend/.env so
+# the @pytest.mark.live gate can detect a developer's key. Nothing else is
+# loaded from .env here. A real shell env var still wins (we only set the key
+# when it is not already present).
 _env_file = Path(__file__).resolve().parent / ".env"
 _dotenv = dotenv_values(_env_file) if _env_file.exists() else {}
-_gemini_key = _dotenv.get("GEMINI_API_KEY")
-if _gemini_key and not os.environ.get("GEMINI_API_KEY"):
-    os.environ["GEMINI_API_KEY"] = _gemini_key
 _openrouter_key = _dotenv.get("OPENROUTER_API_KEY")
 if _openrouter_key and not os.environ.get("OPENROUTER_API_KEY"):
     os.environ["OPENROUTER_API_KEY"] = _openrouter_key
@@ -36,17 +31,13 @@ if _anthropic_key and not os.environ.get("ANTHROPIC_API_KEY"):
 sys.path.insert(0, os.path.dirname(__file__))
 
 # settings.py runs its OWN load_dotenv(backend/.env) at import time (a real app
-# requirement so the API server / run.py CLI honor a developer's .env). Left
-# alone that import would leak LLM_PROVIDER / LLM_MODEL from a dev's .env into
-# the test process and flip the default provider under test — breaking the
-# stub-only-CI invariant. Trigger that one-time import here, then drop the
-# leaked provider/model selection so every test observes the keyless `stub`
-# default. This scoping is test-process only; the real app is unaffected, and
-# Provider API keys surfaced above are preserved for the @pytest.mark.live gates.
+# requirement so the API server / run.py CLI honor a developer's .env). Trigger
+# that one-time import here, then drop what a developer's .env must not leak
+# into the test process. This scoping is test-process only; the real app is
+# unaffected, and provider API keys surfaced above are preserved for the
+# @pytest.mark.live gates.
 import settings as _settings  # noqa: E402,F401  (imported for its load_dotenv side effect)
 
-os.environ.pop("LLM_PROVIDER", None)
-os.environ.pop("LLM_MODEL", None)
 # Story 5.9: the suite is keyless for trace export by construction. Without
 # these pops a real LOGFIRE_TOKEN in a developer's backend/.env would configure
 # live export at `api.main` import and ship test spans to Logfire.

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
@@ -55,8 +54,7 @@ from application.ports.scenario_catalogue import ScenarioContext
 from application.ports.session import ResolvedSession
 from application.use_cases.accept_turn import accept_turn
 from application.use_cases.enqueue_compute import enqueue_compute
-from scripts.gate_a_cutover import FixtureSpec, REPO_ROOT, run_cutover
-from services import run_service
+from scripts.governed_fixtures import REPO_ROOT
 from settings import default_settings
 
 
@@ -97,8 +95,6 @@ def _catalogue_client(postgres_engine, *, site_id, tmp_path):
         provisioning_database_url=postgres_engine.url.render_as_string(
             hide_password=False
         ),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
     )
     session = ResolvedSession(
         app_user_id=uuid4(),
@@ -1482,80 +1478,6 @@ def test_site_context_cleanup_does_not_mask_the_original_error(
 
     with pytest.raises(_DownstreamFailure):
         context.throw(_DownstreamFailure("simulated downstream failure"))
-
-
-@pytest.mark.postgres
-def test_cutover_snapshots_throwaway_sqlite_and_imports_both_real_fixtures(
-    postgres_engine,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    legacy_db = tmp_path / "legacy.db"
-    with sqlite3.connect(legacy_db) as connection:
-        connection.execute("CREATE TABLE scenarios (id TEXT PRIMARY KEY)")
-        connection.execute("CREATE TABLE runs (id TEXT PRIMARY KEY)")
-        connection.execute("INSERT INTO scenarios VALUES ('legacy-only')")
-
-    suffix = uuid4().hex
-    fixtures = (
-        FixtureSpec(
-            REPO_ROOT / "data" / "sample_tiny_input.json",
-            f"sample_tiny_input-{suffix}",
-            "v1",
-        ),
-        FixtureSpec(
-            REPO_ROOT / "data" / "sample_tiny_input_more_tm.json",
-            f"sample_tiny_input_more_tm-{suffix}",
-            "v1",
-        ),
-    )
-    settings = replace(
-        default_settings(),
-        db_path=str(legacy_db),
-        database_url=postgres_engine.url.render_as_string(hide_password=False),
-        provisioning_database_url=postgres_engine.url.render_as_string(
-            hide_password=False
-        ),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
-    )
-    pool = ThreadPoolExecutor(max_workers=1)
-    pool.submit(lambda: None).result()
-    monkeypatch.setattr(run_service, "_pool", pool)
-
-    result = run_cutover(settings=settings, fixtures=fixtures)
-
-    assert result.worker_drained is True
-    assert run_service._pool is None
-    assert result.snapshot_path.exists()
-    with sqlite3.connect(result.snapshot_path) as snapshot:
-        assert snapshot.execute("SELECT id FROM scenarios").fetchone()[0] == "legacy-only"
-    with postgres_engine.connect() as connection:
-        imported = connection.execute(
-            select(
-                scenario_version.c.fixture_id,
-                scenario_version.c.payload,
-                scenario_version.c.checksum_algorithm,
-                scenario_version.c.checksum_schema_version,
-                scenario_version.c.checksum_digest,
-            ).where(
-                scenario_version.c.site_id == result.site_id,
-                scenario_version.c.fixture_id.in_(
-                    [fixture.fixture_id for fixture in fixtures]
-                ),
-            )
-        ).all()
-    assert len(imported) == 2
-    assert {row.fixture_id for row in imported} == {
-        fixture.fixture_id for fixture in fixtures
-    }
-    assert all(row.checksum_algorithm == "sha256" for row in imported)
-    assert all(row.checksum_schema_version == "rfc8785-v1" for row in imported)
-    assert all(len(row.checksum_digest) == 64 for row in imported)
-    expected_payloads = {
-        fixture.fixture_id: json.loads(fixture.path.read_text(encoding="utf-8"))
-        for fixture in fixtures
-    }
-    assert {row.fixture_id: row.payload for row in imported} == expected_payloads
 
 
 @pytest.mark.postgres

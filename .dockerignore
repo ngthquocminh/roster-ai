@@ -11,7 +11,7 @@ evidence
 
 # Untracked local developer state. `Dockerfile` does `COPY backend/ backend/`,
 # and `settings.py` calls `load_dotenv(backend/.env, override=False)` at
-# import — so without these two rules a developer's real GEMINI_API_KEY,
+# import — so without these two rules a developer's real
 # OPENROUTER_API_KEY, AGENT_RUNTIME_API_KEY or CSRF_SECRET would be baked into
 # the image and loaded inside every container for each key compose does not
 # set. They would also make the recorded image digest a function of untracked

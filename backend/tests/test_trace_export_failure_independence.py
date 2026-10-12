@@ -364,8 +364,6 @@ def test_turn_and_solver_outcomes_are_unchanged_by_a_failing_exporter(
         "SHIFTMIND_SEED_PLANNER_EMAIL": "planner@shiftmind.local",
         "ROSTERAI_DATABASE_URL": login,
         "ROSTERAI_PROVISIONING_DATABASE_URL": provisioning,
-        "ROSTERAI_MAINTENANCE_FLAG": str(tmp_path / "maintenance.flag"),
-        "ROSTERAI_DB": str(tmp_path / "legacy.sqlite3"),
         "SOLVER_WALL_TIME_LIMIT_SECONDS": "5",
         "SOLVER_MAX_DETERMINISTIC_TIME": "5",
     }.items():

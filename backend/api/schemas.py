@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, Field, StringConstraints
 from application.contracts.grounding import GroundedResponseV1
 from application.contracts.dialogue import ResolvedClarificationV1, TerminalOutcomeV1
 from application.contracts.proposal import (
@@ -17,78 +17,6 @@ from application.contracts.scenario_projection import LockV1
 from application.contracts.audit_envelope import AuditOutcomeV1, WorkerFactsV1
 from application.contracts.evidence_ref import EvidenceRefV1
 from application.contracts.schedule_version import MetricSetV1, ScheduleRunStatusV1
-
-
-class ScenarioCreate(BaseModel):
-    name: str = Field(min_length=1)
-    fixture: str = Field(min_length=1)
-    time_limit_s: float = Field(default=60.0, gt=0)
-
-
-class ScenarioOut(BaseModel):
-    id: str
-    name: str
-    fixture: str
-    time_limit_s: float
-    created_at: str
-
-
-class RunOut(BaseModel):
-    id: str
-    scenario_id: str
-    status: str
-    created_at: str
-    started_at: Optional[str] = None
-    finished_at: Optional[str] = None
-    solver_status: Optional[str] = None
-    error: Optional[str] = None
-
-
-class InsightOut(BaseModel):
-    ready: bool
-    run_id: str
-    report: Optional[str] = None    # present when ready=True (INS-01)
-    status: Optional[str] = None    # present when ready=False (D-07)
-    reason: Optional[str] = None    # present when ready=False (D-07)
-
-    @model_validator(mode="after")
-    def check_ready_fields(self) -> "InsightOut":
-        if self.ready and self.report is None:
-            raise ValueError("report must be set when ready=True")
-        if not self.ready and self.status is None:
-            raise ValueError("status must be set when ready=False")
-        return self
-
-
-class ConstraintParseRequest(BaseModel):
-    scenario_id: str = Field(min_length=1)
-    text: str = Field(min_length=1, max_length=2000)
-
-
-class AppliedConstraint(BaseModel):
-    id: str
-    tool: str
-    args: dict
-    parsed_constraint: str
-
-
-class RejectedConstraint(BaseModel):
-    tool: str
-    error: str
-
-
-class ConstraintParseResponse(BaseModel):
-    applied: list[AppliedConstraint]
-    rejected: list[RejectedConstraint]
-    clarification_needed: str | None
-    no_constraint_found: bool
-
-
-class OverrideOut(BaseModel):
-    id: str
-    tool: str
-    args: dict
-    parsed_constraint: str | None = None  # None for pre-D-02 legacy entries
 
 
 class ProblemDetailsV1(BaseModel):

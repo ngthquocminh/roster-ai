@@ -86,7 +86,7 @@ bindings = resolve_bindings({
     `backend/migrations/versions/*.py` to the single head — a file-graph walk,
     so report generation never needs PostgreSQL running
   * `dataset` / `scenario` by importing `default_fixtures()` from
-    `backend/scripts/gate_a_cutover.py` — never a second copy of the list
+    `backend/scripts/governed_fixtures.py` — never a second copy of the list
   * `image` from `.build/image-digests.json` when a local image build has been
     recorded, otherwise `"local source tree"` / `postgres:18`; a fabricated digest would be a false binding. Immutable
     digests arrive with Epic 5 Story 5.3.

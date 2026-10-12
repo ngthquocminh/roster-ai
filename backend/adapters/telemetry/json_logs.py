@@ -23,8 +23,7 @@ _MAX_EXCEPTION_CHAIN = 16
 #: discarded as third-party (code review of story-5.2).
 _APPLICATION_LOGGER_PREFIXES = (
     "api", "worker", "application", "adapters", "agent", "engine",
-    "services", "store", "scripts", "shiftmind", "evals", "ingest",
-    "llm", "domain", "config", "__main__",
+    "scripts", "shiftmind", "evals", "ingest", "domain", "config", "__main__",
 )
 
 

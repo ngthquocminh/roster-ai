@@ -10,13 +10,13 @@ This is a property of the design, not an accident:
 
 | Dependency | How CI satisfies it without a secret |
 |---|---|
-| LLM provider | `backend/llm/base.py::create_provider` resolves the keyless `stub` provider by default (NFR26, AD-16) |
+| Agent model | `AGENT_RUNTIME_MODEL` defaults to `deterministic`, a keyless model double (NFR26, AD-16) |
 | OIDC / sign-in | `backend/adapters/oidc/fake.py` — a local double that signs its own tokens and serves its own discovery/JWKS in-process |
 | PostgreSQL | An ephemeral `postgres:18` service container using the same `rosterai:rosterai` credentials as `docker-compose.yml`, which is what `backend/settings.py` already defaults to |
 
 ## Secrets that must NOT be added
 
-`GEMINI_API_KEY`, `OPENROUTER_API_KEY`, and `ANTHROPIC_API_KEY` must not be configured as repository
+`AGENT_RUNTIME_API_KEY`, `OPENROUTER_API_KEY`, and `ANTHROPIC_API_KEY` must not be configured as repository
 secrets or exposed to any job in this workflow.
 
 `LOGFIRE_TOKEN` must not be added either (Story 5.9). The test suite is keyless

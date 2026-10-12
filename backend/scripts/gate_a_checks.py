@@ -180,13 +180,11 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         story="1.1",
         invariant="immutable_fixtures",
         description=(
-            "Checksummed fixture import, append-only versioned history, and "
-            "the one-way Gate A cutover."
+            "Checksummed fixture import and append-only versioned history."
         ),
         runner="pytest",
         test_files=(
             "backend/tests/test_fixture_history_import.py",
-            "backend/tests/test_gate_a_cutover.py",
             "backend/tests/test_postgres_schema.py",
             "backend/tests/test_postgres_toolchain.py",
         ),
@@ -270,12 +268,9 @@ GATE_A_CHECKS: tuple[GateACheck, ...] = (
         check="exact_evidence_target_resolution",
         story="1.5",
         invariant="normalized_scenario_reads",
-        description="Exact evidence-reference resolution and de-duplication.",
+        description="Exact evidence-reference resolution.",
         runner="pytest",
-        test_files=(
-            "backend/tests/test_evidence_ref.py",
-            "backend/tests/test_resolve_dedup.py",
-        ),
+        test_files=("backend/tests/test_evidence_ref.py",),
     ),
     GateACheck(
         check="evidence_target_nfr35_latency",

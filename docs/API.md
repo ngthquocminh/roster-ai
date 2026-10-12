@@ -110,12 +110,10 @@ docker compose exec -T api python -c "from api.main import app; print('\\n'.join
 That command lists the paths; counting the methods on each gives the operations.
 At the commit this page was written the schema held **37 paths / 40 operations**
 under `/api/v1` — auth, scenario catalogue and projections, conversations,
-proposals, schedule runs, approvals and provenance — and **13 paths / 15
-operations** outside it: `health`, `fixtures`, the fake OIDC endpoints, and the
-v0.3 compatibility routes (`/scenarios`, `/runs`, `/constraints`) that are still
-mounted and still served from the legacy store. Those legacy routes are taken
-offline by the Gate A cutover described in
-[`GATE-A-RUNBOOK.md`](GATE-A-RUNBOOK.md), not by this milestone.
+proposals, schedule runs, approvals and provenance. Outside it are only
+`/health` and the fake OIDC endpoints (mounted when `OIDC_PROVIDER=fake`). The
+v0.3/v0.4 compatibility routes (`/scenarios`, `/runs`, `/constraints`,
+`/fixtures`) were removed with the legacy store.
 
 These counts are a dated observation, not a maintained inventory — re-run the
 command rather than trusting them. The generated schema is the authoritative

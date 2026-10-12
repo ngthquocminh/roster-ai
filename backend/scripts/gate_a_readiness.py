@@ -91,7 +91,7 @@ _DECLARED_BINDINGS = {
 
 
 def _fixture_entries() -> list[dict[str, str]]:
-    from scripts.gate_a_cutover import default_fixtures
+    from scripts.governed_fixtures import default_fixtures
 
     return [
         {

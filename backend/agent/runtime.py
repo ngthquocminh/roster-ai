@@ -275,9 +275,8 @@ class AgentRuntimeConfig:
 
     AD-7: budgets, limits, and timeouts are application configuration, never model
     output. The adapter reads them from here and from the per-request budget — it
-    never reads an env var of its own. `settings.py` supplies the values; this
-    seam has its OWN fields and deliberately does not overload
-    `llm_provider`/`llm_model`, which belong to the separate `LLMProvider` seam.
+    never reads an env var of its own. `settings.py` supplies the values through
+    the `agent_runtime_*` fields.
     """
 
     model: str = "test"
@@ -1039,12 +1038,7 @@ def create_agent_runtime(
     tracer_provider: object | None = None,
     route: TurnRoute = "scheduling",
 ) -> PydanticAIAgentRuntime:
-    """Factory mirroring `llm/base.py:create_provider`'s shape.
-
-    Kept separate from `create_provider` on purpose: two seams, two factories, two
-    configurations (AD-19). This one reads `agent_runtime_*` settings fields and
-    never `llm_provider`/`llm_model`.
-    """
+    """Build the PydanticAI runtime from the `agent_runtime_*` settings fields (AD-19)."""
     config = AgentRuntimeConfig(instructions=instructions_for(route))
     if settings is not None:
         config = AgentRuntimeConfig(

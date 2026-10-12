@@ -65,7 +65,6 @@ def _fresh_app(monkeypatch, tmp_path, cors_origins: str):
     the header is just absent.
     """
     monkeypatch.setenv("CORS_ORIGINS", cors_origins)
-    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "test.db"))
     import sys
 
     sys.modules.pop("api.main", None)

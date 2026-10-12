@@ -199,7 +199,7 @@ def test_a_check_declaring_files_without_a_runner_is_rejected():
             story="1.1",
             invariant="immutable_fixtures",
             description="files but no runner",
-            test_files=("backend/tests/test_gate_a_cutover.py",),
+            test_files=("backend/tests/test_fixture_history_import.py",),
         )
 
 

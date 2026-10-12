@@ -26,7 +26,6 @@ from api.deps import (
     get_clock,
     get_conversation_repository,
     get_identity_store,
-    get_llm_provider,
     get_membership_reader,
     get_schedule_run_repository,
     get_settings,
@@ -164,8 +163,6 @@ class FakeSchedulingRuns:
 
 @pytest.fixture
 def client(monkeypatch, tmp_path):
-    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "legacy.db"))
-    monkeypatch.setenv("ROSTERAI_MAINTENANCE_FLAG", str(tmp_path / "gate-a-maintenance"))
     session = ResolvedSession(
         app_user_id=uuid4(), site_id=uuid4(),
         csrf_token_hash=hash_secret(_CSRF_TOKEN),
@@ -736,7 +733,7 @@ def test_provenance_route_never_serializes_pending_payload_content(client) -> No
     assert set(tool) >= {"tool_name", "tool_call_id"}
 
 
-def test_provenance_survives_provider_failure_with_audit_and_evidence(client) -> None:
+def test_provenance_returns_audit_and_evidence_items(client) -> None:
     test_client, settings, session = client
     run_id, candidate_id, scenario_version_id = uuid4(), uuid4(), uuid4()
     approval_id, actor_id = uuid4(), session.app_user_id
@@ -776,9 +773,6 @@ def test_provenance_survives_provider_failure_with_audit_and_evidence(client) ->
     )
     app.dependency_overrides[get_conversation_repository] = lambda: SimpleNamespace(
         timeline=lambda *_args, **_kwargs: SimpleNamespace(events=()),
-    )
-    app.dependency_overrides[get_llm_provider] = lambda: (_ for _ in ()).throw(
-        RuntimeError("provider unavailable")
     )
 
     response = test_client.get(

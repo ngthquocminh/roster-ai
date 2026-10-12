@@ -107,22 +107,13 @@ _PUBLIC_VERSIONED_PATHS = frozenset(
         "/api/v1/auth/session",
     }
 )
-#: Pre-Gate-A SQLite routes, still mounted outside `/api/v1`. They are
-#: unauthenticated and site-unaware; what keeps them offline is
-#: `refuse_legacy_routes_during_gate_a`, a filesystem-flag check rather than an
-#: authorization check. Listed here so the write-surface assertion below covers
-#: the WHOLE app — a test named "the write surface is exactly the approved
-#: paths" that silently ignored three open write routes would be worse than no
-#: test. Their live flag state is an operational fact, owned by
-#: `docs/GATE-A-RUNBOOK.md` section 2, not by this suite.
-_LEGACY_WRITE_ROUTES = (
-    ("POST", "/constraints"),
+#: Un-versioned write routes. Listed so the write-surface assertion below
+#: covers the WHOLE app, not only `/api/v1`.
+_UNVERSIONED_WRITE_ROUTES = (
     # Local-only OAuth protocol endpoint. It consumes an ephemeral code and
     # never writes governed scenario or baseline state; api.main mounts it
     # only when OIDC_PROVIDER=fake.
     ("POST", "/oidc/token"),
-    ("POST", "/scenarios"),
-    ("POST", "/scenarios/{scenario_id}/runs"),
 )
 
 
@@ -205,17 +196,7 @@ def _concrete(path: str) -> str:
 def gate_a_write_client(tmp_path, monkeypatch):
     """The app with proposal storage stubbed, so only the transport is tested.
 
-    `db_path` and `maintenance_flag_path` are set through the ENVIRONMENT, not
-    only through `dependency_overrides`: `lifespan` calls module-level
-    `get_settings()` (`api/main.py:45`) and so does `_gate_a_flag_is_set`
-    (`api/main.py:132`), and neither consults overrides. Setting them on the
-    injected `Settings` alone leaves both reading the real
-    `backend/var/rosterai.db`, which is isolation in name only.
     """
-    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "legacy.db"))
-    monkeypatch.setenv(
-        "ROSTERAI_MAINTENANCE_FLAG", str(tmp_path / "gate-a-maintenance")
-    )
     resolved = ResolvedSession(
         app_user_id=uuid4(),
         site_id=uuid4(),
@@ -245,7 +226,7 @@ def gate_a_write_client(tmp_path, monkeypatch):
 
 
 def test_gate_a_write_surface_is_exactly_the_approved_paths() -> None:
-    """The whole app's write surface, enumerated — legacy routes included.
+    """The whole app's write surface, enumerated — un-versioned routes included.
 
     Not an allowlist that silences the guard: the three denial tests below run
     over whatever `_versioned_write_routes()` discovers, including routes added
@@ -253,11 +234,10 @@ def test_gate_a_write_surface_is_exactly_the_approved_paths() -> None:
     a human recording in `docs/GATE-A-RUNBOOK.md` why it does not touch
     governed scenario data or the baseline pointer.
 
-    It deliberately covers un-versioned routes too. The legacy routes are NOT
-    session-guarded and the local-only OIDC token route is an OAuth protocol
-    endpoint — nothing here claims otherwise — but a "write surface"
-    assertion that quietly skipped them would read as a clean bill of health
-    over three open write paths.
+    It deliberately covers un-versioned routes too. The local-only OIDC token
+    route is an OAuth protocol endpoint, not session-guarded, but a "write
+    surface" assertion that quietly skipped it would read as a clean bill of
+    health over an open write path.
     """
     versioned = [
         ("POST", "/api/v1/approvals"),
@@ -278,7 +258,7 @@ def test_gate_a_write_surface_is_exactly_the_approved_paths() -> None:
     ]
 
     assert _versioned_write_routes() == versioned
-    assert _all_write_routes() == sorted(versioned + list(_LEGACY_WRITE_ROUTES))
+    assert _all_write_routes() == sorted(versioned + list(_UNVERSIONED_WRITE_ROUTES))
 
 
 def test_public_versioned_paths_expose_no_write_verb() -> None:

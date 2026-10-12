@@ -139,11 +139,7 @@ def stream_client(tmp_path):
         csrf_token_hash=hash_secret(_CSRF_TOKEN),
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    settings = replace(
-        default_settings(),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
-    )
+    settings = replace(default_settings())
 
     class _IdentityStore:
         def resolve_session(self, _token_hash: str) -> ResolvedSession:

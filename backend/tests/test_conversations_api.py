@@ -293,8 +293,6 @@ def conversation_client(tmp_path):
     repository.actor_id = resolved.app_user_id
     settings = replace(
         default_settings(),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
         agent_runtime_model="deterministic",
     )
     previous_overrides = dict(app.dependency_overrides)

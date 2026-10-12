@@ -32,8 +32,8 @@ def test_committed_fixture_is_a_fixed_point_of_the_rule(path) -> None:
 
 
 def test_synthetic_members_stay_unambiguous_to_substring_resolution() -> None:
-    # `constraint_service._resolve_member` substring-matches a token against
-    # both the member name and the GUID contact_id.
+    # Planners and the model refer to workers by first name in conversation, so
+    # no first name may be a substring of another name or look like a GUID.
     first_names = [name.split()[0] for name in SYNTHETIC_MEMBERS]
     assert len(set(first_names)) == len(first_names)
     for name in SYNTHETIC_MEMBERS:

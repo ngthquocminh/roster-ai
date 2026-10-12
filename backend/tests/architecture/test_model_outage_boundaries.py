@@ -429,11 +429,7 @@ def _exercise_manual_run_flow(
         csrf_token_hash=hash_secret(_CSRF_TOKEN),
         expires_at=_NOW + timedelta(hours=1),
     )
-    settings = replace(
-        default_settings(),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
-    )
+    settings = replace(default_settings())
     previous = dict(app.dependency_overrides)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_identity_store] = lambda: _IdentityStore(session)
@@ -652,11 +648,7 @@ def test_solver_service_failure_keeps_its_own_problem_surface(
         csrf_token_hash=hash_secret(_CSRF_TOKEN),
         expires_at=_NOW + timedelta(hours=1),
     )
-    settings = replace(
-        default_settings(),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
-    )
+    settings = replace(default_settings())
     previous = dict(app.dependency_overrides)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_identity_store] = lambda: _IdentityStore(session)

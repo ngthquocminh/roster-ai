@@ -448,7 +448,7 @@ def _fixture_specs() -> Sequence[Any]:
     # Imported, never re-declared: `default_fixtures()` already pins the
     # governed fixture identities and versions. A second copy would be a
     # second source of truth.
-    from scripts.gate_a_cutover import default_fixtures
+    from scripts.governed_fixtures import default_fixtures
 
     return default_fixtures()
 

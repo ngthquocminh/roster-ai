@@ -165,17 +165,6 @@ def test_budget_exhaustion_and_timeout_are_distinct_outcomes() -> None:
     assert timeout.status != budget.status
 
 
-def test_owned_error_type_is_not_the_llm_seam_error() -> None:
-    """Two seams, two error types. Catching one must not catch the other."""
-    from llm.base import LLMProviderError
-
-    with pytest.raises(AgentRuntimeError):
-        FakeAgentRuntime(fail=True).run_turn(AgentTurnRequestV1(prompt="x"))
-
-    assert not issubclass(AgentRuntimeError, LLMProviderError)
-    assert not issubclass(LLMProviderError, AgentRuntimeError)
-
-
 def test_turn_request_exposes_no_authority_input() -> None:
     """AD-2/AD-15: the port takes trusted server-owned inputs only. A capability
     name, permission, or authority flag must not be settable on the request.
