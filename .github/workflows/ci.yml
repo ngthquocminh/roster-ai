@@ -301,9 +301,8 @@ jobs:
         # no alembic.ini and dies with
         #   FAILED: No 'script_location' key found in configuration.
         # which reads like a missing config but is purely a cwd mistake. That
-        # misreading cost a story: see the "CORRECTED 2026-08-10" entry in
-        # _bmad-output/implementation-artifacts/deferred-work.md, where a
-        # temporary alembic.ini was synthesized to work around it.
+        # misreading cost a story, where a temporary alembic.ini was
+        # synthesized to work around it.
         run: |
           set -euo pipefail
           uv run --project backend alembic upgrade head

@@ -7,8 +7,7 @@ by, and which planner questions each side can answer.
 **Read this before creating or reviewing any story that touches a metric.**
 This document exists because the rule was stable and true but written down
 nowhere, so five of Story 2.7's nine decision-grade review findings were the
-same rule re-derived wrongly from adapter code
-(`_bmad-output/implementation-artifacts/epic-1-2-retro-2026-08-16.md` §3.2,
+same rule re-derived wrongly from adapter code (Epic 1–2 retrospective,
 action A1). Cite it; do not re-derive it.
 
 Sits beside [`EVIDENCE-CONVENTION.md`](EVIDENCE-CONVENTION.md) and

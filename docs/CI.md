@@ -100,8 +100,7 @@ FAILED: No 'script_location' key found in configuration.
 That reads like a missing or broken config file. It is not; it is a
 working-directory mistake. This misreading previously cost a story, which
 synthesized a temporary `alembic.ini` to work around a problem that did not
-exist (see the `CORRECTED 2026-08-10` entry in
-`_bmad-output/implementation-artifacts/deferred-work.md`).
+exist.
 
 The `migrations` job therefore has **no** `working-directory: backend`. Do not
 add one.

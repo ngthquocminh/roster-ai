@@ -4,8 +4,7 @@ Mirrors `gate_a_checks.py`: a registry only, with no I/O. `gate_b_readiness.py`
 reads it, evaluates every check and writes `evidence/epic-5/release-gate-report.json`.
 
 The seven rows are the Gate B rows of the Release Gate table in
-`_bmad-output/planning-artifacts/epics.md`, which is the only place their
-thresholds live. This module registers what proves each row; it does not
+`docs/RELEASE-GATES.md`, which is the only place their thresholds live. This module registers what proves each row; it does not
 restate or redefine a threshold (Story 5.13 F1). The dataset floors below are
 the one exception, and only because AC3 amends that row through D4–D6.
 
@@ -45,7 +44,7 @@ Freshness = Literal["code_ancestor"]
 
 #: Story 5.13 D4 — the golden-dataset ratchet floor, replacing NFR28's 50.
 #: Reason (recorded verbatim in prd.md §7, requirements-inventory.md NFR28 and
-#: epics.md): the 50 assumed golden-case contributions from Stories 3.10–3.12
+#: docs/RELEASE-GATES.md): the 50 assumed golden-case contributions from Stories 3.10–3.12
 #: and 4.5, and those stories deliberately added none, because their invariants
 #: are not model-reachable and are proven as PostgreSQL proof nodes (4.5
 #: Decision 11). Multi-turn cases are versioned and graded by the same

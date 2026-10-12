@@ -51,15 +51,6 @@ dist/
 .claude/settings.local.json
 .claude/skills/
 
-# Story 1.8 publishes the generated OpenAPI snapshot alongside schema.d.ts.
-.bmad-loop/runs/
-.bmad-loop/cache/
-.bmad-loop/policy.toml
-
-# BMad: personal install answers, never shared across teammates/machines
-_bmad/config.user.yaml
-_bmad/config.user.toml
-
 # BMad: reinstallable skill-package mirror for Codex/Gemini (bmad-loop init
 # regenerates it) — same treatment as the already-ignored .claude/skills/
 .agents/skills/
@@ -78,12 +69,18 @@ _bmad/config.user.toml
 /frontend-vitest.json
 /playwright.json
 
-# JUnit XML consumed by the Gate A readiness report. Regenerable from the test
-# suites, noisy in diffs, and the report itself carries the summarized result —
-# so it is deliberately NOT committed. It must never be written into evidence/.
-_bmad-output/test-artifacts/
-
 # Local, content-addressed container build metadata.
 /.build/
 /.local/
 /.codeboarding/
+
+# Planning workspace (BMad config, plans, specs, stories, retros). Each of
+# _bmad/ and _bmad-output/ is its own nested git repository pushed to a private
+# remote, so none of it is ever published here. _bmad-output/test-artifacts/
+# also receives the JUnit XML the Gate A/B readiness reports consume; it must
+# never be written into evidence/.
+/_bmad/
+/_bmad-output/
+/.bmad-loop/
+# superpowers skills write specs and plans here by default.
+/docs/superpowers/

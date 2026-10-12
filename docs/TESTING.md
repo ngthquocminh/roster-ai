@@ -126,7 +126,7 @@ Tests: `tests/test_live_eval_publication.py` (publisher subprocess against a loc
 
 ## Gate B release report — Story 5.13
 
-Gate B's rows live in `_bmad-output/planning-artifacts/epics.md` § Release Gate.
+Gate B's rows live in [`RELEASE-GATES.md`](RELEASE-GATES.md).
 `backend/scripts/gate_b_checks.py` registers each row's proof, and
 `backend/scripts/gate_b_readiness.py` writes `evidence/epic-5/release-gate-report.json`.
 No row is decided by a stored flag alone (Story 5.13 D2). Live rows read bound

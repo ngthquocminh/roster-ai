@@ -9,9 +9,9 @@ One owner per audience prevents drift.
   [walkthrough](WALKTHROUGH.md), [architecture](ARCHITECTURE.md), setup,
   configuration, and the API pointer. Diagrams referenced by the README live in
   `docs/assets/`.
-- **Planning lifecycle and implementation records** live in `_bmad-output/`.
-  They record what was decided, built, and still deferred; they are not the
-  reviewer entry point.
+- **Planning lifecycle and implementation records** (stories, specs, retros)
+  are kept in a private planning repository, not here. Story and decision
+  numbers in code comments refer to it.
 - **Historical material** lives in `docs/archive/`. It is retained for context
   but is neither current nor maintained.
 

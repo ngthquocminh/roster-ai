@@ -5,9 +5,8 @@ Exit code 0 from a test runner is a weak signal. Three failure modes in this
 repo produce a green exit while proving nothing:
 
 * `backend/tests/test_evidence_convention.py`'s `requires_git` guard SKIPS its
-  commit-binding assertions when git is unavailable
-  (`_bmad-output/implementation-artifacts/deferred-work.md`, the story-1.11
-  review entry) — a git-less runner sweeps the whole evidence tree green.
+  commit-binding assertions when git is unavailable (found in the Story 1.11
+  review) — a git-less runner sweeps the whole evidence tree green.
 * `backend/conftest.py::_temporary_postgres_database` calls `pytest.skip()`
   when PostgreSQL is unreachable, so all 45 `@pytest.mark.postgres` tests turn
   into skips rather than failures.

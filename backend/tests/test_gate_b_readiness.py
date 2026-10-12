@@ -36,7 +36,7 @@ from scripts.gate_b_checks import (
 from scripts.junit_ingest import MissingTestError, RunnerReport
 from scripts.junit_ingest import TestCaseResult as _CaseResult
 
-EPICS = REPO_ROOT / "_bmad-output" / "planning-artifacts" / "epics.md"
+RELEASE_GATES = REPO_ROOT / "docs" / "RELEASE-GATES.md"
 NFR35_FILE = "backend/tests/test_postgres_integration.py"
 CLEAN = {
     "dataset": "d", "evaluator": "e", "model": "m", "prompt": "p", "tool": "t",
@@ -60,8 +60,8 @@ def test_registry_is_internally_valid() -> None:
 
 
 def test_every_gate_b_row_of_the_release_gate_table_is_registered() -> None:
-    """An unregistered row is a row nobody decides. Read from epics.md itself."""
-    table_rows = re.findall(r"^\| ([^|]+?) \| B \|", EPICS.read_text(encoding="utf-8"), re.M)
+    """An unregistered row is a row nobody decides. Read from the table itself."""
+    table_rows = re.findall(r"^\| ([^|]+?) \| B \|", RELEASE_GATES.read_text(encoding="utf-8"), re.M)
     assert table_rows, "could not read the Release Gate table"
     assert sorted(table_rows) == sorted(row.title for row in GATE_B_ROWS)
 
