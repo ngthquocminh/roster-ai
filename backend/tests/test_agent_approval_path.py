@@ -219,8 +219,6 @@ def agent_client(tmp_path):
 
     settings = replace(
         default_settings(),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
         scheduling_baseline_enabled=True,
     )
     previous = dict(app.dependency_overrides)

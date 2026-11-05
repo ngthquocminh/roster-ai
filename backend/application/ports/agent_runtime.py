@@ -5,12 +5,6 @@ orchestration. This module is that port. It imports no framework: an
 implementation may be the PydanticAI adapter in `backend/agent/`, or a fake, and
 application code cannot tell which from the types alone.
 
-This is deliberately NOT the existing `LLMProvider` seam. `backend/llm/`'s
-provider-neutral constraint-parsing and cached-insight operations stay behind
-their own port until deliberately migrated (AD-19, AC2). The two seams may share
-a provider client *inside adapters*, but they do not share a port, an error type,
-or a configuration key.
-
 Shape mirrors `application/ports/scenario_projection.py`: frozen dataclass DTOs
 in `application/contracts/`, a `typing.Protocol` for the port itself, absolute
 imports from the backend root.
@@ -29,9 +23,7 @@ class AgentRuntimeError(RuntimeError):
     """Raised when an agent runtime call fails.
 
     Provider- and framework-neutral, so no PydanticAI or vendor exception type
-    ever crosses this seam. Mirrors the established pattern of
-    `llm/base.py:LLMProviderError` — but is a SEPARATE type on purpose: one seam's
-    failure must not be catchable as the other's.
+    ever crosses this seam.
 
     Implementations must preserve the original cause (`raise ... from exc`) so a
     swallowed root cause never becomes the only record of a failure.

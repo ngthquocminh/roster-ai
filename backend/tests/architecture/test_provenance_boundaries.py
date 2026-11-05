@@ -44,5 +44,5 @@ def test_provenance_query_has_no_provider_or_calculator_dependency() -> None:
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
     }
-    assert not {name for name in imports if name.startswith(("agent", "llm", "sqlalchemy"))}
+    assert not {name for name in imports if name.startswith(("agent", "sqlalchemy"))}
     assert not {name for name in calls if name.startswith("calculate_")}

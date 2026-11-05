@@ -16,11 +16,18 @@ it, and OR-Tools CP-SAT alone builds the schedule. What it is and how it works:
 | Test suites, live eval, mocking convention | `docs/TESTING.md` |
 | Demand family/unit rules | `docs/DOMAIN-MODEL.md` |
 | Stack and versions | `backend/pyproject.toml`, `frontend/package.json` |
-| Superseded v0.3/v0.4 design (SQLite, `LLMProvider`) | `docs/archive/` (historical only, do not follow) |
 
-**Legacy code:** `backend/llm/`, `backend/services/` and `backend/store/` are v0.3/v0.4
-compatibility adapters. Chat and LLM work goes through `backend/agent/` (PydanticAI
-`AgentRuntime`) and `backend/application/`. Don't extend the legacy paths.
+**Planning workspace is private.** `_bmad/` (BMad config) and `_bmad-output/`
+(PRDs, architecture spine, epics, stories, specs, retros) are gitignored here.
+Each is its own nested git repository with a private remote, so commit planning
+changes inside that folder (`git -C _bmad-output commit ...`), never in this repo.
+They exist only in local checkouts; cloud sessions don't have them. Never quote
+their content into tracked files, and cite them in public docs only by story or
+decision number.
+
+Chat and LLM work goes through `backend/agent/` (PydanticAI `AgentRuntime`) and
+`backend/application/`. The v0.3/v0.4 SQLite stack and its `LLMProvider` seam were
+removed; don't reintroduce them.
 
 ## Read before touching these
 

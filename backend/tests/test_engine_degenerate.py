@@ -10,7 +10,6 @@ instances — no live CP-SAT solve needed, so tests stay fast and portable.
 from __future__ import annotations
 
 from domain.result import CoverageStat, SolveResult, SummaryMetrics, SolverStats
-from services.serialize import serialize_result
 
 
 # ---------------------------------------------------------------------------
@@ -182,23 +181,3 @@ def test_status_not_altered_when_warnings_present():
     assert r.status == "OPTIMAL", (
         f"Warnings must not alter status; expected OPTIMAL, got {r.status!r}"
     )
-
-
-# ---------------------------------------------------------------------------
-# 6. Warnings survive serialization
-# ---------------------------------------------------------------------------
-
-def test_warnings_in_serialize_result_output():
-    """serialize_result includes a top-level 'warnings' key."""
-    r = _make_result()
-    d = serialize_result(r)
-    assert "warnings" in d, f"serialize_result output must have 'warnings' key; keys: {list(d)}"
-    assert d["warnings"] == []
-
-
-def test_warnings_values_survive_serialization():
-    """Warning strings pass through serialize_result unchanged."""
-    msg = "Degenerate solve: task family 'Pick' has 10.0h required but zero assigned supply."
-    r = _make_result(warnings=[msg])
-    d = serialize_result(r)
-    assert d["warnings"] == [msg], f"Warning content must be preserved; got: {d['warnings']}"

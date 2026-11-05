@@ -86,11 +86,7 @@ def catalogue_client(tmp_path):
         csrf_token_hash="a" * 64,
         expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    settings = replace(
-        default_settings(),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
-    )
+    settings = replace(default_settings())
     reader = _Reader((entry,), {scenario_id: context})
     # Restore rather than clear on teardown, and do it in a finally: a failing
     # assertion propagates in at the yield, and a bare clear() after the with
@@ -190,11 +186,7 @@ def test_database_failure_stays_within_the_problem_details_contract(
             "connection to server at 'db.internal' (10.0.0.5) failed"
         )
 
-    settings = replace(
-        default_settings(),
-        db_path=str(tmp_path / "legacy.db"),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
-    )
+    settings = replace(default_settings())
     resolved = ResolvedSession(
         app_user_id=uuid4(),
         site_id=uuid4(),

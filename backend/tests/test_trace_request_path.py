@@ -74,8 +74,6 @@ def traced_stack(fresh_postgres_database_url, monkeypatch, tmp_path):
     monkeypatch.setenv("SHIFTMIND_SEED_PLANNER_EMAIL", "planner@shiftmind.local")
     monkeypatch.setenv("ROSTERAI_DATABASE_URL", login)
     monkeypatch.setenv("ROSTERAI_PROVISIONING_DATABASE_URL", provisioning)
-    monkeypatch.setenv("ROSTERAI_MAINTENANCE_FLAG", str(tmp_path / "maintenance.flag"))
-    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "legacy.sqlite3"))
     # A short, still-real CP-SAT solve.
     monkeypatch.setenv("SOLVER_WALL_TIME_LIMIT_SECONDS", "5")
     monkeypatch.setenv("SOLVER_MAX_DETERMINISTIC_TIME", "5")

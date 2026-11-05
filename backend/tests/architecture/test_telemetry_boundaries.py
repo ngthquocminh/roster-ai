@@ -27,8 +27,7 @@ PRODUCER_ROOTS = ("api", "agent", "application", "worker")
 #: story-5.2). `backend/*.py` is added separately by `_python_files`.
 NON_TEST_BACKEND_ROOTS = (
     "adapters", "agent", "api", "application", "config", "domain", "engine",
-    "evals", "fixtures", "ingest", "llm", "migrations", "scripts", "services",
-    "store", "worker",
+    "evals", "fixtures", "ingest", "migrations", "scripts", "worker",
 )
 LOGGER_METHODS = {"debug", "info", "warning", "error", "exception", "critical", "log"}
 RUN_SCOPED_EVENTS = {
@@ -473,7 +472,6 @@ _PRIVILEGED_DSN_ALLOWLIST = frozenset(
         "settings.py",
         "migrations/env.py",
         "scripts/bootstrap_local.py",
-        "scripts/gate_a_cutover.py",
         "scripts/seed_planner.py",
     }
 )

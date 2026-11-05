@@ -84,10 +84,8 @@ def test_csrf_token_is_not_reconstructible_from_the_session_token_alone() -> Non
 
 @pytest.fixture()
 def auth_client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "legacy.db"))
     settings = replace(
         default_settings(),
-        maintenance_flag_path=str(tmp_path / "gate-a-maintenance"),
         oidc_issuer="https://fake-idp.test",
         oidc_client_id="shiftmind-tests",
         oidc_redirect_uri="https://testserver/api/v1/auth/callback",
@@ -286,16 +284,12 @@ def test_safe_referer_fallback_allows_valid_csrf(auth_client) -> None:
     assert response.status_code == 204
 
 
-def test_versioned_api_requires_auth_but_legacy_routes_keep_their_behavior(
+def test_versioned_api_requires_auth_and_leaks_nothing(
     auth_client,
 ) -> None:
     client, _, _ = auth_client
 
     protected = client.get("/api/v1/not-a-real-resource")
-    legacy = client.post(
-        "/scenarios",
-        json={"name": "bad", "fixture": "missing.json"},
-    )
 
     assert protected.status_code == 401
     assert protected.json()["code"] == "authentication_required"
@@ -303,7 +297,6 @@ def test_versioned_api_requires_auth_but_legacy_routes_keep_their_behavior(
     assert "fixture" not in protected_text
     assert "membership" not in protected_text
     assert "site name" not in protected_text
-    assert legacy.status_code == 400
 
 
 def test_application_exposes_no_registration_or_membership_creation_route(

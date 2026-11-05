@@ -10,7 +10,7 @@ from alembic.config import Config
 from sqlalchemy import Engine, create_engine
 
 from adapters.postgres.fixture_history import FixtureImportResult, PostgresFixtureHistoryAdapter
-from scripts.gate_a_cutover import REPO_ROOT, default_fixtures
+from scripts.governed_fixtures import REPO_ROOT, default_fixtures
 from scripts.seed_planner import SeedPlannerResult, provision_seed_planner
 from settings import Settings, default_settings
 

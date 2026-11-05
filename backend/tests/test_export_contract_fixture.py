@@ -11,7 +11,7 @@ from scripts.export_contract_fixture import (
     build_contract_fixture,
     export_contract_fixtures,
 )
-from scripts.gate_a_cutover import default_fixtures
+from scripts.governed_fixtures import default_fixtures
 
 
 @pytest.mark.parametrize("fixture", default_fixtures(), ids=lambda item: item.fixture_id)

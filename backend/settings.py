@@ -1,9 +1,8 @@
-"""Runtime settings — filesystem paths and LLM provider config, resolved from
-env with sane defaults.
+"""Runtime settings, resolved from env with sane defaults.
 
 Kept to a single lightweight config-layer dependency (python-dotenv) so any
-layer can import it. Env overrides let tests point at a temp DB / data dir, or
-select an LLM provider/model, without touching code.
+layer can import it. Env overrides let tests and deployments change database
+URLs, the agent runtime model, budgets and telemetry without touching code.
 """
 from __future__ import annotations
 
@@ -17,18 +16,14 @@ from urllib.parse import urlsplit
 from dotenv import load_dotenv
 
 _BACKEND_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = _BACKEND_DIR.parent
 
 # Load backend/.env once at import time, resolved relative to this file so it
 # works regardless of process CWD (API server, run.py CLI, pytest). A real OS
-# env var always wins (override=False); an empty `GEMINI_API_KEY=` in the file
-# does not clobber an already-set OS key.
+# env var always wins (override=False); an empty `OPENROUTER_API_KEY=` in the
+# file does not clobber an already-set OS key.
 load_dotenv(_BACKEND_DIR / ".env", override=False)
 
 
-# Live-verified tool-capable as of 2026-07-13; replaces meta-llama/llama-3.3-70b-instruct:free, which started returning upstream 429 rate-limit errors.
-_OPENROUTER_DEFAULT_MODEL = "openai/gpt-oss-20b:free"
-_ANTHROPIC_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 _LOGFIRE_DEFAULT_BASE_URL = "https://logfire-us.pydantic.dev"
 
 # The one authorized trace-content diagnostic mode (addendum §6, Story 5.9).
@@ -59,28 +54,15 @@ AC2_CEILING_FIELDS = (
 
 @dataclass(frozen=True)
 class Settings:
-    db_path: str            # SQLite file
-    data_dir: str           # directory holding input fixtures (*.json)
     database_url: str = field(repr=False)  # restricted API runtime credential (T-04-01)
     provisioning_database_url: str = field(repr=False)  # privileged credential (T-04-01)
-    maintenance_flag_path: str  # persistent Gate A legacy-write lock
-    llm_provider: str       # "stub" (default) | "gemini" | "openrouter" | "anthropic"
-    llm_model: str          # model id passed to the selected provider
-    # T-04-01: keep the API key out of the auto-generated __repr__ so it never
-    # surfaces in logs, FastAPI dependency errors, or unhandled-exception dumps.
-    llm_api_key: str | None = field(repr=False, default=None)  # from GEMINI_API_KEY; None for stub
-    # Same repr=False treatment as llm_api_key (T-04-01) — from OPENROUTER_API_KEY.
+    # T-04-01: keep API keys out of the auto-generated __repr__ so they never
+    # surface in logs, FastAPI dependency errors, or unhandled-exception dumps.
+    # From OPENROUTER_API_KEY; read by the tier-1 grounding checker factory.
     openrouter_api_key: str | None = field(repr=False, default=None)
-    # Separate from llm_model because llm_model's default "gemini-2.5-flash" is
-    # not a valid OpenRouter slug.
-    openrouter_model: str = _OPENROUTER_DEFAULT_MODEL
-    # Separate from llm_model because Anthropic model identifiers are neither
-    # Gemini nor OpenRouter model identifiers.
-    anthropic_api_key: str | None = field(repr=False, default=None)
-    anthropic_model: str = _ANTHROPIC_DEFAULT_MODEL
     # Browser origins allowed to call this API (BE-01, D-04). Not secret, so
     # this field carries no repr override — that treatment is reserved for the
-    # two API key fields above.
+    # API key field above.
     cors_origins: tuple[str, ...] = field(default=())
     oidc_provider: str = "fake"
     oidc_issuer: str = "http://shiftmind.test/oidc"
@@ -101,10 +83,7 @@ class Settings:
     # so a leaked session token alone can't also reconstruct the CSRF
     # token. repr=False for the same reason as the API keys above (T-04-01).
     csrf_secret: str = field(repr=False, default="shiftmind-local-csrf-secret")
-    # AgentRuntime seam (Story 2.1, AD-19). Deliberately SEPARATE fields from
-    # llm_provider/llm_model: the agent runtime and the task-specific
-    # LLMProvider are two seams, and overloading one seam's configuration onto
-    # the other is what makes them impossible to migrate independently later.
+    # AgentRuntime seam (Story 2.1, AD-19).
     agent_runtime_model: str = "deterministic"
     # Optional OpenRouter reasoning control; unset preserves provider defaults.
     agent_runtime_reasoning_effort: str | None = None
@@ -218,29 +197,6 @@ def tier1_flag_threshold(settings: "Settings") -> float | None:
     if not (math.isfinite(threshold) and 0.0 < threshold < 1.0):
         raise InvalidFlagError("grounding_tier1_flag_threshold must be between 0 and 1")
     return threshold
-
-
-def resolve_fixture_path(data_dir: str, fixture: str) -> str | None:
-    """Resolve `fixture` against `data_dir`, rejecting any path that escapes it
-    (an absolute path, or a relative path containing `../` sequences) — CR-03.
-
-    `os.path.join(data_dir, fixture)` silently discards `data_dir` when
-    `fixture` is absolute, and a relative `fixture` containing `../` can
-    normalize outside `data_dir` even without being absolute; either lets a
-    caller reference an arbitrary file on disk (path traversal).
-
-    Returns the resolved absolute path, or None if `fixture` is invalid.
-    Callers translate None into the appropriate "unknown fixture" response
-    for their layer (400 at scenario-creation time, 404/LookupError at
-    constraint-parse time) — never a bare filesystem error.
-    """
-    if os.path.isabs(fixture):
-        return None
-    data_dir_abs = os.path.abspath(data_dir)
-    candidate = os.path.normpath(os.path.join(data_dir_abs, fixture))
-    if candidate != data_dir_abs and not candidate.startswith(data_dir_abs + os.sep):
-        return None
-    return candidate
 
 
 class InvalidFlagError(ValueError):
@@ -375,8 +331,6 @@ def default_settings() -> Settings:
     reasoning_effort = os.environ.get('AGENT_RUNTIME_REASONING_EFFORT') or None
     if reasoning_effort not in {None, 'none', 'low', 'medium', 'high'}:
         raise InvalidFlagError('AGENT_RUNTIME_REASONING_EFFORT must be none, low, medium, or high')
-    db_path = os.environ.get("ROSTERAI_DB", str(_BACKEND_DIR / "var" / "rosterai.db"))
-    data_dir = os.environ.get("ROSTERAI_DATA_DIR", str(_REPO_ROOT / "data"))
     # The API's own connection: a non-superuser login that carries no table
     # grants of its own and cannot bypass RLS. It authenticates only to reach
     # `SET LOCAL ROLE shiftmind_runtime` (domain reads) and the `auth.*`
@@ -392,17 +346,7 @@ def default_settings() -> Settings:
         "ROSTERAI_PROVISIONING_DATABASE_URL",
         "postgresql+psycopg://rosterai:rosterai@localhost:5432/rosterai",
     )
-    maintenance_flag_path = os.environ.get(
-        "ROSTERAI_MAINTENANCE_FLAG",
-        str(_BACKEND_DIR / "var" / "gate-a-maintenance"),
-    )
-    llm_provider = os.environ.get("LLM_PROVIDER", "stub")
-    llm_model = os.environ.get("LLM_MODEL", "gemini-2.5-flash")
-    llm_api_key = os.environ.get("GEMINI_API_KEY")
     openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
-    openrouter_model = os.environ.get("OPENROUTER_MODEL", _OPENROUTER_DEFAULT_MODEL)
-    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
-    anthropic_model = os.environ.get("ANTHROPIC_MODEL", _ANTHROPIC_DEFAULT_MODEL)
     # The os.environ.get default only applies when CORS_ORIGINS is absent from
     # env entirely; an explicitly empty CORS_ORIGINS="" yields an empty
     # allow-list (a valid "no browser origin may call this" posture), not a
@@ -571,18 +515,9 @@ def default_settings() -> Settings:
         os.environ.get("AGENT_TRACE_CONTENT_MODE")
     )
     return Settings(
-        db_path=db_path,
-        data_dir=data_dir,
         database_url=database_url,
         provisioning_database_url=provisioning_database_url,
-        maintenance_flag_path=maintenance_flag_path,
-        llm_provider=llm_provider,
-        llm_model=llm_model,
-        llm_api_key=llm_api_key,
         openrouter_api_key=openrouter_api_key,
-        openrouter_model=openrouter_model,
-        anthropic_api_key=anthropic_api_key,
-        anthropic_model=anthropic_model,
         cors_origins=cors_origins,
         oidc_provider=oidc_provider,
         oidc_issuer=oidc_issuer.rstrip("/"),

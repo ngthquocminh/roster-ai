@@ -1,7 +1,6 @@
 """Framework <-> owned translation. The edge, and the only place it happens.
 
-Mirrors the intent of `llm/translate.py`: unpack the vendor payload into a
-neutral shape before it crosses a seam.
+Unpack the vendor payload into a neutral shape before it crosses a seam.
 
 **Translation is a whitelist.** We name the part kinds ShiftMind understands and
 drop everything else. This is not stylistic. AD-15 says "discard provider

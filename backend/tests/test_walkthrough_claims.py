@@ -25,25 +25,10 @@ def _reviewer_facing_docs() -> tuple[Path, ...]:
 
 
 #: Documents excluded from the retired-symbol sweep, each with the reason it is
-#: exempt. These are not stale: the v0.3 surface was fenced, not removed (AD-1's
-#: compatibility allowance), so they describe a surface that is still live.
-#: ``settings.py:253,274`` still read ``ROSTERAI_DB``/``LLM_PROVIDER``, 15 legacy
-#: operations are still mounted, and retirement is staged behind the fail-closed
-#: middleware in ``api/main.py`` plus ``scripts/gate_a_cutover.py``.
-#: The split is entry-document vs reference-document, not clean vs dirty. A
-#: reviewer-entry document must not name the legacy seam at all, because naming
-#: it there presents it as the current path. A deep-reference document describes
-#: live mechanisms for a living, and several of those mechanisms legitimately
-#: carry these names. Residual, ledgered: this guard is a literal token sweep and
-#: cannot tell "accurately describes a live legacy mechanism" from "presents it
-#: as current", so the documents below are reviewed by eye, not by test.
+#: exempt. The v0.3/v0.4 surface these symbols name has been removed, so only a
+#: document that records the decision to leave it may still name it.
 SYMBOL_SWEEP_EXCLUSIONS = {
-    "CONFIGURATION.md": "documents the still-live legacy surface settings.py reads",
     "AGENT-RUNTIME-DECISION.md": "the ADR that decided to move off that seam",
-    "GATE-A-RUNBOOK.md": "documents the SQLite cutover operation itself",
-    "CI-SECRETS-CHECKLIST.md": "create_provider is a live keyless default",
-    "TESTING.md": "describes tests that still exercise the legacy store",
-    "DEVELOPMENT.md": "describes live test-isolation that pops those env vars",
 }
 
 RETIRED = (

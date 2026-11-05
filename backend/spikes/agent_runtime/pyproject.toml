@@ -20,8 +20,8 @@ dependencies = [
     # by Story 5.1. See docs/AGENT-RUNTIME-DECISION.md.
     #
     # The two extras mirror the two providers the repo already ships:
-    #   google     -> backend/llm/gemini.py     (google-genai)
-    #   openrouter -> backend/llm/openrouter.py (openai-compatible)
+    #   google     -> the then-shipped Gemini provider     (google-genai)
+    #   openrouter -> the then-shipped OpenRouter provider (openai-compatible)
     "pydantic-ai-slim[google,openrouter]==2.27.0",
 ]
 

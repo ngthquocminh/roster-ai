@@ -12,9 +12,6 @@ from api.deps import get_site_context
 from api.routers.conversations import router
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
-ALLOWED_LEAKS = {
-    "services/run_service.py": "legacy SQLite solve executor; removal belongs to Gate A",
-}
 
 
 def _background_primitives(path: Path) -> set[str]:
@@ -168,14 +165,6 @@ def test_a_capability_whose_feature_policy_has_no_setting_fails_loudly() -> None
 
     with pytest.raises(IncompleteManifestError):
         enabled_feature_policy(NoFlags())
-
-
-def test_the_single_legacy_executor_allow_list_entry_still_matches() -> None:
-    assert set(ALLOWED_LEAKS) == {"services/run_service.py"}
-    for relative in ALLOWED_LEAKS:
-        path = BACKEND_ROOT / relative
-        assert path.exists()
-        assert _background_primitives(path) == {"ThreadPoolExecutor"}
 
 
 def test_the_execute_route_never_derives_feature_policy_from_installed_modules() -> None:

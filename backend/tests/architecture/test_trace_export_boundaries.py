@@ -35,14 +35,13 @@ REPO_ROOT = BACKEND_ROOT.parent
 #: Same walk as `test_telemetry_boundaries.NON_TEST_BACKEND_ROOTS`.
 NON_TEST_BACKEND_ROOTS = (
     "adapters", "agent", "api", "application", "config", "domain", "engine",
-    "evals", "fixtures", "ingest", "llm", "migrations", "scripts", "services",
-    "store", "worker",
+    "evals", "fixtures", "ingest", "migrations", "scripts", "worker",
 )
 #: Decision 1's `logfire` ban: the runtime roots plus backend-root modules.
 #: `evals/` and `scripts/` are not runtime (Story 5.10 owns `logfire` there).
 LOGFIRE_BANNED_ROOTS = (
     "api", "worker", "agent", "application", "domain", "adapters", "engine",
-    "services", "store", "ingest", "llm", "config",
+    "ingest", "config",
 )
 SDK_PREFIXES = ("opentelemetry.sdk", "opentelemetry.exporter", "opentelemetry.instrumentation")
 SDK_ALLOWED = frozenset({"adapters/telemetry/spans.py", "api/tracing.py"})
@@ -335,9 +334,7 @@ def nonliteral_sql(source: str) -> list[str]:
     """`text(...)` / `.exec_driver_sql(...)` calls whose SQL is not a literal.
 
     `text` is resolved through the module's imports, as the engine guard in
-    `test_telemetry_boundaries.py` resolves `create_engine`. `store/db.py`'s
-    SQLite `conn.execute(f"PRAGMA ...")` is neither construct and is out of
-    this rule's reach by construction -- SQLAlchemy never sees it.
+    `test_telemetry_boundaries.py` resolves `create_engine`.
     """
     tree = ast.parse(source)
     bindings: dict[str, str] = {}

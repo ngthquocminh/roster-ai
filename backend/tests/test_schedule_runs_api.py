@@ -57,10 +57,6 @@ _CSRF_TOKEN = "schedule-run-csrf"
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("ROSTERAI_DB", str(tmp_path / "legacy.db"))
-    monkeypatch.setenv(
-        "ROSTERAI_MAINTENANCE_FLAG", str(tmp_path / "gate-a-maintenance")
-    )
     session = ResolvedSession(
         app_user_id=uuid4(),
         site_id=uuid4(),

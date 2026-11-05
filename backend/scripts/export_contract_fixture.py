@@ -24,7 +24,7 @@ from adapters.postgres.scenario_projection import (
     _normalize_workers,
     _rows,
 )
-from scripts.gate_a_cutover import FixtureSpec, REPO_ROOT, default_fixtures
+from scripts.governed_fixtures import FixtureSpec, REPO_ROOT, default_fixtures
 
 
 CONTRACT_DIRECTORY = REPO_ROOT / "data" / "contract"

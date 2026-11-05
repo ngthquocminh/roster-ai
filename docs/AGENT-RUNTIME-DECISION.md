@@ -131,6 +131,8 @@ than the 3.10 dev venv.
 
 - It does not migrate the existing `LLMProvider` seam. `backend/llm/**` and
   `backend/services/**` keep their current ports, error types, and configuration keys.
+  (Later superseded: that seam, `backend/llm/**`, `backend/services/**` and
+  `backend/store/**` were removed on 2026-11-05.)
   The two seams may share a provider client *inside adapters* (AD-19 permits it) but must
   not share a port, an error type, or a configuration key.
 - It does not add the Logfire SDK, a CI workflow, a capability registry, or a migration.

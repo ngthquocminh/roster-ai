@@ -1,7 +1,7 @@
 # Gate A Runbook
 
-Operational procedures for the Gate A foundation: the one-way brownfield
-cutover, the legacy-route live flag, and regenerating the readiness report.
+Operational procedures for the Gate A foundation: seeding a local
+environment and regenerating the readiness report.
 
 Gate A is the AR28 boundary. Epic 2 (AgentRuntime and agent tools) may not
 begin until `evidence/story-1.11/gate-a-readiness-report.json` records
@@ -84,17 +84,6 @@ enforced centrally by `enforce_versioned_session_and_csrf` for the whole
 - The two proposal write routes use `get_site_context` directly, which is what
   `test_proposal_write_routes_resolve_site_context_and_session` asserts.
 
-### Legacy SQLite write routes are NOT part of that surface
-
-`POST /scenarios`, `POST /scenarios/{id}/runs` and `POST /constraints` still
-exist outside `/api/v1`. They are unauthenticated and site-unaware, and are held
-offline by `refuse_legacy_routes_during_gate_a` — a **filesystem-flag** check, not
-an authorization check. It fails closed on error, but an environment where the
-flag path is simply absent serves them. That is an operational fact about a
-deployment, not a property of the code, which is why it is section 2's live-flag
-procedure and not a test. Do not read the `/api/v1` write-surface test as a
-statement about these three.
-
 Proposals are **created** inside the conversation turn (`finalize_agent_run`),
 not by an HTTP create route — there is deliberately no `POST /api/v1/proposals`.
 
@@ -114,125 +103,29 @@ role (see `backend/tests/test_identity_role_boundaries.py`).
 
 ---
 
-## 1. The one-way cutover
+## 1. Seeding a local environment
 
-> **Do not run the real cutover against a development checkout.** It writes a
-> persistent maintenance flag that takes the legacy `/scenarios`, `/runs` and
-> `/constraints` routes offline, which breaks the 61 tests that depend on those
-> routes being reachable. Story 1.9 recorded this explicitly: proving the
-> *mechanism* (done, with isolated settings) and performing the *operation*
-> against a real environment are two different things. If you are ever tempted
-> to "just run the cutover so a test passes", the test is targeting the wrong
-> environment.
-
-AR25/AD-25 make this a one-way brownfield cutover, performed in an offline
-maintenance window.
-
-1. **Disable supervisor auto-restart**, or scale the API service to zero.
-2. **Stop the running `uvicorn api.main:app` process and wait for it to fully
-   exit.** Process termination is the authoritative worker-drain boundary.
-   `_drain_worker_pool()` in the script only observes `run_service._pool`
-   *within the script's own process* — it is a defensive check for
-   same-process/test invocation, never a substitute for this step. There is no
-   in-process admin trigger, because no authenticated admin model exists yet.
-3. **Run the cutover:**
-   ```bash
-   cd backend
-   uv run --frozen python scripts/gate_a_cutover.py
-   ```
-   In order it: writes the persistent maintenance flag, drains the in-process
-   pool, snapshots the legacy SQLite database next to the original as
-   `rosterai.pre-gate-a-<timestamp>.db`, ensures the `ShiftMind / Seeded Site`
-   site exists, and imports both governed fixtures with RFC 8785 checksums.
-4. **Validate the import**, then restart the application.
-
-Old SQLite scenarios and runs stay offline afterwards — readable only through
-the snapshot file. They are deliberately not migrated; fabricating governed
-history for them would defeat the point of the fixture lineage.
-
-### Seeding a local environment without cutting over
-
-For local work you usually want the governed fixtures and a planner user
-*without* the maintenance flag. Import through the adapter directly:
+`docker compose up` runs `python -m scripts.bootstrap_local`, which applies
+migrations, imports the governed fixtures from
+`scripts/governed_fixtures.py:default_fixtures()` with RFC 8785 checksums into
+the `ShiftMind / Seeded Site` site, and provisions the planner. It is
+idempotent. Outside compose:
 
 ```bash
 cd backend
-uv run --frozen python -c "
-import sys; sys.path.insert(0, '.')
-import json
-from adapters.postgres.fixture_history import PostgresFixtureHistoryAdapter
-from scripts.gate_a_cutover import default_fixtures
-from settings import default_settings
-
-settings = default_settings()
-adapter = PostgresFixtureHistoryAdapter(settings.provisioning_database_url)
-site_id = adapter.ensure_seed_site('ShiftMind', 'Seeded Site')
-for spec in default_fixtures():
-    payload = json.loads(spec.path.read_text(encoding='utf-8'))
-    adapter.import_fixture(
-        site_id=site_id, fixture_id=spec.fixture_id, version=spec.version,
-        payload=payload, source_package='predefined-fixtures',
-        source_path=spec.path.name,
-    )
-"
+uv run --frozen python -m scripts.bootstrap_local
 ```
 
-Then provision a planner identity:
-
-```bash
-SHIFTMIND_SEED_PLANNER_SUBJECT=local-planner \
-SHIFTMIND_SEED_PLANNER_EMAIL=you@example.com \
-  uv run --frozen python scripts/seed_planner.py
-```
-
-Prerequisites: Docker PostgreSQL 18 up (`docker compose up -d postgres`) and
-`uv run --frozen alembic upgrade head` applied.
+Prerequisites: Docker PostgreSQL 18 up (`docker compose up -d postgres`).
 
 ---
 
-## 2. The legacy-route live flag
+## 2. The retired cutover
 
-Story 1.9 proved the *mechanism* and explicitly left the *live state* to this
-runbook (`evidence/story-1.9/…json` records
-`"legacy_route_live_flag_state": "not verified by this story — operational
-fact, owned by Story 1.11 / release runbook"`).
-
-**Mechanism.** `refuse_legacy_routes_during_gate_a` in `backend/api/main.py`
-refuses every method on the `/scenarios`, `/runs` and `/constraints` prefixes
-once the flag path exists. `/health` and `/fixtures` stay available — they are
-not SQLite-backed. `_gate_a_flag_is_set()` uses `.exists()` and fails *closed*
-on any `OSError`, so a permission problem is treated as "maintenance active"
-rather than silently permitting mutations.
-
-**How to check the live state** of a given environment:
-
-```bash
-# 1. What path is the flag configured at?
-cd backend
-uv run --frozen python -c "
-import sys; sys.path.insert(0, '.')
-from settings import default_settings
-print(default_settings().maintenance_flag_path)
-"
-
-# 2. Does it exist in the target environment?
-#    (local)
-test -e "$(...)" && echo "cutover ACTIVE" || echo "cutover NOT active"
-
-# 3. Confirm behaviourally against the running API:
-curl -s -o /dev/null -w '%{http_code}\n' "$API_ORIGIN/scenarios"
-#   503 (or refusal) -> flag is set, legacy routes are offline
-#   200              -> flag is NOT set, legacy routes are still live
-```
-
-The environment variable is `ROSTERAI_MAINTENANCE_FLAG`; it defaults to
-`var/gate-a-maintenance` relative to `backend/`.
-
-**Current recorded state (2026-08-07): not applicable — no deployed
-environment exists.** There is no `.github/`, no image pipeline and no hosted
-API; deployment is Epic 5 (Stories 5.5–5.7). On a local development checkout
-the flag is deliberately absent, which is why the 61 legacy-route tests still
-pass. This is an honest "not yet applicable", not a pass.
+Gate A originally included a one-way cutover from the v0.3/v0.4 store,
+performed in a maintenance window behind a filesystem flag that took the
+pre-`/api/v1` routes offline. That store, those routes, the flag and the
+cutover script have since been removed; they remain in git history.
 
 ---
 

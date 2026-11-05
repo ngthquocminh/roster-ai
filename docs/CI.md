@@ -13,7 +13,7 @@ wrong.** A naive runner would go green having proved nothing. Read the
 
 | Job | Command | Baseline enforced |
 |---|---|---|
-| `backend` | `uv run --frozen pytest` (in `backend/`) | ≥864 passed, ≤1 skipped, ≥7 deselected |
+| `backend` | `uv run --frozen pytest` (in `backend/`) | ≥864 passed, ≤1 skipped, ≥2 deselected |
 | `backend` | `uv run --frozen pytest tests/test_evidence_convention.py` | ≥48 passed, **0 skipped** |
 | `backend-postgres` | `uv run --frozen pytest -m postgres` | ≥45 passed, **0 skipped** |
 | `migrations` | `uv run --project backend alembic check` (**from repo root**) | no new upgrade operations |
@@ -28,10 +28,9 @@ Baselines were measured on `faf22eb` (2026-08-16) with PostgreSQL running.
 
 ### Deliberately not run
 
-`pytest -m live` — the seven `@pytest.mark.live` tests call a real LLM
-provider. **NFR26** keeps them out of normal CI, and no `GEMINI_API_KEY` or
-`OPENROUTER_API_KEY` is set on any job, so the keyless `stub` provider is what
-gets exercised.
+`pytest -m live` — the two `@pytest.mark.live` tests call a real LLM
+provider. **NFR26** keeps them out of normal CI, and no provider key is set on
+any job, so the keyless deterministic model double is what gets exercised.
 
 This is enforced, not assumed. The `backend` job compares the number of
 live-marked tests against the number the default run deselects; if someone
@@ -100,8 +99,7 @@ FAILED: No 'script_location' key found in configuration.
 That reads like a missing or broken config file. It is not; it is a
 working-directory mistake. This misreading previously cost a story, which
 synthesized a temporary `alembic.ini` to work around a problem that did not
-exist (see the `CORRECTED 2026-08-10` entry in
-`_bmad-output/implementation-artifacts/deferred-work.md`).
+exist.
 
 The `migrations` job therefore has **no** `working-directory: backend`. Do not
 add one.
@@ -207,7 +205,7 @@ workflow. Run them directly, with `docker compose up -d postgres` first:
 # backend gates
 cd backend
 uv run --frozen pytest tests/test_evidence_convention.py -q   # expect 48 passed, 0 skipped
-uv run --frozen pytest -q                                     # expect 864 passed, 1 skipped, 7 deselected
+uv run --frozen pytest -q                                     # expect 864 passed, 1 skipped, 2 deselected
 uv run --frozen pytest -m postgres -q                         # expect 45 passed, 0 skipped
 
 # migration gate — from the REPOSITORY ROOT, see trap 1

@@ -8,7 +8,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import hmac
-from pathlib import Path
 from time import perf_counter
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
@@ -22,7 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.responses import PlainTextResponse
 from starlette.routing import compile_path
 
 from api.auth_security import SESSION_COOKIE_NAME, hash_secret
@@ -45,34 +44,24 @@ from api.routers import (
     agent_availability,
     approvals,
     auth,
-    constraints,
     conversations,
     fake_oidc,
-    fixtures,
     health,
     proposals,
-    runs,
     schedule_runs,
     scenario_catalogue,
     scenario_projection,
-    scenarios,
 )
-from services import run_service
-from store import db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_json_logging()
-    db.init_db(get_settings().db_path)
     yield
-    try:
-        run_service.shutdown()
-    finally:
-        if _process_tracing is not None:
-            # Bounded and never raises (Decision 12): whatever the collector
-            # does, it returns within `spans.SHUTDOWN_DEADLINE_SECONDS`.
-            _process_tracing.shutdown()
+    if _process_tracing is not None:
+        # Bounded and never raises (Decision 12): whatever the collector
+        # does, it returns within `spans.SHUTDOWN_DEADLINE_SECONDS`.
+        _process_tracing.shutdown()
 
 
 app = FastAPI(title="ShiftMind API", version=APP_VERSION, lifespan=lifespan)
@@ -197,42 +186,8 @@ async def versioned_unhandled_problem(request: Request, exc: Exception):
             title="Internal server error",
             detail="The request could not be completed.",
         )
-    # Legacy unversioned paths keep Starlette's default shape.
+    # Unversioned paths (/health, the fake IdP) keep Starlette's default shape.
     return PlainTextResponse("Internal Server Error", status_code=500)
-
-
-# Legacy SQLite-backed routes: gated in full (reads and writes) once Gate A's
-# flag is set. /health and /fixtures are not SQLite-backed and stay available.
-_LEGACY_ROUTE_PREFIXES = ("/scenarios", "/runs", "/constraints")
-
-
-def _gate_a_flag_is_set() -> bool:
-    """True if anything at all is present at the flag path (file, directory, or
-    symlink) or if we can't determine that due to a filesystem error. Only a
-    definitively absent path permits normal legacy-route access — every other
-    outcome fails closed, since this check exists to keep legacy data offline."""
-    try:
-        return Path(get_settings().maintenance_flag_path).exists()
-    except OSError:
-        return True
-
-
-@app.middleware("http")
-async def refuse_legacy_routes_during_gate_a(request: Request, call_next):
-    """Keep legacy SQLite-backed routes offline once the Gate A flag has been written."""
-    if request.url.path.startswith(_LEGACY_ROUTE_PREFIXES) and _gate_a_flag_is_set():
-        return JSONResponse(
-            {
-                "type": "about:blank",
-                "title": "Gate A maintenance window",
-                "status": 503,
-                "detail": "Legacy SQLite-backed routes are offline during cutover.",
-            },
-            status_code=503,
-            media_type="application/problem+json",
-            headers={"Retry-After": "3600"},
-        )
-    return await call_next(request)
 
 
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -416,10 +371,6 @@ async def emit_request_telemetry(request: Request, call_next):
     return response
 
 app.include_router(health.router)
-app.include_router(fixtures.router)
-app.include_router(scenarios.router)
-app.include_router(runs.router)
-app.include_router(constraints.router)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(agent_availability.router, prefix="/api/v1")
 app.include_router(scenario_catalogue.router, prefix="/api/v1")

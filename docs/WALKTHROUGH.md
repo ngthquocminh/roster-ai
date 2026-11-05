@@ -8,7 +8,7 @@ From a clean clone, run `docker compose up -d --build`, open `http://localhost:8
 
 ## Architecture boundary
 
-ShiftMind is a hexagonal modular monolith: dependencies point inward, so domain and application code stay free of framework and concrete-provider types. The boundary is mechanically enforced — `backend/tests/architecture/` sweeps the packages for forbidden imports — with named exceptions carried in that suite's `ALLOWED_LEAKS` rather than waived silently. Three ports under `backend/application/ports/` currently import SQLAlchemy's `Connection` and are recorded there; closing them is tracked in the deferred-work ledger. The adopted invariants are in the [architecture spine](../_bmad-output/planning-artifacts/architecture/architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md).
+ShiftMind is a hexagonal modular monolith: dependencies point inward, so domain and application code stay free of framework and concrete-provider types. The boundary is mechanically enforced — `backend/tests/architecture/` sweeps the packages for forbidden imports — with named exceptions carried in that suite's `ALLOWED_LEAKS` rather than waived silently. Three ports under `backend/application/ports/` currently import SQLAlchemy's `Connection` and are recorded there; closing them is tracked in the deferred-work ledger. The boundaries are described in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## The governed loop, end to end over real HTTP — captured 2026-09-09
 
@@ -33,7 +33,7 @@ Read those figures with three things in mind, because the dimensional model behi
 
 ### What this run does not exercise
 
-The capture above is the composed proof, which drives the loop through real HTTP but is not a browser walk. Three steps of the product's primary journey ([`EXPERIENCE.md`](../_bmad-output/planning-artifacts/ux-designs/ux-ShiftMind-2026-07-22/EXPERIENCE.md) Flow 1) are therefore not shown here: the Scenario Data viewer, the agent reply carrying adjacent evidence links and its clarification path, and the Results surface with its baseline deltas and objective trade-offs. Those are covered by the frontend and API suites and by the evidence artifacts linked below, not by this transcript.
+The capture above is the composed proof, which drives the loop through real HTTP but is not a browser walk. Three steps of the product's primary journey are therefore not shown here: the Scenario Data viewer, the agent reply carrying adjacent evidence links and its clarification path, and the Results surface with its baseline deltas and objective trade-offs. Those are covered by the frontend and API suites and by the evidence artifacts linked below, not by this transcript.
 
 <!-- behavioral-claims:start -->
 The composed journey reaches `solver_completed`, creates and consumes an approval, promotes the candidate baseline to a new version, and returns a provenance timeline carrying the approval request, the decision and the promotion. Anchor: `backend/tests/compose_proof.py::test_one_command_stack_serves_real_oidc_and_worker`.
@@ -85,7 +85,7 @@ Twenty bound evidence artifacts exist under `evidence/`; the ones below are the 
 - [State semantics and accessibility](../evidence/story-4.6/state-semantics-and-accessibility.json)
 - [Content minimization report](../evidence/story-5.2/content-minimization-report.json)
 
-Gate B's checklist is in [`epics.md`](../_bmad-output/planning-artifacts/epics.md). Story 5.13 assessed it and wrote the [release report](../evidence/epic-5/release-gate-report.json). **Gate B has passed**: all seven rows pass, with the report bound to one code commit and the live evidence measured at an ancestor with no model-facing change since.
+Gate B's checklist is in [`RELEASE-GATES.md`](RELEASE-GATES.md). Story 5.13 assessed it and wrote the [release report](../evidence/epic-5/release-gate-report.json). **Gate B has passed**: all seven rows pass, with the report bound to one code commit and the live evidence measured at an ancestor with no model-facing change since.
 
 - **Golden dataset:** 45 versioned cases (39 single-turn, 6 multi-turn), with at least 4 per allowed capability and 10 consequential/prohibited.
 - **Live tool routing:** 100% overall and on consequential/prohibited cases, in each of three passes on the configured model, with every case offered the production chat tools ([evidence](../evidence/story-5.13/live-golden-routing.json)). The report's `live_recorded_results` list what was recorded beside routing without deciding it.

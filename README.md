@@ -194,6 +194,6 @@ Also open:
 
 ## Verification references
 
-- **Decisions:** [architecture spine](_bmad-output/planning-artifacts/architecture/architecture-ShiftMind-2026-07-22/ARCHITECTURE-SPINE.md).
+- **Decisions:** [architecture and trust boundaries](docs/ARCHITECTURE.md), [agent runtime decision](docs/AGENT-RUNTIME-DECISION.md), and [release gates](docs/RELEASE-GATES.md).
 - **Code:** [capability registry](backend/application/capabilities/installed.py), [grounding gate](backend/application/grounding/gate.py), [tier-1 claim-support checker](backend/adapters/grounding/jev_checker.py), [approval decision](backend/application/use_cases/decide_approval.py), [provenance query](backend/application/queries/decision_provenance.py), [CP-SAT objective](backend/engine/cpsat/objective.py), and [agent tracing](backend/agent/runtime.py).
 - **Evidence:** [approval and audit invariants](evidence/story-4.5/approval-audit-invariants.json), [live conversations](evidence/story-5.12/live-conversation-journeys.json), and [CI workflow](.github/workflows/ci.yml).

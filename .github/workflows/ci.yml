@@ -6,7 +6,7 @@
 # — see `.github/scripts/assert_counts.py` for why exit 0 is not enough here.
 #
 # Recorded baselines, measured on faf22eb (2026-08-16) with PostgreSQL up:
-#   backend default    864 passed,  1 skipped, 7 deselected
+#   backend default    864 passed,  1 skipped, 2 deselected
 #   backend -m postgres 45 passed,  0 skipped
 #   evidence convention 48 passed,  0 skipped
 #   frontend vitest    400 passed  (63 files)
@@ -109,12 +109,6 @@ jobs:
         working-directory: backend
         run: uv sync --frozen --all-groups
 
-      - name: Create runtime state directory
-        # backend/settings.py defaults db_path and maintenance_flag_path under
-        # backend/var/, which is gitignored and therefore absent on a fresh
-        # checkout.
-        run: mkdir -p backend/var
-
       - name: Assert the default suite still excludes live-provider tests
         working-directory: backend
         # NFR26. If someone drops `addopts = -m "not live"` from
@@ -155,19 +149,16 @@ jobs:
 
       - name: Run default suite
         working-directory: backend
-        # GEMINI_API_KEY / OPENROUTER_API_KEY are deliberately absent — not set
-        # to "", genuinely unset. settings.py reads llm_api_key straight from
-        # os.environ.get("GEMINI_API_KEY"), and its contract is None-for-stub;
-        # an empty string would be a different value. With neither present,
-        # llm/base.py::create_provider resolves the keyless `stub` provider and
-        # adapters/oidc/fake.py the local OIDC double. See
+        # Provider keys are deliberately absent — not set to "", genuinely
+        # unset. With none present the agent runtime uses its deterministic
+        # model double and adapters/oidc/fake.py the local OIDC double. See
         # docs/CI-SECRETS-CHECKLIST.md: normal CI holds no live credential.
         run: |
           set -o pipefail
           uv run --frozen pytest -q -rs 2>&1 | tee ../backend-default.log
 
       - name: Assert default suite baseline
-        # 864 passed / 1 skipped / 7 deselected. The single permitted skip is
+        # 864 passed / 1 skipped / 2 deselected. The single permitted skip is
         # the unconditional one at tests/test_scheduling_inspect.py:324 ("tasks
         # is a projection group the inspect capability does not expose"); it
         # does not depend on the environment. Anything above that ceiling means
@@ -176,7 +167,7 @@ jobs:
           python3 .github/scripts/assert_counts.py \
             --runner pytest --log backend-default.log \
             --label "backend default suite" \
-            --min-passed 864 --max-skipped 1 --min-deselected 7
+            --min-passed 864 --max-skipped 1 --min-deselected 2
 
       - name: Upload backend logs
         if: failure()
@@ -225,9 +216,6 @@ jobs:
       - name: Sync dependencies
         working-directory: backend
         run: uv sync --frozen --all-groups
-
-      - name: Create runtime state directory
-        run: mkdir -p backend/var
 
       - name: Run PostgreSQL suite
         working-directory: backend
@@ -301,9 +289,8 @@ jobs:
         # no alembic.ini and dies with
         #   FAILED: No 'script_location' key found in configuration.
         # which reads like a missing config but is purely a cwd mistake. That
-        # misreading cost a story: see the "CORRECTED 2026-08-10" entry in
-        # _bmad-output/implementation-artifacts/deferred-work.md, where a
-        # temporary alembic.ini was synthesized to work around it.
+        # misreading cost a story, where a temporary alembic.ini was
+        # synthesized to work around it.
         run: |
           set -euo pipefail
           uv run --project backend alembic upgrade head
@@ -578,7 +565,7 @@ jobs:
             echo ""
             echo "| Gate | Result | Baseline |"
             echo "|---|---|---|"
-            echo "| Backend default suite | $BACKEND | >=864 passed, <=1 skipped, >=7 deselected |"
+            echo "| Backend default suite | $BACKEND | >=864 passed, <=1 skipped, >=2 deselected |"
             echo "| PostgreSQL integration | $POSTGRES | >=45 passed, 0 skipped |"
             echo "| alembic check | $MIGRATIONS | no new upgrade operations |"
             echo "| Frontend lint/types/build/unit | $FRONTEND | >=400 passed, 0 skipped |"

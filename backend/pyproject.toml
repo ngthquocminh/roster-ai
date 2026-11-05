@@ -29,8 +29,8 @@ dependencies = [
     # `-slim` with exactly three extras, never the `pydantic-ai` meta-package:
     # that resolves to [anthropic,cli,evals,google,logfire,mcp,openai,retries,web]
     # and would pull the Logfire SDK, a stack row owned by Story 5.1.
-    # The extras mirror the providers already shipped: anthropic -> AgentRuntime,
-    # google -> llm/gemini.py, openrouter -> llm/openrouter.py.
+    # The extras are the providers `agent/runtime.py` can select: anthropic,
+    # google (GoogleModel) and openrouter.
     "pydantic-ai-slim[anthropic,google,openrouter]==2.27.0",
     # Trace export (Story 5.9, AR27: locked at this implementation gate). Exact
     # pins, not floors: `adapters/telemetry/spans.py` constructs the

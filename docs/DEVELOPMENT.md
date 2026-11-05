@@ -10,8 +10,8 @@ neither shares configuration except through `CORS_ORIGINS` (backend) and
 
 This guide covers the day-to-day loop: running each half locally, running
 tests, following code style, and the two Protocol seams (`SchedulerEngine`,
-`LLMProvider`) that exist specifically so new solver/LLM backends can be added
-without touching service or route code.
+`AgentRuntime`) that exist specifically so new solver and agent backends can be
+added without touching application or route code.
 
 ## Local setup
 
@@ -120,9 +120,9 @@ uv run pytest -q                     # default suite — no network, no API keys
 uv run pytest -q -m live             # also run the network-backed live provider tests
 ```
 
-Tests live in `backend/tests/` as `test_*.py` files (e.g. `test_api.py`,
-`test_engine_small.py`, `test_llm_provider.py`, `test_gemini_provider.py`,
-`test_openrouter_provider.py`, `test_anthropic_provider.py`). `backend/pyproject.toml` registers a `live`
+Tests live in `backend/tests/` as `test_*.py` files (e.g.
+`test_engine_small.py`, `test_conversations_api.py`,
+`test_evaluation_harness.py`). `backend/pyproject.toml` registers a `live`
 pytest marker:
 
 ```toml
@@ -152,15 +152,13 @@ CI runs it in the non-required `compose-proof` job on `main` and on
 `workflow_dispatch`.
 
 The default `addopts` excludes `live`-marked tests, so `uv run pytest -q`
-never requires `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, or `ANTHROPIC_API_KEY` and is safe to run in
-CI or on a fresh machine. The handful of `@pytest.mark.live` tests (in
-`test_gemini_provider.py`, `test_openrouter_provider.py`, and `test_anthropic_provider.py`) are additionally
-gated with `@pytest.mark.skipif(not _HAS_KEY, ...)`, so even an explicit
-`pytest -m live` run skips them cleanly if the relevant API key isn't set in
-the environment. `backend/conftest.py` also pops `LLM_PROVIDER` /
-`LLM_MODEL` from the process environment after import so a developer's local
-`.env` can never flip the default provider under test — every non-`live`
-test always observes the keyless `stub` provider.
+never requires a provider key and is safe to run in CI or on a fresh machine.
+The two `@pytest.mark.live` tests (in `test_evaluation_harness.py`) are
+additionally gated with `@pytest.mark.skipif`, so even an explicit
+`pytest -m live` run skips them cleanly unless `AGENT_RUNTIME_API_KEY` and a
+live `AGENT_RUNTIME_MODEL` are set. `backend/conftest.py` also pops
+`LOGFIRE_TOKEN` and `TYPESAFE_API_KEY` after import so a developer's local
+`.env` cannot turn on trace export or the tier-1 checker under test.
 
 ### Frontend
 
@@ -235,10 +233,6 @@ runtime implementation. The default `deterministic` model is keyless and drives
 the composed local journey; live providers require an explicit
 `provider:model` and a credential. Extending this seam means adding a second
 `AgentRuntime` implementation and a branch in `create_agent_runtime`.
-
-Existing compatibility adapters remain behind their own seams under AD-1's
-migration allowance, but they are not the model-extension point for this
-system.
 
 ## How the backend and frontend talk locally
 

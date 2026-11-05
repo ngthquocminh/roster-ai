@@ -338,8 +338,8 @@ def test_alembic_head_resolution_needs_no_database(tmp_path, monkeypatch):
     Asserted behaviourally rather than by grepping the source. The original
     version checked that the strings `create_engine`/`psycopg`/`sqlalchemy` did
     not appear in `evidence_binding.py` — but the module's own import graph
-    reaches them anyway (`resolve_bindings` -> `gate_a_cutover.default_fixtures`
-    -> `adapters.postgres.fixture_history`, which imports sqlalchemy at module
+    reached them anyway (`resolve_bindings` -> the fixture list's then-module ->
+    `adapters.postgres.fixture_history`, which imports sqlalchemy at module
     level). So the grep passed while proving nothing, and would have kept
     passing if someone had added a real `create_engine(...).connect()` one
     module away.
@@ -398,7 +398,7 @@ def test_alembic_head_fails_loudly_on_an_empty_graph(tmp_path):
 
 
 def test_dataset_and_scenario_come_from_default_fixtures_not_a_second_copy():
-    from scripts.gate_a_cutover import default_fixtures
+    from scripts.governed_fixtures import default_fixtures
 
     bindings = resolve_bindings(_DECLARED, repo_root=REPO_ROOT, allow_dirty=True)
     for spec in default_fixtures():
